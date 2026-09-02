@@ -66,7 +66,9 @@ public sealed class WorldEngagement {
     // kit falls back to. An application's Kit names a row here; a null Kit on a screen target reads the default,
     // and a null Kit on a body target never reaches a pad at all (pure passthrough).
     private readonly Dictionary<string, WorldPadElement?[]> m_kitPads = new(comparer: StringComparer.Ordinal);
+
     private readonly WorldPadElement?[] m_defaultPad;
+
     // Per-screen authored reach mask and pad-kit name, resolved ONCE at construction from each screen's
     // WorldScreenRoute — what Compose stamps onto a screen application.
     private readonly Dictionary<int, ChannelReachMask> m_screenReach = new();

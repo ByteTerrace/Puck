@@ -56,8 +56,10 @@ internal abstract class Win32FaceAuthenticationCameraGraph<TStream> : Win32Camer
     protected abstract TStream CreateStream(CameraSensor sensor, Win32FaceAuthenticationStream stream);
     /// <summary>Handles one new native frame on the worker thread.</summary>
     protected abstract void Deliver(VideoMediaFrame video, CameraSensor sensor);
+
     /// <summary>Gets a value indicating whether both pins have proved live for this tier.</summary>
     protected abstract bool IsLive { get; }
+
     /// <summary>Runs once per poll while live; the shared tier attaches targets here.</summary>
     protected virtual void Service() { }
     /// <summary>Releases tier resources on the worker thread before the capture closes.</summary>
@@ -76,7 +78,6 @@ internal abstract class Win32FaceAuthenticationCameraGraph<TStream> : Win32Camer
 
         throw new InvalidOperationException(message: $"the graph carries no {sensor} stream");
     }
-
     protected sealed override void Work() {
         try {
             while (!Stopping) {
@@ -321,6 +322,7 @@ internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticati
             }
 
             var stream = StreamFor(sensor: sensor);
+
             if (!stream.Slots.TryReserveWriteSlot(slot: out var slot)) {
                 return;
             }
@@ -406,6 +408,7 @@ internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticati
 
         return true;
     }
+
     nint IProbeInputResolver.Resolve(CameraSensor sensor, bool previous) => (sensor switch {
         CameraSensor.Color => (m_colorConverter?.OutputView ?? 0),
         CameraSensor.Infrared => (previous ? (m_infraredConverter?.PreviousView ?? 0) : (m_infraredConverter?.OutputView ?? 0)),

@@ -25,7 +25,7 @@ internal static class AutomaticSequenceClaims {
             (automaton.StateCount != 2) ||
             (automaton.StartState != 0) ||
             (automaton.AlphabetSize != 2) ||
-            (automaton.Transition(state: 0, digit: 1) != 1) ||
+            (automaton.Transition(digit: 1, state: 0) != 1) ||
             (automaton.OutputSymbol(state: 1) != 1) ||
             (automaton.Run(digits: [1, 0, 1]) != 0)
         ) {
@@ -37,6 +37,7 @@ internal static class AutomaticSequenceClaims {
             numeration: positional,
             outputAlphabet: [-BigInteger.One, BigInteger.One]
         );
+
         if (
             !parity.HasSignedUnitOutput ||
             (parity.Automaton != automaton) ||
@@ -50,22 +51,23 @@ internal static class AutomaticSequenceClaims {
         for (ulong index = 0; (index < 4096); ++index) {
             var digits = positional.Represent(value: index);
             var rebuilt = positional.Evaluate(digits: digits);
-            var expectedSymbol = (BitOperations.PopCount(index) & 1);
+            var expectedSymbol = BitOperations.PopCount(value: index) & 1;
 
             if (rebuilt != index) {
                 return $"positional representation failed to round-trip {index}";
             }
             if (
                 (parity.OutputSymbolAt(index: index) != expectedSymbol) ||
-                (parity.OutputSymbolAt(index: new BigInteger(index)) != expectedSymbol)
+                (parity.OutputSymbolAt(index: new BigInteger(value: index)) != expectedSymbol)
             ) {
                 return $"the BigInteger and ulong DFAO paths disagreed with parity at {index}";
             }
 
             var expectedValue = ((expectedSymbol == 0) ? -BigInteger.One : BigInteger.One);
+
             if (
                 (parity.ValueAt(index: index) != expectedValue) ||
-                (parity.ValueAt(index: new BigInteger(index)) != expectedValue)
+                (parity.ValueAt(index: new BigInteger(value: index)) != expectedValue)
             ) {
                 return $"the output-alphabet map disagreed with parity at {index}";
             }
@@ -78,6 +80,7 @@ internal static class AutomaticSequenceClaims {
             surdNumerator: 1
         );
         var ostrowski = IntegerNumerationSystem.QuadraticOstrowski(basis: squareRootTwo);
+
         if (
             (ostrowski.Kind != IntegerNumerationKind.QuadraticOstrowski) ||
             (ostrowski.Radix != 0) ||
@@ -97,18 +100,20 @@ internal static class AutomaticSequenceClaims {
             numeration: ostrowski,
             outputAlphabet: [BigInteger.Zero, BigInteger.One]
         );
-        var arbitraryWidth = BigInteger.Parse("100000000000000000000000000000000000000000000000001");
+        var arbitraryWidth = BigInteger.Parse(value: "100000000000000000000000000000000000000000000000001");
 
         foreach (var index in new BigInteger[] { 0, 1, 2, 3, 55, 65_535, arbitraryWidth }) {
             var digits = ostrowski.Represent(value: index);
+
             if (ostrowski.Evaluate(digits: digits) != index) {
                 return $"Ostrowski representation failed to round-trip {index}";
             }
 
             var expected = digits.Aggregate(
-                seed: 0,
-                func: (sum, digit) => ((sum + digit) & 1)
+                func: (sum, digit) => ((sum + digit) & 1),
+                seed: 0
             );
+
             if (ostrowskiParity.ValueAt(index: index) != expected) {
                 return $"Ostrowski DFAO evaluation disagreed with its digit sum at {index}";
             }
@@ -130,6 +135,7 @@ internal static class AutomaticSequenceClaims {
             cancellationToken: TestContext.Current.CancellationToken,
             parameters: parameters
         );
+
         if (
             (analysis.Status != RadicalShadowAnalysisStatus.Total) ||
             (analysis.Parameters != parameters) ||
@@ -157,6 +163,7 @@ internal static class AutomaticSequenceClaims {
             certificate: analysis.Certificate,
             limits: null
         );
+
         if (
             (program.Certificate != analysis.Certificate) ||
             !program.Corrections.ValueAt(index: BigInteger.One).IsZero
@@ -181,20 +188,21 @@ internal static class AutomaticSequenceClaims {
             cancellationToken: TestContext.Current.CancellationToken,
             program: program
         );
+
         if (evaluator.Parameters != parameters) {
             return "the evaluator lost its verified recurrence parameters";
         }
         for (ulong index = 1; (index <= 256); ++index) {
             var expected = IndependentSquareRootFloor(value: (2 * BigInteger.Pow(
-                value: (index + 1),
-                exponent: 2
+                exponent: 2,
+                value: (index + 1)
             )));
 
             if (
                 !evaluator.CorrectionAt(index: index).IsZero ||
-                !evaluator.CorrectionAt(index: new BigInteger(index)).IsZero ||
+                !evaluator.CorrectionAt(index: new BigInteger(value: index)).IsZero ||
                 (evaluator.FloorAt(index: index) != expected) ||
-                (evaluator.FloorAt(index: new BigInteger(index)) != expected)
+                (evaluator.FloorAt(index: new BigInteger(value: index)) != expected)
             ) {
                 return $"the certified radical evaluator failed at n={index}";
             }
@@ -204,6 +212,7 @@ internal static class AutomaticSequenceClaims {
             cancellationToken: TestContext.Current.CancellationToken,
             parameters: new RadicalShadowTowerParameters(D: 2, U: 0, V: 0, W: 1)
         );
+
         if (
             (undecided.Status != RadicalShadowAnalysisStatus.Undecided) ||
             (undecided.Certificate is not null) ||
@@ -217,6 +226,7 @@ internal static class AutomaticSequenceClaims {
             cancellationToken: TestContext.Current.CancellationToken,
             parameters: new RadicalShadowTowerParameters(D: 4, U: 0, V: 0, W: 0)
         );
+
         if (invalid.Status != RadicalShadowAnalysisStatus.Invalid) {
             return "a square radicand did not produce Invalid";
         }
@@ -230,6 +240,7 @@ internal static class AutomaticSequenceClaims {
             ),
             parameters: parameters
         );
+
         if (
             (limited.Status != RadicalShadowAnalysisStatus.ResourceLimit) ||
             (RadicalShadowAnalysisLimits.Default.MaximumAutomatonStates <= 0) ||
@@ -265,6 +276,7 @@ internal static class AutomaticSequenceClaims {
             parameters: parameters,
             proofKind: RadicalShadowProofKind.ExactAffine
         );
+
         if (RadicalShadowTowerVerifier.TryVerify(
             cancellationToken: TestContext.Current.CancellationToken,
             failure: out verificationFailure,

@@ -38,9 +38,9 @@ public sealed class MusicWhenTokenLawTests {
             },
             segment: new MusicSegmentDocument(
                 Id: "calm",
-                Transitions: [.. WorldAudioCue.MusicWhenTokens.Select(selector: static token => new MusicTransitionDocument(To: "calm", When: token, At: null))],
-                Layers: [.. WorldAudioCue.MusicWhenTokens.Select(selector: static token => new MusicLayerDocument(TuneId: "bed-tune", GainThousandths: null, When: token))],
-                Embellishments: [.. WorldAudioCue.MusicWhenTokens.Select(selector: static token => new MusicEmbellishmentDocument(PatchId: "stinger", When: token, GainThousandths: null))]
+                Transitions: [.. WorldAudioCue.MusicWhenTokens.Select(selector: static token => new MusicTransitionDocument(At: null, To: "calm", When: token))],
+                Layers: [.. WorldAudioCue.MusicWhenTokens.Select(selector: static token => new MusicLayerDocument(GainThousandths: null, TuneId: "bed-tune", When: token))],
+                Embellishments: [.. WorldAudioCue.MusicWhenTokens.Select(selector: static token => new MusicEmbellishmentDocument(GainThousandths: null, PatchId: "stinger", When: token))]
             )
         );
     }
@@ -50,7 +50,7 @@ public sealed class MusicWhenTokenLawTests {
             path: "transitions.when",
             segment: new MusicSegmentDocument(
                 Id: "calm",
-                Transitions: [new MusicTransitionDocument(To: "calm", When: WorldAudioCue.PlayerJump, At: null)]
+                Transitions: [new MusicTransitionDocument(At: null, To: "calm", When: WorldAudioCue.PlayerJump)]
             ),
             token: WorldAudioCue.PlayerJump
         );
@@ -62,7 +62,7 @@ public sealed class MusicWhenTokenLawTests {
             segment: new MusicSegmentDocument(
                 Id: "calm",
                 Transitions: null,
-                Layers: [new MusicLayerDocument(TuneId: "bed-tune", GainThousandths: null, When: WorldAudioCue.MutationApplied)]
+                Layers: [new MusicLayerDocument(GainThousandths: null, TuneId: "bed-tune", When: WorldAudioCue.MutationApplied)]
             ),
             token: WorldAudioCue.MutationApplied
         );
@@ -74,7 +74,7 @@ public sealed class MusicWhenTokenLawTests {
             segment: new MusicSegmentDocument(
                 Id: "calm",
                 Transitions: null,
-                Embellishments: [new MusicEmbellishmentDocument(PatchId: "stinger", When: WorldAudioCue.GrantDenied, GainThousandths: null)]
+                Embellishments: [new MusicEmbellishmentDocument(GainThousandths: null, PatchId: "stinger", When: WorldAudioCue.GrantDenied)]
             ),
             token: WorldAudioCue.GrantDenied
         );
@@ -88,7 +88,7 @@ public sealed class MusicWhenTokenLawTests {
             segment: new MusicSegmentDocument(
                 Id: "calm",
                 Transitions: null,
-                Layers: [new MusicLayerDocument(TuneId: "bed-tune", GainThousandths: null, When: " ")]
+                Layers: [new MusicLayerDocument(GainThousandths: null, TuneId: "bed-tune", When: " ")]
             ),
             token: " "
         );
@@ -114,7 +114,7 @@ public sealed class MusicWhenTokenLawTests {
                 Tempo: new MusicTempoDocument(BeatsPerBar: 4, TicksPerBeat: 2100),
                 Segments: [segment]
             ));
-            var tune = AudioCanonicalizer.Canonicalize(document: new AudioDocument(Schema: AudioDocument.CurrentSchema, Name: "bed", Tempo: null, Patterns: null, Order: null, Effects: null));
+            var tune = AudioCanonicalizer.Canonicalize(document: new AudioDocument(Effects: null, Name: "bed", Order: null, Patterns: null, Schema: AudioDocument.CurrentSchema, Tempo: null));
             var patch = SynthPatchCanonicalizer.Canonicalize(document: new SynthPatchDocument(Schema: SynthPatchDocument.CurrentSchema, Name: "stinger", Oscillator: null, DutyThousandths: null, Polynomial: null, AttackFrames: null, DecayFrames: null, SustainThousandths: null, ReleaseFrames: null, PitchMillihertz: 440_000));
             var musicPath = Path.Combine(path1: directory, path2: "when-law.puck.music.v1.json");
             var tunePath = Path.Combine(path1: directory, path2: "bed-tune.puck.audio.v1.json");

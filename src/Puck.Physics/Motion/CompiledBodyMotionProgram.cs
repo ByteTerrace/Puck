@@ -75,6 +75,7 @@ public sealed class CompiledBodyMotionProgram {
     public bool OwnsVerticalContactState => Contains(operation: BodyMotionOp.ApplyVerticalGravity);
     /// <summary>Gets the operations grouped by their intrinsic host phase.</summary>
     public BodyMotionOp[][] Phases { get; }
+
     /// <summary>Gets the instruction-set version this compiler accepts.</summary>
     public const string SupportedVersion = "puck.body-motion.v1";
 
@@ -138,9 +139,9 @@ public sealed class CompiledBodyMotionProgram {
     public static CompiledBodyMotionProgram Compile(string? name, string? version, BodyProgramKind? kind, IReadOnlyList<BodyMotionOp>? operations) {
         if (string.IsNullOrWhiteSpace(value: name)) {
             throw Refuse(
-                BodyMotionProgramRefusal.NameMissing,
-                name,
-                "name is required"
+                detail: "name is required",
+                name: name,
+                refusal: BodyMotionProgramRefusal.NameMissing
             );
         }
         if (!string.Equals(
@@ -149,9 +150,9 @@ public sealed class CompiledBodyMotionProgram {
             comparisonType: StringComparison.Ordinal
         )) {
             throw Refuse(
-                BodyMotionProgramRefusal.VersionUnsupported,
-                name,
-                $"version '{version}' is not '{SupportedVersion}'"
+                detail: $"version '{version}' is not '{SupportedVersion}'",
+                name: name,
+                refusal: BodyMotionProgramRefusal.VersionUnsupported
             );
         }
         if (
@@ -160,9 +161,9 @@ public sealed class CompiledBodyMotionProgram {
             (operations.Count > MaxOperations)
         ) {
             throw Refuse(
-                BodyMotionProgramRefusal.InstructionCountOutOfRange,
-                name,
-                $"operation count must be in [1, {MaxOperations}]"
+                detail: $"operation count must be in [1, {MaxOperations}]",
+                name: name,
+                refusal: BodyMotionProgramRefusal.InstructionCountOutOfRange
             );
         }
         if (
@@ -183,9 +184,9 @@ public sealed class CompiledBodyMotionProgram {
         foreach (var op in operations) {
             if (!Enum.IsDefined(value: op)) {
                 throw Refuse(
-                    BodyMotionProgramRefusal.OpcodeUnknown,
-                    name,
-                    $"opcode value {((int)op)} is not declared"
+                    detail: $"opcode value {((int)op)} is not declared",
+                    name: name,
+                    refusal: BodyMotionProgramRefusal.OpcodeUnknown
                 );
             }
             if (
@@ -193,16 +194,16 @@ public sealed class CompiledBodyMotionProgram {
                 ((RequiredAdmission(operation: op) & ~admissionMask) != BodyProgramAdmission.None)
             ) {
                 throw Refuse(
-                    BodyMotionProgramRefusal.OpcodeInadmissible,
-                    name,
-                    $"opcode '{op}' is inadmissible for program kind '{programKind}'"
+                    detail: $"opcode '{op}' is inadmissible for program kind '{programKind}'",
+                    name: name,
+                    refusal: BodyMotionProgramRefusal.OpcodeInadmissible
                 );
             }
             if (!seen.Add(item: op)) {
                 throw Refuse(
-                    BodyMotionProgramRefusal.OpcodeDuplicate,
-                    name,
-                    $"opcode '{op}' occurs more than once"
+                    detail: $"opcode '{op}' occurs more than once",
+                    name: name,
+                    refusal: BodyMotionProgramRefusal.OpcodeDuplicate
                 );
             }
 
@@ -226,11 +227,11 @@ public sealed class CompiledBodyMotionProgram {
         }
 
         return new CompiledBodyMotionProgram(
-            name: name,
-            kind: programKind,
             admissionMask: admissionMask,
-            phases: phases,
-            operations: seen
+            kind: programKind,
+            name: name,
+            operations: seen,
+            phases: phases
         );
     }
     /// <summary>Reports whether this program selects an operation.</summary>

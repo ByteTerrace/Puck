@@ -37,7 +37,6 @@ internal sealed class TuneInstrumentMachine : IScreenMachine, IAudioMachine, IIn
 
     /// <inheritdoc/>
     public long TicksPerBeat { get; private set; }
-
     /// <inheritdoc/>
     public bool IsAssigned => m_inner.IsAssigned;
     /// <inheritdoc/>

@@ -99,7 +99,6 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // per-entity flag the pack/emit path reads to skip the catalog avatar (the body renders its creation instead).
     private readonly List<WorldStampPool.BodyStamp> m_bodyStamps = new();
     private readonly bool[] m_rendersAsStamp = new bool[WorldRigCatalog.Capacity];
-
     // The catalog-look root follower: a NON-stamp-rendered avatar (a Catalog-sourced look, or a Creation look the
     // stamp pool had no free slot for) whose look names a root Motion.Dynamics row lags the whole avatar toward its
     // raw interpolated pose instead of drawing it directly — resolved once per rebuild (Compose, beside the rig/scale/
@@ -112,6 +111,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // teleport, an over-threshold correction) reseeds the follower exactly like an address change does, so the boom
     // never streaks the follower across the jump. -1 (never observed) reseeds on the first frame.
     private readonly int[] m_avatarDynamicsPoseEpoch = NewPoseEpochs();
+
     private float m_pendingDeltaSeconds;
 
     private static int[] NewPoseEpochs() {

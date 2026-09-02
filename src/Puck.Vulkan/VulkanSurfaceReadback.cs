@@ -227,6 +227,7 @@ public sealed class VulkanSurfaceReadback : IDisposable {
     // behavior on Vulkan and a mismatched resource state is undefined behavior on Direct3D 12.
     private void RecordReadback(nint commandBufferHandle, nint sourceImageHandle, GpuImageLayout sourceLayout) {
         var device = m_device!;
+
         var (vulkanSourceLayout, sourceAccessMask, sourceStageMask) = sourceLayout switch {
             // The producer-side External handoff is still VkImageLayout.GENERAL; unlike a working General storage
             // image, however, Record left it scoped for the completed producer write's read-only handoff.

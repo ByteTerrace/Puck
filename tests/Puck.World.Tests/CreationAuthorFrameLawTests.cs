@@ -67,7 +67,7 @@ public sealed class CreationAuthorFrameLawTests {
 
         var surfacePoint = FixedVector3.FromVector3(value: engineRun.Position);
 
-        Assert.True(condition: field!.Probe(position: in surfacePoint, distance: out var distance, material: out _, gradient: out _));
+        Assert.True(condition: field!.Probe(distance: out var distance, gradient: out _, material: out _, position: in surfacePoint));
         Assert.True((FixedQ4816.Abs(value: distance) < SurfaceTolerance),
             userMessage: $"the compiled solid field disagrees with the render conversion at the authored front point; distance={((double)distance):0.####}");
     }
@@ -107,11 +107,11 @@ public sealed class CreationAuthorFrameLawTests {
         var equatorPoint = new FixedVector3(X: FixedQ4816.FromDouble(value: 0.5), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero);
         var topPoint = new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.FromDouble(value: 1.0), Z: FixedQ4816.Zero);
 
-        Assert.True(condition: field!.Probe(position: in equatorPoint, distance: out var equatorDistance, material: out _, gradient: out _));
+        Assert.True(condition: field!.Probe(distance: out var equatorDistance, gradient: out _, material: out _, position: in equatorPoint));
         Assert.True((FixedQ4816.Abs(value: equatorDistance) < SurfaceTolerance),
             userMessage: $"scale.x/z=0.5 did not compile to radius 0.5; equator distance={((double)equatorDistance):0.####}");
 
-        Assert.True(condition: field.Probe(position: in topPoint, distance: out var topDistance, material: out _, gradient: out _));
+        Assert.True(condition: field.Probe(distance: out var topDistance, gradient: out _, material: out _, position: in topPoint));
         Assert.True((FixedQ4816.Abs(value: topDistance) < SurfaceTolerance),
             userMessage: $"scale.y=1 did not compile to a 1-unit cylindrical section (2·radius + length = 2); top distance={((double)topDistance):0.####}");
     }
@@ -174,10 +174,10 @@ public sealed class CreationAuthorFrameLawTests {
         };
 
         Assert.True(condition: WorldSolidField.TryBuild(definition: definition, built: out var field, reason: out var reason), userMessage: reason);
-        Assert.True(condition: field!.Probe(position: in authoredPoint, distance: out var authoredFieldDistance, material: out _, gradient: out _));
+        Assert.True(condition: field!.Probe(distance: out var authoredFieldDistance, gradient: out _, material: out _, position: in authoredPoint));
         Assert.True((FixedQ4816.Abs(value: authoredFieldDistance) < SurfaceTolerance),
             userMessage: $"the authored point did not read as solid in the compiled contact field; distance={((double)authoredFieldDistance):0.####}");
-        Assert.True(condition: field.Probe(position: in reflectedPoint, distance: out var reflectedFieldDistance, material: out _, gradient: out _));
+        Assert.True(condition: field.Probe(distance: out var reflectedFieldDistance, gradient: out _, material: out _, position: in reflectedPoint));
         Assert.True((FixedQ4816.Abs(value: reflectedFieldDistance) < SurfaceTolerance),
             userMessage: $"the fold-reflected point did not read as solid in the compiled contact field; distance={((double)reflectedFieldDistance):0.####}");
     }

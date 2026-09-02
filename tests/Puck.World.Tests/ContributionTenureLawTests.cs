@@ -364,6 +364,7 @@ public sealed class ContributionTenureLawTests {
         Assert.NotNull(@object: Facet(fixture: endowed).Contributor);
         Assert.Null(@object: Facet(fixture: endowed).RetractDeadlineTick);
     }
+
     private static WorldDefinition EndowedDocument() {
         var document = Document();
         var slot = document.Placements[0];
@@ -379,6 +380,7 @@ public sealed class ContributionTenureLawTests {
             ],
         });
     }
+
     /// <summary>DENIAL: a submission that names <c>contributor</c> is refused and changes nothing. CONTROL: the same
     /// submission without it applies and stamps the ACTING principal — which is a different identity from the one
     /// the denied payload tried to name.</summary>

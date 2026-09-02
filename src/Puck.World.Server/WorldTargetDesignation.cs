@@ -17,7 +17,6 @@ public readonly record struct WorldTargetDesignation(int Index, FixedVector3 Poi
         Index: -1,
         Point: default
     );
-
     /// <summary>Gets a value indicating whether this slot designates anything.</summary>
     public bool Exists => (HasBody || IsPoint);
     /// <summary>Gets a value indicating whether this slot designates a concrete body.</summary>

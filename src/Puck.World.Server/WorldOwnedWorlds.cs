@@ -72,9 +72,9 @@ public sealed class WorldOwnedWorlds {
             ) ||
                 (document?.Identity is null)
             ) {
-                unloadable.Add(item: (path, (document is null)
+                unloadable.Add(item: (path, ((document is null)
                     ? reason
-                    : $"{path} is not a valid {WorldDefinition.SchemaVersion} document: it declares no identity section, so it is not an owned world"
+                    : $"{path} is not a valid {WorldDefinition.SchemaVersion} document: it declares no identity section, so it is not an owned world")
                 ));
 
                 continue;
@@ -187,12 +187,10 @@ public sealed class WorldOwnedWorlds {
     /// directory with its original bytes: the seeding pass skips any id whose catalog path is occupied, so nothing
     /// writes over it, and it is refused again on the next construction.</param>
     public sealed record WorldOwnedWorldDisposal(string FileName, string Reason, string QuarantinePath, bool Moved);
-
     /// <summary>One document this catalog refused and left exactly where it was.</summary>
     /// <param name="FileName">The file name it carries in the catalog directory.</param>
     /// <param name="Reason">Why it could not be admitted.</param>
     public sealed record WorldOwnedWorldRefusal(string FileName, string Reason);
-
     /// <summary>The catalog's checkpointed state — the identities as document data plus the mutation counter.
     /// Excludes <see cref="FilePath"/> (host state — the state directory a fresh instance's own construction
     /// resolves) and <see cref="LastReceipt"/> (a read-back-only diagnostic of the most recent submission, the same
@@ -628,7 +626,6 @@ public sealed class WorldOwnedWorlds {
 
         return rows;
     }
-
     // The result is a GROUPING KEY as well as a narration, so it must carry nothing that varies per file: the loader
     // spells the path at the head of some reasons ("{path} is not a valid …") and mid-sentence in others ("no file
     // at {path}", "cannot read {path}: …"), and the operating system's own message quotes it again. Every occurrence

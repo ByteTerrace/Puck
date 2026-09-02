@@ -16,6 +16,7 @@ public sealed class ProbeReadingRing {
     private readonly ProbeReading[] m_slots = new ProbeReading[SlotCount];
 
     private long m_publishCount;
+
     private volatile int m_latestSlot = -1;
 
     /// <summary>Gets the number of publications so far.</summary>

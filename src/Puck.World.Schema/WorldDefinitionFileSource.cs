@@ -165,6 +165,7 @@ public static class WorldDefinitionFileSource {
             return false;
         }
     }
+
     /// <summary>Parses, migrates, and validates an already-decoded, already-composed document string — the shared
     /// middle of every load path once its own bytes/basis handling has produced flat JSON: a directory load
     /// (composed above) and a bytes-only load with no directory to resolve a chain against
@@ -233,6 +234,7 @@ public static class WorldDefinitionFileSource {
 
         return true;
     }
+
     private static bool TryResolveBasisPath(JsonNode? basisNode, string referrerPath, out string? basisPath, out string reason) {
         basisPath = null;
 

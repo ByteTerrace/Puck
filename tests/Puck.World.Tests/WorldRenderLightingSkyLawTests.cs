@@ -32,8 +32,8 @@ public sealed class WorldRenderLightingSkyLawTests {
         var second = Resolve(defaults: BaseDefaults() with { Lighting = lighting }, state: [ColorsRow(hex: "#4C5C8C")], revision: 2, track: track);
         var stale = Resolve(defaults: BaseDefaults() with { Lighting = lighting }, state: [ColorsRow(hex: "#000000")], revision: 2, track: track);
 
-        Assert.Equal(expected: new Vector3((0xFF / 255f), (0xD9 / 255f), (0xA6 / 255f)), actual: first.SunColor);
-        Assert.Equal(expected: new Vector3((0x4C / 255f), (0x5C / 255f), (0x8C / 255f)), actual: second.SunColor);
+        Assert.Equal(expected: new Vector3(x: (0xFF / 255f), y: (0xD9 / 255f), z: (0xA6 / 255f)), actual: first.SunColor);
+        Assert.Equal(expected: new Vector3(x: (0x4C / 255f), y: (0x5C / 255f), z: (0x8C / 255f)), actual: second.SunColor);
         // Same revision: the cached resolution stands until the next delivery.
         Assert.Equal(expected: second.SunColor, actual: stale.SunColor);
     }
@@ -65,6 +65,7 @@ public sealed class WorldRenderLightingSkyLawTests {
             }))
         );
     }
+
     private static bool TryValidateLocal(WorldDefinition definition) => WorldDefinitionValidator.TryValidate(
         definition: definition,
         neighbours: null,
@@ -131,7 +132,6 @@ public sealed class WorldRenderLightingSkyLawTests {
             }))
         );
     }
-
     [Fact]
     public void AbsentLightingAndSky_ResolveToSdfFrameDefaultsBitExact() {
         var settings = Resolve(defaults: BaseDefaults());
@@ -154,31 +154,29 @@ public sealed class WorldRenderLightingSkyLawTests {
         Assert.Equal(expected: 0f, actual: settings.SkyStarBrightness);
         Assert.Equal(expected: 0u, actual: settings.SkyStarSeed);
     }
-
     [Fact]
     public void AuthoredLighting_EveryFieldThreadsThrough() {
         var lighting = new WorldRenderLighting(
             Sun: new WorldRenderSun(
-                Direction: new Vector3(0.3f, 0.6f, -0.5f),
+                Direction: new Vector3(x: 0.3f, y: 0.6f, z: -0.5f),
                 Weight: 0.42f,
                 Color: "#FFD9A6"
             ),
             Ambient: new WorldRenderAmbient(
                 Base: 0.11f,
-                Hemisphere: 0.13f,
-                Color: "#4C5C8C"
+                Color: "#4C5C8C",
+                Hemisphere: 0.13f
             )
         );
         var settings = Resolve(defaults: BaseDefaults() with { Lighting = lighting });
 
-        Assert.Equal(expected: new Vector3(0.3f, 0.6f, -0.5f), actual: settings.SunDirection);
+        Assert.Equal(expected: new Vector3(x: 0.3f, y: 0.6f, z: -0.5f), actual: settings.SunDirection);
         Assert.Equal(expected: 0.42f, actual: settings.SunWeight);
-        Assert.Equal(expected: new Vector3((0xFF / 255f), (0xD9 / 255f), (0xA6 / 255f)), actual: settings.SunColor);
+        Assert.Equal(expected: new Vector3(x: (0xFF / 255f), y: (0xD9 / 255f), z: (0xA6 / 255f)), actual: settings.SunColor);
         Assert.Equal(expected: 0.11f, actual: settings.AmbientBase);
         Assert.Equal(expected: 0.13f, actual: settings.AmbientHemisphere);
-        Assert.Equal(expected: new Vector3((0x4C / 255f), (0x5C / 255f), (0x8C / 255f)), actual: settings.AmbientColor);
+        Assert.Equal(expected: new Vector3(x: (0x4C / 255f), y: (0x5C / 255f), z: (0x8C / 255f)), actual: settings.AmbientColor);
     }
-
     [Fact]
     public void AuthoredLighting_PartialSection_UnsetFieldsKeepSdfFrameDefaults() {
         var lighting = new WorldRenderLighting(Sun: new WorldRenderSun(Weight: 0.5f));
@@ -190,7 +188,6 @@ public sealed class WorldRenderLightingSkyLawTests {
         Assert.Equal(expected: SdfFrame.DefaultAmbientBase, actual: settings.AmbientBase);
         Assert.Equal(expected: SdfFrame.DefaultAmbientHemisphere, actual: settings.AmbientHemisphere);
     }
-
     [Fact]
     public void AuthoredSky_EveryFieldThreadsThroughAndEnablesTheProceduralSky() {
         var sky = new WorldRenderSky(
@@ -204,9 +201,9 @@ public sealed class WorldRenderLightingSkyLawTests {
         var settings = Resolve(defaults: BaseDefaults() with { Sky = sky });
 
         Assert.True(condition: settings.SkyEnabled);
-        Assert.Equal(expected: new Vector3((0x1B / 255f), (0x23 / 255f), (0x50 / 255f)), actual: settings.SkyZenithColor);
-        Assert.Equal(expected: new Vector3((0xE0 / 255f), (0x8F / 255f), (0x6B / 255f)), actual: settings.SkyHorizonColor);
-        Assert.Equal(expected: new Vector3((0x0B / 255f), (0x0D / 255f), (0x14 / 255f)), actual: settings.SkyGroundColor);
+        Assert.Equal(expected: new Vector3(x: (0x1B / 255f), y: (0x23 / 255f), z: (0x50 / 255f)), actual: settings.SkyZenithColor);
+        Assert.Equal(expected: new Vector3(x: (0xE0 / 255f), y: (0x8F / 255f), z: (0x6B / 255f)), actual: settings.SkyHorizonColor);
+        Assert.Equal(expected: new Vector3(x: (0x0B / 255f), y: (0x0D / 255f), z: (0x14 / 255f)), actual: settings.SkyGroundColor);
         Assert.Equal(expected: 0.02f, actual: settings.SkyFogDensity);
         Assert.Equal(expected: 0.045f, actual: settings.SkySunDiscRadians);
         Assert.Equal(expected: 6f, actual: settings.SkySunDiscIntensity);
@@ -214,7 +211,6 @@ public sealed class WorldRenderLightingSkyLawTests {
         Assert.Equal(expected: 0.85f, actual: settings.SkyStarBrightness);
         Assert.Equal(expected: 1337u, actual: settings.SkyStarSeed);
     }
-
     [Fact]
     public void AuthoredSky_FogDensityIsIndependentOfEnabled() {
         // render.sky.fogDensity is read every frame regardless of the gradient/disc/star gate — a world can raise

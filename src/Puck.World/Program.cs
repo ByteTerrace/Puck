@@ -197,11 +197,11 @@ if (parseResult.GetValue(option: federationKeyFileOption) is { } federationKeyFi
 
     try {
         var pkcs8 = File.ReadAllBytes(path: Path.GetFullPath(path: federationKeyFile));
-        var key = System.Security.Cryptography.ECDsa.Create();
-
-        key.ImportPkcs8PrivateKey(
-            bytesRead: out _,
-            source: pkcs8
+        // The one key-import path in the tree: refuses trailing bytes and any curve other than the one the signing
+        // algorithm names, so a wrong key file fails here by name rather than at the first signed claim.
+        var key = Puck.Attestation.AttestationKeys.ImportPkcs8PrivateKey(
+            algorithm: Puck.Attestation.AttestationAlgorithms.EcdsaP256Sha256,
+            pkcs8: pkcs8
         );
 
         authenticator = new Puck.World.Server.WorldAttestedAuthenticator(
@@ -212,7 +212,7 @@ if (parseResult.GetValue(option: federationKeyFileOption) is { } federationKeyFi
             ),
             trustEntries: () => worldSource.Definition.Admission
         );
-    } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)) {
+    } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException or ArgumentException)) {
         Console.Error.WriteLine(value: $"--federation-key-file could not be read: {exception.Message}");
 
         return 1;

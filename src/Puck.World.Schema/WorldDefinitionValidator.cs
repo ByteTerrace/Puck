@@ -479,6 +479,7 @@ public static partial class WorldDefinitionValidator {
                 return;
         }
     }
+
     internal static void ValidateOverlayPredicate(OverlayPredicate? predicate, string path, List<string> errors, WorldDefinition? definition = null, IReadOnlyDictionary<string, WorldStateRow>? stateRows = null) {
         switch (predicate) {
             case null:
@@ -622,6 +623,7 @@ public static partial class WorldDefinitionValidator {
                 return;
         }
     }
+
     // Identity and profile colors stay literal: they are persisted per identity (RgbToHex into the owned-world
     // catalog) and travel between worlds, so nothing there can bind to one world's state.
     private static bool IsHexColor(string? value) =>
@@ -819,11 +821,11 @@ public static partial class WorldDefinitionValidator {
             var rowId = id(row);
 
             RequireUniqueName(
-                value: rowId,
-                seen: ids,
-                path: path,
+                errors: errors,
                 field: "id",
-                errors: errors
+                path: path,
+                seen: ids,
+                value: rowId
             );
 
             if (check(row) is not { } result) {
@@ -853,6 +855,7 @@ public static partial class WorldDefinitionValidator {
 
         return ids;
     }
+
     // The declared-name sets ValidateCore's worst-threaded consumers (ValidatePlacements/ValidateFaceSources,
     // ValidateScreenSource/ValidateMagazine) resolve dangling references against, carried as ONE parameter instead
     // of one positional HashSet per set. Filled progressively as ValidateCore computes each set — a field is safe to
@@ -860,14 +863,15 @@ public static partial class WorldDefinitionValidator {
     // un-scoped locals already followed.
     private sealed class ValidationScope {
         public HashSet<string> Cameras { get; set; } = [];
-        public HashSet<string> PrototypeIds { get; set; } = [];
         public HashSet<string> DestinationNames { get; set; } = [];
         public HashSet<string> FontNames { get; set; } = [];
         public bool HasTextCatalog { get; set; }
         public HashSet<string> KitNames { get; set; } = [];
         public HashSet<string> LookNames { get; set; } = [];
         public HashSet<string> PatchIds { get; set; } = [];
+        public HashSet<string> PrototypeIds { get; set; } = [];
     }
+
     private static void ValidateCore(WorldDefinition definition, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims) {
         ArgumentNullException.ThrowIfNull(definition);
 
@@ -1060,9 +1064,9 @@ public static partial class WorldDefinitionValidator {
             id: static row => row.Name,
             hash: static row => row.Hash,
             check: row => CheckMusic(
+                patchIds: patchIds,
                 row: row,
-                tuneIds: tuneIds,
-                patchIds: patchIds
+                tuneIds: tuneIds
             ),
             errors: errors
         );

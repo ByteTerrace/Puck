@@ -71,6 +71,7 @@ public sealed record WorldPlacementContribution(
     )),
         seconds: GraceSeconds
     );
+
     /// <summary>Gets a value indicating whether a partner currently occupies this slot.</summary>
     [JsonIgnore]
     public bool IsFilled => (Contributor is not null);

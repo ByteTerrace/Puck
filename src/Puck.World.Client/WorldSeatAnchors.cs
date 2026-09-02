@@ -30,7 +30,7 @@ public static class WorldSeatAnchors {
     }
     /// <summary>Returns a value indicating whether <paramref name="anchor"/> is a seat-relative kind.</summary>
     /// <param name="anchor">The anchor.</param>
-    public static bool IsSeatRelative(WorldAnchor? anchor) => anchor is WorldAnchor.Seat or WorldAnchor.RecentSpeaker;
+    public static bool IsSeatRelative(WorldAnchor? anchor) => (anchor is WorldAnchor.Seat or WorldAnchor.RecentSpeaker);
     /// <summary>Returns the part id a seat-relative anchor names, or <see langword="null"/> for its root.</summary>
     /// <param name="anchor">The anchor.</param>
     public static string? PartOf(WorldAnchor? anchor) => anchor switch {
@@ -136,6 +136,7 @@ public static class WorldSeatAnchors {
 
         return true;
     }
+
     private static SdfAnchor RootPose(int body, WorldClient client) => new(
         Orientation: client.Orientation(index: body),
         Position: client.Position(index: body)
@@ -150,6 +151,7 @@ public static class WorldSeatAnchors {
 
         return ((((uint)body) < ((uint)WorldClient.EntityCapacity)) && client.IsActive(index: body));
     }
+
     /// <summary>Selects the anchor a camera rides this frame for <paramref name="slot"/>: the bare
     /// <see cref="WorldCamera.Anchor"/>, or the first <see cref="WorldCamera.Anchors"/> candidate whose condition
     /// holds. <paramref name="candidateIndex"/> is that candidate's index, or -1 (bare anchor, or none holding —

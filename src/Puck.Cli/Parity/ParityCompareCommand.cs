@@ -73,7 +73,7 @@ internal static class ParityCompareCommand {
             if (outcome.Failed) {
                 failedCount++;
 
-                WriteEvidence(outcome: outcome, outDir: resolvedOutDir);
+                WriteEvidence(outDir: resolvedOutDir, outcome: outcome);
             }
         }
 

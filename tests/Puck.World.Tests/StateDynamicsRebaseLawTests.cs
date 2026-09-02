@@ -10,9 +10,9 @@ namespace Puck.World.Tests;
 /// referenced <c>dynamics</c> row's own <c>r</c>, and <c>world.undo</c>/a market touch rebase the same way.</summary>
 public sealed class StateDynamicsRebaseLawTests {
     private static readonly WorldPrincipal Actor = WorldPrincipal.Seat(slot: 0);
-    private static readonly WorldDynamicsRow KickPositive = new(Name: "kickPos", Frequency: 1f, Damping: 1f, Response: 1f);
-    private static readonly WorldDynamicsRow KickZero = new(Name: "kickZero", Frequency: 1f, Damping: 1f, Response: 0f);
-    private static readonly WorldDynamicsRow KickNegative = new(Name: "kickNeg", Frequency: 1f, Damping: 1f, Response: -1f);
+    private static readonly WorldDynamicsRow KickPositive = new(Damping: 1f, Frequency: 1f, Name: "kickPos", Response: 1f);
+    private static readonly WorldDynamicsRow KickZero = new(Damping: 1f, Frequency: 1f, Name: "kickZero", Response: 0f);
+    private static readonly WorldDynamicsRow KickNegative = new(Damping: 1f, Frequency: 1f, Name: "kickNeg", Response: -1f);
 
     private static WorldDefinition BuildDocument(string dynamicsRow) {
         var row = new WorldStateRow(
@@ -20,7 +20,7 @@ public sealed class StateDynamicsRebaseLawTests {
             Kind: CellKind.Int,
             Capacity: 8,
             Cells: [
-                new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: 0, Dynamics: new WorldStateDynamics(Row: dynamicsRow, Y0: 0, V0: 0, EpochTick: 0)),
+                new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: 0, Dynamics: new WorldStateDynamics(EpochTick: 0, Row: dynamicsRow, V0: 0, Y0: 0)),
             ]
         );
 
@@ -154,7 +154,7 @@ public sealed class StateDynamicsRebaseLawTests {
                 new WorldStateCell(
                     Key: WorldCellName.Parse(candidate: "1"),
                     Value: MarketFixtures.BidderStartingGold,
-                    Dynamics: new WorldStateDynamics(Row: "kickZero", Y0: MarketFixtures.BidderStartingGold, V0: 0, EpochTick: 0)
+                    Dynamics: new WorldStateDynamics(EpochTick: 0, Row: "kickZero", V0: 0, Y0: MarketFixtures.BidderStartingGold)
                 ),
                 new WorldStateCell(Key: WorldCellName.Parse(candidate: "2"), Value: MarketFixtures.BidderStartingGold),
             ]

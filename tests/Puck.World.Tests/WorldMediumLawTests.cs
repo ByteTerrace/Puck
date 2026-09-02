@@ -46,9 +46,8 @@ public sealed class WorldMediumLawTests {
         };
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var reason));
-        Assert.Contains(expectedSubstring: "medium requires a heightScale greater than 0", actualString: reason, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "medium requires a heightScale greater than 0");
     }
-
     [Fact]
     public void MediumOutsideTheLatticeTraitRefusesByName() {
         // The document below is a VALID medium row — the sabotage moves "medium" from inside "lattice" to a
@@ -140,15 +139,14 @@ public sealed class WorldMediumLawTests {
         };
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: dry, reason: out var reason));
-        Assert.Contains(expectedSubstring: "declares a swim model but the world authors no medium lattice row", actualString: reason, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "declares a swim model but the world authors no medium lattice row");
     }
-
     [Fact]
     public void ABodyStandingInAMediumCellGetsSubmergedAfterAStep_AndABodyOnDryCellsDoesNot() {
         // A 2x2 lattice at the origin covers seat-1's spawn (0,0,0) but not seat-2's (2,0,0) — the "same lattice,
         // in vs out of coverage" contrast a single fixture proves both halves through, since every local seat runs
         // the SAME resolved seat kit (see the puck-world skill's own seat/kit remarks).
-        using var fixture = Fixtures.FreshServer(definition: BuildSwimKitDocument(topology: Topology(width: 2, depth: 2)));
+        using var fixture = Fixtures.FreshServer(definition: BuildSwimKitDocument(topology: Topology(depth: 2, width: 2)));
         var wet = WorldPrincipal.Seat(slot: 0);
         var dry = WorldPrincipal.Seat(slot: 1);
 
@@ -165,7 +163,6 @@ public sealed class WorldMediumLawTests {
         Assert.True(condition: wetBody.Submerged);
         Assert.False(condition: dryBody.Submerged);
     }
-
     [Fact]
     public void AMediumRowSurvivesCompileDecompileRoundTripExactly() {
         var trait = new WorldStateLatticeTrait(
@@ -189,7 +186,6 @@ public sealed class WorldMediumLawTests {
 
         Assert.Equal(expected: trait, actual: decompiled.World![0].Lattice);
     }
-
     [Fact]
     public void AMediumRowSurvivesWorldSaveRoundTripExactly() {
         var trait = new WorldStateLatticeTrait(

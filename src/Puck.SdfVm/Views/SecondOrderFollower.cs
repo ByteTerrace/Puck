@@ -15,7 +15,6 @@ public readonly record struct SecondOrderPropagator(float A11, float A12, float 
     /// <summary>Gets the identity propagator — a follower left untouched.</summary>
     public static SecondOrderPropagator Identity => new(A11: 1f, A12: 0f, A21: 0f, A22: 1f);
 }
-
 /// <summary>
 /// The presentation-side twin of <see cref="Puck.Maths.SecondOrderDynamics"/>: the same t3ssel8r-style second-order
 /// system, derived and propagated in <see cref="float"/> at the render/frame seam rather than in fixed point. Kept in
@@ -51,19 +50,19 @@ public readonly record struct SecondOrderResponse {
     /// <exception cref="ArgumentOutOfRangeException">A parameter is non-finite, <paramref name="frequencyHz"/> is not
     /// strictly positive, or <paramref name="dampingRatio"/> is negative.</exception>
     public static SecondOrderResponse Create(float frequencyHz, float dampingRatio, float initialResponse) {
-        if (!float.IsFinite(frequencyHz) || (frequencyHz <= 0f)) {
+        if (!float.IsFinite(f: frequencyHz) || (frequencyHz <= 0f)) {
             throw new ArgumentOutOfRangeException(
                 paramName: nameof(frequencyHz),
                 message: "The natural frequency must be finite and strictly positive."
             );
         }
-        if (!float.IsFinite(dampingRatio) || (dampingRatio < 0f)) {
+        if (!float.IsFinite(f: dampingRatio) || (dampingRatio < 0f)) {
             throw new ArgumentOutOfRangeException(
                 paramName: nameof(dampingRatio),
                 message: "The damping ratio must be finite and non-negative."
             );
         }
-        if (!float.IsFinite(initialResponse)) {
+        if (!float.IsFinite(f: initialResponse)) {
             throw new ArgumentOutOfRangeException(
                 paramName: nameof(initialResponse),
                 message: "The initial response must be finite."
@@ -79,7 +78,7 @@ public readonly record struct SecondOrderResponse {
                 : SecondOrderDynamicsBranch.Overdamped));
         var oscillationRate = ((branch == SecondOrderDynamicsBranch.CriticallyDamped)
             ? 0f
-            : (omega * MathF.Sqrt(MathF.Abs(1f - (dampingRatio * dampingRatio)))));
+            : (omega * MathF.Sqrt(x: MathF.Abs(x: (1f - (dampingRatio * dampingRatio))))));
 
         return new() {
             Branch = branch,
@@ -92,60 +91,59 @@ public readonly record struct SecondOrderResponse {
             TargetVelocityGain = ((initialResponse * dampingRatio) / omega),
         };
     }
-
     /// <summary>Forms the exact pole-matched propagator for one frame's delta time.</summary>
     /// <param name="deltaSeconds">The frame's delta time, in seconds.</param>
     /// <returns><see cref="SecondOrderPropagator.Identity"/> when <paramref name="deltaSeconds"/> is non-positive or
     /// non-finite; otherwise the propagator for that interval.</returns>
     public SecondOrderPropagator Propagator(float deltaSeconds) {
-        if (!float.IsFinite(deltaSeconds) || (deltaSeconds <= 0f)) {
+        if (!float.IsFinite(f: deltaSeconds) || (deltaSeconds <= 0f)) {
             return SecondOrderPropagator.Identity;
         }
 
         switch (Branch) {
             case SecondOrderDynamicsBranch.CriticallyDamped: {
-                var e = MathF.Exp(-(DecayRate * deltaSeconds));
-                var omegaT = (DecayRate * deltaSeconds);
+                    var e = MathF.Exp(x: -(DecayRate * deltaSeconds));
+                    var omegaT = (DecayRate * deltaSeconds);
 
-                return new(
-                    A11: (e * (1f + omegaT)),
-                    A12: (e * deltaSeconds),
-                    A21: (-Stiffness * (e * deltaSeconds)),
-                    A22: (e * (1f - omegaT))
-                );
-            }
+                    return new(
+                        A11: (e * (1f + omegaT)),
+                        A12: (e * deltaSeconds),
+                        A21: (-Stiffness * (e * deltaSeconds)),
+                        A22: (e * (1f - omegaT))
+                    );
+                }
             case SecondOrderDynamicsBranch.Underdamped: {
-                var e = MathF.Exp(-(DecayRate * deltaSeconds));
-                var angle = (OscillationRate * deltaSeconds);
-                var (sin, cos) = (MathF.Sin(angle), MathF.Cos(angle));
-                var ratio = (DecayRate / OscillationRate);
-                var eSinOverOmegaD = ((e * sin) / OscillationRate);
+                    var e = MathF.Exp(x: -(DecayRate * deltaSeconds));
+                    var angle = (OscillationRate * deltaSeconds);
 
-                return new(
-                    A11: (e * (cos + (ratio * sin))),
-                    A12: eSinOverOmegaD,
-                    A21: (-Stiffness * eSinOverOmegaD),
-                    A22: (e * (cos - (ratio * sin)))
-                );
-            }
+                    var (sin, cos) = (MathF.Sin(x: angle), MathF.Cos(x: angle));
+                    var ratio = (DecayRate / OscillationRate);
+                    var eSinOverOmegaD = ((e * sin) / OscillationRate);
+
+                    return new(
+                        A11: (e * (cos + (ratio * sin))),
+                        A12: eSinOverOmegaD,
+                        A21: (-Stiffness * eSinOverOmegaD),
+                        A22: (e * (cos - (ratio * sin)))
+                    );
+                }
             default: { // Overdamped: p1 = ζω − σ, p2 = ζω + σ (both positive); the poles are −p1, −p2; p1·p2 = ω².
-                var p1 = (DecayRate - OscillationRate);
-                var p2 = (DecayRate + OscillationRate);
-                var lambda1 = MathF.Exp(-(p1 * deltaSeconds));
-                var lambda2 = MathF.Exp(-(p2 * deltaSeconds));
-                var twoSigma = (2f * OscillationRate);
-                var a12 = ((lambda1 - lambda2) / twoSigma);
+                    var p1 = (DecayRate - OscillationRate);
+                    var p2 = (DecayRate + OscillationRate);
+                    var lambda1 = MathF.Exp(x: -(p1 * deltaSeconds));
+                    var lambda2 = MathF.Exp(x: -(p2 * deltaSeconds));
+                    var twoSigma = (2f * OscillationRate);
+                    var a12 = ((lambda1 - lambda2) / twoSigma);
 
-                return new(
-                    A11: (((p2 * lambda1) - (p1 * lambda2)) / twoSigma),
-                    A12: a12,
-                    A21: (-Stiffness * a12),
-                    A22: (((p2 * lambda2) - (p1 * lambda1)) / twoSigma)
-                );
-            }
+                    return new(
+                        A11: (((p2 * lambda1) - (p1 * lambda2)) / twoSigma),
+                        A12: a12,
+                        A21: (-Stiffness * a12),
+                        A22: (((p2 * lambda2) - (p1 * lambda1)) / twoSigma)
+                    );
+                }
         }
     }
-
     /// <summary>Advances one scalar follower lane by one propagator step, in place.</summary>
     /// <param name="position">The lane's position, updated in place.</param>
     /// <param name="velocity">The lane's velocity, updated in place.</param>
@@ -160,7 +158,7 @@ public readonly record struct SecondOrderResponse {
         var nextE = ((propagator.A11 * e) + (propagator.A12 * v));
         var nextV = ((propagator.A21 * e) + (propagator.A22 * v));
 
-        if (!float.IsFinite(nextE) || !float.IsFinite(nextV)) {
+        if (!float.IsFinite(f: nextE) || !float.IsFinite(f: nextV)) {
             position = xStar;
             velocity = 0f;
 
@@ -171,7 +169,6 @@ public readonly record struct SecondOrderResponse {
         velocity = nextV;
     }
 }
-
 /// <summary>
 /// A zero-allocation, mutable second-order follower over a <see cref="Vector3"/> lane — the position lag a stamped
 /// creation's root or a bound part rides. The caller estimates the target's velocity by differencing consecutive
@@ -236,13 +233,12 @@ public struct SecondOrderFollower3 {
         SecondOrderResponse.Step(ref y, ref vy, target.Y, targetVelocity.Y, propagator, response.TargetVelocityGain);
         SecondOrderResponse.Step(ref z, ref vz, target.Z, targetVelocity.Z, propagator, response.TargetVelocityGain);
 
-        Value = new(x, y, z);
-        Velocity = new(vx, vy, vz);
+        Value = new(x: x, y: y, z: z);
+        Velocity = new(x: vx, y: vy, z: vz);
 
         return Value;
     }
 }
-
 /// <summary>
 /// A zero-allocation, mutable second-order follower over a <see cref="Vector4"/> lane — a quaternion's four
 /// components, each following independently. The caller is responsible for hemisphere-matching consecutive targets
@@ -311,13 +307,12 @@ public struct SecondOrderFollower4 {
         SecondOrderResponse.Step(ref z, ref vz, target.Z, targetVelocity.Z, propagator, response.TargetVelocityGain);
         SecondOrderResponse.Step(ref w, ref vw, target.W, targetVelocity.W, propagator, response.TargetVelocityGain);
 
-        Value = new(x, y, z, w);
-        Velocity = new(vx, vy, vz, vw);
+        Value = new(w: w, x: x, y: y, z: z);
+        Velocity = new(w: vw, x: vx, y: vy, z: vz);
 
         return Value;
     }
 }
-
 /// <summary>The hemisphere-matched position+orientation follower step every root/part pose lag in this library
 /// shares.</summary>
 public static class SecondOrderPoseFollower {
@@ -343,26 +338,26 @@ public static class SecondOrderPoseFollower {
         Quaternion targetOrientation
     ) {
         var easedPosition = position.Step(
-            response: in response,
             deltaSeconds: deltaSeconds,
+            response: in response,
             target: targetPosition
         );
-        var targetVector = new Vector4(targetOrientation.X, targetOrientation.Y, targetOrientation.Z, targetOrientation.W);
+        var targetVector = new Vector4(w: targetOrientation.W, x: targetOrientation.X, y: targetOrientation.Y, z: targetOrientation.Z);
 
         if (
             orientation.Seeded &&
-            (Vector4.Dot(orientation.PreviousTarget, targetVector) < 0f)
+            (Vector4.Dot(vector1: orientation.PreviousTarget, vector2: targetVector) < 0f)
         ) {
             targetVector = -targetVector;
         }
 
         var easedVector = orientation.Step(
-            response: in response,
             deltaSeconds: deltaSeconds,
+            response: in response,
             target: targetVector
         );
         var easedOrientation = ((easedVector.LengthSquared() > 1e-12f)
-            ? Quaternion.Normalize(value: new Quaternion(easedVector.X, easedVector.Y, easedVector.Z, easedVector.W))
+            ? Quaternion.Normalize(value: new Quaternion(w: easedVector.W, x: easedVector.X, y: easedVector.Y, z: easedVector.Z))
             : targetOrientation);
 
         return (easedPosition, easedOrientation);

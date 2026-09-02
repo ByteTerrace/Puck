@@ -306,12 +306,27 @@ in flight; that is why the two concerns are separate, and why adding a request
 kind means deciding which lane it belongs on.
 
 Only a failure to CONNECT takes a lane out of service, and only after a retry.
-A break on an established connection reconnects and re-sends once without
-entering backoff — a live neighbour must not be marked unavailable over one
-recycled socket. Slowness never changes lane state: the worker has no read
-deadline. A lane inside its backoff window answers every request immediately
-with `LaneUnavailable` without touching a socket, which is what keeps a closed
-edge from stalling the source's tick.
+A break on an established connection reconnects without entering backoff — a
+live neighbour must not be marked unavailable over one recycled socket — and
+re-sends once ONLY when `ILaneProtocol.MayResend` says the kind is safe to send
+twice (`WorldFederationLaneProtocol` answers false for `Submission`, which the
+host applies straight through with no dedup, and true for the transfer-id-keyed
+kinds); otherwise the request is answered `ConnectionClosed` and left in
+doubt. Every attempt runs under the lane's per-request deadline
+(`WorldRemoteAuthority.LaneRequestTimeout`): a peer that goes silent after the
+request was written is answered `RequestTimedOut` without a re-send and
+without backoff, so slowness never changes lane state. An unexpected exception
+from the dialect answers that one request `LaneUnavailable` and the worker
+serves the next. A lane inside its backoff window answers every request
+immediately with `LaneUnavailable` without touching a socket, which is what
+keeps a closed edge from stalling the source's tick. A run that holds no
+federation signing identity (no `--federation-key-file`) never opens a lane, an
+observer session, or an intent stream: every request is answered
+`LaneUnavailable` naming that, with one stderr line per authority. An
+authenticator that verifies but cannot prove (trust entries, no signing oracle)
+passes `IsConfigured`; the first proof it refuses reveals it, and the same gate
+closes on it from then on. Every refused `WorldFederationAnswer`, lane-refused
+ones included, carries `WorldFederationResponse.Refusal` as its kind.
 
 Every transfer step answers. A step that ran out of time is a named refusal,
 never "ask again": a caller told to retry would hold the transfer while the

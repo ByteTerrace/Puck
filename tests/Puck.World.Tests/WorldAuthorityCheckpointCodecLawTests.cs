@@ -255,10 +255,10 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
     public void Dynamics_kit_body_with_nonzero_follower_state_round_trips_structurally() {
         var document = Fixtures.BuildDocument();
         var kit = document.Kits[0];
-        var grounded = (WorldMotionModel.Grounded)kit.Motion;
+        var grounded = ((WorldMotionModel.Grounded)kit.Motion);
 
         document = document with {
-            DynamicsRaw = [.. Fixtures.StandardDynamics, new WorldDynamicsRow(Name: "settle", Frequency: 2f, Damping: 1f, Response: 0f)],
+            DynamicsRaw = [.. Fixtures.StandardDynamics, new WorldDynamicsRow(Damping: 1f, Frequency: 2f, Name: "settle", Response: 0f)],
             KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "settle" } }],
         };
 
@@ -322,7 +322,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         document = (document with {
             BodyMotionProgramsRaw = [.. document.BodyMotionPrograms, followProgram],
             KitRowsRaw = [kit with {
-                ProducersRaw = new Dictionary<string, BodyProgramParameters>(kit.Producers) {
+                ProducersRaw = new Dictionary<string, BodyProgramParameters>(collection: kit.Producers) {
                     ["follow"] = new BodyProgramParameters(
                         Scalars: new Dictionary<string, float> {
                             ["standoffRadius"] = 0.1f,

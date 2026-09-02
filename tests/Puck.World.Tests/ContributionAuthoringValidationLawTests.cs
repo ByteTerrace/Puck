@@ -214,9 +214,9 @@ public sealed class ContributionAuthoringValidationLawTests {
         );
 
         var sabotaged = Encoding.UTF8.GetBytes(s: text.Replace(
+            comparisonType: StringComparison.Ordinal,
             newValue: "\"tenure\": \"Presencee\"",
-            oldValue: "\"tenure\": \"Presence\"",
-            comparisonType: StringComparison.Ordinal
+            oldValue: "\"tenure\": \"Presence\""
         ));
 
         _ = Assert.ThrowsAny<Exception>(testCode: () => WorldDefinitionSerialization.Deserialize(utf8Json: sabotaged));

@@ -8,24 +8,23 @@ namespace Puck.ShaderVm.Tests;
 // checkerboards) and the pip avatar. Materials are flattened into one global palette because a Shader VM sample
 // carries a single material id, where the document scopes its palette per creation.
 public static class NullWorldScene {
-    public const int Ink = 1;
-    public const int Paper = 0;
-    public const int Sage = 2;
     public const int BlueDeep = 3;
     public const int BluePale = 4;
-    public const int Stone = 5;
+    public const int Ink = 1;
+    public const int Paper = 0;
+    public const int PillarLamp = 11;
+    public const int PillarStone = 9;
+    public const int PillarTrim = 10;
     public const int PipBody = 6;
     public const int PipEye = 7;
     public const int PipPupil = 8;
-    public const int PillarStone = 9;
-    public const int PillarTrim = 10;
-    public const int PillarLamp = 11;
     public const int PlanetoidCrust = 12;
     public const int PlanetoidRock = 13;
+    public const int Sage = 2;
+    public const int Stone = 5;
 
     // The lamp material the document marks emissive.
     public static int Emissive => PillarLamp;
-
     public static Vector3[] Palette => [
         Srgb(hex: 0xFFFFFF),
         Srgb(hex: 0x000000),
@@ -56,6 +55,7 @@ public static class NullWorldScene {
 
         return world;
     }
+
     // A ground plane at y = 0.001, wallpaper-folded on a unit cell so the P1 two-colouring strides paper against ink,
     // then cut back to the +x/-z quadrant by two subtracted half-spaces.
     private static Expression GroundNorthEast(Expression point) {
@@ -65,7 +65,7 @@ public static class NullWorldScene {
             material: (Paper + WallpaperMaterial(cellIndex: cellIndex, stride: 1f))
         );
 
-        return Quadrant(keepNegativeX: true, keepPositiveZ: true, surface: surface, point: point);
+        return Quadrant(keepNegativeX: true, keepPositiveZ: true, point: point, surface: surface);
     }
     private static Expression GroundSouthEast(Expression point) => Quadrant(
         keepNegativeX: true,
@@ -80,7 +80,7 @@ public static class NullWorldScene {
             material: (BlueDeep + WallpaperMaterial(cellIndex: cellIndex, stride: 1f))
         );
 
-        return Quadrant(keepNegativeX: false, keepPositiveZ: false, surface: surface, point: point);
+        return Quadrant(keepNegativeX: false, keepPositiveZ: false, point: point, surface: surface);
     }
     // The one quadrant the document leaves uncut: it underlies the whole plane and the other three sit above it.
     private static Expression GroundNorthWest(Expression point) => Sample(
@@ -137,7 +137,7 @@ public static class NullWorldScene {
     private static Expression Planetoids(Expression point) {
         var world = Planetoid(point: point, position: Expression.Constant(x: 6f, y: 17f, z: 6f), scale: 1f);
 
-        foreach (var (x, y, z, scale) in ((float, float, float, float)[])[(-6f, 17f, 6f, 1f), (6f, 17f, -6f, 1f), (-6f, 17f, -6f, 1f), (0f, 24f, 0f, 1.8f)]) {
+        foreach (var (x, y, z, scale) in (((float, float, float, float)[])[(-6f, 17f, 6f, 1f), (6f, 17f, -6f, 1f), (-6f, 17f, -6f, 1f), (0f, 24f, 0f, 1.8f)])) {
             world = Union(candidate: Planetoid(point: point, position: Expression.Constant(x: x, y: y, z: z), scale: scale), current: world);
         }
 
@@ -179,7 +179,9 @@ public static class NullWorldScene {
 
         return Union(candidate: pupil, current: Union(candidate: eye, current: body));
     }
+
     private static Expression Up => Expression.Constant(x: 0f, y: 1f, z: 0f);
+
     private static Vector3 Srgb(uint hex) => new(
         x: MathF.Pow(x: (((hex >> 16) & 0xFFu) / 255f), y: 2.2f),
         y: MathF.Pow(x: (((hex >> 8) & 0xFFu) / 255f), y: 2.2f),

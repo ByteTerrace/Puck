@@ -363,10 +363,23 @@ connect, hello, and challenge are paid once per lane rather than once per
 operation. A lane is strictly ordered, so transfer transactions and routed
 traffic are kept on separate lanes rather than queueing behind each other. Only
 a failure to connect takes a lane out of service; a break on an established
-connection reconnects and re-sends without entering backoff, and slowness never
-changes lane state. A lane inside its backoff window answers `LaneUnavailable`
-without touching a socket, which is what keeps a closed edge from stalling the
-source's tick.
+connection reconnects without entering backoff and re-sends only when
+`ILaneProtocol.MayResend` says the kind is safe to send twice (`Submission`
+never; the transfer-id-keyed kinds are idempotent at the host), otherwise the
+request is answered `ConnectionClosed` and left in doubt. Each attempt runs
+under a per-request deadline (`LaneRequestTimeout`): a peer that goes silent
+after the request was written is answered `RequestTimedOut` with no re-send and
+no backoff, and an unexpected exception from the dialect answers that one
+request `LaneUnavailable` without killing the worker. A lane inside its backoff
+window answers `LaneUnavailable` without touching a socket, which is what keeps
+a closed edge from stalling the source's tick. A run that holds no federation
+signing identity (no `--federation-key-file`) never opens a lane, an observer
+session, or an intent stream at all: every request is answered
+`LaneUnavailable` naming that, with one stderr line per authority, since no
+connect could ever authenticate. An authenticator that verifies but cannot
+prove (admission trust entries, no signing oracle) passes `IsConfigured`, so
+the first proof it refuses is what reveals it; from then on the same gate
+closes on it with the same answer.
 
 Every document this codec writes goes out at the connection's disclosure tier.
 `DisclosureFor` resolves it once per federation connection, through the same

@@ -341,6 +341,7 @@ public sealed partial class WorldAddonRuntime {
             : AddonMutateRefusals.ToVerdict(reason: AddonMutateRefusal.ApplyRejected))
         );
     }
+
     private MountedAddon? FindMountedByInstanceId(long instanceId) {
         for (var index = 0; (index < m_mounted.Count); ++index) {
             if (m_mounted[index].InstanceId == instanceId) {

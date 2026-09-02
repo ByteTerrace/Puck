@@ -253,10 +253,10 @@ internal sealed class CommandValueJsonConverter : JsonConverter<CommandValue> {
 
         const string NotFiniteMessage = "CommandValue raw components must be finite numbers.";
 
-        var x = JsonComponentReader.ReadFloat(reader: ref reader, notNumberMessage: NotFiniteMessage, notFiniteMessage: NotFiniteMessage);
-        var y = JsonComponentReader.ReadFloat(reader: ref reader, notNumberMessage: NotFiniteMessage, notFiniteMessage: NotFiniteMessage);
-        var z = JsonComponentReader.ReadFloat(reader: ref reader, notNumberMessage: NotFiniteMessage, notFiniteMessage: NotFiniteMessage);
-        var w = JsonComponentReader.ReadFloat(reader: ref reader, notNumberMessage: NotFiniteMessage, notFiniteMessage: NotFiniteMessage);
+        var x = JsonComponentReader.ReadFloat(notFiniteMessage: NotFiniteMessage, notNumberMessage: NotFiniteMessage, reader: ref reader);
+        var y = JsonComponentReader.ReadFloat(notFiniteMessage: NotFiniteMessage, notNumberMessage: NotFiniteMessage, reader: ref reader);
+        var z = JsonComponentReader.ReadFloat(notFiniteMessage: NotFiniteMessage, notNumberMessage: NotFiniteMessage, reader: ref reader);
+        var w = JsonComponentReader.ReadFloat(notFiniteMessage: NotFiniteMessage, notNumberMessage: NotFiniteMessage, reader: ref reader);
 
         if (
             !reader.Read() ||
@@ -401,8 +401,8 @@ internal abstract class NameListMaskJsonConverter<T> : JsonConverter<T> where T 
         );
 
         if (!TryParse(
-            text: token,
             mask: out var mask,
+            text: token,
             unknown: out var unknown
         )) {
             throw new JsonException(message: $"a {MaskKind} mask is a comma-separated list of {Vocabulary}; '{(string.IsNullOrEmpty(value: unknown)
@@ -495,7 +495,7 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
         string? row = null;
         JsonElement? y0 = null;
         JsonElement? v0 = null;
-        long epochTick = 0;
+        var epochTick = 0L;
 
         foreach (var member in element.EnumerateObject()) {
             switch (member.Name) {
@@ -1418,8 +1418,8 @@ internal abstract class TryParseStringJsonConverter<T> : JsonConverter<T>, IJson
 
         return (TryParse(
             candidate: token,
-            value: out var value,
-            reason: out var reason
+            reason: out var reason,
+            value: out var value
         )
             ? value
             : throw new JsonException(message: $"'{token}' {reason}.")

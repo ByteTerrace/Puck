@@ -15,8 +15,8 @@ public static partial class WorldAuthorityCheckpointCodec {
 
             foreach (var field in section.Raw) {
                 WriteLongArray(
-                    writer: writer,
-                    values: field
+                    values: field,
+                    writer: writer
                 );
             }
         }

@@ -33,6 +33,7 @@ internal interface IManifoldSlotState : IManifoldSlotEvictionKey {
     FixedVector3 Normal { get; }
     /// <summary>Whether the slot is not associated with a candidate this step.</summary>
     bool IsIdle { get; }
+
     /// <summary>Marks the slot idle at the start of a step's association.</summary>
     void MarkIdle();
     /// <summary>Clears the impulse the slot warm starts from.</summary>

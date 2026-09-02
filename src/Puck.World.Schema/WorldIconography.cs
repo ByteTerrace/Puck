@@ -19,7 +19,6 @@ public static class WorldIconCapacity {
     /// silently truncates every third character at the composer.</remarks>
     public const int MaxLabelChars = 2;
 }
-
 /// <summary>The committed fixed-UI font ids an icon <see cref="WorldIconGlyphRef"/> is spelled with. Only
 /// <see cref="JetBrainsMonoRegular"/> is admitted: the icon bake draws every glyph cell from that one MTSDF atlas
 /// (<c>Puck.Overlays.OverlayGlyphAtlasSet.MonoFont</c>), so the validator refuses any other face by name rather than
@@ -32,7 +31,6 @@ public static class WorldIconFontCatalog {
     /// may name.</summary>
     public const string JetBrainsMonoRegular = "jetbrains-mono-regular";
 }
-
 /// <summary>A single glyph reference into a world-shipped (committed fixed-UI) font: a font id
 /// (<see cref="WorldIconFontCatalog"/>) plus one Unicode scalar, spelled either as the literal character or as a
 /// <c>U+XXXX</c> escape (1-6 hex digits) for a glyph with no convenient literal spelling.</summary>
@@ -142,7 +140,6 @@ public sealed record WorldIconographySection(
         BadgesRaw: [],
         IconsRaw: []
     );
-
     /// <summary>Gets the badge-mapping rows — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldIconBadgeRow> Badges => (BadgesRaw ?? []);

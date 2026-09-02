@@ -25,13 +25,12 @@ internal static partial class Oracles {
         var e1X = (6 * ((p1X - (2 * p2X)) + p3X)); var e1Z = (6 * ((p1Z - (2 * p2Z)) + p3Z));
 
         var speed0 = Math.Sqrt(d: ((d0X * d0X) + (d0Z * d0Z)));
-        var k0 = (((d0X * e0Z) - (d0Z * e0X)) / (speed0 * speed0 * speed0));
+        var k0 = (((d0X * e0Z) - (d0Z * e0X)) / ((speed0 * speed0) * speed0));
         var speed1 = Math.Sqrt(d: ((d1X * d1X) + (d1Z * d1Z)));
-        var k1 = (((d1X * e1Z) - (d1Z * e1X)) / (speed1 * speed1 * speed1));
+        var k1 = (((d1X * e1Z) - (d1Z * e1X)) / ((speed1 * speed1) * speed1));
 
         return (k0, k1);
     }
-
     /// <summary>Reconstructs a compiled segment's endpoint curvatures exactly, in <see cref="BigInteger"/> — the same
     /// definition as <see cref="CurvatureSplineEndpointCurvatureDouble"/>, without any intermediate rounding, narrowed
     /// to <see cref="double"/> only at the very last step (the returned tuple), which the caller compares within an
@@ -61,7 +60,6 @@ internal static partial class Oracles {
 
         return (k0, k1);
     }
-
     /// <summary>Sums chord lengths over a fine uniform-<c>t</c> subdivision of a compiled segment's cubic Bézier —
     /// independent of <see cref="CurvatureSplineExactMath"/>'s Simpson arc-length table, which integrates
     /// <c>|B'(t)|</c> rather than summing chords, over the exact pre-rounding control points rather than the
@@ -79,8 +77,8 @@ internal static partial class Oracles {
         for (var i = 1; (i <= subdivisions); ++i) {
             var t = (((double)i) / subdivisions);
             var u = (1.0 - t);
-            var x = ((u * u * u * p0X) + (3 * u * u * t * p1X) + (3 * u * t * t * p2X) + (t * t * t * p3X));
-            var z = ((u * u * u * p0Z) + (3 * u * u * t * p1Z) + (3 * u * t * t * p2Z) + (t * t * t * p3Z));
+            var x = ((((((u * u) * u) * p0X) + ((((3 * u) * u) * t) * p1X)) + ((((3 * u) * t) * t) * p2X)) + (((t * t) * t) * p3X));
+            var z = ((((((u * u) * u) * p0Z) + ((((3 * u) * u) * t) * p1Z)) + ((((3 * u) * t) * t) * p2Z)) + (((t * t) * t) * p3Z));
 
             length += Math.Sqrt(d: (((x - previousX) * (x - previousX)) + ((z - previousZ) * (z - previousZ))));
             previousX = x;
@@ -89,7 +87,6 @@ internal static partial class Oracles {
 
         return length;
     }
-
     /// <summary>Independently locates the position at a requested within-segment arc length by walking a fine chord
     /// subdivision of the compiled Q32 control points and linearly interpolating the last sub-chord — a different
     /// METHOD from the subject's own composite-Simpson quadrature plus arc-table inversion, used to certify position
@@ -112,8 +109,8 @@ internal static partial class Oracles {
         for (var i = 1; (i <= subdivisions); ++i) {
             var t = (((double)i) / subdivisions);
             var u = (1.0 - t);
-            var x = ((u * u * u * p0X) + (3 * u * u * t * p1X) + (3 * u * t * t * p2X) + (t * t * t * p3X));
-            var z = ((u * u * u * p0Z) + (3 * u * u * t * p1Z) + (3 * u * t * t * p2Z) + (t * t * t * p3Z));
+            var x = ((((((u * u) * u) * p0X) + ((((3 * u) * u) * t) * p1X)) + ((((3 * u) * t) * t) * p2X)) + (((t * t) * t) * p3X));
+            var z = ((((((u * u) * u) * p0Z) + ((((3 * u) * u) * t) * p1Z)) + ((((3 * u) * t) * t) * p2Z)) + (((t * t) * t) * p3Z));
             var chord = Math.Sqrt(d: (((x - previousX) * (x - previousX)) + ((z - previousZ) * (z - previousZ))));
             var next = (cumulative + chord);
 
@@ -130,7 +127,6 @@ internal static partial class Oracles {
 
         return (previousX, previousZ); // the target sits past this subdivision's own (slightly under-measured) total; clamp to the end.
     }
-
     /// <summary>Finds every real root of the tangent-length quartic <c>(27/8)κ0²κ1·l0⁴ − (9/2)κ0κ1s0·l0² + w³·l0 +
     /// [(3/2)κ1s0² + s1w²] = 0</c> admissible within <c>[MinTangentLength, MaxTangentChordRatio·|C|]</c>, by a coarse
     /// sign-change scan followed by bisection — an independently written <see cref="double"/> root finder sharing no
@@ -138,35 +134,35 @@ internal static partial class Oracles {
     /// constructed multi-root case's root count and each candidate's <c>l0² + l1²</c>.</summary>
     public static List<(double L0, double L1)> CurvatureSplineAdmissibleTangentLengths(double s0, double s1, double w, double kappa0, double kappa1, double chordLength) {
         double Q(double l0) {
-            var c0 = ((1.5 * kappa1 * s0 * s0) + (s1 * w * w));
-            var c1 = (w * w * w);
-            var c2 = -(4.5 * kappa0 * kappa1 * s0);
-            var c4 = ((27.0 / 8.0) * kappa0 * kappa0 * kappa1);
+            var c0 = ((((1.5 * kappa1) * s0) * s0) + ((s1 * w) * w));
+            var c1 = ((w * w) * w);
+            var c2 = -(((4.5 * kappa0) * kappa1) * s0);
+            var c4 = ((((27.0 / 8.0) * kappa0) * kappa0) * kappa1);
 
-            return ((((c4 * l0 * l0) + c2) * l0 * l0) + (c1 * l0) + c0);
+            return (((((((c4 * l0) * l0) + c2) * l0) * l0) + (c1 * l0)) + c0);
         }
 
-        var lo = ((double)CurvatureSpline.MinTangentLength.Value / 65536.0);
+        var lo = (((double)CurvatureSpline.MinTangentLength.Value) / 65536.0);
         var hi = (CurvatureSpline.MaxTangentChordRatio * chordLength);
         const int steps = 40000;
-        var previous = Q(lo);
+        var previous = Q(l0: lo);
         var roots = new List<double>();
 
         for (var i = 1; (i <= steps); ++i) {
-            var t = (lo + ((hi - lo) * i / steps));
-            var current = Q(t);
+            var t = (lo + (((hi - lo) * i) / steps));
+            var current = Q(l0: t);
 
             if ((previous == 0.0) || ((previous < 0.0) != (current < 0.0))) {
-                var a = (lo + ((hi - lo) * (i - 1) / steps));
+                var a = (lo + (((hi - lo) * (i - 1)) / steps));
                 var b = t;
 
                 for (var bisect = 0; (bisect < 80); ++bisect) {
                     var mid = ((a + b) / 2.0);
 
-                    if ((Q(a) < 0.0) == (Q(mid) < 0.0)) { a = mid; } else { b = mid; }
+                    if ((Q(l0: a) < 0.0) == (Q(l0: mid) < 0.0)) { a = mid; } else { b = mid; }
                 }
 
-                roots.Add((a + b) / 2.0);
+                roots.Add(item: ((a + b) / 2.0));
             }
 
             previous = current;
@@ -176,10 +172,10 @@ internal static partial class Oracles {
         var admissible = new List<(double, double)>();
 
         foreach (var l0 in roots) {
-            var l1 = ((s0 - (1.5 * kappa0 * l0 * l0)) / w);
+            var l1 = ((s0 - (((1.5 * kappa0) * l0) * l0)) / w);
 
             if ((l0 >= lo) && (l1 >= lo) && ((l0 * l0) <= capSquared) && ((l1 * l1) <= capSquared)) {
-                admissible.Add((l0, l1));
+                admissible.Add(item: (l0, l1));
             }
         }
 

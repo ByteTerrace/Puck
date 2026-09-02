@@ -24,8 +24,10 @@ public sealed record SkyFrameSettings {
     public float StarDensity { get; init; } = 64f;
     /// <summary>Gets the peak star brightness.</summary>
     public float StarBrightness { get; init; } = 0.85f;
+
     /// <summary>Gets the twinkle phase within its period, in the unit interval.</summary>
     public float StarPhase { get; init; }
+
     /// <summary>Gets the fraction of stars that twinkle.</summary>
     public float TwinkleShare { get; init; } = 0.3f;
     /// <summary>Gets how far a twinkling star dips.</summary>
@@ -40,12 +42,14 @@ public sealed record SkyFrameSettings {
     public float CloudSoftness { get; init; } = 0.3f;
     /// <summary>Gets the cloud cell size, in layer units.</summary>
     public float CloudScale { get; init; } = 2.5f;
+
     /// <summary>Gets the integrated cloud drift offset, in cells.</summary>
     public Vector2 CloudDrift { get; init; }
     /// <summary>Gets the integrated shaping-field shear offset, in cells.</summary>
     public Vector2 CloudShear { get; init; }
     /// <summary>Gets the integrated rotation of the layer about the zenith, in radians.</summary>
     public float CloudSpin { get; init; }
+
     /// <summary>Gets how far the rotating frame winds the flow inward.</summary>
     public float CloudCurl { get; init; } = 0.8f;
     /// <summary>Gets the seed the cloud field hashes.</summary>

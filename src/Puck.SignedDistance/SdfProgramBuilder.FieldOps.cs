@@ -114,16 +114,16 @@ public sealed partial class SdfProgramBuilder {
         m_instructions.Add(item: new SdfInstruction(
             Blend: ((uint)octaves),
             Data0: new Vector4(
+                w: lacunarity,
                 x: frequency,
                 y: amplitude,
-                z: gain,
-                w: lacunarity
+                z: gain
             ),
             Data1: new Vector4(
+                w: 0.0f,
                 x: (1.0f / gainSum),
                 y: 0.0f,
-                z: 0.0f,
-                w: 0.0f
+                z: 0.0f
             ),
             Material: 0,
             Op: SdfOp.NoiseDisplace,

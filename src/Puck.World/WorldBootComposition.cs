@@ -958,7 +958,7 @@ internal static class WorldBootComposition {
                                     services: postRenderServices,
                                     width: width
                                 );
-                                sp.GetRequiredService<WorldPostRenderExtensionPasses>().Add(id: entry.Id, pass: (FullscreenPassNode)composed);
+                                sp.GetRequiredService<WorldPostRenderExtensionPasses>().Add(id: entry.Id, pass: ((FullscreenPassNode)composed));
                             }
                         }
 

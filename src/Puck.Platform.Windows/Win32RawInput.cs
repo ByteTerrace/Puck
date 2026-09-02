@@ -8,7 +8,6 @@ namespace Puck.Platform.Windows;
 /// <param name="Width">The desktop width in pixels.</param>
 /// <param name="Height">The desktop height in pixels.</param>
 public readonly record struct Win32DesktopBounds(int Left, int Top, int Width, int Height);
-
 /// <summary>Pure state and coordinate operations shared by the Win32 Raw Input adapter and its tests.</summary>
 public static class Win32RawInput {
     /// <summary>Applies one raw keyboard make or break transition to a <c>BYTE[256]</c>-compatible key-state table.</summary>

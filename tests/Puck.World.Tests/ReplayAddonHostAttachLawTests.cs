@@ -40,7 +40,7 @@ public sealed class ReplayAddonHostAttachLawTests {
 
         var result = tape.StopRecording();
 
-        Assert.Null(result.VerifyFault);
+        Assert.Null(@object: result.VerifyFault);
 
         using var persistedStream = File.OpenRead(path: result.Path);
         var persisted = WorldReplaySnapshot.Read(stream: persistedStream);

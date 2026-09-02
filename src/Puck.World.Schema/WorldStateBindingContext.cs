@@ -61,7 +61,7 @@ public static class WorldStateBindingContext {
 
         if (
             (reference is not { Length: > 0 }) ||
-            !reference.StartsWith(value: RowReferencePrefix, comparisonType: StringComparison.Ordinal)
+            !reference.StartsWith(comparisonType: StringComparison.Ordinal, value: RowReferencePrefix)
         ) {
             return false;
         }
@@ -80,7 +80,6 @@ public static class WorldStateBindingContext {
 
         return true;
     }
-
     /// <summary>Parses a <c>state:&lt;row&gt;</c> family name.</summary>
     /// <param name="family">The binding-context family name.</param>
     /// <param name="rowName">The validated state-row name on success.</param>

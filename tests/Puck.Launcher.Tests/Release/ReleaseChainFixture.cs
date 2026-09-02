@@ -15,6 +15,7 @@ internal sealed class ReleaseChainFixture {
     private readonly DomainKeys m_keys;
 
     public readonly IAttestationCodec Codec = new CborAttestationCodec();
+
     public KeyId RootId => m_keys.RootId;
     public string Subject => m_keys.Subject;
 

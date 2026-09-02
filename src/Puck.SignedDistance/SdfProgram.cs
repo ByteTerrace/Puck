@@ -273,8 +273,8 @@ public sealed partial class SdfProgram {
         // same maxInstances (enforced by the guard above) — so the packed bytes below are the same either way.
         var gridBlock = ((gridWorkspace is not null)
             ? gridWorkspace.Build(
-                instances: m_instanceBinning,
-                enabled: buildInstanceGrid
+                enabled: buildInstanceGrid,
+                instances: m_instanceBinning
             )
             : SdfInstanceGrid.Build(
                 enabled: buildInstanceGrid,
@@ -537,8 +537,8 @@ public sealed partial class SdfProgram {
 
                 if (TryMergeAdjacentSegments(
                     current: in candidate,
-                    next: in accumulator,
-                    merged: out var mergedRecord
+                    merged: out var mergedRecord,
+                    next: in accumulator
                 )) {
                     accumulator = mergedRecord;
                 } else {
@@ -1107,6 +1107,7 @@ public sealed partial class SdfProgram {
 
         return (1.0f + (((amplitude * (1.0f / gainSum)) * frequency) * (NoiseGradientBound * gradientSum)));
     }
+
     private static float DisplaceWarpLipschitz(SdfInstruction instruction) {
         var amplitude = MathF.Abs(x: instruction.Data0.W);
         var frequency = MathF.Max(

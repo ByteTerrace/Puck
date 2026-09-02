@@ -1052,6 +1052,7 @@ public sealed class WorldGrants : IWorldGrantsView {
 
         return new GrantVerdict(Rule: GrantRule.NoHold);
     }
+
     // The shared body of the group-membership and group-ownership expansion fallbacks above: does any group listed
     // for `principal` in `groups` hold (capability, subject) or its All wildcard, itself resolved fresh through
     // m_byPrincipal on every call (never cached). `rule` names which fallback is calling, so the returned verdict
@@ -1092,6 +1093,7 @@ public sealed class WorldGrants : IWorldGrantsView {
 
         return false;
     }
+
     /// <inheritdoc/>
     public bool AllowsAllSections(WorldPrincipal principal, WorldCapability capability, out WorldSection deniedSection, out GrantVerdict denial) {
         foreach (var section in Enum.GetValues<WorldSection>()) {
@@ -2166,13 +2168,13 @@ public sealed class WorldGrants : IWorldGrantsView {
         foreach (var (principal, applications) in m_applications) {
             if (!m_byPrincipal.ContainsKey(key: principal)) {
                 principals.Add(item: new WorldGrantsPrincipalCheckpoint(
-                    Principal: principal,
-                    Drive: [],
-                    Observe: [],
+                    Applications: [.. applications],
                     Control: [],
-                    Mutate: [],
+                    Drive: [],
                     Edit: [],
-                    Applications: [.. applications]
+                    Mutate: [],
+                    Observe: [],
+                    Principal: principal
                 ));
             }
         }

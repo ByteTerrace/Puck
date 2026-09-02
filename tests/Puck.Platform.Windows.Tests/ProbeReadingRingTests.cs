@@ -10,7 +10,7 @@ public sealed class ProbeReadingRingTests {
         var ring = new ProbeReadingRing();
 
         Assert.Equal(actual: ring.Version, expected: 0L);
-        Assert.False(ring.TryReadLatest(reading: out _));
+        Assert.False(condition: ring.TryReadLatest(reading: out _));
     }
     [Fact]
     public void Publish_updates_version_and_reader_sees_the_latest_measurement() {
@@ -18,12 +18,12 @@ public sealed class ProbeReadingRingTests {
 
         ring.Publish(reading: MakeMeasurement(sequence: 1L));
         Assert.Equal(actual: ring.Version, expected: 1L);
-        Assert.True(ring.TryReadLatest(reading: out var first));
+        Assert.True(condition: ring.TryReadLatest(reading: out var first));
         Assert.Equal(actual: first.Sequence, expected: 1L);
 
         ring.Publish(reading: MakeMeasurement(sequence: 2L));
         Assert.Equal(actual: ring.Version, expected: 2L);
-        Assert.True(ring.TryReadLatest(reading: out var second));
+        Assert.True(condition: ring.TryReadLatest(reading: out var second));
         Assert.Equal(actual: second.Sequence, expected: 2L);
     }
     [Fact]
@@ -50,12 +50,12 @@ public sealed class ProbeReadingRingTests {
                         continue;
                     }
 
-                    AssertUntornAndMonotone(reading: reading, lastSeen: ref lastSeen);
+                    AssertUntornAndMonotone(lastSeen: ref lastSeen, reading: reading);
                 }
 
                 // Drain whatever landed after the producer's final publish but before this loop noticed `stop`.
                 if (ring.TryReadLatest(reading: out var trailing)) {
-                    AssertUntornAndMonotone(reading: trailing, lastSeen: ref lastSeen);
+                    AssertUntornAndMonotone(lastSeen: ref lastSeen, reading: trailing);
                 }
             } catch (Exception exception) {
                 readerException = exception;

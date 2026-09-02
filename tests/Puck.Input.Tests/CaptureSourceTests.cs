@@ -141,7 +141,7 @@ public sealed class CaptureSourceTests {
         _ = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue);
 
         Assert.True(condition: router.TryGetLastInputTick(slot: 0, tick: out var lastInput));
-        Assert.Equal(expected: 2UL, actual: lastInput);
+        Assert.Equal(actual: lastInput, expected: 2UL);
     }
 
     private static GamepadDrain Drain(InputDeviceId deviceId, GamepadTouchPoint touch) => new(

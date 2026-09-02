@@ -61,8 +61,9 @@ peer at each tier — the byte size and the section inventory — or at the tier
 named federation namespace resolves to.
 
 Authority-to-authority projection and transfer additionally require
-`--federation-key-file <path>` on both processes. The file contains exactly 32
-raw secret bytes or 64 hexadecimal characters. A fresh challenge authenticates
+`--federation-key-file <path>` on both processes. The file is a DER-encoded
+PKCS#8 P-256 private key with nothing after it; a key on any other curve, or
+one followed by trailing bytes, is refused at boot by name. A fresh challenge authenticates
 and binds every connection to its claimed source-authority namespace before any
 observe, reserve, commit, status, intent, or submission operation is accepted;
 omitting the key disables federation by name while leaving ordinary admitted

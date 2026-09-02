@@ -206,8 +206,8 @@ public sealed class WorldTcpHost : IDisposable {
             }
 
             if (!TryDecodeSubmissionFrame(
-                frame: frame,
                 failure: out var failure,
+                frame: frame,
                 payload: out var payload
             )) {
                 await WorldTcpWireFormat.WriteRefusalAsync(
@@ -363,7 +363,7 @@ public sealed class WorldTcpHost : IDisposable {
                     !authentication.Ok ||
                     (authentication.Kind != ((byte)WorldFederationRequest.Authenticate)) ||
                     !WorldFederationCodec.TryDecodeAuthentication(
-                    body: authentication.Body,
+                    body: authentication.Body.Span,
                     failure: out _,
                     proof: out var federationProof
                 ) ||
@@ -674,9 +674,9 @@ public sealed class WorldTcpHost : IDisposable {
             : tcs.Task
         );
     }
-    private async Task<bool> ServeCommitAsync(NetworkStream stream, string sourceAuthority, byte[] body, CancellationToken ct) {
+    private async Task<bool> ServeCommitAsync(NetworkStream stream, string sourceAuthority, ReadOnlyMemory<byte> body, CancellationToken ct) {
         if (!WorldFederationCodec.TryDecodeCommit(
-            body: body,
+            body: body.Span,
             defaults: m_server.Definition.PlayerDefaults,
             sourceAuthority: out var carriedAuthority,
             transferId: out var transferId,
@@ -765,7 +765,7 @@ public sealed class WorldTcpHost : IDisposable {
         }
     }
     // Returns whether the lane stays open for another request.
-    private async Task<bool> ServeFederationRequestAsync(NetworkStream stream, string sourceAuthority, WorldDisclosureTier tier, WorldFederationRequest kind, byte[] body, CancellationToken ct) {
+    private async Task<bool> ServeFederationRequestAsync(NetworkStream stream, string sourceAuthority, WorldDisclosureTier tier, WorldFederationRequest kind, ReadOnlyMemory<byte> body, CancellationToken ct) {
         switch (kind) {
             case WorldFederationRequest.Reserve:
                 return await ServeReserveAsync(
@@ -852,10 +852,10 @@ public sealed class WorldTcpHost : IDisposable {
                 return false;
         }
     }
-    private async Task<bool> ServeReserveAsync(NetworkStream stream, string sourceAuthority, WorldDisclosureTier tier, byte[] body, CancellationToken ct) {
+    private async Task<bool> ServeReserveAsync(NetworkStream stream, string sourceAuthority, WorldDisclosureTier tier, ReadOnlyMemory<byte> body, CancellationToken ct) {
         if (
             !WorldFederationCodec.TryDecodeReservation(
-            body: body,
+            body: body.Span,
             defaults: m_server.Definition.PlayerDefaults,
             request: out var request,
             failure: out var failure
@@ -906,9 +906,9 @@ public sealed class WorldTcpHost : IDisposable {
 
         return true;
     }
-    private async Task<bool> ServeRouteAsync(NetworkStream stream, string sourceAuthority, WorldDisclosureTier tier, byte[] body, CancellationToken ct) {
+    private async Task<bool> ServeRouteAsync(NetworkStream stream, string sourceAuthority, WorldDisclosureTier tier, ReadOnlyMemory<byte> body, CancellationToken ct) {
         if (!WorldFederationCodec.TryDecodeRouteCredential(
-            body: body,
+            body: body.Span,
             failure: out var failure,
             mobility: out var mobility,
             sourceAuthority: out var carriedAuthority
@@ -1011,9 +1011,9 @@ public sealed class WorldTcpHost : IDisposable {
 
         return true;
     }
-    private async Task<bool> ServeSubmissionAsync(NetworkStream stream, string sourceAuthority, byte[] body, CancellationToken ct) {
+    private async Task<bool> ServeSubmissionAsync(NetworkStream stream, string sourceAuthority, ReadOnlyMemory<byte> body, CancellationToken ct) {
         if (!WorldFederationCodec.TryDecodeSubmission(
-            body: body,
+            body: body.Span,
             failure: out var failure,
             frame: out var submittedFrame,
             mobility: out var mobility,
@@ -1045,8 +1045,8 @@ public sealed class WorldTcpHost : IDisposable {
         }
 
         if (!TryDecodeSubmissionFrame(
-            frame: submittedFrame,
             failure: out var codecFailure,
+            frame: submittedFrame,
             payload: out var payload
         )) {
             await WriteFederationRefusal(
@@ -1108,18 +1108,22 @@ public sealed class WorldTcpHost : IDisposable {
             result: result,
             stream: completion
         ).ConfigureAwait(continueOnCapturedContext: false);
+        // The completion stream's own buffer feeds the one framed write directly; nothing keeps it past the await.
         await WorldFederationCodec.WriteResponseAsync(
             stream: stream,
             kind: WorldFederationResponse.Completion,
-            body: completion.ToArray(),
+            body: completion.GetBuffer().AsMemory(
+                length: checked((int)completion.Length),
+                start: 0
+            ),
             ct: ct
         ).ConfigureAwait(continueOnCapturedContext: false);
 
         return true;
     }
-    private async Task<bool> ServeTransferKeyAsync(NetworkStream stream, string sourceAuthority, WorldFederationRequest kind, byte[] body, CancellationToken ct) {
+    private async Task<bool> ServeTransferKeyAsync(NetworkStream stream, string sourceAuthority, WorldFederationRequest kind, ReadOnlyMemory<byte> body, CancellationToken ct) {
         if (!WorldFederationCodec.TryDecodeTransferKey(
-            body: body,
+            body: body.Span,
             failure: out var failure,
             sourceAuthority: out var carriedAuthority,
             transferId: out var transferId
@@ -1253,7 +1257,7 @@ public sealed class WorldTcpHost : IDisposable {
                     return;
                 }
                 if (!WorldFederationCodec.TryDecodeIntent(
-                    body: frame.Body,
+                    body: frame.Body.Span,
                     sourceAuthority: out var carriedAuthority,
                     mobility: out var mobility,
                     submission: out var submission,

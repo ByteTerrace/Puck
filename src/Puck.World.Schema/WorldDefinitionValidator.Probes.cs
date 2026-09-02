@@ -7,6 +7,7 @@ public static partial class WorldDefinitionValidator {
         "pan", "tilt", "zoom", "exposure", "focus", "brightness", "contrast",
         "saturation", "sharpness", "gain", "whiteBalance", "backlightCompensation", "fieldOfView",
     };
+
     // Vocabulary and structural shape only — the shallow half of the shallow-then-deep split
     // WorldRenderExtensionEntry.Config already establishes: a kind naming no registered probe kind, a probe
     // reference resolving to nothing, or a source colliding with another axis binding refuses here, at load, by name

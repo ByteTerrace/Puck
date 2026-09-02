@@ -111,6 +111,7 @@ internal static class HudRowValidation {
     /// <summary>Appends one enum-reasoned HUD refusal line — <c>hud.&lt;reason&gt;: &lt;message&gt;</c>, the same
     /// spelling <see cref="WorldDefinitionValidator.Validate"/> folds every other section's errors under.</summary>
     internal static void Refuse(List<string> errors, HudRefusal reason, string message) => errors.Add(item: $"hud.{reason}: {message}");
+
     // Shared by a plain Binding and every Template placeholder: parse against the closed HudBindingVocabulary, then
     // — for a state.* token — resolve its existence against the document's OWN declared state rows (world scope only
     // carries a real map; seat scope passes null, refusing every state.* token, same as ValidateElement's remarks).
@@ -158,7 +159,6 @@ internal static class HudRowValidation {
             }
         }
     }
-
     // Bridges ValidateFrameSource's collect-many-errors style (a List<string>, shared with every other screen/probe
     // frame-source site) into this door's own collected style: run the shared gate into a scratch list, then fold
     // it into ONE hud.frameSourceInvalid line naming every collected sub-message, rather than forking a second copy
@@ -274,6 +274,7 @@ internal static class HudRowValidation {
             );
         }
     }
+
     /// <summary>Validates one element row: a required id unique within <paramref name="elementIds"/>, a valid rect,
     /// and (when present) a binding token in the closed <see cref="HudBindingVocabulary"/> — for a
     /// <c>state.&lt;row&gt;</c> token, additionally that the row resolves against <paramref name="stateRows"/>

@@ -165,6 +165,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     // truncation narration (see OverlayFrameBuilder.Refused): a channel can open/close this episode with no
     // reservation overflow ever happening, so it cannot share state with m_overflowEpisodeOpen.
     private readonly bool[] m_refusalEpisodeOpen = new bool[OverlayChannelLeases.Count];
+
     // The fixed frame-slot table's independent overflow episode. This can span world- and seat-scope HUD documents,
     // so each document's authoring ceiling cannot by itself prove the composed frame fits.
     private bool m_frameSlotOverflowEpisodeOpen;
@@ -933,6 +934,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         ReleaseGpuResources();
         m_inner.OnDeviceLost();
     }
+
     // Routes every early-exit retirement through OverlayFrameRetirementPolicy's table so this method and the two
     // early returns in ProduceFrame below cannot drift out of step on which exit retires immediately.
     private void RetireForExit(OverlayFrameExit exit) {
@@ -942,6 +944,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
             m_frameSlots.RetireAllAfter(fence: m_frameFence);
         }
     }
+
     /// <inheritdoc/>
     public Surface ProduceFrame(in FrameContext context) {
         if (m_disposed) {

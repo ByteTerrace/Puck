@@ -31,12 +31,12 @@ internal static partial class Oracles {
         var omegaD = (piScale * oneQ16);
 
         var stiffness = WrapToRaw(value: RoundRationalTiesToEven(
-            numerator: ((omegaN * omegaN) * scale32),
-            denominator: (omegaD * omegaD)
+            denominator: (omegaD * omegaD),
+            numerator: ((omegaN * omegaN) * scale32)
         ));
         var decayRate = WrapToRaw(value: RoundRationalTiesToEven(
-            numerator: ((zeta * omegaN) * scale32),
-            denominator: (oneQ16 * omegaD)
+            denominator: (oneQ16 * omegaD),
+            numerator: ((zeta * omegaN) * scale32)
         ));
 
         var oscillationRate = 0L;
@@ -62,12 +62,12 @@ internal static partial class Oracles {
         var responseZeta = (r * zeta);
 
         var targetVelocityGain = WrapToRaw(value: RoundRationalTiesToEven(
-            numerator: ((responseZeta * omegaD) * scale32),
-            denominator: ((oneQ16 * oneQ16) * omegaN)
+            denominator: ((oneQ16 * oneQ16) * omegaN),
+            numerator: ((responseZeta * omegaD) * scale32)
         ));
         var retargetGain = WrapToRaw(value: RoundRationalTiesToEven(
-            numerator: ((responseZeta * omegaN) * scale32),
-            denominator: ((oneQ16 * oneQ16) * omegaD)
+            denominator: ((oneQ16 * oneQ16) * omegaD),
+            numerator: ((responseZeta * omegaN) * scale32)
         ));
 
         return (stiffness, decayRate, oscillationRate, dampingOverOscillation, targetVelocityGain, retargetGain);

@@ -566,8 +566,8 @@ public sealed partial class WorldServer {
         try {
             if (m_addons is { } addonsForRebuild) {
                 if (!addonsForRebuild.TryPrepare(
-                    current: m_definition,
                     candidate: candidate,
+                    current: m_definition,
                     plan: out rebuildAddonPlan,
                     reason: out var rebuildAddonReason
                 )) {
@@ -1187,8 +1187,8 @@ public sealed partial class WorldServer {
                 }
 
                 if (!addonsForPrepare.TryPrepare(
-                    current: m_definition,
                     candidate: candidate,
+                    current: m_definition,
                     plan: out addonPlan,
                     reason: out var addonReason
                 )) {
@@ -1219,8 +1219,8 @@ public sealed partial class WorldServer {
             Install(
                 definition: candidate,
                 rebuildPopulation: (AffectsPopulation(mutation: mutation) || RefreshesLookAssignment(
-                mutation: mutation,
-                candidate: candidate
+                candidate: candidate,
+                mutation: mutation
             ) || (solidAffecting && WorldContactSelection.RequiresField(collision: candidate.Collision)))
             );
 
@@ -1801,6 +1801,7 @@ public sealed partial class WorldServer {
             m_tickCollided = collided!;
         }
     }
+
     // Pre-sizes the per-tick addon contention tracking against a plan's own MountedCount (or, at boot/AttachAddons,
     // the runtime's already-committed count) — called BEFORE the addon plan's own Commit, so the caller can adopt
     // the new arrays by reference in the same breath as the plan itself publishes, with no allocation at that
@@ -1824,6 +1825,7 @@ public sealed partial class WorldServer {
         principal = new WorldPrincipal[capacity];
         collided = new bool[capacity];
     }
+
     /// <summary>Attaches a client sink the per-tick snapshot is delivered to, immediately delivering the live
     /// definition followed by a primer snapshot of the current table, so the client renders the current state before
     /// its first ordinary tick delivery. A subscribe, not an overwrite: <see cref="WorldOutputHub"/> supports more
@@ -1908,8 +1910,8 @@ public sealed partial class WorldServer {
             ConnectionId: connectionId,
             CorrelationId: correlationId,
             Mutation: mutation,
-            SourceAddonInstanceId: sourceAddonInstanceId,
-            OutcomeObserved: outcomeObserved
+            OutcomeObserved: outcomeObserved,
+            SourceAddonInstanceId: sourceAddonInstanceId
         ));
     }
     /// <summary>Buffers a whole-document rebuild-and-swap (<c>world.reset</c>/<c>world.load</c>/<c>world.reload</c>)

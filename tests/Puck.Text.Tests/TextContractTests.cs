@@ -28,11 +28,11 @@ public sealed class TextContractTests {
             width: width,
             height: 1,
             metrics: new FontAtlasMetrics(
-                LineHeight: 1.0f,
                 Ascender: 1.0f,
                 Descender: 0.0f,
-                UnderlineY: 0.0f,
-                UnderlineThickness: 0.0f
+                LineHeight: 1.0f,
+                UnderlineThickness: 0.0f,
+                UnderlineY: 0.0f
             ),
             glyphs: glyphs,
             kerningPairs: [],
@@ -40,8 +40,8 @@ public sealed class TextContractTests {
         );
     private static FontAtlas LayoutAtlas() => CreateAtlas(
         glyphs: [
-            new FontAtlasGlyph(unicode: 'A', advance: 1f, planeBounds: new FontAtlasBounds(Left: 0f, Bottom: 0f, Right: 1f, Top: 1f), atlasBounds: new FontAtlasBounds(Left: 0f, Bottom: 1f, Right: 1f, Top: 0f)),
-            new FontAtlasGlyph(unicode: 'B', advance: 1f, planeBounds: new FontAtlasBounds(Left: 0f, Bottom: 0f, Right: 1f, Top: 1f), atlasBounds: new FontAtlasBounds(Left: 0f, Bottom: 1f, Right: 1f, Top: 0f)),
+            new FontAtlasGlyph(unicode: 'A', advance: 1f, planeBounds: new FontAtlasBounds(Bottom: 0f, Left: 0f, Right: 1f, Top: 1f), atlasBounds: new FontAtlasBounds(Bottom: 1f, Left: 0f, Right: 1f, Top: 0f)),
+            new FontAtlasGlyph(unicode: 'B', advance: 1f, planeBounds: new FontAtlasBounds(Bottom: 0f, Left: 0f, Right: 1f, Top: 1f), atlasBounds: new FontAtlasBounds(Bottom: 1f, Left: 0f, Right: 1f, Top: 0f)),
         ],
         imageData: new FontAtlasImageData(rgbaPixels: [1, 2, 3, 4], height: 1, width: 1),
         width: 1
@@ -100,7 +100,7 @@ public sealed class TextContractTests {
     [Fact]
     public void LayoutWrapsAfterContentEvenWhenNegativeTrackingCrossesTheOrigin() {
         var atlas = CreateAtlas(
-            glyphs: [new FontAtlasGlyph(unicode: 'A', advance: 1f, planeBounds: new FontAtlasBounds(Left: 0f, Bottom: 0f, Right: 2f, Top: 1f), atlasBounds: new FontAtlasBounds(Left: 0f, Bottom: 1f, Right: 1f, Top: 0f))],
+            glyphs: [new FontAtlasGlyph(unicode: 'A', advance: 1f, planeBounds: new FontAtlasBounds(Bottom: 0f, Left: 0f, Right: 2f, Top: 1f), atlasBounds: new FontAtlasBounds(Bottom: 1f, Left: 0f, Right: 1f, Top: 0f))],
             imageData: new FontAtlasImageData(rgbaPixels: [1, 2, 3, 4], height: 1, width: 1),
             width: 1
         );
@@ -116,8 +116,8 @@ public sealed class TextContractTests {
     public void LayoutCenterAlignmentAccountsForNegativeLeftBearing() {
         var atlas = CreateAtlas(
             glyphs: [
-                new FontAtlasGlyph(unicode: 'A', advance: 2f, planeBounds: new FontAtlasBounds(Left: -1f, Bottom: 0f, Right: 1f, Top: 1f), atlasBounds: new FontAtlasBounds(Left: 0f, Bottom: 1f, Right: 1f, Top: 0f)),
-                new FontAtlasGlyph(unicode: 'B', advance: 1f, planeBounds: new FontAtlasBounds(Left: 0f, Bottom: 0f, Right: 1f, Top: 1f), atlasBounds: new FontAtlasBounds(Left: 0f, Bottom: 1f, Right: 1f, Top: 0f)),
+                new FontAtlasGlyph(unicode: 'A', advance: 2f, planeBounds: new FontAtlasBounds(Bottom: 0f, Left: -1f, Right: 1f, Top: 1f), atlasBounds: new FontAtlasBounds(Bottom: 1f, Left: 0f, Right: 1f, Top: 0f)),
+                new FontAtlasGlyph(unicode: 'B', advance: 1f, planeBounds: new FontAtlasBounds(Bottom: 0f, Left: 0f, Right: 1f, Top: 1f), atlasBounds: new FontAtlasBounds(Bottom: 1f, Left: 0f, Right: 1f, Top: 0f)),
             ],
             imageData: new FontAtlasImageData(rgbaPixels: [1, 2, 3, 4], height: 1, width: 1),
             width: 1
@@ -148,7 +148,7 @@ public sealed class TextContractTests {
     public void LayoutRejectsUndefinedAlignment() {
         var options = new TextLayoutOptions(Alignment: ((TextAlignment)int.MaxValue));
 
-        _ = Assert.Throws<ArgumentOutOfRangeException>(() => new TextLayout().Layout(
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new TextLayout().Layout(
             atlas: LayoutAtlas(),
             options: options,
             text: "A"
@@ -156,7 +156,7 @@ public sealed class TextContractTests {
     }
     [Fact]
     public void ArtifactWriterRoundTripsGeneratedAtlas() {
-        var fontBytes = File.ReadAllBytes(path: Path.Combine(AppContext.BaseDirectory, "Fonts", "JetBrainsMono-Regular.ttf"));
+        var fontBytes = File.ReadAllBytes(path: Path.Combine(path1: AppContext.BaseDirectory, path2: "Fonts", path3: "JetBrainsMono-Regular.ttf"));
         var atlas = new ManagedFontAtlasGenerator().Generate(request: new FontAtlasGenerationRequest {
             FontBytes = fontBytes,
             FontIdentifier = "test://artifact-roundtrip",
@@ -167,13 +167,13 @@ public sealed class TextContractTests {
                 MaxAtlasPixels = (128 * 128),
             },
         });
-        var directory = Path.Combine(Path.GetTempPath(), $"puck-font-atlas-{Guid.NewGuid():N}");
-        var jsonPath = Path.Combine(directory, "atlas.json");
+        var directory = Path.Combine(path1: Path.GetTempPath(), path2: $"puck-font-atlas-{Guid.NewGuid():N}");
+        var jsonPath = Path.Combine(path1: directory, path2: "atlas.json");
 
         try {
-            FontAtlasArtifactWriter.Write(jsonPath: jsonPath, atlas: atlas);
+            FontAtlasArtifactWriter.Write(atlas: atlas, jsonPath: jsonPath);
 
-            var imagePath = Path.ChangeExtension(path: jsonPath, extension: ".png");
+            var imagePath = Path.ChangeExtension(extension: ".png", path: jsonPath);
             var imageData = new FontAtlasImageDataLoader().Load(
                 imageIdentifier: imagePath,
                 pngBytes: File.ReadAllBytes(path: imagePath)
@@ -185,10 +185,10 @@ public sealed class TextContractTests {
                 jsonContent: File.ReadAllBytes(path: jsonPath)
             );
 
-            Assert.True(loaded.TryGetGlyph(unicode: 'A', glyph: out var glyph));
-            Assert.NotNull(glyph.AtlasBounds);
-            Assert.True(loaded.TryGetGlyphById(glyphId: glyph.GlyphId, glyph: out var byId));
-            Assert.Same(expected: glyph, actual: byId);
+            Assert.True(condition: loaded.TryGetGlyph(glyph: out var glyph, unicode: 'A'));
+            Assert.NotNull(value: glyph.AtlasBounds);
+            Assert.True(condition: loaded.TryGetGlyphById(glyphId: glyph.GlyphId, glyph: out var byId));
+            Assert.Same(actual: byId, expected: glyph);
             Assert.Equal(atlas.ImageData!.RgbaPixels, loaded.ImageData!.RgbaPixels);
         } finally {
             if (Directory.Exists(path: directory)) {
@@ -198,25 +198,25 @@ public sealed class TextContractTests {
     }
     [Fact]
     public void BbCodeSupportsDocumentedShortHexColors() {
-        var enriched = Assert.Single(BbCodeTextMarkup.EnrichRunes(markup: "[color=#f00]x[/color]"));
+        var enriched = Assert.Single(collection: BbCodeTextMarkup.EnrichRunes(markup: "[color=#f00]x[/color]"));
 
-        Assert.Equal(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), enriched.Effect.TintColor);
+        Assert.Equal(new Vector4(w: 1.0f, x: 1.0f, y: 0.0f, z: 0.0f), enriched.Effect.TintColor);
     }
     [Fact]
     public void CatalogPackerRemapsLogicalFontsIntoOneTexture() {
         var first = CreateAtlas(
-            glyphs: [new FontAtlasGlyph(unicode: 'A', advance: 1f, planeBounds: new FontAtlasBounds(0f, 0f, 1f, 1f), atlasBounds: new FontAtlasBounds(0f, 1f, 1f, 0f), glyphId: 7)],
+            glyphs: [new FontAtlasGlyph(unicode: 'A', advance: 1f, planeBounds: new FontAtlasBounds(Bottom: 0f, Left: 0f, Right: 1f, Top: 1f), atlasBounds: new FontAtlasBounds(Bottom: 1f, Left: 0f, Right: 1f, Top: 0f), glyphId: 7)],
             imageData: new FontAtlasImageData([1, 2, 3, 4], height: 1, width: 1),
             width: 1
         );
         var second = CreateAtlas(
-            glyphs: [new FontAtlasGlyph(unicode: 'B', advance: 1f, planeBounds: new FontAtlasBounds(0f, 0f, 1f, 1f), atlasBounds: new FontAtlasBounds(0f, 1f, 1f, 0f))],
+            glyphs: [new FontAtlasGlyph(unicode: 'B', advance: 1f, planeBounds: new FontAtlasBounds(Bottom: 0f, Left: 0f, Right: 1f, Top: 1f), atlasBounds: new FontAtlasBounds(Bottom: 1f, Left: 0f, Right: 1f, Top: 0f))],
             imageData: new FontAtlasImageData([5, 6, 7, 8], height: 1, width: 1),
             width: 1
         );
         var packed = FontAtlasCatalogPacker.Pack(
             defaultFont: "first",
-            fonts: new Dictionary<string, FontAtlas>(StringComparer.Ordinal) {
+            fonts: new Dictionary<string, FontAtlas>(comparer: StringComparer.Ordinal) {
                 ["second"] = second,
                 ["first"] = first,
             },
@@ -226,17 +226,17 @@ public sealed class TextContractTests {
 
         Assert.Equal(2, packed.ImageData.Width);
         Assert.Equal(new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 }, packed.ImageData.RgbaPixels);
-        Assert.True(packed.Resolve(name: "second").TryGetGlyph(unicode: 'B', glyph: out var glyph));
+        Assert.True(condition: packed.Resolve(name: "second").TryGetGlyph(glyph: out var glyph, unicode: 'B'));
         Assert.Equal(1f, glyph.AtlasBounds!.Value.Left);
-        Assert.True(packed.Resolve(name: "first").TryGetGlyphById(glyphId: 7, glyph: out _));
+        Assert.True(condition: packed.Resolve(name: "first").TryGetGlyphById(glyph: out _, glyphId: 7));
         Assert.Same(packed.Resolve(name: null), packed.Resolve(name: "first"));
     }
     [Fact]
     public void EnrichmentReplacesMalformedUtf16() {
         var malformed = new string(c: '\uD800', count: 1);
 
-        var visible = Assert.Single(TextEnrichmentTags.EnumerateVisibleRunes(text: malformed));
-        var segment = Assert.Single(TextEnrichmentTags.EnumerateSanitizableSegments(text: malformed));
+        var visible = Assert.Single(collection: TextEnrichmentTags.EnumerateVisibleRunes(text: malformed));
+        var segment = Assert.Single(collection: TextEnrichmentTags.EnumerateSanitizableSegments(text: malformed));
 
         Assert.Equal(Rune.ReplacementChar, visible);
         Assert.Equal(Rune.ReplacementChar, segment.Rune);
@@ -245,8 +245,8 @@ public sealed class TextContractTests {
     public void ImageDataRequiresExactPackedRgbaLength() {
         _ = new FontAtlasImageData(new byte[16], height: 2, width: 2);
 
-        _ = Assert.Throws<ArgumentException>(() => new FontAtlasImageData(new byte[4], height: 2, width: 2));
-        _ = Assert.Throws<ArgumentException>(() => new FontAtlasImageData(new byte[20], height: 2, width: 2));
+        _ = Assert.Throws<ArgumentException>(testCode: () => new FontAtlasImageData(new byte[4], height: 2, width: 2));
+        _ = Assert.Throws<ArgumentException>(testCode: () => new FontAtlasImageData(new byte[20], height: 2, width: 2));
     }
     [Fact]
     public void ImageLoaderRejectsCorruptChunkCrc() {
@@ -258,14 +258,14 @@ public sealed class TextContractTests {
         );
         pngBytes[29] ^= byte.MaxValue;
 
-        _ = Assert.Throws<InvalidDataException>(() => new FontAtlasImageDataLoader().Load(
+        _ = Assert.Throws<InvalidDataException>(testCode: () => new FontAtlasImageDataLoader().Load(
             imageIdentifier: "corrupt.png",
             pngBytes: pngBytes
         ));
     }
     [Fact]
     public void InProcessGeneratorBuildsCompositeGlyphsDeterministically() {
-        var fontBytes = File.ReadAllBytes(path: Path.Combine(AppContext.BaseDirectory, "Fonts", "JetBrainsMono-Regular.ttf"));
+        var fontBytes = File.ReadAllBytes(path: Path.Combine(path1: AppContext.BaseDirectory, path2: "Fonts", path3: "JetBrainsMono-Regular.ttf"));
         var request = new FontAtlasGenerationRequest {
             FontBytes = fontBytes,
             FontIdentifier = "test://jetbrains-mono-composite",
@@ -281,16 +281,16 @@ public sealed class TextContractTests {
         var first = new ManagedFontAtlasGenerator().Generate(request: request);
         var second = new ManagedFontAtlasGenerator().Generate(request: request);
 
-        Assert.True(first.TryGetGlyph(unicode: 'é', glyph: out var glyph));
-        Assert.NotNull(glyph.AtlasBounds);
+        Assert.True(condition: first.TryGetGlyph(glyph: out var glyph, unicode: 'é'));
+        Assert.NotNull(value: glyph.AtlasBounds);
         Assert.Equal(first.Width, second.Width);
         Assert.Equal(first.Height, second.Height);
         Assert.Equal(first.ImageData!.RgbaPixels, second.ImageData!.RgbaPixels);
-        Assert.Contains(first.ImageData.RgbaPixels, static value => (value > 128));
+        Assert.Contains(collection: first.ImageData.RgbaPixels, filter: static value => (value > 128));
     }
     [Fact]
     public void InProcessGeneratorBuildsRequestedMtsdfGlyphs() {
-        var fontBytes = File.ReadAllBytes(path: Path.Combine(AppContext.BaseDirectory, "Fonts", "JetBrainsMono-Regular.ttf"));
+        var fontBytes = File.ReadAllBytes(path: Path.Combine(path1: AppContext.BaseDirectory, path2: "Fonts", path3: "JetBrainsMono-Regular.ttf"));
         var atlas = new ManagedFontAtlasGenerator().Generate(request: new FontAtlasGenerationRequest {
             FontBytes = fontBytes,
             FontIdentifier = "test://jetbrains-mono",
@@ -305,19 +305,19 @@ public sealed class TextContractTests {
         });
 
         Assert.Equal(FontAtlasKind.Mtsdf, atlas.Kind);
-        Assert.NotNull(atlas.ImageData);
-        Assert.True(atlas.TryGetGlyph(unicode: 'A', glyph: out var glyph));
-        Assert.NotNull(glyph.AtlasBounds);
-        Assert.True(atlas.TryGetGlyph(unicode: ' ', glyph: out var space));
-        Assert.Null(space.AtlasBounds);
-        Assert.False(atlas.TryGetGlyph(unicode: 'C', glyph: out _));
-        Assert.Contains(atlas.ImageData.RgbaPixels, static value => (value > 128));
-        Assert.Contains(atlas.ImageData.RgbaPixels, static value => (value < 128));
+        Assert.NotNull(@object: atlas.ImageData);
+        Assert.True(condition: atlas.TryGetGlyph(glyph: out var glyph, unicode: 'A'));
+        Assert.NotNull(value: glyph.AtlasBounds);
+        Assert.True(condition: atlas.TryGetGlyph(glyph: out var space, unicode: ' '));
+        Assert.Null(value: space.AtlasBounds);
+        Assert.False(condition: atlas.TryGetGlyph(glyph: out _, unicode: 'C'));
+        Assert.Contains(collection: atlas.ImageData.RgbaPixels, filter: static value => (value > 128));
+        Assert.Contains(collection: atlas.ImageData.RgbaPixels, filter: static value => (value < 128));
     }
     [Fact]
     public void InProcessGeneratorReportsMissingTablesForMalformedCffContainer() {
         byte[] cffHeader = [0x4F, 0x54, 0x54, 0x4F, 0, 0, 0, 0, 0, 0, 0, 0];
-        var exception = Assert.Throws<ArgumentException>(() => new ManagedFontAtlasGenerator().Generate(request: new FontAtlasGenerationRequest {
+        var exception = Assert.Throws<ArgumentException>(testCode: () => new ManagedFontAtlasGenerator().Generate(request: new FontAtlasGenerationRequest {
             FontBytes = cffHeader,
             FontIdentifier = "test://cff-font",
             Options = new FontAtlasGenerationOptions {
@@ -334,7 +334,7 @@ public sealed class TextContractTests {
             Padding = 7,
         };
 
-        _ = Assert.Throws<ArgumentOutOfRangeException>(() => new ManagedFontAtlasGenerator().Generate(request: new FontAtlasGenerationRequest {
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new ManagedFontAtlasGenerator().Generate(request: new FontAtlasGenerationRequest {
             FontBytes = new byte[] { 1 },
             FontIdentifier = "test://font",
             Options = options,
@@ -346,28 +346,28 @@ public sealed class TextContractTests {
             glyphs: [new FontAtlasGlyph(
                 unicode: 'A',
                 advance: 1.0f,
-                planeBounds: new FontAtlasBounds(Left: 0.0f, Bottom: 0.0f, Right: 1.0f, Top: 1.0f),
-                atlasBounds: new FontAtlasBounds(Left: 0.0f, Bottom: 1.0f, Right: 1.0f, Top: 0.0f)
+                planeBounds: new FontAtlasBounds(Bottom: 0.0f, Left: 0.0f, Right: 1.0f, Top: 1.0f),
+                atlasBounds: new FontAtlasBounds(Bottom: 1.0f, Left: 0.0f, Right: 1.0f, Top: 0.0f)
             )],
             imageData: new FontAtlasImageData([0, 0, 0, 0], height: 1, width: 1),
             width: 1
         );
         var layout = new TextLayout();
 
-        _ = Assert.Throws<ArgumentOutOfRangeException>(() => layout.Layout(atlas, "A", scale: float.NaN));
-        _ = Assert.Throws<ArgumentOutOfRangeException>(() => layout.Layout(atlas, "A", scale: float.PositiveInfinity));
-        _ = Assert.Throws<ArgumentOutOfRangeException>(() => layout.Layout(atlas, "A", maxLineWidth: float.NaN));
-        _ = Assert.Throws<ArgumentOutOfRangeException>(() => layout.Layout(atlas, "A", maxLineWidth: float.PositiveInfinity));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => layout.Layout(atlas, "A", scale: float.NaN));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => layout.Layout(atlas, "A", scale: float.PositiveInfinity));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => layout.Layout(atlas, "A", maxLineWidth: float.NaN));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => layout.Layout(atlas, "A", maxLineWidth: float.PositiveInfinity));
     }
     [Fact]
     public void LoaderWrapsMalformedJsonAsInvalidData() {
-        var exception = Assert.Throws<InvalidDataException>(() => new FontAtlasLoader().Load(
+        var exception = Assert.Throws<InvalidDataException>(testCode: () => new FontAtlasLoader().Load(
             atlasIdentifier: "broken-atlas",
             jsonContent: Encoding.UTF8.GetBytes(s: "{"),
             imagePath: "broken.png"
         ));
 
-        _ = Assert.IsType<JsonException>(exception.InnerException);
+        _ = Assert.IsType<JsonException>(@object: exception.InnerException);
     }
     [Fact]
     public void MismatchedEndTagDoesNotPopTheCurrentEffect() {
@@ -382,10 +382,10 @@ public sealed class TextContractTests {
     }
     [Fact]
     public void PinnedContainedResolutionChecksBothBoundaryAndContent() {
-        var basePath = Path.GetFullPath(path: Path.Combine(Path.GetTempPath(), "puck-text-contained-resolution"));
-        var resolvedPath = Path.Combine(basePath, "fonts", "body.ttf");
+        var basePath = Path.GetFullPath(path: Path.Combine(path1: Path.GetTempPath(), path2: "puck-text-contained-resolution"));
+        var resolvedPath = Path.Combine(path1: basePath, path2: "fonts", path3: "body.ttf");
         byte[] fontBytes = [1, 2, 3, 4];
-        var source = new MemoryAssetSource(new Dictionary<string, byte[]>(StringComparer.Ordinal) {
+        var source = new MemoryAssetSource(assets: new Dictionary<string, byte[]>(comparer: StringComparer.Ordinal) {
             [resolvedPath] = fontBytes,
         });
         var resolver = new FontAtlasSourceResolver(fontAtlasGenerator: new StubFontAtlasGenerator(), assetSource: source);
@@ -393,25 +393,25 @@ public sealed class TextContractTests {
 
         _ = resolver.ResolvePinnedContained(fontPath: "fonts/body.ttf", expectedHash: expectedHash, generationOptions: new FontAtlasGenerationOptions(), basePath: basePath);
 
-        _ = Assert.Throws<ArgumentException>(() => resolver.ResolvePinnedContained(fontPath: "../outside.ttf", expectedHash: expectedHash, generationOptions: new FontAtlasGenerationOptions(), basePath: basePath));
-        _ = Assert.Throws<InvalidDataException>(() => resolver.ResolvePinnedContained(fontPath: "fonts/body.ttf", expectedHash: "sha256-64/0000000000000000", generationOptions: new FontAtlasGenerationOptions(), basePath: basePath));
+        _ = Assert.Throws<ArgumentException>(testCode: () => resolver.ResolvePinnedContained(fontPath: "../outside.ttf", expectedHash: expectedHash, generationOptions: new FontAtlasGenerationOptions(), basePath: basePath));
+        _ = Assert.Throws<InvalidDataException>(testCode: () => resolver.ResolvePinnedContained(fontPath: "fonts/body.ttf", expectedHash: "sha256-64/0000000000000000", generationOptions: new FontAtlasGenerationOptions(), basePath: basePath));
     }
     [Fact]
     public void RuntimeCacheTreatsCollectionFaceAsPartOfFontIdentity() {
-        var basePath = Path.GetFullPath(path: Path.Combine(Path.GetTempPath(), "puck-text-face-cache-contract"));
-        var fontPath = Path.Combine(basePath, "family.ttc");
-        var source = new MemoryAssetSource(new Dictionary<string, byte[]>(StringComparer.Ordinal) {
+        var basePath = Path.GetFullPath(path: Path.Combine(path1: Path.GetTempPath(), path2: "puck-text-face-cache-contract"));
+        var fontPath = Path.Combine(path1: basePath, path2: "family.ttc");
+        var source = new MemoryAssetSource(assets: new Dictionary<string, byte[]>(comparer: StringComparer.Ordinal) {
             [fontPath] = [1, 2, 3, 4],
         });
         var generator = new RecordingFontAtlasGenerator();
-        var resolver = new FontAtlasSourceResolver(fontAtlasGenerator: generator, assetSource: source);
+        var resolver = new FontAtlasSourceResolver(assetSource: source, fontAtlasGenerator: generator);
 
         var first = resolver.Resolve(fontPath: "family.ttc", generationOptions: new FontAtlasGenerationOptions { FaceIndex = 0 }, basePath: basePath);
         var second = resolver.Resolve(fontPath: "family.ttc", generationOptions: new FontAtlasGenerationOptions { FaceIndex = 1 }, basePath: basePath);
         var firstAgain = resolver.Resolve(fontPath: "family.ttc", generationOptions: new FontAtlasGenerationOptions { FaceIndex = 0 }, basePath: basePath);
 
-        Assert.NotSame(first, second);
-        Assert.Same(first, firstAgain);
+        Assert.NotSame(actual: second, expected: first);
+        Assert.Same(actual: firstAgain, expected: first);
         Assert.Equal([0, 1], generator.FaceIndices);
     }
     [Fact]
@@ -429,24 +429,24 @@ public sealed class TextContractTests {
             width: 1
         );
 
-        Assert.Single(atlas.Glyphs);
-        Assert.False(atlas.TryGetGlyph(unicode: -1, glyph: out _));
-        Assert.True(atlas.TryGetGlyphById(glyphId: 42, glyph: out var byId));
-        Assert.Same(expected: glyph, actual: byId);
+        Assert.Single(collection: atlas.Glyphs);
+        Assert.False(condition: atlas.TryGetGlyph(glyph: out _, unicode: -1));
+        Assert.True(condition: atlas.TryGetGlyphById(glyph: out var byId, glyphId: 42));
+        Assert.Same(actual: byId, expected: glyph);
     }
     [Fact]
     public void PrebakedCacheKeepsResolvedImagePathInItsIdentity() {
         var basePath = Path.Combine(
-            Path.GetTempPath(),
-            "puck-text-cache-contract"
+            path1: Path.GetTempPath(),
+            path2: "puck-text-cache-contract"
         );
-        var firstAtlasPath = Path.Combine(basePath, "first", "atlas.json");
-        var secondAtlasPath = Path.Combine(basePath, "second", "atlas.json");
-        var firstImagePath = Path.ChangeExtension(firstAtlasPath, ".png");
-        var secondImagePath = Path.ChangeExtension(secondAtlasPath, ".png");
+        var firstAtlasPath = Path.Combine(path1: basePath, path2: "first", path3: "atlas.json");
+        var secondAtlasPath = Path.Combine(path1: basePath, path2: "second", path3: "atlas.json");
+        var firstImagePath = Path.ChangeExtension(extension: ".png", path: firstAtlasPath);
+        var secondImagePath = Path.ChangeExtension(extension: ".png", path: secondAtlasPath);
         var metadata = Encoding.UTF8.GetBytes(s: AtlasJson);
         byte[] imageBytes = [1, 2, 3, 4];
-        var source = new MemoryAssetSource(new Dictionary<string, byte[]>(StringComparer.Ordinal) {
+        var source = new MemoryAssetSource(assets: new Dictionary<string, byte[]>(comparer: StringComparer.Ordinal) {
             [firstAtlasPath] = metadata,
             [firstImagePath] = imageBytes,
             [secondAtlasPath] = metadata,
@@ -458,17 +458,17 @@ public sealed class TextContractTests {
         );
 
         var first = resolver.ResolvePrebaked(
-            atlasPath: Path.Combine("first", "atlas.json"),
+            atlasPath: Path.Combine(path1: "first", path2: "atlas.json"),
             basePath: basePath
         );
         var second = resolver.ResolvePrebaked(
-            atlasPath: Path.Combine("second", "atlas.json"),
+            atlasPath: Path.Combine(path1: "second", path2: "atlas.json"),
             basePath: basePath
         );
 
         Assert.Equal(firstImagePath, first.ImagePath);
         Assert.Equal(secondImagePath, second.ImagePath);
-        Assert.NotSame(first, second);
+        Assert.NotSame(actual: second, expected: first);
     }
     [Fact]
     public void SdfGenerationUsesColorCoverageForOpaqueMasks() {
@@ -489,17 +489,17 @@ public sealed class TextContractTests {
         var sdf = SdfCoverageAtlas.Generate(coverage: coverage);
         var pixels = sdf.ImageData!.RgbaPixels;
 
-        Assert.True((pixels[0] < 128));
-        Assert.True((pixels[4] > 128));
+        Assert.True(condition: (pixels[0] < 128));
+        Assert.True(condition: (pixels[4] > 128));
     }
     [Fact]
     public void StripToPlainTextRejectsNull() {
-        _ = Assert.Throws<ArgumentNullException>(() => BbCodeTextMarkup.StripToPlainText(markup: null!));
+        _ = Assert.Throws<ArgumentNullException>(testCode: () => BbCodeTextMarkup.StripToPlainText(markup: null!));
     }
 
     private sealed class MemoryAssetSource(IReadOnlyDictionary<string, byte[]> assets) : IAssetSource {
         public bool Exists(string path) =>
-            assets.ContainsKey(path);
+            assets.ContainsKey(key: path);
         public ReadOnlyMemory<byte> Read(string path) =>
             assets[path];
     }

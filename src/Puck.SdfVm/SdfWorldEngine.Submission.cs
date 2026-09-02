@@ -116,12 +116,14 @@ public sealed partial class SdfWorldEngine {
         frame: frame,
         onFrameSlotAvailable: null
     );
+
     // The live node's additive external-resource seam: keep the longstanding public SubmitFrame signature intact,
     // while letting it retire/adopt leased screen sources in the exact frame-ring fence interval.
     internal void SubmitFrameWithExternalResources(SdfFrame frame, Action<int> onFrameSlotAvailable) => SubmitFrameCore(
         frame: frame,
         onFrameSlotAvailable: onFrameSlotAvailable
     );
+
     private void SubmitFrameCore(SdfFrame frame, Action<int>? onFrameSlotAvailable) {
         ThrowIfPipelinedFrameInFlight();
 
@@ -144,6 +146,7 @@ public sealed partial class SdfWorldEngine {
             m_timingFrame++;
         }
     }
+
     /// <summary>Records and submits one frame fire-and-forget, then issues a non-blocking fenced readback of the
     /// composited output — the demo bake-preview path. Neither the compute submit nor the readback copy waits: the
     /// caller polls <see cref="IsFramePixelsReady"/> on a later produced frame and, once it is ready, collects the

@@ -60,7 +60,6 @@ public static class WorldAdjacencyGeometry {
             (MathF.Abs(x: alongUp) <= (((float)((double)frame.HalfHeight)) + reach))
         );
     }
-
     /// <summary>Selects solid placements relevant to one counterpart band, in document order.</summary>
     public static Selection Select(WorldDefinition definition, WorldFaceFrame frame, FixedQ4816 overlapDepth, int maximum = MaximumPlacementsPerBand) {
         ArgumentNullException.ThrowIfNull(argument: definition);

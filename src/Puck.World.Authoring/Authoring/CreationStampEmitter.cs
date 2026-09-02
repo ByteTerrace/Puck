@@ -231,6 +231,7 @@ public static class CreationStampEmitter {
             );
         }
     }
+
     private static void EmitShapeChain(SdfProgramBuilder builder, ShapeDocument shape, CreationStampTransform transform, int material, float? contactMargin) {
         var (shapePosition, shapeRotation) = ReflectedShapeTransform(
             shape: shape,
@@ -278,6 +279,7 @@ public static class CreationStampEmitter {
         ).Dilate(radius: margin);
         _ = chain.PopField();
     }
+
     /// <summary>Emits ONE shape of a creation under the stamp transform — the per-shape-instance form of
     /// <see cref="Emit"/>, for a stamper that gives each shape its own tight cull bound
     /// (<see cref="ShapeStampBound"/>) instead of one whole-creation instance.</summary>
@@ -310,6 +312,7 @@ public static class CreationStampEmitter {
         ArgumentNullException.ThrowIfNull(document);
 
         var shape = document.Shapes![shapeIndex];
+
         var (shapePosition, _) = ReflectedShapeTransform(
             shape: shape,
             normal: transform.ReflectionNormal
@@ -565,6 +568,7 @@ public static class CreationStampEmitter {
 
         for (var index = 0; (index < runs.Count); index++) {
             var run = runs[index];
+
             var (position, rotation) = RunFrame(
                 document: document,
                 run: run
@@ -652,6 +656,7 @@ public static class CreationStampEmitter {
 
         for (var index = 0; (index < runs.Count); index++) {
             var run = runs[index];
+
             var (position, rotation) = RunFrame(
                 document: document,
                 run: run
@@ -1130,7 +1135,7 @@ public static class CreationStampLattice {
     /// <param name="mirror">The authored local reflection plane, or <see langword="null"/>.</param>
     /// <param name="ceiling">The largest returned value.</param>
     public static long MaterializedCopyCount(CreationStampPattern? pattern, long? sampledCount, CreationStampPlane? mirror, long ceiling = long.MaxValue) {
-        var copies = (sampledCount is { } sampled
+        var copies = ((sampledCount is { } sampled)
             ? Math.Min(val1: sampled, val2: ceiling)
             : MultiplySaturated(
                 ceiling: ceiling,

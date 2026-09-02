@@ -24,7 +24,7 @@ public sealed class MusicGainThousandthsRangeLawTests {
             segment: new MusicSegmentDocument(
                 Id: "calm",
                 Transitions: null,
-                Layers: [new MusicLayerDocument(TuneId: "bed-tune", GainThousandths: (MaxGainThousandths + 1), When: null)]
+                Layers: [new MusicLayerDocument(GainThousandths: (MaxGainThousandths + 1), TuneId: "bed-tune", When: null)]
             )
         );
     }
@@ -38,7 +38,7 @@ public sealed class MusicGainThousandthsRangeLawTests {
             segment: new MusicSegmentDocument(
                 Id: "calm",
                 Transitions: null,
-                Layers: [new MusicLayerDocument(TuneId: "bed-tune", GainThousandths: -1, When: null)]
+                Layers: [new MusicLayerDocument(GainThousandths: -1, TuneId: "bed-tune", When: null)]
             )
         );
     }
@@ -52,7 +52,7 @@ public sealed class MusicGainThousandthsRangeLawTests {
             segment: new MusicSegmentDocument(
                 Id: "calm",
                 Transitions: null,
-                Embellishments: [new MusicEmbellishmentDocument(PatchId: "stinger", When: "region.enter", GainThousandths: (MaxGainThousandths + 1))]
+                Embellishments: [new MusicEmbellishmentDocument(GainThousandths: (MaxGainThousandths + 1), PatchId: "stinger", When: "region.enter")]
             )
         );
     }
@@ -67,8 +67,8 @@ public sealed class MusicGainThousandthsRangeLawTests {
             segment: new MusicSegmentDocument(
                 Id: "calm",
                 Transitions: null,
-                Layers: [new MusicLayerDocument(TuneId: "bed-tune", GainThousandths: MaxGainThousandths, When: null)],
-                Embellishments: [new MusicEmbellishmentDocument(PatchId: "stinger", When: "region.enter", GainThousandths: null)]
+                Layers: [new MusicLayerDocument(GainThousandths: MaxGainThousandths, TuneId: "bed-tune", When: null)],
+                Embellishments: [new MusicEmbellishmentDocument(GainThousandths: null, PatchId: "stinger", When: "region.enter")]
             )
         );
     }
@@ -83,7 +83,7 @@ public sealed class MusicGainThousandthsRangeLawTests {
                 Tempo: new MusicTempoDocument(BeatsPerBar: 4, TicksPerBeat: 2100),
                 Segments: [segment]
             ));
-            var tune = AudioCanonicalizer.Canonicalize(document: new AudioDocument(Schema: AudioDocument.CurrentSchema, Name: "bed", Tempo: null, Patterns: null, Order: null, Effects: null));
+            var tune = AudioCanonicalizer.Canonicalize(document: new AudioDocument(Effects: null, Name: "bed", Order: null, Patterns: null, Schema: AudioDocument.CurrentSchema, Tempo: null));
             var patch = SynthPatchCanonicalizer.Canonicalize(document: new SynthPatchDocument(Schema: SynthPatchDocument.CurrentSchema, Name: "stinger", Oscillator: null, DutyThousandths: null, Polynomial: null, AttackFrames: null, DecayFrames: null, SustainThousandths: null, ReleaseFrames: null, PitchMillihertz: 440_000));
             var musicPath = Path.Combine(path1: directory, path2: "gain-law.puck.music.v1.json");
             var tunePath = Path.Combine(path1: directory, path2: "bed-tune.puck.audio.v1.json");

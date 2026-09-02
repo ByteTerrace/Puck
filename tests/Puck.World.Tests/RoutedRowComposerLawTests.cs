@@ -34,7 +34,7 @@ public sealed class RoutedRowComposerLawTests {
             path: "views.seatRig",
             principal: WorldPrincipal.Console
         ));
-        Assert.Contains(expectedSubstring: "addressed world's own live document", actualString: liveDocumentError, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(actualString: liveDocumentError, comparisonType: StringComparison.Ordinal, expectedSubstring: "addressed world's own live document");
 
         // Denial 2: an unknown path is refused naming the admissible siblings, never a silent no-op.
         Assert.False(condition: WorldRowCommandModule.TryComposeRoutedSet(
@@ -44,6 +44,6 @@ public sealed class RoutedRowComposerLawTests {
             path: "nonsense",
             principal: WorldPrincipal.Console
         ));
-        Assert.Contains(expectedSubstring: "placements", actualString: unknownError, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(actualString: unknownError, comparisonType: StringComparison.Ordinal, expectedSubstring: "placements");
     }
 }

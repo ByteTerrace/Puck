@@ -65,6 +65,7 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
     public Win32D3D11ProbeKernel(nint device, nint context, nint device1, in ProbeKernelRequest request, ProbeReadingRing ring, int triggerWidth, int triggerHeight)
         : this(device: ((ID3D11Device*)device), context: ((ID3D11DeviceContext*)context), device1: ((ID3D11Device1*)device1), request: in request, ring: ring, triggerWidth: triggerWidth, triggerHeight: triggerHeight) {
     }
+
     private Win32D3D11ProbeKernel(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Device1* device1, in ProbeKernelRequest request, ProbeReadingRing ring, int triggerWidth, int triggerHeight) {
         ArgumentNullException.ThrowIfNull(ring);
 
@@ -131,7 +132,7 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
 
             var accumulateDescription = new D3D11_BUFFER_DESC {
                 BindFlags = D3D11_BIND_FLAG.D3D11_BIND_UNORDERED_ACCESS,
-                ByteWidth = checked((uint)AccumulateElementCount * (uint)sizeof(uint)),
+                ByteWidth = checked((((uint)AccumulateElementCount) * ((uint)sizeof(uint)))),
                 MiscFlags = D3D11_RESOURCE_MISC_FLAG.D3D11_RESOURCE_MISC_BUFFER_STRUCTURED,
                 StructureByteStride = ((uint)sizeof(uint)),
                 Usage = D3D11_USAGE.D3D11_USAGE_DEFAULT,
@@ -145,12 +146,12 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
             };
 
             accumulateUavDescription.Anonymous.Buffer.NumElements = AccumulateElementCount;
-            device->CreateUnorderedAccessView(pResource: ((ID3D11Resource*)accumulateBuffer), pDesc: &accumulateUavDescription, ppUAView: &accumulateUav);
+            device->CreateUnorderedAccessView(pDesc: &accumulateUavDescription, pResource: ((ID3D11Resource*)accumulateBuffer), ppUAView: &accumulateUav);
 
             var channelsElementCount = checked((uint)(m_channelCount + 1));
             var channelsDescription = new D3D11_BUFFER_DESC {
                 BindFlags = D3D11_BIND_FLAG.D3D11_BIND_UNORDERED_ACCESS,
-                ByteWidth = checked(channelsElementCount * (uint)sizeof(float)),
+                ByteWidth = checked((channelsElementCount * ((uint)sizeof(float)))),
                 MiscFlags = D3D11_RESOURCE_MISC_FLAG.D3D11_RESOURCE_MISC_BUFFER_STRUCTURED,
                 StructureByteStride = ((uint)sizeof(float)),
                 Usage = D3D11_USAGE.D3D11_USAGE_DEFAULT,
@@ -164,7 +165,7 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
             };
 
             channelsUavDescription.Anonymous.Buffer.NumElements = channelsElementCount;
-            device->CreateUnorderedAccessView(pResource: ((ID3D11Resource*)channelsBuffer), pDesc: &channelsUavDescription, ppUAView: &channelsUav);
+            device->CreateUnorderedAccessView(pDesc: &channelsUavDescription, pResource: ((ID3D11Resource*)channelsBuffer), ppUAView: &channelsUav);
 
             var stagingDescription = new D3D11_BUFFER_DESC {
                 ByteWidth = channelsDescription.ByteWidth,
@@ -194,7 +195,7 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
                 };
 
                 device->CreateTexture2D(pDesc: &outputDescription, pInitialData: null, ppTexture2D: &output);
-                device->CreateUnorderedAccessView(pResource: ((ID3D11Resource*)output), pDesc: null, ppUAView: &outputUav);
+                device->CreateUnorderedAccessView(pDesc: null, pResource: ((ID3D11Resource*)output), ppUAView: &outputUav);
 
                 outputTargets = new ID3D11Texture2D*[declaredOutput.SharedTargetHandles.Count];
 
@@ -303,11 +304,11 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
             return false;
         }
 
-        var deltaSeconds = ((float)((now - m_lastRunTimestamp) / (double)Stopwatch.Frequency));
+        var deltaSeconds = ((float)((now - m_lastRunTimestamp) / ((double)Stopwatch.Frequency)));
 
         m_lastRunTimestamp = now;
-        UpdateConstants(now: now, deltaSeconds: deltaSeconds, boundMask: boundMask);
-        Dispatch(inputViews: views, slot: slot, channels: out var channels, confidence: out var confidence);
+        UpdateConstants(boundMask: boundMask, deltaSeconds: deltaSeconds, now: now);
+        Dispatch(channels: out var channels, confidence: out var confidence, inputViews: views, slot: slot);
 
         if (m_slots is { } publication) {
             publication.Publish(slot: slot);
@@ -350,7 +351,7 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
     private void Dispatch(ReadOnlySpan<nint> inputViews, int slot, out ProbeChannelValues channels, out FixedQ4816 confidence) {
         Span<uint> zero = [0u, 0u, 0u, 0u];
 
-        m_context->ClearUnorderedAccessViewUint(pUnorderedAccessView: m_accumulateUav, Values: zero);
+        m_context->ClearUnorderedAccessViewUint(Values: zero, pUnorderedAccessView: m_accumulateUav);
 
         var views = stackalloc ID3D11ShaderResourceView*[inputViews.Length];
 
@@ -363,16 +364,16 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
         var uavs = stackalloc ID3D11UnorderedAccessView*[3] { m_accumulateUav, m_channelsUav, m_outputUav };
         var uavCount = ((m_outputUav is null) ? 2u : 3u);
 
-        m_context->CSSetShaderResources(StartSlot: 0, NumViews: viewCount, ppShaderResourceViews: views);
-        m_context->CSSetConstantBuffers(StartSlot: 0, NumBuffers: 2, ppConstantBuffers: constantBuffers);
-        m_context->CSSetUnorderedAccessViews(StartSlot: 0, NumUAVs: uavCount, ppUnorderedAccessViews: uavs, pUAVInitialCounts: null);
-        m_context->CSSetShader(pComputeShader: m_accumulateShader, NumClassInstances: 0, ppClassInstances: null);
+        m_context->CSSetShaderResources(NumViews: viewCount, StartSlot: 0, ppShaderResourceViews: views);
+        m_context->CSSetConstantBuffers(NumBuffers: 2, StartSlot: 0, ppConstantBuffers: constantBuffers);
+        m_context->CSSetUnorderedAccessViews(NumUAVs: uavCount, StartSlot: 0, pUAVInitialCounts: null, ppUnorderedAccessViews: uavs);
+        m_context->CSSetShader(NumClassInstances: 0, pComputeShader: m_accumulateShader, ppClassInstances: null);
         m_context->Dispatch(
             ThreadGroupCountX: checked((uint)((m_dispatchWidth + 7) / 8)),
             ThreadGroupCountY: checked((uint)((m_dispatchHeight + 7) / 8)),
             ThreadGroupCountZ: 1
         );
-        m_context->CSSetShader(pComputeShader: m_finalizeShader, NumClassInstances: 0, ppClassInstances: null);
+        m_context->CSSetShader(NumClassInstances: 0, pComputeShader: m_finalizeShader, ppClassInstances: null);
         m_context->Dispatch(ThreadGroupCountX: 1, ThreadGroupCountY: 1, ThreadGroupCountZ: 1);
 
         var noViews = stackalloc ID3D11ShaderResourceView*[inputViews.Length];
@@ -383,10 +384,10 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
             noViews[index] = null;
         }
 
-        m_context->CSSetShaderResources(StartSlot: 0, NumViews: viewCount, ppShaderResourceViews: noViews);
-        m_context->CSSetUnorderedAccessViews(StartSlot: 0, NumUAVs: uavCount, ppUnorderedAccessViews: noUavs, pUAVInitialCounts: null);
-        m_context->CSSetConstantBuffers(StartSlot: 0, NumBuffers: 2, ppConstantBuffers: noConstantBuffers);
-        m_context->CSSetShader(pComputeShader: null, NumClassInstances: 0, ppClassInstances: null);
+        m_context->CSSetShaderResources(NumViews: viewCount, StartSlot: 0, ppShaderResourceViews: noViews);
+        m_context->CSSetUnorderedAccessViews(NumUAVs: uavCount, StartSlot: 0, pUAVInitialCounts: null, ppUnorderedAccessViews: noUavs);
+        m_context->CSSetConstantBuffers(NumBuffers: 2, StartSlot: 0, ppConstantBuffers: noConstantBuffers);
+        m_context->CSSetShader(NumClassInstances: 0, pComputeShader: null, ppClassInstances: null);
 
         if (slot >= 0) {
             m_context->CopySubresourceRegion(
@@ -406,10 +407,10 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
 
         var mapped = default(D3D11_MAPPED_SUBRESOURCE);
 
-        m_context->Map(pResource: ((ID3D11Resource*)m_channelsStaging), Subresource: 0, MapType: D3D11_MAP.D3D11_MAP_READ, MapFlags: 0, pMappedResource: &mapped);
+        m_context->Map(MapFlags: 0, MapType: D3D11_MAP.D3D11_MAP_READ, Subresource: 0, pMappedResource: &mapped, pResource: ((ID3D11Resource*)m_channelsStaging));
 
         try {
-            var floats = new ReadOnlySpan<float>(mapped.pData, (m_channelCount + 1));
+            var floats = new ReadOnlySpan<float>(length: (m_channelCount + 1), pointer: mapped.pData);
             var values = default(ProbeChannelValues);
 
             for (var channel = 0; (channel < m_channelCount); channel++) {
@@ -419,25 +420,25 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
             channels = values;
             confidence = FixedQ4816.FromDouble(value: floats[m_channelCount]);
         } finally {
-            m_context->Unmap(pResource: ((ID3D11Resource*)m_channelsStaging), Subresource: 0);
+            m_context->Unmap(Subresource: 0, pResource: ((ID3D11Resource*)m_channelsStaging));
         }
     }
     private void UpdateConstants(long now, float deltaSeconds, uint boundMask) {
-        var time = ((float)((now - m_startTimestamp) / (double)Stopwatch.Frequency));
+        var time = ((float)((now - m_startTimestamp) / ((double)Stopwatch.Frequency)));
         var frame = stackalloc float[4];
 
         frame[0] = time;
         frame[1] = deltaSeconds;
         ((uint*)frame)[2] = unchecked((uint)m_cycles);
         ((uint*)frame)[3] = boundMask;
-        m_context->UpdateSubresource(pDstResource: ((ID3D11Resource*)m_frameBuffer), DstSubresource: 0, pDstBox: null, pSrcData: frame, SrcRowPitch: 0, SrcDepthPitch: 0);
+        m_context->UpdateSubresource(DstSubresource: 0, SrcDepthPitch: 0, SrcRowPitch: 0, pDstBox: null, pDstResource: ((ID3D11Resource*)m_frameBuffer), pSrcData: frame);
 
         if ((m_constantBuffer is null) || (Interlocked.Exchange(location1: ref m_pendingConstants, value: null) is not { } pending)) {
             return;
         }
 
         fixed (byte* data = pending) {
-            m_context->UpdateSubresource(pDstResource: ((ID3D11Resource*)m_constantBuffer), DstSubresource: 0, pDstBox: null, pSrcData: data, SrcRowPitch: 0, SrcDepthPitch: 0);
+            m_context->UpdateSubresource(DstSubresource: 0, SrcDepthPitch: 0, SrcRowPitch: 0, pDstBox: null, pDstResource: ((ID3D11Resource*)m_constantBuffer), pSrcData: data);
         }
     }
     private static ID3D11ComputeShader* CompileShader(ID3D11Device* device, string entry, string source) {
@@ -448,9 +449,9 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
 
             device->CreateComputeShader(pShaderBytecode: code->GetBufferPointer(), BytecodeLength: code->GetBufferSize(), pClassLinkage: null, ppComputeShader: &shader);
 
-            return (shader is null)
+            return ((shader is null)
                 ? throw new InvalidOperationException(message: $"D3D11 probe kernel '{entry}' creation returned no shader")
-                : shader;
+                : shader);
         } finally {
             Release(value: code);
         }
@@ -482,7 +483,7 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
                         : Marshal.PtrToStringUTF8(((nint)errors->GetBufferPointer()), checked((int)errors->GetBufferSize()))
                     );
 
-                    throw new COMException(message: $"probe kernel '{entry}' failed to compile: {message}", errorCode: result.Value);
+                    throw new COMException(errorCode: result.Value, message: $"probe kernel '{entry}' failed to compile: {message}");
                 }
             }
 

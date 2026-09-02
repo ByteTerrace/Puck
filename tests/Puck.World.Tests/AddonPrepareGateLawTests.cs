@@ -46,7 +46,6 @@ public sealed class AddonPrepareGateLawTests {
             }
         );
     }
-
     [Fact]
     public void PlanCommitsOnceOnAcceptance_NeverCreatedOnRefusal_NeverDisposedAfterCommit() {
         using var fixture = Fixtures.FreshServer();
@@ -86,7 +85,6 @@ public sealed class AddonPrepareGateLawTests {
         Assert.False(condition: plan.Disposed, userMessage: "a committed plan must never be disposed — WorldServer's own linear-ownership floor only disposes an UNcommitted plan");
         Assert.True(condition: plan.Finished, userMessage: "the committed plan's deferred narration/retire step (Finish) never ran");
     }
-
     [Fact]
     public void NoAddonHostAttachedRefusesAnAddonAffectingMutation_UnrelatedMutationStillApplies() {
         using var fixture = Fixtures.FreshServer();
@@ -124,7 +122,6 @@ public sealed class AddonPrepareGateLawTests {
             }
         );
     }
-
     [Fact]
     public void UndoDisposesEveryIntermediateProbe_CommitsOnlyTheFinalReconcilePlan() {
         using var fixture = Fixtures.FreshServer();
@@ -163,7 +160,6 @@ public sealed class AddonPrepareGateLawTests {
         Assert.False(condition: final.Disposed, userMessage: "the final undo reconcile plan must not be disposed after it commits");
         Assert.True(condition: final.Committed, userMessage: "the final undo reconcile plan was never committed");
     }
-
     [Fact]
     public void UnrelatedSectionMutationNeverTouchesThePrepareGate() {
         using var fixture = Fixtures.FreshServer();
@@ -189,7 +185,6 @@ public sealed class AddonPrepareGateLawTests {
             actual: host.TryPrepareCallCount
         );
     }
-
     // Proves the WorldServer.Step half of stable completion routing: the instance token a caller submits on
     // EnqueueMutation travels unchanged to CompleteMutation, per pending op, even when an ordinary addon-affecting
     // mutation drains between two addon-sourced completions carrying different tokens. The other half — that
@@ -230,7 +225,6 @@ public sealed class AddonPrepareGateLawTests {
             actual: host.CompletedMutations
         );
     }
-
     // The plan-ownership guard now covers contention-array staging, not only Commit — see WorldServer.
     // MutationApply.cs's TryApplyMutation (and its ApplyRebuild/ApplyUndo siblings): the whole sequence from a
     // successful TryPrepare through Commit runs under ONE try/finally. A MountedCount this large forces
@@ -259,7 +253,6 @@ public sealed class AddonPrepareGateLawTests {
         Assert.True(condition: plan.Disposed, userMessage: "an exception between a successful TryPrepare and Commit must still dispose the plan — the ownership guard now covers contention-array staging too");
         Assert.False(condition: plan.Committed, userMessage: "a plan that never reached Commit must not read as committed");
     }
-
     // ApplyRebuild's own null-host gate (finding 3): with no addon host attached at all, a candidate whose only
     // addon row is ENABLED must refuse — installing it would leave the document claiming a mounted guest no host
     // can ever run. A candidate whose only addon row is DISABLED stays vacuous, exactly like an addon-free one.
@@ -298,7 +291,6 @@ public sealed class AddonPrepareGateLawTests {
 
         return !before.AsSpan().SequenceEqual(other: after);
     }
-
     private static bool ApplyAndObserveChange(WorldFixture fixture, string name) {
         var before = fixture.DefinitionBytes();
 
@@ -424,7 +416,6 @@ internal sealed class RecordingAddonHost : IWorldAddonHost {
         return true;
     }
 }
-
 /// <summary>The <see cref="RecordingAddonHost"/>'s own opaque plan — reports whether it was committed, disposed, or
 /// (a WorldServer bug) neither/both, so a law can assert the exact linear-ownership shape a real
 /// <c>PreparedAddonInstall</c> promises without constructing one.</summary>

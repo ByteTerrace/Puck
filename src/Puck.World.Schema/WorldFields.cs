@@ -56,7 +56,7 @@ public sealed record WorldFieldsSection(
                 continue;
             }
 
-            if ((uint)fieldIndex >= (uint)composite.Fields.Count) {
+            if (((uint)fieldIndex) >= ((uint)composite.Fields.Count)) {
                 return false;
             }
 
@@ -80,7 +80,7 @@ public sealed record WorldFieldsSection(
                 var fill = fills[fillIndex];
 
                 if (
-                    ((uint)paintIndex >= (uint)paint.Count) ||
+                    (((uint)paintIndex) >= ((uint)paint.Count)) ||
                     (fill is null) ||
                     !string.Equals(a: paint[paintIndex].Field, b: row.Name, comparisonType: StringComparison.Ordinal) ||
                     !FillEqual(authored: fill, compiled: paint[paintIndex])
@@ -97,7 +97,6 @@ public sealed record WorldFieldsSection(
             (paintIndex == paint.Count)
         );
     }
-
     /// <summary>Determines whether two compiled composites carry the same runtime field inputs, including paint.</summary>
     internal bool HasSameCompilation(WorldFieldsSection other) => (
         (Lattice == other.Lattice) &&
@@ -105,7 +104,6 @@ public sealed record WorldFieldsSection(
         ReactionsEqual(left: Reactions, right: other.Reactions) &&
         (Paint ?? []).SequenceEqual(second: (other.Paint ?? []))
     );
-
     /// <summary>Determines whether two compiled composites lower to the same reaction program. Paint and display
     /// metadata remain inputs to the companion composite, not to reaction scheduling.</summary>
     internal bool HasSameProgram(WorldFieldsSection other) => (
@@ -217,6 +215,7 @@ public sealed record WorldFieldsSection(
             World: rows
         );
     }
+
     /// <summary>The topology name a decompiled projection lattice carries — one lattice exists today, so the
     /// round-trip needs no authored name.</summary>
     public const string DefaultTopologyName = "world";
@@ -237,7 +236,6 @@ public sealed record WorldFieldsSection(
 
         return true;
     }
-
     private static bool ReactionEqual(WorldReaction left, WorldReaction right) => (left, right) switch {
         (WorldReaction.Diffuse a, WorldReaction.Diffuse b) => (a == b),
         (WorldReaction.Decay a, WorldReaction.Decay b) => (a == b),
@@ -255,7 +253,6 @@ public sealed record WorldFieldsSection(
         ),
         _ => false,
     };
-
     private static bool FillEqual(WorldLatticeFill authored, WorldLatticeFill compiled) => (authored, compiled) switch {
         (WorldLatticeFill.Rect a, WorldLatticeFill.Rect b) => (
             (a.Value == b.Value) &&
@@ -279,7 +276,6 @@ public sealed record WorldFieldsSection(
         ),
         _ => false,
     };
-
     private static bool ProgramFieldsEqual(IReadOnlyList<WorldFieldRow> left, IReadOnlyList<WorldFieldRow> right) {
         if (left.Count != right.Count) {
             return false;

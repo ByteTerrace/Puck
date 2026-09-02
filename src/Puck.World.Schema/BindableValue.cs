@@ -206,7 +206,7 @@ public readonly record struct BindableScalar {
         }
 
         return (stateRow.Kind switch {
-            CellKind.Fixed => ((float)(double)FixedQ4816.FromRawBits(value: rawValue)),
+            CellKind.Fixed => ((float)((double)FixedQ4816.FromRawBits(value: rawValue))),
             CellKind.Int => ((float)rawValue),
             _ => fallback,
         });

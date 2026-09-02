@@ -87,6 +87,7 @@ public static class SdfWorldRenderBuilder {
             viewportCapacity: spec.ViewportCapacity,
             width: spec.Width
         );
+
         producer.SetScreenSourceFrames(screenSourceFrames: spec.ScreenSourceFrames);
         var root = ((IRenderNode)producer);
 

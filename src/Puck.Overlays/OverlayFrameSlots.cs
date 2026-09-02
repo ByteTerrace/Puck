@@ -20,6 +20,7 @@ public sealed class OverlayFrameSlots {
     private readonly int[] m_keys = new int[SlotCount];
     private readonly OverlayFrameLease[] m_leases = new OverlayFrameLease[SlotCount];
     private readonly OverlayFrameLease[] m_pendingRetireLeases = new OverlayFrameLease[SlotCount];
+
     private readonly IOverlayFrameSources m_sources;
 
     private int m_boundCount;
@@ -37,7 +38,6 @@ public sealed class OverlayFrameSlots {
 
     /// <summary>Gets the number of slots bound so far this frame.</summary>
     public int BoundCount => m_boundCount;
-
     /// <summary>Gets whether a distinct source binding was refused this frame because all <see cref="SlotCount"/>
     /// slots were already occupied. The table does not acquire an over-capacity source merely to probe its
     /// availability.</summary>
@@ -89,10 +89,10 @@ public sealed class OverlayFrameSlots {
     public void BeginFrame() {
         Array.Copy(
             destinationArray: m_pendingRetireLeases,
+            destinationIndex: 0,
             length: m_boundCount,
             sourceArray: m_leases,
-            sourceIndex: 0,
-            destinationIndex: 0
+            sourceIndex: 0
         );
         m_pendingRetireCount = m_boundCount;
         m_boundCount = 0;

@@ -21,6 +21,7 @@ public sealed class WorldCurveCommandModule(IWorldConsoleAuthority authority) : 
             _ => this,
         };
     }
+
     // One pass over the whole document, grouped by the referenced row name — every row's census then looks itself up
     // rather than each re-walking the document.
     private static Dictionary<string, ReferenceCounts> CountReferencesByRow(WorldDefinition definition) {

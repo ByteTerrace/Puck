@@ -21,7 +21,6 @@ namespace Puck.World;
 /// over authoring is the ordinary <see cref="WorldCapability.Mutate"/> hold over
 /// <see cref="WorldSection.Properties"/>/<see cref="WorldSection.Interactions"/> the row verb already checks.</remarks>
 internal sealed class WorldInteractionCommandModule(IServerLink link) : ICommandModule {
-
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(

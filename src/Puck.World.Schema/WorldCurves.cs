@@ -45,7 +45,6 @@ public sealed class WorldCurveTable {
         ordinal: out index
     );
 }
-
 /// <summary>
 /// One authored knot of a named <c>curves</c> row: a planar position with elevation, a tangent direction, and the
 /// signed curvature the compiled spline reaches there — see <see cref="Puck.Maths.CurvatureSplineKnot"/> for the
@@ -72,7 +71,6 @@ public sealed record WorldCurveKnot(
     float TangentYaw,
     float Curvature
 );
-
 /// <summary>
 /// One named <c>curves</c> row: an ordered list of curvature-declaring knots that <see cref="Compiled"/> derives
 /// into a curvature-continuous cubic-Bézier spline (Steven Wittens' construction — see

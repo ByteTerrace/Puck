@@ -11,9 +11,9 @@ namespace Puck.Overlays;
 public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
     // A viewport eased/shrunk to nothing has nowhere to draw a bar.
     private const float MinRegionExtent = 0.05f;
+
     /// <summary>One full march of the latched-toggle border, seconds.</summary>
     public const float TogglePeriodSeconds = 1.6f;
-
     /// <summary>The chord-hint lines one seat's bar draws. A page with more command-chord rows than this shows the
     /// first <see cref="MaxHintLines"/> and the rest are refused at the bar's own channel boundary, attributed.</summary>
     public const int MaxHintLines = 8;
@@ -60,7 +60,7 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
         var chrome = m_theme.Current.Chrome;
         // The latched-toggle border's phase: one march per TogglePeriodSeconds on the presentation clock — never
         // simulation time; every latched plate in the frame shares it so they march together.
-        var togglePhase = (float)((System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: 0L).TotalSeconds % TogglePeriodSeconds) / TogglePeriodSeconds);
+        var togglePhase = ((float)((System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: 0L).TotalSeconds % TogglePeriodSeconds) / TogglePeriodSeconds));
         var regionWidthPx = (region.Width * builder.Width);
         var regionHeightPx = (region.Height * builder.Height);
         var regionOriginX = (region.X * builder.Width);
@@ -94,7 +94,7 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
         for (var index = 0; (index < slots.Length); index++) {
             var slot = slots[index];
 
-            if (!slot.Visible || ((uint)slot.Frame >= (uint)frames.Length)) {
+            if (!slot.Visible || (((uint)slot.Frame) >= ((uint)frames.Length))) {
                 continue;
             }
 

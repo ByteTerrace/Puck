@@ -151,7 +151,7 @@ internal sealed class Win32FaceAuthenticationCapture : IDisposable {
         );
     }
     private static Win32FaceAuthenticationSelection FindPair(string deviceId) {
-        if (!Win32CameraDeviceGroups.TryFind(deviceId: deviceId, color: out var color, group: out var group, infrared: out var infrared)) {
+        if (!Win32CameraDeviceGroups.TryFind(color: out var color, deviceId: deviceId, group: out var group, infrared: out var infrared)) {
             throw new NotSupportedException(message: $"camera device '{deviceId}' is no longer attached");
         }
 
@@ -339,14 +339,14 @@ internal static class Win32CameraDeviceGroups {
     public static bool TryFind(string deviceId, out MediaFrameSourceGroup group, out MediaFrameSourceInfo? color, out MediaFrameSourceInfo? infrared) {
         var groups = Volatile.Read(location: ref s_groups);
 
-        if (TryFind(groups: groups, deviceId: deviceId, group: out group, color: out color, infrared: out infrared)) {
+        if (TryFind(color: out color, deviceId: deviceId, group: out group, groups: groups, infrared: out infrared)) {
             return true;
         }
 
         groups = Scan();
         Volatile.Write(location: ref s_groups, value: groups);
 
-        return TryFind(groups: groups, deviceId: deviceId, group: out group, color: out color, infrared: out infrared);
+        return TryFind(color: out color, deviceId: deviceId, group: out group, groups: groups, infrared: out infrared);
     }
 
     private static Win32CameraDeviceGroup[] Scan() {
@@ -400,7 +400,6 @@ internal static class Win32CameraDeviceGroups {
 
         return false;
     }
-
     private static (MediaFrameSourceInfo? Color, MediaFrameSourceInfo? Infrared) Sources(MediaFrameSourceGroup group) {
         MediaFrameSourceInfo? color = null;
         MediaFrameSourceInfo? infrared = null;

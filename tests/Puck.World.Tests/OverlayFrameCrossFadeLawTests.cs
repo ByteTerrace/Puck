@@ -32,10 +32,9 @@ public sealed class OverlayFrameCrossFadeLawTests {
 
         var record = Record(builder: builder);
 
-        Assert.Equal(expected: (4u | (3u << 4) | (1u << 12) | (1u << 13) | (6u << 16)), actual: record[4]);
+        Assert.Equal(expected: 4u | (3u << 4) | (1u << 12) | (1u << 13) | (6u << 16), actual: record[4]);
         Assert.Equal(expected: BitConverter.SingleToUInt32Bits(value: 0.25f), actual: record[8]);
     }
-
     [Fact]
     public void WriteFrameWithoutAnOutgoingSlotLeavesBits16UpAndWord8Zero() {
         var builder = BuildBuilder();
@@ -57,15 +56,14 @@ public sealed class OverlayFrameCrossFadeLawTests {
 
         var record = Record(builder: builder);
 
-        Assert.Equal(expected: (4u | (7u << 4)), actual: record[4]);
+        Assert.Equal(expected: 4u | (7u << 4), actual: record[4]);
         Assert.Equal(expected: 0u, actual: record[8]);
     }
-
     [Fact]
     public void EmitFrameCarriesBothSlotsAndTheMixWhenBothSourcesBind() {
         var builder = BuildBuilder();
         var writer = BuildWriter(
-            element: FrameElement(sourceA: 11, sourceB: 12, mix: 0.5f),
+            element: FrameElement(mix: 0.5f, sourceA: 11, sourceB: 12),
             frameSlots: new OverlayFrameSlots(sources: new FixedFrameSources(refuseKey: -1))
         );
 
@@ -76,13 +74,12 @@ public sealed class OverlayFrameCrossFadeLawTests {
         var record = Record(builder: builder);
 
         Assert.Equal(expected: 1, actual: builder.ElementCount);
-        Assert.Equal(expected: (4u | (0u << 4) | (2u << 16)), actual: record[4]);
+        Assert.Equal(expected: 4u | (0u << 4) | (2u << 16), actual: record[4]);
         Assert.Equal(expected: BitConverter.SingleToUInt32Bits(value: 0.5f), actual: record[8]);
     }
-
-    [Theory]
     [InlineData(12)]
     [InlineData(-1)]
+    [Theory]
     public void EmitFrameDegradesToTheWinnerAloneWhenTheOutgoingSourceCannotBind(int refuseKey) {
         var builder = BuildBuilder();
         var sources = new FixedFrameSources(refuseKey: refuseKey);
@@ -96,7 +93,7 @@ public sealed class OverlayFrameCrossFadeLawTests {
         }
 
         var writer = BuildWriter(
-            element: FrameElement(sourceA: 11, sourceB: 12, mix: 0.5f),
+            element: FrameElement(mix: 0.5f, sourceA: 11, sourceB: 12),
             frameSlots: frameSlots
         );
 
@@ -108,30 +105,30 @@ public sealed class OverlayFrameCrossFadeLawTests {
         var winnerSlot = ((refuseKey < 0) ? (uint)(OverlayFrameSlots.SlotCount - 1) : 0u);
 
         Assert.Equal(expected: 1, actual: builder.ElementCount);
-        Assert.Equal(expected: (4u | (winnerSlot << 4)), actual: record[4]);
+        Assert.Equal(expected: 4u | (winnerSlot << 4), actual: record[4]);
         Assert.Equal(expected: 0u, actual: record[8]);
     }
 
     private static OverlayFrameBuilder BuildBuilder() => new(
         glyphs: CreateGlyphs(
-            atlasCellWidth: 1,
             atlasCellHeight: 1,
+            atlasCellWidth: 1,
             distanceRange: 1f,
-            packedSdf: [0u],
-            glyphCount: 1
+            glyphCount: 1,
+            packedSdf: [0u]
         ),
         height: Height,
         leases: new OverlayChannelLeases(
             capacity: new OverlayCapacity(
-                Seats: 0,
-                HudPanels: 1,
-                HudElementsPerPanel: 1,
-                HudSeatPanelsPerSeat: 0,
-                HudElementsPerSeatPanel: 0,
                 BindingBarMaxBanks: 0,
-                BindingBarMaxSlotsPerBank: 0,
                 BindingBarMaxModifiers: 0,
+                BindingBarMaxSlotsPerBank: 0,
+                HudElementsPerPanel: 1,
+                HudElementsPerSeatPanel: 0,
+                HudPanels: 1,
+                HudSeatPanelsPerSeat: 0,
                 MarkerMaxChipsPerSeat: 0,
+                Seats: 0,
                 WheelMaxRings: 0,
                 WheelMaxSectorsPerRing: 0
             )
@@ -139,7 +136,6 @@ public sealed class OverlayFrameCrossFadeLawTests {
         theme: OverlayThemeValues.Zero,
         width: Width
     );
-
     private static HudWriter BuildWriter(OverlayHudElement element, OverlayFrameSlots frameSlots) => new(
         bindings: new NoBindings(),
         frameSlots: frameSlots,
@@ -148,7 +144,7 @@ public sealed class OverlayFrameCrossFadeLawTests {
                 Panels: new[] {
                     new OverlayHudPanel(
                         Id: "fade",
-                        Rect: new OverlayHudRect(X: 0f, Y: 0f, Width: 1f, Height: 1f),
+                        Rect: new OverlayHudRect(Height: 1f, Width: 1f, X: 0f, Y: 0f),
                         Band: OverlayHudBand.Over,
                         Style: OverlayPanelStyle.Panel,
                         Elements: new[] { element }
@@ -158,10 +154,9 @@ public sealed class OverlayFrameCrossFadeLawTests {
         ),
         theme: new OverlayThemeStore()
     );
-
     private static OverlayHudElement FrameElement(int sourceA, int sourceB, float mix) => new(
         Kind: OverlayHudElementKind.Frame,
-        Rect: new OverlayHudRect(X: 0f, Y: 0f, Width: 1f, Height: 1f),
+        Rect: new OverlayHudRect(Height: 1f, Width: 1f, X: 0f, Y: 0f),
         Role: default,
         Text: null,
         Binding: null,
@@ -169,12 +164,10 @@ public sealed class OverlayFrameCrossFadeLawTests {
         FrameSourceB: sourceB,
         FrameMix: mix
     );
-
     private static ReadOnlySpan<uint> Record(OverlayFrameBuilder builder) => builder.Scratch.Slice(
         start: (builder.ElementBaseWords + ((builder.ElementCount - 1) * OverlayFrameBuilder.ElementWords)),
         length: OverlayFrameBuilder.ElementWords
     );
-
     [UnsafeAccessor(UnsafeAccessorKind.Constructor)]
     private static extern OverlayGlyphSdfPack CreateGlyphs(int atlasCellWidth, int atlasCellHeight, float distanceRange, uint[] packedSdf, int glyphCount);
 
@@ -187,7 +180,7 @@ public sealed class OverlayFrameCrossFadeLawTests {
             }
 
             lease = new OverlayFrameLease(
-                ImageViewHandle: key + 1,
+                ImageViewHandle: (key + 1),
                 Release: static _ => { },
                 ReleaseToken: key
             );
@@ -195,7 +188,6 @@ public sealed class OverlayFrameCrossFadeLawTests {
             return true;
         }
     }
-
     private sealed class FixedHudSource(OverlayHudFrame frame) : IHudSource {
         public bool TrySnapshot(out OverlayHudFrame frame) {
             frame = this.frame;
@@ -205,7 +197,6 @@ public sealed class OverlayFrameCrossFadeLawTests {
 
         private readonly OverlayHudFrame frame = frame;
     }
-
     private sealed class NoBindings : IHudBindingResolver {
         public bool TryResolve(string binding, out float fraction, out string text) {
             fraction = 0f;

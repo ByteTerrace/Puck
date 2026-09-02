@@ -9,9 +9,10 @@ namespace Puck.Cli.Parity;
 /// output as agreement.</summary>
 internal static class ParityManifestLoader {
     private const string ContractSchema = "puck.parity.contract.v1";
-    private const string ManifestSchema = "puck.parity.manifest.v1";
     private const int DefaultTileSize = 16;
+    private const string ManifestSchema = "puck.parity.manifest.v1";
     private const int MaxDepth = 16;
+
     private static readonly Func<string, Exception> Refusal = static message => new ParityDocumentRefusal(message: message);
 
     public static bool TryLoadManifest(string path, out ParityManifest manifest, out string error) {
@@ -51,7 +52,7 @@ internal static class ParityManifestLoader {
                 captures.Add(item: capture);
             }
 
-            manifest = new ParityManifest(Backend: backend, World: world, Captures: captures);
+            manifest = new ParityManifest(Backend: backend, Captures: captures, World: world);
 
             return true;
         } catch (ParityDocumentRefusal refusal) {
@@ -98,7 +99,7 @@ internal static class ParityManifestLoader {
                 throw new ParityDocumentRefusal(message: "contract stations is empty; nothing could be gated or thresholded.");
             }
 
-            contract = new ParityContract(TileSize: tileSize, Stations: stations);
+            contract = new ParityContract(Stations: stations, TileSize: tileSize);
 
             return true;
         } catch (ParityDocumentRefusal refusal) {
@@ -138,7 +139,7 @@ internal static class ParityManifestLoader {
                 throw new ParityDocumentRefusal(message: $"{context} cameraInside is true, so frame and census must be absent.");
             }
 
-            return new ParityManifestCapture(Station: station, Tick: tick, StateHash: stateHash, CameraInside: true, Frame: null, Census: null);
+            return new ParityManifestCapture(CameraInside: true, Census: null, Frame: null, StateHash: stateHash, Station: station, Tick: tick);
         }
 
         if (!hasFrame || !hasCensus) {
@@ -148,7 +149,7 @@ internal static class ParityManifestLoader {
         var frame = CliStrictJson.ReadRequiredString(context: context, element: row, member: "frame", refusal: Refusal);
         var census = ReadCensus(context: context, element: CliStrictJson.ReadRequiredObject(context: context, element: row, member: "census", refusal: Refusal));
 
-        return new ParityManifestCapture(Station: station, Tick: tick, StateHash: stateHash, CameraInside: false, Frame: frame, Census: census);
+        return new ParityManifestCapture(CameraInside: false, Census: census, Frame: frame, StateHash: stateHash, Station: station, Tick: tick);
     }
     private static IReadOnlyDictionary<string, long> ReadCensus(JsonElement element, string context) {
         var census = new Dictionary<string, long>(comparer: StringComparer.Ordinal);
@@ -168,7 +169,7 @@ internal static class ParityManifestLoader {
 
         CliStrictJson.RequireOnlyMembers(element: row, context: context, unknownMemberDetail: "strict documents refuse fields the comparator does not read.", refusal: Refusal, "tileMeanDelta", "tileMaxDelta", "censusFloor");
 
-        var tileMeanDelta = CliStrictJson.ReadRequiredFiniteNumber(context: context, element: row, member: "tileMeanDelta", descriptor: "finite number", refusal: Refusal);
+        var tileMeanDelta = CliStrictJson.ReadRequiredFiniteNumber(context: context, descriptor: "finite number", element: row, member: "tileMeanDelta", refusal: Refusal);
 
         if (tileMeanDelta < 0) {
             throw new ParityDocumentRefusal(message: $"{context} tileMeanDelta must be zero or greater.");
@@ -202,7 +203,7 @@ internal static class ParityManifestLoader {
         }
     }
     private static JsonDocument ParseDocument(string path) =>
-        CliStrictJson.ParseStrict(path: path, maxDepth: MaxDepth, duplicateDetail: "the comparator must see one value.", refusal: Refusal);
+        CliStrictJson.ParseStrict(duplicateDetail: "the comparator must see one value.", maxDepth: MaxDepth, path: path, refusal: Refusal);
     private static bool IsStateHash(string value) {
         if (value.Length != 16) {
             return false;

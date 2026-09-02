@@ -157,6 +157,7 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
         y: -1000f,
         z: 0f
     );
+
     /// <summary>Gets or sets where a hidden/unused dynamic-transform slot parks this frame (<see cref="SdfEmitContext.ParkPosition"/>)
     /// — settable so a host can move it to sit well outside its own world's camera/tile-cull reach. Changing this does
     /// not rebuild the program (it only affects <see cref="ISdfSceneEmitter.PackDynamicTransforms"/>, called every

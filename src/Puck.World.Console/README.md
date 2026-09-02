@@ -28,7 +28,8 @@ that stayed in `Puck.World` need it too.
 
 Project references: `Puck.World.Server`, `Puck.World.Protocol`,
 `Puck.World.Schema`, `Puck.Commands`, `Puck.Launcher` (the
-`ITextCommandHoldGate` seam `WorldConsoleWaitGate` implements), `Puck.Networking`.
+`ITextCommandHoldGate` seam `WorldConsoleWaitGate` implements). `Puck.Networking`
+is reached only through `Puck.World.Server`; nothing here names it directly.
 
 ## `IWorldConsoleAuthority`
 

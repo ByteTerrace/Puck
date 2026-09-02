@@ -13,7 +13,6 @@ public sealed class CameraAuthoringValidationLawTests {
         yield return [1, -1, false];
         yield return [1, 256, false];
     }
-
     [MemberData(nameof(VendorByteCases))]
     [Theory]
     public void VendorSelectorsAndValuesAreBytes(int id, int value, bool valid) {
@@ -23,13 +22,12 @@ public sealed class CameraAuthoringValidationLawTests {
         );
         var admitted = WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var reason);
 
-        Assert.Equal(expected: valid, actual: admitted);
+        Assert.Equal(actual: admitted, expected: valid);
 
         if (!valid) {
             Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "camera.controls.vendor[0]");
         }
     }
-
     [Fact]
     public void UndefinedSensorRefusesBeforeBinderIndexing() {
         var definition = WithCamera(sensor: ((WorldCameraSensor)byte.MaxValue), vendor: null);
@@ -37,7 +35,6 @@ public sealed class CameraAuthoringValidationLawTests {
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var reason));
         Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "camera.sensor");
     }
-
     // The fixture document declares 4 local seats (Fixtures.BuildDocument's four seat spawns), so seat 5 is the first
     // out-of-range ordinal and seat 4 is the last in-range one.
     [Fact]
@@ -45,17 +42,17 @@ public sealed class CameraAuthoringValidationLawTests {
         Laws.RefusalWithControl(
             lawId: "camera.seat-out-of-range",
             deniedOutcome: () => WorldDefinitionValidator.TryValidateLocally(
-                definition: WithCamera(sensor: WorldCameraSensor.Color, vendor: null, seat: 5),
+                definition: WithCamera(seat: 5, sensor: WorldCameraSensor.Color, vendor: null),
                 reason: out _
             ),
             controlOutcome: () => WorldDefinitionValidator.TryValidateLocally(
-                definition: WithCamera(sensor: WorldCameraSensor.Color, vendor: null, seat: 4),
+                definition: WithCamera(seat: 4, sensor: WorldCameraSensor.Color, vendor: null),
                 reason: out _
             ));
     }
     [Fact]
     public void AZeroSeatRefuses() {
-        var definition = WithCamera(sensor: WorldCameraSensor.Color, vendor: null, seat: 0);
+        var definition = WithCamera(seat: 0, sensor: WorldCameraSensor.Color, vendor: null);
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var reason));
         Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "camera.seat");

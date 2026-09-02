@@ -37,7 +37,6 @@ public interface IWorldFieldLatticeHost {
     /// <param name="tick">The stepping tick.</param>
     void AddScalar(WorldStateHandle row, FixedQ4816 amount, ulong tick);
 }
-
 /// <summary>
 /// The live cell values of a world's <c>fields</c> section and the reactions that evolve them — simulation state
 /// beside the population: stepped from <c>WorldServer.Step</c> on the lattice's cadence, checkpointed, and delivered
@@ -49,7 +48,9 @@ public sealed class WorldFieldLattice {
     private readonly int m_depth;
     private readonly List<int> m_deltas = [];
     private readonly bool[][] m_deltaDirty;
+
     private WorldFieldsSection m_document;
+
     private readonly FixedQ4816[] m_heightScale;
     private readonly bool[] m_isMedium;
     private readonly int m_layers;
@@ -58,7 +59,9 @@ public sealed class WorldFieldLattice {
     private readonly FixedQ4816[] m_min;
     private readonly string[] m_names;
     private readonly FixedVector3 m_origin;
+
     private WorldFieldProgram m_program;
+
     private readonly FixedQ4816[] m_scratch;
     private readonly Int128[] m_flowDelta;
     private readonly FixedQ4816[] m_flowHeights;
@@ -66,6 +69,7 @@ public sealed class WorldFieldLattice {
     private readonly int m_stepEveryTicks;
     private readonly FixedQ4816[][] m_values;
     private readonly int m_width;
+
     private bool m_fullResync = true;
     private int m_revision;
 
@@ -135,8 +139,8 @@ public sealed class WorldFieldLattice {
         // Every cell donates an equal share to each of the lattice's active-axis directions -- an axis with a
         // single cell (Layers = 1 on a ground lattice) has no directions at all, never a "missing neighbour".
         m_flowDirections = (
-            ((document.Lattice.Width > 1) ? 2 : 0) +
-            ((document.Lattice.Depth > 1) ? 2 : 0) +
+            (((document.Lattice.Width > 1) ? 2 : 0) +
+            ((document.Lattice.Depth > 1) ? 2 : 0)) +
             ((document.Lattice.Layers > 1) ? 2 : 0)
         );
 
@@ -268,12 +272,11 @@ public sealed class WorldFieldLattice {
             );
         }
 
-        var cellVisits = checked(((long)CellCount * m_program.CellPassCount));
-        var bodySlotVisits = checked(((long)bodyCapacity * m_program.BodyPassCount));
+        var cellVisits = checked((((long)CellCount) * m_program.CellPassCount));
+        var bodySlotVisits = checked((((long)bodyCapacity) * m_program.BodyPassCount));
 
         return $"lattice {m_program.Nodes.Count} node(s) every {m_stepEveryTicks} tick(s): {CellCount} cell(s) x {m_program.CellPassCount} pass(es) = {cellVisits} cell visit(s); bodies {activeBodyCount}/{bodyCapacity} active/capacity x {m_program.BodyPassCount} pass(es) = {bodySlotVisits} slot visit(s)";
     }
-
     /// <summary>Checks whether a replacement companion/program pair can be installed without reallocating or
     /// reseeding cell storage. Reaction-only, colour, and paint changes are compatible; topology, cadence, and field
     /// envelope changes require a host restart.</summary>
@@ -324,7 +327,6 @@ public sealed class WorldFieldLattice {
 
         return true;
     }
-
     /// <summary>Installs a compatible replacement reaction program while retaining every live cell, pending delta,
     /// revision, and checkpoint shape.</summary>
     /// <param name="document">The replacement complete companion.</param>
@@ -353,7 +355,7 @@ public sealed class WorldFieldLattice {
         WorldFieldComparison.Greater => (value > expected),
         _ => (value >= expected),
     };
-    private int CellIndex(int x, int y, int z) => (((z * m_layers) + y) * m_width + x);
+    private int CellIndex(int x, int y, int z) => ((((z * m_layers) + y) * m_width) + x);
     private FixedQ4816 Clamp(int field, FixedQ4816 value) => FixedQ4816.Clamp(
         maximum: m_max[field],
         minimum: m_min[field],
@@ -389,7 +391,7 @@ public sealed class WorldFieldLattice {
 
         return (negative ? -((Int128)quotient) : ((Int128)quotient));
     }
-    private static FixedQ4816 Mean(Int128 rawSum, int count) => FixedQ4816.FromRawBits(value: FixedSaturate.ToInt64(value: DivideRoundHalfEven(numerator: rawSum, divisor: count)));
+    private static FixedQ4816 Mean(Int128 rawSum, int count) => FixedQ4816.FromRawBits(value: FixedSaturate.ToInt64(value: DivideRoundHalfEven(divisor: count, numerator: rawSum)));
     private void ClearDeltas() {
         foreach (var key in m_deltas) {
             var field = (key / CellCount);
@@ -430,6 +432,7 @@ public sealed class WorldFieldLattice {
 
         m_revision++;
     }
+
     /// <summary>Resolves the cell a BODY couples to for the <see cref="WorldReaction.Emit"/>/
     /// <see cref="WorldReaction.Expose"/> reactions: the column under the body, with Y admitted up to the lattice's
     /// derived coupling ceiling (the volume's top plus the tallest surface any height-bearing field can raise) and
@@ -532,7 +535,7 @@ public sealed class WorldFieldLattice {
     /// <param name="position">The body's world position.</param>
     /// <returns>The surface's world-space Y, or <see langword="null"/> for no medium.</returns>
     public FixedQ4816? MediumSurface(in FixedVector3 position) {
-        if (!TryBodyCellOf(position: in position, cell: out var cell)) {
+        if (!TryBodyCellOf(cell: out var cell, position: in position)) {
             return null;
         }
 
@@ -583,7 +586,7 @@ public sealed class WorldFieldLattice {
     /// <param name="readScalar">Reads a scalar state row's slot cell for <paramref name="expected"/>'s row form.</param>
     public bool Holds(int field, int cell, WorldFieldComparison comparison, WorldLatticeScalar expected, Func<string, FixedQ4816> readScalar) => Holds(
         comparison: comparison,
-        value: Value(field: field, cell: cell),
+        value: Value(cell: cell, field: field),
         expected: CompiledScalar.Compile(scalar: expected).Resolve(readScalar: readScalar)
     );
     /// <summary>Gets the solid surface height of a column — the greatest height any height field raises there, or
@@ -622,6 +625,7 @@ public sealed class WorldFieldLattice {
 
         return best;
     }
+
     /// <summary>Gets the lattice's width in cells.</summary>
     public int Width => m_width;
     /// <summary>Gets the lattice's depth in cells.</summary>
@@ -637,7 +641,7 @@ public sealed class WorldFieldLattice {
         var threshold = FixedQ4816.FromDouble(value: fill.Threshold);
         var one = FixedQ4816.One;
         var span = (one - threshold);
-        var seed = unchecked((uint)(fill.Seed ^ (uint)worldSeed ^ (uint)(worldSeed >> 32)));
+        var seed = unchecked((uint)(fill.Seed ^ ((uint)worldSeed) ^ ((uint)(worldSeed >> 32))));
 
         for (var z = 0; (z < m_depth); z++) {
             for (var x = 0; (x < m_width); x++) {
@@ -652,7 +656,7 @@ public sealed class WorldFieldLattice {
                         cellX: x,
                         cellZ: z,
                         noiseCells: System.Math.Max(val1: 1, val2: cells),
-                        seed: unchecked(seed + ((uint)octave * 0x9E3779B9u))
+                        seed: unchecked((seed + (((uint)octave) * 0x9E3779B9u)))
                     ));
                     weight += amplitude;
                     amplitude = FixedQ4816.FromRawBits(value: (amplitude.Value >> 1));
@@ -681,7 +685,7 @@ public sealed class WorldFieldLattice {
             field: field,
             value: FixedQ4816.FromDouble(value: fill.Value)
         );
-        var seed = unchecked((uint)(fill.Seed ^ (uint)worldSeed ^ (uint)(worldSeed >> 32)));
+        var seed = unchecked((uint)(fill.Seed ^ ((uint)worldSeed) ^ ((uint)(worldSeed >> 32))));
         var spacing = System.Math.Max(val1: 2, val2: fill.Spacing);
         var radius = System.Math.Max(val1: 1, val2: fill.Radius);
         var radiusSquared = (radius * radius);
@@ -705,8 +709,8 @@ public sealed class WorldFieldLattice {
                         );
                         // The point sits inside its block, radius-inset so a disc never leaves the block.
                         var inset = System.Math.Max(val1: 0, val2: (spacing - (2 * radius)));
-                        var px = ((bx * spacing) + radius + ((inset > 0) ? (int)(h.X % (uint)inset) : 0));
-                        var pz = ((bz * spacing) + radius + ((inset > 0) ? (int)(h.Y % (uint)inset) : 0));
+                        var px = (((bx * spacing) + radius) + ((inset > 0) ? (int)(h.X % ((uint)inset)) : 0));
+                        var pz = (((bz * spacing) + radius) + ((inset > 0) ? (int)(h.Y % ((uint)inset)) : 0));
                         var ddx = (x - px);
                         var ddz = (z - pz);
 
@@ -724,6 +728,7 @@ public sealed class WorldFieldLattice {
             }
         }
     }
+
     /// <summary>Steps the reactions once when <paramref name="tick"/> falls on the cadence; a no-op otherwise. The
     /// host is invoked directly (no per-call delegate is allocated) so a world with a <c>fields</c> section pays
     /// nothing beyond the cadence check on the ticks the lattice does not react on.</summary>
@@ -764,8 +769,8 @@ public sealed class WorldFieldLattice {
                             (host.BodyPosition(body: body) is not { } position) ||
                             (host.ReadTag(row: emit.Tag, body: body, tick: tick) == 0L) ||
                             !TryBodyCellOf(
-                            position: in position,
-                            cell: out var cell
+                            cell: out var cell,
+                            position: in position
                         )
                         ) {
                             continue;
@@ -798,8 +803,8 @@ public sealed class WorldFieldLattice {
                         }
 
                         var exposed = (TryBodyCellOf(
-                            position: in position,
-                            cell: out var cell
+                            cell: out var cell,
+                            position: in position
                         ) && Holds(
                             comparison: expose.Comparison,
                             expected: Resolve(host: host, input: expose.Value, tick: tick),
@@ -820,6 +825,7 @@ public sealed class WorldFieldLattice {
             }
         }
     }
+
     private static FixedQ4816 Resolve(IWorldFieldLatticeHost host, WorldFieldScalarInput input, ulong tick) => (input.IsState
         ? host.ReadScalar(row: input.State, tick: tick)
         : input.Literal
@@ -855,7 +861,7 @@ public sealed class WorldFieldLattice {
                         continue;
                     }
 
-                    var mean = Mean(rawSum: rawSum, count: count);
+                    var mean = Mean(count: count, rawSum: rawSum);
                     var current = m_scratch[cell];
 
                     Write(
@@ -934,7 +940,6 @@ public sealed class WorldFieldLattice {
             }
         }
     }
-
     // Mass-conserving directional transport. h_i (m_flowHeights) is snapshotted once per step: this field's own
     // PREVIOUS-step value (Jacobi, like StepDiffuse) plus every 'over' field's LIVE value -- Flow never writes an
     // over field, so live and snapshot agree there.
@@ -1089,7 +1094,7 @@ public sealed class WorldFieldLattice {
     /// <returns>The deltas.</returns>
     public FieldCellDelta[] TakeDeltas(bool full, out bool isFull) {
         if (full || m_fullResync) {
-            var all = new FieldCellDelta[FieldCount * CellCount];
+            var all = new FieldCellDelta[(FieldCount * CellCount)];
             var index = 0;
 
             for (var field = 0; (field < FieldCount); field++) {
@@ -1203,7 +1208,7 @@ public sealed class WorldFieldLattice {
             var nonzero = 0;
 
             foreach (var value in m_values[field]) {
-                sum += (double)value;
+                sum += ((double)value);
 
                 if (value != FixedQ4816.Zero) {
                     nonzero++;
@@ -1225,10 +1230,10 @@ public sealed class WorldFieldLattice {
 
         for (var index = 0; (index < m_program.Nodes.Count); index++) {
             if (index > 0) {
-                plan.Append(',');
+                plan.Append(value: ',');
             }
 
-            plan.Append(index).Append(':').Append(m_program.Nodes[index] switch {
+            plan.Append(value: index).Append(value: ':').Append(value: m_program.Nodes[index] switch {
                 WorldFieldNode.Diffuse => "diffuse",
                 WorldFieldNode.Decay => "decay",
                 WorldFieldNode.Transform => "transform",
@@ -1243,13 +1248,13 @@ public sealed class WorldFieldLattice {
 
         foreach (var dependency in m_program.Dependencies) {
             if (dependencies.Length > 0) {
-                dependencies.Append(',');
+                dependencies.Append(value: ',');
             }
 
-            dependencies.Append(dependency.Before.Ordinal).Append('>').Append(dependency.After.Ordinal);
+            dependencies.Append(value: dependency.Before.Ordinal).Append(value: '>').Append(value: dependency.After.Ordinal);
         }
 
-        return $"lattice {m_width}x{m_layers}x{m_depth} @ {(double)m_cellSize} every {m_stepEveryTicks} ticks: {string.Join(
+        return $"lattice {m_width}x{m_layers}x{m_depth} @ {((double)m_cellSize)} every {m_stepEveryTicks} ticks: {string.Join(
             separator: " | ",
             values: parts
         )} | plan nodes={m_program.Nodes.Count} cellPasses={m_program.CellPassCount} bodyPasses={m_program.BodyPassCount} order=[{plan}] dependencies=[{dependencies}]";
@@ -1302,8 +1307,8 @@ public sealed class WorldFieldLatticeSolid : IFieldEvaluator {
     private FixedQ4816 Distance(in FixedVector3 point) {
         var cell = m_lattice.CellSize;
         var origin = m_lattice.Origin;
-        var fx = (int)(FixedQ4816.Floor(value: ((point.X - origin.X) / cell)).Value >> 16);
-        var fz = (int)(FixedQ4816.Floor(value: ((point.Z - origin.Z) / cell)).Value >> 16);
+        var fx = ((int)(FixedQ4816.Floor(value: ((point.X - origin.X) / cell)).Value >> 16));
+        var fz = ((int)(FixedQ4816.Floor(value: ((point.Z - origin.Z) / cell)).Value >> 16));
         var best = (cell * FixedQ4816.FromInteger(value: Reach));
 
         for (var z = (fz - Reach); (z <= (fz + Reach)); z++) {
@@ -1347,6 +1352,7 @@ public sealed class WorldFieldLatticeSolid : IFieldEvaluator {
 
         return best;
     }
+
     /// <inheritdoc/>
     public bool TryDistance(FixedPosition position, out FixedQ4816 distance, out int material) {
         material = 0;
@@ -1423,31 +1429,32 @@ public sealed class WorldUnionField : IFieldEvaluator {
 
     private bool Nearer(FixedPosition position, out bool useB) {
         var hasA = m_a.TryDistance(
-            position: position,
             distance: out var da,
-            material: out _
+            material: out _,
+            position: position
         );
         var hasB = m_b.TryDistance(
-            position: position,
             distance: out var db,
-            material: out _
+            material: out _,
+            position: position
         );
 
         useB = (hasB && (!hasA || (db < da)));
 
         return (hasA || hasB);
     }
+
     /// <inheritdoc/>
     public bool TryDistance(FixedPosition position, out FixedQ4816 distance, out int material) {
         var hasA = m_a.TryDistance(
-            position: position,
             distance: out var da,
-            material: out var ma
+            material: out var ma,
+            position: position
         );
         var hasB = m_b.TryDistance(
-            position: position,
             distance: out var db,
-            material: out var mb
+            material: out var mb,
+            position: position
         );
 
         if (hasA && hasB) {

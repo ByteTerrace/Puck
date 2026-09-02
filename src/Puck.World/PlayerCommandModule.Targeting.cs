@@ -51,9 +51,9 @@ internal sealed partial class PlayerCommandModule {
         m_link.SubmitDesignation(
             designation: new WorldDesignation(
                 EntityIndex: index,
+                Point: point,
                 Register: register,
-                Subject: subject,
-                Point: point
+                Subject: subject
             ),
             principal: context.ActingPrincipal()
         );

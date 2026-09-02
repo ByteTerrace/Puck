@@ -240,7 +240,7 @@ public sealed partial class WorldServer {
                     ),
                     originalRow: originalRow,
                     tick: tick
-                )
+                ),
                 });
             }
         }
@@ -415,8 +415,8 @@ public sealed partial class WorldServer {
         var kicked = dynamicsRow.Compiled.Retarget(
             current: sample,
             newTarget: WorldStateReader.DynamicsRawToFixed(
-                row: originalRow,
-                raw: newTarget
+                raw: newTarget,
+                row: originalRow
             ),
             oldTarget: WorldStateReader.DynamicsRawToFixed(
                 row: originalRow,
@@ -598,7 +598,7 @@ public sealed partial class WorldServer {
                 arg1: document,
                 arg2: id
             );
-        } catch (Exception exception) when (exception is Puck.Assets.Documents.DocumentValidationException or InvalidOperationException) {
+        } catch (Exception exception) when ((exception is Puck.Assets.Documents.DocumentValidationException or InvalidOperationException)) {
             // The canonicalizer refuses a malformed document with DocumentValidationException; an unresolved
             // `state.` reference inside the document surfaces as InvalidOperationException from the value's own
             // read. Both are the submitter's document being inadmissible at this boundary — a loud refusal, never a
@@ -628,11 +628,13 @@ public sealed partial class WorldServer {
 
         return true;
     }
+
     /// <summary>Owns load + canonical hash verification for a name/source/hash reference row at the mutation
     /// composition boundary (<see cref="WorldTune"/>/<see cref="WorldPatch"/>) — the referenced twin of <see
     /// cref="TryCanonicalizeDocument{TDocument}"/>: the row carries no document to write back, so a successful
     /// verify only proves the row is admissible, never returns a payload.</summary>
     private delegate bool AssetRowLoader<in TRow, TDocument>(TRow row, out TDocument? document, out string? error);
+
     private static bool TryVerifyReferencedAsset<TRow, TDocument>(
         TRow row,
         string id,
@@ -654,7 +656,7 @@ public sealed partial class WorldServer {
                 arg1: document!,
                 arg2: id
             );
-        } catch (Exception exception) when (exception is Puck.Assets.Documents.DocumentValidationException or InvalidOperationException) {
+        } catch (Exception exception) when ((exception is Puck.Assets.Documents.DocumentValidationException or InvalidOperationException)) {
             reason = exception.Message.ReplaceLineEndings(replacementText: " ");
 
             return false;
@@ -702,9 +704,9 @@ public sealed partial class WorldServer {
             (stateRow is null) ||
             WorldStateDocumentValues.TryRefresh(
                 definition: candidate,
-                rowName: stateRow,
+                reason: out reason,
                 refreshed: out candidate,
-                reason: out reason
+                rowName: stateRow
             )
         );
     }
@@ -1492,12 +1494,12 @@ public sealed partial class WorldServer {
                         }
 
                         if (!WorldStateCellWriter.TryComposeTextCell(
-                            row: row,
-                            key: cellKey,
-                            text: textToWrite,
                             cells: out var textCells,
                             evictedKey: out evictedKey,
-                            reason: out var composeTextReason
+                            key: cellKey,
+                            reason: out var composeTextReason,
+                            row: row,
+                            text: textToWrite
                         )) {
                             candidate = current;
                             reason = $"state row '{m.Row}' cell '{m.Key}' {composeTextReason}";

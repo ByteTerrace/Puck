@@ -14,7 +14,7 @@ internal static class WorldDataHookInstaller {
     [ModuleInitializer]
     internal static void Install() => WorldSchemaVocabularyHooks.Install(
         postRenderExtensionCheck: WorldPostRenderExtensions.IsShipped,
-        screenMachineEngineCheck: WorldScreenMachineEngines.IsRegistered,
-        probeKindCheck: WorldProbeKinds.IsShipped
+        probeKindCheck: WorldProbeKinds.IsShipped,
+        screenMachineEngineCheck: WorldScreenMachineEngines.IsRegistered
     );
 }

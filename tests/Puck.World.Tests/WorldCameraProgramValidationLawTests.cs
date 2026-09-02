@@ -15,8 +15,8 @@ public sealed class WorldCameraProgramValidationLawTests {
     private static WorldCameraProgramOp Fov(float radians = 0.9f) => new WorldCameraProgramOp.Fov(FieldOfViewRadians: new BindableScalar(literal: radians));
     private static WorldCameraProgram Program(string name, params WorldCameraProgramOp[] operations) => new(
         Name: name,
-        Version: WorldCameraProgram.CurrentVersion,
-        Operations: operations
+        Operations: operations,
+        Version: WorldCameraProgram.CurrentVersion
     );
     // A document carrying ONE authored camera whose rig is the program under test. A camera row imposes no
     // interactivity rule of its own, so it is the honest place to state an op-level refusal.
@@ -45,7 +45,7 @@ public sealed class WorldCameraProgramValidationLawTests {
         var document = DocumentWithCamera(rig: Program(
             "probe-rig",
             new WorldCameraProgramOp.Anchor(Subject: new WorldCameraSubject.WorldPoint(Point: new DocumentVector3(x: 1f, y: 2f, z: 3f))),
-            new WorldCameraProgramOp.ClampPitch(MinPitch: -1f, MaxPitch: 1f),
+            new WorldCameraProgramOp.ClampPitch(MaxPitch: 1f, MinPitch: -1f),
             new WorldCameraProgramOp.Orbit(
                 Distance: 4f,
                 Yaw: new BindableScalar(literal: 0.25f),
@@ -161,22 +161,22 @@ public sealed class WorldCameraProgramValidationLawTests {
     public void AClampPitchAfterTheOrbitItGovernsIsRefusedByName() => Refuses(
         control: Program(
             "probe-rig",
-            new WorldCameraProgramOp.ClampPitch(MinPitch: -1f, MaxPitch: 1f),
+            new WorldCameraProgramOp.ClampPitch(MaxPitch: 1f, MinPitch: -1f),
             new WorldCameraProgramOp.Orbit(Distance: 4f, Yaw: new BindableScalar(literal: 0f), Pitch: new BindableScalar(literal: 0f)),
             Fov()
         ),
         denied: Program(
             "probe-rig",
             new WorldCameraProgramOp.Orbit(Distance: 4f, Yaw: new BindableScalar(literal: 0f), Pitch: new BindableScalar(literal: 0f)),
-            new WorldCameraProgramOp.ClampPitch(MinPitch: -1f, MaxPitch: 1f),
+            new WorldCameraProgramOp.ClampPitch(MaxPitch: 1f, MinPitch: -1f),
             Fov()
         ),
         expected: "'clampPitch' must precede the 'orbit' op it governs"
     );
     [Fact]
     public void AnInvertedClampPitchBandIsRefusedByName() => Refuses(
-        control: Program("probe-rig", new WorldCameraProgramOp.ClampPitch(MinPitch: -1f, MaxPitch: 1f), Fov()),
-        denied: Program("probe-rig", new WorldCameraProgramOp.ClampPitch(MinPitch: 1f, MaxPitch: -1f), Fov()),
+        control: Program("probe-rig", new WorldCameraProgramOp.ClampPitch(MaxPitch: 1f, MinPitch: -1f), Fov()),
+        denied: Program("probe-rig", new WorldCameraProgramOp.ClampPitch(MaxPitch: -1f, MinPitch: 1f), Fov()),
         expected: "minPitch must be strictly less than maxPitch"
     );
     [Fact]

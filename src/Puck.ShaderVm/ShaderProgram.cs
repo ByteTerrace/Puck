@@ -12,14 +12,14 @@ public sealed class ShaderProgram {
 
         ValidateInstructions(instructions: instructions, constantCount: constants.Count);
 
-        m_words = new uint[ShaderIsa.HeaderWordCount + instructions.Count + (constants.Count * 4)];
+        m_words = new uint[((ShaderIsa.HeaderWordCount + instructions.Count) + (constants.Count * 4))];
         m_words[0] = ShaderIsa.Magic;
         m_words[1] = ShaderIsa.Version;
         m_words[2] = ((uint)instructions.Count);
         m_words[3] = ((uint)constants.Count);
 
         for (var index = 0; (index < instructions.Count); index++) {
-            m_words[ShaderIsa.HeaderWordCount + index] = instructions[index].Pack();
+            m_words[(ShaderIsa.HeaderWordCount + index)] = instructions[index].Pack();
         }
 
         var constantBase = (ShaderIsa.HeaderWordCount + instructions.Count);
@@ -28,12 +28,13 @@ public sealed class ShaderProgram {
             var value = constants[index];
             var wordBase = (constantBase + (index * 4));
 
-            m_words[(wordBase + 0)] = BitConverter.SingleToUInt32Bits(value.X);
-            m_words[(wordBase + 1)] = BitConverter.SingleToUInt32Bits(value.Y);
-            m_words[(wordBase + 2)] = BitConverter.SingleToUInt32Bits(value.Z);
-            m_words[(wordBase + 3)] = BitConverter.SingleToUInt32Bits(value.W);
+            m_words[(wordBase + 0)] = BitConverter.SingleToUInt32Bits(value: value.X);
+            m_words[(wordBase + 1)] = BitConverter.SingleToUInt32Bits(value: value.Y);
+            m_words[(wordBase + 2)] = BitConverter.SingleToUInt32Bits(value: value.Z);
+            m_words[(wordBase + 3)] = BitConverter.SingleToUInt32Bits(value: value.W);
         }
     }
+
     private ShaderProgram(uint[] words) => m_words = words;
 
     /// <summary>Gets the number of decoded instructions.</summary>
@@ -50,7 +51,7 @@ public sealed class ShaderProgram {
         ArgumentOutOfRangeException.ThrowIfNegative(value: index);
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: index, other: InstructionCount);
 
-        return ShaderInstruction.Unpack(word: m_words[ShaderIsa.HeaderWordCount + index]);
+        return ShaderInstruction.Unpack(word: m_words[(ShaderIsa.HeaderWordCount + index)]);
     }
     /// <summary>Reads one four-lane constant.</summary>
     /// <param name="index">The constant index.</param>
@@ -59,13 +60,13 @@ public sealed class ShaderProgram {
         ArgumentOutOfRangeException.ThrowIfNegative(value: index);
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: index, other: ConstantCount);
 
-        var wordBase = (ShaderIsa.HeaderWordCount + InstructionCount + (index * 4));
+        var wordBase = ((ShaderIsa.HeaderWordCount + InstructionCount) + (index * 4));
 
         return new Vector4(
-            x: BitConverter.UInt32BitsToSingle(m_words[(wordBase + 0)]),
-            y: BitConverter.UInt32BitsToSingle(m_words[(wordBase + 1)]),
-            z: BitConverter.UInt32BitsToSingle(m_words[(wordBase + 2)]),
-            w: BitConverter.UInt32BitsToSingle(m_words[(wordBase + 3)])
+            x: BitConverter.UInt32BitsToSingle(value: m_words[(wordBase + 0)]),
+            y: BitConverter.UInt32BitsToSingle(value: m_words[(wordBase + 1)]),
+            z: BitConverter.UInt32BitsToSingle(value: m_words[(wordBase + 2)]),
+            w: BitConverter.UInt32BitsToSingle(value: m_words[(wordBase + 3)])
         );
     }
     /// <summary>Validates and copies a packed program received from another host boundary.</summary>
@@ -93,7 +94,7 @@ public sealed class ShaderProgram {
             throw new ArgumentException(message: $"The packed program declares {constantCount} constants; the maximum is {ShaderIsa.MaxConstants}.", paramName: nameof(words));
         }
 
-        var expectedWordCount = (ShaderIsa.HeaderWordCount + instructionCount + (constantCount * 4));
+        var expectedWordCount = ((ShaderIsa.HeaderWordCount + instructionCount) + (constantCount * 4));
 
         if (words.Length != expectedWordCount) {
             throw new ArgumentException(message: $"The packed program declares {instructionCount} instructions and {constantCount} constants, requiring {expectedWordCount} words; it carries {words.Length}.", paramName: nameof(words));
@@ -102,13 +103,14 @@ public sealed class ShaderProgram {
         var instructions = new ShaderInstruction[instructionCount];
 
         for (var index = 0; (index < instructionCount); index++) {
-            instructions[index] = ShaderInstruction.Unpack(word: words[ShaderIsa.HeaderWordCount + index]);
+            instructions[index] = ShaderInstruction.Unpack(word: words[(ShaderIsa.HeaderWordCount + index)]);
         }
 
-        ValidateInstructions(instructions: instructions, constantCount: constantCount);
+        ValidateInstructions(constantCount: constantCount, instructions: instructions);
 
         return new ShaderProgram(words: words.ToArray());
     }
+
     // Jumps are forward-only, so one linear pass is a complete dataflow: an instruction's stack depth arrives either
     // by fallthrough or from the jumps targeting it, and the two must agree. No backward edge means no loop, which
     // bounds the GPU interpreter's work by the instruction count alone.
@@ -136,6 +138,7 @@ public sealed class ShaderProgram {
             }
 
             var instruction = instructions[index];
+
             var (consumed, produced) = StackEffect(op: instruction.Op);
 
             _ = instruction.Pack();
@@ -158,33 +161,33 @@ public sealed class ShaderProgram {
 
             switch (instruction.Op) {
                 case ShaderOp.Jump or ShaderOp.JumpIfZero: {
-                    var target = checked((int)instruction.Operand);
+                        var target = checked((int)instruction.Operand);
 
-                    if (target <= index) {
-                        throw new ArgumentException(message: $"Shader instruction {index} jumps backward to {target}; the Shader VM admits forward jumps only.", paramName: nameof(instructions));
-                    }
-                    if (target >= instructions.Count) {
-                        throw new ArgumentException(message: $"Shader instruction {index} jumps to {target}, past the {instructions.Count}-instruction stream.", paramName: nameof(instructions));
-                    }
-                    if (arrivals.TryGetValue(key: target, out var existing) && (existing != depth)) {
-                        throw new ArgumentException(message: $"Shader instruction {target} is reached with stack depth {existing} and {depth} by different jumps.", paramName: nameof(instructions));
-                    }
+                        if (target <= index) {
+                            throw new ArgumentException(message: $"Shader instruction {index} jumps backward to {target}; the Shader VM admits forward jumps only.", paramName: nameof(instructions));
+                        }
+                        if (target >= instructions.Count) {
+                            throw new ArgumentException(message: $"Shader instruction {index} jumps to {target}, past the {instructions.Count}-instruction stream.", paramName: nameof(instructions));
+                        }
+                        if (arrivals.TryGetValue(key: target, out var existing) && (existing != depth)) {
+                            throw new ArgumentException(message: $"Shader instruction {target} is reached with stack depth {existing} and {depth} by different jumps.", paramName: nameof(instructions));
+                        }
 
-                    arrivals[target] = depth;
-                    reachable = (instruction.Op == ShaderOp.JumpIfZero);
+                        arrivals[target] = depth;
+                        reachable = (instruction.Op == ShaderOp.JumpIfZero);
 
-                    break;
-                }
+                        break;
+                    }
                 case ShaderOp.Halt: {
-                    if (depth != 0) {
-                        throw new ArgumentException(message: $"Shader instruction {index} halts with {depth} values left beneath its result.", paramName: nameof(instructions));
+                        if (depth != 0) {
+                            throw new ArgumentException(message: $"Shader instruction {index} halts with {depth} values left beneath its result.", paramName: nameof(instructions));
+                        }
+
+                        halted = true;
+                        reachable = false;
+
+                        break;
                     }
-
-                    halted = true;
-                    reachable = false;
-
-                    break;
-                }
                 default:
                     break;
             }

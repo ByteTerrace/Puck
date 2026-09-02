@@ -88,9 +88,9 @@ public sealed partial class PlayerRoster {
                 (m_slots[slot] is null) ||
                 IsClaimed(slot: slot) ||
                 TryGetSeatDevice(
-                    slot: slot,
+                    device: out _,
                     kind: InputDeviceKind.Camera,
-                    device: out _
+                    slot: slot
                 )
             ) {
                 continue;

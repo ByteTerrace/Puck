@@ -14,10 +14,10 @@ public sealed class BodyDynamicsLawTests {
     private static WorldDefinition WithKitDynamics(string dynamicsRow, float damping) {
         var document = Fixtures.BuildDocument();
         var kit = document.Kits[0];
-        var grounded = (WorldMotionModel.Grounded)kit.Motion;
+        var grounded = ((WorldMotionModel.Grounded)kit.Motion);
 
         return document with {
-            DynamicsRaw = [.. Fixtures.StandardDynamics, new WorldDynamicsRow(Name: dynamicsRow, Frequency: 2f, Damping: damping, Response: 0f)],
+            DynamicsRaw = [.. Fixtures.StandardDynamics, new WorldDynamicsRow(Damping: damping, Frequency: 2f, Name: dynamicsRow, Response: 0f)],
             KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = dynamicsRow } }],
         };
     }
@@ -31,7 +31,7 @@ public sealed class BodyDynamicsLawTests {
 
     [Fact]
     public void CriticalDamping_RisesMonotonicallyToMoveSpeed_ThenDecaysMonotonicallyOnRelease() {
-        using var fixture = Fixtures.FreshServer(definition: WithKitDynamics(dynamicsRow: "settle", damping: 1f));
+        using var fixture = Fixtures.FreshServer(definition: WithKitDynamics(damping: 1f, dynamicsRow: "settle"));
         var body = JoinBody(fixture: fixture);
         var moveSpeed = ((float)((double)body.EffectiveMoveSpeed));
         var previous = 0f;
@@ -47,7 +47,7 @@ public sealed class BodyDynamicsLawTests {
             previous = speed;
         }
 
-        Assert.True(condition: (MathF.Abs(previous - moveSpeed) < (moveSpeed * 0.01f)), userMessage: $"after 2 s the speed {previous:0.#####} should sit within 1% of the move speed {moveSpeed:0.#####}");
+        Assert.True(condition: (MathF.Abs(x: (previous - moveSpeed)) < (moveSpeed * 0.01f)), userMessage: $"after 2 s the speed {previous:0.#####} should sit within 1% of the move speed {moveSpeed:0.#####}");
 
         for (var tick = 0; (tick < 480); tick++) {
             body.SubmitIntent(intent: default);
@@ -61,7 +61,6 @@ public sealed class BodyDynamicsLawTests {
 
         Assert.True(condition: (previous < 1e-3f), userMessage: $"after 2 s of release the speed should have decayed below one LSB; read {previous:0.#####}");
     }
-
     // A stick held at FULL deflection commands a target that already sits at the kit's own move-speed ceiling, so
     // StepPlanarFollower's clamp masks an overshoot there by construction (the very next step re-seeds the follower
     // back onto the clamped value). Holding a PARTIAL deflection instead commands a target well under the ceiling,
@@ -70,7 +69,7 @@ public sealed class BodyDynamicsLawTests {
     public void LightDamping_OvershootsThePartialTarget_WhereCriticalDampingNeverDoes() {
         var partial = FixedQ4816.FromDouble(value: 0.4);
 
-        using var lightFixture = Fixtures.FreshServer(definition: WithKitDynamics(dynamicsRow: "loose", damping: 0.25f));
+        using var lightFixture = Fixtures.FreshServer(definition: WithKitDynamics(damping: 0.25f, dynamicsRow: "loose"));
         var lightBody = JoinBody(fixture: lightFixture);
         var targetSpeed = (((float)((double)lightBody.EffectiveMoveSpeed)) * 0.4f);
         var lightOvershot = false;
@@ -86,7 +85,7 @@ public sealed class BodyDynamicsLawTests {
 
         Assert.True(condition: lightOvershot, userMessage: $"light damping should overshoot the partial target {targetSpeed:0.#####} at some tick");
 
-        using var criticalFixture = Fixtures.FreshServer(definition: WithKitDynamics(dynamicsRow: "settle", damping: 1f));
+        using var criticalFixture = Fixtures.FreshServer(definition: WithKitDynamics(damping: 1f, dynamicsRow: "settle"));
         var criticalBody = JoinBody(fixture: criticalFixture);
         var criticalOvershot = false;
 
@@ -101,21 +100,20 @@ public sealed class BodyDynamicsLawTests {
 
         Assert.False(condition: criticalOvershot, userMessage: "critical damping should never overshoot the partial target");
     }
-
     [Fact]
     public void IdenticalIntentReplays_ProduceIdenticalHashTraces_WhileADifferentSimulationRateDiverges() {
         Action<WorldBody, int> holdForward = static (body, _) => body.SubmitIntent(intent: default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One));
-        var document = WithKitDynamics(dynamicsRow: "settle", damping: 1f);
+        var document = WithKitDynamics(damping: 1f, dynamicsRow: "settle");
         var first = Fixtures.DriveHashTrace(document: document, ticks: 240, join: JoinBody, perTick: holdForward);
         var second = Fixtures.DriveHashTrace(document: document, ticks: 240, join: JoinBody, perTick: holdForward);
 
-        Assert.Equal(expected: first, actual: second);
+        Assert.Equal(actual: second, expected: first);
 
         const int slowRateHz = 120;
         var slowDocument = document with { Simulation = new WorldSimulationDefaults(RateHz: slowRateHz) };
         var slowStepTicks = checked((ulong)(FixedTickConversion.TicksPerSecond / ((ulong)slowRateHz)));
-        var third = Fixtures.DriveHashTrace(document: slowDocument, ticks: 240, join: JoinBody, perTick: holdForward, stepTicks: slowStepTicks);
+        var third = Fixtures.DriveHashTrace(document: slowDocument, join: JoinBody, perTick: holdForward, stepTicks: slowStepTicks, ticks: 240);
 
-        Assert.NotEqual(expected: first, actual: third);
+        Assert.NotEqual(actual: third, expected: first);
     }
 }

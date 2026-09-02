@@ -87,7 +87,6 @@ public sealed class SdfPackedContractLawTests {
             )
             .Build();
     }
-
     /// <summary>The sentinel band has no top: an arbitrarily large material id decodes to an arbitrarily large screen
     /// index, which is exactly the unguarded read the band's bound exists to refuse.</summary>
     [Fact]
@@ -108,7 +107,6 @@ public sealed class SdfPackedContractLawTests {
             )
             .Build();
     }
-
     /// <summary>The typed <see cref="SdfProgram.Instructions"/> seam and the packed <see cref="SdfProgram.Words"/> are
     /// two spellings of one program; a post-construction mutation through a downcast would desync the CPU interpreter
     /// from the GPU without any error.</summary>
@@ -127,7 +125,6 @@ public sealed class SdfPackedContractLawTests {
             expected: SdfShapeType.Sphere
         );
     }
-
     /// <summary>The constructor snapshots its inputs, so a list whose enumerator and indexer disagree cannot pack words
     /// describing a different program from the one the typed seam reports.</summary>
     [Fact]
@@ -153,7 +150,6 @@ public sealed class SdfPackedContractLawTests {
             expected: ((uint)SdfShapeType.Box)
         );
     }
-
     [Fact]
     public void TheConstructorRefusesAnInstanceRangeOutsideTheStream() {
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Build(
@@ -192,12 +188,11 @@ public sealed class SdfPackedContractLawTests {
             instructions: [Shape()]
         );
     }
-
     [Fact]
     public void TheConstructorRefusesInvalidPackedTableValues() {
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Build(
             instructions: [Shape()],
-            materials: [new SdfMaterial(Albedo: new Vector3(float.NaN, 1f, 1f))]
+            materials: [new SdfMaterial(Albedo: new Vector3(x: float.NaN, y: 1f, z: 1f))]
         ));
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Build(
             instructions: [Shape()],
@@ -205,7 +200,7 @@ public sealed class SdfPackedContractLawTests {
         ));
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Build(
             instructions: [Shape()],
-            screenSurfaces: [Screen(origin: new Vector3(float.NaN, 0f, 0f))]
+            screenSurfaces: [Screen(origin: new Vector3(x: float.NaN, y: 0f, z: 0f))]
         ));
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Build(
             instructions: [Shape()],
@@ -213,21 +208,20 @@ public sealed class SdfPackedContractLawTests {
         ));
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Build(
             instructions: [Shape()],
-            instances: [Instance(first: 0, end: 1) with { Center = new Vector3(float.NaN, 0f, 0f) }]
+            instances: [Instance(end: 1, first: 0) with { Center = new Vector3(x: float.NaN, y: 0f, z: 0f) }]
         ));
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Build(
             instructions: [Shape()],
-            instances: [Instance(first: 0, end: 1) with { Radius = -1f }]
+            instances: [Instance(end: 1, first: 0) with { Radius = -1f }]
         ));
 
         _ = Build(
             instructions: [Shape()],
-            instances: [Instance(first: 0, end: 1)],
+            instances: [Instance(end: 1, first: 0)],
             materials: OneMaterial,
             screenSurfaces: [Screen()]
         );
     }
-
     [Fact]
     public void TheConstructorRefusesUnbalancedOrCrossOwnerFieldScopes() {
         var push = Shape() with { Op = SdfOp.PushField };
@@ -238,15 +232,14 @@ public sealed class SdfPackedContractLawTests {
         _ = Assert.Throws<ArgumentException>(testCode: () => Build(instructions: [push, push, Shape(), pop, pop]));
         _ = Assert.Throws<ArgumentException>(testCode: () => Build(
             instructions: [push, Shape(), pop],
-            instances: [Instance(first: 1, end: 2)]
+            instances: [Instance(end: 2, first: 1)]
         ));
 
         _ = Build(
             instructions: [push, Shape(), pop],
-            instances: [Instance(first: 0, end: 3)]
+            instances: [Instance(end: 3, first: 0)]
         );
     }
-
     /// <summary>A PushField seeds the accumulator with the far-distance sentinel, so a scope that emits no shape
     /// composes that sentinel as its candidate — under an intersection-family blend it wins the max() and erases every
     /// candidate the stream accumulated before it. SdfProgramBuilder.PopField refuses the same scope; the packed
@@ -279,7 +272,6 @@ public sealed class SdfPackedContractLawTests {
         // Control: the SAME stream with one shape inside the scope is admitted.
         _ = Build(instructions: [Shape(), push, Shape(), pop]);
     }
-
     [Fact]
     public void TheConstructorRefusesAnUndeclaredShapeBlendOrMaterialLane() {
         _ = Assert.Throws<ArgumentException>(testCode: () => Build(instructions: [Shape(shape: 250u)]));
@@ -295,7 +287,6 @@ public sealed class SdfPackedContractLawTests {
         )]);
         _ = Build(instructions: [Shape(material: ((uint)SdfProgramBuilder.ScreenMaterialId))]);
     }
-
     [Fact]
     public void TheConstructorRefusesAnUnpackableScreenIndex() {
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Build(
@@ -319,7 +310,6 @@ public sealed class SdfPackedContractLawTests {
             screenSurfaces: [Screen(index: 3), Screen(index: 4)]
         );
     }
-
     /// <summary>The shader projects a hit onto the frame's two axes while the slab's geometry and the collider ride the
     /// frame derived from them, so only an orthonormal pair describes one solid.</summary>
     [Fact]
@@ -345,7 +335,6 @@ public sealed class SdfPackedContractLawTests {
             screenSurfaces: [Screen(up: Vector3.UnitY)]
         );
     }
-
     [Fact]
     public void ScreenSlabRefusesASkewedFrame() {
         var builder = NewBuilder();
@@ -387,24 +376,27 @@ public sealed class SdfPackedContractLawTests {
             expected: Vector3.UnitY
         );
     }
-
     /// <summary>A data lane is reinterpreted into a GPU word bit-for-bit, so a non-finite operand is not absorbed
     /// anywhere: it poisons the program-wide Lipschitz step scale and the cull bounds derived from the same lanes, and
     /// the shader propagates it through every blend downstream.</summary>
     [Fact]
     public void TheConstructorRefusesANonFiniteOperandLane() {
-        var nan = Shape() with { Data0 = new Vector4(
+        var nan = Shape() with {
+            Data0 = new Vector4(
             w: 0f,
             x: float.NaN,
             y: 0f,
             z: 0f
-        ) };
-        var infinity = Shape() with { Data1 = new Vector4(
+        ),
+        };
+        var infinity = Shape() with {
+            Data1 = new Vector4(
             w: 0f,
             x: float.PositiveInfinity,
             y: 0f,
             z: 0f
-        ) };
+        ),
+        };
 
         _ = Assert.Throws<ArgumentException>(testCode: () => Build(instructions: [nan]));
         _ = Assert.Throws<ArgumentException>(testCode: () => Build(instructions: [infinity]));
@@ -427,7 +419,6 @@ public sealed class SdfPackedContractLawTests {
         // Control: the same instructions with finite lanes are admitted.
         _ = Build(instructions: [Shape()]);
     }
-
     /// <summary>Glyph's UV rect and SampledRegion's dimensions/pool offset ride their float lanes as reinterpreted
     /// integer bits, so a bit pattern that reads as NaN as a float is a legitimate operand there and the finiteness
     /// sweep must skip exactly those lanes.</summary>
@@ -476,7 +467,6 @@ public sealed class SdfPackedContractLawTests {
             ),
         }]));
     }
-
     /// <summary>The exact trapezoid core projects onto the slanted side by dividing by that side's squared length, so
     /// a profile whose slant vanishes returns NaN from the shader and divides by zero in the fixed-point evaluator.
     /// The lane values the packed word carries are what that core reads, so the bound belongs at this door too.</summary>
@@ -507,7 +497,6 @@ public sealed class SdfPackedContractLawTests {
             ),
         }]);
     }
-
     /// <summary>The instance directory attributes each segment to ONE owner, so a second instance claiming an
     /// instruction the first already owns packs the empty segment range while still carrying a real cull bound: its
     /// geometry then renders only where the winner's mask bit happens to be set.</summary>
@@ -554,7 +543,6 @@ public sealed class SdfPackedContractLawTests {
             instructions: [Shape(), Shape(), Shape()]
         );
     }
-
     /// <summary>The shader divides the hit's projection onto each screen axis by that axis's half-extent, so a zero
     /// half-extent produces an infinite or NaN UV on a surface the sentinel band guarantees is reachable.</summary>
     [Fact]
@@ -578,7 +566,6 @@ public sealed class SdfPackedContractLawTests {
             screenSurfaces: [Screen()]
         );
     }
-
     /// <summary>An indexed screen slab's local half-extents become the surface frame's half-extents, so the builder
     /// refuses the same degenerate frame one layer earlier, naming the caller's argument.</summary>
     [Fact]

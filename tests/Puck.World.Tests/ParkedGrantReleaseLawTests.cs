@@ -64,8 +64,8 @@ public sealed class ParkedGrantReleaseLawTests {
     // body for any other principal by name, which would mask the exclusivity question this suite is asking.
     private static WorldPrincipal AdmitPeer(WorldFixture fixture) {
         var peer = WorldPrincipal.Peer(
-            index: PeerBodyIndex,
-            generation: PeerGeneration
+            generation: PeerGeneration,
+            index: PeerBodyIndex
         );
 
         fixture.Server.ApplyServerEvent(serverEvent: new WorldServerEvent.PeerAdmitted(
@@ -143,7 +143,7 @@ public sealed class ParkedGrantReleaseLawTests {
             grant: acquisition
         );
 
-        Assert.False(condition: Holds(fixture: fixture, principal: rival, capability: WorldCapability.Control, subject: subject), userMessage: "an exclusive acquisition over a live peer's reserved subject must be refused");
+        Assert.False(condition: Holds(capability: WorldCapability.Control, fixture: fixture, principal: rival, subject: subject), userMessage: "an exclusive acquisition over a live peer's reserved subject must be refused");
 
         Disconnect(
             fixture: fixture,
@@ -156,7 +156,7 @@ public sealed class ParkedGrantReleaseLawTests {
             grant: acquisition
         );
 
-        Assert.True(condition: Holds(fixture: fixture, principal: rival, capability: WorldCapability.Control, subject: subject), userMessage: "the disconnected peer's reservation must not outlive its connection");
+        Assert.True(condition: Holds(capability: WorldCapability.Control, fixture: fixture, principal: rival, subject: subject), userMessage: "the disconnected peer's reservation must not outlive its connection");
         Assert.True(condition: Controls(fixture: fixture, principal: rival));
         Assert.False(condition: Controls(fixture: fixture, principal: peer));
         Assert.Empty(collection: fixture.Server.Grants.Held(principal: peer));
@@ -258,7 +258,7 @@ public sealed class ParkedGrantReleaseLawTests {
             )
         );
 
-        Assert.True(condition: Holds(fixture: fixture, principal: seat, capability: WorldCapability.Control, subject: acquired));
+        Assert.True(condition: Holds(capability: WorldCapability.Control, fixture: fixture, principal: seat, subject: acquired));
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Leave(
             Principal: seat,
@@ -266,7 +266,7 @@ public sealed class ParkedGrantReleaseLawTests {
         )).Accepted);
 
         Assert.True(condition: fixture.Server.Population.IsSeatParked(slot: 1), userMessage: "a positive grace must park the seat");
-        Assert.True(condition: Holds(fixture: fixture, principal: seat, capability: WorldCapability.Control, subject: acquired), userMessage: "a parked seat keeps every row it held — it is the one participant a re-join can resume onto");
+        Assert.True(condition: Holds(capability: WorldCapability.Control, fixture: fixture, principal: seat, subject: acquired), userMessage: "a parked seat keeps every row it held — it is the one participant a re-join can resume onto");
         Assert.True(condition: Holds(fixture: fixture, principal: seat, capability: WorldCapability.Drive, subject: GrantSubject.Body(index: 1)));
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
@@ -276,7 +276,7 @@ public sealed class ParkedGrantReleaseLawTests {
             WireProtocolKey: WorldProtocol.WireProtocolKey
         )).Accepted, userMessage: "the seeded Drive row is what authorizes the resuming re-join, so losing it would break resume outright");
         Assert.False(condition: fixture.Server.Population.IsSeatParked(slot: 1));
-        Assert.True(condition: Holds(fixture: fixture, principal: seat, capability: WorldCapability.Control, subject: acquired));
+        Assert.True(condition: Holds(capability: WorldCapability.Control, fixture: fixture, principal: seat, subject: acquired));
     }
     /// <summary>The restore-side half of the same law: a restored parked PEER generation is exactly as unresumable as
     /// a live-parked one, so <see cref="WorldServer.RestoreCheckpoint"/> releases its rows and exclusive reservations
@@ -487,7 +487,7 @@ public sealed class ParkedGrantReleaseLawTests {
                 .Select(selector: static entry => entry.GetType().Name)
                 .ToHashSet(comparer: StringComparer.Ordinal);
 
-            Assert.Contains(expected: "PeerDisconnected", collection: kinds);
+            Assert.Contains(collection: kinds, expected: "PeerDisconnected");
         }
 
         Assert.Equal(actual: tape.Verify(name: name).DivergedAt, expected: -1);

@@ -416,13 +416,13 @@ public sealed class TransferAbortKitWideningLawTests {
     // discriminates a missing restore rather than trivially passing regardless. Reverted immediately after
     // confirming red; the law suite as committed is the GREEN state.
 
-    private static WorldDynamicsRow Settle => new(Name: "settle", Frequency: 2f, Damping: 1f, Response: 0f);
+    private static WorldDynamicsRow Settle => new(Damping: 1f, Frequency: 2f, Name: "settle", Response: 0f);
 
     [Fact]
     public void DetachThenRestore_GroundedDynamicsKitBody_PlanarFollowerStateRoundTripsExactly() {
         var document = Fixtures.BuildDocument();
         var kit = document.Kits[0];
-        var grounded = (WorldMotionModel.Grounded)kit.Motion;
+        var grounded = ((WorldMotionModel.Grounded)kit.Motion);
 
         document = document with {
             DynamicsRaw = [.. Fixtures.StandardDynamics, Settle],
@@ -471,7 +471,7 @@ public sealed class TransferAbortKitWideningLawTests {
     public void DetachThenRestore_SwimDynamicsKitBody_VerticalFollowerStateRoundTripsExactly() {
         var document = BuildSwimKitDocument();
         var kit = document.Kits[0];
-        var swim = (WorldMotionModel.Swim)kit.Motion;
+        var swim = ((WorldMotionModel.Swim)kit.Motion);
 
         document = document with {
             DynamicsRaw = [.. Fixtures.StandardDynamics, Settle],

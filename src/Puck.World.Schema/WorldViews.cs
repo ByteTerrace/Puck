@@ -78,7 +78,7 @@ public sealed record WorldViewDefaults(WorldCameraProgram SeatRig, WorldSeatView
             Version: WorldCameraProgram.CurrentVersion,
             Operations: [
                 new WorldCameraProgramOp.Orbit(Distance: 0.01f, Yaw: new BindableScalar(literal: 0f), Pitch: new BindableScalar(literal: 0f)),
-                new WorldCameraProgramOp.Fov(new BindableScalar(literal: 0f)),
+                new WorldCameraProgramOp.Fov(FieldOfViewRadians: new BindableScalar(literal: 0f)),
             ]
         ),
         SeatControl: new WorldSeatViewControl(

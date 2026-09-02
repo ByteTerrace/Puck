@@ -58,11 +58,15 @@ public sealed class WorldAttestedAuthenticator : IAuthenticator {
     int IAuthenticator.ChallengeBytes => NewChallengeBytes;
 
     /// <inheritdoc/>
+    /// <remarks>Configured to prove OR to verify — a host's door needs only the latter. A client that needs a proof
+    /// from a verify-only instance learns so from <see cref="Prove"/>'s own refusal (<see cref="WorldRemoteAuthority"/>
+    /// records that and closes its signing gate on it).</remarks>
     public bool IsConfigured => ((m_oracle is not null) || (m_trustEntries is not null));
 
     /// <inheritdoc/>
     public byte[] NewChallenge() => RandomNumberGenerator.GetBytes(count: NewChallengeBytes);
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">This instance holds no signing oracle.</exception>
     public byte[] Prove(ReadOnlySpan<byte> challenge) {
         if (m_oracle is null) {
             throw new InvalidOperationException(message: "this authenticator holds no signing oracle; it cannot prove an identity");

@@ -23,6 +23,7 @@ internal static class AngularFrequencyAndRationalClaims {
 
         foreach (var raw in FrequencyRaws) {
             var frequency = FixedQ4816.FromRawBits(value: raw);
+
             var (numerator, denominator) = FixedQ4816.AngularFrequency(frequencyHz: frequency);
 
             if (denominator != expectedDenominator) {
@@ -35,7 +36,7 @@ internal static class AngularFrequencyAndRationalClaims {
                 return $"AngularFrequency({frequency}) returned numerator {numerator}, expected {expectedNumerator}";
             }
 
-            var expectedSign = Math.Sign(raw);
+            var expectedSign = Math.Sign(value: raw);
 
             if (numerator.Sign != expectedSign) {
                 return $"AngularFrequency({frequency}) returned a numerator whose sign disagrees with the frequency's own";
@@ -55,9 +56,9 @@ internal static class AngularFrequencyAndRationalClaims {
             // The independent leg: a double reconstruction of 2π·f that shares neither PiQ61 nor the fixed-point
             // shift with the member under test.
             var reference = ((2.0 * Math.PI) * ((double)frequency));
-            var reconstructed = ((double)numerator / (double)denominator);
-            var drift = Math.Abs(reference - reconstructed);
-            var tolerance = (1e-9 * (1.0 + Math.Abs(reference)));
+            var reconstructed = (((double)numerator) / ((double)denominator));
+            var drift = Math.Abs(value: (reference - reconstructed));
+            var tolerance = (1e-9 * (1.0 + Math.Abs(value: reference)));
 
             if (drift > tolerance) {
                 return $"AngularFrequency({frequency}) = {reconstructed} disagrees with the double reconstruction {reference} by {drift}, past tolerance {tolerance}";
@@ -70,7 +71,7 @@ internal static class AngularFrequencyAndRationalClaims {
     private static bool CrossEqual(Rational left, Rational right) =>
         ((left.Numerator * right.Denominator) == (right.Numerator * left.Denominator));
     private static double ToDouble(Rational value) =>
-        ((double)value.Numerator / (double)value.Denominator);
+        (((double)value.Numerator) / ((double)value.Denominator));
 
     /// <summary>Proves <see cref="Rational"/> is a valid rational representation before proving its field-axiom
     /// identities: <see langword="default"/>(<see cref="Rational"/>) reads back as the canonical <c>0/1</c> — never
@@ -128,12 +129,12 @@ internal static class AngularFrequencyAndRationalClaims {
 
         var zero = new Rational(Numerator: BigInteger.Zero, Denominator: BigInteger.One);
         var samples = new Rational[] {
-            new(Numerator: 1, Denominator: 1),
-            new(Numerator: -1, Denominator: 1),
-            new(Numerator: 3, Denominator: 7),
-            new(Numerator: -3, Denominator: 7),
-            new(Numerator: 22, Denominator: 5),
-            new(Numerator: 0, Denominator: 3),
+            new(Denominator: 1, Numerator: 1),
+            new(Denominator: 1, Numerator: -1),
+            new(Denominator: 7, Numerator: 3),
+            new(Denominator: 7, Numerator: -3),
+            new(Denominator: 5, Numerator: 22),
+            new(Denominator: 3, Numerator: 0),
             new(Numerator: (BigInteger.One << 96), Denominator: (BigInteger.One << 40)),
             new(Numerator: -(BigInteger.One << 96), Denominator: (BigInteger.One << 40)),
         };
@@ -169,9 +170,9 @@ internal static class AngularFrequencyAndRationalClaims {
 
                 var directDouble = (ToDouble(value: a) + ToDouble(value: b));
                 var exactDouble = ToDouble(value: (a + b));
-                var tolerance = (1e-6 * (1.0 + Math.Abs(directDouble)));
+                var tolerance = (1e-6 * (1.0 + Math.Abs(value: directDouble)));
 
-                if (Math.Abs(directDouble - exactDouble) > tolerance) {
+                if (Math.Abs(value: (directDouble - exactDouble)) > tolerance) {
                     return $"{a} + {b} = {exactDouble} disagrees with the double reconstruction {directDouble}";
                 }
 

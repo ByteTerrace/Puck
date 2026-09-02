@@ -243,6 +243,7 @@ public static class WorldProjection {
             projection: projection
         );
     }
+
     // A projection discloses no `state` section, so a retained `state.<row>[.<key>]` reference would reach the peer
     // as a pointer into a table it was never handed — read as one, it faults; resolved as one, it refuses. The egress
     // is therefore flat: every reference is answered from this authority's own state and dropped.
@@ -263,9 +264,9 @@ public static class WorldProjection {
         }
 
         if (!WorldStateDocumentValues.TryFlatten(
-            source: definition,
             graph: copy,
-            reason: out var flattenReason
+            reason: out var flattenReason,
+            source: definition
         )) {
             throw new InvalidOperationException(message: $"the composed projection could not be flattened: {flattenReason}");
         }

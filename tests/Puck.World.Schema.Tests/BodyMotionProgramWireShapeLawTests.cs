@@ -12,6 +12,22 @@ namespace Puck.World.Schema.Tests;
 /// file has to say.
 /// </summary>
 public sealed class BodyMotionProgramWireShapeLawTests {
+    private const string CurveFollowProducerJson = """
+{
+  "name": "track",
+  "version": "puck.body-motion.v1",
+  "kind": "Producer",
+  "operations": [
+    "SenseNearestInCone",
+    "ProduceAttendIntent"
+  ],
+  "target": {
+    "$type": "curve",
+    "curve": "loop",
+    "rate": 2
+  }
+}
+""";
     private const string SensedProducerJson = """
 {
   "name": "wander",
@@ -27,22 +43,6 @@ public sealed class BodyMotionProgramWireShapeLawTests {
     "range": 12,
     "halfAngleDegrees": 45,
     "requiresLineOfSight": true
-  }
-}
-""";
-    private const string CurveFollowProducerJson = """
-{
-  "name": "track",
-  "version": "puck.body-motion.v1",
-  "kind": "Producer",
-  "operations": [
-    "SenseNearestInCone",
-    "ProduceAttendIntent"
-  ],
-  "target": {
-    "$type": "curve",
-    "curve": "loop",
-    "rate": 2
   }
 }
 """;
@@ -87,10 +87,10 @@ public sealed class BodyMotionProgramWireShapeLawTests {
             Kind: BodyProgramKind.Producer,
             Operations: [BodyMotionOp.SenseNearestInCone, BodyMotionOp.ProduceAttendIntent],
             Target: new BodyTargetSource.Sensed(
-                Scope: BodyTargetScope.Bodies,
-                Range: 12f,
                 HalfAngleDegrees: 45f,
-                RequiresLineOfSight: true
+                Range: 12f,
+                RequiresLineOfSight: true,
+                Scope: BodyTargetScope.Bodies
             )
         );
         var written = JsonSerializer.Serialize(

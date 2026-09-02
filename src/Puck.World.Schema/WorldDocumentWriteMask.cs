@@ -33,7 +33,7 @@ public readonly record struct DocumentWriteMask(ulong Bits) {
     /// <returns><see langword="true"/> when the operation's bit is set.</returns>
     public bool Contains(WorldDocumentWriteKind kind) => ClosedBitset.Contains(
         bits: Bits,
-        ordinal: (int)kind
+        ordinal: ((int)kind)
     );
     /// <summary>Describes the admitted operations by NAME, comma-separated (<c>Set,Add</c>) — the spelling
     /// <c>world.grant</c>'s own <c>writes:&lt;name,…&gt;</c> token takes. An empty mask reads
@@ -72,6 +72,6 @@ public readonly record struct DocumentWriteMask(ulong Bits) {
     /// <returns>The widened mask.</returns>
     public DocumentWriteMask With(WorldDocumentWriteKind kind) => new(Bits: ClosedBitset.With(
         bits: Bits,
-        ordinal: (int)kind
+        ordinal: ((int)kind)
     ));
 }

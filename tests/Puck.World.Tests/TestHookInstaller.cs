@@ -14,7 +14,7 @@ internal static class TestHookInstaller {
     [ModuleInitializer]
     internal static void Install() => WorldSchemaVocabularyHooks.Install(
         postRenderExtensionCheck: static _ => true,
-        screenMachineEngineCheck: static _ => true,
-        probeKindCheck: static _ => true
+        probeKindCheck: static _ => true,
+        screenMachineEngineCheck: static _ => true
     );
 }

@@ -13,11 +13,11 @@ public static class SkyProgram {
     private const float CloudHeight = 0.7f;
     private const float CloudHorizonFade = 0.05f;
     private const float CloudNormalTap = 0.18f;
+    private const int CloudOctaves = 4;
     private const float CloudOpacity = 3.5f;
     private const float CloudSelfShadow = 0.6f;
     private const float CloudSilverLining = 0.5f;
     private const float CloudWarp = 0.6f;
-    private const int CloudOctaves = 4;
     private const float StarInset = 0.3f;
     private const float StarLuminosityFloor = 0.125f;
     private const float StarRadiusFraction = 0.12f;
@@ -53,6 +53,7 @@ public static class SkyProgram {
 
         return Lerp(amount: clouds.W, from: color, to: clouds);
     }
+
     // The three-stop vertical ramp: ground below the horizon, horizon to zenith above it.
     private static Expression Gradient(Expression direction, Expression elevation) {
         var ground = Expression.Parameter(index: SkyParameters.Ground);
@@ -76,7 +77,7 @@ public static class SkyProgram {
         var stars = Expression.Parameter(index: SkyParameters.Stars);
         var density = stars.X;
         var cell = Floor(value: (((OctahedralEncode(direction: direction) * 0.5f) + 0.5f) * density));
-        var hash = Hash3(value: (Seeded(position: cell, seed: seed).Swizzle(x: 0, y: 1, z: 3, w: 3)));
+        var hash = Hash3(value: (Seeded(position: cell, seed: seed).Swizzle(w: 3, x: 0, y: 1, z: 3)));
         var unit = Unit(value: hash);
         var second = Unit(value: Hash3(value: hash));
         var luminosity = Min(
@@ -91,7 +92,7 @@ public static class SkyProgram {
             hash: hash
         ));
         var offset = Lerp(
-            amount: unit.Swizzle(x: 1, y: 2, z: 1, w: 2),
+            amount: unit.Swizzle(w: 2, x: 1, y: 2, z: 1),
             from: StarInset,
             to: (1f - StarInset)
         );
@@ -125,9 +126,9 @@ public static class SkyProgram {
     }
     // A blackbody ramp from roughly 3000 K through white to 15000 K, each tint at unit peak channel.
     private static Expression Spectrum(Expression temperature) {
-        var cool = Expression.Constant(x: 0.71f, y: 0.80f, z: 1f, w: 1f);
-        var warm = Expression.Constant(x: 1f, y: 0.71f, z: 0.42f, w: 1f);
-        var white = Expression.Constant(x: 1f, y: 0.98f, z: 0.99f, w: 1f);
+        var cool = Expression.Constant(w: 1f, x: 0.71f, y: 0.80f, z: 1f);
+        var warm = Expression.Constant(w: 1f, x: 1f, y: 0.71f, z: 0.42f);
+        var white = Expression.Constant(w: 1f, x: 1f, y: 0.98f, z: 0.99f);
 
         return Select(
             condition: (temperature > 0.5f),
@@ -143,7 +144,7 @@ public static class SkyProgram {
         var clouds = Expression.Parameter(index: SkyParameters.Clouds);
         var b = (CloudDomeRadius * elevation);
         var reach = (Sqrt(value: ((b * b) + ((2f * CloudDomeRadius) + 1f))) - b);
-        var layer = (direction.Swizzle(x: 0, y: 2, z: 0, w: 2) * reach);
+        var layer = (direction.Swizzle(w: 2, x: 0, y: 2, z: 0) * reach);
         var radius = layer.Length2;
         var angle = (shape.Z + (shape.W * ((2f * radius) / (1f + (radius * radius)))));
         var turn = Cos(value: angle);
@@ -153,29 +154,29 @@ public static class SkyProgram {
         var thickness = Thickness(
             point: point,
             seed: seed,
-            shear: wind.Swizzle(x: 2, y: 3, z: 2, w: 3),
+            shear: wind.Swizzle(w: 3, x: 2, y: 3, z: 2),
             softness: shape.X,
             threshold: threshold
         );
-        var sunTurned = Rotate(cosine: turn, sine: swing, value: sun.Swizzle(x: 0, y: 2, z: 0, w: 2));
+        var sunTurned = Rotate(cosine: turn, sine: swing, value: sun.Swizzle(w: 2, x: 0, y: 2, z: 0));
         var alongX = Thickness(
             point: (point + Expression.Constant(x: CloudNormalTap, y: 0f)),
             seed: seed,
-            shear: wind.Swizzle(x: 2, y: 3, z: 2, w: 3),
+            shear: wind.Swizzle(w: 3, x: 2, y: 3, z: 2),
             softness: shape.X,
             threshold: threshold
         );
         var alongY = Thickness(
             point: (point + Expression.Constant(x: 0f, y: CloudNormalTap)),
             seed: seed,
-            shear: wind.Swizzle(x: 2, y: 3, z: 2, w: 3),
+            shear: wind.Swizzle(w: 3, x: 2, y: 3, z: 2),
             softness: shape.X,
             threshold: threshold
         );
         var sunward = Thickness(
             point: (point + (((CloudNormalTap * 2f) * (sunTurned + 1e-5f).Normalized2))),
             seed: seed,
-            shear: wind.Swizzle(x: 2, y: 3, z: 2, w: 3),
+            shear: wind.Swizzle(w: 3, x: 2, y: 3, z: 2),
             softness: shape.X,
             threshold: threshold
         );
@@ -198,7 +199,7 @@ public static class SkyProgram {
     // A domain-warped fbm thresholded at the coverage edge: a first field bends the second's domain, which is what
     // gives the puffed, lobed silhouettes flat noise never does.
     private static Expression Thickness(Expression point, Expression shear, uint seed, Expression threshold, Expression softness) {
-        var warp = Fbm2(octaves: CloudOctaves, position: Seeded(position: (point + shear), seed: (seed ^ 0x9E3779B9u)));
+        var warp = Fbm2(octaves: CloudOctaves, position: Seeded(position: (point + shear), seed: seed ^ 0x9E3779B9u));
         var density = Fbm2(octaves: CloudOctaves, position: Seeded(position: (point + (CloudWarp * (warp - 0.5f))), seed: seed));
 
         return SmoothStep(edge0: threshold, edge1: (threshold + softness), value: density);
@@ -209,12 +210,12 @@ public static class SkyProgram {
     );
     // The unit sphere onto the [-1, 1] square: the octahedral projection the star cells are laid out on.
     private static Expression OctahedralEncode(Expression direction) {
-        var folded = direction.Swizzle(x: 0, y: 1, z: 0, w: 1) / (Abs(value: direction.X) + Abs(value: direction.Y) + Abs(value: direction.Z));
+        var folded = (direction.Swizzle(w: 1, x: 0, y: 1, z: 0) / ((Abs(value: direction.X) + Abs(value: direction.Y)) + Abs(value: direction.Z)));
 
         return Select(
             condition: (direction.Z < 0f),
             whenFalse: folded,
-            whenTrue: ((1f - Abs(value: folded.Swizzle(x: 1, y: 0, z: 1, w: 0))) * SignPositive(value: folded))
+            whenTrue: ((1f - Abs(value: folded.Swizzle(w: 0, x: 1, y: 0, z: 1))) * SignPositive(value: folded))
         );
     }
     private static Expression OctahedralDecode(Expression point) {
@@ -223,7 +224,7 @@ public static class SkyProgram {
             y: point.Y,
             z: ((1f - Abs(value: point.X)) - Abs(value: point.Y))
         );
-        var folded = ((1f - Abs(value: raised.Swizzle(x: 1, y: 0, z: 1, w: 0))) * SignPositive(value: raised));
+        var folded = ((1f - Abs(value: raised.Swizzle(w: 0, x: 1, y: 0, z: 1))) * SignPositive(value: raised));
 
         return Select(
             condition: (raised.Z < 0f),

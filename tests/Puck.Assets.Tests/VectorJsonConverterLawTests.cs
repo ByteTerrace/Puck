@@ -11,8 +11,8 @@ public sealed class VectorJsonConverterLawTests {
         var json = JsonSerializer.Serialize(value: value, options: Documents.DocumentJsonOptions.Shared);
         var read = JsonSerializer.Deserialize<Vector2>(json: json, options: Documents.DocumentJsonOptions.Shared);
 
-        Assert.DoesNotContain(expectedSubstring: "\"x\"", actualString: json, comparisonType: StringComparison.Ordinal);
-        Assert.Equal(expected: value, actual: read);
+        Assert.DoesNotContain(actualString: json, comparisonType: StringComparison.Ordinal, expectedSubstring: "\"x\"");
+        Assert.Equal(actual: read, expected: value);
     }
     [Fact]
     public void Vector3_RoundTrips_BitExactly() {
@@ -20,24 +20,24 @@ public sealed class VectorJsonConverterLawTests {
         var json = JsonSerializer.Serialize(value: value, options: Documents.DocumentJsonOptions.Shared);
         var read = JsonSerializer.Deserialize<Vector3>(json: json, options: Documents.DocumentJsonOptions.Shared);
 
-        Assert.DoesNotContain(expectedSubstring: "\"x\"", actualString: json, comparisonType: StringComparison.Ordinal);
-        Assert.Equal(expected: value, actual: read);
+        Assert.DoesNotContain(actualString: json, comparisonType: StringComparison.Ordinal, expectedSubstring: "\"x\"");
+        Assert.Equal(actual: read, expected: value);
     }
     [Fact]
     public void Quaternion_RoundTrips_BitExactly_InXyzwOrder() {
-        var value = new Quaternion(x: 0.34202015f, y: 0f, z: 0f, w: 0.9396926f);
+        var value = new Quaternion(w: 0.9396926f, x: 0.34202015f, y: 0f, z: 0f);
         var json = JsonSerializer.Serialize(value: value, options: Documents.DocumentJsonOptions.Shared);
         var read = JsonSerializer.Deserialize<Quaternion>(json: json, options: Documents.DocumentJsonOptions.Shared);
         // The wire order is [x, y, z, w] — the first array element is X, not W.
         var firstNumber = json.TrimStart('[', '\r', '\n', ' ').Split(separator: ',')[0].Trim();
 
-        Assert.DoesNotContain(expectedSubstring: "isIdentity", actualString: json, comparisonType: StringComparison.Ordinal);
-        Assert.Equal(expected: "0.34202015", actual: firstNumber);
-        Assert.Equal(expected: value, actual: read);
+        Assert.DoesNotContain(actualString: json, comparisonType: StringComparison.Ordinal, expectedSubstring: "isIdentity");
+        Assert.Equal(actual: firstNumber, expected: "0.34202015");
+        Assert.Equal(actual: read, expected: value);
     }
-    [Theory]
     [InlineData("[1,2]")]
     [InlineData("[1,2,3,4]")]
+    [Theory]
     public void Vector3_RefusesWrongArity(string json) =>
         Assert.Throws<JsonException>(testCode: () => JsonSerializer.Deserialize<Vector3>(json: json, options: Documents.DocumentJsonOptions.Shared));
     [Fact]
@@ -46,9 +46,9 @@ public sealed class VectorJsonConverterLawTests {
 
         Assert.Contains(expectedSubstring: "array", actualString: exception.Message, comparisonType: StringComparison.Ordinal);
     }
-    [Theory]
     [InlineData("[1,2,3]")]
     [InlineData("[1,2,3,4,5]")]
+    [Theory]
     public void Quaternion_RefusesWrongArity(string json) =>
         Assert.Throws<JsonException>(testCode: () => JsonSerializer.Deserialize<Quaternion>(json: json, options: Documents.DocumentJsonOptions.Shared));
     [Fact]

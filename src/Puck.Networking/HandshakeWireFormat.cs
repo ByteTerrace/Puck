@@ -102,9 +102,11 @@ public static class HandshakeWireFormat {
             val1: 0,
             val2: (MaxHelloIdentityBytes - sizeof(uint))
         ));
+
         var (outcome, following, body) = await WireFrame.TryReadPrefixedBodyAsync(
             cap: cap,
             ct: ct,
+            leadingBytes: 0,
             stream: stream
         ).ConfigureAwait(continueOnCapturedContext: false);
 
@@ -162,19 +164,27 @@ public static class HandshakeWireFormat {
     /// <summary>Reads one raw <c>[u32 length][…]</c> length-prefixed block. Returns the whole buffer, prefix
     /// included — distinct from <see cref="WireFrame.ReadAsync"/>, which returns kind/body already split and refuses
     /// a zero-length body; this reader tolerates one, for a caller (a leaf decoder expecting the prefix in its own
-    /// span) that draws that line itself.</summary>
+    /// span) that draws that line itself. The prefix and body land in ONE allocation: the shared read head leaves
+    /// four leading bytes free and this back-patches the length into them, so a caller slicing the buffer keeps
+    /// exactly the bytes the peer sent with no copy.</summary>
     /// <param name="stream">The connection stream.</param>
-    /// <param name="maxTotalBytes">The hard cap on prefix+body bytes — refused before any body allocation.</param>
+    /// <param name="maxTotalBytes">The hard cap on prefix+body bytes — an oversized length is refused before the
+    /// buffer is allocated, so the cap bounds what a peer can make this side allocate.</param>
     /// <param name="ct">Cancellation.</param>
     /// <returns>The whole frame buffer, or <see langword="null"/> on a clean/abrupt disconnect or an oversized length.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
     public static async Task<byte[]?> TryReadLengthPrefixedFrameAsync(Stream stream, int maxTotalBytes, CancellationToken ct) {
+        ArgumentNullException.ThrowIfNull(argument: stream);
+
         var cap = ((uint)Math.Max(
             val1: 0,
             val2: (maxTotalBytes - sizeof(uint))
         ));
-        var (outcome, following, body) = await WireFrame.TryReadPrefixedBodyAsync(
+
+        var (outcome, following, whole) = await WireFrame.TryReadPrefixedBodyAsync(
             cap: cap,
             ct: ct,
+            leadingBytes: sizeof(uint),
             stream: stream
         ).ConfigureAwait(continueOnCapturedContext: false);
 
@@ -182,17 +192,9 @@ public static class HandshakeWireFormat {
             return null;
         }
 
-        // Unlike WireFrame.ReadAsync/TryReadHelloIdentityAsync, this reader's own contract keeps the length prefix
-        // IN the returned buffer (a caller decoding it as one already-framed blob) — re-encode it rather than
-        // threading a second buffer shape through the shared read head for one caller.
-        var whole = new byte[checked((sizeof(uint) + ((int)following)))];
-
         BinaryPrimitives.WriteUInt32LittleEndian(
             destination: whole,
             value: following
-        );
-        body.CopyTo(
-            destination: whole.AsSpan(start: sizeof(uint))
         );
 
         return whole;

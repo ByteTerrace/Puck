@@ -76,6 +76,7 @@ public sealed class TextLayout {
 
         return blockWidth;
     }
+
     // The plain-string Layout overloads' fast path: every glyph carries TextEffect.None (there is no enrichment tier
     // to carry here), so this wraps the framework's own rune decoder (StringRuneEnumerator, itself a struct) instead
     // of routing through the enrichment-aware IEnumerable<TextEffectRune> shape. Because this type is a genuine
@@ -89,6 +90,7 @@ public sealed class TextLayout {
             Effect: TextEffect.None,
             Rune: m_runes.Current
         );
+
         readonly object IEnumerator.Current => Current;
 
         public bool MoveNext() => m_runes.MoveNext();

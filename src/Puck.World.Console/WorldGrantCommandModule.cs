@@ -105,6 +105,7 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority, IS
 
         return false;
     }
+
     /// <summary>Parses the same <c>&lt;principal&gt; &lt;capability&gt; &lt;subject&gt; [exclusive] [budget:&lt;n&gt;]</c>
     /// grammar <c>world.grant</c>/<c>world.revoke</c> use, shared with the mutation surface's
     /// <c>world.grant.set</c>/<c>world.grant.remove</c> — one grammar for a grant token sequence regardless of
@@ -583,6 +584,7 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority, IS
             token: token
         );
     }
+
     /// <summary>Parses a subject token (<c>all</c> | <c>body:&lt;n&gt;</c> | <c>screen:&lt;n&gt;</c> |
     /// <c>section:&lt;name&gt;</c> | <c>state:&lt;name&gt;</c>) through <see cref="GrantSubject.TryParse"/> — the
     /// identical grammar a document-sourced subject canonicalizes through (a <see cref="WorldCapabilityRequest.Subject"/>,
@@ -595,7 +597,6 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority, IS
         subject: out subject,
         token: token
     );
-
     // The DOCUMENT-AUTHORED half of the read-back — the `document:<id>` rows in WorldDefinition.Grants, which are
     // deliberately NOT replayed into the live table (Server.WorldServer.IsDocumentChannelRow, and the grant door
     // refuses one by name): the cross-document durable-state write-back channel resolves them by reading the OWNER'S

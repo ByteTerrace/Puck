@@ -143,24 +143,25 @@ public sealed class WorldVoiceSynthTests {
     }
     [Fact]
     public void BabbleUtteranceFiresOneDistinctSeededTriggerPerSyllableBitIdenticalAcrossTwoFreshPairings() {
-        var (slotsFirst, renderFirst) = RunBabbleUtterance(syllableCount: 6, cadenceTicks: 600, identitySeed: 0x1234UL, utteranceOrdinal: 3UL, baseTick: 1_000UL);
-        var (slotsSecond, renderSecond) = RunBabbleUtterance(syllableCount: 6, cadenceTicks: 600, identitySeed: 0x1234UL, utteranceOrdinal: 3UL, baseTick: 1_000UL);
+        var (slotsFirst, renderFirst) = RunBabbleUtterance(baseTick: 1_000UL, cadenceTicks: 600, identitySeed: 0x1234UL, syllableCount: 6, utteranceOrdinal: 3UL);
+        var (slotsSecond, renderSecond) = RunBabbleUtterance(baseTick: 1_000UL, cadenceTicks: 600, identitySeed: 0x1234UL, syllableCount: 6, utteranceOrdinal: 3UL);
 
         Assert.Equal(expected: 6, actual: slotsFirst.Distinct().Count());
         Assert.True(condition: renderFirst.AsSpan().SequenceEqual(other: renderSecond));
         Assert.True(condition: slotsFirst.SequenceEqual(second: slotsSecond));
     }
-    [Theory]
     [InlineData(2)]
     [InlineData(5)]
     [InlineData(10)]
+    [Theory]
     public void BabbleUtteranceNeverCollapsesToASingleSustainedToneForMultipleSyllables(int syllableCount) {
-        var (slots, _) = RunBabbleUtterance(syllableCount: syllableCount, cadenceTicks: 500, identitySeed: 7UL, utteranceOrdinal: 1UL, baseTick: 0UL);
+        var (slots, _) = RunBabbleUtterance(baseTick: 0UL, cadenceTicks: 500, identitySeed: 7UL, syllableCount: syllableCount, utteranceOrdinal: 1UL);
 
         Assert.Equal(expected: syllableCount, actual: slots.Count);
         Assert.NotEqual(expected: 1, actual: slots.Count);
         Assert.Equal(expected: syllableCount, actual: slots.Distinct().Count());
     }
+
     // Composes VoiceBabbler's deterministic tick schedule with VoiceSynth.Trigger: one seeded voice per syllable,
     // never a single collapsed trigger for the whole utterance. Each syllable's seed folds the identity seed, the
     // utterance ordinal, and the syllable index — never wall-clock or the tick value itself — mirroring
@@ -186,7 +187,6 @@ public sealed class WorldVoiceSynthTests {
 
         return (Slots: slots, Render: Render(synth: synth, totalFrames: 4800));
     }
-
     private static VoicePatch Chirp() => new(
         AttackFrames: 480,
         DecayFrames: 4800,

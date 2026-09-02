@@ -155,6 +155,14 @@ var claim = AttestationSigner.SignClaim(
 var wire = codec.EncodeAttestation(attestation: claim);
 ```
 
+A signing key loaded from stored bytes goes through
+`AttestationKeys.ImportPkcs8PrivateKey(pkcs8, algorithm)` rather than a bare
+`ECDsa.Create()` plus import. The helper requires the whole byte span to be one
+PKCS#8 key and the key to be on the curve the named algorithm promises, so a key
+file with trailing bytes or a key on another curve is refused where it is
+loaded (`ArgumentException`) rather than at its first signature; bytes that do
+not decode at all raise `CryptographicException`.
+
 The receiving side pins the root once, then verifies what arrives:
 
 ```csharp
@@ -207,6 +215,7 @@ surface.
 | Type | Role |
 |------|------|
 | `KeyId` / `AttestationAlgorithms` | Describe a key-bound identity and the registered signing or sealing algorithm attached to it. |
+| `AttestationKeys` | Import PKCS#8 private key material for a named signing algorithm, refusing trailing bytes and a key on the wrong curve. |
 | `AttestationHeader` / `SignedAttestation` | Hold the signed context and the exact arrived bytes used for verification. |
 | `IAttestationCodec` / `CborAttestationCodec` | Encode and decode the canonical v1 wire representation. |
 | `AttestationSigner` | Create signed claims and key-binding attestations. |

@@ -45,15 +45,19 @@ internal sealed class WorldOverlayFeed {
     // family-aware badge resolver's only per-tick input (the connected family) rides the mutable m_currentFamily cell
     // instead of a fresh closure, the same "mutable cell + preallocated delegate" shape m_pressedBySource already takes.
     private readonly Func<string, OverlayResolvedGlyph> m_resolveBadge;
+
     private static readonly Func<string, OverlayResolvedGlyph> NoBadge = static _ => OverlayResolvedGlyph.None;
+
     // Same "mutable cell + preallocated delegate" shape as m_resolveBadge: the per-tick input is WHICH state row
     // this seat's bar named (m_currentIconRow), so the delegate is allocated once rather than per seat per tick.
     // Nothing is cached across ticks — the row's cells are live, so an ordinary state mutation retargets an icon
     // between frames.
     private readonly Func<string?, OverlayResolvedGlyph> m_resolveIcon;
+
     private string? m_currentIconRow;
     private int m_currentSlot;
     private GamepadType m_currentFamily;
+
     private readonly PlayerRoster m_roster;
     private readonly OverlayBindingSeat[] m_seats;
     private readonly OverlayBindingSlot[][] m_slots;
@@ -87,8 +91,8 @@ internal sealed class WorldOverlayFeed {
         m_icons = icons;
         m_resolveIcon = action => {
             m_bindings.GetRoutedState(
-                slot: m_currentSlot,
                 definition: out var definition,
+                slot: m_currentSlot,
                 tick: out var tick
             );
 
@@ -137,6 +141,7 @@ internal sealed class WorldOverlayFeed {
             ));
         }
     }
+
     // The seat's chord-hint lines, re-formatted only when its published view changes (a page/group flip or a
     // recompose — human cadence, never per frame). One ASCII line per command-chord row of the active group:
     // the chord's modifier labels joined by '+', then the row's label (or its command name).
@@ -341,8 +346,8 @@ internal sealed class WorldOverlayFeed {
                         bankAlpha: bankAlpha,
                         bankOrder: bankIndex,
                         destination: destination.AsSpan(
-                            start: writeOffset,
-                            length: slotCount
+                            length: slotCount,
+                            start: writeOffset
                         ),
                         hideUnbound: barStatus.EffectiveHideUnbound,
                         frame: placed.Frame,

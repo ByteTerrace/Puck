@@ -9,11 +9,9 @@ public abstract record CameraDeviceScanOutcome {
 
     /// <summary>The platform enumerated successfully; <paramref name="Ids"/> is every device it currently reports.</summary>
     public sealed record Success(IReadOnlySet<InputDeviceId> Ids) : CameraDeviceScanOutcome;
-
     /// <summary>The platform enumeration call failed with <paramref name="Message"/>.</summary>
     public sealed record Failure(string Message) : CameraDeviceScanOutcome;
 }
-
 /// <summary>The device-table ids a scan outcome adds and retires, and whether the caller should narrate it.</summary>
 /// <param name="ToAdd">Ids present in the outcome but not in the previously known set.</param>
 /// <param name="ToRetire">Previously known ids the outcome no longer reports; empty for a failed scan — a failure
@@ -28,7 +26,6 @@ public readonly record struct CameraDeviceScanDecision(
     bool Narrate,
     bool IsFailing
 );
-
 /// <summary>Decides one camera device-scan episode's effect on a binder's device table — pure, so the failure
 /// once-per-episode narration rule and the add/retire id sets are provable without Media Foundation, a roster, or a
 /// live device.</summary>
@@ -40,7 +37,7 @@ public static class CameraDeviceScanReconciler {
     /// already failed and narrated.</param>
     public static CameraDeviceScanDecision Reconcile(IReadOnlySet<InputDeviceId> knownIds, CameraDeviceScanOutcome outcome, bool wasFailing) {
         if (outcome is CameraDeviceScanOutcome.Failure) {
-            return new CameraDeviceScanDecision(ToAdd: [], ToRetire: [], Narrate: !wasFailing, IsFailing: true);
+            return new CameraDeviceScanDecision(IsFailing: true, Narrate: !wasFailing, ToAdd: [], ToRetire: []);
         }
 
         var ids = ((CameraDeviceScanOutcome.Success)outcome).Ids;
@@ -60,6 +57,6 @@ public static class CameraDeviceScanReconciler {
             }
         }
 
-        return new CameraDeviceScanDecision(ToAdd: toAdd, ToRetire: toRetire, Narrate: false, IsFailing: false);
+        return new CameraDeviceScanDecision(IsFailing: false, Narrate: false, ToAdd: toAdd, ToRetire: toRetire);
     }
 }

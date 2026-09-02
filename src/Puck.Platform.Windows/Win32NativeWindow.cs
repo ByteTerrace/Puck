@@ -155,8 +155,11 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
 
     private readonly IClipboardService m_clipboardService;
     private readonly NativeWindowOptions m_options;
+
     private readonly Queue<WindowInputEvent> m_pendingInput = [];
+
     private readonly GCHandle m_selfHandle;
+
     // Reused across every ToUnicodeEx call — text derivation runs on the window-pump thread only, so one small
     // scratch buffer is safe to share (sized for a combining dead-key result or a surrogate pair).
     private readonly char[] m_textBuffer = new char[8];
@@ -174,7 +177,9 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private bool m_disposed;
     private bool m_isFullscreen;
     private bool m_hasPainted;
+
     private bool m_isOpen = true;
+
     private bool m_isVisible;
     private Vector2 m_frameMouseDelta;
     private bool m_pointerPositionDirty;
@@ -313,8 +318,8 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
 
             if (state.PositionDirty) {
                 m_pendingInput.Enqueue(item: WindowInputEvent.PointerAbsolute(
-                    position: state.Position,
-                    deviceId: state.DeviceId
+                    deviceId: state.DeviceId,
+                    position: state.Position
                 ));
                 state.PositionDirty = false;
             }
@@ -1265,9 +1270,9 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private void EmitRawTypedText(InputDeviceId deviceId, bool isExtended, byte[] keyState, in RawKeyboard keyboard) {
         // Toggle state (bit 0) is a single system-wide fact, not per keyboard — mirrored in from GetKeyState so a
         // Shift+letter or a dead-key sequence resolves against the real CapsLock/NumLock/ScrollLock state.
-        keyState[VkCapital] = (byte)((User32.GetKeyState(virtualKey: VkCapital) & 1) != 0 ? 1 : 0);
-        keyState[VkNumLock] = (byte)((User32.GetKeyState(virtualKey: VkNumLock) & 1) != 0 ? 1 : 0);
-        keyState[VkScroll] = (byte)((User32.GetKeyState(virtualKey: VkScroll) & 1) != 0 ? 1 : 0);
+        keyState[VkCapital] = ((byte)(((User32.GetKeyState(virtualKey: VkCapital) & 1) != 0) ? 1 : 0));
+        keyState[VkNumLock] = ((byte)(((User32.GetKeyState(virtualKey: VkNumLock) & 1) != 0) ? 1 : 0));
+        keyState[VkScroll] = ((byte)(((User32.GetKeyState(virtualKey: VkScroll) & 1) != 0) ? 1 : 0));
 
         var scanCode = ((uint)(keyboard.MakeCode | (isExtended ? 0x0100u : 0u)));
         var written = User32.ToUnicodeEx(
@@ -1290,9 +1295,9 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             m_pendingInput.Enqueue(item: WindowInputEvent.TypedText(
                 deviceId: deviceId,
                 text: new string(
-                    value: m_textBuffer,
+                    length: written,
                     startIndex: 0,
-                    length: written
+                    value: m_textBuffer
                 )
             ));
         }

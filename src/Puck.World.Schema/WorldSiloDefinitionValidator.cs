@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using Puck.Attestation;
 
 namespace Puck.World;
 
@@ -51,14 +52,14 @@ public static class WorldSiloDefinitionValidator {
 
         try {
             var pkcs8 = File.ReadAllBytes(path: federation.KeyFile);
-            using var key = ECDsa.Create();
-
-            key.ImportPkcs8PrivateKey(
-                bytesRead: out _,
-                source: pkcs8
+            // The same import the silo host performs when it loads the row, so a key file that validates here is
+            // exactly one the host will accept: P-256, no trailing bytes.
+            using var key = AttestationKeys.ImportPkcs8PrivateKey(
+                algorithm: AttestationAlgorithms.EcdsaP256Sha256,
+                pkcs8: pkcs8
             );
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or CryptographicException)) {
-            reason = $"world '{world}' federation.keyFile '{federation.KeyFile}' could not be read as a PKCS#8 EC private key — {exception.Message}";
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or CryptographicException or ArgumentException)) {
+            reason = $"world '{world}' federation.keyFile '{federation.KeyFile}' could not be read as a PKCS#8 P-256 private key — {exception.Message}";
 
             return false;
         }

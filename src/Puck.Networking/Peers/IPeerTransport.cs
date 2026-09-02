@@ -41,7 +41,10 @@ public interface IPeerConnection : IAsyncDisposable {
     /// <summary>Gets the remote address.</summary>
     EndPoint RemoteEndpoint { get; }
     /// <summary>Gets the DER-encoded SubjectPublicKeyInfo of the key the remote side proved possession of at the
-    /// transport's own handshake, or empty when it proved none.</summary>
+    /// transport's own handshake, or empty when it proved none. An empty key is refused by the peer handshake as
+    /// <see cref="PeerRefusal.ChannelUnbound"/> before any identity is compared: a transport that proved no key
+    /// cannot bind the identity a peer offers to the channel it offered it on, so it never reaches an identity
+    /// decision.</summary>
     ReadOnlyMemory<byte> RemoteTransportKey { get; }
 
     /// <summary>Accepts the next stream the remote side opened.</summary>

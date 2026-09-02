@@ -89,8 +89,8 @@ public sealed class WorldQueryDriftPlumbingLawTests {
     private static IReadOnlyList<FixedPosition> SamplePoints() {
         var points = new List<FixedPosition>();
 
-        foreach (var z in (ReadOnlySpan<double>)[-0.4, 0.1,]) {
-            foreach (var x in (ReadOnlySpan<double>)[-0.9, -0.6, -0.4, -0.1, 0.1, 0.4, 0.6, 0.9,]) {
+        foreach (var z in ((ReadOnlySpan<double>)[-0.4, 0.1,])) {
+            foreach (var x in ((ReadOnlySpan<double>)[-0.9, -0.6, -0.4, -0.1, 0.1, 0.4, 0.6, 0.9,])) {
                 points.Add(item: FixedPosition.FromLocal(local: new FixedVector3(
                     X: FixedQ4816.FromDouble(value: x),
                     Y: FixedQ4816.One,
@@ -134,7 +134,6 @@ public sealed class WorldQueryDriftPlumbingLawTests {
             expected: 1.0
         );
     }
-
     [Fact]
     public void AOneCellFencepostInTheBakedHeightsShowsUpAsDisagreement() {
         var evaluator = BuildSteppedGroundEvaluator();

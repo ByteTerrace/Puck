@@ -25,13 +25,11 @@ public sealed class BindingBarAuthoredLayoutLawTests {
         Assert.Equal(expected: 3, actual: destination[0].Frame);
         Assert.False(condition: destination[1].Visible);
     }
-
     [Fact]
     public void AnUnauthoredBadgeIsTheUpRightCornerAndAnAuthoredPairIsItself() {
         Assert.Equal(expected: Vector2.One, actual: new WorldBindingBarSlotPlacement(Source: InputSources.Gamepad.DpadUp, X: 0f, Y: 0f).Plate.Badge);
-        Assert.Equal(expected: new Vector2(x: -1f, y: 0f), actual: new WorldBindingBarSlotPlacement(Source: InputSources.Gamepad.DpadLeft, X: 0f, Y: 0f, Badge: [-1f, 0f]).Plate.Badge);
+        Assert.Equal(expected: new Vector2(x: -1f, y: 0f), actual: new WorldBindingBarSlotPlacement(Badge: [-1f, 0f], Source: InputSources.Gamepad.DpadLeft, X: 0f, Y: 0f).Plate.Badge);
     }
-
     [Fact]
     public void CompilingMergesPiecesWithALaterPieceWinningASourceAndNormalizesEachFrame() {
         // One bottom frame holding a resting cross (at −5 and +5) and a wing nested two in and one up, and one left
@@ -42,7 +40,7 @@ public sealed class BindingBarAuthoredLayoutLawTests {
             Banks: new Dictionary<string, WorldBindingBarBankPlacement>(comparer: StringComparer.Ordinal) {
                 ["resting"] = new WorldBindingBarBankPlacement(Pieces: [
                     new WorldBindingBarPiece(Table: "cross", At: [-5f, 0f]),
-                    new WorldBindingBarPiece(Table: "cross", At: [5f, 0f], Badge: [-1f, 0f]),
+                    new WorldBindingBarPiece(At: [5f, 0f], Badge: [-1f, 0f], Table: "cross"),
                     new WorldBindingBarPiece(Table: "no-such"),
                 ]),
                 ["lt"] = new WorldBindingBarBankPlacement(Pieces: [new WorldBindingBarPiece(Table: "cross", At: [-3f, 1f])]),
@@ -53,7 +51,7 @@ public sealed class BindingBarAuthoredLayoutLawTests {
             },
             Tables: new Dictionary<string, IReadOnlyList<WorldBindingBarSlotPlacement>>(comparer: StringComparer.Ordinal) {
                 ["cross"] = [
-                    new WorldBindingBarSlotPlacement(Source: InputSources.Gamepad.DpadUp, X: 0f, Y: 1f, Badge: [0f, 1f]),
+                    new WorldBindingBarSlotPlacement(Badge: [0f, 1f], Source: InputSources.Gamepad.DpadUp, X: 0f, Y: 1f),
                     new WorldBindingBarSlotPlacement(Source: InputSources.Gamepad.DpadDown, X: 0f, Y: -1f),
                 ],
                 ["column"] = [
@@ -97,24 +95,22 @@ public sealed class BindingBarAuthoredLayoutLawTests {
         Assert.Equal(expected: new Vector2(x: 0f, y: -1.5f), actual: side.Plates[InputSources.Gamepad.DpadDown].Position);
         Assert.False(condition: compiled.Banks.ContainsKey(key: "unplaced"));
     }
-
     [Fact]
     public void TheButtonSizeShrinksUntilEveryFrameFitsTheRegion() {
         // A bottom strip 16 plates wide (along 0, across 15, inset 0.5) and a left column 12 tall (along 0, across 11).
         BindingBarFrame[] frames = [
-            new BindingBarFrame(Edge: BindingBarEdge.Bottom, Inset: 0.5f, Along: 0f, Across: 15f),
-            new BindingBarFrame(Edge: BindingBarEdge.Left, Inset: 0.5f, Along: 0f, Across: 11f),
+            new BindingBarFrame(Across: 15f, Along: 0f, Edge: BindingBarEdge.Bottom, Inset: 0.5f),
+            new BindingBarFrame(Across: 11f, Along: 0f, Edge: BindingBarEdge.Left, Inset: 0.5f),
         ];
 
         // Wide region: the strip needs 16 × bs ≤ 1.6 (bs ≤ 0.1); the column needs 12 × bs ≤ 1 → 1/12 binds.
-        Assert.Equal(expected: (1f / 12f), actual: CompiledBindingBarLayout.FitButtonSize(frames: frames, buttonSize: 0.1f, aspect: 1.6f), tolerance: 1e-6f);
+        Assert.Equal(expected: (1f / 12f), actual: CompiledBindingBarLayout.FitButtonSize(aspect: 1.6f, buttonSize: 0.1f, frames: frames), tolerance: 1e-6f);
         // Square region: the strip's 16 plates across now bind the width → 1/16.
-        Assert.Equal(expected: (1f / 16f), actual: CompiledBindingBarLayout.FitButtonSize(frames: frames, buttonSize: 0.1f, aspect: 1f), tolerance: 1e-6f);
+        Assert.Equal(expected: (1f / 16f), actual: CompiledBindingBarLayout.FitButtonSize(aspect: 1f, buttonSize: 0.1f, frames: frames), tolerance: 1e-6f);
         // A size that already fits is kept; an empty layout keeps the authored size.
-        Assert.Equal(expected: 0.05f, actual: CompiledBindingBarLayout.FitButtonSize(frames: frames, buttonSize: 0.05f, aspect: 1.6f));
-        Assert.Equal(expected: 0.1f, actual: CompiledBindingBarLayout.Empty.FitButtonSize(buttonSize: 0.1f, aspect: 1.6f));
+        Assert.Equal(expected: 0.05f, actual: CompiledBindingBarLayout.FitButtonSize(aspect: 1.6f, buttonSize: 0.05f, frames: frames));
+        Assert.Equal(expected: 0.1f, actual: CompiledBindingBarLayout.Empty.FitButtonSize(aspect: 1.6f, buttonSize: 0.1f));
     }
-
     [Fact]
     public void APlateHangsFromItsEdgeWithItsPitchZeroEdgeOnTheInsetLine() {
         // Bottom, inset 0.25 (region-height units here — the writer passes pitches × button size), 1.6 aspect: the
@@ -122,23 +118,22 @@ public sealed class BindingBarAuthoredLayoutLawTests {
         // plate's bottom edge sits on the line (so its center is half a plate up).
         var bottom = BindingBarLayout.BarAnchor(aspect: 1.6f, edge: BindingBarEdge.Bottom, inset: 0.25f);
 
-        AssertPoint(expectedX: 0.8f, expectedY: 0.75f, actual: bottom);
+        AssertPoint(actual: bottom, expectedX: 0.8f, expectedY: 0.75f);
         AssertPoint(expectedX: 0.5f, expectedY: 0.6f, actual: BindingBarLayout.PlateCenter(anchor: bottom, buttonSize: 0.1f, edge: BindingBarEdge.Bottom, pitchX: -3f, pitchY: 1f));
 
         // Left, inset 0.04: the group is centered vertically and the pitch-0 plate's left edge sits on the line;
         // pitch (0, 2) is two plates up from center.
         var left = BindingBarLayout.BarAnchor(aspect: 1.6f, edge: BindingBarEdge.Left, inset: 0.04f);
 
-        AssertPoint(expectedX: 0.04f, expectedY: 0.5f, actual: left);
+        AssertPoint(actual: left, expectedX: 0.04f, expectedY: 0.5f);
         AssertPoint(expectedX: 0.09f, expectedY: 0.3f, actual: BindingBarLayout.PlateCenter(anchor: left, buttonSize: 0.1f, edge: BindingBarEdge.Left, pitchX: 0f, pitchY: 2f));
 
         // Right, inset 0.04: the pitch-0 plate's right edge on the line.
         var right = BindingBarLayout.BarAnchor(aspect: 1.6f, edge: BindingBarEdge.Right, inset: 0.04f);
 
-        AssertPoint(expectedX: 1.56f, expectedY: 0.5f, actual: right);
+        AssertPoint(actual: right, expectedX: 1.56f, expectedY: 0.5f);
         AssertPoint(expectedX: 1.51f, expectedY: 0.5f, actual: BindingBarLayout.PlateCenter(anchor: right, buttonSize: 0.1f, edge: BindingBarEdge.Right, pitchX: 0f, pitchY: 0f));
     }
-
     [Fact]
     public void TheLayoutCellSelectsANamedLayoutThenTheDefaultNameThenNothing() {
         var crossbar = new WorldBindingBarLayout(ButtonSize: 0.1f);
@@ -158,8 +153,8 @@ public sealed class BindingBarAuthoredLayoutLawTests {
     }
 
     private static void AssertPoint(float expectedX, float expectedY, Vector2 actual) {
-        Assert.Equal(expected: expectedX, actual: actual.X, tolerance: 1e-5f);
-        Assert.Equal(expected: expectedY, actual: actual.Y, tolerance: 1e-5f);
+        Assert.Equal(actual: actual.X, expected: expectedX, tolerance: 1e-5f);
+        Assert.Equal(actual: actual.Y, expected: expectedY, tolerance: 1e-5f);
     }
     private static void Compose(string[] slotSet, IReadOnlyDictionary<string, BindingPlatePlacement> plates, int frame, OverlayBindingSlot[] destination) =>
         BindingBarSeatComposer.ComposeBank(
@@ -176,13 +171,13 @@ public sealed class BindingBarAuthoredLayoutLawTests {
             slotSet: slotSet,
             text: true,
             view: new BindingPageView(
-                PageId: "base",
-                Group: "play",
-                Label: null,
-                Icon: null,
                 Buttons: [],
+                CommandChords: [],
+                Group: "play",
+                Icon: null,
+                Label: null,
                 Modifiers: [],
-                CommandChords: []
+                PageId: "base"
             )
         );
 }

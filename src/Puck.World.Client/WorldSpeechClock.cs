@@ -9,6 +9,7 @@ public sealed class WorldSpeechClock {
 
     /// <summary>The body that most recently spoke, or -1 when nothing has.</summary>
     public int RecentSpeakerBody { get; private set; } = -1;
+
     /// <summary>The completed tick the most recent speaker spoke on (0 until something has).</summary>
     public ulong RecentSpeakerTick { get; private set; }
 

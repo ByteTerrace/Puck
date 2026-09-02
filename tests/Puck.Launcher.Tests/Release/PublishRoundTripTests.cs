@@ -12,7 +12,6 @@ public sealed class PublishRoundTripTests : IDisposable {
     private readonly TempStagingRoot m_root = new();
 
     public void Dispose() => m_root.Dispose();
-
     [Fact]
     public async Task UnsignedDryRunTree_VerifiesOnceSigned_ByAThrowawayChain() {
         // The exact walk PublishCommand performs: hash each payload file into the same objects/ tree

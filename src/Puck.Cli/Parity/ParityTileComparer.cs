@@ -8,13 +8,11 @@ namespace Puck.Cli.Parity;
 /// <param name="MeanDelta">The mean absolute R/G/B channel delta over the tile's pixels, in LSB units.</param>
 /// <param name="MaxDelta">The largest single-channel delta observed in the tile, in LSB units.</param>
 internal readonly record struct ParityTileMetrics(int TileX, int TileY, double MeanDelta, int MaxDelta);
-
 /// <summary>A frame pair's per-tile comparison result.</summary>
 /// <param name="Passed">Whether every tile stayed within both thresholds.</param>
 /// <param name="Worst">The tile with the largest mean delta (ties broken by max delta) — reported on failure
 /// and, harmlessly, on success.</param>
 internal readonly record struct ParityTileComparison(bool Passed, ParityTileMetrics Worst);
-
 /// <summary>
 /// Per-tile frame comparison — the replacement for the condemned whole-frame mean. A localized defect that a
 /// million agreeing pixels would dilute under a global mean instead lands entirely inside a handful of tiles,
@@ -35,7 +33,7 @@ internal static class ParityTileComparer {
 
             for (var tileX = 0; (tileX < width); tileX += tileSize) {
                 var x1 = Math.Min(val1: (tileX + tileSize), val2: width);
-                var metrics = MeasureTile(left: left, right: right, tileX: (tileX / tileSize), tileY: (tileY / tileSize), x0: tileX, x1: x1, y0: tileY, y1: y1, width: width);
+                var metrics = MeasureTile(left: left, right: right, tileX: (tileX / tileSize), tileY: (tileY / tileSize), width: width, x0: tileX, x1: x1, y0: tileY, y1: y1);
 
                 if (!hasWorst || IsWorse(candidate: metrics, current: worst)) {
                     worst = metrics;
@@ -73,14 +71,14 @@ internal static class ParityTileComparer {
 
         for (int pixel = 0, index = 0; (pixel < pixelCount); pixel++, index += 4) {
             heatmap[index] = ((worstDelta == 0) ? (byte)0 : (byte)((deltas[pixel] * 255) / worstDelta));
-            heatmap[index + 3] = 255;
+            heatmap[(index + 3)] = 255;
         }
 
         return heatmap;
     }
 
     private static ParityTileMetrics MeasureTile(PngImage left, PngImage right, int tileX, int tileY, int x0, int x1, int y0, int y1, int width) {
-        long total = 0;
+        var total = 0L;
         var count = 0;
         var maxDelta = 0;
 
@@ -100,17 +98,17 @@ internal static class ParityTileComparer {
 
         var meanDelta = ((count == 0) ? 0.0 : (total / (count * 3.0)));
 
-        return new ParityTileMetrics(TileX: tileX, TileY: tileY, MeanDelta: meanDelta, MaxDelta: maxDelta);
+        return new ParityTileMetrics(MaxDelta: maxDelta, MeanDelta: meanDelta, TileX: tileX, TileY: tileY);
     }
     private static int MaxChannelDelta(byte[] left, byte[] right, int index) {
         var deltaR = Math.Abs(value: (left[index] - right[index]));
-        var deltaG = Math.Abs(value: (left[index + 1] - right[index + 1]));
-        var deltaB = Math.Abs(value: (left[index + 2] - right[index + 2]));
+        var deltaG = Math.Abs(value: (left[(index + 1)] - right[(index + 1)]));
+        var deltaB = Math.Abs(value: (left[(index + 2)] - right[(index + 2)]));
 
         return Math.Max(val1: deltaR, val2: Math.Max(val1: deltaG, val2: deltaB));
     }
     private static int ChannelDeltaSum(byte[] left, byte[] right, int index) =>
-        (Math.Abs(value: (left[index] - right[index])) + Math.Abs(value: (left[index + 1] - right[index + 1])) + Math.Abs(value: (left[index + 2] - right[index + 2])));
+        ((Math.Abs(value: (left[index] - right[index])) + Math.Abs(value: (left[(index + 1)] - right[(index + 1)]))) + Math.Abs(value: (left[(index + 2)] - right[(index + 2)])));
     private static bool IsWorse(ParityTileMetrics candidate, ParityTileMetrics current) =>
         ((candidate.MeanDelta > current.MeanDelta) || ((candidate.MeanDelta == current.MeanDelta) && (candidate.MaxDelta > current.MaxDelta)));
 }

@@ -209,7 +209,8 @@ public sealed class SdfDomainExpansionTests {
             expected: point
         );
     }
-    [Fact]
+    [Fact]
+
     public void ExpansionIsBitIdenticalAcrossCalls() {
         List<SdfDomainOp> domain = [
             new SdfDomainOp.Symmetry(Normal: Vector3.UnitX),

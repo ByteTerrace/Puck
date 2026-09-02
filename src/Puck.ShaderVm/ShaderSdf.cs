@@ -26,7 +26,6 @@ public static class ShaderSdf {
     /// <param name="sample">The sample.</param>
     /// <returns>The material id, replicated to every lane.</returns>
     public static ShaderExpression Material(ShaderExpression sample) => sample.Y;
-
     /// <summary>The distance to a sphere about the origin.</summary>
     /// <param name="point">The evaluation point.</param>
     /// <param name="radius">The radius.</param>
@@ -59,7 +58,7 @@ public static class ShaderSdf {
     /// <returns>The signed distance.</returns>
     public static ShaderExpression Cylinder(ShaderExpression point, ShaderExpression radius, ShaderExpression halfHeight) {
         var corner = ShaderExpression.Combine(
-            x: (point.Swizzle(x: 0, y: 2, z: 0, w: 2).Length2 - radius),
+            x: (point.Swizzle(w: 2, x: 0, y: 2, z: 0).Length2 - radius),
             y: (Abs(value: point.Y) - halfHeight)
         );
         var outside = Max(left: corner, right: ShaderExpression.Constant(value: 0f)).Length2;
@@ -82,7 +81,6 @@ public static class ShaderSdf {
 
         return ((outside + inside) - cornerRadius);
     }
-
     /// <summary>Moves the evaluation point into a translated frame.</summary>
     /// <param name="point">The evaluation point.</param>
     /// <param name="offset">The frame origin.</param>
@@ -99,7 +97,7 @@ public static class ShaderSdf {
     /// <param name="quaternion">The frame orientation, as (x, y, z, w).</param>
     /// <returns>The point in the rotated frame.</returns>
     public static ShaderExpression Rotate(ShaderExpression point, ShaderExpression quaternion) {
-        var axis = quaternion.Swizzle(x: 0, y: 1, z: 2, w: 3);
+        var axis = quaternion.Swizzle(w: 3, x: 0, y: 1, z: 2);
         var first = ShaderExpression.Binary(left: axis, op: ShaderOp.Cross3, right: point);
         var second = ShaderExpression.Binary(left: axis, op: ShaderOp.Cross3, right: first);
 
@@ -121,7 +119,7 @@ public static class ShaderSdf {
     /// <returns>The folded point, with the axial coordinate untouched.</returns>
     public static ShaderExpression RepeatPolarY(ShaderExpression point, float count, out ShaderExpression sector) {
         var sectorAngle = ((2f * MathF.PI) / count);
-        var plane = point.Swizzle(x: 0, y: 2, z: 0, w: 2);
+        var plane = point.Swizzle(w: 2, x: 0, y: 2, z: 0);
         var raised = (Atan2(abscissa: plane.X, ordinate: plane.Y) + (0.5f * sectorAngle));
         var index = Floor(value: (raised / sectorAngle));
         var angle = ((raised - (index * sectorAngle)) - (0.5f * sectorAngle));
@@ -147,7 +145,7 @@ public static class ShaderSdf {
     /// <returns>The folded point, with the axis normal to the fold plane untouched.</returns>
     /// <remarks>The fold plane is XZ, matching the ground the world lays its lattices on.</remarks>
     public static ShaderExpression WallpaperFoldP1(ShaderExpression point, ShaderExpression cell, out ShaderExpression cellIndex) {
-        var lattice = point.Swizzle(x: 0, y: 2, z: 0, w: 2);
+        var lattice = point.Swizzle(w: 2, x: 0, y: 2, z: 0);
         var index = ShaderExpression.Unary(op: ShaderOp.Round, value: (lattice / cell));
         var folded = (index * cell);
 
@@ -167,7 +165,6 @@ public static class ShaderSdf {
         modulus: ShaderExpression.Constant(value: 2f),
         value: (cellIndex.X + cellIndex.Y)
     ) * stride);
-
     /// <summary>Takes the nearer of two samples, with its material.</summary>
     /// <param name="current">The accumulated sample.</param>
     /// <param name="candidate">The sample composed into it.</param>

@@ -38,8 +38,10 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
     protected abstract void ConfigureReader(IMFAttributes config);
     /// <summary>Handles one sample on the worker thread; the sample is released by the caller.</summary>
     protected abstract void Deliver(IMFSample sample);
+
     /// <summary>Gets whether the tier has proved its input live.</summary>
     protected abstract bool IsLive { get; }
+
     /// <summary>Sets the tier's output type for the selected native mode and builds the stream at the negotiated
     /// extent.</summary>
     protected abstract TStream Negotiate(IMFSourceReader reader, uint streamIndex, Guid nativeSubtype, CameraCaptureFormat nativeFormat);
@@ -55,7 +57,6 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
         readyTimeoutMilliseconds: ReadyTimeoutMilliseconds,
         threadName: threadName
     );
-
     protected sealed override void Work() {
         IMFSourceReader? reader = null;
         var started = false;
@@ -84,7 +85,7 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
 
             m_controls = null;
 
-            ReleaseSource(source: ref m_mediaSource, activate: ref m_activate);
+            ReleaseSource(activate: ref m_activate, source: ref m_mediaSource);
             ReleaseTier();
 
             if (started) {
@@ -92,6 +93,7 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
             }
         }
     }
+
     // The activation contract, in one place so no teardown site can forget a step: Shutdown() on the media source,
     // then ShutdownObject() on the IMFActivate that created it, then the RCWs release. Shared by the Work() teardown
     // and the infrared-fallback re-activation in OpenReader, which must retire the color source's activation before
@@ -117,13 +119,13 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
             activate = null;
         }
     }
-
     private IMFSourceReader OpenReader(out uint streamIndex) {
         // The infrared sensor is probed on the color device first — the BRIO exposes it as a second stream of the color
         // camera — and only a device without such a stream falls back to the separate sensor-camera category.
         var infrared = (CameraSensor.Infrared == Request.Sensor);
+
         var (colorLink, infraredLink) = ResolveDeviceLinks();
-        var (mediaSource, deviceName, activate) = ActivateDefaultVideoSource(symbolicLink: colorLink, extended: infrared, infrared: false);
+        var (mediaSource, deviceName, activate) = ActivateDefaultVideoSource(extended: infrared, infrared: false, symbolicLink: colorLink);
         IMFMediaType? infraredType = null;
         IMFPresentationDescriptor? infraredPresentation = null;
 
@@ -132,8 +134,8 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
         m_activate = activate;
 
         if (infrared && !TryPrepareInfraredStream(mediaSource: mediaSource, mediaType: out infraredType, presentationDescriptor: out infraredPresentation, streamIndex: out streamIndex)) {
-            ReleaseSource(source: ref m_mediaSource, activate: ref m_activate);
-            (mediaSource, deviceName, activate) = ActivateDefaultVideoSource(symbolicLink: infraredLink, extended: true, infrared: true);
+            ReleaseSource(activate: ref m_activate, source: ref m_mediaSource);
+            (mediaSource, deviceName, activate) = ActivateDefaultVideoSource(extended: true, infrared: true, symbolicLink: infraredLink);
             m_mediaSource = mediaSource;
             m_activate = activate;
 
@@ -400,7 +402,7 @@ internal sealed class Win32SourceReaderPixelGraph : Win32SourceReaderCameraGraph
             }
         }
 
-        var (width, height) = ReadFrameLayout(reader: reader, streamIndex: streamIndex, defaultStride: out m_defaultStride);
+        var (width, height) = ReadFrameLayout(defaultStride: out m_defaultStride, reader: reader, streamIndex: streamIndex);
         m_width = width;
         m_height = height;
         m_stream = new Win32PixelStream(height: height, nativeFormat: nativeFormat, sensor: Request.Sensor, width: width);
@@ -437,6 +439,7 @@ internal sealed class Win32SourceReaderPixelGraph : Win32SourceReaderCameraGraph
             _ = Marshal.ReleaseComObject(o: buffer);
         }
     }
+
     private void PublishBgra(int length) {
         var packedLength = checked(((m_width * m_height) * 4));
 
@@ -447,7 +450,7 @@ internal sealed class Win32SourceReaderPixelGraph : Win32SourceReaderCameraGraph
         if (!CameraFramePacking.TryPackBgra(
             destination: m_packed,
             height: m_height,
-            source: m_scratch.AsSpan(start: 0, length: length),
+            source: m_scratch.AsSpan(length: length, start: 0),
             sourceStride: m_defaultStride,
             width: m_width
         )) {
@@ -470,7 +473,7 @@ internal sealed class Win32SourceReaderPixelGraph : Win32SourceReaderCameraGraph
             destination: m_expanded,
             height: m_height,
             luminanceSum: out var total,
-            source: m_scratch.AsSpan(start: 0, length: length),
+            source: m_scratch.AsSpan(length: length, start: 0),
             sourceStride: m_defaultStride,
             width: m_width
         )) {
@@ -519,15 +522,18 @@ internal sealed class Win32SourceReaderPixelGraph : Win32SourceReaderCameraGraph
 [SupportedOSPlatform("windows10.0.10240")]
 internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGraph<Win32SharedStream>, ICameraKernelHost, IProbeInputResolver {
     private readonly long m_adapterLuid;
-    private readonly Win32ProbeKernelBench m_bench = new();
 
+    private readonly Win32ProbeKernelBench m_bench = new();
     private int m_latestSlot = -1;
+
     private bool m_sourceLive;
+
     private nint[] m_targetViews = [];
 
     private Win32D3D11VideoDevice? m_device;
     private IMFDXGIDeviceManager? m_manager;
     private Win32SharedStream? m_stream;
+
     private nint[] m_targets = [];
 
     public Win32SourceReaderSharedGraph(long adapterLuid, string deviceId, CameraStreamRequest request) : base(deviceId: deviceId, request: request) {
@@ -566,7 +572,7 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
             _ = Marshal.ReleaseComObject(o: outputType);
         }
 
-        var (width, height) = ReadFrameLayout(reader: reader, streamIndex: streamIndex, defaultStride: out _);
+        var (width, height) = ReadFrameLayout(defaultStride: out _, reader: reader, streamIndex: streamIndex);
 
         m_stream = new Win32SharedStream(height: height, nativeFormat: nativeFormat, sensor: Request.Sensor, targetFormat: SurfaceFormat.B8G8R8A8Unorm, width: width);
 
@@ -672,11 +678,13 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
 
         return true;
     }
+
     nint IProbeInputResolver.Resolve(CameraSensor sensor, bool previous) => (((m_latestSlot >= 0) && (CameraSensor.Color == sensor) && !previous)
         ? m_targetViews[m_latestSlot]
         : 0
     );
     (int Width, int Height) IProbeInputResolver.Extent(CameraSensor sensor) => (m_stream!.Width, m_stream.Height);
+
     protected override void ReleaseTier() {
         m_bench.Close();
 

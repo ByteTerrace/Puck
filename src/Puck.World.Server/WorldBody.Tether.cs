@@ -13,13 +13,13 @@ public sealed partial class WorldBody {
     private FixedVector3 m_tetherAnchorPointOrLocalOffset;
 
     /// <summary>Gets the attached tether's current rope length, or <see langword="null"/> when no tether is attached.</summary>
-    public FixedQ4816? TetherLength => (m_tether is { } tether
+    public FixedQ4816? TetherLength => ((m_tether is { } tether)
         ? tether.Length
         : null
     );
     /// <summary>Gets the attached tether's minimum rope length (the reel-in floor), or <see langword="null"/> when no
     /// tether is attached.</summary>
-    public FixedQ4816? TetherMinLength => (m_tether is { } tether
+    public FixedQ4816? TetherMinLength => ((m_tether is { } tether)
         ? tether.MinLength
         : null
     );
@@ -92,6 +92,7 @@ public sealed partial class WorldBody {
         );
         m_tether = tether;
     }
+
     /// <summary>Solves the attached tether against this tick's resolved anchor position, applying the same late,
     /// already-integrated-state correction <see cref="ApplyDynamicContact"/> applies for a dynamic body contact — the
     /// combined planar/vertical velocity is decomposed, corrected, and written back exactly the same way. A no-op when

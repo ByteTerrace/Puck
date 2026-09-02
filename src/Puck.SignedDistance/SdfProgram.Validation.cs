@@ -8,7 +8,6 @@ public sealed partial class SdfProgram {
     // BasisSkewTolerance — the builder refuses the same frame one layer earlier, naming the caller's argument.
     private const float ScreenFrameSkewTolerance = 1.0e-3f;
     private const float ScreenFrameUnitTolerance = 1.0e-3f;
-
     // The operand lanes a shape carries as reinterpreted integer BITS rather than a float value, as a bit per lane over
     // (Data0.xyzw, Data1.xyzw). A bit pattern there reads as NaN or an infinity as often as it reads as a number, so the
     // finiteness sweep must skip exactly these and no others. KEEP IN SYNC with the asuint() reads in
@@ -20,10 +19,9 @@ public sealed partial class SdfProgram {
     private static readonly string[] OperandLaneNames = ["Data0.x", "Data0.y", "Data0.z", "Data0.w", "Data1.x", "Data1.y", "Data1.z", "Data1.w"];
 
     private static bool IsFinite(Vector3 value) =>
-        float.IsFinite(f: value.X) &&
+        (float.IsFinite(f: value.X) &&
         float.IsFinite(f: value.Y) &&
-        float.IsFinite(f: value.Z);
-
+        float.IsFinite(f: value.Z));
     private bool DeclaresScreenIndex(int screenIndex) {
         foreach (var surface in m_screenSurfaces) {
             if (surface.ScreenIndex == screenIndex) {
@@ -99,8 +97,8 @@ public sealed partial class SdfProgram {
                 (material.Shininess < 0f)
             ) {
                 throw new ArgumentOutOfRangeException(
-                    paramName: paramName,
-                    message: $"Material {index} must carry finite, non-negative albedo, emissive, specular, and shininess values; got {material}."
+                    message: $"Material {index} must carry finite, non-negative albedo, emissive, specular, and shininess values; got {material}.",
+                    paramName: paramName
                 );
             }
         }
@@ -408,8 +406,8 @@ public sealed partial class SdfProgram {
             }
 
             RequireOrthonormalScreenFrame(
-                surface: surface,
-                paramName: screenSurfacesParamName
+                paramName: screenSurfacesParamName,
+                surface: surface
             );
         }
 
@@ -447,6 +445,7 @@ public sealed partial class SdfProgram {
 
         return instructionOwners;
     }
+
     public void ValidateIsa() {
         for (var index = 0; (index < m_instructions.Length); index++) {
             var opcode = m_instructions[index].Op;

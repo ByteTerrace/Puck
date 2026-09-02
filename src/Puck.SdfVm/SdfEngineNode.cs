@@ -56,6 +56,7 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
     private readonly uint m_height;
     private readonly int m_instanceCapacity;
     private readonly SdfWorldKernels m_kernels;
+
     /// <summary>Gets the last uploaded program's packed word count, or 0 before the first upload — the live half of
     /// the <c>world.budget</c> cost sheet against <see cref="ProgramWordCapacity"/>.</summary>
     public int LiveProgramWords { get; private set; }
@@ -66,13 +67,16 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
     public float LiveProgramStepScale { get; private set; }
     /// <summary>Gets the frozen program-word envelope this node was constructed with.</summary>
     public int ProgramWordCapacity => m_programWordCapacity;
+
     private readonly int m_programWordCapacity;
     private readonly bool? m_rayQueryEnabled;
     private readonly Dictionary<int, Func<Vector3>> m_screenLights;
+
     private SdfScreenSourceFrame[] m_pendingScreenSourceFrames = [];
     private SdfScreenSourceFrame[][] m_retainedScreenSourceFrames = BuildScreenSourceFrameRing(capacity: 0);
     private readonly int[] m_retainedScreenSourceFrameCounts = new int[SdfWorldEngine.FrameRingSize];
     private Dictionary<int, Func<SdfScreenSourceFrame>> m_screenSourceFrames = EmptyScreenSourceFrames;
+
     private readonly Dictionary<int, Func<nint>> m_screenSources;
     private readonly Dictionary<int, Func<SdfScreenSurfaceTransform?>> m_screenSurfaceTransforms;
     private readonly SdfViewGpuServices m_services;
@@ -110,7 +114,6 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
     ) {
         public long TotalTicks => (((((CaptureFrameTicks + SetupTicks) + ScreenPublishTicks) + ViewRenderTicks) + BindingsTicks) + SubmitFrameTicks);
     }
-
     /// <summary>Brackets one CPU phase with <see cref="Stopwatch"/> only while <paramref name="enabled"/> is set;
     /// disabled, <see cref="Stop"/> reads 0 without touching the clock.</summary>
     private readonly ref struct CpuPhaseTimer(bool enabled, long startTicks) {
@@ -123,7 +126,6 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
                 startTicks: (enabled ? Stopwatch.GetTimestamp() : 0L)
             );
         }
-
         public long Stop() {
             return (m_enabled ? (Stopwatch.GetTimestamp() - m_startTicks) : 0L);
         }
@@ -141,7 +143,9 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
         SurfaceId: SurfaceId.New()
     );
     private Surface[] m_childSurfaces = [];
+
     private int m_pendingScreenSourceFrameCount;
+
     private ISteppableRenderNode[] m_steppableChildren = [];
 
     private static int CaptureDelayFrames() {
@@ -468,7 +472,7 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
             retained[index] = default;
         }
 
-        m_pendingScreenSourceFrames.AsSpan(start: 0, length: m_pendingScreenSourceFrameCount).CopyTo(destination: retained);
+        m_pendingScreenSourceFrames.AsSpan(length: m_pendingScreenSourceFrameCount, start: 0).CopyTo(destination: retained);
         m_retainedScreenSourceFrameCounts[frameSlot] = m_pendingScreenSourceFrameCount;
         Array.Clear(array: m_pendingScreenSourceFrames, index: 0, length: m_pendingScreenSourceFrameCount);
         m_pendingScreenSourceFrameCount = 0;
@@ -968,6 +972,7 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
         // here and at composition with the same value is harmless.
         _ = GpuTimingControl.Shared.TrySeed(armed: (m_timingEnabled ?? false));
     }
+
     // Builder-only additive seam: keeps the longstanding public constructor's Func<nint> screenSources parameter
     // source-compatible while a render spec can opt particular indices into fence-retired frame acquisitions.
     internal void SetScreenSourceFrames(IReadOnlyDictionary<int, Func<SdfScreenSourceFrame>>? screenSourceFrames) {

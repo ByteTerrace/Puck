@@ -24,7 +24,7 @@ namespace Puck.SdfVm.Views;
 public sealed class SdfCurvePath {
     // Every raw a CompiledCurvatureSpline carries is Q(CurvatureSpline.CoefficientFractionBitCount); this converts
     // one to double, once, at construction.
-    private static readonly double RawScale = Math.ScaleB(x: 1.0, n: CurvatureSpline.CoefficientFractionBitCount);
+    private static readonly double RawScale = Math.ScaleB(n: CurvatureSpline.CoefficientFractionBitCount, x: 1.0);
 
     private readonly Segment[] m_segments;
 
@@ -114,7 +114,7 @@ public sealed class SdfCurvePath {
             ? ((totalLength > 0.0) ? (arcLength - (totalLength * Math.Floor(d: (arcLength / totalLength)))) : 0.0)
             : arcLength);
 
-        local = Math.Clamp(value: local, min: 0.0, max: totalLength);
+        local = Math.Clamp(max: totalLength, min: 0.0, value: local);
 
         var segmentIndex = 0;
 
@@ -139,13 +139,12 @@ public sealed class SdfCurvePath {
         var y = (segment.Y0 + (segment.Grade * withinSegment));
 
         return (
-            Position: new Vector3(x: (float)positionX, y: (float)y, z: (float)positionZ),
-            TangentYaw: ((float)Math.Atan2(y: -tangentX, x: -tangentZ))
+            Position: new Vector3(x: ((float)positionX), y: ((float)y), z: ((float)positionZ)),
+            TangentYaw: ((float)Math.Atan2(x: -tangentZ, y: -tangentX))
         );
     }
 
     private static double ToDouble(long raw) => (raw / RawScale);
-
     // Binary-searches the cumulative table (its own panel count, adaptively derived per segment, not fixed) for the
     // bracket containing withinSegment, then linearly interpolates the fraction within it — the
     // CompiledCurvatureSpline.InvertArcTable precedent, in double.
@@ -154,7 +153,7 @@ public sealed class SdfCurvePath {
         var hi = (table.Length - 1);
 
         while (lo < hi) {
-            var mid = ((lo + hi + 1) / 2);
+            var mid = (((lo + hi) + 1) / 2);
 
             if (table[mid] <= withinSegment) { lo = mid; } else { hi = (mid - 1); }
         }
@@ -166,25 +165,23 @@ public sealed class SdfCurvePath {
         var bracketLo = table[lo];
         var bracketHi = table[(lo + 1)];
         var span = (bracketHi - bracketLo);
-        var fraction = ((span > 0.0) ? Math.Clamp(value: ((withinSegment - bracketLo) / span), min: 0.0, max: 1.0) : 0.0);
+        var fraction = ((span > 0.0) ? Math.Clamp(max: 1.0, min: 0.0, value: ((withinSegment - bracketLo) / span)) : 0.0);
 
         return ((lo + fraction) / (table.Length - 1));
     }
-
     private static double DeCasteljau(double p0, double p1, double p2, double p3, double t) {
-        var q0 = double.Lerp(value1: p0, value2: p1, amount: t);
-        var q1 = double.Lerp(value1: p1, value2: p2, amount: t);
-        var q2 = double.Lerp(value1: p2, value2: p3, amount: t);
-        var r0 = double.Lerp(value1: q0, value2: q1, amount: t);
-        var r1 = double.Lerp(value1: q1, value2: q2, amount: t);
+        var q0 = double.Lerp(amount: t, value1: p0, value2: p1);
+        var q1 = double.Lerp(amount: t, value1: p1, value2: p2);
+        var q2 = double.Lerp(amount: t, value1: p2, value2: p3);
+        var r0 = double.Lerp(amount: t, value1: q0, value2: q1);
+        var r1 = double.Lerp(amount: t, value1: q1, value2: q2);
 
-        return double.Lerp(value1: r0, value2: r1, amount: t);
+        return double.Lerp(amount: t, value1: r0, value2: r1);
     }
-
     private static double QuadraticAt(double a0, double a1, double a2, double t) {
-        var q0 = double.Lerp(value1: a0, value2: a1, amount: t);
-        var q1 = double.Lerp(value1: a1, value2: a2, amount: t);
+        var q0 = double.Lerp(amount: t, value1: a0, value2: a1);
+        var q1 = double.Lerp(amount: t, value1: a1, value2: a2);
 
-        return double.Lerp(value1: q0, value2: q1, amount: t);
+        return double.Lerp(amount: t, value1: q0, value2: q1);
     }
 }

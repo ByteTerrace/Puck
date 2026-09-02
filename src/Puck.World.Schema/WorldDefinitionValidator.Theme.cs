@@ -15,7 +15,7 @@ public static partial class WorldDefinitionValidator {
     }
     private static void RequireBindableScalar(BindableScalar scalar, WorldDefinition definition, string path, List<string> errors) {
         if (!scalar.IsAuthorable(definition: definition)) {
-            errors.Add(item: $"{path} {(scalar.Binding ?? scalar.Literal?.ToString() ?? "(absent)")} {BindableScalar.Grammar}.");
+            errors.Add(item: $"{path} {(scalar.Binding ?? (scalar.Literal?.ToString() ?? "(absent)"))} {BindableScalar.Grammar}.");
         }
     }
     private static void RequireBindableUnitScalar(BindableScalar scalar, WorldDefinition definition, string path, List<string> errors) {

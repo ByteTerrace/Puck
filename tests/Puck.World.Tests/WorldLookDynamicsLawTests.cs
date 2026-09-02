@@ -11,7 +11,7 @@ namespace Puck.World.Tests;
 /// resolved part, an empty part id), a root and a part dynamics reference coexisting, and
 /// <see cref="WorldLookMotion.Default"/>'s literal shape.</summary>
 public sealed class WorldLookDynamicsLawTests {
-    private static WorldDynamicsRow Chase => new(Name: "chase", Frequency: 1f, Damping: 1f, Response: 0f);
+    private static WorldDynamicsRow Chase => new(Damping: 1f, Frequency: 1f, Name: "chase", Response: 0f);
 
     private static WorldPrototype BuildPartedCreation() {
         var shape = new ShapeDocument(
@@ -38,7 +38,6 @@ public sealed class WorldLookDynamicsLawTests {
 
         return new WorldPrototype(Id: "parted", Document: canonical.Document, HashRaw: canonical.Hash);
     }
-
     private static WorldDefinition WithPartedCreation(WorldLookMotion motion) => Fixtures.BuildDocument() with {
         DynamicsRaw = [Chase],
         CreationsRaw = [BuildPartedCreation()],
@@ -58,7 +57,6 @@ public sealed class WorldLookDynamicsLawTests {
         Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "looks[0].motion.partDynamics['missing-part'] names no part of creation 'parted'.");
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: admitted, neighbours: null, reason: out var controlReason), userMessage: controlReason);
     }
-
     [Fact]
     public void PartDynamicsDanglingRowRefusesWhileResolvingPasses() {
         var denied = WithPartedCreation(motion: WorldLookMotion.Default with {
@@ -72,7 +70,6 @@ public sealed class WorldLookDynamicsLawTests {
         Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "looks[0].motion.partDynamics['head'] 'missing' names no dynamics row.");
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: admitted, neighbours: null, reason: out var controlReason), userMessage: controlReason);
     }
-
     [Fact]
     public void PartDynamicsEmptyPartIdRefusesWhileNonEmptyPasses() {
         var denied = WithPartedCreation(motion: WorldLookMotion.Default with {
@@ -86,7 +83,6 @@ public sealed class WorldLookDynamicsLawTests {
         Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "looks[0].motion.partDynamics has an empty part id.");
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: admitted, neighbours: null, reason: out var controlReason), userMessage: controlReason);
     }
-
     [Fact]
     public void RootAndPartDynamicsTogetherPass() {
         var admitted = WithPartedCreation(motion: WorldLookMotion.Default with {
@@ -96,7 +92,6 @@ public sealed class WorldLookDynamicsLawTests {
 
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: admitted, neighbours: null, reason: out var reason), userMessage: reason);
     }
-
     [Fact]
     public void DefaultMotionCarriesNoDynamics() {
         var motion = WorldLookMotion.Default;

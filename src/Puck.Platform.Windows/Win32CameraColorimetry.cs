@@ -63,17 +63,14 @@ public readonly record struct Win32CameraColorimetry(uint Matrix, uint NominalRa
         }
     }
 }
-
 public enum Win32YuvMatrix {
     Bt709,
     Bt601,
 }
-
 public enum Win32YuvRange {
     Limited,
     Full,
 }
-
 public readonly record struct Win32YuvConversion(
     Win32YuvMatrix Matrix,
     Win32YuvRange Range,

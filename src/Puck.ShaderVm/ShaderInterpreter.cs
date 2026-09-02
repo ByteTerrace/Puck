@@ -33,7 +33,7 @@ public static class ShaderInterpreter {
         // The stream was decoded and validated when the program was built, so the hot loop reads raw words: no
         // per-instruction Enum.IsDefined, no bounds re-check.
         while (pointer < instructionCount) {
-            var word = words[ShaderIsa.HeaderWordCount + pointer];
+            var word = words[(ShaderIsa.HeaderWordCount + pointer)];
             var op = ((ShaderOp)(word & 0xFFu));
             var operand = (word >> 8);
 
@@ -41,119 +41,120 @@ public static class ShaderInterpreter {
 
             switch (op) {
                 case ShaderOp.LoadInput: {
-                    stack[depth++] = (((ShaderInput)operand) switch {
-                        ShaderInput.Coordinate => context.Coordinate,
-                        ShaderInput.Time => new Vector4(value: context.Time),
-                        _ => new Vector4(value: ((float)context.SampleIndex)),
-                    });
+                        stack[depth++] = (((ShaderInput)operand) switch {
+                            ShaderInput.Coordinate => context.Coordinate,
+                            ShaderInput.Time => new Vector4(value: context.Time),
+                            _ => new Vector4(value: ((float)context.SampleIndex)),
+                        });
 
-                    break;
-                }
+                        break;
+                    }
                 case ShaderOp.LoadParameter: {
-                    if (operand >= parameters.Length) {
-                        throw new InvalidOperationException(message: $"The program loads parameter {operand}; the caller supplied {parameters.Length}.");
+                        if (operand >= parameters.Length) {
+                            throw new InvalidOperationException(message: $"The program loads parameter {operand}; the caller supplied {parameters.Length}.");
+                        }
+
+                        stack[depth++] = parameters[checked((int)operand)];
+
+                        break;
                     }
-
-                    stack[depth++] = parameters[checked((int)operand)];
-
-                    break;
-                }
                 case ShaderOp.LoadConstant: {
-                    stack[depth++] = Constant(index: ((int)operand), words: words, constantBase: constantBase);
+                        stack[depth++] = Constant(constantBase: constantBase, index: ((int)operand), words: words);
 
-                    break;
-                }
-                case ShaderOp.LoadConstantDynamic: {
-                    stack[(depth - 1)] = Constant(
-                        constantBase: constantBase,
-                        index: Math.Clamp(value: ((int)stack[(depth - 1)].X), min: 0, max: (constantCount - 1)),
-                        words: words
-                    );
-
-                    break;
-                }
-                case ShaderOp.LoadLocal: {
-                    stack[depth++] = locals[checked((int)operand)];
-
-                    break;
-                }
-                case ShaderOp.StoreLocal: {
-                    locals[checked((int)operand)] = stack[--depth];
-
-                    break;
-                }
-                case ShaderOp.Swizzle: {
-                    var source = stack[(depth - 1)];
-
-                    stack[(depth - 1)] = new Vector4(
-                        x: Lane(value: source, lane: ShaderIsa.UnpackSwizzle(operand: operand, lane: 0)),
-                        y: Lane(value: source, lane: ShaderIsa.UnpackSwizzle(operand: operand, lane: 1)),
-                        z: Lane(value: source, lane: ShaderIsa.UnpackSwizzle(operand: operand, lane: 2)),
-                        w: Lane(value: source, lane: ShaderIsa.UnpackSwizzle(operand: operand, lane: 3))
-                    );
-
-                    break;
-                }
-                case ShaderOp.Duplicate: {
-                    stack[depth] = stack[(depth - 1)];
-                    depth++;
-
-                    break;
-                }
-                case ShaderOp.Swap: {
-                    (stack[(depth - 1)], stack[(depth - 2)]) = (stack[(depth - 2)], stack[(depth - 1)]);
-
-                    break;
-                }
-                case ShaderOp.Drop: {
-                    depth--;
-
-                    break;
-                }
-                case ShaderOp.Pick: {
-                    stack[depth] = stack[((depth - 1) - ((int)operand))];
-                    depth++;
-
-                    break;
-                }
-                case ShaderOp.Jump: {
-                    pointer = checked((int)operand);
-
-                    break;
-                }
-                case ShaderOp.JumpIfZero: {
-                    if (stack[--depth].X == 0f) {
-                        pointer = checked((int)operand);
+                        break;
                     }
+                case ShaderOp.LoadConstantDynamic: {
+                        stack[(depth - 1)] = Constant(
+                            constantBase: constantBase,
+                            index: Math.Clamp(value: ((int)stack[(depth - 1)].X), min: 0, max: (constantCount - 1)),
+                            words: words
+                        );
 
-                    break;
-                }
+                        break;
+                    }
+                case ShaderOp.LoadLocal: {
+                        stack[depth++] = locals[checked((int)operand)];
+
+                        break;
+                    }
+                case ShaderOp.StoreLocal: {
+                        locals[checked((int)operand)] = stack[--depth];
+
+                        break;
+                    }
+                case ShaderOp.Swizzle: {
+                        var source = stack[(depth - 1)];
+
+                        stack[(depth - 1)] = new Vector4(
+                            x: Lane(value: source, lane: ShaderIsa.UnpackSwizzle(lane: 0, operand: operand)),
+                            y: Lane(value: source, lane: ShaderIsa.UnpackSwizzle(lane: 1, operand: operand)),
+                            z: Lane(value: source, lane: ShaderIsa.UnpackSwizzle(lane: 2, operand: operand)),
+                            w: Lane(value: source, lane: ShaderIsa.UnpackSwizzle(lane: 3, operand: operand))
+                        );
+
+                        break;
+                    }
+                case ShaderOp.Duplicate: {
+                        stack[depth] = stack[(depth - 1)];
+                        depth++;
+
+                        break;
+                    }
+                case ShaderOp.Swap: {
+                        (stack[(depth - 1)], stack[(depth - 2)]) = (stack[(depth - 2)], stack[(depth - 1)]);
+
+                        break;
+                    }
+                case ShaderOp.Drop: {
+                        depth--;
+
+                        break;
+                    }
+                case ShaderOp.Pick: {
+                        stack[depth] = stack[((depth - 1) - ((int)operand))];
+                        depth++;
+
+                        break;
+                    }
+                case ShaderOp.Jump: {
+                        pointer = checked((int)operand);
+
+                        break;
+                    }
+                case ShaderOp.JumpIfZero: {
+                        if (stack[--depth].X == 0f) {
+                            pointer = checked((int)operand);
+                        }
+
+                        break;
+                    }
                 case ShaderOp.Halt: {
-                    return stack[--depth];
-                }
+                        return stack[--depth];
+                    }
                 default: {
-                    depth = Apply(
-                        depth: depth,
-                        op: op,
-                        operand: operand,
-                        stack: stack
-                    );
+                        depth = Apply(
+                            depth: depth,
+                            op: op,
+                            operand: operand,
+                            stack: stack
+                        );
 
-                    break;
-                }
+                        break;
+                    }
             }
         }
 
         return stack[(depth - 1)];
     }
+
     private static Vector4 Constant(ReadOnlySpan<uint> words, int constantBase, int index) {
         var wordBase = (constantBase + (index * 4));
 
         return new Vector4(
-            w: BitConverter.UInt32BitsToSingle(words[(wordBase + 3)]),
-            x: BitConverter.UInt32BitsToSingle(words[(wordBase + 0)]),
-            y: BitConverter.UInt32BitsToSingle(words[(wordBase + 1)]),
-            z: BitConverter.UInt32BitsToSingle(words[(wordBase + 2)])
+            w: BitConverter.UInt32BitsToSingle(value: words[(wordBase + 3)]),
+            x: BitConverter.UInt32BitsToSingle(value: words[(wordBase + 0)]),
+            y: BitConverter.UInt32BitsToSingle(value: words[(wordBase + 1)]),
+            z: BitConverter.UInt32BitsToSingle(value: words[(wordBase + 2)])
         );
     }
     private static int Apply(int depth, ShaderOp op, uint operand, Span<Vector4> stack) {
@@ -180,27 +181,27 @@ public static class ShaderInterpreter {
     private static Vector4 Unary(ShaderOp op, Vector4 value) => op switch {
         ShaderOp.Absolute => Vector4.Abs(value: value),
         ShaderOp.Negate => -value,
-        ShaderOp.Floor => Map(value: value, map: MathF.Floor),
-        ShaderOp.Ceiling => Map(value: value, map: MathF.Ceiling),
+        ShaderOp.Floor => Map(map: MathF.Floor, value: value),
+        ShaderOp.Ceiling => Map(map: MathF.Ceiling, value: value),
         ShaderOp.Fraction => Map(value: value, map: component => (component - MathF.Floor(x: component))),
         ShaderOp.Saturate => Vector4.Clamp(value1: value, min: Vector4.Zero, max: Vector4.One),
-        ShaderOp.Truncate => Map(value: value, map: MathF.Truncate),
-        ShaderOp.Round => Map(value: value, map: MathF.Round),
+        ShaderOp.Truncate => Map(map: MathF.Truncate, value: value),
+        ShaderOp.Round => Map(map: MathF.Round, value: value),
         ShaderOp.Sign => Map(value: value, map: component => ((float)MathF.Sign(x: component))),
         ShaderOp.Reciprocal => (Vector4.One / value),
         ShaderOp.SquareRoot => Vector4.SquareRoot(value: value),
         ShaderOp.InverseSquareRoot => (Vector4.One / Vector4.SquareRoot(value: value)),
-        ShaderOp.Exponential => Map(value: value, map: MathF.Exp),
-        ShaderOp.NaturalLogarithm => Map(value: value, map: MathF.Log),
-        ShaderOp.Sine => Map(value: value, map: MathF.Sin),
-        ShaderOp.Cosine => Map(value: value, map: MathF.Cos),
-        ShaderOp.Normalize2 => Normalize(value: new Vector4(x: value.X, y: value.Y, z: 0f, w: 0f)),
-        ShaderOp.Normalize3 => Normalize(value: new Vector4(x: value.X, y: value.Y, z: value.Z, w: 0f)),
+        ShaderOp.Exponential => Map(map: MathF.Exp, value: value),
+        ShaderOp.NaturalLogarithm => Map(map: MathF.Log, value: value),
+        ShaderOp.Sine => Map(map: MathF.Sin, value: value),
+        ShaderOp.Cosine => Map(map: MathF.Cos, value: value),
+        ShaderOp.Normalize2 => Normalize(value: new Vector4(w: 0f, x: value.X, y: value.Y, z: 0f)),
+        ShaderOp.Normalize3 => Normalize(value: new Vector4(w: 0f, x: value.X, y: value.Y, z: value.Z)),
         ShaderOp.Length2 => new Vector4(value: MathF.Sqrt(x: ((value.X * value.X) + (value.Y * value.Y)))),
         ShaderOp.Length3 => new Vector4(value: MathF.Sqrt(x: (((value.X * value.X) + (value.Y * value.Y)) + (value.Z * value.Z)))),
         ShaderOp.Hash3 => HashBits(value: value),
-        ShaderOp.BitsToUnitFloat => Map(value: value, map: component => (((float)BitConverter.SingleToUInt32Bits(component)) * ShaderIsa.InverseTwoPow32)),
-        ShaderOp.IntegerBits => Map(value: value, map: component => BitConverter.UInt32BitsToSingle(((uint)component))),
+        ShaderOp.BitsToUnitFloat => Map(value: value, map: component => (((float)BitConverter.SingleToUInt32Bits(value: component)) * ShaderIsa.InverseTwoPow32)),
+        ShaderOp.IntegerBits => Map(value: value, map: component => BitConverter.UInt32BitsToSingle(value: ((uint)component))),
         _ => throw new ArgumentException(message: $"Shader operation {op} is not unary.", paramName: nameof(op)),
     };
     private static Vector4 Binary(Vector4 left, ShaderOp op, Vector4 right) => op switch {
@@ -216,10 +217,10 @@ public static class ShaderInterpreter {
         ShaderOp.Dot2 => new Vector4(value: ((left.X * right.X) + (left.Y * right.Y))),
         ShaderOp.Dot3 => new Vector4(value: (((left.X * right.X) + (left.Y * right.Y)) + (left.Z * right.Z))),
         ShaderOp.Cross3 => new Vector4(
+            w: 0f,
             x: ((left.Y * right.Z) - (left.Z * right.Y)),
             y: ((left.Z * right.X) - (left.X * right.Z)),
-            z: ((left.X * right.Y) - (left.Y * right.X)),
-            w: 0f
+            z: ((left.X * right.Y) - (left.Y * right.X))
         ),
         ShaderOp.Less => Zip(left: left, right: right, zip: (a, b) => ((a < b) ? 1f : 0f)),
         ShaderOp.Greater => Zip(left: left, right: right, zip: (a, b) => ((a > b) ? 1f : 0f)),
@@ -234,24 +235,24 @@ public static class ShaderInterpreter {
             z: SmoothStep(edge0: a.Z, edge1: b.Z, value: c.Z),
             w: SmoothStep(edge0: a.W, edge1: b.W, value: c.W)
         ),
-        ShaderOp.Clamp => Vector4.Clamp(value1: a, min: b, max: c),
+        ShaderOp.Clamp => Vector4.Clamp(max: c, min: b, value1: a),
         ShaderOp.Select => new Vector4(
+            w: ((c.W != 0f) ? b.W : a.W),
             x: ((c.X != 0f) ? b.X : a.X),
             y: ((c.Y != 0f) ? b.Y : a.Y),
-            z: ((c.Z != 0f) ? b.Z : a.Z),
-            w: ((c.W != 0f) ? b.W : a.W)
+            z: ((c.Z != 0f) ? b.Z : a.Z)
         ),
         _ => throw new ArgumentException(message: $"Shader operation {op} is not ternary.", paramName: nameof(op)),
     };
     // The lattice fields read their seed from lane w as a raw bit pattern, so a caller composes a seed with plain
     // float arithmetic and lands it there through IntegerBits.
     private static Vector4 Field(ShaderOp op, int octaves, Vector4 value) {
-        var seed = BitConverter.SingleToUInt32Bits(value.W);
+        var seed = BitConverter.SingleToUInt32Bits(value: value.W);
 
         return op switch {
-            ShaderOp.ValueNoise2 => new Vector4(value: LatticeNoise2(x: value.X, y: value.Y, seed: seed)),
-            ShaderOp.ValueNoise3 => new Vector4(value: LatticeNoise3(x: value.X, y: value.Y, z: value.Z, seed: seed)),
-            ShaderOp.Fbm2 => new Vector4(value: Fbm2(x: value.X, y: value.Y, seed: seed, octaves: octaves)),
+            ShaderOp.ValueNoise2 => new Vector4(value: LatticeNoise2(seed: seed, x: value.X, y: value.Y)),
+            ShaderOp.ValueNoise3 => new Vector4(value: LatticeNoise3(seed: seed, x: value.X, y: value.Y, z: value.Z)),
+            ShaderOp.Fbm2 => new Vector4(value: Fbm2(octaves: octaves, seed: seed, x: value.X, y: value.Y)),
             _ => throw new ArgumentException(message: $"Shader operation {op} is not a field sample.", paramName: nameof(op)),
         };
     }
@@ -261,7 +262,7 @@ public static class ShaderInterpreter {
         var value = 0f;
 
         for (var octave = 0; (octave < octaves); octave++) {
-            value += (amplitude * LatticeNoise2(x: x, y: y, seed: (seed + ((uint)octave))));
+            value += (amplitude * LatticeNoise2(seed: (seed + ((uint)octave)), x: x, y: y));
             normalizer += amplitude;
             x = ((x * 2f) + 17f);
             y = ((y * 2f) + 17f);
@@ -273,10 +274,10 @@ public static class ShaderInterpreter {
     private static float LatticeNoise2(float x, float y, uint seed) {
         var cellX = MathF.Floor(x: x);
         var cellY = MathF.Floor(x: y);
-        var a = Corner(x: cellX, y: cellY, seed: seed);
-        var b = Corner(x: (cellX + 1f), y: cellY, seed: seed);
-        var c = Corner(x: cellX, y: (cellY + 1f), seed: seed);
-        var d = Corner(x: (cellX + 1f), y: (cellY + 1f), seed: seed);
+        var a = Corner(seed: seed, x: cellX, y: cellY);
+        var b = Corner(seed: seed, x: (cellX + 1f), y: cellY);
+        var c = Corner(seed: seed, x: cellX, y: (cellY + 1f));
+        var d = Corner(seed: seed, x: (cellX + 1f), y: (cellY + 1f));
         var u = Quintic(value: (x - cellX));
         var v = Quintic(value: (y - cellY));
 
@@ -285,15 +286,15 @@ public static class ShaderInterpreter {
     private static float LatticeNoise3(float x, float y, float z, uint seed) {
         var cellZ = MathF.Floor(x: z);
         var w = Quintic(value: (z - cellZ));
-        var lower = LatticeNoise2(x: x, y: y, seed: (seed ^ BitConverter.SingleToUInt32Bits(cellZ)));
-        var upper = LatticeNoise2(x: x, y: y, seed: (seed ^ BitConverter.SingleToUInt32Bits((cellZ + 1f))));
+        var lower = LatticeNoise2(x: x, y: y, seed: seed ^ BitConverter.SingleToUInt32Bits(value: cellZ));
+        var upper = LatticeNoise2(x: x, y: y, seed: seed ^ BitConverter.SingleToUInt32Bits(value: (cellZ + 1f)));
 
         return Mix(a: lower, b: upper, t: w);
     }
     private static float Corner(float x, float y, uint seed) {
         var (hashed, _, _) = ShaderIsa.Pcg3d(
-            x: BitConverter.SingleToUInt32Bits(x),
-            y: BitConverter.SingleToUInt32Bits(y),
+            x: BitConverter.SingleToUInt32Bits(value: x),
+            y: BitConverter.SingleToUInt32Bits(value: y),
             z: seed
         );
 
@@ -301,15 +302,15 @@ public static class ShaderInterpreter {
     }
     private static Vector4 HashBits(Vector4 value) {
         var (x, y, z) = ShaderIsa.Pcg3d(
-            x: BitConverter.SingleToUInt32Bits(value.X),
-            y: BitConverter.SingleToUInt32Bits(value.Y),
-            z: BitConverter.SingleToUInt32Bits(value.Z)
+            x: BitConverter.SingleToUInt32Bits(value: value.X),
+            y: BitConverter.SingleToUInt32Bits(value: value.Y),
+            z: BitConverter.SingleToUInt32Bits(value: value.Z)
         );
 
         return new Vector4(
-            x: BitConverter.UInt32BitsToSingle(x),
-            y: BitConverter.UInt32BitsToSingle(y),
-            z: BitConverter.UInt32BitsToSingle(z),
+            x: BitConverter.UInt32BitsToSingle(value: x),
+            y: BitConverter.UInt32BitsToSingle(value: y),
+            z: BitConverter.UInt32BitsToSingle(value: z),
             w: 0f
         );
     }
@@ -343,9 +344,9 @@ public static class ShaderInterpreter {
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     private static float Mix(float a, float b, float t) => (a + ((b - a) * t));
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    private static float Quintic(float value) => ((value * value * value) * ((value * ((value * 6f) - 15f)) + 10f));
+    private static float Quintic(float value) => (((value * value) * value) * ((value * ((value * 6f) - 15f)) + 10f));
     private static float SmoothStep(float edge0, float edge1, float value) {
-        var t = Math.Clamp(value: ((value - edge0) / (edge1 - edge0)), min: 0f, max: 1f);
+        var t = Math.Clamp(max: 1f, min: 0f, value: ((value - edge0) / (edge1 - edge0)));
 
         return ((t * t) * (3f - (2f * t)));
     }

@@ -152,10 +152,12 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // its own slot wrote), and a queue of pending uploads drained one per produced frame (RecordBrickUpload).
     private readonly IGpuComputePipeline? m_brickUploadPipeline;
     private readonly IGpuShaderModule? m_brickUploadShaderModule;
+
     private readonly IGpuStorageBuffer?[] m_brickUploadStaging = new IGpuStorageBuffer?[FrameRingSize];
     private readonly nint[] m_brickUploadSets = new nint[FrameRingSize];
     private readonly Queue<(int Slot, int Count, float[] Voxels)> m_brickUploads = new();
     private readonly byte[] m_brickUploadPush = new byte[BrickBakePushByteLength];
+
     // The carve-bake brick pool: one persistent device-local f32 buffer the sliced bake writes and
     // the beam + views kernels sample. Always allocated (a 1-float filler when the pool is disabled), always bound to
     // the beam/views sets, since both kernels compile the sdfBrickPool binding unconditionally (SDF_SAMPLED_REGIONS).

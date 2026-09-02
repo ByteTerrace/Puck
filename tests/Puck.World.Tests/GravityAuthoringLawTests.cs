@@ -37,8 +37,8 @@ public sealed class GravityAuthoringLawTests {
         IReadOnlyList<WorldGravityPoint>? points = null,
         DocumentVector3? uniform = null
     ) => new(
-        Attractors: (attractors ?? []),
         Areas: areas,
+        Attractors: (attractors ?? []),
         GravitationalConstant: gravitationalConstant,
         Points: points,
         SofteningLength: 0.5f,
@@ -79,7 +79,7 @@ public sealed class GravityAuthoringLawTests {
     [Fact]
     public void PointPreset_LowersThroughTheSoftenedKernelToItsSurfacePromise() {
         var definition = WithGravity(gravity: PointGravity(points: [
-            new WorldGravityPoint(PlacementId: "ball", SurfaceGravity: 9.81f, ReferenceRadius: 100f),
+            new WorldGravityPoint(PlacementId: "ball", ReferenceRadius: 100f, SurfaceGravity: 9.81f),
         ]));
 
         Assert.True(
@@ -106,7 +106,7 @@ public sealed class GravityAuthoringLawTests {
             )
         )]);
 
-        Assert.True(condition: field.TryAcceleration(entityIndex: 0, acceleration: out var acceleration));
+        Assert.True(condition: field.TryAcceleration(acceleration: out var acceleration, entityIndex: 0));
         Assert.InRange(
             actual: -((double)acceleration.X),
             low: 9.80,
@@ -115,12 +115,11 @@ public sealed class GravityAuthoringLawTests {
         Assert.Equal(expected: FixedQ4816.Zero, actual: acceleration.Y);
         Assert.Equal(expected: FixedQ4816.Zero, actual: acceleration.Z);
     }
-
     [Fact]
     public void PointPreset_RequiresPositiveG_WhileUniformOnlyDoesNot() {
         var point = WithGravity(gravity: PointGravity(
             gravitationalConstant: 0f,
-            points: [new WorldGravityPoint(PlacementId: "ball", SurfaceGravity: 9.81f, ReferenceRadius: 100f)]
+            points: [new WorldGravityPoint(PlacementId: "ball", ReferenceRadius: 100f, SurfaceGravity: 9.81f)]
         ));
         var uniform = WithGravity(gravity: PointGravity(
             gravitationalConstant: 0f,
@@ -129,9 +128,9 @@ public sealed class GravityAuthoringLawTests {
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: point, reason: out var pointReason));
         Assert.Contains(
-            expectedSubstring: "gravity.gravitationalConstant must be positive when gravity.points declares a source",
             actualString: pointReason,
-            comparisonType: StringComparison.Ordinal
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "gravity.gravitationalConstant must be positive when gravity.points declares a source"
         );
         Assert.True(
             condition: WorldDefinitionValidator.TryValidateLocally(definition: uniform, reason: out var uniformReason),
@@ -146,15 +145,14 @@ public sealed class GravityAuthoringLawTests {
         Assert.Empty(collection: compiled.Attractors);
         Assert.Equal(expected: FixedQ4816.FromDouble(value: -9.81), actual: compiled.Uniform.Y);
     }
-
     [Fact]
     public void APlacementMayNotBeCountedByBothSourceSpellings() {
         var denied = WithGravity(gravity: PointGravity(
-            attractors: [new WorldGravityAttractor(PlacementId: "ball", Mass: 10f)],
-            points: [new WorldGravityPoint(PlacementId: "ball", SurfaceGravity: 9.81f, ReferenceRadius: 100f)]
+            attractors: [new WorldGravityAttractor(Mass: 10f, PlacementId: "ball")],
+            points: [new WorldGravityPoint(PlacementId: "ball", ReferenceRadius: 100f, SurfaceGravity: 9.81f)]
         ));
         var control = WithGravity(gravity: PointGravity(
-            points: [new WorldGravityPoint(PlacementId: "ball", SurfaceGravity: 9.81f, ReferenceRadius: 100f)]
+            points: [new WorldGravityPoint(PlacementId: "ball", ReferenceRadius: 100f, SurfaceGravity: 9.81f)]
         ));
 
         Laws.RefusalWithControl(
@@ -164,30 +162,28 @@ public sealed class GravityAuthoringLawTests {
         );
         _ = WorldDefinitionValidator.TryValidateLocally(definition: denied, reason: out var reason);
         Assert.Contains(
-            expectedSubstring: "gravity.points[0].placementId duplicates gravity source 'ball'",
             actualString: reason,
-            comparisonType: StringComparison.Ordinal
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "gravity.points[0].placementId duplicates gravity source 'ball'"
         );
     }
-
     [Fact]
     public void PointPreset_UnrepresentableLoweringRefusesBeforeRuntimeCompilation() {
         var denied = WithGravity(gravity: PointGravity(points: [
-            new WorldGravityPoint(PlacementId: "ball", SurfaceGravity: float.MaxValue, ReferenceRadius: float.MaxValue),
+            new WorldGravityPoint(PlacementId: "ball", ReferenceRadius: float.MaxValue, SurfaceGravity: float.MaxValue),
         ]));
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: denied, reason: out var reason));
         Assert.Contains(
-            expectedSubstring: "gravity.points[0] cannot lower",
             actualString: reason,
-            comparisonType: StringComparison.Ordinal
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "gravity.points[0] cannot lower"
         );
     }
-
     [Fact]
     public void LegacyMassSources_CompileUnchangedWhenPointsAreAbsent() {
         var definition = WithGravity(gravity: PointGravity(
-            attractors: [new WorldGravityAttractor(PlacementId: "ball", Mass: 10f)]
+            attractors: [new WorldGravityAttractor(Mass: 10f, PlacementId: "ball")]
         ));
 
         var compiled = FixedWorldGravity.Compile(
@@ -196,14 +192,14 @@ public sealed class GravityAuthoringLawTests {
         );
 
         var source = Assert.Single(collection: compiled.Attractors);
+
         Assert.Equal(expected: FixedQ4816.FromInteger(value: 10), actual: source.Mass);
         Assert.Equal(expected: FixedVector3.Zero, actual: source.Position);
     }
-
     [Fact]
     public void PointPreset_RoundTripsAsAuthoredQuantities() {
         var definition = WithGravity(gravity: PointGravity(points: [
-            new WorldGravityPoint(PlacementId: "ball", SurfaceGravity: 9.81f, ReferenceRadius: 100f),
+            new WorldGravityPoint(PlacementId: "ball", ReferenceRadius: 100f, SurfaceGravity: 9.81f),
         ]));
 
         var roundTrip = WorldDefinitionSerialization.Deserialize(
@@ -215,11 +211,10 @@ public sealed class GravityAuthoringLawTests {
         Assert.Equal(expected: 9.81f, actual: point.SurfaceGravity);
         Assert.Equal(expected: 100f, actual: point.ReferenceRadius);
     }
-
     [Fact]
     public void NullPointRow_RefusesByIndexedPath() {
         var definition = WithGravity(gravity: PointGravity(points: [
-            new WorldGravityPoint(PlacementId: "ball", SurfaceGravity: 9.81f, ReferenceRadius: 100f),
+            new WorldGravityPoint(PlacementId: "ball", ReferenceRadius: 100f, SurfaceGravity: 9.81f),
         ]));
         var node = JsonNode.Parse(
             json: Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.Serialize(definition: definition))
@@ -237,7 +232,6 @@ public sealed class GravityAuthoringLawTests {
             comparisonType: StringComparison.Ordinal
         );
     }
-
     [Fact]
     public void LocalAreas_FoldGlobalThenAscendingPriorityAndAuthoredTieOrder() {
         var definition = WithGravity(gravity: PointGravity(
@@ -267,17 +261,16 @@ public sealed class GravityAuthoringLawTests {
                 ),
             ]
         ));
-        var field = CompileField(definition: definition, capacity: 1);
+        var field = CompileField(capacity: 1, definition: definition);
 
         field.Solve(targets: [Target(entityIndex: 0, x: 0, y: 0, z: 0)]);
 
-        Assert.True(condition: field.TryAcceleration(entityIndex: 0, acceleration: out var acceleration));
+        Assert.True(condition: field.TryAcceleration(acceleration: out var acceleration, entityIndex: 0));
         Assert.Equal(expected: FixedQ4816.Zero, actual: acceleration.X);
         Assert.Equal(expected: FixedQ4816.One, actual: acceleration.Y);
         Assert.Equal(expected: FixedQ4816.FromInteger(value: 3), actual: acceleration.Z);
         Assert.Equal(expected: [0, 1, 2], actual: field.Compiled.Areas.Select(selector: area => area.AuthoredIndex));
     }
-
     [Fact]
     public void LocalArea_BoundaryIsInclusive_AndAreaOnlyOutsideBodyDoesNotParticipate() {
         var definition = WithGravity(gravity: PointGravity(
@@ -290,7 +283,7 @@ public sealed class GravityAuthoringLawTests {
                 Acceleration: new WorldGravityAreaAcceleration.Directional(Value: new Vector3(x: 0f, y: -2f, z: 0f))
             )]
         ));
-        var field = CompileField(definition: definition, capacity: 2);
+        var field = CompileField(capacity: 2, definition: definition);
         var justOutside = FixedQ4816.FromRawBits(value: (FixedQ4816.FromInteger(value: 5).Value + 1L));
 
         field.Solve(targets: [
@@ -298,14 +291,13 @@ public sealed class GravityAuthoringLawTests {
             new WorldGravityTarget(EntityIndex: 1, Position: new FixedVector3(X: justOutside, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero), Mass: FixedQ4816.Zero),
         ]);
 
-        Assert.True(condition: field.TryAcceleration(entityIndex: 0, acceleration: out var boundary));
+        Assert.True(condition: field.TryAcceleration(acceleration: out var boundary, entityIndex: 0));
         Assert.Equal(expected: FixedQ4816.FromInteger(value: -2), actual: boundary.Y);
-        Assert.False(condition: field.TryAcceleration(entityIndex: 1, acceleration: out _));
+        Assert.False(condition: field.TryAcceleration(acceleration: out _, entityIndex: 1));
         Assert.Equal(expected: 2, actual: field.AreaStatistics.TargetCount);
         Assert.Equal(expected: 2, actual: field.AreaStatistics.EvaluationCount);
         Assert.Equal(expected: 1, actual: field.AreaStatistics.MatchCount);
     }
-
     [Fact]
     public void BoxArea_EvaluatesMembershipInThePlacementsYawLocalFrame() {
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
@@ -326,17 +318,16 @@ public sealed class GravityAuthoringLawTests {
                 )]
             ),
         };
-        var field = CompileField(definition: definition, capacity: 2);
+        var field = CompileField(capacity: 2, definition: definition);
 
         field.Solve(targets: [
             Target(entityIndex: 0, x: 2, y: 0, z: 0),
             Target(entityIndex: 1, x: 0, y: 0, z: 2),
         ]);
 
-        Assert.True(condition: field.TryAcceleration(entityIndex: 0, acceleration: out _));
-        Assert.False(condition: field.TryAcceleration(entityIndex: 1, acceleration: out _));
+        Assert.True(condition: field.TryAcceleration(acceleration: out _, entityIndex: 0));
+        Assert.False(condition: field.TryAcceleration(acceleration: out _, entityIndex: 1));
     }
-
     [Fact]
     public void ZeroReplace_CancellationAndRadialCentreRemainParticipatingZeroAnswers() {
         static WorldGravityArea Area(WorldGravityAreaMode mode, WorldGravityAreaAcceleration acceleration) => new(
@@ -365,11 +356,10 @@ public sealed class GravityAuthoringLawTests {
             Assert.True(condition: field.IsActive);
             field.Solve(targets: [Target(entityIndex: 0, x: 0, y: 0, z: 0)]);
 
-            Assert.True(condition: field.TryAcceleration(entityIndex: 0, acceleration: out var acceleration));
+            Assert.True(condition: field.TryAcceleration(acceleration: out var acceleration, entityIndex: 0));
             Assert.Equal(expected: FixedVector3.Zero, actual: acceleration);
         }
     }
-
     [Fact]
     public void ZeroReplaceSuppressesKitGravity_WhileAnOutsideAreaBodyKeepsFallbackGravity() {
         static WorldDefinition Definition(float radius) => WithGravity(gravity: PointGravity(
@@ -388,8 +378,8 @@ public sealed class GravityAuthoringLawTests {
 
         Assert.True(condition: inside.Server.ApplySession(request: new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
         Assert.True(condition: outside.Server.ApplySession(request: new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
-        inside.Server.Population.EntryBody(index: 0)!.Pose(x: 0f, y: 100f, z: 0f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
-        outside.Server.Population.EntryBody(index: 0)!.Pose(x: 0f, y: 100f, z: 0f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        inside.Server.Population.EntryBody(index: 0)!.Pose(pitchRadians: 0f, rollRadians: 0f, x: 0f, y: 100f, yawRadians: 0f, z: 0f);
+        outside.Server.Population.EntryBody(index: 0)!.Pose(pitchRadians: 0f, rollRadians: 0f, x: 0f, y: 100f, yawRadians: 0f, z: 0f);
 
         for (var tick = 0; (tick < 12); tick++) {
             inside.Step();
@@ -397,16 +387,15 @@ public sealed class GravityAuthoringLawTests {
         }
 
         Assert.Equal(expected: FixedQ4816.FromInteger(value: 100), actual: inside.Server.Population.EntryBody(index: 0)!.FixedPosition.Y);
-        Assert.True(condition: outside.Server.Population.EntryBody(index: 0)!.FixedPosition.Y < FixedQ4816.FromInteger(value: 100));
+        Assert.True(condition: (outside.Server.Population.EntryBody(index: 0)!.FixedPosition.Y < FixedQ4816.FromInteger(value: 100)));
 
-        inside.Server.Population.EntryBody(index: 0)!.Pose(x: 2000f, y: 100f, z: 0f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        inside.Server.Population.EntryBody(index: 0)!.Pose(pitchRadians: 0f, rollRadians: 0f, x: 2000f, y: 100f, yawRadians: 0f, z: 0f);
         for (var tick = 0; (tick < 12); tick++) {
             inside.Step();
         }
 
-        Assert.True(condition: inside.Server.Population.EntryBody(index: 0)!.FixedPosition.Y < FixedQ4816.FromInteger(value: 100));
+        Assert.True(condition: (inside.Server.Population.EntryBody(index: 0)!.FixedPosition.Y < FixedQ4816.FromInteger(value: 100)));
     }
-
     [Fact]
     public void LocalArea_RidesTheExistingAuthoritativePlacementAttachmentPose() {
         var definition = AttachedAreaDefinition();
@@ -417,7 +406,7 @@ public sealed class GravityAuthoringLawTests {
         Assert.Equal(expected: 0, actual: fixture.Server.Population.GravityAreaStatistics.ActiveAreaCount);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
-        fixture.Server.Population.EntryBody(index: 0)!.Pose(x: 100f, y: 100f, z: 100f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        fixture.Server.Population.EntryBody(index: 0)!.Pose(pitchRadians: 0f, rollRadians: 0f, x: 100f, y: 100f, yawRadians: 0f, z: 100f);
 
         for (var tick = 0; (tick < 12); tick++) {
             fixture.Step();
@@ -433,16 +422,15 @@ public sealed class GravityAuthoringLawTests {
 
         Assert.Equal(expected: 0, actual: fixture.Server.Population.GravityAreaStatistics.ActiveAreaCount);
     }
-
-    [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    [Theory]
     public void AttachedArea_CheckpointRestoreContinuesBitIdenticallyOnTheNextSolve(bool zeroAcceleration) {
         using var fixture = Fixtures.FreshServer(definition: AttachedAreaDefinition(zeroAcceleration: zeroAcceleration));
         var actor = WorldPrincipal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
-        fixture.Server.Population.EntryBody(index: 0)!.Pose(x: 100f, y: 100f, z: 100f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        fixture.Server.Population.EntryBody(index: 0)!.Pose(pitchRadians: 0f, rollRadians: 0f, x: 100f, y: 100f, yawRadians: 0f, z: 100f);
         for (var tick = 0; (tick < 8); tick++) {
             fixture.Step();
         }
@@ -482,6 +470,7 @@ public sealed class GravityAuthoringLawTests {
             machineId: Guid.NewGuid(),
             template: restoredDefinition
         );
+
         var (restored, _) = WorldServer.FromCheckpoint(
             checkpoint: decoded,
             instanceIdentity: "gravity-area",
@@ -505,7 +494,6 @@ public sealed class GravityAuthoringLawTests {
             Assert.Equal(expected: fixture.Server.Population.GravityAreaStatistics, actual: restored.Population.GravityAreaStatistics);
         }
     }
-
     [Fact]
     public void LocalAreas_RoundTripTheirUnionShapes_WhileAbsenceKeepsTheMemberOmitted() {
         var absentBytes = WorldDefinitionSerialization.Serialize(definition: WithGravity(gravity: PointGravity(gravitationalConstant: 0f)));
@@ -542,7 +530,6 @@ public sealed class GravityAuthoringLawTests {
         Assert.IsType<WorldGravityAreaBounds.SphereBounds>(@object: roundTrip.Gravity.Areas[1].Bounds);
         Assert.IsType<WorldGravityAreaAcceleration.Radial>(@object: roundTrip.Gravity.Areas[1].Acceleration);
     }
-
     [Fact]
     public void LocalAreaValidationRefusesNullRowsAndUnrepresentableLoweringByIndexedPath() {
         var definition = WithGravity(gravity: PointGravity(
@@ -557,7 +544,7 @@ public sealed class GravityAuthoringLawTests {
         ));
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var reason));
-        Assert.Contains(expectedSubstring: "gravity.areas[0] cannot lower", actualString: reason, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "gravity.areas[0] cannot lower");
 
         var node = JsonNode.Parse(json: Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.Serialize(definition: WithGravity(gravity: PointGravity(
             gravitationalConstant: 0f,
@@ -569,16 +556,16 @@ public sealed class GravityAuthoringLawTests {
                 Acceleration: new WorldGravityAreaAcceleration.Directional(Value: Vector3.Zero)
             )]
         )))))!.AsObject();
+
         node["gravity"]!["areas"]!.AsArray()[0] = null;
         var exception = Assert.Throws<InvalidDataException>(testCode: () => WorldDefinitionSerialization.Deserialize(utf8Json: Encoding.UTF8.GetBytes(s: node.ToJsonString())));
 
         Assert.Contains(expectedSubstring: "gravity.areas[0] is required", actualString: exception.Message, comparisonType: StringComparison.Ordinal);
     }
-
     [Fact]
     public void PositiveGlobalConstant_SolvesBodyOnlySources_AndParticipatesAtZeroWithOneBody() {
         var definition = WithGravity(gravity: PointGravity(gravitationalConstant: 45f));
-        var oneBody = CompileField(definition: definition, capacity: 1);
+        var oneBody = CompileField(capacity: 1, definition: definition);
 
         oneBody.Solve(targets: [new WorldGravityTarget(
             EntityIndex: 0,
@@ -586,22 +573,22 @@ public sealed class GravityAuthoringLawTests {
             Mass: FixedQ4816.FromInteger(value: 10)
         )]);
 
-        Assert.True(condition: oneBody.TryAcceleration(entityIndex: 0, acceleration: out var loneAcceleration));
+        Assert.True(condition: oneBody.TryAcceleration(acceleration: out var loneAcceleration, entityIndex: 0));
         Assert.Equal(expected: FixedVector3.Zero, actual: loneAcceleration);
 
-        var twoBodies = CompileField(definition: definition, capacity: 2);
+        var twoBodies = CompileField(capacity: 2, definition: definition);
+
         twoBodies.Solve(targets: [
             new WorldGravityTarget(EntityIndex: 0, Position: new FixedVector3(X: FixedQ4816.FromInteger(value: -10), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero), Mass: FixedQ4816.FromInteger(value: 10)),
             new WorldGravityTarget(EntityIndex: 1, Position: new FixedVector3(X: FixedQ4816.FromInteger(value: 10), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero), Mass: FixedQ4816.FromInteger(value: 10)),
         ]);
 
-        Assert.True(condition: twoBodies.TryAcceleration(entityIndex: 0, acceleration: out var left));
-        Assert.True(condition: twoBodies.TryAcceleration(entityIndex: 1, acceleration: out var right));
-        Assert.True(condition: left.X > FixedQ4816.Zero);
+        Assert.True(condition: twoBodies.TryAcceleration(acceleration: out var left, entityIndex: 0));
+        Assert.True(condition: twoBodies.TryAcceleration(acceleration: out var right, entityIndex: 1));
+        Assert.True(condition: (left.X > FixedQ4816.Zero));
         Assert.Equal(expected: left.X, actual: -right.X);
         Assert.Equal(expected: 2, actual: twoBodies.Statistics.BodyCount);
     }
-
     [Fact]
     public void BodyOnlyGlobalSolve_ComposesWithMatchingLocalArea() {
         var definition = WithGravity(gravity: PointGravity(
@@ -614,19 +601,18 @@ public sealed class GravityAuthoringLawTests {
                 Acceleration: new WorldGravityAreaAcceleration.Directional(Value: new Vector3(x: 0f, y: -3f, z: 0f))
             )]
         ));
-        var field = CompileField(definition: definition, capacity: 2);
+        var field = CompileField(capacity: 2, definition: definition);
 
         field.Solve(targets: [
             new WorldGravityTarget(EntityIndex: 0, Position: new FixedVector3(X: FixedQ4816.FromInteger(value: -5), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero), Mass: FixedQ4816.FromInteger(value: 10)),
             new WorldGravityTarget(EntityIndex: 1, Position: new FixedVector3(X: FixedQ4816.FromInteger(value: 5), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero), Mass: FixedQ4816.FromInteger(value: 10)),
         ]);
 
-        Assert.True(condition: field.TryAcceleration(entityIndex: 0, acceleration: out var left));
-        Assert.True(condition: left.X > FixedQ4816.Zero);
+        Assert.True(condition: field.TryAcceleration(acceleration: out var left, entityIndex: 0));
+        Assert.True(condition: (left.X > FixedQ4816.Zero));
         Assert.Equal(expected: FixedQ4816.FromInteger(value: -3), actual: left.Y);
         Assert.Equal(expected: 2, actual: field.AreaStatistics.MatchCount);
     }
-
     [Fact]
     public void LocalAreaComposition_SaturatesInsteadOfWrapping_AndReplaceResetsTheFold() {
         const float Huge = 100_000_000_000_000f;
@@ -664,7 +650,7 @@ public sealed class GravityAuthoringLawTests {
         foreach (var field in new[] { uniformCombine, replaceThenCombine }) {
             field.Solve(targets: [Target(entityIndex: 0, x: 0, y: 0, z: 0)]);
 
-            Assert.True(condition: field.TryAcceleration(entityIndex: 0, acceleration: out var acceleration));
+            Assert.True(condition: field.TryAcceleration(acceleration: out var acceleration, entityIndex: 0));
             Assert.Equal(expected: FixedQ4816.MaxValue, actual: acceleration.X);
         }
     }
@@ -677,7 +663,6 @@ public sealed class GravityAuthoringLawTests {
             compiled: FixedWorldGravity.Compile(gravity: definition.Gravity, placements: definition.Placements)
         );
     }
-
     private static WorldGravityTarget Target(int entityIndex, int x, int y, int z) => new(
         EntityIndex: entityIndex,
         Position: new FixedVector3(

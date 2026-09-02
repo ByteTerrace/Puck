@@ -132,7 +132,9 @@ public static class WorldFederationCodec {
     /// headroom, never for one HMAC tag.</summary>
     public const int MaxProofBytes = (8 * 1024);
     /// <summary>The protocol discriminator, distinct from the interactive peer wire key so one listener can route
-    /// both dialects off the first eight bytes.</summary>
+    /// both dialects off the first eight bytes. A dialer opens every federation connection by writing it through
+    /// <see cref="HandshakeWireFormat.WriteHelloAsync"/> — that is the only hello; the challenge/authenticate exchange
+    /// that follows rides ordinary frames.</summary>
     public const ulong WireKey = 0x35444546554B4350UL;
 
     private static bool Finish(ref WireReader reader, out WireFailure failure) => reader.TryFinish(failure: out failure);
@@ -270,7 +272,7 @@ public static class WorldFederationCodec {
     private static EntitySnapshot ReadEntity(ref WireReader reader, int ordinal) {
         var index = reader.ReadInt32();
         var position = reader.ReadFiniteVector(field: $"snapshot entity {ordinal} position");
-        var orientation = reader.ReadQuaternion();
+        var orientation = reader.ReadFiniteQuaternion(field: $"snapshot entity {ordinal} orientation");
         var heading = reader.ReadSingle();
         var bodyColor = reader.ReadFiniteVector(field: $"snapshot entity {ordinal} body color");
         var active = reader.ReadBoolean();
@@ -462,6 +464,7 @@ public static class WorldFederationCodec {
             throw new InvalidOperationException(message: $"intent source '{source}' is not defined");
         }
     }
+
     /// <summary>Encodes the challenge proof sent before every federation operation. Carries no claimed source
     /// namespace — the door derives that from the verified proof itself (<see cref="WorldAttestedAuthenticator"/>),
     /// never from anything the wire asserts.</summary>
@@ -825,6 +828,7 @@ public static class WorldFederationCodec {
         ct: ct,
         stream: stream
     );
+
     // The one framed-read shape both directions share: read the frame, refuse an undeclared kind by its wire number,
     // then refuse a body over that kind's own cap. Only the enum and its cap table differ; the half names itself in the
     // refusal text. The half rides as a static-abstract witness rather than a pair of delegates so every frame's kind
@@ -861,6 +865,7 @@ public static class WorldFederationCodec {
             : read
         );
     }
+
     /// <summary>Decodes an authentication leaf. The proof's own shape is <see cref="Puck.Networking.IAuthenticator.TryVerify"/>'s
     /// call to make, never this decode's — a fixed length here would bind the wire to one authenticator scheme.
     /// Carries no source-authority field: the leaf IS the proof, and the identity it establishes comes back only
@@ -1021,8 +1026,8 @@ public static class WorldFederationCodec {
         }
 
         if (!WorldProjection.TryToDefinition(
-            projection: projection,
             definition: out definition,
+            projection: projection,
             reason: out var hydrationReason
         )) {
             failure = new WireFailure(
@@ -1380,11 +1385,11 @@ public static class WorldFederationCodec {
         snapshot = new WorldSnapshot(
             Authority: authority,
             Entries: entries,
+            FieldCells: deltas,
+            FieldsFull: fieldsFull,
             Revision: revision,
             StepTicks: stepTicks,
-            Tick: tick,
-            FieldCells: deltas,
-            FieldsFull: fieldsFull
+            Tick: tick
         );
 
         return Finish(
@@ -1440,28 +1445,6 @@ public static class WorldFederationCodec {
             failure: out failure,
             reader: ref reader
         );
-    }
-    /// <summary>Writes the federation discriminator that opens every connection. This is the only hello: the
-    /// challenge/authenticate exchange that follows rides ordinary frames.</summary>
-    /// <param name="stream">The connection stream.</param>
-    /// <param name="ct">Cancellation.</param>
-    /// <returns>The write task.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
-    public static async Task WriteHelloAsync(Stream stream, CancellationToken ct) {
-        ArgumentNullException.ThrowIfNull(argument: stream);
-
-        var bytes = new byte[sizeof(ulong)];
-
-        System.Buffers.Binary.BinaryPrimitives.WriteUInt64LittleEndian(
-            destination: bytes,
-            value: WireKey
-        );
-
-        await stream.WriteAsync(
-            buffer: bytes,
-            cancellationToken: ct
-        ).ConfigureAwait(continueOnCapturedContext: false);
-        await stream.FlushAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false);
     }
     /// <summary>Writes a named refusal frame.</summary>
     /// <param name="stream">The connection stream.</param>

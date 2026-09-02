@@ -184,13 +184,13 @@ public sealed partial class WorldPopulation {
     // stepRaw arrive already bounded well under long's range (CurvatureSpline's own MaxCoordinate/
     // MaxTangentChordRatio caps bound totalLengthRaw far below 2^62), so the addition itself cannot overflow.
     private static long AdvanceCurveArc(long arcRaw, long stepRaw, long totalLengthRaw, bool closed) {
-        var next = unchecked(arcRaw + stepRaw);
+        var next = unchecked((arcRaw + stepRaw));
 
         if (!closed) {
             return Math.Clamp(
-                value: next,
+                max: totalLengthRaw,
                 min: 0L,
-                max: totalLengthRaw
+                value: next
             );
         }
 
@@ -206,6 +206,7 @@ public sealed partial class WorldPopulation {
 
         return next;
     }
+
     /// <summary>Counts active bodies whose currently selected producer follows a <c>curves</c> row — the
     /// <c>world.budget</c> cost sheet's own per-tick price for the feature (one
     /// <see cref="Puck.Maths.CompiledCurvatureSpline.Evaluate"/> per follower, per tick).</summary>
@@ -238,6 +239,7 @@ public sealed partial class WorldPopulation {
 
         return count;
     }
+
     // The altitude a wander entity holds: a free kit's authored base plus its per-index range sample; a grounded kit
     // starts at the authored spawn point or the world origin and lets contact geometry settle it.
     private static CompiledBodyProducer? SeedProducer(in FixedWorldKit kit) =>
@@ -454,7 +456,6 @@ public sealed partial class WorldPopulation {
             body.SetMediumSurface(surface: fields.MediumSurface(position: body.FixedPosition));
         }
     }
-
     /// <summary>Advances every active seat body by one exact simulation tick: a wander-sourced seat gets this tick's
     /// producer image staged first (the same deterministic path as a peer), then the body integrates its submitted
     /// intent per the merge rule. Runs after <see cref="AdvanceSimulated"/> in the server step, so the

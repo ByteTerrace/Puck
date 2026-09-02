@@ -36,14 +36,14 @@ public static class WorldRowFieldStepper {
     // The CLR floating-point families a numeric leaf steps in floating point (a fractional delta lands, and a whole
     // value stays a float rather than snapping to an integer). Nullable<T> is already unwrapped by TryResolveClrType.
     private static bool IsFloatingClrType(Type type) =>
-        (type == typeof(float)) ||
+        ((type == typeof(float)) ||
         (type == typeof(double)) ||
         (type == typeof(decimal)) ||
-        (type == typeof(Half));
+        (type == typeof(Half)));
     // The CLR integer families a numeric leaf steps in integer arithmetic — the current value stays EXACT (never
     // routed through a float that loses precision past 2^24) and the delta is rounded to whole steps.
     private static bool IsIntegralClrType(Type type) =>
-        (type == typeof(byte)) ||
+        ((type == typeof(byte)) ||
         (type == typeof(sbyte)) ||
         (type == typeof(short)) ||
         (type == typeof(ushort)) ||
@@ -52,7 +52,7 @@ public static class WorldRowFieldStepper {
         (type == typeof(long)) ||
         (type == typeof(ulong)) ||
         (type == typeof(nint)) ||
-        (type == typeof(nuint));
+        (type == typeof(nuint)));
     private static Type? ElementTypeOf(Type collectionType) {
         if (collectionType.IsArray) {
             return collectionType.GetElementType();
@@ -86,7 +86,7 @@ public static class WorldRowFieldStepper {
             current = (Nullable.GetUnderlyingType(nullableType: current) ?? current);
 
             var property = current.GetProperty(
-                bindingAttr: (BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase),
+                bindingAttr: BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase,
                 name: segment.Name
             );
 
@@ -325,114 +325,114 @@ public static class WorldRowFieldStepper {
 
         switch (leaf!.GetValueKind()) {
             case JsonValueKind.True or JsonValueKind.False: {
-                var current = leaf.GetValue<bool>();
-                var applied = ((delta != 0f) ? !current : current);
+                    var current = leaf.GetValue<bool>();
+                    var applied = ((delta != 0f) ? !current : current);
 
-                oldText = (current ? "true" : "false");
-                newText = (applied ? "true" : "false");
-                replacement = JsonValue.Create(value: applied)!;
+                    oldText = (current ? "true" : "false");
+                    newText = (applied ? "true" : "false");
+                    replacement = JsonValue.Create(value: applied)!;
 
-                break;
-            }
-            case JsonValueKind.Number: {
-                // Type the numeric step by the field's REAL CLR type, never by how JSON SPELLED the value:
-                // SerializeToNode renders a float 8f as the integer literal `8`, so keying on the JSON kind would step
-                // a float field in integer arithmetic (8 - 0.4 rounds back to 8, a silent no-op). The CLR type is
-                // authoritative — an integer field steps exactly in integer space, a float field in floating point.
-                _ = TryResolveClrType(
-                    error: out _,
-                    leafType: out var numericType,
-                    rowType: rowType,
-                    segments: segments
-                );
-
-                // When reflection cannot reach the leaf's CLR type (a member no property walk resolves), fall back to
-                // the JSON spelling — best effort, the only signal left.
-                var stepInteger = ((numericType is { } resolved)
-                    ? IsIntegralClrType(type: resolved)
-                    : leaf.AsValue().TryGetValue<long>(value: out _)
-                );
-
-                if (stepInteger) {
-                    // Round the delta to whole steps and add in integer space so the current value stays exact past
-                    // 2^24. A delta or sum outside long's range refuses by name rather than throwing OverflowException
-                    // up through the dispatcher (which catches nothing) — a malformed step submits nothing.
-                    long currentLong;
-                    long appliedLong;
-
-                    try {
-                        currentLong = leaf.GetValue<long>();
-                        appliedLong = checked(currentLong + (long)Math.Round(value: delta, mode: MidpointRounding.AwayFromZero));
-                    } catch (Exception exception) when (exception is OverflowException or FormatException or InvalidOperationException) {
-                        error = $"'{fieldPath}': integer step out of range (delta {delta.ToString(format: "0.####", provider: CultureInfo.InvariantCulture)})";
-
-                        return false;
-                    }
-
-                    oldText = currentLong.ToString(provider: CultureInfo.InvariantCulture);
-                    newText = appliedLong.ToString(provider: CultureInfo.InvariantCulture);
-                    replacement = JsonValue.Create(value: appliedLong)!;
-                } else {
-                    var currentDouble = leaf.GetValue<double>();
-                    var appliedDouble = (currentDouble + delta);
-
-                    if (!double.IsFinite(d: appliedDouble)) {
-                        error = $"'{fieldPath}': step result is not finite (current {currentDouble.ToString(format: "0.####", provider: CultureInfo.InvariantCulture)}, delta {delta.ToString(format: "0.####", provider: CultureInfo.InvariantCulture)})";
-
-                        return false;
-                    }
-
-                    oldText = currentDouble.ToString(format: "0.####", provider: CultureInfo.InvariantCulture);
-                    newText = appliedDouble.ToString(format: "0.####", provider: CultureInfo.InvariantCulture);
-                    replacement = JsonValue.Create(value: appliedDouble)!;
+                    break;
                 }
-
-                break;
-            }
-            case JsonValueKind.String: {
-                if (
-                    !TryResolveClrType(
-                        error: out error,
-                        leafType: out var leafType,
+            case JsonValueKind.Number: {
+                    // Type the numeric step by the field's REAL CLR type, never by how JSON SPELLED the value:
+                    // SerializeToNode renders a float 8f as the integer literal `8`, so keying on the JSON kind would step
+                    // a float field in integer arithmetic (8 - 0.4 rounds back to 8, a silent no-op). The CLR type is
+                    // authoritative — an integer field steps exactly in integer space, a float field in floating point.
+                    _ = TryResolveClrType(
+                        error: out _,
+                        leafType: out var numericType,
                         rowType: rowType,
                         segments: segments
-                    ) ||
-                    (leafType is not { IsEnum: true })
-                ) {
-                    error ??= $"'{fieldPath}': not a steppable field (number, boolean, or named enum only)";
+                    );
 
-                    return false;
+                    // When reflection cannot reach the leaf's CLR type (a member no property walk resolves), fall back to
+                    // the JSON spelling — best effort, the only signal left.
+                    var stepInteger = ((numericType is { } resolved)
+                        ? IsIntegralClrType(type: resolved)
+                        : leaf.AsValue().TryGetValue<long>(value: out _)
+                    );
+
+                    if (stepInteger) {
+                        // Round the delta to whole steps and add in integer space so the current value stays exact past
+                        // 2^24. A delta or sum outside long's range refuses by name rather than throwing OverflowException
+                        // up through the dispatcher (which catches nothing) — a malformed step submits nothing.
+                        long currentLong;
+                        long appliedLong;
+
+                        try {
+                            currentLong = leaf.GetValue<long>();
+                            appliedLong = checked((currentLong + ((long)Math.Round(mode: MidpointRounding.AwayFromZero, value: delta))));
+                        } catch (Exception exception) when ((exception is OverflowException or FormatException or InvalidOperationException)) {
+                            error = $"'{fieldPath}': integer step out of range (delta {delta.ToString(format: "0.####", provider: CultureInfo.InvariantCulture)})";
+
+                            return false;
+                        }
+
+                        oldText = currentLong.ToString(provider: CultureInfo.InvariantCulture);
+                        newText = appliedLong.ToString(provider: CultureInfo.InvariantCulture);
+                        replacement = JsonValue.Create(value: appliedLong)!;
+                    } else {
+                        var currentDouble = leaf.GetValue<double>();
+                        var appliedDouble = (currentDouble + delta);
+
+                        if (!double.IsFinite(d: appliedDouble)) {
+                            error = $"'{fieldPath}': step result is not finite (current {currentDouble.ToString(format: "0.####", provider: CultureInfo.InvariantCulture)}, delta {delta.ToString(format: "0.####", provider: CultureInfo.InvariantCulture)})";
+
+                            return false;
+                        }
+
+                        oldText = currentDouble.ToString(format: "0.####", provider: CultureInfo.InvariantCulture);
+                        newText = appliedDouble.ToString(format: "0.####", provider: CultureInfo.InvariantCulture);
+                        replacement = JsonValue.Create(value: appliedDouble)!;
+                    }
+
+                    break;
                 }
+            case JsonValueKind.String: {
+                    if (
+                        !TryResolveClrType(
+                            error: out error,
+                            leafType: out var leafType,
+                            rowType: rowType,
+                            segments: segments
+                        ) ||
+                        (leafType is not { IsEnum: true })
+                    ) {
+                        error ??= $"'{fieldPath}': not a steppable field (number, boolean, or named enum only)";
 
-                var names = Enum.GetNames(enumType: leafType);
-                var current = leaf.GetValue<string>();
-                var index = Array.IndexOf(
-                    array: names,
-                    value: current
-                );
+                        return false;
+                    }
 
-                if (index < 0) {
-                    error = $"'{fieldPath}': current value '{current}' is not a recognized {leafType.Name} member";
+                    var names = Enum.GetNames(enumType: leafType);
+                    var current = leaf.GetValue<string>();
+                    var index = Array.IndexOf(
+                        array: names,
+                        value: current
+                    );
 
-                    return false;
+                    if (index < 0) {
+                        error = $"'{fieldPath}': current value '{current}' is not a recognized {leafType.Name} member";
+
+                        return false;
+                    }
+
+                    var direction = MathF.Sign(x: delta);
+
+                    if (direction == 0) {
+                        error = $"'{fieldPath}': delta must be nonzero to cycle an enum";
+
+                        return false;
+                    }
+
+                    var appliedIndex = ((((index + direction) % names.Length) + names.Length) % names.Length);
+
+                    oldText = current;
+                    newText = names[appliedIndex];
+                    replacement = JsonValue.Create(value: names[appliedIndex])!;
+
+                    break;
                 }
-
-                var direction = MathF.Sign(x: delta);
-
-                if (direction == 0) {
-                    error = $"'{fieldPath}': delta must be nonzero to cycle an enum";
-
-                    return false;
-                }
-
-                var appliedIndex = ((((index + direction) % names.Length) + names.Length) % names.Length);
-
-                oldText = current;
-                newText = names[appliedIndex];
-                replacement = JsonValue.Create(value: names[appliedIndex])!;
-
-                break;
-            }
             default:
                 error = $"'{fieldPath}': not a steppable field (number, boolean, or named enum only)";
 

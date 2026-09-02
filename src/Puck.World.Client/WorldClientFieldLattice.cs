@@ -32,10 +32,12 @@ public sealed class WorldClientFieldLattice {
     public WorldFieldsSection Document { get; }
     /// <summary>Gets the field count.</summary>
     public int FieldCount => m_raw.Length;
+
     /// <summary>Gets the revision of one field's cell values.</summary>
     /// <param name="field">The field index.</param>
     /// <returns>The field-local revision.</returns>
     public int FieldRevision(int field) => m_fieldRevisions[field];
+
     /// <summary>Gets the layer count.</summary>
     public int Layers { get; }
     /// <summary>Gets a counter that moves on every applied delta set.</summary>
@@ -85,7 +87,7 @@ public sealed class WorldClientFieldLattice {
     /// <param name="y">The layer.</param>
     /// <param name="z">The Z cell index.</param>
     /// <returns>The cell index.</returns>
-    public int CellIndex(int x, int y, int z) => (((z * Layers) + y) * Width + x);
+    public int CellIndex(int x, int y, int z) => ((((z * Layers) + y) * Width) + x);
     /// <summary>Gets a cell's value as a presentation float.</summary>
     /// <param name="field">The field index.</param>
     /// <param name="cell">The cell index.</param>

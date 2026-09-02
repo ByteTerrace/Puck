@@ -87,7 +87,6 @@ public sealed record ProbeKindOutput(string Of, string Format = ProbeKindOutput.
 /// <param name="Accumulate">The per-pixel accumulation entry point.</param>
 /// <param name="Finalize">The single-dispatch entry point that writes the reading's channels.</param>
 public sealed record ProbeKindKernel(string Source, string Accumulate, string Finalize);
-
 /// <summary>
 /// A <c>puck.probe.v1</c> probe kind manifest: one <c>&lt;id&gt;.puck.probe.json</c> declaring an probe's
 /// input, its channels, and — for a <see cref="ProbeKindClass.Kernel"/> kind — the HLSL source and entry points a
@@ -270,7 +269,7 @@ public sealed partial record ProbeKindManifest(
     /// <returns>The bound values, every absent field at its default.</returns>
     /// <exception cref="InvalidOperationException">The configuration is invalid.</exception>
     public ShaderConfigValues BindConfig(JsonElement? config) {
-        return (TryBindConfig(config: config, values: out var values, reason: out var reason)
+        return (TryBindConfig(config: config, reason: out var reason, values: out var values)
             ? values
             : throw new InvalidOperationException(message: $"'{Name}' config is invalid: {reason}")
         );
@@ -287,6 +286,7 @@ public sealed partial record ProbeKindManifest(
     /// <returns><see langword="true"/> when <paramref name="config"/> is valid.</returns>
     public bool TryBindConfig(JsonElement? config, out ShaderConfigValues values, out string reason) =>
         ShaderConfigBinding.TryBind(schema: Config, config: config, ownerName: Name, values: out values, reason: out reason);
+
     /// <summary>The constant-buffer size granule: a Direct3D 11 constant buffer's byte width must be a multiple of
     /// 16, so <see cref="ConstantsBlock"/> pads the packed fields up to it.</summary>
     public const int ConstantsBlockAlignment = 16;
@@ -312,7 +312,7 @@ public sealed partial record ProbeKindManifest(
             index++;
         }
 
-        var offsets = ShaderPushConstantLayout.ComputeOffsets(types: types, sizeBytes: out _);
+        var offsets = ShaderPushConstantLayout.ComputeOffsets(sizeBytes: out _, types: types);
 
         index = 0;
 
@@ -353,8 +353,8 @@ public sealed partial record ProbeKindManifest(
             index++;
         }
 
-        var offsets = ShaderPushConstantLayout.ComputeOffsets(types: types, sizeBytes: out var sizeBytes);
-        var paddedSize = ((((int)sizeBytes) + (ConstantsBlockAlignment - 1)) / ConstantsBlockAlignment) * ConstantsBlockAlignment;
+        var offsets = ShaderPushConstantLayout.ComputeOffsets(sizeBytes: out var sizeBytes, types: types);
+        var paddedSize = (((((int)sizeBytes) + (ConstantsBlockAlignment - 1)) / ConstantsBlockAlignment) * ConstantsBlockAlignment);
         var block = new byte[paddedSize];
 
         index = 0;

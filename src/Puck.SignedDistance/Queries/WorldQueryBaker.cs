@@ -15,7 +15,6 @@ public static class WorldQueryBaker {
     /// resolution for both foot-traffic blocking and RTS ground-height sampling. Exactly <c>16384</c> raw Q48.16
     /// (no rounding), like the walk grid's cell size.</summary>
     public const float CellSize = 0.25f;
-
     /// <summary>The default maximum number of cells one bake may allocate. At the default resolution this admits a
     /// square up to 512 world units on each side (2048 by 2048 cells) and retains about 32.5 MiB across the height and
     /// blocked layers. Call the overload taking <c>maxCellCount</c> to choose a different explicit budget.</summary>
@@ -338,7 +337,6 @@ public static class WorldQueryBaker {
             minZ: minZ,
             terrain: terrain
         );
-
     /// <summary>Bakes an artifact under an explicit allocation ceiling. The grid is refused before either per-cell
     /// layer is allocated when its dimensions exceed <paramref name="maxCellCount"/>.</summary>
     /// <param name="minX">The grid's minimum X bound (world units).</param>

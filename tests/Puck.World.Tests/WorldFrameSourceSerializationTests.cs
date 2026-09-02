@@ -31,10 +31,10 @@ public sealed class WorldFrameSourceSerializationTests {
 
         var roundTripped = RoundTrip(
             typeInfo: WorldJsonContext.Default.WorldFrameSource,
-            value: (WorldFrameSource)source
+            value: ((WorldFrameSource)source)
         );
 
-        var camera = Assert.IsType<WorldScreenSource.Camera>(roundTripped);
+        var camera = Assert.IsType<WorldScreenSource.Camera>(@object: roundTripped);
 
         Assert.Equal(expected: WorldCameraSensor.Infrared, actual: camera.Sensor);
         Assert.Equal(expected: WorldFeedProfile.Default, actual: camera.Profile);
@@ -49,10 +49,10 @@ public sealed class WorldFrameSourceSerializationTests {
 
         var roundTripped = RoundTrip(
             typeInfo: WorldJsonContext.Default.WorldFrameSource,
-            value: (WorldFrameSource)source
+            value: ((WorldFrameSource)source)
         );
 
-        var camera = Assert.IsType<WorldScreenSource.Camera>(roundTripped);
+        var camera = Assert.IsType<WorldScreenSource.Camera>(@object: roundTripped);
 
         Assert.Equal(expected: 2, actual: camera.Seat);
     }
@@ -62,10 +62,10 @@ public sealed class WorldFrameSourceSerializationTests {
 
         var roundTripped = RoundTrip(
             typeInfo: WorldJsonContext.Default.WorldFrameSource,
-            value: (WorldFrameSource)source
+            value: ((WorldFrameSource)source)
         );
 
-        var view = Assert.IsType<WorldScreenSource.View>(roundTripped);
+        var view = Assert.IsType<WorldScreenSource.View>(@object: roundTripped);
 
         Assert.Equal(expected: "gallery", actual: view.CameraName);
     }
@@ -75,10 +75,10 @@ public sealed class WorldFrameSourceSerializationTests {
 
         var roundTripped = RoundTrip(
             typeInfo: WorldJsonContext.Default.WorldFrameSource,
-            value: (WorldFrameSource)source
+            value: ((WorldFrameSource)source)
         );
 
-        var probe = Assert.IsType<WorldScreenSource.Probe>(roundTripped);
+        var probe = Assert.IsType<WorldScreenSource.Probe>(@object: roundTripped);
 
         Assert.Equal(expected: "faerie", actual: probe.Id);
     }
@@ -92,10 +92,10 @@ public sealed class WorldFrameSourceSerializationTests {
 
         var roundTripped = RoundTrip(
             typeInfo: WorldJsonContext.Default.WorldFrameSource,
-            value: (WorldFrameSource)source
+            value: ((WorldFrameSource)source)
         );
 
-        var capture = Assert.IsType<WorldScreenSource.Capture>(roundTripped);
+        var capture = Assert.IsType<WorldScreenSource.Capture>(@object: roundTripped);
 
         Assert.Equal(expected: "OBS", actual: capture.WindowTitle);
         Assert.Null(@object: capture.MonitorIndex);
@@ -124,7 +124,7 @@ public sealed class WorldFrameSourceSerializationTests {
 
         Assert.Equal(expected: screen.Index, actual: roundTripped.Index);
 
-        var camera = Assert.IsType<WorldScreenSource.Camera>(roundTripped.Source);
+        var camera = Assert.IsType<WorldScreenSource.Camera>(@object: roundTripped.Source);
 
         Assert.Equal(expected: WorldCameraSensor.Color, actual: camera.Sensor);
     }

@@ -27,6 +27,7 @@ public sealed class WorldDynamicsCommandModule(IWorldConsoleAuthority authority)
             _ => this,
         };
     }
+
     // One pass over the whole document, grouped by the referenced row name — every row's census then looks itself up
     // rather than each re-walking the document.
     private static Dictionary<string, ReferenceCounts> CountReferencesByRow(WorldDefinition definition) {
@@ -64,18 +65,17 @@ public sealed class WorldDynamicsCommandModule(IWorldConsoleAuthority authority)
             : default
         );
 
-        return $" {row.Name}"
-            + $" f={row.Frequency.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)}"
-            + $" zeta={row.Damping.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)}"
-            + $" r={row.Response.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)}"
-            + $" decay={FormatRaw32(raw: constants.DecayRateRaw)}"
-            + $" osc={FormatRaw32(raw: constants.OscillationRateRaw)}"
-            + $" k3={FormatRaw32(raw: constants.TargetVelocityGainRaw)}"
-            + $" refs=cameras:{refs.Cameras}"
-            + $",looks:{refs.Looks}"
-            + $",parts:{refs.Parts}"
-            + $",kits:{refs.Kits}"
-            + $",state:{refs.State}";
+        return ((((((((((((string)$" {row.Name} f={row.Frequency.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)}")
+            + $" zeta={row.Damping.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)}")
+            + $" r={row.Response.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)}")
+            + $" decay={FormatRaw32(raw: constants.DecayRateRaw)}")
+            + $" osc={FormatRaw32(raw: constants.OscillationRateRaw)}")
+            + $" k3={FormatRaw32(raw: constants.TargetVelocityGainRaw)}")
+            + $" refs=cameras:{refs.Cameras}")
+            + $",looks:{refs.Looks}")
+            + $",parts:{refs.Parts}")
+            + $",kits:{refs.Kits}")
+            + $",state:{refs.State}");
     }
     private static string DescribeDynamics(WorldDefinition definition) {
         var dynamics = definition.Dynamics;

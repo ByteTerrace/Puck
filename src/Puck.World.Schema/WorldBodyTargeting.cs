@@ -117,6 +117,7 @@ public readonly record struct FixedBodyTargetSource(BodyTargetSource Source, Fix
     ),
         _ => throw new InvalidOperationException(message: $"Unknown body target source '{source.GetType().Name}'."),
     };
+
     // rate/simulationRateHz rounded once to Q32: rate parses to Q16 at the authoring boundary (the same one rounding
     // every authored float takes), then the division to Q32 is the ONE further rounding — never repeated per tick.
     // simulationRateHz <= 0 (an unvalidated caller) rounds to zero rather than dividing by zero.
@@ -124,9 +125,9 @@ public readonly record struct FixedBodyTargetSource(BodyTargetSource Source, Fix
         var rateRaw = FixedQ4816.FromDouble(value: rate).Value;
 
         return (FixedPointRounding.TryRoundRational(
-            numerator: rateRaw,
             denominator: simulationRateHz,
             fractionBitCount: 16,
+            numerator: rateRaw,
             result: out var arcStepRaw
         )
             ? arcStepRaw

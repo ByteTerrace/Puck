@@ -105,8 +105,8 @@ internal sealed partial class WorldProbes {
         foreach (var (socketName, source) in inputs) {
             if (!TryFindSocket(
                 name: socketName,
-                sockets: sockets,
-                socket: out var socket
+                socket: out var socket,
+                sockets: sockets
             )) {
                 throw new InvalidOperationException(message: $"{path}.inputs['{socketName}'] names no socket of probe kind '{manifest.Name}'.");
             }
@@ -185,7 +185,7 @@ internal sealed partial class WorldProbes {
         try {
             document = (JsonSerializer.Deserialize(json: File.ReadAllText(path: resolvedPath), jsonTypeInfo: ProbeTrackJsonContext.Default.ProbeTrackDocument)
                 ?? throw new InvalidDataException(message: "the track document is empty or 'null'."));
-        } catch (Exception exception) when (exception is IOException or JsonException or InvalidDataException) {
+        } catch (Exception exception) when ((exception is IOException or JsonException or InvalidDataException)) {
             throw new InvalidOperationException(message: $"{path} track '{trackPath}' failed to load: {exception.Message}", innerException: exception);
         }
 
@@ -399,7 +399,7 @@ internal sealed partial class WorldProbes {
             }
 
             if (fault is not null) {
-                EndRun(instance: instance, fault: fault);
+                EndRun(fault: fault, instance: instance);
                 instance.SocketGenerations = null;
                 instance.OutputSet = null;
 
@@ -409,7 +409,7 @@ internal sealed partial class WorldProbes {
             var changed = ((instance.SocketGenerations is not { } previous) || !SocketGenerationsEqual(current: generations, previous: previous) || !ReferenceEquals(objA: instance.OutputSet, objB: outputSet));
 
             if (changed) {
-                RestartRun(generations: generations, inputs: inputs, outputSet: outputSet, instance: instance);
+                RestartRun(generations: generations, inputs: inputs, instance: instance, outputSet: outputSet);
 
                 continue;
             }
@@ -463,7 +463,7 @@ internal sealed partial class WorldProbes {
                 }
 
                 var targetRow = m_rows[targetRowIndex];
-                var targetInstance = ResolveInstance(target: targetRow, contextSeat: contextSeat);
+                var targetInstance = ResolveInstance(contextSeat: contextSeat, target: targetRow);
 
                 if (targetInstance is null) {
                     return (s_unboundKernelInput, null, null, $"probe '{probeSource.Id}' has no live instance for seat {contextSeat}");
@@ -518,7 +518,7 @@ internal sealed partial class WorldProbes {
     // the declared output ring at its resolved extent when the kind writes one, resolve the trigger sensor's
     // kernel host at this instance's own seat, and attach.
     private void RestartRun(ProbeInstance instance, ProbeKernelInput[] inputs, object?[] generations, object? outputSet) {
-        EndRun(instance: instance, fault: null);
+        EndRun(fault: null, instance: instance);
         instance.SocketGenerations = [.. generations];
         instance.OutputSet = outputSet;
 

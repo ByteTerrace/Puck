@@ -72,7 +72,6 @@ public struct FixedTetherConstraint {
         MinLength: MinLength,
         Remainder: m_lengthAccumulator.Remainder
     );
-
     /// <summary>Restores a previously captured deterministic reel state.</summary>
     /// <param name="state">The state produced by <see cref="CaptureState"/>.</param>
     /// <returns>A tether that continues reeling from the captured fixed-point fraction.</returns>
@@ -126,7 +125,6 @@ public struct FixedTetherConstraint {
     /// <returns>The anchor point in world axes.</returns>
     public static FixedVector3 ResolveAnchor(in FixedVector3 anchorPosition, in FixedQuaternion anchorOrientation, in FixedVector3 localOffset) =>
         (anchorPosition + anchorOrientation.Rotate(vector: localOffset));
-
     /// <summary>Advances <see cref="Length"/> by <paramref name="ratePerSecond"/> over <paramref name="elapsedTicks"/>,
     /// clamped at <see cref="MinLength"/> — positive reels the rope out, negative reels it in. Integrated through a
     /// <see cref="FixedRateAccumulator"/> bound to the engine tick base, so a rate that is not an exact multiple of one
@@ -152,7 +150,6 @@ public struct FixedTetherConstraint {
 
         Length = next;
     }
-
     /// <summary>Solves the distance cap against the CURRENT tick's resolved anchor position. A no-op — bit for bit —
     /// while <paramref name="position"/> sits at or inside <see cref="Length"/> from <paramref name="anchor"/>; once
     /// beyond it, projects <paramref name="position"/> back onto the sphere of radius <see cref="Length"/> and removes
@@ -189,12 +186,10 @@ public struct FixedTetherConstraint {
         return new FixedTetherResolution(Taut: true);
     }
 }
-
 /// <summary>The outcome of one <see cref="FixedTetherConstraint.Solve"/> call.</summary>
 /// <param name="Taut">Whether the rope was at its cap this call — <see langword="false"/> means <c>Solve</c> left
 /// position and velocity untouched.</param>
 public readonly record struct FixedTetherResolution(bool Taut);
-
 /// <summary>The complete deterministic state of a <see cref="FixedTetherConstraint"/>.</summary>
 /// <param name="Length">The current rope length.</param>
 /// <param name="MinLength">The reel-in floor.</param>

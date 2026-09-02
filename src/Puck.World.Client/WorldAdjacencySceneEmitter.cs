@@ -78,7 +78,6 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     // reservation WorldAdjacencyGeometry.Select's default `maximum` honors) and reused across bands and rebuilds —
     // EmitStatic consumes it synchronously and never retains the reference.
     private readonly WorldPlacement[] m_mappedPlacements = new WorldPlacement[MaxInstancesPerBand];
-
     // WriteRevision's own scratch: the rebuild watch must not disturb the emitted latch it is comparing against.
     private readonly bool[] m_polledEntities = new bool[WorldRigCatalog.Capacity];
     // WriteRevision's own scratch for the reachability poll's "still present this call" set, cleared and refilled
@@ -88,7 +87,6 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     // pass over m_polledRevisions.Keys (read-only — Dictionary forbids mutating a table a live Keys enumerator is
     // open over), then applied in a second pass, so the two-pass shape stays without allocating a LINQ array.
     private readonly List<string> m_missingAdjacencies = [];
-
     // The last-polled reachability/revision per band, keyed by (placementId, faceName) — WriteRevision's own poll
     // compares against this to decide whether a rebuild is owed, without ever emitting from inside WriteRevision
     // itself (emission belongs to Emit alone).
@@ -252,8 +250,8 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                     creations: neighbour.Definition.Creations,
                     placements: new ArraySegment<WorldPlacement>(
                         array: m_mappedPlacements,
-                        offset: 0,
-                        count: mappedCount
+                        count: mappedCount,
+                        offset: 0
                     )
                 );
             }
@@ -268,6 +266,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             }
         }
     }
+
     // A plain indexed copy of the first `count` entries — the ONLY place EmitCurrent allocates a fresh
     // m_emittedProjections array, reached only when a live edit authors more adjacency projections than this
     // composition reserved at boot.
@@ -521,6 +520,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                     quaternion2: neighbour.CurrentOrientation(index: entity),
                     amount: alpha
                 );
+
                 WorldMirroredAvatarBand.AdvanceGait(
                     address: neighbour.EntityAddress(index: entity),
                     gaitPhase: ref m_gaitPhases[motionIndex],

@@ -11,7 +11,6 @@ public enum FixedSurfaceColliderSource : byte {
     /// <summary>The second span (<c>dynamicColliders</c>) — recomputed by the caller every tick.</summary>
     Dynamic,
 }
-
 /// <summary>One surface-attach candidate: the nearest analytic surface point within the caller's reach, its
 /// outward unit normal there, which collider owns it, and the probe's distance to it.</summary>
 /// <param name="Point">The nearest point on the owning collider's surface.</param>
@@ -30,7 +29,6 @@ public readonly record struct FixedSurfaceAttachCandidate(
     FixedSurfaceColliderSource Source,
     int ColliderIndex
 );
-
 /// <summary>
 /// The nearest-surface-point primitive climbing (surface attach/conform) and grappling (tether anchor selection)
 /// both resolve against — one deterministic query over the same analytic collider vocabulary
@@ -212,10 +210,10 @@ public static class FixedSurfaceQuery {
             if (
                 (distance <= reach) &&
                 (!found || IsCloser(
+                best: in best,
                 distance: distance,
                 index: index,
-                source: source,
-                best: in best
+                source: source
             ))
             ) {
                 found = true;
@@ -265,8 +263,8 @@ public static class FixedSurfaceQuery {
             if (
                 (cosine >= cosineHalfAngle) &&
                 (!found || IsBetterDirected(
-                bestCosine: bestCosine,
                 best: in best,
+                bestCosine: bestCosine,
                 cosine: cosine,
                 distance: distance,
                 index: index,

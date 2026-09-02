@@ -287,6 +287,7 @@ public sealed partial class WorldPopulation {
             register: register,
             sourceIndex: sourceIndex
         );
+
     private bool DesignationWithinEnvelope(int sourceIndex, in FixedVector3 candidate, string candidateLabel, in FixedQuaternion candidateOrientation, WorldTargetRegister register, float rangeValue, float halfAngleDegrees, out string reason) {
         var source = m_entries[sourceIndex].Body!;
         var origin = source.FixedPosition;
@@ -328,6 +329,7 @@ public sealed partial class WorldPopulation {
         reason = string.Empty;
         return true;
     }
+
     /// <summary>Reads a visited-world effective slot and composes it with a register maximum by taking the tighter value.</summary>
     public static float EffectiveTargetValue(WorldBody? body, string? stateName, float authoredMaximum) {
         if (

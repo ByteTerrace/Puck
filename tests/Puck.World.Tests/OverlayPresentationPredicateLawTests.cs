@@ -10,7 +10,7 @@ namespace Puck.World.Tests;
 public sealed class OverlayPresentationPredicateLawTests {
     private const int RateHz = 240;
 
-    private static readonly WorldHudRect UnitRect = new(X: 0f, Y: 0f, Width: 1f, Height: 1f);
+    private static readonly WorldHudRect UnitRect = new(Height: 1f, Width: 1f, X: 0f, Y: 0f);
 
     private static WorldCamera Camera(WorldAnchor? anchor = null, IReadOnlyList<WorldCameraAnchorCandidate>? anchors = null) => new(
         Name: "portrait",
@@ -51,11 +51,11 @@ public sealed class OverlayPresentationPredicateLawTests {
             Defaults: new WorldHudDefaults(Enabled: true),
             Panels: [
                 new WorldHudPanel(
-                    Id: "portrait",
-                    Rect: UnitRect,
-                    Layer: WorldHudLayer.Over,
-                    Style: WorldHudPanelStyle.Chip,
                     Elements: ((element is { } authored) ? [authored] : []),
+                    Id: "portrait",
+                    Layer: WorldHudLayer.Over,
+                    Rect: UnitRect,
+                    Style: WorldHudPanelStyle.Chip,
                     Visible: visible
                 ),
             ]
@@ -109,7 +109,7 @@ public sealed class OverlayPresentationPredicateLawTests {
         Laws.RefusalWithControl(
             lawId: "camera.anchor-xor-anchors",
             deniedOutcome: () => Validates(definition: WithCameras(Camera(anchor: seat, anchors: ranked))),
-            controlOutcome: () => Validates(definition: WithCameras(Camera(anchors: ranked))) && Validates(definition: WithCameras(Camera(anchor: seat))));
+            controlOutcome: () => (Validates(definition: WithCameras(Camera(anchors: ranked))) && Validates(definition: WithCameras(Camera(anchor: seat)))));
     }
     [Fact]
     public void ACameraRefusesAnEmptyRankedListWhileOneCandidatePasses() {
@@ -123,7 +123,7 @@ public sealed class OverlayPresentationPredicateLawTests {
         Laws.RefusalWithControl(
             lawId: "camera.seat-anchor-number",
             deniedOutcome: () => Validates(definition: WithCameras(Camera(anchor: new WorldAnchor.Seat(Number: 0)))),
-            controlOutcome: () => Validates(definition: WithCameras(Camera(anchor: new WorldAnchor.Seat(Number: 1)))) && Validates(definition: WithCameras(Camera(anchor: new WorldAnchor.Seat()))));
+            controlOutcome: () => (Validates(definition: WithCameras(Camera(anchor: new WorldAnchor.Seat(Number: 1)))) && Validates(definition: WithCameras(Camera(anchor: new WorldAnchor.Seat())))));
     }
     [Fact]
     public void ARankedCandidateRefusesAnInvalidConditionWhileAValidOnePasses() {
@@ -144,7 +144,7 @@ public sealed class OverlayPresentationPredicateLawTests {
         Laws.RefusalWithControl(
             lawId: "hud.frame-source-xor-sources",
             deniedOutcome: () => Validates(definition: WithPanel(element: FrameElement(source: CaptureSource(title: "a"), sources: candidates))),
-            controlOutcome: () => Validates(definition: WithPanel(element: FrameElement(sources: candidates))) && Validates(definition: WithPanel(element: FrameElement(source: CaptureSource(title: "a")))));
+            controlOutcome: () => (Validates(definition: WithPanel(element: FrameElement(sources: candidates))) && Validates(definition: WithPanel(element: FrameElement(source: CaptureSource(title: "a"))))));
     }
     [Fact]
     public void AFrameElementRefusesANegativeFadeWhileZeroPasses() {
@@ -153,7 +153,6 @@ public sealed class OverlayPresentationPredicateLawTests {
             deniedOutcome: () => Validates(definition: WithPanel(element: FrameElement(source: CaptureSource(title: "a"), fadeSeconds: -1f))),
             controlOutcome: () => Validates(definition: WithPanel(element: FrameElement(source: CaptureSource(title: "a"), fadeSeconds: 0f))));
     }
-
     [Fact]
     public void SpeakingPresenceHoldsThroughTheWindowEasesAcrossTheFadeThenCuts() {
         var clock = new WorldSpeechClock();
@@ -175,10 +174,10 @@ public sealed class OverlayPresentationPredicateLawTests {
         Assert.Equal(expected: 1f, actual: At(clock: clock, now: spoke));
         Assert.Equal(expected: 1f, actual: At(clock: clock, now: (spoke + (RateHz / 2))));
 
-        var midFade = At(clock: clock, now: (spoke + RateHz + (RateHz / 2)));
+        var midFade = At(clock: clock, now: ((spoke + RateHz) + (RateHz / 2)));
 
-        Assert.InRange(actual: midFade, low: 0.25f, high: 0.75f);
-        Assert.Equal(expected: 0f, actual: At(clock: clock, now: (spoke + (2 * RateHz) + 1)));
+        Assert.InRange(actual: midFade, high: 0.75f, low: 0.25f);
+        Assert.Equal(expected: 0f, actual: At(clock: clock, now: ((spoke + (2 * RateHz)) + 1)));
         Assert.Equal(expected: 0f, actual: OverlayRecency.Presence(completedTick: spoke, fadeSeconds: fade, lastHeldTick: clock.LastSpokeTick(bodyIndex: 3), rateHz: RateHz, windowSeconds: window));
     }
     [Fact]
@@ -187,7 +186,7 @@ public sealed class OverlayPresentationPredicateLawTests {
 
         clock.NoteSpoke(bodyIndex: 0, tick: 10UL);
 
-        Assert.Equal(expected: 1f, actual: OverlayRecency.Presence(completedTick: (10UL + RateHz - 1), fadeSeconds: 0f, lastHeldTick: clock.LastSpokeTick(bodyIndex: 0), rateHz: RateHz, windowSeconds: 1f));
+        Assert.Equal(expected: 1f, actual: OverlayRecency.Presence(completedTick: ((10UL + RateHz) - 1), fadeSeconds: 0f, lastHeldTick: clock.LastSpokeTick(bodyIndex: 0), rateHz: RateHz, windowSeconds: 1f));
         Assert.Equal(expected: 0f, actual: OverlayRecency.Presence(completedTick: (10UL + RateHz), fadeSeconds: 0f, lastHeldTick: clock.LastSpokeTick(bodyIndex: 0), rateHz: RateHz, windowSeconds: 1f));
     }
     [Fact]
@@ -201,7 +200,6 @@ public sealed class OverlayPresentationPredicateLawTests {
         Assert.Equal(expected: 5UL, actual: clock.LastSpokeTick(bodyIndex: 4));
         Assert.Equal(expected: 0UL, actual: clock.LastSpokeTick(bodyIndex: -1));
     }
-
     [Fact]
     public void AStatePredicateComparesTextOrdinallyAndNumbersThroughTheComparison() {
         var definition = WithPanel();
@@ -214,7 +212,6 @@ public sealed class OverlayPresentationPredicateLawTests {
         Assert.True(condition: OverlayStateComparison.Holds(definition: definition, state: new OverlayPredicate.State(Binding: "state.score", Value: 3f), tick: 0UL));
         Assert.False(condition: OverlayStateComparison.Holds(definition: definition, state: new OverlayPredicate.State(Binding: "state.missing", Value: 3f), tick: 0UL));
     }
-
     [Fact]
     public void TheFirstHoldingCandidateWinsAndNoneHoldingIsNoWinner() {
         var candidates = new OverlayPredicate?[] {
@@ -233,30 +230,29 @@ public sealed class OverlayPresentationPredicateLawTests {
     public void AWinnerChangeHoldsBothKeysUntilTheFadeCompletes() {
         var fade = new OverlayFrameCrossfade();
 
-        fade.Advance(winner: 7, nowSeconds: 0.0, fadeSeconds: 1f);
+        fade.Advance(fadeSeconds: 1f, nowSeconds: 0.0, winner: 7);
         Assert.Equal(expected: (7, -1, 1f), actual: (fade.Current, fade.Outgoing, fade.Mix));
 
-        fade.Advance(winner: 9, nowSeconds: 10.0, fadeSeconds: 1f);
+        fade.Advance(fadeSeconds: 1f, nowSeconds: 10.0, winner: 9);
         Assert.Equal(expected: (9, 7), actual: (fade.Current, fade.Outgoing));
         Assert.Equal(expected: 0f, actual: fade.Mix);
 
-        fade.Advance(winner: 9, nowSeconds: 10.5, fadeSeconds: 1f);
+        fade.Advance(fadeSeconds: 1f, nowSeconds: 10.5, winner: 9);
         Assert.Equal(expected: 7, actual: fade.Outgoing);
         Assert.InRange(actual: fade.Mix, low: 0.25f, high: 0.75f);
 
-        fade.Advance(winner: 9, nowSeconds: 11.0, fadeSeconds: 1f);
+        fade.Advance(fadeSeconds: 1f, nowSeconds: 11.0, winner: 9);
         Assert.Equal(expected: (9, -1, 1f), actual: (fade.Current, fade.Outgoing, fade.Mix));
     }
     [Fact]
     public void AZeroFadeCutsToTheNewWinner() {
         var fade = new OverlayFrameCrossfade();
 
-        fade.Advance(winner: 1, nowSeconds: 0.0, fadeSeconds: 0f);
-        fade.Advance(winner: 2, nowSeconds: 0.1, fadeSeconds: 0f);
+        fade.Advance(fadeSeconds: 0f, nowSeconds: 0.0, winner: 1);
+        fade.Advance(fadeSeconds: 0f, nowSeconds: 0.1, winner: 2);
 
         Assert.Equal(expected: (2, -1, 1f), actual: (fade.Current, fade.Outgoing, fade.Mix));
     }
-
     [Fact]
     public void ASeatRelativeCameraRegistersPerSeatWhileASharedCameraRegistersOnce() {
         var seatCamera = Camera(anchors: [new WorldCameraAnchorCandidate(Anchor: new WorldAnchor.RecentSpeaker(), When: new OverlayPredicate.Speaking(Subject: new OverlaySubject.RecentSpeaker(), WindowSeconds: 1f)), new WorldCameraAnchorCandidate(Anchor: new WorldAnchor.Seat())]);
@@ -273,7 +269,7 @@ public sealed class OverlayPresentationPredicateLawTests {
         var perception = new WorldPerceptionAnchor();
         var speech = new WorldSpeechClock();
 
-        perception.Publish(slot: 1, bodyIndex: 9);
+        perception.Publish(bodyIndex: 9, slot: 1);
 
         Assert.Equal(expected: 9, actual: WorldSeatAnchors.BodyOf(anchor: new WorldAnchor.Seat(), slot: 1, perception: perception, speech: speech));
         Assert.Equal(expected: 9, actual: WorldSeatAnchors.BodyOf(anchor: new WorldAnchor.Seat(Number: 2), slot: 0, perception: perception, speech: speech));
@@ -295,11 +291,11 @@ public sealed class OverlayPresentationPredicateLawTests {
         var bare = WorldSeatAnchors.SelectAnchor(camera: Camera(anchor: new WorldAnchor.Seat()), candidateIndex: out var bareIndex, evaluator: new FactEvaluator(holding: null), slot: 0);
 
         Assert.IsType<WorldAnchor.RecentSpeaker>(@object: winner);
-        Assert.Equal(expected: 0, actual: winnerIndex);
+        Assert.Equal(actual: winnerIndex, expected: 0);
         Assert.Null(@object: none);
-        Assert.Equal(expected: -1, actual: noneIndex);
+        Assert.Equal(actual: noneIndex, expected: -1);
         Assert.IsType<WorldAnchor.Seat>(@object: bare);
-        Assert.Equal(expected: -1, actual: bareIndex);
+        Assert.Equal(actual: bareIndex, expected: -1);
     }
 
     private sealed class FactEvaluator(OverlayFact? holding) : IOverlayPredicateEvaluator {
@@ -308,6 +304,6 @@ public sealed class OverlayPresentationPredicateLawTests {
             OverlayPredicate.Now now => (now.Fact == holding),
             _ => false,
         };
-        public bool EvaluateAnySeat(OverlayPredicate? predicate) => Evaluate(slot: 0, predicate: predicate);
+        public bool EvaluateAnySeat(OverlayPredicate? predicate) => Evaluate(predicate: predicate, slot: 0);
     }
 }

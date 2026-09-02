@@ -22,8 +22,8 @@ public sealed class ChannelFrameLawTests {
         );
 
         return MathF.Atan2(
-            y: -facing.X,
-            x: -facing.Z
+            x: -facing.Z,
+            y: -facing.X
         );
     }
     private static bool TryValidate(WorldDefinition definition) => WorldDefinitionValidator.TryValidate(

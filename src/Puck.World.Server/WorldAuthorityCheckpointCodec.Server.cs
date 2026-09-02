@@ -852,10 +852,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             PlanarFollowerPositionRawX: planarFollowerPositionRawX,
             PlanarFollowerPositionRawY: planarFollowerPositionRawY,
             PlanarFollowerPositionRawZ: planarFollowerPositionRawZ,
+            PlanarFollowerPreviousTarget: planarFollowerPreviousTarget,
             PlanarFollowerVelocityRawX: planarFollowerVelocityRawX,
             PlanarFollowerVelocityRawY: planarFollowerVelocityRawY,
             PlanarFollowerVelocityRawZ: planarFollowerVelocityRawZ,
-            PlanarFollowerPreviousTarget: planarFollowerPreviousTarget,
             PlanarRampRemainder: planarRampRemainder,
             PlanarVelocity: planarVelocity,
             PreviousChannelBit: previousChannelBit,
@@ -868,8 +868,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             VehiclePitch: vehiclePitch,
             VehicleResidualRemainder: vehicleResidualRemainder,
             VerticalFollowerPositionRaw: verticalFollowerPositionRaw,
-            VerticalFollowerVelocityRaw: verticalFollowerVelocityRaw,
             VerticalFollowerPreviousTarget: verticalFollowerPreviousTarget,
+            VerticalFollowerVelocityRaw: verticalFollowerVelocityRaw,
             VerticalVelocity: verticalVelocity
         );
     }
@@ -1055,18 +1055,18 @@ public static partial class WorldAuthorityCheckpointCodec {
         var tetherAnchorPointOrLocalOffset = reader.ReadFixedVector();
 
         return new WorldBody.AttachmentResidue(
-            Mode: mode,
             AttachPreviousBit: attachPreviousBit,
-            DetachPreviousBit: detachPreviousBit,
             ClimbAnchor: climbAnchor,
+            ClimbGrantedByOverride: climbGrantedByOverride,
             ClimbNormal: climbNormal,
-            ClimbTangentRight: climbTangentRight,
-            ClimbTangentUp: climbTangentUp,
-            ClimbVelocity: climbVelocity,
             ClimbRemainderX: climbRemainderX,
             ClimbRemainderY: climbRemainderY,
             ClimbRemainderZ: climbRemainderZ,
-            ClimbGrantedByOverride: climbGrantedByOverride,
+            ClimbTangentRight: climbTangentRight,
+            ClimbTangentUp: climbTangentUp,
+            ClimbVelocity: climbVelocity,
+            DetachPreviousBit: detachPreviousBit,
+            Mode: mode,
             Tether: tether,
             TetherAnchorBodyIndex: tetherAnchorBodyIndex,
             TetherAnchorPointOrLocalOffset: tetherAnchorPointOrLocalOffset

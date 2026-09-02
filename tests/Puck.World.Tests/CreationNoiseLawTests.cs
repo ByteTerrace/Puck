@@ -98,7 +98,7 @@ public sealed class CreationNoiseLawTests {
             collection: violations,
             filter: violation => (
                 (violation.Path == "noise") &&
-                violation.Message.Contains(value: "step factor", comparisonType: StringComparison.Ordinal)
+                violation.Message.Contains(comparisonType: StringComparison.Ordinal, value: "step factor")
             )
         );
     }
@@ -113,12 +113,12 @@ public sealed class CreationNoiseLawTests {
 
         Assert.Empty(collection: violations);
     }
-    [Theory]
     [InlineData(0f, 1f, "noise.frequency")]
     [InlineData(9f, 1f, "noise.frequency")]
     [InlineData(0.3f, 0f, "noise.amplitude")]
     [InlineData(0.3f, 5f, "noise.amplitude")]
     [InlineData(float.NaN, 1f, "noise.frequency")]
+    [Theory]
     public void AnOutOfRangeParameterRefusesByPath(float frequency, float amplitude, string path) {
         var violations = CreationCanonicalizer.Validate(document: Document(noise: new CreationNoiseDocument(
             Amplitude: amplitude,

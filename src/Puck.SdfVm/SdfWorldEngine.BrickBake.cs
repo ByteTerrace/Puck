@@ -161,7 +161,6 @@ public sealed partial class SdfWorldEngine {
         m_brickVoxelCursor[slot] = 0;
         m_brickSerials[slot]++;
     }
-
     /// <summary>Queues a host-baked brick upload. A later produced frame records the copy and moves the slot to
     /// <see cref="BrickBakeState.Ready"/>; re-queuing the same slot before that frame keeps only the newest values.</summary>
     /// <param name="slot">The brick slot.</param>

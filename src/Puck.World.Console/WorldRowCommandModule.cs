@@ -285,8 +285,8 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldDynamicsRow,
             toMutation: static (principal, row) => new WorldMutation.UpsertDynamics(
-                Row: row,
-                Principal: principal
+                Principal: principal,
+                Row: row
             )
         ),
         Remove: RemoveByName(remove: static (principal, name) => new WorldMutation.RemoveDynamics(
@@ -304,8 +304,8 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldCurveRow,
             toMutation: static (principal, row) => new WorldMutation.UpsertCurve(
-                Row: row,
-                Principal: principal
+                Principal: principal,
+                Row: row
             )
         ),
         Remove: RemoveByName(remove: static (principal, name) => new WorldMutation.RemoveCurve(
@@ -942,6 +942,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
 
         return CommandResult.Error(output: $"[{verb}: unknown path '{path}' — {admissible}]");
     }
+
     /// <summary>Composes the <c>world.row.set</c> mutation for one dotted path and raw JSON tail WITHOUT submitting
     /// it — the seam the routed twin (<c>player.row.set</c>, which follows a crossed seat's authority route) reuses,
     /// so the routed grammar and the local grammar can never drift. A section whose mutation composes against the
@@ -992,6 +993,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
 
         return true;
     }
+
     // Type-erased upsert factory (server-agnostic form): parses <paramref name="info"/>'s shape from the raw JSON
     // tail and hands the parsed value to <paramref name="toMutation"/> — the ONE generic seam most of the section
     // table closes over.
@@ -1134,6 +1136,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             valueKind: CommandValueKind.Axis1D
         );
     }
+
     private CommandResult HandleStep(WorldServer server, CommandContext context, WireArgs args) {
         if (args.Count is (< 1 or > 2)) {
             return CommandResult.Usage(
@@ -1175,7 +1178,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         // removed. The whole-row upsert collides at this grain, not the field grain: two steps to different fields of
         // ONE row still stomp each other. Every pre-drain submission targets NextInputTick, so it is the window a
         // same-row collision lives inside.
-        var rowIdentity = path[..(path.Length - fieldPath.Length - 1)];
+        var rowIdentity = path[..((path.Length - fieldPath.Length) - 1)];
 
         if (m_stepGuard.IsClaimed(
             rowIdentity: rowIdentity,
@@ -1257,8 +1260,8 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
 
             if (
                 !path.StartsWith(
-                value: prefix,
-                comparisonType: StringComparison.Ordinal
+                comparisonType: StringComparison.Ordinal,
+                value: prefix
             ) ||
                 ((bestKey is not null) && (candidateKey.Length <= bestKey.Length))
             ) {
@@ -1345,8 +1348,8 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
                     comparisonType: StringComparison.Ordinal
                 )) {
                     return ToReadOutcome(node: JsonSerializer.SerializeToNode(
-                        value: row,
-                        jsonTypeInfo: info
+                        jsonTypeInfo: info,
+                        value: row
                     ));
                 }
             }
@@ -1428,6 +1431,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
 /// </summary>
 public sealed class WorldRowStepWindowGuard {
     private readonly HashSet<string> m_claimed = new(comparer: StringComparer.Ordinal);
+
     private ulong m_window;
     private bool m_seenWindow;
 

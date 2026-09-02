@@ -23,14 +23,12 @@ public sealed class SchemaVocabularyHookParityLawTests {
         Assert.NotNull(@object: WorldExtensionVocabularyHook.PostRenderExtensionCheck);
         Assert.NotNull(@object: WorldExtensionVocabularyHook.ScreenMachineEngineCheck);
     }
-
     /// <summary>The reserved context-family list is DERIVED from the client's published registry, not mirrored: a
     /// built-in family added there refuses a colliding authored <c>seatModes</c> name without a second edit in the
     /// validator.</summary>
     [Fact]
     public void TheReservedFamilyListIsTheClientRegistry() =>
         Assert.Equal(expected: WorldContextFamilies.Families, actual: ContextFamilyVocabularyHook.ReservedFamilyNames);
-
     /// <summary>The derivation has teeth: an authored seat-mode family named after a built-in one refuses by name,
     /// beside a passing control that differs only in the name.</summary>
     [Fact]

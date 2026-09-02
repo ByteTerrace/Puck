@@ -153,7 +153,6 @@ public static class WorldCameraRigCompiler {
     private readonly record struct ScalarSource(BindableScalar? Binding, float Fallback, float SpreadPullback);
     // One per-frame subject slot's source — an authored subject other than the program's own reference pose.
     private readonly record struct SubjectSource(WorldCameraSubject Subject);
-
     // The authored-to-IR walk. Programs are keyed by authored NAME so a blend that reaches the same program twice
     // (and a cycle the validator would have refused) compiles to one entry rather than recursing forever.
     private sealed class Translation(WorldDefinition definition, bool interactive) {
@@ -312,8 +311,8 @@ public static class WorldCameraRigCompiler {
                             var parameters = row.Parameters;
 
                             operations.Add(item: new SdfCameraOp.Dynamics(Value: new SdfCameraDynamics(
-                                Frequency: parameters.Frequency,
                                 Damping: parameters.Damping,
+                                Frequency: parameters.Frequency,
                                 Response: parameters.Response
                             )));
                         }
@@ -439,7 +438,6 @@ public static class WorldCameraRigCompiler {
             return null;
         }
     }
-
     private sealed class CompiledRig : IWorldCameraProgramRig {
         private readonly SdfCameraProgramRig m_rig;
         private readonly IReadOnlyList<ScalarSource> m_scalarSources;
@@ -458,11 +456,11 @@ public static class WorldCameraRigCompiler {
             m_subjectSources = subjectSources;
         }
 
+        public SdfCameraDynamics Dynamics => m_rig.Dynamics;
         public SdfCameraLook Look {
             get => m_rig.Look;
             set => m_rig.Look = value;
         }
-        public SdfCameraDynamics Dynamics => m_rig.Dynamics;
         public float Spread { get; set; }
 
         public void Retarget(WorldDefinition definition) {

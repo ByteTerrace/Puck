@@ -164,8 +164,8 @@ public static class WorldAffordances {
         ArgumentNullException.ThrowIfNull(argument: channels);
         ValidateContexts(
             document: document,
-            seatModes: seatModes,
-            errors: errors
+            errors: errors,
+            seatModes: seatModes
         );
 
         // An absent registry withholds the COMMAND lookup and nothing else. Returning early here instead made the

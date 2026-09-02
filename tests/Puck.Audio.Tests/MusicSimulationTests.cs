@@ -159,7 +159,7 @@ public sealed class MusicDirectorTests {
     public void ConditionalLayerIsInactiveWithoutItsEdge() {
         var director = new MusicDirector(graph: LayeredGraph());
 
-        director.Step(tick: 1, boundary: MusicClockBoundary.None, edges: []);
+        director.Step(boundary: MusicClockBoundary.None, edges: [], tick: 1);
 
         Assert.DoesNotContain(expected: "danger-bed", collection: director.ActiveLayerTuneIds);
     }
@@ -183,19 +183,19 @@ public sealed class MusicDirectorTests {
     public void UnconditionalLayerIsActiveWhileItsSegmentIsCurrent() {
         var director = new MusicDirector(graph: LayeredGraph());
 
-        director.Step(tick: 1, boundary: MusicClockBoundary.None, edges: []);
+        director.Step(boundary: MusicClockBoundary.None, edges: [], tick: 1);
         Assert.Contains(expected: "ambient-bed", collection: director.ActiveLayerTuneIds);
 
-        director.Step(tick: 2, boundary: MusicClockBoundary.Beat, edges: []);
+        director.Step(boundary: MusicClockBoundary.Beat, edges: [], tick: 2);
         Assert.Contains(expected: "ambient-bed", collection: director.ActiveLayerTuneIds);
     }
     [Fact]
     public void UnconditionalLayerLeavesWhenItsSegmentDoes() {
         var director = new MusicDirector(graph: LayeredGraph());
 
-        director.Step(tick: 1, boundary: MusicClockBoundary.None, edges: []);
+        director.Step(boundary: MusicClockBoundary.None, edges: [], tick: 1);
         director.Step(tick: 2, boundary: MusicClockBoundary.None, edges: [new MusicSenseEdge(A: 0, B: 0, Family: MusicSenseFamily.RegionEnter)]);
-        director.Step(tick: 3, boundary: MusicClockBoundary.Bar, edges: []);
+        director.Step(boundary: MusicClockBoundary.Bar, edges: [], tick: 3);
 
         Assert.Equal(expected: "alert", actual: director.CurrentSegmentId);
         Assert.DoesNotContain(expected: "ambient-bed", collection: director.ActiveLayerTuneIds);
@@ -223,7 +223,7 @@ public sealed class MusicDirectorTests {
         var director = new MusicDirector(graph: LayeredGraph());
 
         director.Step(tick: 1, boundary: MusicClockBoundary.None, edges: [new MusicSenseEdge(A: 0, B: 0, Family: MusicSenseFamily.SeatJoin)]);
-        director.Step(tick: 2, boundary: MusicClockBoundary.None, edges: []);
+        director.Step(boundary: MusicClockBoundary.None, edges: [], tick: 2);
 
         Assert.Equal(expected: 1UL, actual: director.LastEmbellishmentTick);
     }

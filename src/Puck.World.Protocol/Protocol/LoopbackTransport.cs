@@ -209,9 +209,9 @@ public sealed class LoopbackTransport : IServerLink {
 
                 if (
                     TryNextEnvelope(
-                    principal: principal,
+                    envelope: out var commandEnvelope,
                     payload: command,
-                    envelope: out var commandEnvelope
+                    principal: principal
                 ) &&
                     (commandEnvelope.Payload is WorldSubmissionPayload.Command canonicalCommand)
                 ) {
@@ -263,8 +263,8 @@ public sealed class LoopbackTransport : IServerLink {
                 );
             default:
                 return Submit(
-                    principal: principal,
-                    payload: payload
+                    payload: payload,
+                    principal: principal
                 );
         }
     }

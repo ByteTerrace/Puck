@@ -87,9 +87,9 @@ public static class WorldStateDocumentValues {
             }
 
             if (!WorldColor.TryParseBinding(
-                value: reference,
+                key: out var key,
                 row: out var row,
-                key: out var key
+                value: reference
             )) {
                 reason = $"{path} reference '{reference}' must be state.<row>[.<key>]";
                 return false;
@@ -122,8 +122,8 @@ public static class WorldStateDocumentValues {
             }
 
             if (!stateValue.TryResolve(
-                text: text,
-                reason: out var parseReason
+                reason: out var parseReason,
+                text: text
             )) {
                 reason = $"{path} reference '{reference}' must hold {stateValue.ExpectedValue}: {parseReason}";
                 return false;

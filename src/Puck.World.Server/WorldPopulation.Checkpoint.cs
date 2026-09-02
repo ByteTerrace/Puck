@@ -218,14 +218,14 @@ public sealed partial class WorldPopulation {
             entry.IdentitySubject = captured.IdentitySubject;
             entry.ProducerState = new BodyProducerState {
                 AcquiredTarget = captured.ProducerAcquiredTarget,
+                ActiveProducerCurveIndex = captured.ProducerActiveCurveIndex,
+                ActiveProducerName = captured.ProducerActiveName,
                 ActivityPhase = captured.ProducerActivityPhase,
                 ActivityRate = captured.ProducerActivityRate,
+                CurveArcRaw = captured.ProducerCurveArcRaw,
                 Phase = captured.ProducerPhase,
                 PreferredAltitude = captured.ProducerPreferredAltitude,
                 WeaveFrequency = captured.ProducerWeaveFrequency,
-                CurveArcRaw = captured.ProducerCurveArcRaw,
-                ActiveProducerName = captured.ProducerActiveName,
-                ActiveProducerCurveIndex = captured.ProducerActiveCurveIndex,
             };
 
             if (

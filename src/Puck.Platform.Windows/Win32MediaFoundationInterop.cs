@@ -164,6 +164,7 @@ internal static class MfInterop {
             Marshal.FreeCoTaskMem(ptr: devices);
         }
     }
+
     // Linear scan: MFEnumDeviceSources yields a handful of capture devices per machine, never enough for the scan to
     // matter.
     private static int SelectDeviceIndex(nint devices, uint count, string symbolicLink) {
@@ -188,6 +189,7 @@ internal static class MfInterop {
 
         throw new InvalidOperationException(message: $"camera device '{symbolicLink}' is not among the enumerated capture devices");
     }
+
     /// <summary>Selects the media source's native L8 infrared stream before a Source Reader is constructed.</summary>
     /// <remarks>Some composite UVC cameras, including BRIO firmware, require the presentation descriptor and its
     /// media-type handler to be configured first; selecting the same stream only after reader creation is too late.</remarks>

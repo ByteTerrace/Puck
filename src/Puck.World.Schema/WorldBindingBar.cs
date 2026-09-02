@@ -25,7 +25,6 @@ public static class WorldBindingBarCapacity {
     /// it any more.</summary>
     public const int MaxSlots = 32;
 }
-
 /// <summary>Where a bar hangs: a viewport edge and how far in from it. Every bank anchored to the same edge and
 /// inset shares one frame — their plates are laid out together on one pitch grid and the nearest plate of the whole
 /// group sits at the inset — so a nested crossbar is five banks on one anchor, and a strip with side columns is
@@ -55,7 +54,6 @@ public sealed record WorldBindingBarSlotPlacement(
         x: 1f,
         y: 1f
     );
-
     /// <summary>Gets this placement as the overlay reads it: the pitch position and the resolved badge multiples.</summary>
     [JsonIgnore]
     public BindingPlatePlacement Plate => new(
@@ -200,6 +198,7 @@ public sealed record WorldBindingBarLayout(
 
         return CompiledBindingBarLayout.Build(banks: banks);
     }
+
     /// <summary>The resolved <see cref="ButtonSize"/> an unauthored bar takes (45/600).</summary>
     public const float DefaultButtonSize = (45f / 600f);
     /// <summary>The resolved <see cref="GlyphOffsetRatio"/> an unauthored bar takes.</summary>
@@ -358,6 +357,7 @@ public sealed record WorldBindingBarAuthoring(
         SlotSet: [],
         Text: false
     );
+
     /// <summary>The layout a selector value names: <see cref="Layouts"/>[<paramref name="name"/>] when it exists,
     /// else <see cref="Layouts"/>[<see cref="Layout"/>], else <see cref="WorldBindingBarLayout.Default"/> (no banks —
     /// nothing drawn).</summary>

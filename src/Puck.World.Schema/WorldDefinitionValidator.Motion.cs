@@ -605,21 +605,21 @@ public static partial class WorldDefinitionValidator {
 
         if (hasResponse) {
             ValidateResponse(
-                response: response!,
+                errors: errors,
                 path: $"{path}.response",
-                errors: errors
+                response: response!
             );
         }
 
         if (
             hasDynamics &&
             RequireDeclared(
-            value: dynamics,
             declaredSet: dynamicsNames,
-            path: path,
+            errors: errors,
             field: "dynamics",
+            path: path,
             rowNoun: "dynamics",
-            errors: errors
+            value: dynamics
         ) &&
             (simulationRateHz <= 0)
         ) {

@@ -152,8 +152,8 @@ internal sealed partial class WorldScreenBinder {
 
             ConfigureCameraView(
                 camera: camera,
-                view: view,
-                seat: seat
+                seat: seat,
+                view: view
             );
 
             registration = new CameraRegistration { Row = camera, Seat = seat, View = view };

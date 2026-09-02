@@ -35,8 +35,8 @@ internal sealed class ProbeCommandModule(Func<WorldProbes> probes) : ICommandMod
         var path = args[1].ToString();
 
         if (!m_probes().TryBeginRecording(
-            probeRef: probeRef,
             path: path,
+            probeRef: probeRef,
             reason: out var reason,
             seconds: seconds
         )) {

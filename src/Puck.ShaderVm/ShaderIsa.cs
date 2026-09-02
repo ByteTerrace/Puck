@@ -38,7 +38,7 @@ public static class ShaderIsa {
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: ((uint)z), other: 3u);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: ((uint)w), other: 3u);
 
-        return (((uint)x) | (((uint)y) << 2) | (((uint)z) << 4) | (((uint)w) << 6));
+        return ((uint)x) | (((uint)y) << 2) | (((uint)z) << 4) | (((uint)w) << 6);
     }
     /// <summary>Reads one lane selector out of a <see cref="ShaderOp.Swizzle"/> operand.</summary>
     /// <param name="operand">The packed operand.</param>

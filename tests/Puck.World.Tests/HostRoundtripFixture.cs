@@ -43,6 +43,7 @@ internal static class HostRoundtripFixture {
             host.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
         }
     }
+
     /// <summary>Builds the two-row host, joins two local seats on row-a, steps both rows, drains a transfer of
     /// slot 0 to row-b, and steps a settled tail.</summary>
     public static (WorldInstanceHost Host, HostRow RowA, HostRow RowB, Guid MachineId) BuildCommittedScenario() {

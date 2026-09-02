@@ -78,9 +78,11 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // candidate list is composed into once per Dress call (not once per seat — every seat's cull reads the SAME
     // list). See ComposeMarkerCandidates/ComposeMarkerSeat.
     private readonly MarkerStore m_markers;
+
     private readonly OverlayMarkerChip[][] m_markerChips = new OverlayMarkerChip[PlayerRoster.MaxSlots][];
     private readonly OverlayMarkerSeat[] m_markerSeats = new OverlayMarkerSeat[PlayerRoster.MaxSlots];
     private readonly List<MarkerCandidate> m_markerCandidates = [];
+
     private readonly Func<string, OverlayResolvedGlyph> m_resolveIcon;
     private readonly PlayerRoster m_roster;
     // The first-party puck.sdf.v1 document emitter (world.sdf.load) — a SECOND tenant of the same live composition
@@ -289,13 +291,12 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             // unhandled exception out of a service factory.
             throw new WorldRenderCapacityRefusedException(
                 innerException: capacity,
-                message: $"the composed render scene exceeds the engine's {capacity.Limit}-{capacity.Capacity} ceiling — "
-                    + $"{definition.Placements.Count} placement row(s), {definition.Screens.Count} screen(s), "
-                    + $"population {WorldRigCatalog.Capacity} rigs, and "
-                    + $"{WorldAdjacencyBands.ProjectionCapacity(definition: definition)} adjacency band(s) at "
-                    + $"{WorldAdjacencyGeometry.MaximumPlacementsPerBand} solid(s) + {WorldAdjacencyGeometry.MaximumEntitiesPerBand} "
-                    + $"body(ies) each. Author fewer rows, or fewer adjacency edges (a band is reserved for every direct "
-                    + $"edge plus every derivable corner pair)."
+                message: (((((((string)$"the composed render scene exceeds the engine's {capacity.Limit}-{capacity.Capacity} ceiling — {definition.Placements.Count} placement row(s), {definition.Screens.Count} screen(s), ")
+                    + $"population {WorldRigCatalog.Capacity} rigs, and ")
+                    + $"{WorldAdjacencyBands.ProjectionCapacity(definition: definition)} adjacency band(s) at ")
+                    + $"{WorldAdjacencyGeometry.MaximumPlacementsPerBand} solid(s) + {WorldAdjacencyGeometry.MaximumEntitiesPerBand} ")
+                    + $"body(ies) each. Author fewer rows, or fewer adjacency edges (a band is reserved for every direct ")
+                    + $"edge plus every derivable corner pair).")
             );
         }
         ProgramWordCapacity = m_composed.WorstCaseProgramWordCapacity;
@@ -546,6 +547,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         );
         m_builtDefinitionRevision = definitionRevision;
     }
+
     // One authored `markers` row instance's resolved look, cached once per Dress call (every seat's cull reads the
     // SAME candidate list — see ComposeMarkerCandidates/ComposeMarkerSeat). RingRadiusWorld is 0 for an instance
     // with no ring (no authored ring policy, or a tracked row that does not resolve the policy's field).
@@ -623,9 +625,9 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                     var speaker = speakers[speakerIndex];
 
                     if (!m_audio.TryResolveSpeakerPose(
+                        position: out var position,
                         speaker: speaker,
-                        transforms: m_transforms,
-                        position: out var position
+                        transforms: m_transforms
                     )) {
                         continue;
                     }
@@ -742,8 +744,8 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
 
         return new OverlayMarkerSeat(
             Chips: chips.AsMemory(
-                start: 0,
-                length: count
+                length: count,
+                start: 0
             ),
             Viewport: region
         );
@@ -1376,8 +1378,8 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
 
         // Published EVERY frame: an empty frame clears the chips the moment the section authors none.
         m_markers.Publish(frame: new OverlayMarkerFrame(Seats: m_markerSeats.AsMemory(
-            start: 0,
-            length: markerSeatCount
+            length: markerSeatCount,
+            start: 0
         )));
 
         if (hasSeatViewFallback) {

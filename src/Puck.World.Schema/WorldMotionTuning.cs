@@ -265,11 +265,11 @@ public abstract record WorldMotionModel {
     /// <summary>The declared velocity-response table of whichever arm this is (see <see cref="Grounded.Response"/>/
     /// <see cref="Swim.Response"/>), null-coalesced to the empty table — a kit's authored <see langword="null"/> and a
     /// kit with no planar-shaping arm at all read identically here.</summary>
-    public IReadOnlyList<MotionResponse> DeclaredResponse => (this switch {
+    public IReadOnlyList<MotionResponse> DeclaredResponse => ((this switch {
         Grounded grounded => grounded.Response,
         Swim swim => swim.Response,
         _ => null,
-    }) ?? [];
+    }) ?? []);
     /// <summary>The declared <c>dynamics</c> row name of whichever arm this is (see <see cref="Grounded.Dynamics"/>/
     /// <see cref="Swim.Dynamics"/>), or <see langword="null"/> for an arm shaped by <see cref="DeclaredResponse"/>
     /// instead, or with no planar-shaping arm at all.</summary>

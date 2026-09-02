@@ -8,7 +8,6 @@ namespace Puck.Platform;
 /// <param name="Height">The desired frame height.</param>
 /// <param name="RateHz">The desired capture rate; zero prefers the device's fastest mode at the chosen size.</param>
 public readonly record struct CameraStreamRequest(CameraSensor Sensor, int Width, int Height, uint RateHz);
-
 /// <summary>The native transport format a camera graph negotiated before any platform conversion into Puck's
 /// presentation surface.</summary>
 /// <param name="Subtype">The native media subtype (for example <c>YUY2</c>, <c>MJPG</c>, or <c>L8</c>).</param>
@@ -16,7 +15,6 @@ public readonly record struct CameraStreamRequest(CameraSensor Sensor, int Width
 /// <param name="Mode">The named coordinated capture mode, or <see langword="null"/> for an ordinary single-stream
 /// graph.</param>
 public readonly record struct CameraCaptureFormat(string Subtype, double RateHz, string? Mode = null);
-
 /// <summary>One physical camera as the platform enumerates it, independent of whether — or how — anything has it
 /// open. <see cref="Id"/> is the platform's stable device identity: reconnecting the same physical camera reports the
 /// same <see cref="Id"/>, so it survives a hot-unplug/replug and is safe to key a roster entry by.</summary>
@@ -24,7 +22,6 @@ public readonly record struct CameraCaptureFormat(string Subtype, double RateHz,
 /// <param name="Name">The driver-reported display name.</param>
 /// <param name="Sensors">The physical sensors this device exposes.</param>
 public readonly record struct CameraDeviceInfo(string Id, string Name, IReadOnlyList<CameraSensor> Sensors);
-
 /// <summary>
 /// Opens a physical camera as a backend-neutral graph of sensor streams. One open is one device graph: every
 /// requested sensor streams, or the open refuses as a whole and the caller decides which sensor to drop. Two tiers,
@@ -65,7 +62,6 @@ public interface ICameraCaptureService {
     /// <returns><see langword="true"/> if every requested sensor opened and delivered a native GPU sample.</returns>
     bool TryOpenShared(long adapterLuid, string deviceId, ReadOnlySpan<CameraStreamRequest> streams, [NotNullWhen(true)] out ICameraGraph<ICameraSharedStream>? graph);
 }
-
 /// <summary>One open camera device: its sensor streams and its one physical control surface. Disposing the graph
 /// stops every stream.</summary>
 /// <typeparam name="TStream">The tier's stream shape.</typeparam>
@@ -84,7 +80,6 @@ public interface ICameraGraph<out TStream> : IDisposable where TStream : ICamera
     /// <summary>Gets the sensor streams, in request order.</summary>
     IReadOnlyList<TStream> Streams { get; }
 }
-
 /// <summary>One sensor's stream inside a camera graph. Frames arrive on a platform-owned thread; the consumer polls
 /// <see cref="FrameVersion"/> and never blocks.</summary>
 public interface ICameraStream {
@@ -103,12 +98,10 @@ public interface ICameraStream {
     /// <summary>Gets the negotiated frame width in pixels.</summary>
     int Width { get; }
 }
-
 /// <summary>A CPU-pixel stream: <see cref="IFrameCaptureSource.TryCapture"/> returns the newest frame as
 /// <see cref="SurfaceFormat.B8G8R8A8Unorm"/> pixels (latest-frame-wins, stale frames dropped). A stream returned by a
 /// successful <see cref="ICameraCaptureService.TryOpenPixels"/> already contains its first frame.</summary>
 public interface ICameraPixelStream : ICameraStream, IFrameCaptureSource;
-
 /// <summary>A shared-texture stream: the platform converts each frame on its own device and copies it into one of the
 /// consumer-provisioned shared targets (sized <see cref="ICameraStream.Width"/> × <see cref="ICameraStream.Height"/>
 /// in <see cref="TargetFormat"/>), completing the copy before publishing the slot. Consumers acquire the newest
@@ -125,7 +118,6 @@ public interface ICameraSharedStream : ICameraStream, ISharedSlotRing {
     /// <exception cref="InvalidOperationException">The stream already started.</exception>
     void Start(IReadOnlyList<nint> sharedTargetHandles);
 }
-
 /// <summary>A ring of consumer-owned slots with one producer: a consumer acquires the latest completed slot, samples
 /// it across an asynchronous submission, and releases it; the producer never writes a slot a consumer holds.</summary>
 public interface ISharedSlotRing {

@@ -330,9 +330,9 @@ public sealed partial class WorldAddonRuntime {
     public static WorldAddonRuntime Create(WorldDefinition definition, WorldServer server) {
         if (!TryCreate(
             definition: definition,
-            server: server,
+            reason: out var reason,
             runtime: out var runtime,
-            reason: out var reason
+            server: server
         )) {
             throw new WorldAddonInstallRefusedException(message: $"world installation refused — addon {reason}");
         }
@@ -359,8 +359,8 @@ public sealed partial class WorldAddonRuntime {
         );
 
         if (!candidate.TryPrepare(
-            current: null,
             candidate: definition,
+            current: null,
             plan: out var plan,
             reason: out reason
         )) {
@@ -428,8 +428,7 @@ public sealed partial class WorldAddonRuntime {
                     Console.Error.WriteLine(value: text);
                 }
             }
-        }
-        finally {
+        } finally {
             // Replaced/removed guests are unreachable from the tick path the instant Commit's swap landed —
             // retirement is unconditional once publication landed, so it runs even when a narration thunk or the
             // console write throws; disposal happens here, after publication, never before.
@@ -697,6 +696,7 @@ public sealed partial class WorldAddonRuntime {
             }
         }
     }
+
     // Reconstructs the neutral load descriptor a row prepares under — identical for a freshly-prepared row and a
     // reused one (structural equality already proved every field, including Name/ModulePath/Hash/Fuel, matches),
     // so the SAME helper serves both branches of TryPrepare's loop without a live AddonHost read.
@@ -795,6 +795,7 @@ public sealed partial class WorldAddonRuntime {
             host?.Dispose();
         }
     }
+
     /// <summary>The prepare/commit transaction handle this runtime produces from <see cref="TryPrepare"/> and
     /// consumes in <see cref="Commit"/>/<see cref="Finish"/> — every collection a successful prepare pass built,
     /// plus what disposing an uncommitted plan must release. Linear ownership: exactly one of <see cref="Commit"/>
@@ -832,8 +833,10 @@ public sealed partial class WorldAddonRuntime {
         /// <summary>Gets the full ordered mounted set this plan installs — reused guests and freshly-prepared ones
         /// interleaved in candidate document order.</summary>
         public List<MountedAddon> Mounted { get; } = mounted;
+
         /// <inheritdoc/>
         public int MountedCount => Mounted.Count;
+
         /// <summary>Gets the deferred stderr line producers (mount confirmations, capability disclosures,
         /// inert-channel reports), evaluated and printed by <see cref="WorldAddonRuntime.Finish"/> only, never by
         /// this type. A capability disclosure entry re-reads the grant table at the moment it is invoked, so a
@@ -879,6 +882,7 @@ public sealed partial class WorldAddonRuntime {
         /// published.</summary>
         public void MarkCommitted() => m_committed = true;
     }
+
     /// <summary>Describes the live per-guest cost surface, in mount order — the <c>world.addons</c> read. Allocates one array per
     /// call; a console read, never the tick path.</summary>
     /// <returns>The per-guest cost reports, in mount order.</returns>

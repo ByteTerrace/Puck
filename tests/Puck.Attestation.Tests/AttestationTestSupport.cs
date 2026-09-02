@@ -108,6 +108,7 @@ public static class AttestationTestSupport {
 
         return (rootToIssuing, issuingToSubject);
     }
+
     internal static TrustList BuildTrustList(DomainKeys keys, TimeSpan? defaultMaximumAge, IReadOnlySet<string>? reach = null) {
         var entry = new TrustListEntry(
             PinnedId: keys.RootId,
@@ -316,6 +317,7 @@ public static class AttestationTestSupport {
         return writer.Encode();
     }
 }
+
 /// <summary>
 /// A receiver-side atomic replay commit store, mirroring what a real receiver does: compare/advance the
 /// epoch high-water mark in the same durable transaction as the claim's semantic effect. The rendezvous

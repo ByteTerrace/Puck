@@ -189,8 +189,8 @@ public sealed partial class WorldServer {
         try {
             if (m_addons is { } addonsForUndo) {
                 if (!addonsForUndo.TryPrepare(
-                    current: m_definition,
                     candidate: candidate,
+                    current: m_definition,
                     plan: out addonPlan,
                     reason: out var addonReason
                 )) {
@@ -247,12 +247,12 @@ public sealed partial class WorldServer {
     }
     // Every market mutation that creates or changes an economic commitment is final against journal undo. The
     // section's automatic PruneMarketListings mutation is archival only and therefore intentionally reversible.
-    private static bool IsMarketFinalityBarrier(WorldMutation mutation) => mutation is
+    private static bool IsMarketFinalityBarrier(WorldMutation mutation) => (mutation is
         WorldMutation.CreateMarketListing or
         WorldMutation.PlaceMarketBid or
         WorldMutation.BuyoutMarketListing or
         WorldMutation.CancelMarketListing or
-        WorldMutation.SettleMarketListing;
+        WorldMutation.SettleMarketListing);
     // Undo's own throwaway addon-prepare probe for an INTERMEDIATE journal-replay candidate: proves the row set
     // this candidate carries could still mount, without ever registering, disclosing, or journaling anything — the
     // plan is disposed immediately regardless of outcome. Only the FINAL candidate's prepare (after the loop above)
@@ -280,8 +280,8 @@ public sealed partial class WorldServer {
         }
 
         if (addons.TryPrepare(
-            current: m_definition,
             candidate: candidate,
+            current: m_definition,
             plan: out var plan,
             reason: out var addonReason
         )) {

@@ -6,15 +6,14 @@ namespace Puck.World.Schema.Tests;
 /// <summary>Proves the typed state catalog's stable ordinal, ownership, storage-shape, value-kind, and handle
 /// resolution contracts.</summary>
 public sealed class WorldStateCatalogLawTests {
-    [Theory]
     [InlineData(CellKind.Int, WorldStateValueKind.Int)]
     [InlineData(CellKind.Fixed, WorldStateValueKind.Fixed)]
     [InlineData(CellKind.Bool, WorldStateValueKind.Bool)]
     [InlineData(CellKind.Text, WorldStateValueKind.Text)]
+    [Theory]
     public void WorldRowValueKinds_PreserveTheCellKindDiscriminant(CellKind cellKind, WorldStateValueKind valueKind) {
-        Assert.Equal(expected: (byte)cellKind, actual: (byte)valueKind);
+        Assert.Equal(actual: ((byte)valueKind), expected: ((byte)cellKind));
     }
-
     [Fact]
     public void Compile_AssignsStableGlobalAndLaneOrdinals_InLaneThenDocumentOrder() {
         var section = BuildSection();
@@ -32,97 +31,93 @@ public sealed class WorldStateCatalogLawTests {
             descriptor => AssertDescriptor(descriptor, ordinal: 5, laneOrdinal: 0, name: "cooldown", ownership: WorldStateOwnershipLane.Identity, storage: WorldStateStorageShape.Slot, valueKind: WorldStateValueKind.Timer)
         );
     }
-
     [Fact]
     public void TryResolve_UsesOwnershipAndName_ThenDescriptorAccessNeedsNoName() {
         var catalog = WorldStateCatalog.Compile(section: BuildSection());
 
         Assert.True(condition: catalog.TryResolve(lane: WorldStateOwnershipLane.World, name: WorldCellName.Parse(candidate: "score"), handle: out var score));
-        Assert.True(condition: catalog.TryResolve(lane: WorldStateOwnershipLane.Body, name: "jumpUses", handle: out var jumpUses));
+        Assert.True(condition: catalog.TryResolve(handle: out var jumpUses, lane: WorldStateOwnershipLane.Body, name: "jumpUses"));
         Assert.Equal(expected: "score", actual: catalog[score].Name);
         Assert.Equal(expected: 0, actual: catalog[score].LaneOrdinal);
         Assert.Equal(expected: "jumpUses", actual: catalog[jumpUses].Name);
         Assert.Equal(expected: WorldStateValueKind.Counter, actual: catalog[jumpUses].ValueKind);
 
-        Assert.False(condition: catalog.TryResolve(lane: WorldStateOwnershipLane.Identity, name: "jumpUses", handle: out var wrongLane));
+        Assert.False(condition: catalog.TryResolve(handle: out var wrongLane, lane: WorldStateOwnershipLane.Identity, name: "jumpUses"));
         Assert.False(condition: wrongLane.IsValid);
-        Assert.False(condition: catalog.TryResolve(lane: WorldStateOwnershipLane.World, name: "missing", handle: out var missing));
-        Assert.False(condition: catalog.TryGetDescriptor(handle: missing, descriptor: out _));
+        Assert.False(condition: catalog.TryResolve(handle: out var missing, lane: WorldStateOwnershipLane.World, name: "missing"));
+        Assert.False(condition: catalog.TryGetDescriptor(descriptor: out _, handle: missing));
     }
-
     [Fact]
     public void AHandleFromAnotherCatalogIsRejectedEvenWhenItsOrdinalFits() {
         var first = WorldStateCatalog.Compile(section: BuildSection());
         var second = WorldStateCatalog.Compile(section: BuildSection());
 
-        Assert.True(condition: first.TryResolve(lane: WorldStateOwnershipLane.World, name: "score", handle: out var firstScore));
-        Assert.True(condition: second.TryResolve(lane: WorldStateOwnershipLane.World, name: "score", handle: out var secondScore));
+        Assert.True(condition: first.TryResolve(handle: out var firstScore, lane: WorldStateOwnershipLane.World, name: "score"));
+        Assert.True(condition: second.TryResolve(handle: out var secondScore, lane: WorldStateOwnershipLane.World, name: "score"));
         Assert.Equal(expected: firstScore.Ordinal, actual: secondScore.Ordinal);
-        Assert.False(condition: second.TryGetDescriptor(handle: firstScore, descriptor: out _));
+        Assert.False(condition: second.TryGetDescriptor(descriptor: out _, handle: firstScore));
         Assert.Throws<ArgumentOutOfRangeException>(testCode: () => second[firstScore]);
     }
-
     [Fact]
     public void TypedReaderUsesTheLaneOrdinalAndRefusesAStaleCatalogOrHandle() {
         var section = BuildSection();
         var rows = section.World!.ToArray();
+
         rows[0] = rows[0] with { Cells = [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 7L)] };
         var definition = new WorldDefinition(StateRaw: section with { World = rows });
         var catalog = definition.StateCatalog;
 
-        Assert.True(condition: catalog.TryResolve(lane: WorldStateOwnershipLane.World, name: "score", handle: out var score));
+        Assert.True(condition: catalog.TryResolve(handle: out var score, lane: WorldStateOwnershipLane.World, name: "score"));
         Assert.True(condition: WorldStateReader.TryReadHandle(
-            definition: definition,
             catalog: catalog,
+            definition: definition,
             handle: score,
             key: null,
-            tick: 0UL,
-            row: out var row,
             rawValue: out var raw,
-            text: out _
+            row: out var row,
+            text: out _,
+            tick: 0UL
         ));
         Assert.Equal(expected: "score", actual: row.Name);
-        Assert.Equal(expected: 7L, actual: raw);
+        Assert.Equal(actual: raw, expected: 7L);
 
         var foreign = WorldStateCatalog.Compile(section: definition.StateRaw);
 
         Assert.Throws<ArgumentException>(testCode: () => WorldStateReader.TryReadHandle(
-            definition: definition,
             catalog: foreign,
+            definition: definition,
             handle: score,
             key: null,
-            tick: 0UL,
-            row: out _,
             rawValue: out _,
-            text: out _
+            row: out _,
+            text: out _,
+            tick: 0UL
         ));
     }
-
     [Fact]
     public void WorldDefinition_StateCatalog_RecompilesWhenAWithExpressionReplacesState() {
         var original = new WorldDefinition(StateRaw: BuildSection());
         var originalCatalog = original.StateCatalog;
 
-        Assert.True(condition: originalCatalog.TryResolve(lane: WorldStateOwnershipLane.World, name: "score", handle: out var score));
+        Assert.True(condition: originalCatalog.TryResolve(handle: out var score, lane: WorldStateOwnershipLane.World, name: "score"));
 
         var replaced = original with {
             StateRaw = new WorldStateSection(World: [new WorldStateRow(Name: WorldCellName.Parse(candidate: "round"), Kind: CellKind.Int)]),
         };
 
-        Assert.False(condition: replaced.StateCatalog.TryResolve(lane: WorldStateOwnershipLane.World, name: "score", handle: out _));
-        Assert.True(condition: replaced.StateCatalog.TryResolve(lane: WorldStateOwnershipLane.World, name: "round", handle: out var round));
+        Assert.False(condition: replaced.StateCatalog.TryResolve(handle: out _, lane: WorldStateOwnershipLane.World, name: "score"));
+        Assert.True(condition: replaced.StateCatalog.TryResolve(handle: out var round, lane: WorldStateOwnershipLane.World, name: "round"));
         Assert.Equal(expected: 0, actual: round.Ordinal);
         Assert.NotSame(expected: originalCatalog, actual: replaced.StateCatalog);
-        Assert.False(condition: replaced.StateCatalog.TryGetDescriptor(handle: score, descriptor: out _));
+        Assert.False(condition: replaced.StateCatalog.TryGetDescriptor(descriptor: out _, handle: score));
     }
-
     [Fact]
     public void WorldDefinition_ValueOnlyUpdatePreservesCatalogAndResolvedHandles() {
         var section = BuildSection();
         var original = new WorldDefinition(StateRaw: section);
         var catalog = original.StateCatalog;
 
-        Assert.True(condition: catalog.TryResolve(lane: WorldStateOwnershipLane.World, name: "score", handle: out var score));
+        Assert.True(condition: catalog.TryResolve(handle: out var score, lane: WorldStateOwnershipLane.World, name: "score"));
 
         var rows = section.World!.Select(selector: row => (
             string.Equals(a: row.Name, b: "score", comparisonType: StringComparison.Ordinal)
@@ -134,7 +129,6 @@ public sealed class WorldStateCatalogLawTests {
         Assert.Same(expected: catalog, actual: updated.StateCatalog);
         Assert.Equal(expected: "score", actual: updated.StateCatalog[score].Name);
     }
-
     [Fact]
     public void WorldDefinition_InPlaceCallerArrayMutationCannotLeaveAStaleCatalog() {
         WorldStateRow[] rows = [new WorldStateRow(
@@ -144,7 +138,7 @@ public sealed class WorldStateCatalogLawTests {
         var definition = new WorldDefinition(StateRaw: new WorldStateSection(World: rows));
         var original = definition.StateCatalog;
 
-        Assert.True(condition: original.TryResolve(lane: WorldStateOwnershipLane.World, name: "score", handle: out var score));
+        Assert.True(condition: original.TryResolve(handle: out var score, lane: WorldStateOwnershipLane.World, name: "score"));
 
         rows[0] = new WorldStateRow(
             Name: WorldCellName.Parse(candidate: "round"),
@@ -152,22 +146,20 @@ public sealed class WorldStateCatalogLawTests {
         );
         var refreshed = definition.StateCatalog;
 
-        Assert.NotSame(expected: original, actual: refreshed);
-        Assert.False(condition: refreshed.TryGetDescriptor(handle: score, descriptor: out _));
-        Assert.True(condition: refreshed.TryResolve(lane: WorldStateOwnershipLane.World, name: "round", handle: out _));
+        Assert.NotSame(actual: refreshed, expected: original);
+        Assert.False(condition: refreshed.TryGetDescriptor(descriptor: out _, handle: score));
+        Assert.True(condition: refreshed.TryResolve(handle: out _, lane: WorldStateOwnershipLane.World, name: "round"));
     }
-
     [Fact]
     public void Compile_NullSection_ProducesAnEmptyCatalog() {
         var catalog = WorldStateCatalog.Compile(section: null);
 
         Assert.Empty(collection: catalog.Descriptors);
         Assert.Equal(expected: 0, actual: catalog.Count);
-        Assert.False(condition: catalog.TryResolve(lane: WorldStateOwnershipLane.World, name: "anything", handle: out var handle));
+        Assert.False(condition: catalog.TryResolve(handle: out var handle, lane: WorldStateOwnershipLane.World, name: "anything"));
         Assert.False(condition: handle.IsValid);
         Assert.Throws<ArgumentOutOfRangeException>(testCode: () => catalog[handle]);
     }
-
     [Fact]
     public void Compile_RefusesANameSharedByBodyAndIdentityLanes() {
         var section = new WorldStateSection(
@@ -199,7 +191,6 @@ public sealed class WorldStateCatalogLawTests {
         Body: [new ActionStateSlot(Name: "jumpUses", Kind: ActionStateKind.Counter)],
         Identity: [new ActionStateSlot(Name: "cooldown", Kind: ActionStateKind.Timer)]
     );
-
     private static void AssertDescriptor(WorldStateDescriptor descriptor, int ordinal, int laneOrdinal, string name, WorldStateOwnershipLane ownership, WorldStateStorageShape storage, WorldStateValueKind valueKind) {
         Assert.Equal(expected: ordinal, actual: descriptor.Handle.Ordinal);
         Assert.Equal(expected: laneOrdinal, actual: descriptor.LaneOrdinal);

@@ -14,7 +14,7 @@ namespace Puck.World.Authoring;
 /// </summary>
 public static class CreationStampSampling {
     private static FixedQ4816 GridHalfExtent(FixedQ4816 cellSize, int count) => ((cellSize * FixedQ4816.FromInteger(value: count)) / FixedQ4816.FromInteger(value: 2));
-    private static uint FoldSeed(uint seed, ulong worldSeed) => unchecked((uint)(seed ^ (uint)worldSeed ^ (uint)(worldSeed >> 32)));
+    private static uint FoldSeed(uint seed, ulong worldSeed) => unchecked((uint)(seed ^ ((uint)worldSeed) ^ ((uint)(worldSeed >> 32))));
 
     /// <summary>The exact, seed-independent block count a Scatter region materializes — every block yields exactly
     /// one jittered instance, so the count needs no hash evaluation: ceil(width/spacing) x ceil(depth/spacing).</summary>
@@ -35,7 +35,6 @@ public static class CreationStampSampling {
     /// <param name="width">Cells along the placement's local +X.</param>
     /// <param name="depth">Cells along the placement's local +Z.</param>
     public static long NoiseInstanceCeiling(int width, int depth) => (((long)Math.Max(val1: width, val2: 0)) * Math.Max(val1: depth, val2: 0));
-
     /// <summary>Resolves a Scatter region's one-jittered-point-per-block local offsets (Y = 0), centered on the
     /// placement origin — integer PCG3D hash, Q48.16 throughout, the placement twin of
     /// <c>WorldFieldLattice.ApplyScatterFill</c>'s per-block jitter (unlike the field fill's disc admission, every
@@ -70,8 +69,8 @@ public static class CreationStampSampling {
                 );
                 // The point sits inside its block, radius-inset so it (and the creation's own footprint) stays clear
                 // of the block edge — the same inset WorldFieldLattice.ApplyScatterFill derives its disc from.
-                var px = ((bx * effectiveSpacing) + effectiveRadius + ((inset > 0) ? (int)(h.X % (uint)inset) : 0));
-                var pz = ((bz * effectiveSpacing) + effectiveRadius + ((inset > 0) ? (int)(h.Y % (uint)inset) : 0));
+                var px = (((bx * effectiveSpacing) + effectiveRadius) + ((inset > 0) ? (int)(h.X % ((uint)inset)) : 0));
+                var pz = (((bz * effectiveSpacing) + effectiveRadius) + ((inset > 0) ? (int)(h.Y % ((uint)inset)) : 0));
 
                 offsets[index++] = new FixedVector3(
                     X: (originX + (cellSize * FixedQ4816.FromInteger(value: px))),
@@ -118,7 +117,7 @@ public static class CreationStampSampling {
                         cellX: x,
                         cellZ: z,
                         noiseCells: Math.Max(val1: 1, val2: cells),
-                        seed: unchecked(hashSeed + ((uint)octave * 0x9E3779B9u))
+                        seed: unchecked((hashSeed + (((uint)octave) * 0x9E3779B9u)))
                     ));
                     weight += amplitude;
                     amplitude = FixedQ4816.FromRawBits(value: (amplitude.Value >> 1));

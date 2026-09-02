@@ -223,6 +223,7 @@ public static class ShaderConfigBinding {
 
         return fieldSchema;
     }
+
     /// <summary>Determines whether a component value lies inside a field's inclusive declared range; a field with
     /// no declared bound on a side admits any value on that side.</summary>
     /// <param name="field">The config field.</param>

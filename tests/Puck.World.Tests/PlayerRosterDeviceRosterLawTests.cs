@@ -67,23 +67,23 @@ public sealed class PlayerRosterDeviceRosterLawTests {
 
         Assert.Equal(expected: "camera1", actual: roster.DeviceToken(device: brio));
         Assert.Equal(expected: "camera2", actual: roster.DeviceToken(device: c920));
-        Assert.True(condition: roster.TryResolveDeviceToken(token: "camera1", device: out var resolvedBrio));
-        Assert.Equal(expected: brio, actual: resolvedBrio);
-        Assert.True(condition: roster.TryResolveDeviceToken(token: "camera2", device: out var resolvedC920));
-        Assert.Equal(expected: c920, actual: resolvedC920);
+        Assert.True(condition: roster.TryResolveDeviceToken(device: out var resolvedBrio, token: "camera1"));
+        Assert.Equal(actual: resolvedBrio, expected: brio);
+        Assert.True(condition: roster.TryResolveDeviceToken(device: out var resolvedC920, token: "camera2"));
+        Assert.Equal(actual: resolvedC920, expected: c920);
 
         // Only slot 0 (player 1) is occupied by this fixture's document — the default policy attaches the first
         // camera there and leaves the second unassigned rather than ever minting a player for it.
-        Assert.True(condition: roster.TryGetSeatDevice(slot: 0, kind: InputDeviceKind.Camera, device: out var seated));
-        Assert.Equal(expected: brio, actual: seated);
+        Assert.True(condition: roster.TryGetSeatDevice(device: out var seated, kind: InputDeviceKind.Camera, slot: 0));
+        Assert.Equal(actual: seated, expected: brio);
         Assert.Equal(expected: 0, actual: roster.DeviceSlot(device: brio));
         Assert.Null(@object: roster.DeviceSlot(device: c920));
         Assert.Equal(expected: "Logitech BRIO", actual: roster.DeviceName(device: brio));
 
         var devices = roster.DescribeDevices();
 
-        Assert.Contains(expectedSubstring: "camera1 'Logitech BRIO'=p1*", actualString: devices);
-        Assert.Contains(expectedSubstring: "camera2 'HD Pro Webcam C920'=unassigned", actualString: devices);
+        Assert.Contains(actualString: devices, expectedSubstring: "camera1 'Logitech BRIO'=p1*");
+        Assert.Contains(actualString: devices, expectedSubstring: "camera2 'HD Pro Webcam C920'=unassigned");
     }
     [Fact]
     public void AssignDevice_MovesAnUnassignedCameraOntoAnOccupiedSlot_JoiningThatTeam() {
@@ -165,7 +165,7 @@ public sealed class PlayerRosterDeviceRosterLawTests {
 
         // Both seats are active at boot, so the default policy seated the camera on slot 0 — no move has happened
         // yet, so the event has not fired.
-        Assert.True(condition: roster.TryGetSeatDevice(slot: 0, kind: InputDeviceKind.Camera, device: out _));
+        Assert.True(condition: roster.TryGetSeatDevice(device: out _, kind: InputDeviceKind.Camera, slot: 0));
         Assert.Empty(collection: raised);
 
         Assert.Equal(expected: AssignOutcome.JoinedTeam, actual: roster.AssignDevice(
@@ -174,15 +174,16 @@ public sealed class PlayerRosterDeviceRosterLawTests {
             actingPrincipal: WorldPrincipal.Console
         ));
 
-        Assert.Equal(expected: [camera], actual: raised);
-        Assert.False(condition: roster.TryGetSeatDevice(slot: 0, kind: InputDeviceKind.Camera, device: out _));
-        Assert.True(condition: roster.TryGetSeatDevice(slot: 1, kind: InputDeviceKind.Camera, device: out var moved));
-        Assert.Equal(expected: camera, actual: moved);
+        Assert.Equal(actual: raised, expected: [camera]);
+        Assert.False(condition: roster.TryGetSeatDevice(device: out _, kind: InputDeviceKind.Camera, slot: 0));
+        Assert.True(condition: roster.TryGetSeatDevice(device: out var moved, kind: InputDeviceKind.Camera, slot: 1));
+        Assert.Equal(actual: moved, expected: camera);
     }
 
     private sealed class SingleCommandModule(CommandDefinition definition) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() => [definition];
     }
+
     [Fact]
     public void ACameraNeverCountsAsDevicePresence_SoAGamepadCanStillClaimASlotItAloneOccupies() {
         using var fixture = Fixtures.FreshServer(definition: TwoActiveSeatsDocument());
@@ -196,7 +197,7 @@ public sealed class PlayerRosterDeviceRosterLawTests {
         roster.ObserveDevice(device: brio, kind: InputDeviceKind.Camera, name: "Logitech BRIO");
         roster.ObserveDevice(device: c920, kind: InputDeviceKind.Camera, name: "HD Pro Webcam C920");
 
-        Assert.True(condition: roster.TryGetSeatDevice(slot: 1, kind: InputDeviceKind.Camera, device: out _));
+        Assert.True(condition: roster.TryGetSeatDevice(device: out _, kind: InputDeviceKind.Camera, slot: 1));
 
         // TryClaimSlot's "already driven by a human device" refusal must not fire on the camera alone.
         Assert.True(condition: roster.TryClaimSlot(
@@ -206,7 +207,7 @@ public sealed class PlayerRosterDeviceRosterLawTests {
             principal: WorldPrincipal.Console,
             slot: out var claimed
         ));
-        Assert.Equal(expected: 1, actual: claimed);
+        Assert.Equal(actual: claimed, expected: 1);
         Assert.Null(@object: fault);
     }
     [Fact]
@@ -231,8 +232,8 @@ public sealed class PlayerRosterDeviceRosterLawTests {
             actingPrincipal: WorldPrincipal.Console
         ));
 
-        Assert.True(condition: roster.TryGetSeatDevice(slot: 0, kind: InputDeviceKind.Camera, device: out var resolvedAfterCamera2));
-        Assert.Equal(expected: camera2, actual: resolvedAfterCamera2);
+        Assert.True(condition: roster.TryGetSeatDevice(device: out var resolvedAfterCamera2, kind: InputDeviceKind.Camera, slot: 0));
+        Assert.Equal(actual: resolvedAfterCamera2, expected: camera2);
         Assert.Contains(expectedSubstring: "camera1 'Camera One'=p1 |", actualString: roster.DescribeDevices());
         Assert.Contains(expectedSubstring: "camera2 'Camera Two'=p1*", actualString: roster.DescribeDevices());
 
@@ -244,8 +245,8 @@ public sealed class PlayerRosterDeviceRosterLawTests {
             actingPrincipal: WorldPrincipal.Console
         ));
 
-        Assert.True(condition: roster.TryGetSeatDevice(slot: 0, kind: InputDeviceKind.Camera, device: out var resolvedAfterCamera1));
-        Assert.Equal(expected: camera1, actual: resolvedAfterCamera1);
+        Assert.True(condition: roster.TryGetSeatDevice(device: out var resolvedAfterCamera1, kind: InputDeviceKind.Camera, slot: 0));
+        Assert.Equal(actual: resolvedAfterCamera1, expected: camera1);
     }
     [Fact]
     public void FirstKeyboardAndFirstMouse_SeatWithPlayer1_LikeAGamepadDoes() {
@@ -290,11 +291,11 @@ public sealed class PlayerRosterDeviceRosterLawTests {
 
         var (outcome, slot) = roster.Confirm(device: keyboard2, actingPrincipal: WorldPrincipal.Console);
 
-        Assert.Equal(expected: ConfirmOutcome.Joined, actual: outcome);
-        Assert.Equal(expected: 1, actual: slot);
+        Assert.Equal(actual: outcome, expected: ConfirmOutcome.Joined);
+        Assert.Equal(actual: slot, expected: 1);
         Assert.Equal(expected: "keyboard2", actual: roster.DeviceToken(device: keyboard2));
-        Assert.True(condition: roster.TryResolveDeviceToken(token: "keyboard2", device: out var resolved));
-        Assert.Equal(expected: keyboard2, actual: resolved);
+        Assert.True(condition: roster.TryResolveDeviceToken(device: out var resolved, token: "keyboard2"));
+        Assert.Equal(actual: resolved, expected: keyboard2);
 
         // player.assign keyboard2 1 (display "1" = slot 0) still moves it onto player 1's team like any device.
         Assert.Equal(expected: AssignOutcome.JoinedTeam, actual: roster.AssignDevice(

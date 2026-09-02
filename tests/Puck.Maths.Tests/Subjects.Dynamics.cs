@@ -28,8 +28,8 @@ internal static partial class Subjects {
         var dampingRaw = DynamicsDampingRaw(raw: left[1]);
         var responseRaw = DynamicsResponseRaw(raw: left[2]);
         var oracle = Oracles.DynamicsConstants(
-            frequencyRaw: frequencyRaw,
             dampingRaw: dampingRaw,
+            frequencyRaw: frequencyRaw,
             responseRaw: responseRaw
         );
         SecondOrderDynamics dynamics;
@@ -40,7 +40,7 @@ internal static partial class Subjects {
                 dampingRatio: FixedQ4816.FromRawBits(value: dampingRaw),
                 initialResponse: FixedQ4816.FromRawBits(value: responseRaw)
             );
-        } catch (ArgumentOutOfRangeException) when (dampingRaw != (1L << 16)) {
+        } catch (ArgumentOutOfRangeException) when ((dampingRaw != (1L << 16))) {
             // Off-critical, Create refuses an oscillation rate that would truncate to zero at the Q16 scale
             // Evaluate reads it at — legitimate only when the INDEPENDENT oracle rate agrees it is that small; any
             // other refusal here is a genuine mismatch, so it is re-thrown rather than swallowed.
@@ -69,12 +69,11 @@ internal static partial class Subjects {
         }
 
         return (dynamics.Branch switch {
-            SecondOrderDynamicsBranch.Underdamped => (dampingRaw < (1L << 16)) ? null : "branch should be Underdamped",
-            SecondOrderDynamicsBranch.CriticallyDamped => (dampingRaw == (1L << 16)) ? null : "branch should be CriticallyDamped",
-            _ => (dampingRaw > (1L << 16)) ? null : "branch should be Overdamped",
+            SecondOrderDynamicsBranch.Underdamped => ((dampingRaw < (1L << 16)) ? null : "branch should be Underdamped"),
+            SecondOrderDynamicsBranch.CriticallyDamped => ((dampingRaw == (1L << 16)) ? null : "branch should be CriticallyDamped"),
+            _ => ((dampingRaw > (1L << 16)) ? null : "branch should be Overdamped"),
         });
     }
-
     /// <summary>Walks <see cref="SecondOrderStep.Step(SecondOrderState,FixedQ4816,FixedQ4816)"/> from rest toward a
     /// folded target and compares the walked state against <see cref="SecondOrderDynamics.Evaluate"/> at the same
     /// elapsed duration — two independent code paths over the same physical system (exact BigInteger
@@ -133,11 +132,10 @@ internal static partial class Subjects {
         var valueBound = (8L + (2L * ((Math.Abs(value: targetRaw) >> 15) + 1L)));
         var velocityBound = (valueBound * (2L + (frequencyRaw >> 13)));
 
-        return ((deltaValue <= valueBound) && (deltaVelocity <= velocityBound))
+        return (((deltaValue <= valueBound) && (deltaVelocity <= velocityBound))
             ? null
-            : $"step vs evaluate diverged: dValue={deltaValue} (bound {valueBound}) dVelocity={deltaVelocity} (bound {velocityBound}) (f={frequencyRaw} zeta={dampingRaw} target={targetRaw})";
+            : $"step vs evaluate diverged: dValue={deltaValue} (bound {valueBound}) dVelocity={deltaVelocity} (bound {velocityBound}) (f={frequencyRaw} zeta={dampingRaw} target={targetRaw})");
     }
-
     /// <summary>ζ ≥ 1 from rest never overshoots a step target; a light-damping control (ζ = ¼) does.</summary>
     public static string? DynamicsCriticalAndOverdampedNeverOvershoot() {
         foreach (var zeta in new[] { 1.0, 1.5, 3.0, 8.0 }) {
@@ -188,7 +186,6 @@ internal static partial class Subjects {
 
         return null;
     }
-
     /// <summary>A stepped follower reaches EXACTLY the target with zero velocity — <see cref="SecondOrderState.AtRest"/>
     /// — and stays there; the settle threshold does not merely approach it.</summary>
     public static string? DynamicsSteadyStateExact() {
@@ -221,7 +218,6 @@ internal static partial class Subjects {
 
         return null;
     }
-
     /// <summary>From rest, a step target advancing by one step's worth per tick: y1 orders strictly with r's sign,
     /// Evaluate is bit-identical for r = 0 regardless of target velocity, and <see cref="SecondOrderDynamics.Retarget"/>
     /// applies exactly the derived kick.</summary>
@@ -289,7 +285,6 @@ internal static partial class Subjects {
 
         return null;
     }
-
     /// <summary>The refusal ladder, by parameter name, and the atomic-on-overflow contract of
     /// <see cref="SecondOrderStep.Step(SecondOrderState,FixedQ4816,FixedQ4816)"/>.</summary>
     public static string? DynamicsRefusalsAndOverflow() {
@@ -297,9 +292,9 @@ internal static partial class Subjects {
             try {
                 action();
             } catch (ArgumentOutOfRangeException ex) {
-                return (ex.ParamName == paramName)
+                return ((ex.ParamName == paramName)
                     ? null
-                    : $"{label}: expected paramName '{paramName}', got '{ex.ParamName}'";
+                    : $"{label}: expected paramName '{paramName}', got '{ex.ParamName}'");
             } catch (Exception ex) {
                 return $"{label}: expected ArgumentOutOfRangeException, got {ex.GetType().Name}";
             }
@@ -318,7 +313,7 @@ internal static partial class Subjects {
         }
 
         var dampingFailure = ExpectArgumentOutOfRange(
-            action: () => SecondOrderDynamics.Create(FixedQ4816.One, FixedQ4816.FromRawBits(-1L), FixedQ4816.Zero),
+            action: () => SecondOrderDynamics.Create(FixedQ4816.One, FixedQ4816.FromRawBits(value: -1L), FixedQ4816.Zero),
             paramName: "dampingRatio",
             label: "zeta<0"
         );
@@ -364,8 +359,8 @@ internal static partial class Subjects {
         var fromValueRefused = false;
 
         try {
-            SecondOrderState.FromValue(position: FixedQ4816.FromRawBits(1L << 47), velocity: FixedQ4816.Zero);
-        } catch (ArgumentOutOfRangeException ex) when (ex.ParamName == "position") {
+            SecondOrderState.FromValue(position: FixedQ4816.FromRawBits(value: (1L << 47)), velocity: FixedQ4816.Zero);
+        } catch (ArgumentOutOfRangeException ex) when ((ex.ParamName == "position")) {
             fromValueRefused = true;
         }
 
@@ -386,11 +381,10 @@ internal static partial class Subjects {
             overflowed = true;
         }
 
-        return overflowed
+        return (overflowed
             ? null
-            : "an out-of-range Step must throw OverflowException rather than silently wrap";
+            : "an out-of-range Step must throw OverflowException rather than silently wrap");
     }
-
     /// <summary>A three-lane <see cref="SecondOrderStep.Step(SecondOrderState3,FixedVector3,FixedVector3)"/> equals
     /// three independent scalar steps, bit for bit, lane by lane.</summary>
     public static string? DynamicsVectorLanesIndependent(long[] left, long[] right) {
@@ -421,8 +415,8 @@ internal static partial class Subjects {
             stateZ = step.Step(state: stateZ, target: target.Z, targetVelocity: targetVelocity.Z);
         }
 
-        return ((state3.X == stateX) && (state3.Y == stateY) && (state3.Z == stateZ))
+        return (((state3.X == stateX) && (state3.Y == stateY) && (state3.Z == stateZ))
             ? null
-            : $"vector lanes diverged from scalar steps at (target={target}, targetVelocity={targetVelocity})".ToString(CultureInfo.InvariantCulture);
+            : $"vector lanes diverged from scalar steps at (target={target}, targetVelocity={targetVelocity})".ToString(provider: CultureInfo.InvariantCulture));
     }
 }

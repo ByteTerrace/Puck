@@ -120,8 +120,8 @@ public sealed class BindingVocabularyCheckTests {
             errors: errors
         );
 
-        Assert.Contains(collection: errors, filter: static error => error.Contains(value: "accepts no wire arguments", comparisonType: StringComparison.Ordinal));
-        Assert.Contains(collection: errors, filter: static error => error.Contains(value: "has no press edge", comparisonType: StringComparison.Ordinal));
+        Assert.Contains(collection: errors, filter: static error => error.Contains(comparisonType: StringComparison.Ordinal, value: "accepts no wire arguments"));
+        Assert.Contains(collection: errors, filter: static error => error.Contains(comparisonType: StringComparison.Ordinal, value: "has no press edge"));
 
         errors.Clear();
 

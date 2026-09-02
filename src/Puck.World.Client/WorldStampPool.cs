@@ -48,9 +48,11 @@ public sealed class WorldStampPool {
 
     private readonly Registration?[] m_pool = new Registration?[WorldPlacementPolicy.MaxStampRegistrations];
     private int m_packedSlotBase = -1;
+
     // Latched by Tick, consumed once by the next PackTransforms — the frame delta the pool's root/part followers
     // step by (accumulates across a Tick called more than once before a pack, mirroring the replay clock above).
     private float m_pendingDeltaSeconds;
+
     // The placeholder document an unused/probe slot registers its constant-shape palette against.
     private static readonly CreationDocument EmptyDocument = new(
         Schema: CreationDocument.CurrentSchema,
@@ -83,19 +85,24 @@ public sealed class WorldStampPool {
         // Cue state: the look's cues, each cue's timeline frame (1-based cursor, 0 = unresolved), when each next
         // self-fires on the cue clock, its fire count (the draw's seed), and the cue frame holding now (0 = none).
         public IReadOnlyList<WorldLookCue>? Cues;
+
         // Whether the timeline replays on the render clock (an animated row always does; a body look only when its
         // motion says so — a cue-only timeline otherwise rests on frame 0, the live pose).
         public bool Replay = true;
         public int[] CueFrames = [];
         public float[] CueNextSeconds = [];
         public uint[] CueFires = [];
+
         public float CueClock;
         public int CueFrame;
         public float CueHoldUntil;
+
         // The cursor the frame reads: a firing cue's frame overrides the replay cursor for its hold.
         public int EffectiveCursor => ((CueFrame > 0) ? CueFrame : FrameCursor);
+
         // Memoized per-frame shape-id → pose index (a pure derivation of the immutable document).
         public Dictionary<int, FrameTransformDocument>?[] FramePoses = [];
+
         // The last text-run layout EmitOne computed for this registration's creation, and the scale it was computed
         // at (see ResolveTextLayouts) — null until the first hasText call. A creation-content change never reuses
         // this: Reconcile swaps in a brand-new Registration rather than mutating this one when the content hash
@@ -110,6 +117,7 @@ public sealed class WorldStampPool {
         public required AuthoredPartTable Parts;
         // The row-rooted placement (an ANIMATED or an ATTACHED one), or null for a body-rooted stamp.
         public WorldPlacement? Row;
+
         public float Scale = 1f;
 
         // The root position/orientation followers — set only for a body-rooted registration whose look names a root
@@ -117,17 +125,20 @@ public sealed class WorldStampPool {
         // FollowedOrientation are the values PackTransforms actually rendered this frame: the followers step at most
         // once per frame, there, so TryBodyPartAuthoredPose/TryShapePosition read the latch instead of re-stepping.
         public bool HasRootDynamics;
+
         // The body's WorldClient.PoseEpoch/EntityAddress this registration's followers last seeded against — -1/
         // default before the first pack. PackTransforms reseeds both root followers (and every part follower riding
         // this root) whenever either moves past this: PoseEpoch for a teleport or an over-threshold correction,
         // EntityAddress for a body index reused by a different inhabitant (a distinct address, even at the SAME
         // index and creation hash, so a same-content edit never inherits a stale follower position across it).
         public int RootEpoch = -1;
+
         public WorldEntityAddress RootAddress;
         public SecondOrderResponse RootResponse;
         public SecondOrderFollower3 RootPositionFollower;
         public SecondOrderFollower4 RootOrientationFollower;
         public Vector3 FollowedPosition;
+
         public Quaternion FollowedOrientation = Quaternion.Identity;
         // Per-shape-slot part position followers, resolved from the look's PartDynamics map through Parts —
         // indexed by shape slot (the same index PackTransforms's per-shape loop and Parts.TryResolve's
@@ -233,8 +244,8 @@ public sealed class WorldStampPool {
         var textLayouts = (hasText
             ? ResolveTextLayouts(
                 catalog: textCatalog!,
-                live: live!,
                 document: document!,
+                live: live!,
                 scale: placementScale
             )
             : null
@@ -319,7 +330,7 @@ public sealed class WorldStampPool {
         // already ran, so live.PartFollows reflects this frame's followers) rather than per group — precise
         // per-group membership is not worth a second scan since widening a group without a follower only relaxes
         // its cull, never its geometry.
-        var anyPartFollows = ((live is not null) && Array.IndexOf(array: live.PartFollows, value: true) >= 0);
+        var anyPartFollows = ((live is not null) && (Array.IndexOf(array: live.PartFollows, value: true) >= 0));
         Span<int> emittedGroups = stackalloc int[WorldPlacementPolicy.MaxAnimatedStampShapes];
         var emittedCount = 0;
 
@@ -637,7 +648,7 @@ public sealed class WorldStampPool {
                 registration.CueNextSeconds[index] = CueRest(
                     cue: cues[index],
                     fires: 0,
-                    seed: (uint)stamp.BodyIndex
+                    seed: ((uint)stamp.BodyIndex)
                 );
             }
         }
@@ -689,12 +700,12 @@ public sealed class WorldStampPool {
     // latches the result into FollowedPosition/FollowedOrientation for every other reader this frame.
     private static void StepRootFollower(Registration live, float deltaSeconds, Vector3 targetPosition, Quaternion targetRotation) {
         (live.FollowedPosition, live.FollowedOrientation) = SecondOrderPoseFollower.StepPose(
-            position: ref live.RootPositionFollower,
-            orientation: ref live.RootOrientationFollower,
-            response: in live.RootResponse,
             deltaSeconds: deltaSeconds,
-            targetPosition: targetPosition,
-            targetOrientation: targetRotation
+            orientation: ref live.RootOrientationFollower,
+            position: ref live.RootPositionFollower,
+            response: in live.RootResponse,
+            targetOrientation: targetRotation,
+            targetPosition: targetPosition
         );
     }
     // Steps one part's position follower once, in place, and returns the eased world position.
@@ -737,6 +748,7 @@ public sealed class WorldStampPool {
 
         return (min + ((max - min) * unit));
     }
+
     /// <summary>Fires one of a body look's cues now — the door a driver (a face probe reading the player's camera, a
     /// dialogue line) blinks or mouths the avatar through; the cue's self-fire interval re-arms from this fire.</summary>
     /// <param name="bodyIndex">The population entity index.</param>
@@ -759,6 +771,7 @@ public sealed class WorldStampPool {
 
         return false;
     }
+
     private static void FireCue(Registration live, int index) {
         var cue = live.Cues![index];
 
@@ -768,7 +781,7 @@ public sealed class WorldStampPool {
         live.CueNextSeconds[index] = (live.CueHoldUntil + CueRest(
             cue: cue,
             fires: live.CueFires[index],
-            seed: (uint)(live.BodyIndex ?? 0)
+            seed: ((uint)(live.BodyIndex ?? 0))
         ));
     }
     private static Registration RegisterRow(WorldPlacement row, WorldPrototype creation) => new() {
@@ -945,8 +958,8 @@ public sealed class WorldStampPool {
                 }
 
                 StepRootFollower(
-                    live: live,
                     deltaSeconds: deltaSeconds,
+                    live: live,
                     targetPosition: rootPosition,
                     targetRotation: rootRotation
                 );
@@ -997,9 +1010,9 @@ public sealed class WorldStampPool {
 
                 if (live.PartFollows[shapeIndex]) {
                     worldPosition = StepPartFollower(
+                        deltaSeconds: deltaSeconds,
                         live: live,
                         shapeSlot: shapeIndex,
-                        deltaSeconds: deltaSeconds,
                         target: worldPosition
                     );
                 }

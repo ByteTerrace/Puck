@@ -9,8 +9,9 @@ namespace Puck.Overlays;
 public sealed class OverlayFrameSourceGeneration(Action<int> retain, Action<int> release) {
     private readonly List<int> m_activeKeys = [];
     private readonly List<Entry> m_entries = [];
-    private readonly Action<int> m_release = release ?? throw new ArgumentNullException(paramName: nameof(release));
-    private readonly Action<int> m_retain = retain ?? throw new ArgumentNullException(paramName: nameof(retain));
+    private readonly Action<int> m_release = (release ?? throw new ArgumentNullException(paramName: nameof(release)));
+    private readonly Action<int> m_retain = (retain ?? throw new ArgumentNullException(paramName: nameof(retain)));
+
     private ulong m_generation;
     private bool m_open;
 
@@ -22,7 +23,6 @@ public sealed class OverlayFrameSourceGeneration(Action<int> retain, Action<int>
         (key < m_entries.Count) &&
         m_entries[key].Active
     );
-
     /// <summary>Begins one active-source generation.</summary>
     /// <exception cref="InvalidOperationException">A generation is already open.</exception>
     public void BeginGeneration() {

@@ -75,6 +75,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     private readonly DXGI_FORMAT m_swapChainFormat;
     private readonly PresentMode m_presentMode;
     private readonly uint m_syncInterval;
+
     private readonly nint[] m_backBuffers = new nint[FrameCount];
     // One command allocator/list per swap-chain buffer (indexed by IDXGISwapChain3::GetCurrentBackBufferIndex,
     // queried identically in BeginFrame and Present with no intervening Present call between the two reads, so
@@ -91,7 +92,9 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     private DirectXSurfaceUpload? m_cpuUpload;
     private nint m_frameFence;
     private HANDLE m_frameFenceEvent;
+
     private ulong m_nextFrameFenceValue = 1;
+
     private IGpuSurfaceImport? m_surfaceImport;
     private uint m_height;
     private nint m_lastBlitResource;
@@ -381,6 +384,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         m_frameFenceValues[frameIndex] = fenceValue;
         m_nextFrameFenceValue = (fenceValue + 1);
     }
+
     /// <summary>Blocks until the ring slot <see cref="Present"/> is about to reuse this frame — the slot's
     /// allocator/list from <see cref="FrameCount"/> presents ago — has fully retired on the GPU. This is the
     /// pipelined replacement for a full <see cref="DirectXDeviceContext.WaitIdle"/> drain every frame: the host

@@ -11,7 +11,7 @@ namespace Puck.World;
 public readonly record struct WorldThemeCubicBezier(float X1, float Y1, float X2, float Y2) {
     /// <summary>Gets the inert absence — the identity curve's four zeroed control points.</summary>
     public static WorldThemeCubicBezier Absent { get; } = new(
-        X1: 0f, Y1: 0f, X2: 0f, Y2: 0f
+        X1: 0f, X2: 0f, Y1: 0f, Y2: 0f
     );
 }
 /// <summary>One elevation bloom hue's lit ring + outer halo pair (see <c>Puck.Overlays.DesignTokens.Elevation</c>

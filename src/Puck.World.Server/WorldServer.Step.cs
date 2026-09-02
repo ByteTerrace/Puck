@@ -50,7 +50,6 @@ public sealed partial class WorldServer {
 
         return true;
     }
-
     private void DispatchServerEvent(WorldServerEvent serverEvent, bool ordered) {
         if (ordered) {
             EnqueueOrdered(entry: new OrderedEntry.ServerEvent(Value: serverEvent));
@@ -232,9 +231,9 @@ public sealed partial class WorldServer {
             }
 
             applied |= EvaluateOnce(
-                latch: latch,
                 binding: LatchKey.None,
                 bindings: bindings,
+                latch: latch,
                 rule: rule,
                 stepTicks: stepTicks,
                 tick: tick
@@ -721,7 +720,7 @@ public sealed partial class WorldServer {
             return;
         }
 
-        var bodyIndex = (int)resolved;
+        var bodyIndex = ((int)resolved);
 
         if (Body(index: bodyIndex) is not { } body) {
             Console.Error.WriteLine(value: $"[world.rule: pose skipped — body:{bodyIndex} is inactive]");
@@ -992,8 +991,8 @@ public sealed partial class WorldServer {
 
             if (m_engagement.Compose(
                 actingPrincipal: principal,
-                exclusive: true,
                 entityIndex: slot,
+                exclusive: true,
                 target: target,
                 targetPrincipal: principal
             )) {
@@ -1403,6 +1402,7 @@ public sealed partial class WorldServer {
             Left: -1,
             Right: -1
         );
+
         // Checkpoint spelling: "" for None, else ":left" or ":left:right" — ':' is reserved out of WorldCellName, so
         // the rule name it trails can never contain it. KEEP IN SYNC with TryParse.
         public string Format() => ((Left < 0)

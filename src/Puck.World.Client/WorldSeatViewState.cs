@@ -9,7 +9,6 @@ namespace Puck.World.Client;
 /// local rendering, away rendering, and read-back all observe it.
 /// </summary>
 public sealed class WorldSeatViewState {
-
     private readonly Lock m_gate = new();
     private readonly SdfCameraBoomFollower m_boom = new();
 
@@ -23,8 +22,8 @@ public sealed class WorldSeatViewState {
 
     private Quaternion m_upAlignment = Quaternion.Identity;
     private Vector3 m_alignedUp = Vector3.UnitY;
-
     private readonly WorldCameraRigCompiler.Cache m_rigCache = new();
+
     private float m_pitch;
     private float m_yaw;
 
@@ -152,7 +151,7 @@ public sealed class WorldSeatViewState {
     /// <param name="rate">The exponential closing rate per second.</param>
     /// <param name="deltaSeconds">The step.</param>
     public void Follow(float targetYaw, float rate, float deltaSeconds) {
-        var fraction = FirstOrderLag.Alpha(rate: rate, deltaSeconds: deltaSeconds);
+        var fraction = FirstOrderLag.Alpha(deltaSeconds: deltaSeconds, rate: rate);
 
         lock (m_gate) {
             var current = Wrap(radians: m_yaw);
@@ -176,7 +175,6 @@ public sealed class WorldSeatViewState {
             );
         }
     }
-
     public void Recenter() {
         lock (m_gate) {
             m_yaw = 0f;

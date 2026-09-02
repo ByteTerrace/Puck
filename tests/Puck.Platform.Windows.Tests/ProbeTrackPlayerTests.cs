@@ -5,10 +5,10 @@ using Xunit;
 namespace Puck.Platform.Windows.Tests;
 
 public sealed class ProbeTrackPlayerTests {
-    private static readonly long PeriodTicks = ((long)Math.Round(Stopwatch.Frequency / 30.0));
+    private static readonly long PeriodTicks = ((long)Math.Round(a: (Stopwatch.Frequency / 30.0)));
 
     // A sample time sitting exactly on the 30 Hz tick grid the assertions below walk.
-    private static double GridSeconds(int index) => ((index * PeriodTicks) / (double)Stopwatch.Frequency);
+    private static double GridSeconds(int index) => ((index * PeriodTicks) / ((double)Stopwatch.Frequency));
 
     [Fact]
     public void Rejects_a_document_that_fails_a_shape_check() {
@@ -66,28 +66,29 @@ public sealed class ProbeTrackPlayerTests {
         );
         var player = new ProbeTrackPlayer(document: document, ring: ring);
         const long Origin = 7_000_000L;
-        long Seconds(double seconds) => ((long)Math.Round(seconds * Stopwatch.Frequency));
 
-        Assert.True(player.Advance(nowTimestamp: Origin));
-        Assert.False(player.Advance(nowTimestamp: (Origin + Seconds(seconds: 0.25))));
-        Assert.True(player.Advance(nowTimestamp: (Origin + Seconds(seconds: 0.5))));
-        Assert.True(ring.TryReadLatest(reading: out var second));
-        Assert.Equal(expected: 1, actual: ((int)Math.Round((double)second[0])));
+        long Seconds(double seconds) => ((long)Math.Round(a: (seconds * Stopwatch.Frequency)));
+
+        Assert.True(condition: player.Advance(nowTimestamp: Origin));
+        Assert.False(condition: player.Advance(nowTimestamp: (Origin + Seconds(seconds: 0.25))));
+        Assert.True(condition: player.Advance(nowTimestamp: (Origin + Seconds(seconds: 0.5))));
+        Assert.True(condition: ring.TryReadLatest(reading: out var second));
+        Assert.Equal(expected: 1, actual: ((int)Math.Round(a: ((double)second[0]))));
         Assert.Equal(expected: (Origin + Seconds(seconds: 0.5)), actual: second.CaptureTimestamp);
-        Assert.False(player.Advance(nowTimestamp: (Origin + Seconds(seconds: 0.55))));
-        Assert.True(player.Advance(nowTimestamp: (Origin + Seconds(seconds: 0.6))));
-        Assert.True(ring.TryReadLatest(reading: out var third));
-        Assert.Equal(expected: 2, actual: ((int)Math.Round((double)third[0])));
+        Assert.False(condition: player.Advance(nowTimestamp: (Origin + Seconds(seconds: 0.55))));
+        Assert.True(condition: player.Advance(nowTimestamp: (Origin + Seconds(seconds: 0.6))));
+        Assert.True(condition: ring.TryReadLatest(reading: out var third));
+        Assert.Equal(expected: 2, actual: ((int)Math.Round(a: ((double)third[0]))));
 
         // The track loops one nominal period (1/30 s) after its last sample; a call inside that gap publishes
         // nothing, and the first call past it publishes sample zero again with the loop's own capture time.
         var loopSeconds = (0.6 + (1.0 / 30.0));
 
-        Assert.False(player.Advance(nowTimestamp: (Origin + Seconds(seconds: 0.61))));
-        Assert.True(player.Advance(nowTimestamp: (Origin + Seconds(seconds: loopSeconds) + 1L)));
-        Assert.True(ring.TryReadLatest(reading: out var looped));
-        Assert.Equal(expected: 0, actual: ((int)Math.Round((double)looped[0])));
-        Assert.Equal(expected: (Origin + Seconds(seconds: 0.6) + PeriodTicks), actual: looped.CaptureTimestamp);
+        Assert.False(condition: player.Advance(nowTimestamp: (Origin + Seconds(seconds: 0.61))));
+        Assert.True(condition: player.Advance(nowTimestamp: ((Origin + Seconds(seconds: loopSeconds)) + 1L)));
+        Assert.True(condition: ring.TryReadLatest(reading: out var looped));
+        Assert.Equal(expected: 0, actual: ((int)Math.Round(a: ((double)looped[0]))));
+        Assert.Equal(expected: ((Origin + Seconds(seconds: 0.6)) + PeriodTicks), actual: looped.CaptureTimestamp);
     }
     [Fact]
     public void Publishes_each_sample_exactly_once_per_period_and_loops() {
@@ -110,12 +111,12 @@ public sealed class ProbeTrackPlayerTests {
         for (var globalIndex = 0; (globalIndex < 9); globalIndex++) {
             var windowStart = (Origin + (globalIndex * PeriodTicks));
 
-            Assert.True(player.Advance(nowTimestamp: windowStart));
-            Assert.False(player.Advance(nowTimestamp: (windowStart + (PeriodTicks / 4))));
-            Assert.False(player.Advance(nowTimestamp: (windowStart + (PeriodTicks / 2))));
+            Assert.True(condition: player.Advance(nowTimestamp: windowStart));
+            Assert.False(condition: player.Advance(nowTimestamp: (windowStart + (PeriodTicks / 4))));
+            Assert.False(condition: player.Advance(nowTimestamp: (windowStart + (PeriodTicks / 2))));
 
-            Assert.True(ring.TryReadLatest(reading: out var reading));
-            observedSlots.Add(item: ((int)Math.Round((double)reading[0])));
+            Assert.True(condition: ring.TryReadLatest(reading: out var reading));
+            observedSlots.Add(item: ((int)Math.Round(a: ((double)reading[0]))));
             observedVersions.Add(item: ring.Version);
         }
 
@@ -137,16 +138,16 @@ public sealed class ProbeTrackPlayerTests {
         const long Origin = 5_000_000L;
         var secondSampleOffsetTicks = PeriodTicks;
 
-        Assert.True(player.Advance(nowTimestamp: Origin));
-        Assert.True(ring.TryReadLatest(reading: out var first));
+        Assert.True(condition: player.Advance(nowTimestamp: Origin));
+        Assert.True(condition: ring.TryReadLatest(reading: out var first));
         Assert.Equal(actual: first.CaptureTimestamp, expected: Origin);
 
         // Advance well past the second sample's window; the reported capture time still tracks the sample's own
         // declared offset from the origin, not the (later) instant this call observed it.
-        var lateArrival = (Origin + PeriodTicks + (PeriodTicks / 3));
+        var lateArrival = ((Origin + PeriodTicks) + (PeriodTicks / 3));
 
-        Assert.True(player.Advance(nowTimestamp: lateArrival));
-        Assert.True(ring.TryReadLatest(reading: out var second));
+        Assert.True(condition: player.Advance(nowTimestamp: lateArrival));
+        Assert.True(condition: ring.TryReadLatest(reading: out var second));
         Assert.Equal(actual: second.CaptureTimestamp, expected: (Origin + secondSampleOffsetTicks));
         Assert.Equal(actual: second.CompletionTimestamp, expected: lateArrival);
     }

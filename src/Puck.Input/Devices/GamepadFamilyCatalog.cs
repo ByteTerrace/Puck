@@ -27,9 +27,9 @@ public static class GamepadFamilyCatalog {
     /// exact input admits only the declared member spellings.</remarks>
     public static bool IsKnownName(string name) => (
         Enum.TryParse<GamepadType>(
-            value: name,
             ignoreCase: false,
-            result: out var family
+            result: out var family,
+            value: name
         ) &&
         (family != GamepadType.Unknown) &&
         (Enum.GetName(value: family) == name)

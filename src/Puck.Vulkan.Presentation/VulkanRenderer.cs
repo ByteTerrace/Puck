@@ -371,7 +371,6 @@ public sealed class VulkanRenderer(
         ))
         : 0L
     );
-
     nint IGpuDeviceContext.DeviceHandle => LogicalDevice.Handle;
 
     void IGpuDeviceContext.WaitIdle() => WaitForGpuIdle();

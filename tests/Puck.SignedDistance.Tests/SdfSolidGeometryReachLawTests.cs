@@ -87,7 +87,6 @@ public sealed class SdfSolidGeometryReachLawTests {
             userMessage: $"reach {reach} does not cover an emitted surface at |z| = 4"
         );
     }
-
     /// <summary>Emission raises every scale component to <see cref="SdfSolidGeometry.MinimumScale"/>, so the analyzer
     /// reads the same effective scale: a reach taken from the authored value reports nothing for geometry the emission
     /// still gives extent.</summary>
@@ -126,7 +125,6 @@ public sealed class SdfSolidGeometryReachLawTests {
             );
         }
     }
-
     /// <summary>A cull bound must contain the geometry it labels: an instance's reach is folded into a running maximum
     /// that decides which tiles evaluate the instance at all.</summary>
     [Fact]

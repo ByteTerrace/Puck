@@ -103,7 +103,6 @@ public static class OverlayTokenBlock {
     private static void WriteScalar(Span<uint> destination, Scalar scalar, float value) {
         destination[((RoleCount * 4) + ((int)scalar))] = BitConverter.SingleToUInt32Bits(value: value);
     }
-
     // A scrim's fill plus its own alpha, composed into one baked-alpha RgbaColor the way every other role already
     // bakes its alpha — the GPU-side role table carries no separate per-role alpha channel.
     private static RgbaColor Baked(OverlayThemeValues.Scrim scrim) => new(

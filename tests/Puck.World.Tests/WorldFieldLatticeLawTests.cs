@@ -26,10 +26,9 @@ public sealed class WorldFieldLatticeLawTests {
             Layers: layers,
             StepEveryTicks: 1
         ),
-        Fields: [new WorldFieldRow(Name: "heat", Min: 0f, Max: 10f, HeightScale: heightScale, Color: (heightScale > 0f ? "#ffffff" : null))],
+        Fields: [new WorldFieldRow(Name: "heat", Min: 0f, Max: 10f, HeightScale: heightScale, Color: ((heightScale > 0f) ? "#ffffff" : null))],
         Reactions: reactions
     );
-
     private static WorldFieldsSection FilledFields(WorldLatticeFill fill, int width = 32, int depth = 32) => new(
         Lattice: new WorldFieldLatticeDefinition(
             Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f),
@@ -51,13 +50,13 @@ public sealed class WorldFieldLatticeLawTests {
             Layers: 1,
             StepEveryTicks: 1
         ),
-        Fields: [new WorldFieldRow(Name: "medium", Initial: initial, Min: 0f, Max: 1f, HeightScale: heightScale, Color: "#3B7BD6", Medium: true)]
+        Fields: [new WorldFieldRow(Color: "#3B7BD6", HeightScale: heightScale, Initial: initial, Max: 1f, Medium: true, Min: 0f, Name: "medium")]
     );
     private static long SumBits(WorldFieldLattice lattice, int cells) {
         var sum = 0L;
 
         for (var cell = 0; (cell < cells); cell++) {
-            sum = unchecked(sum + (lattice.Value(field: 0, cell: cell).Value * 31L));
+            sum = unchecked((sum + (lattice.Value(cell: cell, field: 0).Value * 31L)));
         }
 
         return sum;
@@ -65,7 +64,7 @@ public sealed class WorldFieldLatticeLawTests {
 
     [Fact]
     public void ANoiseFillIsBitIdenticalAcrossConstructionsAndMovesWithTheWorldSeed() {
-        var fill = new WorldLatticeFill.Noise(Value: 1f, Frequency: 8, Threshold: 0.4f, Octaves: 3, Seed: 7u);
+        var fill = new WorldLatticeFill.Noise(Frequency: 8, Octaves: 3, Seed: 7u, Threshold: 0.4f, Value: 1f);
         var a = Fixtures.BuildLattice(document: FilledFields(fill: fill), worldSeed: 5UL);
         var b = Fixtures.BuildLattice(document: FilledFields(fill: fill), worldSeed: 5UL);
         var rerolled = Fixtures.BuildLattice(document: FilledFields(fill: fill), worldSeed: 6UL);
@@ -73,11 +72,11 @@ public sealed class WorldFieldLatticeLawTests {
 
         for (var cell = 0; (cell < (32 * 32)); cell++) {
             Assert.Equal(
-                actual: b.Value(field: 0, cell: cell).Value,
-                expected: a.Value(field: 0, cell: cell).Value
+                actual: b.Value(cell: cell, field: 0).Value,
+                expected: a.Value(cell: cell, field: 0).Value
             );
 
-            if (a.Value(field: 0, cell: cell).Value != 0L) {
+            if (a.Value(cell: cell, field: 0).Value != 0L) {
                 filled++;
             }
         }
@@ -85,19 +84,18 @@ public sealed class WorldFieldLatticeLawTests {
         // Patchy, not degenerate: some cells filled, some not, and the world seed rerolls the pattern.
         Assert.InRange(actual: filled, high: ((32 * 32) - 1), low: 1);
         Assert.NotEqual(
-            actual: SumBits(lattice: rerolled, cells: (32 * 32)),
-            expected: SumBits(lattice: a, cells: (32 * 32))
+            actual: SumBits(cells: (32 * 32), lattice: rerolled),
+            expected: SumBits(cells: (32 * 32), lattice: a)
         );
     }
-
     [Fact]
     public void AScatterFillWritesDiscsAndNothingOutsideThem() {
-        var fill = new WorldLatticeFill.Scatter(Value: 1f, Spacing: 8, Radius: 2, Seed: 3u);
+        var fill = new WorldLatticeFill.Scatter(Radius: 2, Seed: 3u, Spacing: 8, Value: 1f);
         var lattice = Fixtures.BuildLattice(document: FilledFields(fill: fill), worldSeed: 1UL);
         var filled = 0;
 
         for (var cell = 0; (cell < (32 * 32)); cell++) {
-            if (lattice.Value(field: 0, cell: cell).Value != 0L) {
+            if (lattice.Value(cell: cell, field: 0).Value != 0L) {
                 filled++;
             }
         }
@@ -106,12 +104,11 @@ public sealed class WorldFieldLatticeLawTests {
         // count stays within the per-block disc envelope on BOTH sides.
         Assert.InRange(actual: filled, high: (16 * 21), low: 16);
     }
-
     [Fact]
     public void ARowReferencedReactionScalarModulatesChemistryOnlyWhileTheRowIsNonzero() {
-        var lattice = Fixtures.BuildLattice(document: (FilledFields(fill: new WorldLatticeFill.Rect(Value: 1f, MinX: 0f, MinZ: 0f, MaxX: 32f, MaxZ: 32f), width: 4, depth: 4) with {
+        var lattice = Fixtures.BuildLattice(document: (FilledFields(fill: new WorldLatticeFill.Rect(MaxX: 32f, MaxZ: 32f, MinX: 0f, MinZ: 0f, Value: 1f), width: 4, depth: 4) with {
             Reactions = [new WorldReaction.Transform(
-                When: [new WorldFieldCondition(Field: "grass", Comparison: WorldFieldComparison.Greater, Value: 0f)],
+                When: [new WorldFieldCondition(Comparison: WorldFieldComparison.Greater, Field: "grass", Value: 0f)],
                 Then: [new WorldFieldWrite(Field: "grass", Op: WorldFieldWriteOp.Add, Value: new WorldLatticeScalar(Row: "season"))]
             )],
         }), state: [new WorldStateRow(Name: WorldCellName.Parse(candidate: "season"), Kind: CellKind.Fixed)]);
@@ -124,17 +121,16 @@ public sealed class WorldFieldLatticeLawTests {
         );
 
         StepOnce();
-        Assert.Equal(expected: FixedQ4816.One.Value, actual: lattice.Value(field: 0, cell: 0).Value);
+        Assert.Equal(expected: FixedQ4816.One.Value, actual: lattice.Value(cell: 0, field: 0).Value);
 
         season = FixedQ4816.FromDouble(value: -0.25);
         StepOnce();
-        Assert.Equal(expected: FixedQ4816.FromDouble(value: 0.75).Value, actual: lattice.Value(field: 0, cell: 0).Value);
+        Assert.Equal(expected: FixedQ4816.FromDouble(value: 0.75).Value, actual: lattice.Value(cell: 0, field: 0).Value);
 
         season = FixedQ4816.Zero;
         StepOnce();
-        Assert.Equal(expected: FixedQ4816.FromDouble(value: 0.75).Value, actual: lattice.Value(field: 0, cell: 0).Value);
+        Assert.Equal(expected: FixedQ4816.FromDouble(value: 0.75).Value, actual: lattice.Value(cell: 0, field: 0).Value);
     }
-
     [Fact]
     public void ABodyStandingOnAGroundLatticeSurfaceCouplesToItsColumn() {
         // Layers = 1, cellSize 1, heightScale 2, max 10: the derived coupling ceiling is 1 + 2*10 = 21. A body at
@@ -142,7 +138,7 @@ public sealed class WorldFieldLatticeLawTests {
         // emit reaction must deposit into its column.
         var lattice = Fixtures.BuildLattice(document: Fields(
             heightScale: 2f,
-            reactions: [new WorldReaction.Emit(Tag: "hot", Field: "heat", Amount: 4f)]
+            reactions: [new WorldReaction.Emit(Amount: 4f, Field: "heat", Tag: "hot")]
         ), state: [new WorldStateRow(Name: WorldCellName.Parse(candidate: "hot"), Kind: CellKind.Int, Capacity: 1)]);
 
         lattice.Step(
@@ -160,16 +156,15 @@ public sealed class WorldFieldLatticeLawTests {
 
         Assert.Equal(
             expected: FixedQ4816.FromInteger(value: 4).Value,
-            actual: lattice.Value(field: 0, cell: 0).Value
+            actual: lattice.Value(cell: 0, field: 0).Value
         );
     }
-
     [Fact]
     public void ABodyAboveTheDerivedCouplingCeilingDoesNotCouple() {
         // Same lattice: ceiling 21. A body at y = 30 flies far above any reachable surface — no deposit.
         var lattice = Fixtures.BuildLattice(document: Fields(
             heightScale: 2f,
-            reactions: [new WorldReaction.Emit(Tag: "hot", Field: "heat", Amount: 4f)]
+            reactions: [new WorldReaction.Emit(Amount: 4f, Field: "heat", Tag: "hot")]
         ), state: [new WorldStateRow(Name: WorldCellName.Parse(candidate: "hot"), Kind: CellKind.Int, Capacity: 1)]);
 
         lattice.Step(
@@ -187,10 +182,9 @@ public sealed class WorldFieldLatticeLawTests {
 
         Assert.Equal(
             expected: 0L,
-            actual: lattice.Value(field: 0, cell: 0).Value
+            actual: lattice.Value(cell: 0, field: 0).Value
         );
     }
-
     [Fact]
     public void AMediumFieldsSurfaceIsOriginYPlusValueTimesHeightScaleAtTheCoupledCell() {
         var lattice = Fixtures.BuildLattice(document: MediumFields(initial: 1f, heightScale: 5f));
@@ -205,7 +199,6 @@ public sealed class WorldFieldLatticeLawTests {
             actual: lattice.MediumSurface(position: in position)
         );
     }
-
     [Fact]
     public void ABodyOutsideTheLatticeOrOverAZeroValueCellHasNoMediumSurface() {
         var zeroValued = Fixtures.BuildLattice(document: MediumFields(initial: 0f, heightScale: 5f));
@@ -224,13 +217,13 @@ public sealed class WorldFieldLatticeLawTests {
         Assert.Null(@object: zeroValued.MediumSurface(position: in insidePosition));
         Assert.Null(@object: outside.MediumSurface(position: in outsidePosition));
     }
-
     [Fact]
     public void DiffusionUsesTheCompiledFieldHandleAndSnapshotsBeforeWriting() {
         var lattice = Fixtures.BuildLattice(document: Fields(
             width: 3,
             reactions: [new WorldReaction.Diffuse(Field: "heat", Rate: 1f)]
         ));
+
         lattice.Restore(checkpoint: new WorldFieldLattice.WorldFieldCheckpoint(Raw: [[
             FixedQ4816.Zero.Value,
             FixedQ4816.FromInteger(value: 3).Value,
@@ -239,25 +232,25 @@ public sealed class WorldFieldLatticeLawTests {
 
         Fixtures.StepLattice(lattice: lattice);
 
-        Assert.Equal(expected: FixedQ4816.FromInteger(value: 3), actual: lattice.Value(field: 0, cell: 0));
-        Assert.Equal(expected: FixedQ4816.Zero, actual: lattice.Value(field: 0, cell: 1));
-        Assert.Equal(expected: FixedQ4816.FromInteger(value: 3), actual: lattice.Value(field: 0, cell: 2));
+        Assert.Equal(expected: FixedQ4816.FromInteger(value: 3), actual: lattice.Value(cell: 0, field: 0));
+        Assert.Equal(expected: FixedQ4816.Zero, actual: lattice.Value(cell: 1, field: 0));
+        Assert.Equal(expected: FixedQ4816.FromInteger(value: 3), actual: lattice.Value(cell: 2, field: 0));
     }
-
     [Fact]
     public void ExposureWritesTheCompiledStateHandle() {
         var document = Fields(reactions: [new WorldReaction.Expose(
-            Field: "heat",
             Comparison: WorldFieldComparison.Greater,
-            Value: 1f,
-            Row: "exposed"
+            Field: "heat",
+            Row: "exposed",
+            Value: 1f
         )]);
         var lattice = Fixtures.BuildLattice(
             document: document,
             state: [new WorldStateRow(Name: WorldCellName.Parse(candidate: "exposed"), Kind: CellKind.Int, Capacity: 1)]
         );
+
         lattice.Restore(checkpoint: new WorldFieldLattice.WorldFieldCheckpoint(Raw: [[FixedQ4816.FromInteger(value: 2).Value]]));
-        var expose = Assert.IsType<WorldFieldNode.Expose>(Assert.Single(collection: lattice.Program.Nodes));
+        var expose = Assert.IsType<WorldFieldNode.Expose>(@object: Assert.Single(collection: lattice.Program.Nodes));
         WorldStateHandle written = default;
         var value = -1L;
 
@@ -265,7 +258,7 @@ public sealed class WorldFieldLatticeLawTests {
             tick: 1UL,
             bodyCount: 1,
             host: new Fixtures.LambdaHost(
-                bodyPosition: static _ => new FixedVector3(FixedQ4816.FromDouble(value: 0.5), FixedQ4816.FromDouble(value: 0.5), FixedQ4816.FromDouble(value: 0.5)),
+                bodyPosition: static _ => new FixedVector3(X: FixedQ4816.FromDouble(value: 0.5), Y: FixedQ4816.FromDouble(value: 0.5), Z: FixedQ4816.FromDouble(value: 0.5)),
                 writeTag: (row, _, next, _) => {
                     written = row;
                     value = next;
@@ -274,9 +267,8 @@ public sealed class WorldFieldLatticeLawTests {
         );
 
         Assert.Equal(expected: expose.Row, actual: written);
-        Assert.Equal(expected: 1L, actual: value);
+        Assert.Equal(actual: value, expected: 1L);
     }
-
     [Fact]
     public void MultipleWritesToOneCell_DeliverOneFinalDelta() {
         var lattice = Fixtures.BuildLattice(document: Fields(reactions: [
@@ -296,9 +288,9 @@ public sealed class WorldFieldLatticeLawTests {
 
         Assert.False(condition: full);
         var delta = Assert.Single(collection: deltas);
+
         Assert.Equal(expected: FixedQ4816.FromInteger(value: 3).Value, actual: delta.Raw);
     }
-
     [Fact]
     public void PrimerFullTake_DoesNotConsumeSharedIncrementalDeltas() {
         var lattice = Fixtures.BuildLattice(document: Fields(reactions: [
@@ -319,7 +311,6 @@ public sealed class WorldFieldLatticeLawTests {
         Assert.False(condition: incrementalFull);
         Assert.Single(collection: incremental);
     }
-
     [Fact]
     public void ConstructorRefusesAProgramCompiledFromDifferentReactions() {
         var document = Fields(reactions: [new WorldReaction.Decay(Field: "heat", Rate: 0.25f)]);
@@ -335,7 +326,6 @@ public sealed class WorldFieldLatticeLawTests {
             program: program
         ));
     }
-
     [Fact]
     public void CompatibleReactionReplacementPreservesCellsAndExecutesTheNewPlanInDocumentOrder() {
         var original = Fields(reactions: [new WorldReaction.Transform(
@@ -371,9 +361,8 @@ public sealed class WorldFieldLatticeLawTests {
         Fixtures.StepLattice(lattice: lattice);
 
         // Document order is add two, then decay by half: (1 + 2) / 2 = 1.5.
-        Assert.Equal(expected: FixedQ4816.FromDouble(value: 1.5), actual: lattice.Value(field: 0, cell: 0));
+        Assert.Equal(expected: FixedQ4816.FromDouble(value: 1.5), actual: lattice.Value(cell: 0, field: 0));
     }
-
     [Fact]
     public void LiveFieldEnvelopeChangesRefuseInsteadOfMigratingCells() {
         var lattice = Fixtures.BuildLattice(document: Fields());
@@ -388,10 +377,9 @@ public sealed class WorldFieldLatticeLawTests {
         );
 
         Assert.False(condition: lattice.CanInstallProgram(document: incompatible, program: program, reason: out var reason));
-        Assert.Contains(expectedSubstring: "restart the host", actualString: reason, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "restart the host");
         Assert.Same(expected: liveProgram, actual: lattice.Program);
     }
-
     [Fact]
     public void ReadBackNamesTheCompiledExecutionAndDependencyPlan() {
         var lattice = Fixtures.BuildLattice(document: Fields(reactions: [
@@ -404,11 +392,10 @@ public sealed class WorldFieldLatticeLawTests {
 
         var readBack = lattice.Describe();
 
-        Assert.Contains(expectedSubstring: "plan nodes=2", actualString: readBack, comparisonType: StringComparison.Ordinal);
-        Assert.Contains(expectedSubstring: "order=[0:transform,1:decay]", actualString: readBack, comparisonType: StringComparison.Ordinal);
-        Assert.Contains(expectedSubstring: "dependencies=[0>1]", actualString: readBack, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(actualString: readBack, comparisonType: StringComparison.Ordinal, expectedSubstring: "plan nodes=2");
+        Assert.Contains(actualString: readBack, comparisonType: StringComparison.Ordinal, expectedSubstring: "order=[0:transform,1:decay]");
+        Assert.Contains(actualString: readBack, comparisonType: StringComparison.Ordinal, expectedSubstring: "dependencies=[0>1]");
     }
-
     [Fact]
     public void BudgetCostUsesCompilerPassClassesInsteadOfTreatingEveryNodeAsOneCellPass() {
         var document = Fields(width: 2, reactions: [
@@ -417,7 +404,7 @@ public sealed class WorldFieldLatticeLawTests {
                 When: [],
                 Then: [new WorldFieldWrite(Field: "heat", Op: WorldFieldWriteOp.Add, Value: 1f)]
             ),
-            new WorldReaction.Expose(Field: "heat", Comparison: WorldFieldComparison.Greater, Value: 1f, Row: "exposed"),
+            new WorldReaction.Expose(Comparison: WorldFieldComparison.Greater, Field: "heat", Row: "exposed", Value: 1f),
         ]);
         var lattice = Fixtures.BuildLattice(
             document: document,
@@ -426,11 +413,10 @@ public sealed class WorldFieldLatticeLawTests {
 
         var cost = lattice.DescribeCost(activeBodyCount: 3, bodyCapacity: 8);
 
-        Assert.Contains(expectedSubstring: "3 node(s) every 1 tick(s)", actualString: cost, comparisonType: StringComparison.Ordinal);
-        Assert.Contains(expectedSubstring: "2 cell(s) x 3 pass(es) = 6 cell visit(s)", actualString: cost, comparisonType: StringComparison.Ordinal);
-        Assert.Contains(expectedSubstring: "bodies 3/8 active/capacity x 1 pass(es) = 8 slot visit(s)", actualString: cost, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(actualString: cost, comparisonType: StringComparison.Ordinal, expectedSubstring: "3 node(s) every 1 tick(s)");
+        Assert.Contains(actualString: cost, comparisonType: StringComparison.Ordinal, expectedSubstring: "2 cell(s) x 3 pass(es) = 6 cell visit(s)");
+        Assert.Contains(actualString: cost, comparisonType: StringComparison.Ordinal, expectedSubstring: "bodies 3/8 active/capacity x 1 pass(es) = 8 slot visit(s)");
     }
-
     [Fact]
     public void PopulationCreatesFields_WhenCollisionAndTargetsDoNotRequireAnSdfField() {
         var definition = Fixtures.WithLattice(definition: Fixtures.BuildDocument(), composite: Fields());
@@ -444,7 +430,6 @@ public sealed class WorldFieldLatticeLawTests {
 
         Assert.NotNull(@object: population.Fields);
     }
-
     [Fact]
     public void PopulationRebuildInstallsReactionOnlyEditsWithoutResettingLiveCells() {
         var originalFields = Fields(reactions: [new WorldReaction.Transform(
@@ -456,27 +441,26 @@ public sealed class WorldFieldLatticeLawTests {
             Then: [new WorldFieldWrite(Field: "heat", Op: WorldFieldWriteOp.Add, Value: 2f)]
         )]);
         var original = Fixtures.WithLattice(definition: Fixtures.BuildDocument(), composite: originalFields);
-        var replacement = Fixtures.WithLattice(definition: original, composite: replacementFields);
+        var replacement = Fixtures.WithLattice(composite: replacementFields, definition: original);
         var population = new WorldPopulation(definition: original);
-        var lattice = Assert.IsType<WorldFieldLattice>(population.Fields);
+        var lattice = Assert.IsType<WorldFieldLattice>(@object: population.Fields);
 
         Fixtures.StepLattice(lattice: lattice);
         population.Rebuild(definition: replacement, solids: null);
 
         Assert.Same(expected: lattice, actual: population.Fields);
-        Assert.Equal(expected: FixedQ4816.One, actual: lattice.Value(field: 0, cell: 0));
+        Assert.Equal(expected: FixedQ4816.One, actual: lattice.Value(cell: 0, field: 0));
 
         Fixtures.StepLattice(lattice: lattice);
 
-        Assert.Equal(expected: FixedQ4816.FromInteger(value: 3), actual: lattice.Value(field: 0, cell: 0));
+        Assert.Equal(expected: FixedQ4816.FromInteger(value: 3), actual: lattice.Value(cell: 0, field: 0));
     }
-
     [Fact]
     public void PopulationRebuildRejectsAnIncompatibleLatticeBeforeChangingDerivedState() {
         var original = Fixtures.WithLattice(definition: Fixtures.BuildDocument(), composite: Fields());
         var incompatible = Fixtures.WithLattice(definition: original, composite: Fields(width: 2));
         var population = new WorldPopulation(definition: original);
-        var lattice = Assert.IsType<WorldFieldLattice>(population.Fields);
+        var lattice = Assert.IsType<WorldFieldLattice>(@object: population.Fields);
         var program = lattice.Program;
         var revision = population.Revision;
         var seats = population.LocalSeatCount;
@@ -488,11 +472,10 @@ public sealed class WorldFieldLatticeLawTests {
 
         Assert.Same(expected: lattice, actual: population.Fields);
         Assert.Same(expected: program, actual: lattice.Program);
-        Assert.Equal(expected: FixedQ4816.Zero, actual: lattice.Value(field: 0, cell: 0));
+        Assert.Equal(expected: FixedQ4816.Zero, actual: lattice.Value(cell: 0, field: 0));
         Assert.Equal(expected: revision, actual: population.Revision);
         Assert.Equal(expected: seats, actual: population.LocalSeatCount);
     }
-
     [Fact]
     public void UndoRefusesAnInjectedIncompatibleBaseBeforeChangingDefinitionProgramCellsOrSolids() {
         var boot = Fixtures.WithLattice(definition: Fixtures.BuildDocument(), composite: Fields());
@@ -508,14 +491,14 @@ public sealed class WorldFieldLatticeLawTests {
         ));
         fixture.Step();
 
-        var lattice = Assert.IsType<WorldFieldLattice>(fixture.Server.Population.Fields);
+        var lattice = Assert.IsType<WorldFieldLattice>(@object: fixture.Server.Population.Fields);
         var definitionBefore = fixture.DefinitionBytes();
         var programBefore = lattice.Program;
         var cellsBefore = lattice.Capture().Raw.Select(selector: static field => field.ToArray()).ToArray();
         var revisionBefore = lattice.Revision;
-        var solidsField = typeof(WorldServer).GetField(name: "m_solids", bindingAttr: BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var solidsField = typeof(WorldServer).GetField(bindingAttr: BindingFlags.Instance | BindingFlags.NonPublic, name: "m_solids")!;
         var solidsBefore = solidsField.GetValue(obj: fixture.Server);
-        var baseField = typeof(WorldServer).GetField(name: "m_base", bindingAttr: BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var baseField = typeof(WorldServer).GetField(bindingAttr: BindingFlags.Instance | BindingFlags.NonPublic, name: "m_base")!;
         var incompatibleBase = Fixtures.WithLattice(definition: fixture.Server.Definition, composite: Fields(width: 2));
         WorldEditEcho? echo = null;
 
@@ -536,40 +519,37 @@ public sealed class WorldFieldLatticeLawTests {
         Assert.Equal(expected: cellsBefore, actual: lattice.Capture().Raw.Select(selector: static field => field.ToArray()).ToArray());
         Assert.Same(expected: solidsBefore, actual: solidsField.GetValue(obj: fixture.Server));
     }
-
     [Fact]
     public void ValidatorRefusesHeightGeometryThatCannotFitOneRenderBrick() {
         var tooWide = Fixtures.WithLattice(definition: Fixtures.BuildDocument(), composite: Fields(width: (WorldFieldCapacity.MaxSurfaceCells + 1), heightScale: 1f));
         var tooTall = Fixtures.WithLattice(definition: Fixtures.BuildDocument(), composite: Fields(layers: 2, heightScale: 64f));
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: tooWide, neighbours: null, reason: out var wideReason));
-        Assert.Contains(expectedSubstring: "render brick", actualString: wideReason, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(actualString: wideReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "render brick");
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: tooTall, neighbours: null, reason: out var tallReason));
-        Assert.Contains(expectedSubstring: "across 2 layers", actualString: tallReason, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(actualString: tallReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "across 2 layers");
     }
-
     [Fact]
     public void ValidatorRefusesValuesThatCollapseOrChangeMeaningAtTheFixedPointBoundary() {
         var tinyCell = Fixtures.WithLattice(definition: Fixtures.BuildDocument(), composite: Fields(cellSize: 0.000001f));
         var invalidComparison = Fixtures.WithLattice(definition: Fixtures.BuildDocument(), composite: Fields(reactions: [
             new WorldReaction.Transform(
-                When: [new WorldFieldCondition(Field: "heat", Comparison: ((WorldFieldComparison)byte.MaxValue), Value: 0f)],
+                When: [new WorldFieldCondition(Comparison: ((WorldFieldComparison)byte.MaxValue), Field: "heat", Value: 0f)],
                 Then: [new WorldFieldWrite(Field: "heat", Op: WorldFieldWriteOp.Set, Value: 1f)]
             ),
         ]));
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: tinyCell, neighbours: null, reason: out var cellReason));
-        Assert.Contains(expectedSubstring: "quantize to a positive Q48.16", actualString: cellReason, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(actualString: cellReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "quantize to a positive Q48.16");
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: invalidComparison, neighbours: null, reason: out var comparisonReason));
-        Assert.Contains(expectedSubstring: "comparison", actualString: comparisonReason, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(actualString: comparisonReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "comparison");
     }
-
     [Fact]
     public void RestoreRefusesCellValuesOutsideTheAuthoredRangeBeforeWritingAnything() {
         var lattice = Fixtures.BuildLattice(document: Fields());
         var invalid = new WorldFieldLattice.WorldFieldCheckpoint(Raw: [[FixedQ4816.FromInteger(value: 11).Value]]);
 
         Assert.Throws<InvalidOperationException>(testCode: () => lattice.Restore(checkpoint: invalid));
-        Assert.Equal(expected: FixedQ4816.Zero, actual: lattice.Value(field: 0, cell: 0));
+        Assert.Equal(expected: FixedQ4816.Zero, actual: lattice.Value(cell: 0, field: 0));
     }
 }

@@ -49,15 +49,15 @@ public sealed class OverlayLeaseTableFitsBackstopsLawTests {
     [Fact]
     public void OversubscribedCapacityArithmeticCannotWrapPastTheBackstop() {
         var adversarial = new OverlayCapacity(
-            Seats: (1 << 30),
-            HudPanels: 0,
-            HudElementsPerPanel: 0,
-            HudSeatPanelsPerSeat: 0,
-            HudElementsPerSeatPanel: 0,
             BindingBarMaxBanks: 0,
-            BindingBarMaxSlotsPerBank: 0,
             BindingBarMaxModifiers: 0,
+            BindingBarMaxSlotsPerBank: 0,
+            HudElementsPerPanel: 0,
+            HudElementsPerSeatPanel: 0,
+            HudPanels: 0,
+            HudSeatPanelsPerSeat: 0,
             MarkerMaxChipsPerSeat: 0,
+            Seats: (1 << 30),
             WheelMaxRings: 0,
             WheelMaxSectorsPerRing: 0
         );

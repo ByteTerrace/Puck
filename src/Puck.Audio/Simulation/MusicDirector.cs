@@ -234,7 +234,7 @@ public sealed class MusicDirector {
         foreach (var layer in segment.Layers) {
             if (
                 (layer.When is not { } when) ||
-                Matches(family: when, edges: edges)
+                Matches(edges: edges, family: when)
             ) {
                 m_activeLayerTuneIds.Add(item: layer.TuneId);
             }

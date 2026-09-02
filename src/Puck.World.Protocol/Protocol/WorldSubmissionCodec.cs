@@ -376,9 +376,9 @@ public static class WorldSubmissionCodec {
     );
     private static WorldPrincipal ReadPrincipal(BinaryReader reader) {
         if (!WorldWireCodec.TryReadPrincipal(
-            reader: reader,
+            kindWire: out var wireKind,
             principal: out var principal,
-            kindWire: out var wireKind
+            reader: reader
         )) {
             throw new LeafCodecException(failure: Fail(
                 WorldCodecRefusal.EnumValueUnknown,

@@ -18,7 +18,7 @@ public sealed class CreationSubmissionBoundaryLawTests {
     // Rows built through the SAME wire grammar a routed or console submission parses (the world.row.set JSON shape),
     // so the law exercises exactly what a submitter can spell.
     private static WorldPrototype Piece(string rotation) => JsonSerializer.Deserialize(
-        json: ("""{"id":"boundary-piece","document":{"schema":"puck.creation.v1","name":"boundary-piece","palette":[{"color":"#D8D2C4"}],"shapes":[{"type":"Box","name":"body","position":[0,0.5,0],"scale":[0.5,0.5,0.5],"rotation":""" + rotation + "}]}}"),
+        json: (("""{"id":"boundary-piece","document":{"schema":"puck.creation.v1","name":"boundary-piece","palette":[{"color":"#D8D2C4"}],"shapes":[{"type":"Box","name":"body","position":[0,0.5,0],"scale":[0.5,0.5,0.5],"rotation":""" + rotation) + "}]}}"),
         jsonTypeInfo: WorldJsonContext.Default.WorldPrototype
     )!;
 

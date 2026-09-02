@@ -260,13 +260,13 @@ public static partial class WorldAuthorityCheckpointCodec {
         checkpoint = new WorldAuthorityCheckpoint(
             Escrow: escrow,
             EventFeed: eventFeed,
+            Fields: fields,
             Grants: grants,
             HostRow: hostRow,
             InputHold: inputHold,
             OwnedWorlds: ownedWorlds,
             Population: population,
-            Server: server,
-            Fields: fields
+            Server: server
         );
         reason = string.Empty;
 

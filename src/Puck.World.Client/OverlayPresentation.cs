@@ -47,11 +47,11 @@ public static class OverlayRecency {
             return 0f;
         }
 
-        return (float)Math.Clamp(
+        return ((float)Math.Clamp(
             max: 1.0,
             min: 0.0,
             value: (1.0 - ((elapsedSeconds - windowSeconds) / fadeSeconds))
-        );
+        ));
     }
 }
 /// <summary>Evaluates an <see cref="OverlayPredicate.State"/> against a live document: text rows compare ordinally,
@@ -96,7 +96,7 @@ public static class OverlayStateComparison {
                 comparisonType: StringComparison.Ordinal
             );
 
-            return (state.Comparison == ActionStateComparison.NotEqual) ? !equal : equal;
+            return ((state.Comparison == ActionStateComparison.NotEqual) ? !equal : equal);
         }
 
         if ((rawValue is not { } raw) || (state.Value is not { } expected)) {
@@ -202,7 +202,7 @@ public struct OverlayFrameCrossfade {
             Outgoing = -1;
             Mix = 1f;
         } else {
-            Mix = (float)Math.Max(val1: 0.0, val2: progress);
+            Mix = ((float)Math.Max(val1: 0.0, val2: progress));
         }
     }
 }

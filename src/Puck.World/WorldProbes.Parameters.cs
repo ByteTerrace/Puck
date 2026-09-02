@@ -45,7 +45,7 @@ internal sealed partial class WorldProbes {
             return new ParameterBindingTemplate {
                 Channel = channel,
                 ConstantOffset = offset,
-                MaxAgeTicks = (long)(parameter.MaxAgeSeconds * Stopwatch.Frequency),
+                MaxAgeTicks = ((long)(parameter.MaxAgeSeconds * Stopwatch.Frequency)),
                 Row = parameter,
                 TargetRowInfo = targetRow,
             };
@@ -81,7 +81,7 @@ internal sealed partial class WorldProbes {
             Channel = channel,
             ExtensionField = extension.Field,
             ExtensionId = extension.Id,
-            MaxAgeTicks = (long)(parameter.MaxAgeSeconds * Stopwatch.Frequency),
+            MaxAgeTicks = ((long)(parameter.MaxAgeSeconds * Stopwatch.Frequency)),
             Row = parameter,
         };
     }
@@ -120,14 +120,14 @@ internal sealed partial class WorldProbes {
 
                 var spec = instance.RowInfo.Manifest.Channels[parameter.Channel];
                 var normalized = NormalizeChannel(
-                    raw: (double)reading[parameter.Channel],
+                    raw: ((double)reading[parameter.Channel]),
                     min: spec.Min,
                     max: spec.Max,
                     neutral: spec.Neutral
                 );
                 var unitInterval = ((normalized + 1.0) / 2.0);
                 var range = parameter.Row.Range;
-                var value = (float)(range.X + (unitInterval * (range.Y - range.X)));
+                var value = ((float)(range.X + (unitInterval * (range.Y - range.X))));
 
                 if (parameter.TargetRowInfo is { } targetRow) {
                     if (ResolveInstance(target: targetRow, contextSeat: instance.Seat) is not { } targetInstance) {
@@ -153,6 +153,7 @@ internal sealed partial class WorldProbes {
             }
         }
     }
+
     /// <summary>Patches one float config field of a declared probe's kind live — the same write
     /// <see cref="ServiceParameters"/> performs for a <c>probe</c>-target parameter binding, driven instead by the
     /// <c>probe.set</c> verb. Bound only by the field's own declared range, never a binding's authored one; a
@@ -170,7 +171,7 @@ internal sealed partial class WorldProbes {
         ArgumentNullException.ThrowIfNull(argument: probeRef);
         ArgumentNullException.ThrowIfNull(argument: field);
 
-        ParseInstanceRef(probeRef: probeRef, baseId: out var baseId, seat: out var seat);
+        ParseInstanceRef(baseId: out var baseId, probeRef: probeRef, seat: out var seat);
 
         if (!m_rowIndexById.TryGetValue(
             key: baseId,
@@ -201,7 +202,7 @@ internal sealed partial class WorldProbes {
         }
 
         if (seat is { } explicitSeat) {
-            if (ResolveInstance(target: rowInfo, contextSeat: explicitSeat) is not { } instance) {
+            if (ResolveInstance(contextSeat: explicitSeat, target: rowInfo) is not { } instance) {
                 reason = $"no live instance '{baseId}@{explicitSeat}'{DescribeKnownInstances(rowInfo: rowInfo)}";
 
                 return false;

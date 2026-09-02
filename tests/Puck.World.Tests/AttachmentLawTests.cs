@@ -14,8 +14,8 @@ namespace Puck.World.Tests;
 public sealed class AttachmentLawTests {
     private const int AttachOrdinal = 3;
     private const int DetachOrdinal = 4;
-    private const int ReelOrdinal = 5;
     private const int ForwardOrdinal = 0;
+    private const int ReelOrdinal = 5;
 
     private sealed class RestoredCheckpoint(WorldServer server, WorldMachineHost machines, string stateDirectory) : IDisposable {
         public WorldServer Server { get; } = server;
@@ -39,13 +39,12 @@ public sealed class AttachmentLawTests {
     private static void AssertOnWallFace(FixedVector3? anchor) {
         Assert.NotNull(@object: anchor);
         Assert.True(
-            condition: (Math.Abs(((double)anchor!.Value.X) - 1.8) < 0.02),
+            condition: (Math.Abs(value: (((double)anchor!.Value.X) - 1.8)) < 0.02),
             userMessage: $"expected the wall's near face (world X ~1.8), got {anchor.Value}"
         );
         Assert.Equal(expected: FixedQ4816.Zero, actual: anchor.Value.Y);
         Assert.Equal(expected: FixedQ4816.Zero, actual: anchor.Value.Z);
     }
-
     private static WorldPrototype BuildBoxCreation(string id, Vector3 halfExtents) {
         var shape = new ShapeDocument(
             Id: 0,
@@ -127,19 +126,19 @@ public sealed class AttachmentLawTests {
                 Rows = rows,
             }),
             AttachmentRaw = new WorldAttachmentSection(
-                Enabled: true,
-                DefaultGrip: false,
+                AttachChannel: attachChannelName,
                 ClimbReach: 5f,
                 ClimbSpeed: 2f,
-                GripCost: 0f,
-                GrappleMaxDistance: 20f,
-                GrappleAssistHalfAngleDegrees: 30f,
-                ReelRate: 2f,
-                ReelInFloor: 1f,
-                ReleaseMomentumScale: 1f,
-                AttachChannel: attachChannelName,
+                DefaultGrip: false,
                 DetachChannel: "detach",
-                ReelChannel: "reel"
+                Enabled: true,
+                GrappleAssistHalfAngleDegrees: 30f,
+                GrappleMaxDistance: 20f,
+                GripCost: 0f,
+                ReelChannel: "reel",
+                ReelInFloor: 1f,
+                ReelRate: 2f,
+                ReleaseMomentumScale: 1f
             ),
         };
     }
@@ -191,6 +190,7 @@ public sealed class AttachmentLawTests {
             machineId: Guid.NewGuid(),
             template: definition
         );
+
         var (server, _) = WorldServer.FromCheckpoint(
             checkpoint: decoded,
             instanceIdentity: identity,
@@ -290,11 +290,11 @@ public sealed class AttachmentLawTests {
         // accumulator's own remainder aside) — Detach carries that same rate, scaled, into the vertical channel, so
         // the FIRST post-detach tick's own vertical displacement should match it within one accumulator step's
         // rounding.
-        var expectedDelta = (climbSpeed * scale * stepSeconds);
+        var expectedDelta = ((climbSpeed * scale) * stepSeconds);
         var actualDelta = ((double)((float)((double)(body.FixedPosition.Y - yAtDetach))));
 
         Assert.True(
-            condition: (Math.Abs(actualDelta - expectedDelta) < (expectedDelta * 0.5)),
+            condition: (Math.Abs(value: (actualDelta - expectedDelta)) < (expectedDelta * 0.5)),
             userMessage: $"post-detach vertical delta {actualDelta} should track the scaled release velocity ~{expectedDelta}"
         );
         Assert.True(condition: (actualDelta > 0), userMessage: "detach must carry POSITIVE (upward) momentum forward, never drop it to zero");
@@ -323,11 +323,11 @@ public sealed class AttachmentLawTests {
         var first = DriveHashTrace(attach: true);
         var second = DriveHashTrace(attach: true);
 
-        Assert.Equal(expected: first, actual: second);
+        Assert.Equal(actual: second, expected: first);
 
         var withoutAttach = DriveHashTrace(attach: false);
 
-        Assert.NotEqual(expected: first, actual: withoutAttach);
+        Assert.NotEqual(actual: withoutAttach, expected: first);
     }
     [Fact]
     public void ClimbCheckpointRestore_PreservesTheWholeTangentIntegratorAndContinuesBitIdentically() {
@@ -429,7 +429,7 @@ public sealed class AttachmentLawTests {
             condition: WorldDefinitionValidator.TryValidateLocally(definition: denied, reason: out var deniedReason),
             userMessage: "an attachChannel naming no declared channel was expected to refuse"
         );
-        Assert.Contains(expectedSubstring: "attachChannel", actualString: deniedReason);
+        Assert.Contains(actualString: deniedReason, expectedSubstring: "attachChannel");
 
         var admitted = BuildAttachmentDocument();
 
@@ -452,7 +452,7 @@ public sealed class AttachmentLawTests {
             condition: WorldDefinitionValidator.TryValidateLocally(definition: ungripped, reason: out var deniedReason),
             userMessage: "a grip facet with no solid facet was expected to refuse"
         );
-        Assert.Contains(expectedSubstring: "grip", actualString: deniedReason);
+        Assert.Contains(actualString: deniedReason, expectedSubstring: "grip");
 
         var gripped = document with {
             CreationsRaw = [wall],

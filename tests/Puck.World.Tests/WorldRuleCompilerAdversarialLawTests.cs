@@ -23,19 +23,16 @@ public sealed class WorldRuleCompilerAdversarialLawTests {
             );
         }
     }
-
     [Fact]
     public void NullEffectsList_RefusesByNameRatherThanThrowingNullReference() => Refuses(
         rule: Rule(effects: null!),
         expected: "non-empty effect list"
     );
-
     [Fact]
     public void NullEffectRow_RefusesByNameRatherThanThrowingNullReference() => Refuses(
         rule: Rule(effects: [null!]),
         expected: "effect row is null"
     );
-
     [Fact]
     public void NullAllPredicateList_RefusesByNameRatherThanThrowingNullReference() => Refuses(
         rule: Rule(
@@ -44,7 +41,6 @@ public sealed class WorldRuleCompilerAdversarialLawTests {
         ),
         expected: "non-null predicate list"
     );
-
     [Fact]
     public void NullPredicateInsideAll_RefusesByNameRatherThanBeingIgnored() => Refuses(
         rule: Rule(
@@ -53,7 +49,6 @@ public sealed class WorldRuleCompilerAdversarialLawTests {
         ),
         expected: "null predicate row"
     );
-
     [Fact]
     public void NullInteractionEffectsList_RefusesByNameRatherThanThrowingNullReference() {
         const string Property = "probe";
@@ -75,7 +70,7 @@ public sealed class WorldRuleCompilerAdversarialLawTests {
             )]),
         };
 
-        var exception = Assert.Throws<WorldRuleException>(() => WorldRuleCompiler.CompileAllInteractions(definition: definition));
+        var exception = Assert.Throws<WorldRuleException>(testCode: () => WorldRuleCompiler.CompileAllInteractions(definition: definition));
 
         Assert.Contains(
             expectedSubstring: "non-empty effect list",
@@ -83,7 +78,6 @@ public sealed class WorldRuleCompilerAdversarialLawTests {
             comparisonType: StringComparison.Ordinal
         );
     }
-
     [Fact]
     public void SpawnPointPose_WithLiteralAngles_RefusesRatherThanDiscardingAngles() => Refuses(
         rule: Rule(effects: [new ActionEffect.Pose(
@@ -99,9 +93,8 @@ public sealed class WorldRuleCompilerAdversarialLawTests {
         Effects: effects,
         Gate: gate
     );
-
     private static void Refuses(WorldRule rule, string expected) {
-        var exception = Assert.Throws<WorldRuleException>(() => WorldRuleCompiler.Compile(
+        var exception = Assert.Throws<WorldRuleException>(testCode: () => WorldRuleCompiler.Compile(
             rule: rule,
             definition: Fixtures.BuildDocument()
         ));

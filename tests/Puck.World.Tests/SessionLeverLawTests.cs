@@ -38,15 +38,15 @@ public sealed class SessionLeverLawTests {
         );
 
         Assert.True(condition: sink.TryApply(lever: Lever(
-            name: KnobName,
-            a: 4.25
+            a: 4.25,
+            name: KnobName
         )));
-        Assert.Equal(expected: [4.25], actual: seen);
+        Assert.Equal(actual: seen, expected: [4.25]);
         // The discriminating half: a name nobody registered answers false, so the caller can say so out loud
         // instead of a write silently going nowhere.
         Assert.False(condition: sink.TryApply(lever: Lever(
-            name: "not-a-knob",
-            a: 1.0
+            a: 1.0,
+            name: "not-a-knob"
         )));
         Assert.Single(collection: seen);
         Assert.True(condition: sink.IsRegistered(name: KnobName));
@@ -96,7 +96,6 @@ public sealed class SessionLeverLawTests {
             expected: expected.Order(comparer: StringComparer.Ordinal)
         );
     }
-
     // ---- The per-seat dimension ----
 
     [Fact]
@@ -154,7 +153,6 @@ public sealed class SessionLeverLawTests {
 
         Assert.True(condition: visibility.Override(slot: 0));
     }
-
     // ---- The wire ----
 
     [Fact]
@@ -177,7 +175,7 @@ public sealed class SessionLeverLawTests {
             lever: out var decoded,
             failure: out var decodeFailure
         ), userMessage: decodeFailure.Detail);
-        Assert.Equal(expected: lever, actual: decoded);
+        Assert.Equal(actual: decoded, expected: lever);
     }
     [Fact]
     public void AnEmptyNameIsRefusedOnTheWire_BecauseItCanAddressNoRegistration() {
@@ -211,7 +209,6 @@ public sealed class SessionLeverLawTests {
             failure: out _
         ));
     }
-
     // ---- The grant gate ----
 
     [Fact]

@@ -56,6 +56,7 @@ public readonly record struct ShaderProgramStatistics(int InstructionCount, int 
             StackDepth: peak
         );
     }
+
     private static int Delta(ShaderOp op) => op switch {
         ShaderOp.LoadInput or ShaderOp.LoadParameter or ShaderOp.LoadConstant or ShaderOp.LoadLocal or ShaderOp.Pick or ShaderOp.Duplicate => 1,
         ShaderOp.StoreLocal or ShaderOp.Drop or ShaderOp.JumpIfZero or ShaderOp.Halt => -1,

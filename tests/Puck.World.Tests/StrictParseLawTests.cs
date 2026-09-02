@@ -78,7 +78,7 @@ public sealed class StrictParseLawTests {
     [Fact]
     public void DynamicsRow_UnmappedMember_RefusesByName() {
         var definition = Fixtures.BuildDocument() with {
-            DynamicsRaw = [new WorldDynamicsRow(Name: "chase", Frequency: 1f, Damping: 1f, Response: 0f)],
+            DynamicsRaw = [new WorldDynamicsRow(Damping: 1f, Frequency: 1f, Name: "chase", Response: 0f)],
         };
         var node = JsonNode.Parse(json: Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.Serialize(definition: definition)))!.AsObject();
 
@@ -94,13 +94,13 @@ public sealed class StrictParseLawTests {
         var y0 = Puck.Maths.FixedQ4816.FromDouble(value: 12.5).Value;
         var v0 = Puck.Maths.FixedQ4816.FromDouble(value: -3.25).Value;
         var definition = Fixtures.BuildDocument() with {
-            DynamicsRaw = [.. Fixtures.StandardDynamics, new WorldDynamicsRow(Name: "gauge", Frequency: 1f, Damping: 1f, Response: 0f)],
+            DynamicsRaw = [.. Fixtures.StandardDynamics, new WorldDynamicsRow(Damping: 1f, Frequency: 1f, Name: "gauge", Response: 0f)],
             StateRaw = new WorldStateSection(World: [
                 new WorldStateRow(
                     Name: WorldCellName.Parse(candidate: "hp"),
                     Kind: CellKind.Fixed,
                     Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0)],
-                    Dynamics: new WorldStateDynamics(Row: "gauge", Y0: y0, V0: v0, EpochTick: 42)
+                    Dynamics: new WorldStateDynamics(EpochTick: 42, Row: "gauge", V0: v0, Y0: y0)
                 ),
             ]),
         };
@@ -109,7 +109,7 @@ public sealed class StrictParseLawTests {
         var reparsed = WorldDefinitionSerialization.Deserialize(utf8Json: first);
         var second = WorldDefinitionSerialization.Serialize(definition: reparsed);
 
-        Assert.Equal(expected: first, actual: second);
+        Assert.Equal(actual: second, expected: first);
         Assert.Equal(expected: y0, actual: reparsed.State[0].Dynamics!.Y0);
         Assert.Equal(expected: v0, actual: reparsed.State[0].Dynamics!.V0);
         Assert.Equal(expected: 42, actual: reparsed.State[0].Dynamics!.EpochTick);

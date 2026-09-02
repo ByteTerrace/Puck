@@ -133,7 +133,6 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
             )
         ));
     }
-
     [Fact]
     public void ConvergedMarchesStillResolveExactly() {
         // A cast under the 0.512-unit exhaustion floor cannot reach the conservative branch: it must still answer with
@@ -180,7 +179,6 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
             )
         ));
     }
-
     [Fact]
     public void ShapeFreeProgramMissesRatherThanReportingAnObstruction() {
         // "Nothing declared" is an answer, not a non-convergence: a program with no shape must not be folded into the
@@ -203,7 +201,6 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
             origin: FixedPosition.Zero
         ));
     }
-
     [Fact]
     public void OverlapTreatsAnUnrepresentableWorldPointAsObstructed() {
         var outsideCarrier = new FixedPosition(
@@ -231,7 +228,6 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
             radius: FixedQ4816.Zero
         ));
     }
-
     [Fact]
     public void QueryEvaluatesTheWholeHierarchicalPositionNotTheCellLocalOffset() {
         var evaluator = BuildUnitSphere();
@@ -239,7 +235,7 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
 
         // One cell along X is 1,048,576 world units from a unit sphere at the origin. Reading only .Local aliases the
         // field with that period and answers "inside" for every cell.
-        foreach (var cell in (long[])[1L, -3L,]) {
+        foreach (var cell in ((long[])[1L, -3L,])) {
             var position = new FixedPosition(
                 cellX: cell,
                 cellY: 0L,
@@ -294,7 +290,6 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
             tolerance: 0.01
         );
     }
-
     [Fact]
     public void GroundHeightRefusesAnUnconvergedProbeRatherThanFabricatingTerrain() {
         // A single VERTICAL plane: there is no downward intersection anywhere in the column, at any depth. A probe
@@ -359,18 +354,17 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
             probeUp: FixedQ4816.FromDouble(value: 0.5)
         ));
         Assert.Equal(
-            expected: 0.0,
             actual: ((double)groundY),
+            expected: 0.0,
             tolerance: 0.002
         );
     }
-
     [Fact]
     public void ExhaustionReachIsInvariantUnderTheStepScale() {
         // The step clamp shortens every advance, so a fixed iteration budget would shorten the distance a march covers
         // in proportion — turning casts that resolved into conservative obstructions purely because the program grew a
         // chamfer. The budget derives from the clamp so the reach stays put.
-        foreach (var chamferCount in (int[])[0, 3,]) {
+        foreach (var chamferCount in ((int[])[0, 3,])) {
             var builder = new SdfProgramBuilder();
             var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
@@ -439,7 +433,6 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
             );
         }
     }
-
     [Fact]
     public void SphereCastDoesNotAdvanceThroughTheStepScaleClearanceGap() {
         // The gap: raw clearance (f - r) is well outside HitEpsilon, but the SCALED advance (f*s - r) is NEGATIVE,
@@ -530,7 +523,6 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
             tolerance: 0.002
         );
     }
-
     [Fact]
     public void GroundIsFoundThroughALowStepScaleProgram() {
         // A descending probe's advance shrinks with its own clearance, so at a low step scale the last stretch before
@@ -568,8 +560,8 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
             probeUp: FixedQ4816.FromDouble(value: 0.5)
         ));
         Assert.Equal(
-            expected: 1.0,
             actual: ((double)groundY),
+            expected: 1.0,
             tolerance: 0.01
         );
 
@@ -603,8 +595,8 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
             probeUp: FixedQ4816.FromDouble(value: 0.5)
         ));
         Assert.Equal(
-            expected: 1.0,
             actual: ((double)edgeGroundY),
+            expected: 1.0,
             tolerance: 0.01
         );
 
@@ -621,7 +613,6 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
             probeUp: FixedQ4816.FromDouble(value: 0.5)
         ));
     }
-
     [Fact]
     public void AnUnrepresentableStepScaleNeverRoundsUpIntoAnUnsafeAdvance() {
         var builder = new SdfProgramBuilder();
@@ -679,7 +670,6 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
             radius: FixedQ4816.Zero
         ));
     }
-
     [Fact]
     public void TheScaledClearanceFloorsRatherThanRoundingToTheNearestTick() {
         var builder = new SdfProgramBuilder();
@@ -750,7 +740,6 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
             radius: radius
         ));
     }
-
     [Fact]
     public void InCellQueriesAreUnchangedByTheRebase() {
         // The control: rebasing against the world origin is the IDENTITY inside cell (0,0,0), which is every position

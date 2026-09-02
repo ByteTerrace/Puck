@@ -19,8 +19,7 @@ public sealed class SdfCameraProgramLawTests {
     private const float ChasePitch = 0.4145069f;
     private const float ChaseYaw = 0f;
 
-    private static readonly SdfCameraDynamics s_chaseDynamics = new(Frequency: 0.9549f, Damping: 1f, Response: 1f);
-
+    private static readonly SdfCameraDynamics s_chaseDynamics = new(Damping: 1f, Frequency: 0.9549f, Response: 1f);
     private static readonly Vector3 s_chaseAimOffset = new(x: 0f, y: 1f, z: 0f);
     private static readonly Vector3 s_chasePivotOffset = Vector3.Zero;
 
@@ -64,8 +63,8 @@ public sealed class SdfCameraProgramLawTests {
     ]);
     private static SdfAnchor[] Anchors() => [
         new(Position: Vector3.Zero, Orientation: Quaternion.Identity),
-        new(Position: new Vector3(x: 3.5f, y: -2f, z: 11.25f), Orientation: Quaternion.CreateFromYawPitchRoll(yaw: 0.7f, pitch: 0f, roll: 0f)),
-        new(Position: new Vector3(x: -140f, y: 62.5f, z: 0.125f), Orientation: Quaternion.CreateFromYawPitchRoll(yaw: -2.3f, pitch: 0.4f, roll: 0.9f)),
+        new(Position: new Vector3(x: 3.5f, y: -2f, z: 11.25f), Orientation: Quaternion.CreateFromYawPitchRoll(pitch: 0f, roll: 0f, yaw: 0.7f)),
+        new(Position: new Vector3(x: -140f, y: 62.5f, z: 0.125f), Orientation: Quaternion.CreateFromYawPitchRoll(pitch: 0.4f, roll: 0.9f, yaw: -2.3f)),
     ];
 
     [Fact]
@@ -78,7 +77,7 @@ public sealed class SdfCameraProgramLawTests {
                 foreach (var livePitch in new[] { 0f, -0.35f, 0.4f, 0.7854f }) {
                     rig.Look = new SdfCameraLook(Pitch: livePitch, Yaw: liveYaw);
 
-                    var expected = ResolveClosedChase(anchor: in anchor, liveYaw: liveYaw, livePitch: livePitch);
+                    var expected = ResolveClosedChase(anchor: in anchor, livePitch: livePitch, liveYaw: liveYaw);
                     var actual = rig.ResolvePose(anchor: in anchor, clock: in clock);
 
                     Assert.Equal(expected: expected.Eye, actual: actual.Eye);
@@ -96,7 +95,7 @@ public sealed class SdfCameraProgramLawTests {
         var program = ChaseProgram();
         var operations = new List<SdfCameraOp>(collection: program.Programs[0].Operations);
 
-        operations[0] = ((SdfCameraOp.Orbit)operations[0] with { AppliesLook = false });
+        operations[0] = (((SdfCameraOp.Orbit)operations[0]) with { AppliesLook = false });
 
         var rig = new SdfCameraProgramRig(
             programs: new SdfCameraProgramSet(Programs: [(program.Programs[0] with { Operations = operations })]),
@@ -226,8 +225,8 @@ public sealed class SdfCameraProgramLawTests {
     }
     [Fact]
     public void Blend_InterpolatesEyeTargetFovAndDynamics() {
-        var aDynamics = new SdfCameraDynamics(Frequency: 2f, Damping: 1f, Response: 0f);
-        var bDynamics = new SdfCameraDynamics(Frequency: 6f, Damping: 1f, Response: 0f);
+        var aDynamics = new SdfCameraDynamics(Damping: 1f, Frequency: 2f, Response: 0f);
+        var bDynamics = new SdfCameraDynamics(Damping: 1f, Frequency: 6f, Response: 0f);
         var a = new SdfCameraProgram(
             Name: "a",
             Operations: [
@@ -292,7 +291,7 @@ public sealed class SdfCameraProgramLawTests {
         Assert.Equal(expected: new Vector3(x: 0f, y: 0f, z: 15f), actual: blended.Eye);
         Assert.Equal(expected: new Vector3(x: 0f, y: 2f, z: 0f), actual: blended.Target);
         Assert.Equal(expected: 2f, actual: blended.FovRadians);
-        Assert.Equal(expected: new SdfCameraDynamics(Frequency: 4f, Damping: 1f, Response: 0f), actual: blended.Dynamics);
+        Assert.Equal(expected: new SdfCameraDynamics(Damping: 1f, Frequency: 4f, Response: 0f), actual: blended.Dynamics);
 
         // Controls: the endpoints resolve their own sub-program exactly.
         rig.Scalars[0] = 0f;
@@ -383,7 +382,7 @@ public sealed class SdfCameraProgramLawTests {
     [Fact]
     public void BoomFollower_SeedsThenLagsOnlyTheBoom() {
         var follower = new SdfCameraBoomFollower();
-        var live = new SdfCameraDynamics(Frequency: 0.9549297f, Damping: 1f, Response: 0f);
+        var live = new SdfCameraDynamics(Damping: 1f, Frequency: 0.9549297f, Response: 0f);
         var eye = new Vector3(x: 0f, y: 0f, z: 10f);
         var target = Vector3.Zero;
 
@@ -392,7 +391,7 @@ public sealed class SdfCameraProgramLawTests {
         Assert.Equal(expected: new Vector3(x: 0f, y: 0f, z: 10f), actual: eye);
         Assert.False(condition: follower.Seeded);
 
-        follower.Apply(dynamics: in live, deltaSeconds: 1f, eye: ref eye, target: ref target);
+        follower.Apply(deltaSeconds: 1f, dynamics: in live, eye: ref eye, target: ref target);
 
         Assert.True(condition: follower.Seeded);
         Assert.Equal(expected: new Vector3(x: 0f, y: 0f, z: 10f), actual: eye);
@@ -400,7 +399,7 @@ public sealed class SdfCameraProgramLawTests {
         var movedEye = new Vector3(x: 0f, y: 0f, z: 30f);
         var movedTarget = new Vector3(x: 5f, y: 0f, z: 0f);
 
-        follower.Apply(dynamics: in live, deltaSeconds: 1f, eye: ref movedEye, target: ref movedTarget);
+        follower.Apply(deltaSeconds: 1f, dynamics: in live, eye: ref movedEye, target: ref movedTarget);
 
         Assert.Equal(expected: new Vector3(x: 5f, y: 0f, z: 0f), actual: movedTarget);
         Assert.True(condition: ((movedEye - movedTarget).Z < 30f));

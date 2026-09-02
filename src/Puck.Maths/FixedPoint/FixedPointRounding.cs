@@ -94,6 +94,7 @@ public static class FixedPointRounding {
 
         return true;
     }
+
     /// <summary>Rounds the exact rational <c>numerator / denominator · 2^fractionBitCount</c> to the nearest
     /// integer, to nearest with ties to even, at unbounded width.</summary>
     /// <param name="numerator">The exact numerator, of either sign.</param>

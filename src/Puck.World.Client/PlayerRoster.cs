@@ -2103,14 +2103,17 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
     }
 
     private readonly Participant?[] m_slots = new Participant?[MaxSlots];
+
     // The document's declared local-seat count (population.localSeats) — the server refuses any join at a slot
     // >= this, so the roster never proposes one: every slot search below is bounded by it, not by MaxSlots (the
     // hard array ceiling). A device arriving for a world declaring fewer seats than it needs is refused ONCE, by
     // name, and remembered in m_refusedDevices rather than re-asking the server on every report.
     private readonly int m_localSeats;
+
     /// <summary>Gets the world's declared local-seat count (<c>population.localSeats</c>) — the ceiling every join
     /// and claim here honors; <see cref="MaxSlots"/> is only the array ceiling.</summary>
     public int LocalSeats => m_localSeats;
+
     private readonly HashSet<InputDeviceId> m_refusedDevices = new();
     // Device → slot map. Reconnect stability is explicit on InputDeviceId; connection-only transports still route for
     // the session but never participate in durable profile preferences.
@@ -2118,7 +2121,9 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
     // The MapDevice ordinal a device was last (re)assigned at — TryGetSeatDevice's tie-break among several devices
     // of one kind sharing a slot (the higher stamp is the seat's current one for that kind).
     private readonly Dictionary<InputDeviceId, int> m_deviceAssignStamp = new();
+
     private int m_nextAssignStamp;
+
     // First-seen device order — the stable basis for the keyboard<N>/mouse<N>/gamepad<N>/camera<N> tokens the
     // reassignment verbs speak. Append-only so a token never shifts under a player.
     private readonly List<InputDeviceId> m_deviceOrder = [];

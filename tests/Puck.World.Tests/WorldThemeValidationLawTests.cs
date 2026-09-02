@@ -42,8 +42,8 @@ public sealed class WorldThemeValidationLawTests {
         BodyLine: 16f, BodySize: bodySize, BodyWeight: 400,
         LabelLine: 16f, LabelSize: 12f, LabelTracking: 0.01f, LabelWeight: 400,
         MicroLine: 16f, MicroSize: 12f, MicroTracking: 0.01f, MicroWeight: 400,
-        MonoLine: 16f, MonoSize: 12f, MonoTracking: 0.01f, MonoWeight: 400,
-        MonoBadgeSize: 12f, MonoReadoutSize: 12f,
+        MonoBadgeSize: 12f, MonoLine: 16f, MonoReadoutSize: 12f, MonoSize: 12f,
+        MonoTracking: 0.01f, MonoWeight: 400,
         TitleLine: 16f, TitleSize: 12f, TitleTracking: 0.01f, TitleWeight: 400
     );
     private static WorldThemeElevation MinimalElevation() => new(
@@ -60,20 +60,20 @@ public sealed class WorldThemeValidationLawTests {
         ChipRestOpacity: 0.6f, EdgeHairlineWidth: 1f, RingStatusWidth: 2f, RingStatusAlpha: 0.5f
     );
     private static WorldThemeDiegetic MinimalDiegetic() => new(
-        PlateTop: OpaqueGray, PlateMid: OpaqueGray, PlateBottom: OpaqueGray, PlateStripeColor: BakedAlphaWhite,
-        EmbossFill: OpaqueGray, EngraveFill: OpaqueGray,
-        EmbossShadowDropAlpha: 0.5f, EmbossShadowDropBlur: 2f, EmbossShadowDropOffsetY: 2f,
-        EmbossShadowLitAlpha: 0.3f, EmbossShadowLitOffsetY: -1f,
-        EngraveShadowLipAlpha: 0.2f, EngraveShadowLipOffsetY: 1f,
-        EngraveShadowRecessAlpha: 0.5f, EngraveShadowRecessBlur: 1f, EngraveShadowRecessOffsetY: -1f,
-        ScreenWellOuter: OpaqueGray, ScreenWellInner: OpaqueGray,
-        BezelOuter: OpaqueGray, BezelInner: OpaqueGray, BezelEdge: OpaqueGray,
-        PhosphorGlowBlur: 4f
+        BezelEdge: OpaqueGray, BezelInner: OpaqueGray, BezelOuter: OpaqueGray, EmbossFill: OpaqueGray,
+        EmbossShadowDropAlpha: 0.5f, EmbossShadowDropBlur: 2f,
+        EmbossShadowDropOffsetY: 2f, EmbossShadowLitAlpha: 0.3f, EmbossShadowLitOffsetY: -1f,
+        EngraveFill: OpaqueGray, EngraveShadowLipAlpha: 0.2f,
+        EngraveShadowLipOffsetY: 1f, EngraveShadowRecessAlpha: 0.5f,
+        EngraveShadowRecessBlur: 1f, EngraveShadowRecessOffsetY: -1f, PhosphorGlowBlur: 4f,
+        PlateBottom: OpaqueGray, PlateMid: OpaqueGray,
+        PlateStripeColor: BakedAlphaWhite, PlateTop: OpaqueGray, ScreenWellInner: OpaqueGray,
+        ScreenWellOuter: OpaqueGray
     );
     private static WorldThemeMotion MinimalMotion() => new(
         CaretBlink: 1000f, DurFast: 100f, DurMed: 150f, DurPanel: 250f,
-        EaseStd: new WorldThemeCubicBezier(X1: 0.2f, Y1: 0f, X2: 0f, Y2: 1f),
-        EaseOut: new WorldThemeCubicBezier(X1: 0.4f, Y1: 0f, X2: 1f, Y2: 1f)
+        EaseStd: new WorldThemeCubicBezier(X1: 0.2f, X2: 0f, Y1: 0f, Y2: 1f),
+        EaseOut: new WorldThemeCubicBezier(X1: 0.4f, X2: 1f, Y1: 0f, Y2: 1f)
     );
     private static WorldThemeIcon MinimalIcon() => new(StrokeHalfWidth: 0.08f);
     private static WorldThemeChrome MinimalChrome() => new(
@@ -82,7 +82,6 @@ public sealed class WorldThemeValidationLawTests {
         WheelHubDotHalf: 3f, WheelHubLabelGap: 2f, WheelLabelAlpha: 1f, WheelMarkerGapRatio: 1.6f,
         WheelMarkerHalf: 3.5f, WheelRingAlpha: 0.55f
     );
-
     private static WorldThemeSection MinimalTheme(float bodySize = 12f, float scrimAlpha = 0.9f) => new(
         Chrome: MinimalChrome(),
         Color: MinimalColor(scrimAlpha: scrimAlpha),
@@ -102,7 +101,6 @@ public sealed class WorldThemeValidationLawTests {
 
         Assert.True(condition: admitted, userMessage: reason);
     }
-
     [Fact]
     public void TypeSizeBelowFloorRefusesByName() {
         var definition = Fixtures.BuildDocument() with { ThemeRaw = MinimalTheme(bodySize: 10f) };
@@ -112,7 +110,6 @@ public sealed class WorldThemeValidationLawTests {
         Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "theme.type.bodySize");
         Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "MSDF glyph coverage floor");
     }
-
     [Fact]
     public void LiteralScrimAlphaBelowFloorRefusesByName() {
         var definition = Fixtures.BuildDocument() with { ThemeRaw = MinimalTheme(scrimAlpha: 0.5f) };
@@ -122,7 +119,6 @@ public sealed class WorldThemeValidationLawTests {
         Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "theme.color.scrimPanel.alpha");
         Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "guaranteed-AA contrast floor");
     }
-
     [Fact]
     public void BoundScrimAlphaBelowFloorPassesValidationButClampsAtResolve() {
         var theme = MinimalTheme() with {
@@ -147,7 +143,6 @@ public sealed class WorldThemeValidationLawTests {
 
         Assert.True(condition: (resolved.Color.ScrimPanel.Alpha >= WorldThemeCapacity.ScrimMinAlpha));
     }
-
     [Fact]
     public void AbsentThemeResolvesToZeroedBlock() {
         var definition = Fixtures.BuildDocument();
@@ -161,7 +156,6 @@ public sealed class WorldThemeValidationLawTests {
         Assert.Equal(expected: 0f, actual: resolved.Space.HeightChip);
         Assert.Equal(expected: 0f, actual: resolved.Chrome.DimQuietAlpha);
     }
-
     /// <summary>The writers' chrome is authored data end to end: what the document declares is what the writers read
     /// through the resolved theme, so retuning a quiet dim or a wheel marker is a document edit, never a rebuild.</summary>
     [Fact]
@@ -181,7 +175,6 @@ public sealed class WorldThemeValidationLawTests {
         Assert.Equal(expected: 0.95f, actual: resolved.Chrome.WheelActiveRingAlpha);
         Assert.Equal(expected: 3.5f, actual: resolved.Chrome.WheelMarkerHalf);
     }
-
     /// <summary>The chrome block's ranges are enforced by name, beside a passing control — an opacity outside [0, 1]
     /// and a negative extent are both authoring errors a boot must refuse rather than draw.</summary>
     [Theory]

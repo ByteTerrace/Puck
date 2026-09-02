@@ -12,8 +12,8 @@ namespace Puck.Cli.Tests;
 /// malformed input document is a distinct exit code from a real parity failure.
 /// </summary>
 public sealed class ParityComparatorTests : IDisposable {
-    private const string ValidStateHash = "0123456789abcdef";
     private const string OtherStateHash = "fedcba9876543210";
+    private const string ValidStateHash = "0123456789abcdef";
 
     private readonly ITestOutputHelper m_output;
     private readonly string m_root;
@@ -24,19 +24,19 @@ public sealed class ParityComparatorTests : IDisposable {
 
         Directory.CreateDirectory(path: m_root);
     }
+
     public void Dispose() {
         try {
             Directory.Delete(path: m_root, recursive: true);
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
         }
     }
-
     [Fact]
     public void IdenticalFramesAndManifestsPassEveryVerdictThroughTheCliVerb() {
         var leftDir = CreateSubdirectory(name: "left");
         var rightDir = CreateSubdirectory(name: "right");
         var outDir = CreateSubdirectory(name: "out");
-        var rgba = BuildGradientRgba(width: 32, height: 32);
+        var rgba = BuildGradientRgba(height: 32, width: 32);
 
         WritePng(directory: leftDir, fileName: "s-1.png", height: 32, rgba: rgba, width: 32);
         WritePng(directory: rightDir, fileName: "s-1.png", height: 32, rgba: rgba, width: 32);
@@ -44,10 +44,10 @@ public sealed class ParityComparatorTests : IDisposable {
         WriteManifestFile(backend: "directx", captureLine: CaptureJson(cameraInside: false, censusMaterial0: 10, frame: "s-1.png", stateHash: ValidStateHash, station: "s", tick: 1), path: Path.Combine(path1: rightDir, path2: "manifest.json"));
 
         var contractPath = WriteContractFile(censusFloorMaterial0: 1, tileMaxDelta: 12, tileMeanDelta: 0.35, tileSize: 16);
-        var exitCode = RunCompareCommand(args: [leftDir, rightDir, "--contract", contractPath, "--out", outDir], stdout: out var stdout, stderr: out _);
+        var exitCode = RunCompareCommand(args: [leftDir, rightDir, "--contract", contractPath, "--out", outDir], stderr: out _, stdout: out var stdout);
 
-        Assert.Equal(expected: 0, actual: exitCode);
-        Assert.Contains(expectedSubstring: "PASS:", actualString: stdout);
+        Assert.Equal(actual: exitCode, expected: 0);
+        Assert.Contains(actualString: stdout, expectedSubstring: "PASS:");
         // Nothing failed, so no evidence subdirectory should have been written under --out.
         Assert.Empty(collection: Directory.EnumerateFileSystemEntries(path: outDir));
     }
@@ -57,14 +57,14 @@ public sealed class ParityComparatorTests : IDisposable {
         const int height = 64;
 
         var leftRgba = BuildGradientRgba(height: height, width: width);
-        var rightRgba = (byte[])leftRgba.Clone();
+        var rightRgba = ((byte[])leftRgba.Clone());
 
         // A 4x4 block, entirely inside tile (1,1) of a 16px grid, +10 LSB on every channel — exactly the
         // "localized defect a global mean dilutes" shape the old whole-frame comparator could not see.
         ApplyBlockDelta(deltaPerChannel: 10, height: height, rgba: rightRgba, size: 4, width: width, x0: 20, y0: 20);
 
-        var leftImage = new PngImage(RgbaPixels: leftRgba, Width: width, Height: height);
-        var rightImage = new PngImage(RgbaPixels: rightRgba, Width: width, Height: height);
+        var leftImage = new PngImage(Height: height, RgbaPixels: leftRgba, Width: width);
+        var rightImage = new PngImage(Height: height, RgbaPixels: rightRgba, Width: width);
 
         var oldEnvelopeVerdict = ParityEnvelope.Compare(left: leftImage, right: rightImage);
         var newTileResult = ParityTileComparer.Compare(left: leftImage, right: rightImage, tileMaxDeltaThreshold: 50, tileMeanDeltaThreshold: ParityEnvelope.MaxMeanDelta, tileSize: 16);
@@ -184,11 +184,11 @@ public sealed class ParityComparatorTests : IDisposable {
         WriteManifestFile(backend: "directx", captureLine: CaptureJson(cameraInside: false, censusMaterial0: 10, frame: "s-1.png", stateHash: ValidStateHash, station: "s", tick: 1), path: Path.Combine(path1: rightDir, path2: "manifest.json"));
 
         var contractPath = WriteContractFile(censusFloorMaterial0: 1, tileMaxDelta: 12, tileMeanDelta: 0.35, tileSize: 16);
-        var exitCode = RunCompareCommand(args: [leftDir, rightDir, "--contract", contractPath], stdout: out _, stderr: out var stderr);
+        var exitCode = RunCompareCommand(args: [leftDir, rightDir, "--contract", contractPath], stderr: out var stderr, stdout: out _);
 
-        Assert.Equal(expected: 3, actual: exitCode);
-        Assert.Contains(expectedSubstring: "ERROR:", actualString: stderr);
-        Assert.Contains(expectedSubstring: "manifest", actualString: stderr);
+        Assert.Equal(actual: exitCode, expected: 3);
+        Assert.Contains(actualString: stderr, expectedSubstring: "ERROR:");
+        Assert.Contains(actualString: stderr, expectedSubstring: "manifest");
     }
 
     private static ParityContract DefaultContract() =>
@@ -202,16 +202,16 @@ public sealed class ParityComparatorTests : IDisposable {
         return (left, right);
     }
     private static byte[] BuildGradientRgba(int width, int height) {
-        var rgba = new byte[(width * height * 4)];
+        var rgba = new byte[((width * height) * 4)];
 
         for (var y = 0; (y < height); y++) {
             for (var x = 0; (x < width); x++) {
                 var index = (((y * width) + x) * 4);
 
-                rgba[index] = (byte)((x * 4) % 256);
-                rgba[index + 1] = (byte)((y * 4) % 256);
-                rgba[index + 2] = (byte)(((x + y) * 2) % 256);
-                rgba[index + 3] = 255;
+                rgba[index] = ((byte)((x * 4) % 256));
+                rgba[(index + 1)] = ((byte)((y * 4) % 256));
+                rgba[(index + 2)] = ((byte)(((x + y) * 2) % 256));
+                rgba[(index + 3)] = 255;
             }
         }
 
@@ -222,18 +222,18 @@ public sealed class ParityComparatorTests : IDisposable {
             for (var x = x0; (x < (x0 + size)); x++) {
                 var index = (((y * width) + x) * 4);
 
-                rgba[index] = (byte)Math.Clamp(value: (rgba[index] + deltaPerChannel), min: 0, max: 255);
-                rgba[index + 1] = (byte)Math.Clamp(value: (rgba[index + 1] + deltaPerChannel), min: 0, max: 255);
-                rgba[index + 2] = (byte)Math.Clamp(value: (rgba[index + 2] + deltaPerChannel), min: 0, max: 255);
+                rgba[index] = ((byte)Math.Clamp(value: (rgba[index] + deltaPerChannel), min: 0, max: 255));
+                rgba[(index + 1)] = ((byte)Math.Clamp(value: (rgba[(index + 1)] + deltaPerChannel), min: 0, max: 255));
+                rgba[(index + 2)] = ((byte)Math.Clamp(value: (rgba[(index + 2)] + deltaPerChannel), min: 0, max: 255));
             }
         }
     }
     private static void WritePng(string directory, string fileName, byte[] rgba, int width, int height) =>
         PngEncoder.Write(height: height, path: Path.Combine(path1: directory, path2: fileName), rgba: rgba, width: width);
     private static string CaptureJson(string station, ulong tick, string stateHash, bool cameraInside, long censusMaterial0, string frame) =>
-        ("{\"station\":\"" + station + "\",\"tick\":" + tick + ",\"stateHash\":\"" + stateHash + "\",\"cameraInside\":" + (cameraInside ? "true" : "false") + ",\"frame\":\"" + frame + "\",\"census\":{\"0\":" + censusMaterial0 + "}}");
+        (((((((((((("{\"station\":\"" + station) + "\",\"tick\":") + tick) + ",\"stateHash\":\"") + stateHash) + "\",\"cameraInside\":") + (cameraInside ? "true" : "false")) + ",\"frame\":\"") + frame) + "\",\"census\":{\"0\":") + censusMaterial0) + "}}");
     private static void WriteManifestFile(string path, string backend, string captureLine) =>
-        File.WriteAllText(contents: ("{\"schema\":\"puck.parity.manifest.v1\",\"backend\":\"" + backend + "\",\"world\":\"w\",\"captures\":[" + captureLine + "]}"), path: path);
+        File.WriteAllText(contents: (((("{\"schema\":\"puck.parity.manifest.v1\",\"backend\":\"" + backend) + "\",\"world\":\"w\",\"captures\":[") + captureLine) + "]}"), path: path);
     private static int RunCompareCommand(string[] args, out string stdout, out string stderr) {
         var originalOut = Console.Out;
         var originalError = Console.Error;

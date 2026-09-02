@@ -179,7 +179,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         foreach (var instance in m_liveInstances) {
             foreach (var axis in instance.AxisBindings) {
                 AppendSeparator(builder: builder, wroteSegment: ref wroteSegment);
-                DescribeAxis(builder: builder, axis: axis, nowTimestamp: nowTimestamp);
+                DescribeAxis(axis: axis, builder: builder, nowTimestamp: nowTimestamp);
             }
         }
         foreach (var instance in m_liveInstances) {
@@ -223,7 +223,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         )) {
             return false;
         }
-        if (!(seconds > 0f) || float.IsNaN(seconds) || float.IsPositiveInfinity(seconds)) {
+        if (!(seconds > 0f) || float.IsNaN(f: seconds) || float.IsPositiveInfinity(f: seconds)) {
             reason = $"seconds '{seconds.ToString(provider: CultureInfo.InvariantCulture)}' must be a positive, finite number";
 
             return false;
@@ -242,8 +242,8 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
             // A trial open (never truncating an existing file) proves the path is writable NOW rather than only
             // once the window elapses — an unwritable path refuses the arm instead of silently discarding the
             // recorded window later.
-            using var trial = File.Open(path: resolvedPath, mode: FileMode.OpenOrCreate, access: FileAccess.Write);
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException) {
+            using var trial = File.Open(access: FileAccess.Write, mode: FileMode.OpenOrCreate, path: resolvedPath);
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)) {
             reason = $"path '{path}' is not writable: {exception.Message}";
 
             return false;
@@ -252,7 +252,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         m_recording = new RecordingState {
             Instance = instance,
             ChannelCount = instance.RowInfo.Manifest.Channels.Count,
-            DurationTicks = (long)(seconds * Stopwatch.Frequency),
+            DurationTicks = ((long)(seconds * Stopwatch.Frequency)),
             Path = resolvedPath,
             RateHz = instance.RowInfo.Row.RateHz,
             StartTimestamp = Stopwatch.GetTimestamp(),
@@ -356,7 +356,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         if (instance.Ring.TryReadLatest(reading: out var reading)) {
             var age = Stopwatch.GetElapsedTime(startingTimestamp: reading.CaptureTimestamp, endingTimestamp: nowTimestamp);
 
-            builder.Append(value: " capture-age=").Append(value: Math.Max(val1: 0L, val2: (long)age.TotalMilliseconds)).Append(value: "ms");
+            builder.Append(value: " capture-age=").Append(value: Math.Max(val1: 0L, val2: ((long)age.TotalMilliseconds))).Append(value: "ms");
 
             for (var channel = 0; (channel < instance.RowInfo.Manifest.Channels.Count); channel++) {
                 builder.Append(value: ' ').Append(value: instance.RowInfo.Manifest.Channels[channel].Name).Append(value: '=').Append(value: reading[channel].ToString());
@@ -449,7 +449,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
                 path: recording.Path,
                 contents: JsonSerializer.Serialize(value: document, jsonTypeInfo: ProbeTrackJsonContext.Default.ProbeTrackDocument)
             );
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             Console.Error.WriteLine(value: $"[probe.record: {recording.Instance.Label} -> {recording.Path} failed: {exception.Message}]");
 
             return;
@@ -478,13 +478,13 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
             var channels = new double[recording.ChannelCount];
 
             for (var channel = 0; (channel < recording.ChannelCount); channel++) {
-                channels[channel] = (double)reading[channel];
+                channels[channel] = ((double)reading[channel]);
             }
 
             recording.Samples.Add(item: new ProbeTrackSample(
-                T: (Math.Max(val1: 0L, val2: (reading.CaptureTimestamp - recording.StartTimestamp)) / (double)Stopwatch.Frequency),
+                T: (Math.Max(val1: 0L, val2: (reading.CaptureTimestamp - recording.StartTimestamp)) / ((double)Stopwatch.Frequency)),
                 C: channels,
-                K: (double)reading.Confidence
+                K: ((double)reading.Confidence)
             ));
         }
 
@@ -495,7 +495,6 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         m_recording = null;
         FinishRecording(recording: recording);
     }
-
     // Resolves an (probe, channel) reference pair a binding row carries, deep-validating both against the
     // resolved row's own loaded manifest (the document's own load-time validator only proved the ANALYZER id
     // resolves; it cannot see channel names, which live behind the kind vocabulary hook).
@@ -520,12 +519,12 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         if (raw >= neutral) {
             var span = (max - neutral);
 
-            return ((span > 0.0) ? Math.Clamp(value: ((raw - neutral) / span), min: 0.0, max: 1.0) : 0.0);
+            return ((span > 0.0) ? Math.Clamp(max: 1.0, min: 0.0, value: ((raw - neutral) / span)) : 0.0);
         }
 
         var lowerSpan = (neutral - min);
 
-        return ((lowerSpan > 0.0) ? -Math.Clamp(value: ((neutral - raw) / lowerSpan), min: 0.0, max: 1.0) : 0.0);
+        return ((lowerSpan > 0.0) ? -Math.Clamp(max: 1.0, min: 0.0, value: ((neutral - raw) / lowerSpan)) : 0.0);
     }
     // Parses a probe reference of the shape "<id>" or "<id>@<seat>" — the probe.set/probe.record addressing grammar.
     // A malformed "@" suffix (non-numeric, or less than 1) is left folded into baseId, so it resolves to "no such
@@ -561,7 +560,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
             return " (no live instances)";
         }
 
-        var seats = new List<int>(bySeat.Keys);
+        var seats = new List<int>(collection: bySeat.Keys);
 
         seats.Sort();
 
@@ -580,7 +579,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
     // probe.record's own resolution: a seat-relative row without an explicit @seat is ambiguous and refused (naming
     // the live instances); every other case matches probe.set's single-instance resolution.
     private bool TryResolveRecordableInstance(string probeRef, out ProbeInstance instance, out string? reason) {
-        ParseInstanceRef(probeRef: probeRef, baseId: out var baseId, seat: out var seat);
+        ParseInstanceRef(baseId: out var baseId, probeRef: probeRef, seat: out var seat);
 
         if (!m_rowIndexById.TryGetValue(key: baseId, value: out var rowIndex)) {
             instance = null!;
@@ -592,7 +591,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         var rowInfo = m_rows[rowIndex];
 
         if (seat is { } explicitSeat) {
-            if (ResolveInstance(target: rowInfo, contextSeat: explicitSeat) is not { } resolved) {
+            if (ResolveInstance(contextSeat: explicitSeat, target: rowInfo) is not { } resolved) {
                 instance = null!;
                 reason = $"no live instance '{baseId}@{explicitSeat}'{DescribeKnownInstances(rowInfo: rowInfo)}";
 
@@ -639,19 +638,19 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
     // constructor) and never retired; a seat-relative row's InstancesBySeat follows the roster's occupancy.
     private sealed class ProbeRowInfo {
         public required byte[] ConstantsTemplate { get; init; }
-        public required bool IsSeatRelative { get; init; }
         public Dictionary<int, ProbeInstance>? InstancesBySeat { get; init; }
+        public required bool IsSeatRelative { get; init; }
         public required ProbeKindManifest Manifest { get; init; }
         public required WorldProbe Row { get; init; }
         public ProbeInstance? SingleInstance { get; set; }
         // The seat a non-seat-relative row's single instance resolves against — every camera socket named its own
         // seat, so this is the trigger socket's (equal to every other socket's, by construction); 1 for a track row.
         public int SingleInstanceSeat { get; init; } = 1;
-        public ProbeTrackDocument? TrackDocument { get; init; }
-        public WorldCameraSensor? TriggerSensor { get; init; }
         public List<AxisBindingTemplate> AxisTemplates { get; } = [];
         public List<ControlBindingTemplate> ControlTemplates { get; } = [];
         public List<ParameterBindingTemplate> ParameterTemplates { get; } = [];
+        public ProbeTrackDocument? TrackDocument { get; init; }
+        public WorldCameraSensor? TriggerSensor { get; init; }
     }
     // One live probe instance: a row's own state for one seat (the row's single seat, or one occupied seat of a
     // seat-relative row). Label is the probe.status/probe.record/probe.set address ("id" or "id@seat");
@@ -661,24 +660,24 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
     // own "id@seat" ring. OutputSet null means the run is not currently attached (never started, or every socket is
     // being re-evaluated after an unready frame) — the next ready frame always attaches.
     private sealed class ProbeInstance {
+        public List<AxisState> AxisBindings { get; } = [];
+        public List<WorldScreenSource.Camera> CameraDemands { get; } = [];
         public required byte[] Constants { get; init; }
+        public List<ControlState> ControlBindings { get; } = [];
         public string? Fault { get; set; }
-        public required string Label { get; init; }
         public required ProbeKernelInput[] Inputs { get; init; }
-        public required string OutputRingKey { get; init; }
+        public required string Label { get; init; }
         public (int Width, int Height)? OutputExtent { get; set; }
+        public required string OutputRingKey { get; init; }
         public object? OutputSet { get; set; }
-        public required ProbeReadingRing Ring { get; init; }
+        public List<ParameterState> ParameterBindings { get; } = [];
         public required object?[] ResolvedGenerations { get; init; }
+        public required ProbeReadingRing Ring { get; init; }
         public required ProbeRowInfo RowInfo { get; init; }
         public IProbeKernelRun? Run { get; set; }
         public required int Seat { get; init; }
         public object?[]? SocketGenerations { get; set; }
         public ProbeTrackPlayer? Track { get; init; }
-        public List<AxisState> AxisBindings { get; } = [];
-        public List<WorldScreenSource.Camera> CameraDemands { get; } = [];
-        public List<ControlState> ControlBindings { get; } = [];
-        public List<ParameterState> ParameterBindings { get; } = [];
         public List<string> ViewExports { get; } = [];
     }
     // One declared axis binding row's resolved, reusable shape — built once per row, instantiated (as an AxisState)
@@ -715,13 +714,18 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
     // lost terminal focus since the last capture, so the next focused frame re-captures even an unchanged sample.
     private sealed class AxisState {
         public required int Channel { get; init; }
+
         public ProbeAxisConditioner Conditioner;
+
         public required InputDeviceId Device { get; init; }
+
         public bool Held;
+
         public required ProbeInstance Instance { get; init; }
         public required WorldProbeBinding.Axis Row { get; init; }
         public required int Slot { get; init; }
         public required string Source { get; init; }
+
         public bool Suppressed;
     }
     // One declared control binding's live, per-instance state — the last written device value, so a
@@ -729,11 +733,16 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
     private sealed class ControlState {
         public required int Channel { get; init; }
         public required CameraControl ControlEnum { get; init; }
+
         public bool HasWritten;
+
         public required ProbeInstance Instance { get; init; }
+
         public int LastValue;
+
         public required long MaxAgeTicks { get; init; }
         public required WorldProbeBinding.Control Row { get; init; }
+
         public ICameraControlSurface? Surface;
         public long Writes;
     }
@@ -741,15 +750,18 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
     // write), so an unchanged conditioned value never re-touches its target.
     private sealed class ParameterState {
         public required int Channel { get; init; }
-        public required long MaxAgeTicks { get; init; }
         public required ProbeInstance Instance { get; init; }
+        public required long MaxAgeTicks { get; init; }
+
         public float LastValue = float.NaN;
         public ProbeInstance? LastTarget;
-        public required WorldProbeBinding.Parameter Row { get; init; }
-        public ProbeRowInfo? TargetRowInfo { get; init; }
+
+        public int ConstantOffset { get; init; }
         public string? ExtensionField { get; init; }
         public string? ExtensionId { get; init; }
-        public int ConstantOffset { get; init; }
+        public required WorldProbeBinding.Parameter Row { get; init; }
+        public ProbeRowInfo? TargetRowInfo { get; init; }
+
         public long Writes;
     }
     // One armed probe.record recording's live state — at most one at a time. LastSequence starts at -1 so the
@@ -758,7 +770,9 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         public required int ChannelCount { get; init; }
         public required long DurationTicks { get; init; }
         public required ProbeInstance Instance { get; init; }
+
         public long LastSequence = -1L;
+
         public required string Path { get; init; }
         public required double RateHz { get; init; }
         public List<ProbeTrackSample> Samples { get; } = [];

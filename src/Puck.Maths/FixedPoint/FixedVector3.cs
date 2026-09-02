@@ -241,6 +241,7 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
         var dx = FixedVectorMath.SignedFromMagnitude(magnitude: (separationX >> 1), negative: !targetGreaterX);
         var dy = FixedVectorMath.SignedFromMagnitude(magnitude: (separationY >> 1), negative: !targetGreaterY);
         var dz = FixedVectorMath.SignedFromMagnitude(magnitude: (separationZ >> 1), negative: !targetGreaterZ);
+
         var (unitX, unitY, unitZ) = FixedVectorMath.Normalize(x: dx, y: dy, z: dz);
         var stepX = (FixedQ4816.FromRawBits(value: unitX) * maxDelta);
         var stepY = (FixedQ4816.FromRawBits(value: unitY) * maxDelta);

@@ -63,8 +63,8 @@ public sealed class ShaderExpression {
     /// <param name="value">The constant value.</param>
     /// <returns>The node.</returns>
     public static ShaderExpression Constant4(Vector4 value) => new(
-        constant: value,
         children: [],
+        constant: value,
         kind: ShaderExpressionKind.Constant,
         op: ShaderOp.LoadConstant,
         operand: 0u
@@ -79,7 +79,7 @@ public sealed class ShaderExpression {
     /// <param name="z">The third lane.</param>
     /// <param name="w">The fourth lane.</param>
     /// <returns>The node.</returns>
-    public static ShaderExpression Constant(float x, float y, float z = 0f, float w = 0f) => Constant4(value: new Vector4(x: x, y: y, z: z, w: w));
+    public static ShaderExpression Constant(float x, float y, float z = 0f, float w = 0f) => Constant4(value: new Vector4(w: w, x: x, y: y, z: z));
     /// <summary>Creates a node loading the constant whose index an expression supplies.</summary>
     /// <param name="index">The expression whose first lane indexes the pool.</param>
     /// <returns>The node.</returns>
@@ -148,13 +148,13 @@ public sealed class ShaderExpression {
     /// <returns>The node.</returns>
     public ShaderExpression Swizzle(int x, int y, int z, int w) => Unary(
         op: ShaderOp.Swizzle,
-        operand: ShaderIsa.PackSwizzle(x: x, y: y, z: z, w: w),
+        operand: ShaderIsa.PackSwizzle(w: w, x: x, y: y, z: z),
         value: this
     );
     /// <summary>Creates a node replicating one of this value's lanes across every lane.</summary>
     /// <param name="lane">The source lane.</param>
     /// <returns>The node.</returns>
-    public ShaderExpression Lane(int lane) => Swizzle(x: lane, y: lane, z: lane, w: lane);
+    public ShaderExpression Lane(int lane) => Swizzle(w: lane, x: lane, y: lane, z: lane);
     /// <summary>Creates a node assembling one four-lane value from the first lanes of four expressions.</summary>
     /// <param name="x">The value supplying the first lane.</param>
     /// <param name="y">The value supplying the second lane.</param>
@@ -168,7 +168,7 @@ public sealed class ShaderExpression {
             value += (z.X * Constant(x: 0f, y: 0f, z: 1f));
         }
         if (w is not null) {
-            value += (w.X * Constant(x: 0f, y: 0f, z: 0f, w: 1f));
+            value += (w.X * Constant(w: 1f, x: 0f, y: 0f, z: 0f));
         }
 
         return value;

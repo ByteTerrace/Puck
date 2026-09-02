@@ -22,7 +22,6 @@ public sealed class SdfLipschitzCompositionLawTests {
         new(x: 0f, y: -0.06f, z: 0f),
     ];
     private static readonly Vector3 SlabHalfExtents = new(x: 10f, y: 1f, z: 10f);
-
     private static readonly FixedVector3 Down = new(
         X: FixedQ4816.Zero,
         Y: -FixedQ4816.One,
@@ -44,10 +43,10 @@ public sealed class SdfLipschitzCompositionLawTests {
                 .ResetPoint()
                 .Translate(offset: SlabCenters[index])
                 .Box(
-                halfExtents: SlabHalfExtents,
-                round: 0f,
-                material: material,
                 blend: SdfBlendOp.ChamferUnion,
+                halfExtents: SlabHalfExtents,
+                material: material,
+                round: 0f,
                 smooth: PlateBevel
             );
         }
@@ -141,15 +140,14 @@ public sealed class SdfLipschitzCompositionLawTests {
             actual: builder.Build().StepScale
         );
     }
-
     [Fact]
     public void ChamferStepScaleGrowsPerCompositionFromTheThirdChamfer() {
         // One chamfer composes against the SDF_FAR_DISTANCE constant (L = 0), so it is the identity: max(0, 1, 1/√2) = 1.
         Assert.Equal(
             expected: 1.0f,
             actual: BuildChamferStack(
-                slabCount: 1,
-                plateBottomY: -100f
+                plateBottomY: -100f,
+                slabCount: 1
             ).StepScale
         );
         // Two chamfers reach exactly √2 — the value the retired per-chain latch reported — so shallow-chamfer content
@@ -157,30 +155,29 @@ public sealed class SdfLipschitzCompositionLawTests {
         Assert.Equal(
             expected: LatchedStepScale,
             actual: BuildChamferStack(
-                slabCount: 2,
-                plateBottomY: -100f
+                plateBottomY: -100f,
+                slabCount: 2
             ).StepScale
         );
 
         // Three reach 1 + 1/√2 = 1.70711, which the latch cannot express: this is the composition the latch drops.
         var third = BuildChamferStack(
-            slabCount: 3,
-            plateBottomY: -100f
+            plateBottomY: -100f,
+            slabCount: 3
         ).StepScale;
 
         Assert.Equal(
-            expected: (1.0f / 1.7071067f),
             actual: third,
+            expected: (1.0f / 1.7071067f),
             tolerance: 1.0e-6f
         );
         Assert.True(condition: (third < LatchedStepScale));
     }
-
     [Fact]
     public void ChamferStackedPlateIsMarchableAtTheAnalyzedStepScale() {
         var uncarved = new SdfFieldEvaluator(program: BuildChamferStack(
-            slabCount: 3,
-            plateBottomY: -100f
+            plateBottomY: -100f,
+            slabCount: 3
         ));
         var top = ScanTopSurface(
             evaluator: uncarved,
@@ -203,8 +200,8 @@ public sealed class SdfLipschitzCompositionLawTests {
 
         var plateBottom = (top - 0.016);
         var program = BuildChamferStack(
-            slabCount: 3,
-            plateBottomY: ((float)plateBottom)
+            plateBottomY: ((float)plateBottom),
+            slabCount: 3
         );
         var evaluator = new SdfFieldEvaluator(program: program);
 
@@ -245,14 +242,14 @@ public sealed class SdfLipschitzCompositionLawTests {
         // one √2 for the whole chain, the per-chain fold this recurrence replaced. Both step through the plate.
         Assert.Null(@object: MarchDown(
             evaluator: evaluator,
-            stepScale: 1.0f,
             startY: 6.0,
+            stepScale: 1.0f,
             stopY: -6.0
         ));
         Assert.Null(@object: MarchDown(
             evaluator: evaluator,
-            stepScale: LatchedStepScale,
             startY: 6.0,
+            stepScale: LatchedStepScale,
             stopY: -6.0
         ));
         // The control: the reference march is not simply broken — at the analyzed scale it finds the same plate the
@@ -268,15 +265,14 @@ public sealed class SdfLipschitzCompositionLawTests {
             tolerance: 0.01
         );
     }
-
     /// <summary>A radius must be subtracted after the field is scaled. Once that lower bound can no longer prove the
     /// sphere is separated, authoritative queries resolve toward obstruction instead of continuing to a raw-field
     /// threshold that may lie inside the true contact envelope.</summary>
     [Fact]
     public void ChamferedFieldUsesTheStepScaleForSphereQueries() {
         var program = BuildChamferStack(
-            slabCount: 3,
-            plateBottomY: -100f
+            plateBottomY: -100f,
+            slabCount: 3
         );
         var evaluator = new SdfFieldEvaluator(program: program);
         var top = ScanTopSurface(
@@ -320,7 +316,6 @@ public sealed class SdfLipschitzCompositionLawTests {
             low: (trueContactTravel - 0.001)
         );
     }
-
     [Fact]
     public void ChamferFreeCastIsUnchangedByTheStepClamp() {
         // The other control: a warp-free program bakes stepScale 1.0f, so its cast advances by the raw field exactly as
@@ -350,7 +345,6 @@ public sealed class SdfLipschitzCompositionLawTests {
             tolerance: 0.002
         );
     }
-
     [Fact]
     public void ChamferPopFieldComposesThroughTheSameRecurrence() {
         var builder = new SdfProgramBuilder();
@@ -360,9 +354,9 @@ public sealed class SdfLipschitzCompositionLawTests {
         // a composition like any other: max(√2, 1, (√2 + 1)/√2) = 1.70711.
         _ = builder
             .Sphere(
-            radius: 1f,
-            material: material,
             blend: SdfBlendOp.ChamferUnion,
+            material: material,
+            radius: 1f,
             smooth: 0.2f
         )
             .ResetPoint()
@@ -372,9 +366,9 @@ public sealed class SdfLipschitzCompositionLawTests {
             z: 0f
         ))
             .Sphere(
-            radius: 1f,
-            material: material,
             blend: SdfBlendOp.ChamferUnion,
+            material: material,
+            radius: 1f,
             smooth: 0.2f
         )
             .ResetPoint()

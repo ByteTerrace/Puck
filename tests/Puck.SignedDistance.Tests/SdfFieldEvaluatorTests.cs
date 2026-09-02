@@ -44,12 +44,12 @@ public sealed class SdfFieldEvaluatorTests {
 
         var evaluator = new SdfFieldEvaluator(program: builder.Build());
         var baked = new BakedWorldQuery(artifact: WorldQueryBaker.Bake(
-            minX: -1f,
-            minZ: -1f,
+            blockers: [],
             maxX: 1f,
             maxZ: 1f,
-            terrain: [],
-            blockers: []
+            minX: -1f,
+            minZ: -1f,
+            terrain: []
         ));
         var histogram = WorldQueryDriftInstrument.Evaluate(
             evaluator: evaluator,
@@ -75,10 +75,9 @@ public sealed class SdfFieldEvaluatorTests {
             actual: histogram.BakedComparisons
         );
     }
-
-    [Theory]
     [InlineData(0.0, 0.0, 0.0, -0.25)]
     [InlineData(2.0, 0.0, 0.0, 1.0)]
+    [Theory]
     public void RoundedRectangleUsesTheShaderExactDistanceBody(double x, double y, double z, double expectedDistance) {
         var evaluator = BuildRoundedRectangleEvaluator();
 
@@ -98,7 +97,6 @@ public sealed class SdfFieldEvaluatorTests {
             actual: distance
         );
     }
-
     [Fact]
     public void RoundedRectangleSupportsTheRevolveLift() {
         var builder = new SdfProgramBuilder();
@@ -130,7 +128,6 @@ public sealed class SdfFieldEvaluatorTests {
             actual: distance
         );
     }
-
     /// <summary>The ground-height bake allocates one height cell and runs one ground march per cell of the measured
     /// grid, so the cell budget has to be measured first or the refusal costs the whole working set it exists to
     /// prevent. The refused region below is 16000x16000 cells: if the per-cell loop ran, the refusal would arrive a
@@ -192,7 +189,6 @@ public sealed class SdfFieldEvaluatorTests {
             actual: control.Height
         );
     }
-
     /// <summary>The bake authors one float point per cell, so a region whose coordinates are coarser in
     /// <see cref="float"/> than the baker's cell size cannot address one cell apart from the next. It is refused by
     /// name rather than answered with an artifact whose cells silently hold a neighbour's ground or none at all — and

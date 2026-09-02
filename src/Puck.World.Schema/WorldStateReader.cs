@@ -76,9 +76,9 @@ public static class WorldStateReader {
         }
 
         if (
-            !catalog.TryGetDescriptor(handle: handle, descriptor: out var descriptor) ||
+            !catalog.TryGetDescriptor(descriptor: out var descriptor, handle: handle) ||
             (descriptor.Ownership != WorldStateOwnershipLane.World) ||
-            ((uint)descriptor.LaneOrdinal >= (uint)definition.State.Count) ||
+            (((uint)descriptor.LaneOrdinal) >= ((uint)definition.State.Count)) ||
             (definition.State[descriptor.LaneOrdinal] is not { } resolved) ||
             !string.Equals(a: resolved.Name, b: descriptor.Name, comparisonType: StringComparison.Ordinal)
         ) {
@@ -86,11 +86,10 @@ public static class WorldStateReader {
         }
 
         row = resolved;
-        ReadCell(row: row, key: key, tick: tick, rawValue: out rawValue, text: out text);
+        ReadCell(key: key, rawValue: out rawValue, row: row, text: out text, tick: tick);
 
         return true;
     }
-
     /// <summary>Finds the winning cell's key over a keyed row under <paramref name="op"/>
     /// (<see cref="WorldStateReduceOp.Max"/> or <see cref="WorldStateReduceOp.Min"/>), resolving each candidate
     /// cell's value through this same per-(row, key) seam as <see cref="TryRead"/> rather than walking the row's
@@ -315,7 +314,7 @@ public static class WorldStateReader {
             return false;
         }
 
-        ReadCell(row: row, key: key, tick: tick, rawValue: out rawValue, text: out text);
+        ReadCell(key: key, rawValue: out rawValue, row: row, text: out text, tick: tick);
 
         return true;
     }
@@ -355,6 +354,7 @@ public static class WorldStateReader {
         ));
         text = cell.Text;
     }
+
     /// <summary>Resolves one (row, key) pair the same way <see cref="TryRead"/> does, except a cell carrying a
     /// <see cref="WorldStateDynamics"/> easing trait reads its EASED value at <paramref name="tick"/>
     /// (<see cref="TryEvaluateDynamics"/>) rather than its stored truth — the read the HUD's plain
@@ -498,7 +498,7 @@ public static class WorldStateReader {
                 row: row,
                 raw: cell.Value
             ),
-            ticksPerSecond: (ulong)definition.SimulationRateHz
+            ticksPerSecond: ((ulong)definition.SimulationRateHz)
         );
 
         return true;

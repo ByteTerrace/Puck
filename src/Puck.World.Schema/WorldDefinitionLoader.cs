@@ -134,8 +134,8 @@ public static class WorldDefinitionLoader {
             definition: parsed!,
             instanceIdentity: instanceIdentity,
             neighbours: neighbours,
-            resolved: out definition,
             reason: out reason,
+            resolved: out definition,
             sourceName: sourceName
         );
     }

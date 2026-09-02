@@ -26,7 +26,7 @@ public sealed class LatestSlotPublication : ISharedSlotRing {
         ArgumentOutOfRangeException.ThrowIfLessThan(targetCount, 2);
 
         var readers = new int[targetCount];
-        var existing = Interlocked.CompareExchange(location1: ref m_readers, value: readers, comparand: null);
+        var existing = Interlocked.CompareExchange(comparand: null, location1: ref m_readers, value: readers);
 
         if ((existing is not null) && (existing.Length != targetCount)) {
             throw new InvalidOperationException(message: $"the slot publication is already configured for {existing.Length} targets");

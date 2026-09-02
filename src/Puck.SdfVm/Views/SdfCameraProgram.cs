@@ -27,7 +27,6 @@ public readonly record struct SdfCameraScalar {
     /// <param name="fallback">The value used when the frame supplies no such slot.</param>
     /// <returns>The scalar.</returns>
     public static SdfCameraScalar FromSlot(int slot, float fallback = 0f) => new() { Literal = fallback, Slot = slot };
-
     /// <summary>Resolves this number against one frame's scalars.</summary>
     /// <param name="scalars">The frame's scalars.</param>
     /// <returns>The slot's value, or <see cref="Literal"/>.</returns>
@@ -51,7 +50,6 @@ public readonly record struct SdfCameraDynamics(float Frequency, float Damping, 
     /// <summary>Gets the "no dynamics authored" value — a program with no <see cref="SdfCameraOp.Dynamics"/> op, or a
     /// <see cref="SdfCameraOp.Blend"/> of two programs neither of which authors one.</summary>
     public static SdfCameraDynamics None => default;
-
     /// <summary>Gets whether this response is live (an authored positive frequency) rather than <see cref="None"/>.</summary>
     public bool IsLive => (Frequency > 0f);
 }
@@ -216,6 +214,7 @@ public static class SdfCameraProgramEvaluator {
     /// <summary>The distance ahead the aim target sits when a program authors no <see cref="SdfCameraOp.LookAt"/> —
     /// far enough that the look direction is well conditioned, near enough to stay a plausible focus.</summary>
     public const float DefaultFocusDistance = 6f;
+
     // The smallest focus distance a facing look-at resolves at: below this the target collapses onto the eye and the
     // look direction has no answer.
     private const float MinimumFocusDistance = 0.01f;
@@ -323,7 +322,7 @@ public static class SdfCameraProgramEvaluator {
                     var (pathPosition, pathTangentYaw) = pathOp.Curve.Sample(arcLength: (pathOp.Fraction.Resolve(scalars: scalars) * pathOp.Curve.TotalLength));
 
                     subject = new SdfAnchor(
-                        Orientation: Quaternion.CreateFromYawPitchRoll(yaw: pathTangentYaw, pitch: 0f, roll: 0f),
+                        Orientation: Quaternion.CreateFromYawPitchRoll(pitch: 0f, roll: 0f, yaw: pathTangentYaw),
                         Position: pathPosition
                     );
                     eye = subject.Position;

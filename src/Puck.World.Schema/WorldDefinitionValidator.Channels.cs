@@ -61,11 +61,11 @@ public static partial class WorldDefinitionValidator {
 
                 if (
                     RequireUniqueName(
-                    value: source,
-                    seen: seenSources,
-                    path: slotPath,
+                    errors: errors,
                     field: "",
-                    errors: errors
+                    path: slotPath,
+                    seen: seenSources,
+                    value: source
                 ) &&
                     (InputSourceVocabularyHook.IsKnownSourceId is { } isKnown) &&
                     !isKnown(source)
@@ -149,7 +149,7 @@ public static partial class WorldDefinitionValidator {
             }
 
             if (layout.Banks is { } bankPlacements) {
-                var bankIds = new HashSet<string>(collection: (authoring.Banks ?? []).Where(predicate: static bank => bank?.Id is not null).Select(selector: static bank => bank!.Id), comparer: StringComparer.Ordinal);
+                var bankIds = new HashSet<string>(collection: (authoring.Banks ?? []).Where(predicate: static bank => (bank?.Id is not null)).Select(selector: static bank => bank!.Id), comparer: StringComparer.Ordinal);
 
                 foreach (var (bankId, placement) in bankPlacements) {
                     var bankPath = $"{layoutPath}.banks['{bankId}']";
@@ -181,7 +181,7 @@ public static partial class WorldDefinitionValidator {
                         var piece = placement.Pieces[index];
                         var piecePath = $"{bankPath}.pieces[{index}]";
 
-                        if (piece is null || string.IsNullOrWhiteSpace(value: piece.Table)) {
+                        if ((piece is null) || string.IsNullOrWhiteSpace(value: piece.Table)) {
                             errors.Add(item: $"{piecePath}.table is required.");
 
                             continue;
@@ -299,21 +299,23 @@ public static partial class WorldDefinitionValidator {
 
                 if (bank.ActiveAlpha is { } activeAlpha) {
                     RequireUnitInterval(
-                        value: activeAlpha,
+                        errors: errors,
                         name: $"{bankPath}.activeAlpha",
-                        errors: errors
+                        value: activeAlpha
                     );
                 }
             }
         }
 
     }
+
     // A badge's failure mode, so a caller can pick its own wording per case while sharing the underlying rule.
     private enum BadgeValidity {
         Valid,
         WrongCount,
         OutOfRange
     }
+
     // Shared badge rule: exactly two elements, both finite, each within [-1, 1] — the same [x, y] offset shape used
     // by a slot placement and a bank piece.
     private static BadgeValidity ValidateBadge(IReadOnlyList<float> badge) {
@@ -435,9 +437,9 @@ public static partial class WorldDefinitionValidator {
     private static void ValidateBindingBarPreferences(BindingBarPreferences? preferences, string path, List<string> errors) {
         if (preferences?.Scale is { } scale) {
             RequirePositive(
-                value: scale,
+                errors: errors,
                 name: $"{path}.scale",
-                errors: errors
+                value: scale
             );
         }
 

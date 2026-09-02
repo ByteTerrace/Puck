@@ -14,15 +14,15 @@ public sealed class MarketJournalFinalityLawTests {
         var seller = WorldPrincipal.Seat(slot: 0);
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.CreateMarketListing(
-            Principal: seller,
-            Seller: seller,
-            ItemRow: MarketFixtures.AppleRow,
-            Quantity: 1,
-            CurrencyRow: MarketFixtures.GoldRow,
-            Format: WorldMarketFormat.English,
-            StartPrice: 10,
             BuyoutPrice: null,
-            DurationSeconds: MarketFixtures.MinDurationSeconds
+            CurrencyRow: MarketFixtures.GoldRow,
+            DurationSeconds: MarketFixtures.MinDurationSeconds,
+            Format: WorldMarketFormat.English,
+            ItemRow: MarketFixtures.AppleRow,
+            Principal: seller,
+            Quantity: 1,
+            Seller: seller,
+            StartPrice: 10
         ));
         fixture.Step();
 
@@ -63,7 +63,6 @@ public sealed class MarketJournalFinalityLawTests {
 
         Assert.Equal(expected: beforeRefusedUndo, actual: fixture.DefinitionBytes());
     }
-
     [Fact]
     public void UndoCannotReverseASettledBuyout() {
         using var fixture = Fixtures.FreshServer(definition: MarketFixtures.BuildDocument());
@@ -71,21 +70,21 @@ public sealed class MarketJournalFinalityLawTests {
         var buyer = WorldPrincipal.Seat(slot: 1);
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.CreateMarketListing(
-            Principal: seller,
-            Seller: seller,
-            ItemRow: MarketFixtures.AppleRow,
-            Quantity: 2,
-            CurrencyRow: MarketFixtures.GoldRow,
-            Format: WorldMarketFormat.Buyout,
-            StartPrice: 0,
             BuyoutPrice: 40,
-            DurationSeconds: MarketFixtures.MinDurationSeconds
+            CurrencyRow: MarketFixtures.GoldRow,
+            DurationSeconds: MarketFixtures.MinDurationSeconds,
+            Format: WorldMarketFormat.Buyout,
+            ItemRow: MarketFixtures.AppleRow,
+            Principal: seller,
+            Quantity: 2,
+            Seller: seller,
+            StartPrice: 0
         ));
         fixture.Step();
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.BuyoutMarketListing(
-            Principal: buyer,
             Buyer: buyer,
-            ListingId: 1
+            ListingId: 1,
+            Principal: buyer
         ));
         fixture.Step();
 

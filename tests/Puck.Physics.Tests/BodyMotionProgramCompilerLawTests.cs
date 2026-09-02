@@ -38,10 +38,10 @@ public sealed class BodyMotionProgramCompilerLawTests {
     ];
 
     private static CompiledBodyMotionProgram Compile(BodyProgramKind kind, params BodyMotionOp[] operations) => CompiledBodyMotionProgram.Compile(
-        name: "law",
-        version: CompiledBodyMotionProgram.SupportedVersion,
         kind: kind,
-        operations: operations
+        name: "law",
+        operations: operations,
+        version: CompiledBodyMotionProgram.SupportedVersion
     );
     private static BodyMotionProgramRefusal? Refusal(BodyProgramKind kind, params BodyMotionOp[] operations) {
         try {
@@ -133,28 +133,28 @@ public sealed class BodyMotionProgramCompilerLawTests {
         Assert.Equal(
             expected: BodyMotionProgramRefusal.NameMissing,
             actual: Assert.Throws<BodyMotionProgramException>(testCode: () => CompiledBodyMotionProgram.Compile(
-                name: "  ",
-                version: CompiledBodyMotionProgram.SupportedVersion,
                 kind: BodyProgramKind.Motion,
-                operations: [BodyMotionOp.CommitPose]
+                name: "  ",
+                operations: [BodyMotionOp.CommitPose],
+                version: CompiledBodyMotionProgram.SupportedVersion
             )).Refusal
         );
         Assert.Equal(
             expected: BodyMotionProgramRefusal.VersionUnsupported,
             actual: Assert.Throws<BodyMotionProgramException>(testCode: () => CompiledBodyMotionProgram.Compile(
-                name: "law",
-                version: "puck.body-motion.v0",
                 kind: BodyProgramKind.Motion,
-                operations: [BodyMotionOp.CommitPose]
+                name: "law",
+                operations: [BodyMotionOp.CommitPose],
+                version: "puck.body-motion.v0"
             )).Refusal
         );
         Assert.Equal(
             expected: BodyMotionProgramRefusal.ProgramKindUnknown,
             actual: Assert.Throws<BodyMotionProgramException>(testCode: () => CompiledBodyMotionProgram.Compile(
-                name: "law",
-                version: CompiledBodyMotionProgram.SupportedVersion,
                 kind: null,
-                operations: [BodyMotionOp.CommitPose]
+                name: "law",
+                operations: [BodyMotionOp.CommitPose],
+                version: CompiledBodyMotionProgram.SupportedVersion
             )).Refusal
         );
         Assert.Equal(

@@ -27,7 +27,6 @@ public static class PlayerAssignmentCommand {
             )
         );
     }
-
     /// <summary>Formats one device-assignment outcome for an operator command.</summary>
     /// <param name="roster">The roster whose current state successful changes echo.</param>
     /// <param name="verb">The command name responsible for the assignment.</param>

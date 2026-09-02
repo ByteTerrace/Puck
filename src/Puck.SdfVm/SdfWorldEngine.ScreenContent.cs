@@ -275,6 +275,7 @@ public sealed partial class SdfWorldEngine {
             value: true
         );
     }
+
     /// <summary>Throws if <paramref name="screenIndex"/> falls outside <c>0..<see cref="MaxScreenSurfaces"/>-1</c>.</summary>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is out of range.</exception>
     private static void RequireScreenIndex(int screenIndex) {

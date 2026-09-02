@@ -8,6 +8,7 @@ public sealed class RefusalTests {
     private static async Task<(PeerIdentity IdentityB, Peer PeerA, Peer PeerB, PeerLink LinkAtoB, PeerLink LinkBtoA, Stream ControlStreamAtB)> ConnectAsync(CancellationToken ct) {
         var identityB = PeerIdentity.Create();
         var peerA = PeerTestSupport.NewPeer();
+
         var (peerB, tapB) = PeerTestSupport.NewTappedPeer(identity: identityB);
         var endpointB = await PeerTestSupport.ListenLoopbackAsync(peer: peerB);
         var linkAtoB = await peerA.DialAsync(
@@ -35,6 +36,7 @@ public sealed class RefusalTests {
     [Fact]
     public async Task UnsignedBytes_AreRefusedAsUnsigned_AndTheLinkStaysOpen() {
         var ct = TestContext.Current.CancellationToken;
+
         var (_, peerA, peerB, linkAtoB, linkBtoA, controlStreamAtB) = await ConnectAsync(ct: ct);
 
         await using var disposeA = peerA;
@@ -62,6 +64,7 @@ public sealed class RefusalTests {
     [Fact]
     public async Task MessageSignedByAnotherKey_IsRefusedAsWrongSigner_AndTheLinkStaysOpen() {
         var ct = TestContext.Current.CancellationToken;
+
         var (_, peerA, peerB, linkAtoB, linkBtoA, controlStreamAtB) = await ConnectAsync(ct: ct);
 
         await using var disposeA = peerA;
@@ -97,6 +100,7 @@ public sealed class RefusalTests {
     [Fact]
     public async Task TamperedPayload_IsRefusedAsUnverified_AndTheLinkStaysOpen() {
         var ct = TestContext.Current.CancellationToken;
+
         var (identityB, peerA, peerB, linkAtoB, linkBtoA, controlStreamAtB) = await ConnectAsync(ct: ct);
 
         await using var disposeA = peerA;

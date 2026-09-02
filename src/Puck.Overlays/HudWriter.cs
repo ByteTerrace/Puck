@@ -13,6 +13,7 @@ namespace Puck.Overlays;
 public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
     // The panel being emitted's presence — multiplied into its chrome and every element's alpha.
     private float m_panelAlpha = 1f;
+
     // A gauge's label run is clipped to this many characters; TextRunChars is the wider bound the reservation takes.
     private const int GaugeLabelChars = 16;
 
@@ -35,6 +36,7 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
 
     private OverlayHudFrame m_frame;
     private bool m_hasFrame;
+
     // Reused across every ComposeTemplate call (single-threaded on the window-pump thread, like every writer here) so
     // only genuine capacity growth allocates — its high-water mark stabilizes after the first few frames' widest
     // template, rather than a fresh empty builder paying the grow-copy sequence back up on every call.
@@ -443,10 +445,12 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
             writerName: nameof(HudWriter)
         );
     }
+
     void IOverlaySeatEmitter<OverlayHudSeatPanel>.EmitSeat(OverlayFrameBuilder builder, in OverlayHudSeatPanel seat) => EmitSeatPanel(
         builder: builder,
         seat: in seat
     );
+
     /// <summary>Emits every under-band panel, in document order.</summary>
     /// <param name="builder">The frame builder.</param>
     public void EmitUnder(OverlayFrameBuilder builder) => EmitBand(

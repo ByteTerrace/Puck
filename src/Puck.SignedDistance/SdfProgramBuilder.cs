@@ -26,6 +26,7 @@ public sealed partial class SdfProgramBuilder {
     /// runtime (Blend lane), so this bounds the per-sample hash cost (8 corner hashes per octave) and the
     /// <c>lacunarity^octaves</c> term inside the Lipschitz step clamp.</summary>
     public const int MaxNoiseOctaves = 8;
+
     // The largest |dot(unitRight, unitUp)| RequireOrthogonalBasis accepts: a cosine, so it reads as ~0.057 degrees.
     private const float BasisSkewTolerance = 1.0e-3f;
 

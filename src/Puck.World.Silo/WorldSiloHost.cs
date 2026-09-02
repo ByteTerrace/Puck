@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
+using Puck.Attestation;
 using Puck.Storage;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -339,11 +340,11 @@ public sealed class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateResolver 
 
         try {
             var pkcs8 = File.ReadAllBytes(path: worldRow.Federation.KeyFile);
-            var key = ECDsa.Create();
-
-            key.ImportPkcs8PrivateKey(
-                bytesRead: out _,
-                source: pkcs8
+            // The one key-import path in the tree: refuses trailing bytes and any curve other than the one the
+            // signing algorithm names, so a wrong key file fails here by name rather than at the first signed claim.
+            var key = AttestationKeys.ImportPkcs8PrivateKey(
+                algorithm: AttestationAlgorithms.EcdsaP256Sha256,
+                pkcs8: pkcs8
             );
 
             var subject = definition.Host.Authority;
@@ -362,7 +363,7 @@ public sealed class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateResolver 
             reason = string.Empty;
 
             return true;
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or CryptographicException)) {
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or CryptographicException or ArgumentException)) {
             federation = default;
             reason = $"'{worldRow.World}' federation.keyFile could not be read — {exception.Message}";
 
@@ -504,8 +505,8 @@ public sealed class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateResolver 
         // less. WorldNoAddonHost.TryPrepare is the identical door the attached live host below enforces; reusing it
         // here means this refusal and that one can never disagree.
         if (!new WorldNoAddonHost().TryPrepare(
-            current: null,
             candidate: definition!,
+            current: null,
             plan: out _,
             reason: out var addonReason
         )) {

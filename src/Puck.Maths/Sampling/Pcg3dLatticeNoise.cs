@@ -33,8 +33,9 @@ public static class Pcg3dLatticeNoise {
             return (x, y, z);
         }
     }
+
     // A corner's [0, 1) value in Q48.16: the hash's top 16 bits ARE the fractional ticks — integer in, integer out.
-    private static FixedQ4816 Corner01(uint cellX, uint cellZ, uint seed) => FixedQ4816.FromRawBits(value: (long)(Pcg3d(x: cellX, y: cellZ, z: seed).X >> 16));
+    private static FixedQ4816 Corner01(uint cellX, uint cellZ, uint seed) => FixedQ4816.FromRawBits(value: ((long)(Pcg3d(x: cellX, y: cellZ, z: seed).X >> 16)));
     // Quintic fade 6t⁵−15t⁴+10t³ in Q48.16 — the CPU twin of the renderer's blend, exact for t in [0, 1].
     private static FixedQ4816 Quintic(FixedQ4816 t) {
         var t2 = (t * t);
@@ -72,6 +73,7 @@ public static class Pcg3dLatticeNoise {
 
         return (quotient, remainder);
     }
+
     /// <summary>Samples one octave of 2D value noise over a cell index (XZ), Q48.16 throughout.</summary>
     /// <param name="cellX">The cell index along X.</param>
     /// <param name="cellZ">The cell index along Z.</param>
@@ -105,10 +107,10 @@ public static class Pcg3dLatticeNoise {
         );
         var ux = Quintic(t: fx);
         var uz = Quintic(t: fz);
-        var c00 = Corner01(cellX: (uint)nx, cellZ: (uint)nz, seed: seed);
-        var c10 = Corner01(cellX: (uint)(nx + 1), cellZ: (uint)nz, seed: seed);
-        var c01 = Corner01(cellX: (uint)nx, cellZ: (uint)(nz + 1), seed: seed);
-        var c11 = Corner01(cellX: (uint)(nx + 1), cellZ: (uint)(nz + 1), seed: seed);
+        var c00 = Corner01(cellX: ((uint)nx), cellZ: ((uint)nz), seed: seed);
+        var c10 = Corner01(cellX: ((uint)(nx + 1)), cellZ: ((uint)nz), seed: seed);
+        var c01 = Corner01(cellX: ((uint)nx), cellZ: ((uint)(nz + 1)), seed: seed);
+        var c11 = Corner01(cellX: ((uint)(nx + 1)), cellZ: ((uint)(nz + 1)), seed: seed);
 
         return Lerp(
             a: Lerp(a: c00, b: c10, t: ux),

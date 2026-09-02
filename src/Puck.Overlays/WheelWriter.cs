@@ -110,7 +110,7 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
                 );
             }
 
-            if (((uint)seat.ActiveRing < (uint)rings.Length) && (seat.ActiveRing >= ringCount)) {
+            if ((((uint)seat.ActiveRing) < ((uint)rings.Length)) && (seat.ActiveRing >= ringCount)) {
                 var refusedLabel = rings[seat.ActiveRing].Label;
 
                 if (!string.IsNullOrEmpty(value: refusedLabel)) {
@@ -149,7 +149,7 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
         // off piece stays accent, while a local dispatch failure or the cancel hub turns danger — and fades out on
         // the authored curve (seat.Fade). This never claims the later simulation/server verdict.
         var fade = seat.Fade;
-        var activeRing = (((uint)seat.ActiveRing < (uint)ringCount)
+        var activeRing = ((((uint)seat.ActiveRing) < ((uint)ringCount))
             ? seat.ActiveRing
             : -1
         );
@@ -227,7 +227,7 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
                     // a dispatch outcome lands on this piece, blooming in the outcome's hue instead.
                     builder.WriteIcon(
                         accent: (isHovered || isOutcome),
-                        accentRole: ((glow is { } chipRole && chipRole != OverlayColorRole.Accent)
+                        accentRole: (((glow is { } chipRole) && (chipRole != OverlayColorRole.Accent))
                             ? chipRole
                             : null),
                         alpha: ringAlpha,

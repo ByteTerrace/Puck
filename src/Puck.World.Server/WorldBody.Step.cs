@@ -1154,6 +1154,7 @@ public sealed partial class WorldBody {
                 x: -dz,
                 y: -dx
             );
+
             var (sinYaw, cosYaw) = FixedQ4816.SinCos(angle: targetYaw);
 
             scratch.Intent = m_roleOrdinals.Intent(
@@ -1921,9 +1922,9 @@ public sealed partial class WorldBody {
             );
 
             return StepPlanarFollower(
+                ceiling: ceiling,
                 step: in planar,
-                target: target,
-                ceiling: ceiling
+                target: target
             );
         }
 

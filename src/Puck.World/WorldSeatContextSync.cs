@@ -94,10 +94,10 @@ internal static class WorldSeatContextSync {
             // application keeps walking the seat's avatar, so it stays perceiving from that avatar; a screen
             // application never swaps either.
             anchor.Publish(
-                slot: slot,
                 bodyIndex: ((!holdsOwn && (possessed >= 0))
                 ? possessed
-                : slot)
+                : slot),
+                slot: slot
             );
         }
     }
