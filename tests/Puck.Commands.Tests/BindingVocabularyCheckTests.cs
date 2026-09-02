@@ -27,14 +27,13 @@ public sealed class BindingVocabularyCheckTests {
                 ),
             ]
         );
-        var errors = new List<string>();
-
-        BindingVocabularyCheck.Validate(
+        var errors = BindingVocabularyCheck.Validate(
             document: document,
-            command: static _ => null,
-            sourceKind: null,
-            errors: errors
-        );
+            lookups: new BindingVocabularyLookups(
+                Command: static _ => null,
+                SourceKind: null
+            )
+        ).Errors;
 
         // The entry labels by its (empty) sequence and the unknown command is refused as data, not as a crash.
         var error = Assert.Single(collection: errors);
@@ -45,14 +44,13 @@ public sealed class BindingVocabularyCheckTests {
     [Fact]
     public void ANullPageEntryIsRefusedNotThrown() {
         var document = Document(entry: null!);
-        var errors = new List<string>();
-
-        BindingVocabularyCheck.Validate(
+        var errors = BindingVocabularyCheck.Validate(
             document: document,
-            command: null,
-            sourceKind: null,
-            errors: errors
-        );
+            lookups: new BindingVocabularyLookups(
+                Command: null,
+                SourceKind: null
+            )
+        ).Errors;
 
         Assert.Contains(expectedSubstring: "entry 0 is null", actualString: Assert.Single(collection: errors));
     }
@@ -63,39 +61,37 @@ public sealed class BindingVocabularyCheckTests {
             Command: "axis.command",
             Activator: new BindingActivatorDefinition(Sequence: ["key.a"])
         ));
-        var errors = new List<string>();
-
-        BindingVocabularyCheck.Validate(
+        var errors = BindingVocabularyCheck.Validate(
             document: document,
-            command: static name => new CommandMetadata(
-                Name: name,
-                ValueKind: CommandValueKind.Axis1D,
-                Routing: CommandRouting.Immediate,
-                Bindability: CommandBindability.Bindable
-            ),
-            sourceKind: static _ => CommandValueKind.Digital,
-            errors: errors
-        );
+            lookups: new BindingVocabularyLookups(
+                Command: static name => new CommandMetadata(
+                    Name: name,
+                    ValueKind: CommandValueKind.Axis1D,
+                    Routing: CommandRouting.Immediate,
+                    Bindability: CommandBindability.Bindable
+                ),
+                SourceKind: static _ => CommandValueKind.Digital
+            )
+        ).Errors;
 
         Assert.Contains(expectedSubstring: "sends digital", actualString: Assert.Single(collection: errors));
     }
     [Fact]
     public void AnUnaddressableTextSourceIsRefusedEvenWhenItsKindIsKnown() {
         var document = Document(entry: new BindingPageEntryDefinition(Sources: ["keyboard.text"], Command: "type"));
-        var errors = new List<string>();
-
-        BindingVocabularyCheck.Validate(
+        var errors = BindingVocabularyCheck.Validate(
             document: document,
-            command: static name => new CommandMetadata(
-                Name: name,
-                ValueKind: CommandValueKind.Digital,
-                Routing: CommandRouting.Immediate,
-                Bindability: CommandBindability.Bindable
-            ),
-            sourceKind: static _ => CommandValueKind.Digital,
-            sourceAddressable: static source => (source != "keyboard.text"),
-            errors: errors
-        );
+            lookups: new BindingVocabularyLookups(
+                Command: static name => new CommandMetadata(
+                    Name: name,
+                    ValueKind: CommandValueKind.Digital,
+                    Routing: CommandRouting.Immediate,
+                    Bindability: CommandBindability.Bindable
+                ),
+                SourceKind: static _ => CommandValueKind.Digital,
+                SourceAddressable: static source => (source != "keyboard.text")
+            )
+        ).Errors;
 
         Assert.Contains(expectedSubstring: "unaddressable control \"keyboard.text\"", actualString: Assert.Single(collection: errors));
     }
@@ -106,26 +102,23 @@ public sealed class BindingVocabularyCheckTests {
             Command: "action",
             Text: "first second"
         ));
-        var errors = new List<string>();
-
-        BindingVocabularyCheck.Validate(
+        var errors = BindingVocabularyCheck.Validate(
             document: document,
-            command: static name => new CommandMetadata(
-                Name: name,
-                ValueKind: CommandValueKind.Axis1D,
-                Routing: CommandRouting.Simulation,
-                Bindability: CommandBindability.Bindable
-            ),
-            sourceKind: static _ => CommandValueKind.Axis1D,
-            errors: errors
-        );
+            lookups: new BindingVocabularyLookups(
+                Command: static name => new CommandMetadata(
+                    Name: name,
+                    ValueKind: CommandValueKind.Axis1D,
+                    Routing: CommandRouting.Simulation,
+                    Bindability: CommandBindability.Bindable
+                ),
+                SourceKind: static _ => CommandValueKind.Axis1D
+            )
+        ).Errors;
 
         Assert.Contains(collection: errors, filter: static error => error.Contains(comparisonType: StringComparison.Ordinal, value: "accepts no wire arguments"));
         Assert.Contains(collection: errors, filter: static error => error.Contains(comparisonType: StringComparison.Ordinal, value: "has no press edge"));
 
-        errors.Clear();
-
-        BindingVocabularyCheck.Validate(
+        errors = BindingVocabularyCheck.Validate(
             document: document with {
                 Chords = [document.Chords[0] with {
                     Page = document.Chords[0].Page! with {
@@ -133,16 +126,17 @@ public sealed class BindingVocabularyCheckTests {
                     },
                 }],
             },
-            command: static name => new CommandMetadata(
-                Name: name,
-                ValueKind: CommandValueKind.Digital,
-                Routing: CommandRouting.Simulation,
-                Bindability: CommandBindability.Bindable,
-                AcceptsWireArgs: true
-            ),
-            sourceKind: static _ => CommandValueKind.Digital,
-            errors: errors
-        );
+            lookups: new BindingVocabularyLookups(
+                Command: static name => new CommandMetadata(
+                    Name: name,
+                    ValueKind: CommandValueKind.Digital,
+                    Routing: CommandRouting.Simulation,
+                    Bindability: CommandBindability.Bindable,
+                    AcceptsWireArgs: true
+                ),
+                SourceKind: static _ => CommandValueKind.Digital
+            )
+        ).Errors;
 
         Assert.Empty(collection: errors);
     }
@@ -151,16 +145,15 @@ public sealed class BindingVocabularyCheckTests {
         // The structural gate has no physical vocabulary, so a typo'd source compiles into a row that tables a
         // control which will never signal — dead forever, and silent until this refusal.
         var document = Document(entry: new BindingPageEntryDefinition(Sources: ["gamepad.buttonSouht"], Command: "jump"));
-        var errors = new List<string>();
-
-        BindingVocabularyCheck.Validate(
+        var errors = BindingVocabularyCheck.Validate(
             document: document,
-            command: null,
-            sourceKind: static source => ((source == "gamepad.buttonSouth")
-            ? CommandValueKind.Digital
-            : null),
-            errors: errors
-        );
+            lookups: new BindingVocabularyLookups(
+                Command: null,
+                SourceKind: static source => ((source == "gamepad.buttonSouth")
+                ? CommandValueKind.Digital
+                : null)
+            )
+        ).Errors;
 
         Assert.Contains(expectedSubstring: "binds unknown control \"gamepad.buttonSouht\"", actualString: Assert.Single(collection: errors));
     }
@@ -169,15 +162,14 @@ public sealed class BindingVocabularyCheckTests {
         // A catalog reports an unaddressable control by answering null for its kind, so the two refusals would
         // otherwise both fire on the same source.
         var document = Document(entry: new BindingPageEntryDefinition(Sources: ["keyboard.text"], Command: "type"));
-        var errors = new List<string>();
-
-        BindingVocabularyCheck.Validate(
+        var errors = BindingVocabularyCheck.Validate(
             document: document,
-            command: null,
-            sourceKind: static _ => null,
-            sourceAddressable: static source => (source != "keyboard.text"),
-            errors: errors
-        );
+            lookups: new BindingVocabularyLookups(
+                Command: null,
+                SourceKind: static _ => null,
+                SourceAddressable: static source => (source != "keyboard.text")
+            )
+        ).Errors;
 
         Assert.Contains(expectedSubstring: "unaddressable control \"keyboard.text\"", actualString: Assert.Single(collection: errors));
     }
@@ -201,16 +193,15 @@ public sealed class BindingVocabularyCheckTests {
                 ),
             ]
         );
-        var errors = new List<string>();
-
-        BindingVocabularyCheck.Validate(
+        var errors = BindingVocabularyCheck.Validate(
             document: document,
-            command: null,
-            sourceKind: static source => ((source == "key.shift")
-            ? CommandValueKind.Digital
-            : null),
-            errors: errors
-        );
+            lookups: new BindingVocabularyLookups(
+                Command: null,
+                SourceKind: static source => ((source == "key.shift")
+                ? CommandValueKind.Digital
+                : null)
+            )
+        ).Errors;
 
         Assert.Contains(expectedSubstring: "names \"key.shfit\", which is neither a declared modifier nor a known control", actualString: Assert.Single(collection: errors));
     }
@@ -232,14 +223,13 @@ public sealed class BindingVocabularyCheckTests {
                 ),
             ]
         );
-        var errors = new List<string>();
-
-        BindingVocabularyCheck.Validate(
+        var errors = BindingVocabularyCheck.Validate(
             document: document,
-            command: null,
-            sourceKind: static _ => CommandValueKind.Digital,
-            errors: errors
-        );
+            lookups: new BindingVocabularyLookups(
+                Command: null,
+                SourceKind: static _ => CommandValueKind.Digital
+            )
+        ).Errors;
 
         Assert.Empty(collection: errors);
     }
@@ -269,36 +259,34 @@ public sealed class BindingVocabularyCheckTests {
                 )]
             )]
         );
-        var errors = new List<string>();
-
-        BindingVocabularyCheck.Validate(
+        var errors = BindingVocabularyCheck.Validate(
             document: document,
-            command: static name => new CommandMetadata(
-                Name: name,
-                ValueKind: CommandValueKind.Digital,
-                Routing: CommandRouting.Immediate,
-                Bindability: CommandBindability.Bindable
-            ),
-            sourceKind: null,
-            errors: errors
-        );
+            lookups: new BindingVocabularyLookups(
+                Command: static name => new CommandMetadata(
+                    Name: name,
+                    ValueKind: CommandValueKind.Digital,
+                    Routing: CommandRouting.Immediate,
+                    Bindability: CommandBindability.Bindable
+                ),
+                SourceKind: null
+            )
+        ).Errors;
 
         Assert.Contains(expectedSubstring: "binds text arguments to \"action\", which accepts no wire arguments", actualString: Assert.Single(collection: errors));
 
-        errors.Clear();
-
-        BindingVocabularyCheck.Validate(
+        errors = BindingVocabularyCheck.Validate(
             document: document,
-            command: static name => new CommandMetadata(
-                Name: name,
-                ValueKind: CommandValueKind.Digital,
-                Routing: CommandRouting.Immediate,
-                Bindability: CommandBindability.Bindable,
-                AcceptsWireArgs: true
-            ),
-            sourceKind: null,
-            errors: errors
-        );
+            lookups: new BindingVocabularyLookups(
+                Command: static name => new CommandMetadata(
+                    Name: name,
+                    ValueKind: CommandValueKind.Digital,
+                    Routing: CommandRouting.Immediate,
+                    Bindability: CommandBindability.Bindable,
+                    AcceptsWireArgs: true
+                ),
+                SourceKind: null
+            )
+        ).Errors;
 
         Assert.Empty(collection: errors);
     }
@@ -320,19 +308,18 @@ public sealed class BindingVocabularyCheckTests {
                 Page: new BindingPageDefinition(Id: "modal", Entries: [])
             )]
         );
-        var errors = new List<string>();
-
-        BindingVocabularyCheck.Validate(
+        var errors = BindingVocabularyCheck.Validate(
             document: document,
-            command: null,
-            sourceKind: static source => ((source == "gamepad.buttonSouht")
-            ? null
-            : CommandValueKind.Digital),
-            sourceAddressable: static source => (source != "keyboard.text"),
-            errors: errors
-        );
+            lookups: new BindingVocabularyLookups(
+                Command: null,
+                SourceKind: static source => ((source == "gamepad.buttonSouht")
+                ? null
+                : CommandValueKind.Digital),
+                SourceAddressable: static source => (source != "keyboard.text")
+            )
+        ).Errors;
 
-        Assert.Equal(expected: 2, actual: errors.Count);
+        Assert.Equal(expected: 2, actual: errors.Length);
         Assert.Contains(collection: errors, filter: static error => (error == "modifier \"aim\" declares unknown control \"gamepad.buttonSouht\""));
         Assert.Contains(collection: errors, filter: static error => (error == "modifier \"type\" declares unaddressable control \"keyboard.text\""));
     }
@@ -364,21 +351,20 @@ public sealed class BindingVocabularyCheckTests {
                 ),
             ]
         );
-        var errors = new List<string>();
-
-        BindingVocabularyCheck.Validate(
+        var errors = BindingVocabularyCheck.Validate(
             document: document,
-            command: static name => new CommandMetadata(
-                Name: name,
-                ValueKind: CommandValueKind.Digital,
-                Routing: CommandRouting.Immediate,
-                Bindability: CommandBindability.Bindable
-            ),
-            sourceKind: source => (catalog.Contains(item: source)
-            ? CommandValueKind.Digital
-            : null),
-            errors: errors
-        );
+            lookups: new BindingVocabularyLookups(
+                Command: static name => new CommandMetadata(
+                    Name: name,
+                    ValueKind: CommandValueKind.Digital,
+                    Routing: CommandRouting.Immediate,
+                    Bindability: CommandBindability.Bindable
+                ),
+                SourceKind: source => (catalog.Contains(item: source)
+                ? CommandValueKind.Digital
+                : null)
+            )
+        ).Errors;
 
         Assert.Empty(collection: errors);
 
@@ -398,6 +384,42 @@ public sealed class BindingVocabularyCheckTests {
         );
 
         Assert.Equal(expected: "modal", actual: bindings.ViewFor(slot: 0).PageId);
+    }
+
+    [Fact]
+    public void TheReportIsTheWholeAnswerAndCarriesNoCallerState() {
+        var document = Document(entry: new BindingPageEntryDefinition(Sources: ["gamepad.buttonSouht"], Command: "jump"));
+        var lookups = new BindingVocabularyLookups(SourceKind: static _ => null);
+
+        // A caller with no vocabularies at all still gets the checks that need none — and gets them clean here,
+        // because every finding this document carries needs a catalog to see.
+        Assert.True(condition: BindingVocabularyCheck.Validate(
+            document: document,
+            lookups: BindingVocabularyLookups.None
+        ).IsClean);
+
+        var first = BindingVocabularyCheck.Validate(
+            document: document,
+            lookups: lookups
+        );
+        var second = BindingVocabularyCheck.Validate(
+            document: document,
+            lookups: lookups
+        );
+
+        // Checked twice, reported twice — never accumulated, the way a caller-owned list would have.
+        Assert.False(condition: first.IsClean);
+        Assert.Equal(actual: second.Errors, expected: first.Errors);
+        Assert.Single(collection: second.Errors);
+
+        _ = Assert.Throws<ArgumentNullException>(testCode: () => BindingVocabularyCheck.Validate(
+            document: null!,
+            lookups: BindingVocabularyLookups.None
+        ));
+        _ = Assert.Throws<ArgumentNullException>(testCode: () => BindingVocabularyCheck.Validate(
+            document: document,
+            lookups: null!
+        ));
     }
 
     private static BindingProfileDocument Document(BindingPageEntryDefinition entry) {

@@ -9,9 +9,8 @@ namespace Puck.Commands;
 /// anywhere a document enters (a live rebind, a recompose, a document validator) without coupling the document types
 /// to the registry.
 /// </summary>
-/// <remarks>Each of the three lookups is independently optional, and a caller missing one still gets the others: a
-/// caller with no registry passes a null <c>command</c> and keeps the channel checks; a caller with no channel table
-/// passes null <c>channel</c> and keeps the command checks. Nothing here couples one half's absence to the other's.
+/// <remarks>The vocabularies come in as one <see cref="BindingVocabularyLookups"/>, each independently optional; the
+/// refusals go out as one <see cref="BindingVocabularyReport"/>, never appended to state the caller already holds.
 /// <para>Four predicates, all per reference: the command must exist (an entry naming an unregistered command is
 /// exactly the binding the <see cref="InputRouter"/> silently drops at resolve time today); it must be
 /// <see cref="CommandBindability.Bindable"/> (an authority verb reached from a page would be an escalation the grant
@@ -28,8 +27,8 @@ namespace Puck.Commands;
 /// <c>held</c>/<c>chord</c> member that names no declared modifier. All four compile to a control that will never
 /// signal, so all four are permanently dead rows — the exact class of typo this gate exists to turn loud. An
 /// axis-COMPONENT source resolves its BASE control instead, and a control marked unaddressable is refused for that
-/// reason alone (one refusal per source, never both). Callers that pass no <c>sourceKind</c> keep every other
-/// check.</para></remarks>
+/// reason alone (one refusal per source, never both). Callers that supply no
+/// <see cref="BindingVocabularyLookups.SourceKind"/> keep every other check.</para></remarks>
 public static class BindingVocabularyCheck {
     private static void CheckChannel(
         ChannelRef channel,
@@ -84,43 +83,25 @@ public static class BindingVocabularyCheck {
     }
     private static string Word(CommandValueKind kind) => kind.ToString().ToLowerInvariant();
 
-    /// <summary>Appends one error per unresolvable, unbindable, argument-incompatible, or kind-mismatched command or
-    /// channel reference in <paramref name="document"/>.</summary>
+    /// <summary>Reports one refusal line per unresolvable, unbindable, argument-incompatible, or kind-mismatched
+    /// command, channel, or physical-control reference in <paramref name="document"/>.</summary>
     /// <param name="document">The binding document to check.</param>
-    /// <param name="command">Resolves a command name (or alias) to its declared facts, answering <see langword="null"/>
-    /// when no such command is registered — typically <see cref="CommandRegistry.TryGetMetadata"/>. Pass
-    /// <see langword="null"/> to skip the command half entirely (a caller with no registry — an offline rehydrator, a
-    /// pre-container boot parse); the channel and kind halves still run, so a caller that cannot check commands never
-    /// has to abandon the checks it can make.</param>
-    /// <param name="sourceKind">Resolves a physical source id to its declared value kind, or <see langword="null"/>
-    /// when the source is unknown to the caller's catalog — which is itself a refusal ("names unknown control"), so
-    /// this lookup doubles as the physical vocabulary's existence check. Pass <see langword="null"/> to skip source
-    /// resolution entirely (a caller with no control catalog).</param>
-    /// <param name="errors">The list refusal lines are appended to.</param>
-    /// <param name="channel">Resolves a declared channel name (a second, world-owned vocabulary a binding destination
-    /// may name instead of a command — see <see cref="BindingPageEntryDefinition.Channel"/>), or <see langword="null"/>
-    /// to skip channel-name resolution entirely (a caller with no channel table). A name this resolves
-    /// <see langword="false"/> for gets the channel twin of the "names no registered command" refusal.</param>
-    /// <param name="channelBinary">Resolves a declared channel name to whether its shape is binary, or
-    /// <see langword="null"/> to skip the shape check entirely (a caller with no channel table). A binary channel's
-    /// scale is always the default (<c>+1</c>, or an omitted <see cref="BindingPageEntryDefinition.Scale"/>) —
-    /// <see cref="BindingPageEntryDefinition.Scale"/>'s own doc names this rule; this is where it is enforced. Only
-    /// consulted for a channel <paramref name="channel"/> has already confirmed exists.</param>
-    /// <param name="sourceAddressable">Optionally identifies declared sources that cannot be authored as binding
-    /// controls despite carrying a known value kind, such as the text-payload source.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="document"/> or <paramref name="errors"/> is
+    /// <param name="lookups">The live vocabularies to resolve against; each is independently optional, and
+    /// <see cref="BindingVocabularyLookups.None"/> still runs the checks that need no vocabulary.</param>
+    /// <returns>The refusal lines, in document order — <see cref="BindingVocabularyReport.IsClean"/> when there are
+    /// none.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="document"/> or <paramref name="lookups"/> is
     /// <see langword="null"/>.</exception>
-    public static void Validate(
-        BindingProfileDocument document,
-        Func<string, CommandMetadata?>? command,
-        Func<string, CommandValueKind?>? sourceKind,
-        List<string> errors,
-        Func<ChannelRef, bool>? channel = null,
-        Func<ChannelRef, bool>? channelBinary = null,
-        Func<string, bool>? sourceAddressable = null
-    ) {
+    public static BindingVocabularyReport Validate(BindingProfileDocument document, BindingVocabularyLookups lookups) {
         ArgumentNullException.ThrowIfNull(argument: document);
-        ArgumentNullException.ThrowIfNull(argument: errors);
+        ArgumentNullException.ThrowIfNull(argument: lookups);
+
+        var channel = lookups.Channel;
+        var channelBinary = lookups.ChannelBinary;
+        var command = lookups.Command;
+        var errors = new List<string>();
+        var sourceAddressable = lookups.SourceAddressable;
+        var sourceKind = lookups.SourceKind;
 
         // OrdinalIgnoreCase, matching how BindingProfile.Compile resolves a row member against a declared modifier
         // id: a member differing only by case IS that modifier there, so refusing it here as an unknown control
@@ -402,7 +383,7 @@ public static class BindingVocabularyCheck {
         }
 
         if (command is null) {
-            return;
+            return new BindingVocabularyReport(Errors: [.. errors]);
         }
 
         // Radial sectors are ordinary compiled binding activations. They therefore obey the same existence,
@@ -443,6 +424,7 @@ public static class BindingVocabularyCheck {
                 }
             }
         }
-    }
 
+        return new BindingVocabularyReport(Errors: [.. errors]);
+    }
 }
