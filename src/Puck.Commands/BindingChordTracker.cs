@@ -87,6 +87,20 @@ public sealed class BindingChordTracker {
 
         return false;
     }
+    /// <summary>Returns whether one source is currently latched down as part of the modifier it names.</summary>
+    /// <param name="source">The provider-neutral input source id.</param>
+    /// <returns><see langword="true"/> when the source names a declared modifier and is one of the sources currently
+    /// holding it down. Per SOURCE, not per modifier: a modifier with several declared sources stays held while any
+    /// of them is down, and the question here is whether THIS source's release has something to give up.</returns>
+    public bool IsDown(string source) {
+        return (
+            m_profile.TryGetModifier(
+            source: source,
+            modifierIndex: out var modifierIndex
+        ) &&
+            m_downSources[modifierIndex].Contains(item: source)
+        );
+    }
     /// <summary>Releases every modifier (focus loss, device disconnect, or a profile reload).</summary>
     public void Reset() {
         m_tracker.Reset();

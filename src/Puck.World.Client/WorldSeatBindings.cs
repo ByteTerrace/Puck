@@ -1067,6 +1067,13 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         return false;
     }
     /// <inheritdoc/>
+    public bool HoldsSource(int slot, string source) {
+        return ((((uint)slot) < SeatCount) && m_seats[slot].HoldsSource(
+            slot: slot,
+            source: source
+        ));
+    }
+    /// <inheritdoc/>
     public void Reset(int slot) {
         if (((uint)slot) < SeatCount) {
             m_seats[slot].Reset(slot: slot);

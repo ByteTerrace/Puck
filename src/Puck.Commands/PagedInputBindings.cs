@@ -466,6 +466,44 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
             groupIndex: out _
         );
     }
+    /// <inheritdoc/>
+    /// <remarks>Non-mutating and profile-checked, exactly like <see cref="ViewFor"/> and <see cref="WheelFor"/>: an
+    /// answer that created slot state would defeat the very gate it feeds — the router asks precisely so an idle
+    /// continuous sample never reaches the authored page.</remarks>
+    public bool HoldsSource(int slot, string source) {
+        if (
+            !m_slots.TryGetValue(
+            key: slot,
+            value: out var state
+        ) ||
+            !ReferenceEquals(
+            objA: state.Profile,
+            objB: m_profile
+        )
+        ) {
+            return false;
+        }
+
+        if (
+            state.Latches.ContainsKey(key: source) ||
+            state.ChordConsumed.Contains(item: source) ||
+            state.Tracker.IsDown(source: source)
+        ) {
+            return true;
+        }
+
+        // Only the ACTIVE page's activators can produce an edge for this signal (see ApplyRowActivators), so only
+        // their gates can be left open by a release that never arrives.
+        var activators = state.Profile.ActivatorsOf(rowIndex: state.PageRowIndex);
+
+        for (var activatorIndex = 0; (activatorIndex < activators.Count); activatorIndex++) {
+            if (state.ActivatorTrackers[activators[activatorIndex].ActivatorIndex]?.HoldsSource(source: source) ?? false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     /// <summary>Atomically swaps in a recompiled profile (an editor save), releasing every slot's chord and latches.
     /// Each slot's requested active group carries over — re-resolved against the new profile, falling back to its
     /// default group when the new profile no longer declares the name.</summary>

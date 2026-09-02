@@ -130,6 +130,27 @@ public sealed class InputRouterFocusExemptTests {
         Assert.Equal(actual: bindings.ViewFor(slot: 0).PageId, expected: "base");
     }
 
+    [Fact]
+    public void AHeldAnalogModifierSurvivingADeviceReleaseStillReturnsThePageToRest() {
+        var bindings = AnalogPageBindings();
+        var router = Router(bindings: bindings);
+
+        router.Capture(signal: Trigger(value: 0.9f));
+        _ = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
+        Assert.Equal(actual: bindings.ViewFor(slot: 0).PageId, expected: "aim");
+
+        // A per-device release (a reseat) withdraws the ROUTER's holds for that device and deliberately leaves the
+        // resolver's chord state alone — the trigger is still physically down and still flipping the page. Whether
+        // its eventual return to rest is forwarded is therefore the RESOLVER's question, not a router-side memory of
+        // having seen the control deflected.
+        router.ReleaseHeld(device: default);
+        router.CaptureFocusExempt(signal: Trigger(value: 0f));
+        _ = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue);
+
+        Assert.Equal(actual: bindings.ViewFor(slot: 0).PageId, expected: "base");
+    }
+
     private static PagedInputBindings AnalogPageBindings() {
         return new PagedInputBindings(profile: BindingProfile.Compile(document: new BindingProfileDocument(
             Version: BindingProfileDocument.CurrentVersion,
@@ -192,13 +213,34 @@ public sealed class InputRouterFocusExemptTests {
     private sealed class ConsolePrincipal : ICommandPrincipalResolver {
         public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Console;
     }
+    // A resolver with just enough state to be asked the question the router asks: which sources it is holding down.
+    // A press marks one; its release gives it up. That is the whole of what PagedInputBindings' latches, tracker and
+    // activator gates amount to from the router's side.
     private sealed class RecordingBindings : IInputBindings {
+        private readonly HashSet<string> m_held = new(comparer: StringComparer.OrdinalIgnoreCase);
+
         public List<string> Resolved { get; } = [];
 
+        public bool HoldsSource(int slot, string source) => m_held.Contains(item: source);
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) {
             Resolved.Add(item: source);
 
             return null;
+        }
+        public IReadOnlyList<CommandBinding>? Resolve(int slot, in InputSignal signal, bool pressesWithheld) {
+            if (
+                signal.Value.IsActive &&
+                (signal.Phase is not (CommandPhase.Completed or CommandPhase.Canceled))
+            ) {
+                _ = m_held.Add(item: signal.Source);
+            } else {
+                _ = m_held.Remove(item: signal.Source);
+            }
+
+            return Resolve(
+                slot: slot,
+                source: signal.Source
+            );
         }
     }
     private sealed class ProbeModule : ICommandModule {
