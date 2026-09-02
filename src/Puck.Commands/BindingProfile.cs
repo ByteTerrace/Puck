@@ -421,6 +421,79 @@ public static class BindingProfile {
             PageId: page.Id
         );
     }
+
+    // The single-page reading of the flattening Compile does in bulk: walk one page's Inherits chain to its root and
+    // apply the overlays back outward. Compile resolves EVERY page at once (memoized per row, with the same-group
+    // check the row indices make cheap), so it cannot answer for a caller holding only a document and one page id —
+    // BindingSessionPlan.FromPage is that caller, and reading a page's raw Entries there walked only the overrides
+    // while every runtime reader saw the flattened set. Both routes apply the SAME OverlayInheritedPage, which is
+    // where the rule actually lives; the duplication here is the walk, not the rule.
+    internal static BindingPageDefinition? EffectivePage(BindingProfileDocument document, string pageId) {
+        var pagesById = new Dictionary<string, BindingPageDefinition>(comparer: StringComparer.Ordinal);
+
+        foreach (var row in (document.Chords ?? [])) {
+            if (
+                (row?.Page is { } candidate) &&
+                !string.IsNullOrEmpty(value: candidate.Id)
+            ) {
+                _ = pagesById.TryAdd(
+                    key: candidate.Id,
+                    value: candidate
+                );
+            }
+        }
+
+        if (!pagesById.TryGetValue(
+            key: pageId,
+            value: out var page
+        )) {
+            return null;
+        }
+
+        // Descend to the root, then overlay outward. A cycle would otherwise spin forever here; Compile refuses the
+        // same document by name, so this walk refuses rather than pretending the chain ended.
+        var chain = new List<BindingPageDefinition>();
+        var walked = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        while (true) {
+            if (!walked.Add(item: page.Id)) {
+                throw new ArgumentException(
+                    message: $"Page inheritance contains a cycle at page \"{page.Id}\".",
+                    paramName: nameof(document)
+                );
+            }
+
+            chain.Add(item: page);
+
+            if (page.Inherits is not { Length: > 0 } inheritedId) {
+                break;
+            }
+
+            if (!pagesById.TryGetValue(
+                key: inheritedId,
+                value: out var inherited
+            )) {
+                throw new ArgumentException(
+                    message: $"Page \"{page.Id}\" inherits invalid page \"{inheritedId}\"; inherited pages must exist in the same group.",
+                    paramName: nameof(document)
+                );
+            }
+
+            page = inherited;
+        }
+
+        var effective = chain[^1];
+
+        for (var chainIndex = (chain.Count - 2); (chainIndex >= 0); chainIndex--) {
+            effective = OverlayInheritedPage(
+                inherited: effective,
+                page: chain[chainIndex]
+            );
+        }
+
+        return effective;
+    }
+
     // Page inheritance is authoring-only. Flattening it here keeps the input fold at one table lookup while giving
     // a modal page source-level overrides instead of forcing it to duplicate a resting page's unrelated controls.
     private static BindingPageDefinition OverlayInheritedPage(BindingPageDefinition inherited, BindingPageDefinition page) {

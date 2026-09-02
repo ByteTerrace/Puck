@@ -176,27 +176,28 @@ public static class WorldAffordances {
         // as --world. Whether a document is valid must not depend on which door it walked through.
         var registry = Registry;
 
-        BindingVocabularyCheck.Validate(
-            command: ((registry is null)
-            ? null
-            : name => (registry.TryGetMetadata(
-                    metadata: out var metadata,
-                    name: name
-                )
-                ? metadata
-                : null)),
+        errors.AddRange(collection: BindingVocabularyCheck.Validate(
             document: document,
-            sourceKind: SourceKind,
-            errors: errors,
-            channel: reference => channels.TryGetOrdinal(
-                ordinal: out _,
-                reference: reference
-            ),
-            channelBinary: reference => (channels.TryGetOrdinal(
-                ordinal: out var ordinal,
-                reference: reference
-            ) && (channels.Shape(ordinal: ordinal) == ChannelShape.Binary)),
-            sourceAddressable: source => !InputSourceVocabulary.IsExplicitlyUnaddressable(sourceId: source)
-        );
+            lookups: new BindingVocabularyLookups(
+                Command: ((registry is null)
+                ? null
+                : name => (registry.TryGetMetadata(
+                        metadata: out var metadata,
+                        name: name
+                    )
+                    ? metadata
+                    : null)),
+                SourceKind: SourceKind,
+                Channel: reference => channels.TryGetOrdinal(
+                    ordinal: out _,
+                    reference: reference
+                ),
+                ChannelBinary: reference => (channels.TryGetOrdinal(
+                    ordinal: out var ordinal,
+                    reference: reference
+                ) && (channels.Shape(ordinal: ordinal) == ChannelShape.Binary)),
+                SourceAddressable: source => !InputSourceVocabulary.IsExplicitlyUnaddressable(sourceId: source)
+            )
+        ).Errors);
     }
 }

@@ -41,12 +41,25 @@ public readonly record struct BindingWheelSelection(int Sector, BindingWheelSele
 /// implementation is documented bit-identical across machines. No <c>MathF</c>/<c>Math</c> transcendental is
 /// reachable from a selection: a libm <c>atan2</c> is free to differ in its last place between runtimes, and one
 /// differing ULP at a sector boundary is a different command.
+/// <para>The sector rule is half-open and the same in every quadrant: sector <c>k</c> is centred
+/// <c>(k + SectorOffset)</c> sectors clockwise of twelve o'clock and sweeps from half a sector before that centre,
+/// so a direction sitting exactly on a seam selects the sector clockwise of the seam. Because the reading is
+/// quantised, that promise is kept to within one and a half steps of the Q16 angle grid (2.3e-5 rad); a direction
+/// inside that band of a seam selects the clockwise sector too.</para>
 /// </remarks>
 public static class BindingWheelGeometry {
+    // One step of the Q16 angle grid FixedQ4816.Atan2 reports on, in radians. Its documented worst case is 0.51 of
+    // this, so a whole step is strictly more than the reading can be wrong by — see SelectAngle.
+    private const double AngleStep = (1d / 65_536d);
+    // The exponent the prescale below lands the larger component's magnitude on: [2^15, 2^16). See SelectAngle.
+    private const int PrescaleExponent = 15;
+
     // The angle decision, made reproducible. The vector is first scaled by a POWER OF TWO so its larger component
-    // lands in [1, 2): that is exact in binary floating point (it only shifts exponents), so it moves no angle,
-    // while giving the Q48.16 conversion below its full 16 fractional bits to work with no matter whether the
-    // caller passed a normalized stick deflection or a pointer displacement in pixels.
+    // lands in [2^15, 2^16): that is exact in binary floating point (it only shifts exponents), so it moves no
+    // angle, while spending the Q48.16 conversion's 16 fractional bits on a value 15 bits above the units place —
+    // the component rounding then perturbs the angle by under 2^-14 of one Q16 angle step, whether the caller
+    // passed a normalized stick deflection or a pointer displacement in pixels. (Landing in [1, 2) instead left
+    // that perturbation at about half a step, comparable with Atan2's own error and enough to unseat a seam.)
     private static BindingWheelSelection SelectAngle(Vector2 vector, int sectorCount, BindingWheelStyleDefinition style) {
         var magnitude = MathF.Max(
             x: MathF.Abs(x: vector.X),
@@ -66,7 +79,7 @@ public static class BindingWheelGeometry {
             );
         }
 
-        var exponent = -MathF.ILogB(x: magnitude);
+        var exponent = (PrescaleExponent - MathF.ILogB(x: magnitude));
         // Screen space is +Y down and sector zero sits at twelve o'clock, so the clockwise angle from that mark is
         // atan2(x, -y).
         var clockwiseAngle = ((double)FixedQ4816.Atan2(
@@ -83,6 +96,16 @@ public static class BindingWheelGeometry {
         if (clockwiseAngle < 0d) {
             clockwiseAngle += Math.Tau;
         }
+
+        // The half-open rule, made SYMMETRIC across the branch cut. Atan2 rounds a MAGNITUDE to the nearest Q16
+        // step, so the reading straddles the true angle; wrapping a negative reading by a whole turn flips which
+        // way that straddle points, and a direction sitting exactly on a seam fell forward on the right half of the
+        // radial and backward on the left — (-1, -1) picked the sector before 315 degrees while (1, -1) picked the
+        // sector after 45. Reading the quantised value as the CLOCKWISE END of the step it names removes the
+        // asymmetry: one whole step is strictly more than the documented 0.51-step error, so the angle the sector
+        // is taken from is never behind the true angle, in any quadrant. The cost is that the decision moves at
+        // most 1.51 steps (2.3e-5 rad) early — four orders of magnitude finer than any authored sector.
+        clockwiseAngle += AngleStep;
 
         // Sector k is CENTERED at (k + SectorOffset) sectors clockwise from north, so its sweep starts half a
         // sector before that. The writer draws with the identical rule, so the piece under the selector is the

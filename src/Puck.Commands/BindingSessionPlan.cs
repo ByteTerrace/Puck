@@ -36,11 +36,13 @@ public sealed record BindingSessionPlan(
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(pageId);
 
-        var page = (document.Chords.Select(selector: static row => row.Page).FirstOrDefault(predicate: page => string.Equals(
-            a: page?.Id,
-            b: pageId,
-            comparisonType: StringComparison.Ordinal
-        ))
+        // The EFFECTIVE page, with its inheritance chain flattened exactly as BindingProfile.Compile flattens it: a
+        // page that inherits presents its overrides PLUS everything it merely keeps at runtime, so a session that
+        // walked the authored entries alone prompted for the overrides and silently dropped the rest.
+        var page = (BindingProfile.EffectivePage(
+            document: document,
+            pageId: pageId
+        )
             ?? throw new ArgumentException(
             message: $"the document has no page \"{pageId}\"",
             paramName: nameof(pageId)
@@ -87,21 +89,26 @@ public sealed record BindingSessionPlan(
     // as its single source) for exactly that last set, so leaving them out would let a guided session capture a
     // page selector onto an ordinary command and quietly make the source flip pages instead of firing.
     private static IEnumerable<string> ReservedSourcesOf(BindingProfileDocument document) {
-        var modifierIds = new HashSet<string>(comparer: StringComparer.Ordinal);
+        // Both sets are OrdinalIgnoreCase because BindingProfile.Compile's modifierIndexById/modifierIndexBySource
+        // are: a member differing from a declared modifier's id — or from one of its sources — only by case IS that
+        // modifier there and mints nothing, so reserving the raw member string would reserve a control name no
+        // catalog declares. When that phantom name collides with a real source the walked page binds, the session
+        // refuses the very capture its own step suggests.
+        var modifierIds = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
         var reserved = new List<string>();
-        var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var seen = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
 
-        foreach (var modifier in document.Modifiers) {
+        foreach (var modifier in (document.Modifiers ?? [])) {
             _ = modifierIds.Add(item: modifier.Id);
 
-            foreach (var source in modifier.Sources) {
+            foreach (var source in (modifier.Sources ?? [])) {
                 if (seen.Add(item: source)) {
                     reserved.Add(item: source);
                 }
             }
         }
 
-        foreach (var row in document.Chords) {
+        foreach (var row in (document.Chords ?? [])) {
             foreach (var member in row.Members) {
                 if (
                     !modifierIds.Contains(item: member) &&

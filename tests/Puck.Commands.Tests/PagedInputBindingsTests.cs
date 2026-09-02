@@ -989,6 +989,83 @@ public sealed class PagedInputBindingsTests {
         Assert.Equal(expected: "belt", actual: bindings.WheelFor(slot: 3)?.Id);
         Assert.Equal(expected: "belt", actual: bindings.WheelFor(slot: 0)?.Id);
     }
+    [Fact]
+    public async Task WheelForNeverCreatesSlotStateBeneathTheSnapshotThread() {
+        // WheelFor is called off the snapshot thread, once per presentation frame. A mutating read — one that
+        // establishes slot state to answer from — races the snapshot thread over the SAME slot entry: the render
+        // thread reads the loaded profile, builds a fresh state against it, and stores it AFTER the snapshot thread
+        // has stored (and pressed a modifier into) its own. The chord is silently gone, and the very next signal
+        // resolves against the resting page instead of the held one. ViewFor has the analogous test; this is
+        // WheelFor's, and reverting WheelFor to the StateFor(slot) form fails it.
+        var profile = BindingProfile.Compile(document: new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [new BindingModifierDefinition(Id: "hold", Sources: ["key.hold"])],
+            Chords: [
+                new BindingChordDefinition(
+                    Group: "play",
+                    Chord: [],
+                    Page: new BindingPageDefinition(
+                        Id: "rest",
+                        Entries: [new BindingPageEntryDefinition(Sources: ["key.action"], Command: ActionCommand)]
+                    )
+                ),
+                new BindingChordDefinition(
+                    Group: "play",
+                    Held: ["hold"],
+                    Page: new BindingPageDefinition(
+                        Id: "held",
+                        Entries: [new BindingPageEntryDefinition(Sources: ["key.action"], Command: EditorCommand)]
+                    )
+                ),
+            ],
+            Wheels: [new BindingWheelDefinition(
+                Id: "tools",
+                Group: "play",
+                HoldPages: ["held"],
+                Rings: [Ring(id: "inner")]
+            )]
+        ));
+        var bindings = new PagedInputBindings(profile: profile);
+        var reading = true;
+        var reads = Task.Run(action: () => {
+            while (Volatile.Read(location: ref reading)) {
+                _ = bindings.WheelFor(slot: 0);
+            }
+        }, cancellationToken: TestContext.Current.CancellationToken);
+
+        try {
+            for (var index = 0; (index < 20_000); index++) {
+                // Reload drops every slot state, so each pass re-opens the window the render thread can store into.
+                bindings.Reload(profile: profile);
+                _ = bindings.Resolve(
+                    signal: InputSignal.Press(source: "key.hold"),
+                    slot: 0
+                );
+
+                var resolved = bindings.Resolve(
+                    signal: InputSignal.Press(source: "key.action"),
+                    slot: 0
+                );
+
+                Assert.Equal(
+                    actual: Assert.Single(collection: (resolved ?? [])).Command,
+                    expected: EditorCommand
+                );
+                _ = bindings.Resolve(
+                    signal: InputSignal.Release(source: "key.action"),
+                    slot: 0
+                );
+                _ = bindings.Resolve(
+                    signal: InputSignal.Release(source: "key.hold"),
+                    slot: 0
+                );
+            }
+        } finally {
+            Volatile.Write(location: ref reading, value: false);
+        }
+
+        await reads;
+    }
 
     private static CompiledBindingProfile GroupProfile() {
         return BindingProfile.Compile(document: new BindingProfileDocument(
