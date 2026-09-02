@@ -55,6 +55,22 @@ public sealed class WorldCommandArgumentsTests {
         Assert.Equal(expected: string.Empty, actual: registry.Submit(line: "tail.after two").Output);
     }
 
+    [Fact]
+    public void ATrailingPositionalTokenIsStrippedWhateverWhitespacePrecedesIt() {
+        var registry = Registry();
+
+        // identity.hud's grammar: <panel-json> [player]. The suffix has to be found by the SAME whitespace rule the
+        // registry tokenized the line with — a narrower ' '/'\t' scan finds no separator at all in a vertical-tab
+        // separated line, so the player index stayed glued to the payload and the verb tried to parse
+        // `{"id":"hp"}\v3` as its JSON.
+        Assert.Equal(expected: "{\"id\":\"hp\"}", actual: registry.Submit(line: "tail.between {\"id\":\"hp\"}\v3").Output);
+        Assert.Equal(expected: "{\"id\":\"hp\"}", actual: registry.Submit(line: "tail.between {\"id\":\"hp\"}\f3").Output);
+        Assert.Equal(expected: "{\"id\":\"hp\"}", actual: registry.Submit(line: "tail.between {\"id\":\"hp\"}\t3").Output);
+        Assert.Equal(expected: "{\"id\":\"hp\"}", actual: registry.Submit(line: "tail.between {\"id\":\"hp\"} 3").Output);
+        // No trailing token to strip: the whole tail is the payload.
+        Assert.Equal(expected: "{\"id\":\"hp\"}", actual: registry.Submit(line: "tail.between {\"id\":\"hp\"}").Output);
+    }
+
     private sealed class TailProbeModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
@@ -73,6 +89,19 @@ public sealed class WorldCommandArgumentsTests {
                     args: in args,
                     context: context,
                     tokens: 2
+                )),
+                bindability: CommandBindability.Unbindable
+            );
+            yield return CommandDefinition.WithWireArgs(
+                name: "tail.between",
+                description: "Echoes the raw tail after its verb, less an optional trailing positional token.",
+                handler: static (context, args) => new CommandResult(Output: WorldCommandArguments.RawBetween(
+                    args: in args,
+                    context: context,
+                    leadingTokens: 1,
+                    trailingTokens: ((args.Count < 2)
+                        ? 0
+                        : 1)
                 )),
                 bindability: CommandBindability.Unbindable
             );

@@ -55,11 +55,66 @@ public static class WorldCommandArguments {
 
         return args.Tail(start: (tokens - 1));
     }
+    /// <summary>Strips <paramref name="leadingTokens"/> leading tokens exactly as <see cref="RawAfter"/> does, then
+    /// strips <paramref name="trailingTokens"/> whitespace-delimited tokens off the END — the shape a verb whose
+    /// free-text tail sits BEFORE a fixed positional suffix needs (<c>identity.hud &lt;panel-json&gt; [player]</c>,
+    /// <c>world.load &lt;path&gt; [force]</c>).</summary>
+    /// <remarks>The trailing split is <see cref="char.IsWhiteSpace(char)"/> for the same reason the leading one is: a
+    /// narrower space-and-tab scan finds no separator in a vertical-tab-separated line the registry's own tokenizer
+    /// had already split correctly, so the suffix stays glued to the tail and the verb tries to parse
+    /// <c>{"id":"hp"}\v3</c> as its payload.
+    /// <para>A line carrying fewer tokens than <paramref name="trailingTokens"/> names has no tail at all and answers
+    /// <see cref="string.Empty"/>, matching <see cref="RawAfter"/>'s answer for an address longer than its line.</para></remarks>
+    /// <param name="context">The invoking context, whose <see cref="CommandContext.Text"/> carries the raw line.</param>
+    /// <param name="args">The tokenized arguments, the fallback when no raw line exists (a bound or programmatic call).</param>
+    /// <param name="leadingTokens">How many leading tokens to strip, the verb included.</param>
+    /// <param name="trailingTokens">How many trailing positional tokens to strip off the end.</param>
+    /// <returns>The text between those two token runs, or <see cref="string.Empty"/> when the line carries fewer.</returns>
+    public static string RawBetween(CommandContext context, in WireArgs args, int leadingTokens, int trailingTokens) {
+        var raw = RawAfter(
+            args: in args,
+            context: context,
+            tokens: leadingTokens
+        );
+
+        if (trailingTokens <= 0) {
+            return raw;
+        }
+
+        var span = raw.AsSpan();
+
+        for (var strip = 0; (strip < trailingTokens); strip++) {
+            span = span.TrimEnd();
+
+            var separator = LastIndexOfWhiteSpace(span: span);
+
+            if (separator < 0) {
+                return string.Empty;
+            }
+
+            span = span[..separator];
+        }
+
+        return Unwrap(tail: span.Trim());
+    }
 
     // The first whitespace character by CATEGORY, the rule CommandRegistry's wire tokenizer splits a submitted line
     // on. Scanned rather than looked up because char.IsWhiteSpace is a Unicode category test, not a listed set.
     private static int IndexOfWhiteSpace(ReadOnlySpan<char> span) {
         for (var index = 0; (index < span.Length); index++) {
+            if (char.IsWhiteSpace(c: span[index])) {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+    // The LAST whitespace character by CATEGORY — IndexOfWhiteSpace's mirror, and the split a verb whose free-text
+    // tail sits BEFORE a fixed positional suffix needs. Scanned for the same reason, and it matters for the same
+    // reason: `anyOf: [' ', '\t']` finds NO separator in a vertical-tab-separated line, so the suffix the verb was
+    // told to strip stays attached to a payload the registry's tokenizer had already split correctly.
+    private static int LastIndexOfWhiteSpace(ReadOnlySpan<char> span) {
+        for (var index = (span.Length - 1); (index >= 0); index--) {
             if (char.IsWhiteSpace(c: span[index])) {
                 return index;
             }

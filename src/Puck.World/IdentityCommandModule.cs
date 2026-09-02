@@ -189,28 +189,21 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             ? "accepted"
             : "refused")} reason={receipt.Reason}]";
     }
-    // Strips the verb token (WorldCommandArguments.Raw), then — only when a trailing player token is present
-    // (args.Count == 2) — the LAST whitespace-delimited token, the same trailing-token split
-    // WorldMutationCommandModule.TryParseLoadArgs uses for world.load's own optional "force" tail. Reconstructed
-    // from the raw command text rather than args[0] so the JSON's quotes survive the console tokenizer.
-    private static string RawPanelJson(CommandContext context, in WireArgs args) {
-        var raw = WorldCommandArguments.Raw(
+    // Strips the verb token, then — only when a trailing player token is present (args.Count == 2) — the LAST
+    // whitespace-delimited token. Reconstructed from the raw command text rather than args[0] so the JSON's quotes
+    // survive the console tokenizer, and delegated to WorldCommandArguments so BOTH ends of that reconstruction
+    // split on the rule the registry's own tokenizer split the line with: the hand-rolled `anyOf: [' ', '\t']` scan
+    // that used to sit here found no separator in `identity.hud <json>\v<player>`, so the player index stayed glued
+    // to a payload the tokenizer had already separated, and the JSON parse refused a line the verb had accepted.
+    private static string RawPanelJson(CommandContext context, in WireArgs args) =>
+        WorldCommandArguments.RawBetween(
             args: in args,
-            context: context
+            context: context,
+            leadingTokens: 1,
+            trailingTokens: ((args.Count < 2)
+                ? 0
+                : 1)
         );
-
-        if (args.Count < 2) {
-            return raw;
-        }
-
-        var trimmed = raw.TrimEnd();
-        var lastSeparator = trimmed.LastIndexOfAny(anyOf: [' ', '\t']);
-
-        return ((lastSeparator < 0)
-            ? trimmed
-            : trimmed[..lastSeparator].TrimEnd()
-        );
-    }
     // The identity-owned PRIVATE seat panel: identity.hud <panel-json> [player]. panel-json is required to be one
     // compact (whitespace-free) WorldHudPanel token — the same authoring convention world.row.set hud.panels and the
     // deleted profile.section door both used — so an optional trailing player index (like identity.motion's) can be
