@@ -16,22 +16,38 @@ namespace Puck.Commands;
 /// forever.</para>
 /// </remarks>
 public readonly struct CommandBuffer<T> : IReadOnlyList<T>, IEquatable<CommandBuffer<T>> {
+    private readonly int m_count;
     private readonly SnapshotGeneration? m_generation;
     private readonly T[]? m_items;
     private readonly ulong m_stamp;
 
     internal CommandBuffer(T[] items, int count, SnapshotGeneration? generation = null) {
-        Count = count;
+        m_count = count;
         m_generation = generation;
         m_items = items;
         m_stamp = (generation?.Stamp ?? 0UL);
     }
 
     /// <inheritdoc/>
-    public int Count { get; }
+    /// <exception cref="InvalidOperationException">The producing router has built another snapshot since this view
+    /// was handed out.</exception>
+    /// <remarks>Checked like every other read, and for the same reason: the count belongs to the tick that produced
+    /// this view, and a consumer sizes a loop, an allocation, or a "did anything happen" branch off it. Answering
+    /// from a retired view would be the quietest way to act on a tick the router has already overwritten.</remarks>
+    public int Count {
+        get {
+            EnsureLive();
+
+            return m_count;
+        }
+    }
     /// <summary>Gets whether this view contains no elements.</summary>
+    /// <exception cref="InvalidOperationException">The producing router has built another snapshot since this view
+    /// was handed out.</exception>
     public bool IsEmpty => (Count == 0);
     /// <summary>Gets the element count.</summary>
+    /// <exception cref="InvalidOperationException">The producing router has built another snapshot since this view
+    /// was handed out.</exception>
     public int Length => Count;
     /// <summary>Gets the view as a span with the same borrowed lifetime.</summary>
     /// <exception cref="InvalidOperationException">The producing router has built another snapshot since this view
@@ -44,7 +60,7 @@ public readonly struct CommandBuffer<T> : IReadOnlyList<T>, IEquatable<CommandBu
                 ? []
                 : m_items.AsSpan(
                     start: 0,
-                    length: Count
+                    length: m_count
                 )
             );
         }
@@ -61,7 +77,7 @@ public readonly struct CommandBuffer<T> : IReadOnlyList<T>, IEquatable<CommandBu
 
             // ONE unsigned comparison covers both ends: a negative index reinterprets as a huge unsigned value and
             // fails here rather than dereferencing the (possibly null) backing array below.
-            if (((uint)index) >= ((uint)Count)) {
+            if (((uint)index) >= ((uint)m_count)) {
                 throw new ArgumentOutOfRangeException(paramName: nameof(index));
             }
 
@@ -95,7 +111,7 @@ public readonly struct CommandBuffer<T> : IReadOnlyList<T>, IEquatable<CommandBu
         EnsureLive();
 
         return new Enumerator(
-            count: Count,
+            count: m_count,
             items: m_items
         );
     }

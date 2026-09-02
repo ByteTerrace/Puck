@@ -102,6 +102,29 @@ public sealed class CommandBufferTests {
         Assert.NotEmpty(collection: second.Lanes[0].Entries.ToArray());
     }
     [Fact]
+    public void ARetainedViewsCountIsRefusedLikeEveryOtherReadOfIt() {
+        var router = new InputRouter(
+            registry: new CommandRegistry(modules: [new SingleCommandModule()]),
+            bindings: new FixedBindings(),
+            principalResolver: new ConsolePrincipal()
+        );
+
+        router.Capture(signal: InputSignal.Press(source: "key.a"));
+
+        var first = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+        var retainedLane = first.Lanes[0];
+
+        _ = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue);
+
+        // A count is a read of the retired storage like any other. Answering it would let a consumer size a loop,
+        // an allocation or a "did anything happen this tick" branch off a number the router no longer stands behind
+        // — the quietest of the failures the borrowed lifetime exists to make loud.
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => first.Lanes.Count);
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => first.Lanes.Length);
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => first.Lanes.IsEmpty);
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => retainedLane.Entries.Count);
+    }
+    [Fact]
     public void TheEmptySnapshotsLanesStayReadableForever() {
         var router = new InputRouter(
             registry: new CommandRegistry(modules: [new SingleCommandModule()]),
