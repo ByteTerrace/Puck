@@ -6,6 +6,8 @@ namespace Puck.Commands.Tests;
 /// <summary>Laws the binding compiler holds over a whole document: the channel release contract, malformed
 /// identifiers, page inheritance, the page view a bar reads, and the empty profile.</summary>
 public sealed class BindingProfileCompilationLawTests {
+    private const string TextCommand = "test.line";
+
     private static CompiledBindingProfile Compile(
         IReadOnlyList<BindingChordDefinition> rows,
         IReadOnlyList<BindingModifierDefinition>? modifiers = null,
@@ -167,6 +169,50 @@ public sealed class BindingProfileCompilationLawTests {
         ));
 
         Assert.Contains(actualString: wheelRow.Message, expectedSubstring: "Wheel \"w\"");
+    }
+    [Fact]
+    public void AWheelSectorsAuthoredTextIsSubmittedAsTheCommandsLine() {
+        // The other half of the sector-text contract: BindingProfileValidationTests pins what the compiler REFUSES,
+        // this pins that an accepted payload actually reaches the wire. A sector commits through the seat's own
+        // input-router lane exactly as a bound press does, so the gate the text bound and the wire-args check now
+        // guard is only worth having if the line arrives — a payload dropped in compilation would validate cleanly
+        // and then submit the bare verb. The activation is deliberately opaque, so this reads the SNAPSHOT.
+        //
+        // The resting page doubles as the wheel's hold page, so a fresh slot presents the radial with no input.
+        var profile = Compile(
+            rows: [Resting()],
+            wheels: [new BindingWheelDefinition(
+                Id: "w",
+                Group: "g",
+                HoldPages: ["base"],
+                Rings: [new BindingPageDefinition(
+                    Id: "ring",
+                    Entries: [
+                        new BindingPageEntryDefinition(Sources: null, Command: TextCommand, Text: "north"),
+                        new BindingPageEntryDefinition(Sources: null, Command: TextCommand),
+                    ]
+                )]
+            )]
+        );
+        var bindings = new PagedInputBindings(profile: profile);
+        var sectors = bindings.WheelFor(slot: 0)!.Rings[0].Sectors;
+        var router = new InputRouter(
+            registry: new CommandRegistry(modules: [new TextProbeModule()]),
+            bindings: bindings,
+            principalResolver: new SeatPrincipals()
+        );
+
+        Assert.True(condition: router.Activate(slot: 0, activation: sectors[0].Activation));
+        Assert.True(condition: router.Activate(slot: 0, activation: sectors[1].Activation));
+
+        var entries = Assert.Single(collection: router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue).Lanes).Entries.ToArray();
+
+        Assert.Equal(actual: entries.Length, expected: 2);
+        Assert.Equal(actual: entries[0].Text, expected: $"{TextCommand} north");
+        Assert.All(collection: entries, action: static entry => Assert.Equal(actual: entry.Origin, expected: CommandOrigin.Binding));
+        // The text-free sector rides the same door and submits no line at all, so the payload is the sector's own
+        // authored field rather than anything the activation path synthesizes.
+        Assert.Null(@object: entries[1].Text);
     }
     [Fact]
     public void AnUnresolvedStateReferenceGroupIsRefusedByRowRatherThanCrashingTheCompiler() {
@@ -465,5 +511,20 @@ public sealed class BindingProfileCompilationLawTests {
         ));
 
         Assert.Contains(actualString: refused.Message, expectedSubstring: "Modifier 1 re-declares id");
+    }
+
+    private sealed class SeatPrincipals : ICommandPrincipalResolver {
+        public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Seat(slot: slot);
+    }
+    private sealed class TextProbeModule : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            // Wire-native, because a text-bearing binding row may only target a command that accepts wire arguments.
+            yield return CommandDefinition.WithWireArgs(
+                name: TextCommand,
+                description: "Wheel sector text probe.",
+                handler: static (_, _) => CommandResult.None,
+                bindability: CommandBindability.Bindable
+            );
+        }
     }
 }
