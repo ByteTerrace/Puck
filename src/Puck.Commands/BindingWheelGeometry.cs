@@ -46,6 +46,13 @@ public readonly record struct BindingWheelSelection(int Sector, BindingWheelSele
 /// so a direction sitting exactly on a seam selects the sector clockwise of the seam. Because the reading is
 /// quantised, that promise is kept to within one and a half steps of the Q16 angle grid (2.3e-5 rad); a direction
 /// inside that band of a seam selects the clockwise sector too.</para>
+/// <para>Every selecting door — <see cref="SelectAxis"/>, <see cref="SelectDirection"/>,
+/// <see cref="SelectSpatial"/> — refuses a <c>sectorCount</c> of zero or less with an
+/// <see cref="ArgumentOutOfRangeException"/> naming it, before any policy runs. A radial with no sectors selects
+/// nothing there is to select, and the sector arithmetic below divides by the count: left unguarded it surfaced as
+/// a bare <see cref="DivideByZeroException"/> from inside private geometry, naming neither the argument nor the
+/// door it came in through. <see cref="BindingProfile.Compile"/> already bounds an authored ring's sector count,
+/// so no live caller can reach the refusal — it exists for the hand-built call.</para>
 /// </remarks>
 public static class BindingWheelGeometry {
     // One step of the Q16 angle grid FixedQ4816.Atan2 reports on, in radians. Its documented worst case is 0.51 of
@@ -198,6 +205,7 @@ public static class BindingWheelGeometry {
     /// dead zone plus the conventional normalized outer guard.</summary>
     public static BindingWheelSelection SelectAxis(Vector2 vector, int sectorCount, BindingWheelStyleDefinition style) {
         ArgumentNullException.ThrowIfNull(argument: style);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: sectorCount);
 
         var distanceSquared = vector.LengthSquared();
 
@@ -233,6 +241,7 @@ public static class BindingWheelGeometry {
     /// <c>atan2(0, 0)</c> would silently report.</summary>
     public static BindingWheelSelection SelectDirection(Vector2 vector, int sectorCount, BindingWheelStyleDefinition style) {
         ArgumentNullException.ThrowIfNull(argument: style);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: sectorCount);
 
         return SelectAngle(
             sectorCount: sectorCount,
@@ -252,6 +261,7 @@ public static class BindingWheelGeometry {
         float unit
     ) {
         ArgumentNullException.ThrowIfNull(argument: style);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: sectorCount);
 
         if (mode == BindingWheelSpatialSelectionMode.Disabled) {
             return new BindingWheelSelection(
