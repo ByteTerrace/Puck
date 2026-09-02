@@ -16,6 +16,7 @@ namespace Puck.Commands;
 /// Author-facing auto-actions such as autorun and auto-jetpack are therefore ordinary channel bindings using
 /// <see cref="Toggle"/>, not bespoke commands or simulation state.
 /// </remarks>
+[System.Text.Json.Serialization.JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<BindingEntryMode>))]
 public enum BindingEntryMode {
     /// <summary>Active exactly while the physical control is held.</summary>
     Hold,

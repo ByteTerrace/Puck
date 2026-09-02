@@ -52,6 +52,7 @@ public sealed record BindingActivatorDefinition(
 );
 /// <summary>The two ways a <see cref="BindingActivatorDefinition"/> sequence resolves. See the type's remarks for
 /// the exact semantics of each.</summary>
+[JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<BindingActivatorMode>))]
 public enum BindingActivatorMode {
     /// <summary>Gates the binding while every sequence member is held, in press order.</summary>
     Held,

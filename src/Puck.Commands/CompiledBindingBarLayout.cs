@@ -3,6 +3,7 @@ using System.Numerics;
 namespace Puck.Commands;
 
 /// <summary>The viewport edge a binding-bar anchor group hangs from.</summary>
+[System.Text.Json.Serialization.JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<BindingBarEdge>))]
 public enum BindingBarEdge {
     /// <summary>The bottom edge; the group is centered left-to-right and its lowest plate sits at the inset.</summary>
     Bottom,
