@@ -111,6 +111,86 @@ public sealed class InputRouterMomentaryReleaseTests {
         Assert.Empty(collection: router.SnapshotForTick(tick: 6UL, windowEndTick: ulong.MaxValue).Lanes);
     }
     [Fact]
+    public void ATapSurvivesTheChordsOwnReleaseOnTheSameDestinationThenAFocusLoss() {
+        var router = Router();
+
+        router.SetActiveMaps(maps: ["play"], slot: 0);
+        PressThrough(
+            router: router,
+            source: "mouse.button1",
+            tick: 1UL
+        );
+
+        // ONE tick carries both edges: the tap completes (dispatching Started, scheduling its release for tick 3) and
+        // the chord row breaks. The chord's release ends the HOLD half of the destination's carried state; it must
+        // not also destroy the tap's separate obligation, which is what carries the cancellation payload.
+        router.Capture(signal: InputSignal.Press(source: "key.a"));
+        router.Capture(signal: InputSignal.Release(source: "mouse.button1"));
+
+        var interleaved = Assert.Single(collection: router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue).Lanes).Entries.ToArray();
+
+        Assert.Equal(actual: interleaved.Length, expected: 3);
+        Assert.Equal(actual: interleaved[1].Phase, expected: CommandPhase.Started);
+        Assert.True(condition: interleaved[1].Dispatch);
+        Assert.Equal(actual: interleaved[2].Phase, expected: CommandPhase.Completed);
+
+        // Focus loss resets IInputBindings, deleting the scheduled edge, so the router itself owes the tap's release.
+        router.ReleaseHeld();
+
+        var released = Assert.Single(collection: Assert.Single(collection: router.SnapshotForTick(tick: 3UL, windowEndTick: ulong.MaxValue).Lanes).Entries);
+
+        Assert.True(condition: released.Dispatch);
+        Assert.Equal(actual: released.Phase, expected: CommandPhase.Canceled);
+        Assert.Empty(collection: router.SnapshotForTick(tick: 4UL, windowEndTick: ulong.MaxValue).Lanes);
+    }
+    [Fact]
+    public void ATapSurvivesTheChordsOwnReleaseOnTheSameDestinationThenAMapTransition() {
+        var router = Router();
+
+        router.SetActiveMaps(maps: ["play"], slot: 0);
+        PressThrough(
+            router: router,
+            source: "mouse.button1",
+            tick: 1UL
+        );
+        router.Capture(signal: InputSignal.Press(source: "key.a"));
+        router.Capture(signal: InputSignal.Release(source: "mouse.button1"));
+        _ = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue);
+
+        // A transition the destination's own map SURVIVES still resets the resolver for this slot, deleting the
+        // scheduled edge. The tap's obligation outlived the chord's release, so this transition discharges it.
+        router.SetActiveMaps(maps: ["play", "hud"], slot: 0);
+
+        var released = Assert.Single(collection: Assert.Single(collection: router.SnapshotForTick(tick: 3UL, windowEndTick: ulong.MaxValue).Lanes).Entries);
+
+        Assert.True(condition: released.Dispatch);
+        Assert.Equal(actual: released.Phase, expected: CommandPhase.Canceled);
+        Assert.Empty(collection: router.SnapshotForTick(tick: 4UL, windowEndTick: ulong.MaxValue).Lanes);
+    }
+    [Fact]
+    public void ATapSurvivingTheChordsOwnReleaseStillTakesItsScheduledEdgeExactlyOnce() {
+        var router = Router();
+
+        router.SetActiveMaps(maps: ["play"], slot: 0);
+        PressThrough(
+            router: router,
+            source: "mouse.button1",
+            tick: 1UL
+        );
+        router.Capture(signal: InputSignal.Press(source: "key.a"));
+        router.Capture(signal: InputSignal.Release(source: "mouse.button1"));
+        _ = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue);
+
+        // The control: nothing destroys the scheduled edge, so it lands on its own tick and the retained obligation
+        // it discharges must not add a second release behind it.
+        var released = Assert.Single(collection: Assert.Single(collection: router.SnapshotForTick(tick: 3UL, windowEndTick: ulong.MaxValue).Lanes).Entries);
+
+        Assert.True(condition: released.Dispatch);
+        Assert.Equal(actual: released.Phase, expected: CommandPhase.Completed);
+        Assert.False(condition: router.IsCommandHeld(command: ChannelCommand, slot: 0));
+        Assert.Empty(collection: router.SnapshotForTick(tick: 4UL, windowEndTick: ulong.MaxValue).Lanes);
+    }
+    [Fact]
     public void ATapFollowedByItsDevicesDisconnectDeliversExactlyOneRelease() {
         var device = InputDeviceId.FromConnectionKey(key: "tapping-pad");
         var router = Router();

@@ -136,7 +136,8 @@ public sealed partial class InputRouter : IDisposable {
         // A tap's one-tick obligation, owed by the RESOLVER's scheduled edge rather than by this table. Every path
         // that destroys that edge (SetActiveMaps, ReleaseHeld()) cancels this too; every path that leaves the
         // resolver alone (ClearSlotHeld, ReleaseHeld(InputDeviceId)) leaves it to its owner. IsEmpty counts it, so
-        // the state carrying the payload survives until one or the other happens.
+        // the state carrying the payload survives until one or the other happens — including across the release of a
+        // HOLD that named the same destination, which ends its own half only (see DropHold).
         public bool HasPendingMomentaryRelease;
         // The payload a pending momentary release cancels with, kept SEPARATE from Entry: a tap and a live hold can
         // name one destination (a chord row and a page activator over the same channel), and folding the tap's press
@@ -397,7 +398,7 @@ public sealed partial class InputRouter : IDisposable {
                 slot: slot
             );
         } else {
-            DropHeld(
+            DropHold(
                 commandId: commandId,
                 slot: slot
             );
@@ -890,7 +891,7 @@ public sealed partial class InputRouter : IDisposable {
                 slot: slot
             ))
             ) {
-                DropHeld(
+                DropHold(
                     commandId: commandId,
                     slot: slot
                 );
@@ -1113,8 +1114,41 @@ public sealed partial class InputRouter : IDisposable {
             );
         }
     }
+    // Ends the HOLD half of one command's carried state — the entry a physical control sustains, the controls
+    // feeding it, and every per-control channel contribution — and drops the state only once nothing else remains.
+    // The exact mirror of DischargeMomentary, and deliberately NOT DropHeld: a Tapped activator's pending momentary
+    // release is a SEPARATE obligation that may name the same destination, owed by the resolver's scheduled edge,
+    // and recycling the whole state here would delete the payload that edge (or a later ReleaseHeld/SetActiveMaps
+    // standing in for it) cancels with — stranding a handler that has already heard the tap's Started.
+    private void DropHold(int slot, ushort commandId) {
+        if (
+            !m_heldBySlot.TryGetValue(
+            key: slot,
+            value: out var held
+        ) ||
+            !held.TryGetValue(
+            key: commandId,
+            value: out var state
+        )
+        ) {
+            return;
+        }
+
+        state.Contributions?.Clear();
+        state.Controls?.Clear();
+        state.Entry = default;
+        state.HasEntry = false;
+
+        if (state.IsEmpty) {
+            DropHeld(
+                commandId: commandId,
+                slot: slot
+            );
+        }
+    }
     // Removes one command from a slot's held table and drops the now-empty slot entry — the single remove-and-prune
-    // idiom every release path (focus loss, device disconnect, an inactive analog sample, a chord release) shares.
+    // idiom every path that has already established the command owes NOTHING further (DropHold, DischargeMomentary,
+    // RemoveContribution, the per-device release sweep) shares.
     private void DropHeld(int slot, ushort commandId) {
         if (m_heldBySlot.TryGetValue(
             key: slot,
@@ -1473,7 +1507,7 @@ public sealed partial class InputRouter : IDisposable {
                     Phase = CommandPhase.Completed,
                     Value = CommandValue.Inactive(kind: entry.Value.Kind),
                 });
-                DropHeld(
+                DropHold(
                     commandId: commandId,
                     slot: slot
                 );
@@ -1526,7 +1560,7 @@ public sealed partial class InputRouter : IDisposable {
         }
     }
     // Drops one physical control from a command's held state, if present. Does NOT remove the state itself: the
-    // last-up release path (ApplySignal's DropHeld branch) owns dropping a command once no control remains.
+    // last-up release path (ApplySignal's DropHold branch) owns dropping a command once no control remains.
     private void RemoveControl(int slot, ushort commandId, HeldControlId control) {
         if (
             m_heldBySlot.TryGetValue(
