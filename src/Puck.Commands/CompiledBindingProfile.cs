@@ -29,7 +29,7 @@ public sealed class CompiledBindingProfile {
     private readonly FrozenDictionary<string, int> m_modifierIndexBySource;
     private readonly ImmutableArray<BindingModifierDefinition> m_modifiers;
     private readonly int[][] m_pageRowsByGroup;
-    private readonly Dictionary<string, int> m_pageRowByPageId;
+    private readonly FrozenDictionary<string, int> m_pageRowByPageId;
     private readonly int[] m_restingRowByGroup;
     private readonly CompiledChordRow[] m_rows;
     private readonly FrozenDictionary<int, BindingWheelView> m_wheelViewByRow;
@@ -281,14 +281,17 @@ public sealed class CompiledBindingProfile {
         ActivatorCount = activatorCount;
 
         // A page id is profile-unique by authoring contract (BindingPageDefinition.Id), so one flat table covers
-        // every group; a row with no page meaning (a bare command/channel row) contributes nothing.
-        m_pageRowByPageId = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
+        // every group; a row with no page meaning (a bare command/channel row) contributes nothing. Ordinal, because
+        // TryGetPageView's caller names a page id it read out of the same document the compiler read.
+        var pageRowByPageId = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
 
         for (var rowIndex = 0; (rowIndex < rows.Length); rowIndex++) {
             if (rows[rowIndex].View is { PageId: { Length: > 0 } pageId }) {
-                m_pageRowByPageId[pageId] = rowIndex;
+                pageRowByPageId[pageId] = rowIndex;
             }
         }
+
+        m_pageRowByPageId = pageRowByPageId.ToFrozenDictionary(comparer: pageRowByPageId.Comparer);
     }
 
     /// <summary>Gets the total number of row activators declared across every page in this profile — the size a
