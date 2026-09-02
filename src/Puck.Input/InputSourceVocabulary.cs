@@ -24,6 +24,16 @@ namespace Puck.Input;
 /// declared nor explicitly unaddressable.
 /// </para>
 /// <para>
+/// Resolution is CASE-INSENSITIVE, in the declared tables and in the parametric families alike. A source id's case
+/// is authored-document noise, never identity: <c>Puck.Commands.BindingProfile</c> compiles a page's sources into an
+/// <see cref="StringComparer.OrdinalIgnoreCase"/> table and dispatches incoming signals through that same table, so
+/// a row authored <c>"Gamepad.ButtonSouth"</c> presses and releases exactly as the canonical spelling does. A
+/// case-sensitive catalog beside a case-insensitive compiler refuses working rows as unknown controls, which is the
+/// one answer this type must never give. Case-insensitivity widens nothing: an id no member and no family declares
+/// stays unknown in every casing, and two <see cref="InputSources"/> members whose ids differ only by case are the
+/// same authoring defect as two identical ones (<see cref="BuildTables"/> throws on either).
+/// </para>
+/// <para>
 /// <see cref="InputSources.Keyboard.Text"/> carries both attributes at once: its declared kind
 /// (<see cref="CommandValueKind.Digital"/>) is perfectly representable, but <see cref="IsExplicitlyUnaddressable"/>
 /// is still <see langword="true"/> for it because the text payload riding beside that kind is not — a caller that
@@ -96,10 +106,10 @@ public static class InputSourceVocabulary {
     // name. declaredBy is the one map both destination tables are gated through, so the guard is symmetric by
     // construction instead of needing a matching check duplicated at each Add call.
     private static (Dictionary<string, CommandValueKind> Kinds, HashSet<string> ExplicitlyUnaddressable, HashSet<string> Relative) BuildTables() {
-        var declaredBy = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
-        var kinds = new Dictionary<string, CommandValueKind>(comparer: StringComparer.Ordinal);
-        var explicitlyUnaddressable = new HashSet<string>(comparer: StringComparer.Ordinal);
-        var relative = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var declaredBy = new Dictionary<string, string>(comparer: StringComparer.OrdinalIgnoreCase);
+        var kinds = new Dictionary<string, CommandValueKind>(comparer: StringComparer.OrdinalIgnoreCase);
+        var explicitlyUnaddressable = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
+        var relative = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
 
         ClassifyGroup(
             declaredBy: declaredBy,
@@ -167,13 +177,18 @@ public static class InputSourceVocabulary {
     }
     // Open-ended families mint source ids rather than declaring one constant each: keyboard letters/functions and
     // numbered mouse buttons. Recognize exactly the same canonical range each public factory accepts. Every id
-    // resolved here is CommandValueKind.Digital — none of the open-ended families mint an analog control.
+    // resolved here is CommandValueKind.Digital — none of the open-ended families mint an analog control, except the
+    // probe family's Axis1D.
+    //
+    // Every prefix and letter test is case-insensitive, matching the declared tables: the compiler that consumes
+    // this answer dispatches "Keyboard.A" and "keyboard.a" through one table entry, so both name the same control
+    // here. The DIGIT walks stay exact — a canonical number has no case, and "keyboard.f01" is still malformed.
     private static bool TryResolveParametricKind(string sourceId, out CommandValueKind kind) {
         kind = default;
 
         const string ProbePrefix = "probe.";
 
-        if (sourceId.StartsWith(comparisonType: StringComparison.Ordinal, value: ProbePrefix)) {
+        if (sourceId.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ProbePrefix)) {
             var name = sourceId.AsSpan(start: ProbePrefix.Length);
 
             if (
@@ -185,7 +200,7 @@ public static class InputSourceVocabulary {
 
             foreach (var character in name) {
                 if (
-                    !char.IsAsciiLetterLower(c: character) &&
+                    !char.IsAsciiLetter(c: character) &&
                     !char.IsAsciiDigit(c: character) &&
                     (character != '-')
                 ) {
@@ -199,7 +214,7 @@ public static class InputSourceVocabulary {
 
         const string MouseButtonPrefix = "mouse.button";
 
-        if (sourceId.StartsWith(comparisonType: StringComparison.Ordinal, value: MouseButtonPrefix)) {
+        if (sourceId.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: MouseButtonPrefix)) {
             if (TryParseCanonicalPositiveNumber(digits: sourceId.AsSpan(start: MouseButtonPrefix.Length), maximum: ushort.MaxValue, number: out _)) {
                 kind = CommandValueKind.Digital;
                 return true;
@@ -211,7 +226,7 @@ public static class InputSourceVocabulary {
         const string KeyboardPrefix = "keyboard.";
 
         if (!sourceId.StartsWith(
-            comparisonType: StringComparison.Ordinal,
+            comparisonType: StringComparison.OrdinalIgnoreCase,
             value: KeyboardPrefix
         )) {
             return false;
@@ -221,7 +236,7 @@ public static class InputSourceVocabulary {
 
         if (
             (suffix.Length == 1) &&
-            char.IsAsciiLetterLower(c: suffix[0])
+            char.IsAsciiLetter(c: suffix[0])
         ) {
             kind = CommandValueKind.Digital;
             return true;
@@ -238,7 +253,7 @@ public static class InputSourceVocabulary {
         const string NumpadPrefix = "numpad";
 
         if (
-            suffix.StartsWith(comparisonType: StringComparison.Ordinal, value: NumpadPrefix) &&
+            suffix.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: NumpadPrefix) &&
             (suffix.Length == (NumpadPrefix.Length + 1)) &&
             char.IsAsciiDigit(c: suffix[^1])
         ) {
@@ -248,7 +263,8 @@ public static class InputSourceVocabulary {
 
         if (
             (suffix.Length >= 2) &&
-            (suffix[0] == 'f') &&
+            char.IsAsciiLetter(c: suffix[0]) &&
+            ((suffix[0] | 0x20) == 'f') &&
             TryParseCanonicalPositiveNumber(
             digits: suffix[1..],
             maximum: 12,

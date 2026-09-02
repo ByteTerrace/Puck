@@ -554,6 +554,19 @@ restored — and in **write mode it rewrites any whitespace drift in the root**,
 which on an unswept root is the whitespace sweep for that root. Run `-WhatIf`
 first; the tree-wide sweep is deliberately its own, separately-landed change.
 
+Choosing the projects is only half the scoping, because a project formats every
+compile item it carries and some of those are LINKED IN from outside it.
+`build/VerifiedCodeAttribute.cs` is linked into every project, so a run over one
+project used to rewrite a file two directories above the root it was handed.
+Phase 0 therefore also passes `--include <root>/`, which confines each
+invocation to the requested root. `dotnet format` matches that pattern against
+each document's path relative to the WORKING DIRECTORY, and it reads a pattern
+as a directory only when the pattern ends in a separator, so a root that cannot
+be spelled that way, meaning one that does not sit under the working directory,
+gets no pattern at all rather than one the matcher would quietly match nothing
+for.
+That run is unscoped, and it says so on stderr before it starts.
+
 | Pass | Rewrite | In the bare-`format` set |
 |---|---|---|
 | `attr-order` | one attribute per list/line, alphabetized. | yes |
@@ -604,7 +617,11 @@ failure in write mode.
 - **Custom rewrites preserve source newline trivia.** Ordinary whitespace policy
   belongs to phase 0. The disk writer does not normalize the complete file text,
   because doing so would change newline characters inside verbatim or raw string
-  literals.
+  literals. A break a pass SYNTHESIZES is a bare line feed, taken from the one
+  declaration `RewriteShaping.EndOfLine`, matching what `.editorconfig` and
+  `.gitattributes` already pin for the whole tree. Phase 0 runs first in every
+  invocation, so a rewriter never inserts into a file it has not already
+  normalized.
 - **Annotated code is left alone.** The four reordering passes (`attr-order`,
   `member-order`, `init-order`, `named-args`) reassign trivia by *slot*, so a
   reorder would leave a comment — or an `#if` — describing whichever element
@@ -637,10 +654,11 @@ failure in write mode.
 - **`named-args` needs the project built.** It resolves symbols against the
   project's real build closure — the built output under `bin/`, the restore's
   package assemblies from `obj/project.assets.json`, the generated global-usings
-  file, and any emitted generator output. Without a build it reports which
-  projects were degraded and leaves the calls it could not resolve positional.
-  A file whose directory chain holds no `.csproj` is reported as skipped rather
-  than counted as clean.
+  file, and any emitted generator output. Without a build, only the framework
+  set resolves there, so the project's files are SKIPPED entire and named, in
+  every mode, rather than named from a framework-only closure; the run exits 1.
+  Build them and run again. A file whose directory chain holds no `.csproj` is
+  likewise reported as skipped rather than counted as clean.
 
 ---
 

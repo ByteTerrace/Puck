@@ -14,8 +14,9 @@ namespace Puck.Commands;
 /// <see cref="CommandPhase.Active"/> when a channel chord is recovered from held digital state, or
 /// <see cref="CommandPhase.Completed"/> on chord break.</param>
 /// <param name="Value">The value the edge carries (the row's press value, or its inactive twin on release).</param>
-/// <param name="Dispatch">Whether the edge's handler fires (a press always dispatches; a release dispatches only
-/// for a <see cref="BindingCommandDefinition.HoldRelease"/> row — either way the release clears the carried held state).</param>
+/// <param name="Dispatch">Whether the edge's handler fires (a press always dispatches; a release dispatches for a
+/// <see cref="BindingCommandDefinition.HoldRelease"/> row and for every CHANNEL destination, whose verb handler is
+/// the only thing that frees the channel — either way the release clears the carried held state).</param>
 /// <param name="Momentary">Whether a <see cref="CommandPhase.Started"/> edge should carry no held state forward
 /// (<see langword="false"/>, the default, is every existing chord-command/Held-activator row: it marks the router's
 /// carried-held table exactly like a physical hold, re-asserting every subsequent tick until a real
@@ -23,8 +24,12 @@ namespace Puck.Commands;
 /// <see cref="BindingActivatorMode.Tapped"/> completion's press: its own release is already scheduled one tick
 /// later (see <see cref="IChordEdgeSource.DrainScheduledEdges"/>), so marking it held too would make the tick
 /// carrying that scheduled release also carry a stale, non-dispatching re-assertion of the press — harmless to a
-/// dispatch-gated reader, but not the clean single-entry pulse a tap is supposed to produce. Ignored on a
-/// <see cref="CommandPhase.Completed"/> edge (a release never marks anything held regardless).</param>
+/// dispatch-gated reader, but not the clean single-entry pulse a tap is supposed to produce. On a
+/// <see cref="CommandPhase.Completed"/> edge it says the release BELONGS to that momentary press and discharges
+/// only its obligation: a chord row and a page activator may name one destination, and a tap's scheduled release
+/// must leave a hold a physical control is still holding down alone — dropping it there would stop the hold
+/// re-asserting with no cancellation ever reaching its handler. An ordinary release (the default) is the hold's
+/// own and drops it.</param>
 /// <param name="DispatchRelease">Whether the release paired with a <see cref="CommandPhase.Started"/> edge dispatches.
 /// For a momentary press, the router retains this fact without carrying the press into later snapshots, so a modality
 /// transition can deliver a cancellation instead of stranding the handler that consumed its press. Ignored on a
@@ -46,7 +51,7 @@ public readonly record struct BindingChordEdge(
 );
 /// <summary>
 /// The seam a chord-aware <see cref="IInputBindings"/> hands its synthesized chord-command edges to the
-/// <see cref="InputRouter"/> through. After each <see cref="IInputBindings.Resolve(int, in InputSignal)"/> the
+/// <see cref="InputRouter"/> through. After each <see cref="IInputBindings.Resolve(int, in InputSignal, bool)"/> the
 /// router drains the slot's pending edges and folds them into the same tick's lane — so a chord-fired command is
 /// <see cref="CommandSnapshot"/>-visible, held-tracked, and replayed exactly like a source-bound one.
 /// </summary>

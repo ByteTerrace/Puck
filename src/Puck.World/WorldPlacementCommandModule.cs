@@ -508,8 +508,9 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
     private static string WithInstanceTag(string text, WorldInstance? instance) =>
         ((instance is not null)
             ? CommandEcho.SpliceTag(
+                prefix: WorldArgs.InstanceTokenPrefix,
                 text: text,
-                tag: $"instance:{instance.Name}"
+                value: instance.Name
             )
             : text
         );

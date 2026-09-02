@@ -13,7 +13,8 @@ namespace Puck.World.Tests;
 /// <see cref="CommandEcho"/> line cannot provide, because neither one ever calls into the verb whose output it
 /// claims to describe. Pins the CommandEcho Head/Field segment grammar (a segment is either a run of
 /// <c>key=value</c> fields or one declared HEAD word followed by fields) across the empty, singleton, and
-/// multi-segment shapes each read-back actually emits, including the trailing-separator drop.</summary>
+/// multi-segment shapes each read-back actually emits, including the trailing-separator drop and the quoting a value
+/// carrying one of the grammar's reserved characters takes.</summary>
 public sealed class ConsoleEchoGrammarCommandModuleTests {
     // Resolves every invocation to the one row this fixture built — the desktop's own WorldBootConsoleAuthority
     // shape, minus the WorldInstanceHost indirection this project has no reason to construct.
@@ -90,16 +91,18 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
         var result = registry.Submit(line: "world.groups");
 
         // Every segment head is a declared word (kind/group/ownership) followed by key=value fields — the honest
-        // grammar CommandEcho now documents — and the final segment carries no trailing " |".
+        // grammar CommandEcho now documents — and the final segment carries no trailing " |". The bracketed LIST
+        // values (roles, members) are quoted: their ']' is a reserved character, and unquoted it would close the
+        // envelope early for a driver scanning for the first bracket.
         Assert.Equal(
-            expected: "[world.groups: kind name=party roles=[leader=Drive] ownership=LeaderDecides lifetime=Ephemeral eviction=Remove cap=4 | group id=alpha kind=party members=[seat1] | ownership subject=Group:alpha owner=seat2]",
+            expected: "[world.groups: kind name=party roles=\"[leader=Drive]\" ownership=LeaderDecides lifetime=Ephemeral eviction=Remove cap=4 | group id=alpha kind=party members=\"[seat1]\" | ownership subject=Group:alpha owner=seat2]",
             actual: result.Output
         );
 
         // The id-filtered form is the singleton case: one segment, still no trailing separator.
         var filtered = registry.Submit(line: "world.groups alpha");
 
-        Assert.Equal(expected: "[world.groups: group id=alpha kind=party members=[seat1]]", actual: filtered.Output);
+        Assert.Equal(expected: "[world.groups: group id=alpha kind=party members=\"[seat1]\"]", actual: filtered.Output);
     }
     [Fact]
     public void WorldMarket_NoSectionAuthored_EchoesNoMarketSection() {
@@ -117,8 +120,10 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
 
         var result = registry.Submit(line: "world.market");
 
-        // The staged trailing-pipe drop (was "... feeReserve=0 |]") — intentional, pinned here as the empty-listings case.
-        Assert.Equal(expected: "[world.market: formats=[English,Buyout] feeBasisPoints=1000 duration=[1..3600] retentionSeconds=604800 feeReserve=0]", actual: result.Output);
+        // The staged trailing-pipe drop (was "... feeReserve=0 |]") — intentional, pinned here as the empty-listings
+        // case. formats and duration are bracketed values, so CommandEcho quotes them rather than letting their ']'
+        // read as the envelope's own.
+        Assert.Equal(expected: "[world.market: formats=\"[English,Buyout]\" feeBasisPoints=1000 duration=\"[1..3600]\" retentionSeconds=604800 feeReserve=0]", actual: result.Output);
     }
     [Fact]
     public void WorldMarket_WithOneListing_EchoesHeadFieldListingSegment() {
@@ -143,7 +148,7 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
         var result = registry.Submit(line: "world.market");
 
         Assert.Equal(
-            expected: "[world.market: formats=[English,Buyout] feeBasisPoints=1000 duration=[1..3600] retentionSeconds=604800 feeReserve=0 | listing id=1 seller=seat1 item=1xapple currency=gold format=English startPrice=10 deadlineTick=1000 status=Active currentBid=0]",
+            expected: "[world.market: formats=\"[English,Buyout]\" feeBasisPoints=1000 duration=\"[1..3600]\" retentionSeconds=604800 feeReserve=0 | listing id=1 seller=seat1 item=1xapple currency=gold format=English startPrice=10 deadlineTick=1000 status=Active currentBid=0]",
             actual: result.Output
         );
     }

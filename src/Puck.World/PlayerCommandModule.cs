@@ -446,8 +446,9 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     // uses for anchor=body:<n>, reused here because an instance-targeted read has no perception anchor to report but
     // still owes the caller which instance answered.
     private static string WithInstanceTag(string text, string instanceName) => CommandEcho.SpliceTag(
-        tag: $"instance:{instanceName}",
-        text: text
+        prefix: WorldArgs.InstanceTokenPrefix,
+        text: text,
+        value: instanceName
     );
 
     /// <inheritdoc/>

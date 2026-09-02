@@ -7,6 +7,10 @@ namespace Puck.Commands.Tests;
 /// <summary>Exercises the text-dispatch surface: the wire-native fast path and its argument parsing, rejection
 /// accounting, quiet acknowledgements, interned command identity, and command-map gating.</summary>
 public sealed class CommandRegistryTests {
+    // help, wire.ack and wire.errors: the registry's own verbs, registered like a module's and interned like a
+    // module's, so they take three of the 16-bit ids a snapshot entry can name.
+    private const int BuiltInCommandCount = 3;
+
     [Fact]
     public void WireNativeFastPathParsesTrailingArguments() {
         var registry = new CommandRegistry(modules: [new CoreModule()]);
@@ -23,6 +27,32 @@ public sealed class CommandRegistryTests {
         var result = registry.Submit(line: "does.not.exist");
 
         Assert.True(condition: result.IsError);
+    }
+    [Fact]
+    public void AnUnknownVerbsRefusalLeadsWithWhatHappened() {
+        var registry = new CommandRegistry(modules: [new CoreModule()]);
+
+        // System.CommandLine describes an unknown verb as two errors, and the first of them — "Required command was
+        // not provided." — is about its own grammar rather than about the line. An operator reading
+        // `[wire.reject: Required command was not provided. | Unrecognized command or argument 'nope'.]` has to get
+        // past a sentence that answers nothing they asked.
+        Assert.Equal(expected: "[wire.reject: unknown command 'nope' — run `help` for the registered verbs]", actual: registry.Submit(line: "nope").Output);
+        Assert.Equal(expected: "[wire.reject: unknown command 'nope' — run `help` for the registered verbs]", actual: registry.Submit(line: "nope with args").Output);
+
+        // A verb the parser DID resolve is a different question — something about its arguments was wrong — and there
+        // the parser's own text is the useful part, so it still rides through.
+        Assert.Contains(actualString: registry.Submit(line: "help extra").Output, comparisonType: StringComparison.Ordinal, expectedSubstring: "extra");
+    }
+    [Fact]
+    public void ABlankLineIsARefusalRatherThanASilentNoOp() {
+        var registry = new CommandRegistry(modules: [new CoreModule()]);
+
+        // wire.errors is advertised as the one number that says whether any submitted line silently no-opped, and a
+        // line naming no command is exactly that; answering IsError=false with no rejection made the counter's own
+        // promise false for the simplest case there is.
+        Assert.True(condition: registry.Submit(line: "").IsError);
+        Assert.True(condition: registry.Submit(line: "   \t ").IsError);
+        Assert.Equal(expected: "[wire.errors: 2 rejected]", actual: registry.Submit(line: "wire.errors").Output);
     }
     [Fact]
     public void WireErrorsCountsRefusalsAndResetZeroesThem() {
@@ -187,13 +217,530 @@ public sealed class CommandRegistryTests {
     }
     [Fact]
     public void MoreCommandsThanTheSnapshotIdSpaceCanRepresentAreRefused() {
-        _ = Assert.Throws<InvalidOperationException>(testCode: static () => new CommandRegistry(modules: [new ManyCommandsModule(count: (ushort.MaxValue + 2))]));
+        // The registry's own three verbs are ordinary registrations and take three of the 16-bit ids, so a module may
+        // contribute one fewer than the module cap this used to name.
+        _ = Assert.Throws<InvalidOperationException>(testCode: static () => new CommandRegistry(modules: [new ManyCommandsModule(count: (((ushort.MaxValue + 1) - BuiltInCommandCount) + 1))]));
     }
     [Fact]
     public void TheFinalRepresentableCommandIdStillResolves() {
-        var registry = new CommandRegistry(modules: [new ManyCommandsModule(count: (ushort.MaxValue + 1))]);
+        var registry = new CommandRegistry(modules: [new ManyCommandsModule(count: ((ushort.MaxValue + 1) - BuiltInCommandCount))]);
 
+        Assert.Equal(actual: registry.CommandCount, expected: (ushort.MaxValue + 1));
         Assert.NotEmpty(collection: registry.GetName(id: ushort.MaxValue));
+    }
+    [Fact]
+    public void AnAtPrefixedTokenIsALiteralArgumentAndNeverReadsAFile() {
+        var path = $"puck-response-probe-{Guid.NewGuid():N}.txt";
+        var registry = new CommandRegistry(modules: [new CoreModule(), new EchoModule()]);
+
+        File.WriteAllText(
+            contents: "spliced",
+            path: path
+        );
+
+        try {
+            // Both the wire-native path and the quoted System.CommandLine fallback see the token verbatim: response
+            // file expansion would have replaced it with the file's contents, and a missing file would have made the
+            // parser echo the path back as an error.
+            Assert.Equal(expected: $"@{path}", actual: registry.Submit(line: $"echo.first @{path}").Output);
+            Assert.Equal(expected: $"@{path}", actual: registry.Submit(line: $"echo.first \"@{path}\"").Output);
+            Assert.Equal(expected: "@nope", actual: registry.Submit(line: "echo.first @nope").Output);
+            Assert.Equal(expected: "[wire.errors: 0 rejected]", actual: registry.Submit(line: "wire.errors").Output);
+        } finally {
+            File.Delete(path: path);
+        }
+    }
+    [Fact]
+    public void AThrowingHandlerBecomesACountedErrorResultRatherThanEscapingSubmit() {
+        var registry = new CommandRegistry(modules: [new CoreModule(), new ThrowingModule()]);
+
+        var result = registry.Submit(line: "boom.wire");
+
+        Assert.True(condition: result.IsError);
+        Assert.Contains(actualString: result.Output, expectedSubstring: nameof(InvalidTimeZoneException));
+        Assert.True(condition: registry.Submit(line: "boom.parsed \"quoted\"").IsError);
+        Assert.Equal(expected: "[wire.errors: 2 rejected]", actual: registry.Submit(line: "wire.errors").Output);
+    }
+    [Fact]
+    public void AThrowingSnapshotHandlerStillLetsALaterTextEntryReleaseItsBarrier() {
+        var applied = new List<string>();
+        var submitted = new List<string>();
+        var registry = new CommandRegistry(modules: [
+            new CoreModule(),
+            new ThrowingModule(),
+            new RecordingSimulationModule(applied: applied),
+        ]);
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new FixedBindings(command: "boom.bound"),
+            principalResolver: new ConsolePrincipal()
+        );
+        var source = new TextCommandSource(registry: registry);
+        var session = source.CreateSeatSession(
+            onResult: (line, _) => submitted.Add(item: line),
+            router: router,
+            slot: 0
+        );
+
+        session.Enqueue(line: "sim.record payload");
+        session.Enqueue(line: "sum 2 3");
+        // Captured BEFORE the drain injects the text entry, so the throwing bound entry sorts ahead of it in the lane.
+        router.Capture(signal: InputSignal.Press(source: "key.a"));
+        source.Collect();
+
+        Assert.Equal(actual: submitted, expected: ["sim.record payload"]);
+
+        var snapshot = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
+        registry.ApplySnapshot(snapshot: in snapshot);
+
+        // The bound handler threw first; the text entry behind it still ran, and its session's read-after-write
+        // barrier still released, so the queued immediate line drains on the next frame.
+        Assert.Equal(actual: applied, expected: ["payload"]);
+        Assert.Equal(expected: "[wire.errors: 1 rejected]", actual: registry.Submit(line: "wire.errors").Output);
+
+        source.Collect();
+
+        Assert.Equal(actual: submitted, expected: ["sim.record payload", "sum 2 3"]);
+    }
+    [Fact]
+    public void AVerbSpelledInAnotherCaseDispatchesOnEveryTextPath() {
+        var registry = new CommandRegistry(modules: [new CoreModule(), new EchoModule()]);
+
+        // Command identity is case-insensitive everywhere else in Puck (m_byName, interned ids, the binding
+        // vocabulary), so the wire table and the System.CommandLine fallback must agree with it.
+        Assert.Equal(expected: "5", actual: registry.Submit(line: "SUM 2 3").Output);
+        Assert.Equal(expected: "a b", actual: registry.Submit(line: "Echo.First \"a b\"").Output);
+        Assert.Equal(expected: "[wire.ack: on]", actual: registry.Submit(line: "Wire.Ack").Output);
+        Assert.Equal(expected: "[wire.errors: 0 rejected]", actual: registry.Submit(line: "WIRE.ERRORS").Output);
+    }
+    [Fact]
+    public void AQuotedVerbResolvesCaseInsensitivelyLikeEveryOtherSpelling() {
+        var registry = new CommandRegistry(modules: [new CoreModule(), new EchoModule()]);
+
+        // A quoted verb reaches the parser with its quotes removed, so the identity to canonicalise is the one INSIDE
+        // them. Reading the raw token instead left `"SUM" 2 3` as the one spelling neither half of the routing
+        // decision could see: the span lookup missed on the quotes and System.CommandLine, which matches command names
+        // ordinally, then refused the uppercase name it was handed.
+        Assert.Equal(expected: "5", actual: registry.Submit(line: "\"SUM\" 2 3").Output);
+        Assert.Equal(expected: "a b", actual: registry.Submit(line: "\"Echo.First\" \"a b\"").Output);
+        Assert.Equal(expected: "[wire.errors: 0 rejected]", actual: registry.Submit(line: "\"WIRE.ERRORS\"").Output);
+
+        // The exactly-spelled quoted forms that already worked are untouched, and an unknown quoted verb is still
+        // refused rather than being rewritten into something.
+        Assert.Equal(expected: "5", actual: registry.Submit(line: "\"sum\" 2 3").Output);
+        Assert.True(condition: registry.Submit(line: "\"does.not.exist\"").IsError);
+    }
+    [Fact]
+    public void ASimulationLineWhoseQuotedVerbIsMisCasedIsStillQueuedRatherThanRefused() {
+        var applied = new List<string>();
+        var registry = new CommandRegistry(modules: [new RecordingSimulationModule(applied: applied)]);
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new EmptyBindings(),
+            principalResolver: new ConsolePrincipal()
+        );
+
+        registry.RouteSimulationTo(sink: router.ConsoleTextSink);
+
+        // Both halves of the fix have to hold together: the submit-time parse canonicalises the quoted verb so the
+        // line routes into the deterministic lane, and the apply-time parse canonicalises the SAME original line so it
+        // still resolves to the command it was injected as.
+        Assert.Equal(expected: CommandResult.None, actual: registry.Submit(line: "\"SIM.RECORD\" payload"));
+        Assert.Empty(collection: applied);
+
+        var snapshot = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
+        registry.ApplySnapshot(snapshot: in snapshot);
+
+        Assert.Equal(actual: applied, expected: ["payload"]);
+        Assert.Equal(expected: "[wire.errors: 0 rejected]", actual: registry.Submit(line: "wire.errors").Output);
+    }
+    [Fact]
+    public void ASimulationLineSpelledInAnotherCaseDispatchesWhenItsTickApplies() {
+        var applied = new List<string>();
+        var registry = new CommandRegistry(modules: [new RecordingSimulationModule(applied: applied)]);
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new EmptyBindings(),
+            principalResolver: new ConsolePrincipal()
+        );
+
+        registry.RouteSimulationTo(sink: router.ConsoleTextSink);
+
+        Assert.Equal(expected: CommandResult.None, actual: registry.Submit(line: "SIM.Record payload"));
+
+        var snapshot = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
+        registry.ApplySnapshot(snapshot: in snapshot);
+
+        Assert.Equal(actual: applied, expected: ["payload"]);
+        Assert.Equal(expected: "[wire.errors: 0 rejected]", actual: registry.Submit(line: "wire.errors").Output);
+    }
+    [Fact]
+    public void ASimulationLineWhoseVerbIsQUOTEDIsStillQueuedRatherThanRunInline() {
+        var applied = new List<string>();
+        var registry = new CommandRegistry(modules: [new CoreModule(), new RecordingSimulationModule(applied: applied)]);
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new EmptyBindings(),
+            principalResolver: new ConsolePrincipal()
+        );
+
+        registry.RouteSimulationTo(sink: router.ConsoleTextSink);
+
+        // A quoted verb token is the PARSER's to unquote — the wire path refuses the line for its '"' and the
+        // leading-token span lookup cannot see through the quote — so the routing decision has to survive to the far
+        // side of the parse. Without that, this Simulation-routed handler ran INLINE at submit: absent from the
+        // deterministic lane, and absent from every replay of it.
+        Assert.Equal(expected: CommandResult.None, actual: registry.Submit(line: "\"sim.record\" payload"));
+        Assert.Empty(collection: applied);
+
+        // An Immediate verb spelled the same way is unaffected: it has no lane to wait for and still answers inline.
+        Assert.Equal(expected: "5", actual: registry.Submit(line: "\"sum\" 2 3").Output);
+
+        var snapshot = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
+        registry.ApplySnapshot(snapshot: in snapshot);
+
+        Assert.Equal(actual: applied, expected: ["payload"]);
+        Assert.Equal(expected: "[wire.errors: 0 rejected]", actual: registry.Submit(line: "wire.errors").Output);
+    }
+    [Fact]
+    public void ADeferredLineDispatchesWithTheEdgeItsSnapshotEntryRecorded() {
+        var phases = new List<CommandPhase>();
+        var registry = new CommandRegistry(modules: [new PhaseProbeModule(phases: phases)]);
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new EmptyBindings(),
+            principalResolver: new ConsolePrincipal()
+        );
+
+        registry.RouteSimulationTo(sink: router.ConsoleTextSink);
+
+        _ = registry.Submit(line: "phase.probe");
+
+        var snapshot = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
+        registry.ApplySnapshot(snapshot: in snapshot);
+
+        // A console impulse injects as a Started edge; a HELD wire verb branching on phase must see that press rather
+        // than the release branch a hard-coded Completed would hand it.
+        Assert.Equal(actual: phases, expected: [CommandPhase.Started]);
+    }
+    [Theory]
+    // The wire-native branch: a plain `verb arg` line resolves through the wire table with no parse at all.
+    [InlineData("edge.wire", "hello")]
+    // The System.CommandLine branch, reached two ways: a QUOTED line (no line carrying a '"' takes the wire path)…
+    [InlineData("edge.wire", "\"a b\"")]
+    // …and a bare Verb, which has no wire handler to resolve to whatever its line looks like.
+    [InlineData("edge.parse", " ")]
+    public void ABoundTextPressCarriesItsOwnEdgeAndValueDownBothDecodePaths(string command, string text) {
+        var seen = new List<(CommandPhase Phase, CommandValue Value)>();
+        var registry = new CommandRegistry(modules: [new EdgeProbeModule(seen: seen)]);
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new FixedBindings(
+                command: command,
+                text: text
+            ),
+            principalResolver: new ConsolePrincipal()
+        );
+
+        router.Capture(signal: InputSignal.Press(source: "key.a"));
+
+        var snapshot = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
+        registry.ApplySnapshot(snapshot: in snapshot);
+
+        var (phase, value) = Assert.Single(collection: seen);
+
+        // The ENTRY decides both, not the decode path: a bound press is a Started edge carrying the control's own
+        // Digital sample. Re-deriving them here would hand a HELD verb the release branch, and would hand it the
+        // command's DECLARED impulse — Axis1D — for a key that has no magnitude.
+        Assert.Equal(actual: phase, expected: CommandPhase.Started);
+        Assert.Equal(actual: value, expected: CommandValue.Digital(active: true));
+        Assert.Equal(actual: value.Kind, expected: CommandValueKind.Digital);
+    }
+    [Fact]
+    public void TheSubmittedLineIsTheHandlersContextTextOnEveryTextPath() {
+        var seen = new List<string?>();
+        var registry = new CommandRegistry(modules: [new TextProbeModule(seen: seen)]);
+
+        _ = registry.Submit(line: "text.probe hello");
+        _ = registry.Submit(line: "text.probe \"a b\"");
+
+        Assert.Equal(actual: seen, expected: ["text.probe hello", "text.probe \"a b\""]);
+    }
+    [Fact]
+    public void AMalformedDeferredLineIsRefusedWhenItsTickApplies() {
+        var registry = new CommandRegistry(modules: [new BareSimulationModule()]);
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new EmptyBindings(),
+            principalResolver: new ConsolePrincipal()
+        );
+
+        registry.RouteSimulationTo(sink: router.ConsoleTextSink);
+
+        // Submit resolves the verb and defers; it does NOT parse the arguments, so the line's one parse happens at
+        // apply time and its refusal reaches wire.errors a tick later instead of the call site.
+        Assert.Equal(expected: CommandResult.None, actual: registry.Submit(line: "sim.bare extra"));
+        Assert.Equal(expected: "[wire.errors: 0 rejected]", actual: registry.Submit(line: "wire.errors").Output);
+
+        var snapshot = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
+        registry.ApplySnapshot(snapshot: in snapshot);
+
+        Assert.Equal(expected: "[wire.errors: 1 rejected]", actual: registry.Submit(line: "wire.errors").Output);
+    }
+    [Fact]
+    public void AMalformedDeferredLineIsReportedToObserversWithItsOwnText() {
+        var seen = new List<CommandActivation>();
+        var registry = new CommandRegistry(
+            modules: [new BareSimulationModule()],
+            observers: [new RecordingObserver(seen: seen)]
+        );
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new EmptyBindings(),
+            principalResolver: new ConsolePrincipal()
+        );
+
+        registry.RouteSimulationTo(sink: router.ConsoleTextSink);
+
+        _ = registry.Submit(line: "sim.bare extra");
+
+        var snapshot = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
+        registry.ApplySnapshot(snapshot: in snapshot);
+
+        // The refusal arrives a tick after the prompt accepted the line, so the ONLY surface that can carry it is the
+        // observer stream every deferred-verdict sink already keys on by Text. Without this the operator saw nothing
+        // at submit, nothing at apply, and had to poll wire.errors to learn the line silently no-opped.
+        var activation = Assert.Single(collection: seen);
+
+        Assert.True(condition: activation.Result.IsError);
+        Assert.Equal(expected: "sim.bare extra", actual: activation.Text);
+        Assert.Equal(expected: "sim.bare", actual: activation.Name);
+        Assert.Contains(actualString: activation.Result.Output, expectedSubstring: "wire.reject");
+    }
+    [Fact]
+    public void BuiltInModeTokensAreReadCaseInsensitively() {
+        var registry = new CommandRegistry(modules: [new CoreModule()]);
+
+        Assert.Equal(expected: "[wire.ack: quiet]", actual: registry.Submit(line: "wire.ack QUIET").Output);
+        Assert.Equal(expected: "[wire.ack: on]", actual: registry.Submit(line: "wire.ack On").Output);
+
+        _ = registry.Submit(line: "does.not.exist");
+
+        Assert.Equal(expected: "[wire.errors: 1 rejected]", actual: registry.Submit(line: "wire.errors RESET").Output);
+        Assert.Equal(expected: "[wire.errors: 0 rejected]", actual: registry.Submit(line: "wire.errors").Output);
+    }
+    [Fact]
+    public void TheAffordanceManifestIsHandedOutAsAnImmutableArray() {
+        var registry = new CommandRegistry(modules: [new CoreModule()]);
+
+        // IsDefault exists only on ImmutableArray, so these lines compile only while the manifest is handed out as
+        // one: an IReadOnlyList over the backing arrays was a cast away from being rewritten under the registry.
+        var definitions = registry.Definitions;
+        var maps = registry.Maps;
+
+        Assert.False(condition: definitions.IsDefault);
+        Assert.False(condition: maps.IsDefault);
+        // The whole dispatchable catalogue, the registry's own verbs included: a listing verb, the help text and the
+        // binding vocabulary all read this, and a verb Submit dispatches but Definitions denies existed let the three
+        // of them each be right and still disagree.
+        Assert.Equal(expected: ["alpha", "beta", "help", "ping", "sum", "wire.ack", "wire.errors"], actual: definitions.Select(selector: static metadata => metadata.Name));
+        Assert.Equal(actual: maps, expected: [CommandMaps.Global, "combat"]);
+    }
+    [Fact]
+    public void TheBuiltInsAnswerTheSameLookupsEveryVerbTheRegistryDispatchesDoes() {
+        var registry = new CommandRegistry(modules: [new CoreModule()]);
+
+        foreach (var name in new[] { "help", "wire.ack", "wire.errors" }) {
+            // Submit dispatches all three, so TryGetId and TryGetMetadata answering false for them made the catalogue
+            // disagree with the dispatcher — and TryGetId's own doc claimed otherwise.
+            Assert.True(condition: registry.TryGetId(id: out var id, name: name));
+            Assert.Equal(actual: registry.GetName(id: id), expected: name);
+            Assert.True(condition: registry.TryGetMetadata(metadata: out var metadata, name: name));
+            Assert.Equal(actual: metadata.Name, expected: name);
+            // What keeps a built-in off a binding page is its BINDABILITY, which a vocabulary check refuses by name,
+            // rather than its absence from a catalogue, which the same check reports as an unknown command.
+            Assert.Equal(actual: metadata.Bindability, expected: CommandBindability.Unbindable);
+            Assert.Equal(actual: metadata.Routing, expected: CommandRouting.Immediate);
+        }
+
+        // Case-insensitively, like every other name.
+        Assert.True(condition: registry.TryGetMetadata(metadata: out _, name: "WIRE.ACK"));
+    }
+    [Fact]
+    public void ABuiltInRefusesAnArgumentItDoesNotTake() {
+        var registry = new CommandRegistry(modules: [new CoreModule()]);
+
+        Assert.Contains(actualString: registry.Submit(line: "help").Output, comparisonType: StringComparison.Ordinal, expectedSubstring: "sum - ");
+        // help lists the built-ins too, so `help` answers for the whole surface a line can reach.
+        Assert.Contains(actualString: registry.Submit(line: "help").Output, comparisonType: StringComparison.Ordinal, expectedSubstring: "wire.errors - ");
+        Assert.True(condition: registry.Submit(line: "help extra").IsError);
+        Assert.True(condition: registry.Submit(line: "wire.ack on quiet").IsError);
+        Assert.True(condition: registry.Submit(line: "wire.errors nope").IsError);
+    }
+    [Fact]
+    public void ALineWiderThanTheWireTokenCapAgreesWithItsQuotedForm() {
+        var registry = new CommandRegistry(modules: [new EchoModule()]);
+        var narrow = string.Join(
+            separator: ' ',
+            values: Enumerable.Range(count: 8, start: 0).Select(selector: static index => $"t{index}")
+        );
+        var wide = string.Join(
+            separator: ' ',
+            values: Enumerable.Range(count: 96, start: 0).Select(selector: static index => $"t{index}")
+        );
+
+        // Under the cap the wire tokenizer serves the line; over it System.CommandLine's splitter does, as it does for
+        // any quoted line. All three must hand the handler the same tokens.
+        Assert.Equal(expected: narrow, actual: registry.Submit(line: $"echo.tail {narrow}").Output);
+        Assert.Equal(expected: wide, actual: registry.Submit(line: $"echo.tail {wide}").Output);
+        Assert.Equal(expected: "a b", actual: registry.Submit(line: "echo.tail \"a b\"").Output);
+    }
+    [Fact]
+    public void TheTwoTokenizersAgreeExceptOnABareEndOfOptionsMarker() {
+        var registry = new CommandRegistry(modules: [new EchoModule()]);
+
+        // Unquoted whitespace, dash-prefixed tokens, and the absence of a --help/--version option are the same on both
+        // grammars; only the parser's end-of-options marker is consumed on the fallback path and not on the wire one.
+        Assert.Equal(expected: "a b", actual: registry.Submit(line: "echo.tail a\vb").Output);
+        Assert.Equal(expected: "x a b", actual: registry.Submit(line: "echo.tail \"x\" a\vb").Output);
+        Assert.Equal(expected: "--flag", actual: registry.Submit(line: "echo.tail --flag").Output);
+        Assert.Equal(expected: "x --flag", actual: registry.Submit(line: "echo.tail \"x\" --flag").Output);
+        Assert.Equal(expected: "-- y", actual: registry.Submit(line: "echo.tail -- y").Output);
+        Assert.Equal(expected: "x y", actual: registry.Submit(line: "echo.tail \"x\" -- y").Output);
+        Assert.True(condition: registry.Submit(line: "--help").IsError);
+        Assert.True(condition: registry.Submit(line: "--version").IsError);
+    }
+    [Fact]
+    public void HelpListsEveryCommandInOrdinalNameOrder() {
+        var registry = new CommandRegistry(modules: [new CoreModule()]);
+
+        var names = registry.Submit(line: "help").Output
+            .Split(separator: '\n')
+            .Select(selector: static entry => entry.Split(separator: " - ")[0])
+            .ToArray();
+
+        Assert.Equal(actual: names, expected: [.. names.OrderBy(
+            comparer: StringComparer.Ordinal,
+            keySelector: static name => name
+        )]);
+        Assert.Contains(collection: names, expected: "help");
+        Assert.Contains(collection: names, expected: "sum");
+    }
+    [Fact]
+    public void OneDefinitionInstanceCannotBeRegisteredIntoTwoRegistries() {
+        var module = new CachedDefinitionModule();
+
+        _ = new CommandRegistry(modules: [module]);
+
+        // A definition owns System.CommandLine state that registration mutates, so the second registry would rewrite
+        // the first one's parser graph.
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => new CommandRegistry(modules: [module]));
+    }
+    [InlineData(true)]
+    [InlineData(false)]
+    [Theory]
+    public void ARegistrationMissingItsHandlerNameOrDescriptionIsRefusedWhereItIsWritten(bool wireNative) {
+        // A null handler used to construct and register happily, then surface on the first dispatch as
+        // `[boom: handler threw NullReferenceException]` — a composition-root bug reported as a runtime command
+        // failure, with nothing naming the registration that caused it.
+        _ = Assert.Throws<ArgumentNullException>(testCode: () => Register(description: "Throws.", handler: null, name: "boom", wireNative: wireNative));
+        _ = Assert.Throws<ArgumentNullException>(testCode: () => Register(description: "Throws.", handler: Nothing, name: null, wireNative: wireNative));
+        _ = Assert.Throws<ArgumentNullException>(testCode: () => Register(description: null, handler: Nothing, name: "boom", wireNative: wireNative));
+        _ = Assert.Throws<ArgumentException>(testCode: () => Register(description: "Throws.", handler: Nothing, name: "  ", wireNative: wireNative));
+        _ = Assert.Throws<ArgumentException>(testCode: () => Register(description: string.Empty, handler: Nothing, name: "boom", wireNative: wireNative));
+
+        static CommandResult Nothing() => CommandResult.None;
+
+        static CommandDefinition Register(Func<CommandResult>? handler, string? name, string? description, bool wireNative) => (wireNative
+            ? CommandDefinition.WithWireArgs(
+                name: name!,
+                description: description!,
+                handler: ((handler is null)
+                    ? null!
+                    : (_, _) => handler()),
+                bindability: CommandBindability.Unbindable
+            )
+            : CommandDefinition.Verb(
+                name: name!,
+                description: description!,
+                valueKind: CommandValueKind.Digital,
+                handler: ((handler is null)
+                    ? null!
+                    : _ => handler()),
+                bindability: CommandBindability.Unbindable
+            )
+        );
+    }
+    [Fact]
+    public void ABlankAliasIsRefusedNamingTheCommandAndItsAliasList() {
+        // Unchecked, this reached the claim ledger's Dictionary and threw naming the parameter 'key' — which tells a
+        // composition root nothing about which module declared which command's alias list badly.
+        var error = Assert.Throws<InvalidOperationException>(testCode: () => new CommandRegistry(modules: [new BlankAliasModule()]));
+
+        Assert.Contains(actualString: error.Message, expectedSubstring: "'alias.probe'");
+        Assert.Contains(actualString: error.Message, expectedSubstring: "aliases");
+        Assert.Contains(actualString: error.Message, expectedSubstring: nameof(BlankAliasModule));
+    }
+    [Fact]
+    public void ACommandsDispatchIdentityAndTextIdentityCannotBeSplitApart() {
+        // A `with` expression bypasses both factories, so the identity-bearing members are readable but not settable
+        // from outside this assembly: `Verb(name: "jump", ...) with { Name = "fly" }` used to register, answer
+        // TryGetId("fly"), and yet dispatch only for the line "jump" — which the registry then called unknown.
+        foreach (var name in new[] { nameof(CommandDefinition.Description), nameof(CommandDefinition.Map), nameof(CommandDefinition.Name), nameof(CommandDefinition.TextCommand) }) {
+            var setter = typeof(CommandDefinition).GetProperty(name: name)!.SetMethod;
+
+            Assert.NotNull(@object: setter);
+            Assert.False(condition: setter!.IsPublic, userMessage: $"{name} is settable by a consumer");
+        }
+    }
+    [Fact]
+    public void RunawayReEntrantSubmissionIsRefusedRatherThanOverflowingTheStack() {
+        var registry = new CommandRegistry(modules: [new ReEntrantModule()]);
+
+        var result = registry.Submit(line: "recurse");
+
+        Assert.True(condition: result.IsError);
+        Assert.Contains(actualString: result.Output, expectedSubstring: "nested more than");
+        // ONE console line was submitted, so wire.errors reports one refusal. The depth guard used to count, and then
+        // every unwinding frame counted the same error result again, so a driver asserting a refusal count read the
+        // nesting depth rather than the number of lines it had sent.
+        Assert.Equal(expected: "[wire.errors: 1 rejected]", actual: registry.Submit(line: "wire.errors").Output);
+    }
+    [Fact]
+    public void AMacroVerbsOwnSubmissionsAreCountedThroughItsVerdictRatherThanBesideIt() {
+        var registry = new CommandRegistry(modules: [new MacroModule()]);
+
+        // The macro submits a line that IS refused and answers success anyway: the operator's line succeeded, so
+        // wire.errors — which answers "how many of the lines I sent were refused" — records nothing.
+        Assert.False(condition: registry.Submit(line: "macro.swallows").IsError);
+        Assert.Equal(expected: "[wire.errors: 0 rejected]", actual: registry.Submit(line: "wire.errors").Output);
+
+        // The macro that PROPAGATES its nested refusal counts exactly one, not two.
+        Assert.True(condition: registry.Submit(line: "macro.propagates").IsError);
+        Assert.Equal(expected: "[wire.errors: 1 rejected]", actual: registry.Submit(line: "wire.errors").Output);
+    }
+    [Fact]
+    public void AMacroVerbsRefusalIsCountedOnceHoweverDeeplyItNested() {
+        var registry = new CommandRegistry(modules: [new MacroModule()]);
+
+        // The documented rule, at the depth that makes it a rule rather than a coincidence: `macro.deep` submits
+        // `macro.propagates`, which submits the refused line. ONE console line was sent, so wire.errors reports one
+        // refusal — not one per frame the error result unwound through.
+        Assert.True(condition: registry.Submit(line: "macro.deep").IsError);
+        Assert.Equal(expected: "[wire.errors: 1 rejected]", actual: registry.Submit(line: "wire.errors reset").Output);
+
+        // …and the other half of the same rule: a swallowed refusal is invisible to the counter at any depth, so a
+        // macro verb that must not hide a failure has to report it back.
+        Assert.False(condition: registry.Submit(line: "macro.deep.swallows").IsError);
+        Assert.Equal(expected: "[wire.errors: 0 rejected]", actual: registry.Submit(line: "wire.errors").Output);
     }
 
     private sealed class CoreModule : ICommandModule {
@@ -349,5 +896,212 @@ public sealed class CommandRegistryTests {
     }
     private sealed class ConsolePrincipal : ICommandPrincipalResolver {
         public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Console;
+    }
+    private sealed class RecordingObserver(List<CommandActivation> seen) : ICommandObserver {
+        public void OnCommand(in CommandActivation activation) => seen.Add(item: activation);
+    }
+    private sealed class EchoModule : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.WithWireArgs(
+                name: "echo.first",
+                description: "Echoes its first trailing token verbatim.",
+                handler: static (_, args) => new CommandResult(Output: ((args.Count == 0)
+                    ? string.Empty
+                    : args[0].ToString())),
+                bindability: CommandBindability.Unbindable
+            );
+            yield return CommandDefinition.WithWireArgs(
+                name: "echo.tail",
+                description: "Echoes every trailing token, space-joined.",
+                handler: static (_, args) => new CommandResult(Output: args.Tail(start: 0)),
+                bindability: CommandBindability.Unbindable
+            );
+        }
+    }
+    private sealed class ThrowingModule : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.Verb(
+                name: "boom.bound",
+                description: "Throws from a bound dispatch.",
+                valueKind: CommandValueKind.Digital,
+                handler: static _ => throw new InvalidTimeZoneException(message: "handler fault"),
+                bindability: CommandBindability.Bindable
+            );
+            yield return CommandDefinition.WithWireArgs(
+                name: "boom.wire",
+                description: "Throws from the wire-native path.",
+                handler: static (_, _) => throw new InvalidTimeZoneException(message: "handler fault"),
+                bindability: CommandBindability.Unbindable
+            );
+            yield return CommandDefinition.WithWireArgs(
+                name: "boom.parsed",
+                description: "Throws from the System.CommandLine fallback path.",
+                handler: static (_, _) => throw new InvalidTimeZoneException(message: "handler fault"),
+                bindability: CommandBindability.Unbindable
+            );
+        }
+    }
+    private sealed class RecordingSimulationModule(List<string> applied) : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.WithWireArgs(
+                name: "sim.record",
+                description: "Records its argument when its tick applies.",
+                handler: (_, args) => {
+                    applied.Add(item: args[0].ToString());
+
+                    return CommandResult.None;
+                },
+                bindability: CommandBindability.Unbindable,
+                routing: CommandRouting.Simulation
+            );
+        }
+    }
+    private sealed class PhaseProbeModule(List<CommandPhase> phases) : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.WithWireArgs(
+                name: "phase.probe",
+                description: "Records the edge its dispatch carried.",
+                handler: (context, _) => {
+                    phases.Add(item: context.Phase);
+
+                    return CommandResult.None;
+                },
+                bindability: CommandBindability.Bindable,
+                held: true,
+                routing: CommandRouting.Simulation
+            );
+        }
+    }
+    // Two shapes of the same probe: a wire-native verb (the DispatchWire branch of ApplySubmittedSimulation) and a
+    // bare Verb (its System.CommandLine parse branch). Both declare Axis1D so a re-derived impulse would be visibly
+    // the wrong KIND for the Digital press that actually drove them.
+    private sealed class EdgeProbeModule(List<(CommandPhase Phase, CommandValue Value)> seen) : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.WithWireArgs(
+                name: "edge.wire",
+                description: "Records the edge and value its dispatch carried.",
+                handler: (context, _) => {
+                    seen.Add(item: (Phase: context.Phase, Value: context.Value));
+
+                    return CommandResult.None;
+                },
+                bindability: CommandBindability.Bindable,
+                held: true,
+                valueKind: CommandValueKind.Axis1D
+            );
+            yield return CommandDefinition.Verb(
+                name: "edge.parse",
+                description: "Records the edge and value its dispatch carried.",
+                valueKind: CommandValueKind.Axis1D,
+                handler: context => {
+                    seen.Add(item: (Phase: context.Phase, Value: context.Value));
+
+                    return CommandResult.None;
+                },
+                bindability: CommandBindability.Bindable,
+                held: true
+            );
+        }
+    }
+    private sealed class TextProbeModule(List<string?> seen) : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.WithWireArgs(
+                name: "text.probe",
+                description: "Records the submitted line it was dispatched from.",
+                handler: (context, _) => {
+                    seen.Add(item: context.Text);
+
+                    return CommandResult.None;
+                },
+                bindability: CommandBindability.Unbindable
+            );
+        }
+    }
+    private sealed class BareSimulationModule : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.Verb(
+                name: "sim.bare",
+                description: "A deferred verb that accepts no arguments.",
+                valueKind: CommandValueKind.Digital,
+                handler: static _ => CommandResult.None,
+                bindability: CommandBindability.Unbindable,
+                routing: CommandRouting.Simulation
+            );
+        }
+    }
+    private sealed class CachedDefinitionModule : ICommandModule {
+        private readonly CommandDefinition m_definition = CommandDefinition.Verb(
+            name: "cached",
+            description: "A definition instance the module hands out more than once.",
+            valueKind: CommandValueKind.Digital,
+            handler: static _ => CommandResult.None,
+            bindability: CommandBindability.Bindable
+        );
+
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return m_definition;
+        }
+    }
+    private sealed class BlankAliasModule : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.Verb(
+                name: "alias.probe",
+                description: "Declares a blank alias.",
+                valueKind: CommandValueKind.Digital,
+                handler: static _ => CommandResult.None,
+                bindability: CommandBindability.Bindable,
+                aliases: ["ok", null!]
+            );
+        }
+    }
+    private sealed class MacroModule : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.WithWireArgs(
+                name: "macro.swallows",
+                description: "Submits a line that is refused, and answers success anyway.",
+                handler: static (context, args) => {
+                    var nested = (context.Registry?.Submit(line: "does.not.exist") ?? CommandResult.None);
+
+                    Assert.True(condition: nested.IsError);
+
+                    return new CommandResult(Output: "ok");
+                },
+                bindability: CommandBindability.Unbindable
+            );
+            yield return CommandDefinition.WithWireArgs(
+                name: "macro.propagates",
+                description: "Submits a line that is refused, and returns its refusal.",
+                handler: static (context, _) => (context.Registry?.Submit(line: "does.not.exist") ?? CommandResult.None),
+                bindability: CommandBindability.Unbindable
+            );
+            yield return CommandDefinition.WithWireArgs(
+                name: "macro.deep",
+                description: "Submits a macro that submits a refused line, and returns the refusal through both frames.",
+                handler: static (context, _) => (context.Registry?.Submit(line: "macro.propagates") ?? CommandResult.None),
+                bindability: CommandBindability.Unbindable
+            );
+            yield return CommandDefinition.WithWireArgs(
+                name: "macro.deep.swallows",
+                description: "Submits a macro that submits a refused line, and answers success anyway.",
+                handler: static (context, _) => {
+                    var nested = (context.Registry?.Submit(line: "macro.propagates") ?? CommandResult.None);
+
+                    Assert.True(condition: nested.IsError);
+
+                    return new CommandResult(Output: "ok");
+                },
+                bindability: CommandBindability.Unbindable
+            );
+        }
+    }
+    private sealed class ReEntrantModule : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.WithWireArgs(
+                name: "recurse",
+                description: "Submits itself, forever, until the registry refuses.",
+                handler: static (context, _) => (context.Registry?.Submit(line: "recurse") ?? CommandResult.None),
+                bindability: CommandBindability.Unbindable
+            );
+        }
     }
 }

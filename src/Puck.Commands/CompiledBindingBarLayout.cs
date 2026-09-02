@@ -3,6 +3,7 @@ using System.Numerics;
 namespace Puck.Commands;
 
 /// <summary>The viewport edge a binding-bar anchor group hangs from.</summary>
+[System.Text.Json.Serialization.JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<BindingBarEdge>))]
 public enum BindingBarEdge {
     /// <summary>The bottom edge; the group is centered left-to-right and its lowest plate sits at the inset.</summary>
     Bottom,
@@ -15,7 +16,12 @@ public enum BindingBarEdge {
 }
 /// <summary>One anchor group of a compiled layout: an edge, an inset, and the extent of every plate of every bank
 /// hanging there, in button pitches. Plates in the group carry pitches normalized to it — along the edge's axis 0 is
-/// the plate whose edge touches the inset, positive inward; across it 0 is the group's center.</summary>
+/// the plate whose edge touches the inset; across it 0 is the group's center. Inward is the direction of INCREASING
+/// pitch for a <see cref="BindingBarEdge.Bottom"/> or <see cref="BindingBarEdge.Left"/> group and DECREASING pitch
+/// for a <see cref="BindingBarEdge.Top"/> or <see cref="BindingBarEdge.Right"/> one, because the pitch axes are the
+/// overlay's own (x right, y up) rather than each edge's: <see cref="CompiledBindingBarLayout.Build"/> shifts a top/right group by its
+/// MAXIMUM, so its normalized pitches run from 0 down through negatives. <c>BindingBarLayout.PlateCenter</c> is
+/// written against exactly that sign per edge.</summary>
 /// <param name="Edge">The edge.</param>
 /// <param name="Inset">The inset from the edge, pitches.</param>
 /// <param name="Along">The farthest plate center from the inset line along the edge's axis, pitches (≥ 0).</param>

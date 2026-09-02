@@ -1,4 +1,3 @@
-using Puck.Physics.Motion;
 using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
@@ -6,7 +5,6 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
 using Puck.Abstractions.Presentation;
-using Puck.Assets.Documents;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Protocol;
@@ -24,15 +22,16 @@ namespace Puck.World;
 /// <see cref="DocumentExtensionsPolicy"/> instead (a reserved '$'/'_' prefix passes; any
 /// other key is a validator rejection). Nothing else in the graph carries that attribute, so every nested row is
 /// unconditionally strict. Every enum the document graph carries declares its own strict by-name
-/// conversion (writes the exact declared member name, refuses a numeric token on read) — most at the enum's own
-/// declaration via <c>[JsonConverter(typeof(StrictEnumConverter&lt;TEnum&gt;))]</c> (<see cref="BodyMotionOp"/>,
-/// <see cref="IntentSource"/>, <see cref="WorldContactRequirement"/>, <see cref="ActionFact"/>,
-/// <see cref="ShadowTier"/>, <see cref="WorldRenderScaleTier"/>,
-/// <see cref="Puck.Abstractions.Presentation.PresentMode"/>, <see cref="Puck.World.Protocol.WorldCapability"/>); one —
-/// <see cref="CommandPhase"/> (<c>Puck.Commands</c>) — lives in a project that does not reference
-/// <c>Puck.Abstractions</c>, so its closed <see cref="StrictEnumConverter{TEnum}"/> instance is listed on this
-/// context below instead (a source-gen context may register a closed generic converter for a type it does not own,
-/// unlike the non-generic factory this replaced, which the generator refused unconditionally).
+/// conversion (writes the exact declared member name, refuses a numeric token on read) at the enum's OWN
+/// declaration via <c>[JsonConverter(typeof(StrictEnumConverter&lt;TEnum&gt;))]</c> (<see cref="Puck.Physics.Motion.BodyMotionOp"/>,
+/// <see cref="IntentSource"/>, <see cref="WorldContactRequirement"/>, <see cref="Puck.Physics.Motion.ActionFact"/>,
+/// <see cref="Puck.Physics.Motion.ActionStateComparison"/>, <see cref="ChannelRole"/>, <see cref="ShadowTier"/>,
+/// <see cref="WorldRenderScaleTier"/>, <see cref="Puck.Abstractions.Presentation.PresentMode"/>,
+/// <see cref="Puck.World.Protocol.WorldCapability"/>, and every <c>Puck.Commands</c> binding enum) — never on this
+/// context's converter list. That is the point rather than a tidiness: a converter listed on a context binds THAT
+/// context alone, so the same enum reached through a second context (Puck.Commands' own
+/// <c>BindingProfileJsonContext</c>) would write a different token. Declaring it on the type decides the wire form
+/// once, and every context that reaches the enum inherits the decision.
 /// <c>UseStringEnumConverter</c> writes by name too but has no <c>allowIntegerValues</c> knob, so it still accepts a
 /// numeric wire value on read. <see cref="Vector2"/>, <see cref="Vector3"/> and <see cref="Quaternion"/> ride
 /// <see cref="Puck.Assets.Documents.Vector2JsonConverter"/>/<see cref="Puck.Assets.Documents.Vector3JsonConverter"/>/<see cref="Puck.Assets.Documents.QuaternionJsonConverter"/>
@@ -72,7 +71,11 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldAddonRow))]
 // The per-world binding overlay row the world.row.set bindingOverlays verb parses as ONE inline-JSON argument — the same wire
 // shape as the document section. Its BindingProfileDocument (from Puck.Commands) is registered explicitly so source-gen
-// emits its metadata for both the canonical writer and the verb accessor.
+// emits its metadata for both the canonical writer and the verb accessor. That metadata is generated here rather
+// than borrowed from Puck.Commands.BindingProfileJsonContext (a source-gen context cannot delegate a type to
+// another context), but the two agree by construction: every bespoke spelling in that graph — CommandValue,
+// ChannelRef, DocumentIdentifier, and each binding enum — is declared on the TYPE, so neither context is free to
+// spell one differently. Puck.World.Schema.Tests pins the agreement on the shipped basis world's own bindings.
 [JsonSerializable(typeof(WorldBindingOverlay))]
 [JsonSerializable(typeof(BindingProfileDocument))]
 // The creation/placement rows (the world.row.set creations / world.row.set placements payload shapes). The embedded
@@ -222,10 +225,11 @@ namespace Puck.World;
 // its own JSON Schema generation rides the same exporter machinery as every world-document family.
 [JsonSerializable(typeof(WorldSiloDefinition))]
 [JsonSourceGenerationOptions(
-    // CommandPhase (Puck.Commands) cannot carry a [JsonConverter] attribute at its own declaration without a new
-    // ProjectReference to Puck.Abstractions from that leaner project; registering its CLOSED StrictEnumConverter<T>
-    // instance here instead keeps the strict posture without that edge.
-    Converters = new[] { typeof(Puck.Assets.Documents.Vector2JsonConverter), typeof(Puck.Assets.Documents.Vector3JsonConverter), typeof(Puck.Assets.Documents.QuaternionJsonConverter), typeof(CommandValueJsonConverter), typeof(CreationDocumentJsonConverter), typeof(WorldBackendPreferenceJsonConverter), typeof(SurfaceFormatJsonConverter), typeof(GrantSubjectJsonConverter), typeof(WorldPrincipalJsonConverter), typeof(ChannelReachMaskJsonConverter), typeof(ChannelConsentMaskJsonConverter), typeof(MutationKindMaskJsonConverter), typeof(DocumentWriteMaskJsonConverter), typeof(WorldStateRowJsonConverter), typeof(WorldSafeNameJsonConverter), typeof(WorldCellNameJsonConverter), typeof(WorldDestinationDurabilityJsonConverter), typeof(WorldPortalTravelJsonConverter), typeof(WorldPortalArrivalJsonConverter), typeof(WorldDestinationScopeJsonConverter), typeof(StrictEnumConverter<CommandPhase>), typeof(StrictEnumConverter<ChannelRole>), typeof(StrictEnumConverter<BindingActivatorMode>), typeof(StrictEnumConverter<BindingEntryMode>), typeof(StrictEnumConverter<BindingWheelSpatialSelectionMode>), typeof(StrictEnumConverter<BindingWheelPlacement>), typeof(StrictEnumConverter<BindingBarEdge>), typeof(StrictEnumConverter<ActionStateComparison>), typeof(StrictEnumConverter<BindingWheelRingSelectionMode>) },
+    // Puck.Commands' own types are absent from this list deliberately: CommandValue and every binding enum carry
+    // their converter at their own declaration now (Puck.Commands references Puck.Abstractions for exactly that),
+    // so this context and Puck.Commands.BindingProfileJsonContext read the shape off the TYPE rather than each
+    // repeating a registration the other could drift from.
+    Converters = new[] { typeof(Puck.Assets.Documents.Vector2JsonConverter), typeof(Puck.Assets.Documents.Vector3JsonConverter), typeof(Puck.Assets.Documents.QuaternionJsonConverter), typeof(CreationDocumentJsonConverter), typeof(WorldBackendPreferenceJsonConverter), typeof(SurfaceFormatJsonConverter), typeof(GrantSubjectJsonConverter), typeof(WorldPrincipalJsonConverter), typeof(ChannelReachMaskJsonConverter), typeof(ChannelConsentMaskJsonConverter), typeof(MutationKindMaskJsonConverter), typeof(DocumentWriteMaskJsonConverter), typeof(WorldStateRowJsonConverter), typeof(WorldSafeNameJsonConverter), typeof(WorldCellNameJsonConverter), typeof(WorldDestinationDurabilityJsonConverter), typeof(WorldPortalTravelJsonConverter), typeof(WorldPortalArrivalJsonConverter), typeof(WorldDestinationScopeJsonConverter) },
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     // The OTHER half of strict parse. UnmappedMemberHandling below refuses a member the model does not have; this
     // refuses a member the model REQUIRES and the document does not carry. Without it, a constructor parameter with
@@ -246,104 +250,6 @@ namespace Puck.World;
 public sealed partial class WorldJsonContext : JsonSerializerContext {
 }
 
-internal sealed class CommandValueJsonConverter : JsonConverter<CommandValue> {
-    private static Vector4 ReadRaw(ref Utf8JsonReader reader) {
-        if (reader.TokenType != JsonTokenType.StartArray) {
-            throw new JsonException(message: "CommandValue raw must be a four-element array.");
-        }
-
-        const string NotFiniteMessage = "CommandValue raw components must be finite numbers.";
-
-        var x = JsonComponentReader.ReadFloat(notFiniteMessage: NotFiniteMessage, notNumberMessage: NotFiniteMessage, reader: ref reader);
-        var y = JsonComponentReader.ReadFloat(notFiniteMessage: NotFiniteMessage, notNumberMessage: NotFiniteMessage, reader: ref reader);
-        var z = JsonComponentReader.ReadFloat(notFiniteMessage: NotFiniteMessage, notNumberMessage: NotFiniteMessage, reader: ref reader);
-        var w = JsonComponentReader.ReadFloat(notFiniteMessage: NotFiniteMessage, notNumberMessage: NotFiniteMessage, reader: ref reader);
-
-        if (
-            !reader.Read() ||
-            (reader.TokenType != JsonTokenType.EndArray)
-        ) {
-            throw new JsonException(message: "CommandValue raw must contain exactly four elements.");
-        }
-
-        return new Vector4(
-            w: w,
-            x: x,
-            y: y,
-            z: z
-        );
-    }
-
-    public override CommandValue Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
-        if (reader.TokenType != JsonTokenType.StartObject) {
-            throw new JsonException(message: "a CommandValue must be an object with kind and raw members.");
-        }
-
-        CommandValueKind? kind = null;
-        Vector4? raw = null;
-
-        while (
-            reader.Read() &&
-            (reader.TokenType != JsonTokenType.EndObject)
-        ) {
-            if (reader.TokenType != JsonTokenType.PropertyName) {
-                throw new JsonException(message: "a CommandValue member name was expected.");
-            }
-
-            var property = reader.GetString();
-
-            if (!reader.Read()) {
-                throw new JsonException(message: $"CommandValue member '{property}' has no value.");
-            }
-
-            switch (property) {
-                case "kind":
-                    var token = ((reader.TokenType == JsonTokenType.String)
-                        ? reader.GetString()
-                        : null
-                    );
-
-                    if (
-                        (token is null) ||
-                        !Enum.TryParse<CommandValueKind>(
-                        ignoreCase: false,
-                        result: out var parsed,
-                        value: token
-                    ) ||
-                        !Enum.IsDefined(value: parsed)
-                    ) {
-                        throw new JsonException(message: $"CommandValue kind '{token}' is not declared.");
-                    }
-                    kind = parsed;
-                    break;
-                case "raw":
-                    raw = ReadRaw(reader: ref reader);
-                    break;
-                default:
-                    throw new JsonException(message: $"CommandValue contains unmapped member '{property}'.");
-            }
-        }
-
-        return new CommandValue(
-            Kind: (kind ?? throw new JsonException(message: "CommandValue requires member 'kind'.")),
-            Raw: (raw ?? throw new JsonException(message: "CommandValue requires member 'raw'."))
-        );
-    }
-    public override void Write(Utf8JsonWriter writer, CommandValue value, JsonSerializerOptions options) {
-        writer.WriteStartObject();
-        writer.WriteString(
-            propertyName: "kind",
-            value: value.Kind.ToString()
-        );
-        writer.WriteStartArray(propertyName: "raw");
-        writer.WriteNumberValue(value: value.Raw.X);
-        writer.WriteNumberValue(value: value.Raw.Y);
-        writer.WriteNumberValue(value: value.Raw.Z);
-        writer.WriteNumberValue(value: value.Raw.W);
-        writer.WriteEndArray();
-        writer.WriteEndObject();
-    }
-}
 /// <summary>The shared shape behind a plain 64-bit lane's wire form: a bare JSON number, round-tripped through the
 /// closed subclass's own <c>Bits</c> constructor/property.</summary>
 internal abstract class BitMaskJsonConverter<T> : JsonConverter<T> where T : struct {

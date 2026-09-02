@@ -18,7 +18,9 @@ namespace Puck.Commands;
 /// <param name="DeviceId">The globally unique identifier of the device that produced the activation.</param>
 /// <param name="Value">The value carried by the activation (for example, a mouse delta or a digital press).</param>
 /// <param name="Phase">The transition the activation represents.</param>
-/// <param name="Text">An optional text payload, such as typed characters.</param>
+/// <param name="Text">An optional text payload, such as typed characters. It reaches a text CONSUMER through the
+/// signal itself; it is NOT snapshot payload, and binding a text-bearing source drops it — see
+/// <see cref="Typed(string, string, InputDeviceId, ulong)"/>.</param>
 /// <param name="CaptureTick">
 /// The monotonic capture time, in engine ticks (<see cref="IInputClock"/>), stamped at the earliest accurate
 /// point in the producing backend. <c>0</c> means unstamped — the router attributes the signal to the current tick.
@@ -33,7 +35,9 @@ namespace Puck.Commands;
 /// <param name="Slot">The lane the signal addresses directly, for a source whose seat is authored rather than
 /// discovered (a document-bound sense measurement), or <see cref="UnresolvedSlot"/> to resolve the lane from
 /// <paramref name="DeviceId"/> through the slot resolver. An authored-lane signal never seats a device and never
-/// counts as player activity.</param>
+/// counts as player activity. <see cref="UnresolvedSlot"/> is the ONLY negative value a signal may carry — every
+/// other one is refused by <see cref="InputRouter.Capture(in InputSignal)"/> rather than silently read as
+/// "resolve from the device".</param>
 public readonly record struct InputSignal(
     string Source,
     InputDeviceId DeviceId,
@@ -91,6 +95,18 @@ public readonly record struct InputSignal(
         );
     }
     /// <summary>A text activation carrying typed characters.</summary>
+    /// <remarks>
+    /// <para><b>Bound dispatch drops <see cref="Text"/>, deliberately.</b> <see cref="InputRouter"/> resolves a text
+    /// signal through the binding table like any other, but the <see cref="CommandEntry"/> it produces carries only
+    /// the text the BINDING ROW authored (<c>CommandBinding.Text</c>, composed into a <c>"verb args"</c> line), never
+    /// this payload. <see cref="CommandEntry.Text"/> is a whole submitted command line that
+    /// <c>CommandRegistry.ApplySnapshot</c> re-parses at tick time, and a typed character is not one: forwarding
+    /// <c>"n"</c> would have the registry refuse <c>n</c> as an unknown verb once per keystroke.</para>
+    /// <para>Nothing authorable reaches that path anyway — the only producer is the window text channel, whose
+    /// source (<c>InputSources.Keyboard.Text</c>) is marked <c>InputSourceUnaddressable</c> precisely because its
+    /// payload cannot ride a binding, so no binding document may name it. A consumer that wants typed characters
+    /// reads them off the signal, upstream of the router.</para>
+    /// </remarks>
     public static InputSignal Typed(string source, string text, InputDeviceId deviceId = default, ulong captureTick = 0UL) {
         ArgumentNullException.ThrowIfNull(text);
 

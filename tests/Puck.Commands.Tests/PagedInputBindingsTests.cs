@@ -5,6 +5,9 @@ namespace Puck.Commands.Tests;
 public sealed class PagedInputBindingsTests {
     private const string ActionCommand = "test.action";
     private const string ChannelCommand = "test.channel";
+    private const string EditorCommand = "test.editor";
+    private const string LongChordCommand = "test.chord.long";
+    private const string ShortChordCommand = "test.chord.short";
 
     [Fact]
     public void ToggleChannelFlipsOnPressAndIgnoresPhysicalRelease() {
@@ -640,8 +643,12 @@ public sealed class PagedInputBindingsTests {
             new BindingPageEntryDefinition(Sources: null, Command: ActionCommand),
         ]);
     }
-    private static void Resolve(PagedInputBindings bindings, InputSignal signal) {
-        _ = bindings.Resolve(signal: in signal, slot: 0);
+    private static void Resolve(PagedInputBindings bindings, InputSignal signal, bool pressesWithheld = false) {
+        _ = bindings.Resolve(
+            pressesWithheld: pressesWithheld,
+            signal: in signal,
+            slot: 0
+        );
     }
     private static InputRouter Router(PagedInputBindings bindings, params (string Name, CommandValueKind Kind)[] definitions) {
         return Router(bindings: bindings, registry: out _, definitions: definitions);
@@ -734,5 +741,572 @@ public sealed class PagedInputBindingsTests {
 
         Assert.NotEmpty(collection: keyRelease);
         Assert.Contains(collection: keyRelease[0].Entries, filter: e => (e.Dispatch && (e.Phase == CommandPhase.Completed)));
+    }
+    [Fact]
+    public void AModifierReleaseThatSatisfiesAShorterRowKeepsItsOwnAuthoredBinding() {
+        var bindings = new PagedInputBindings(profile: OverlappingChordProfile());
+
+        Assert.Equal(
+            actual: Assert.Single(collection: bindings.Resolve(
+                pressesWithheld: false,
+                signal: InputSignal.Press(source: "key.left"),
+                slot: 0
+            )!).Command,
+            expected: ActionCommand
+        );
+        Assert.Null(@object: bindings.Resolve(
+            pressesWithheld: false,
+            signal: InputSignal.Press(source: "key.right"),
+            slot: 0
+        ));
+
+        // Releasing key.left breaks [left, right] AND leaves [right] exactly satisfied, so a command row fires on
+        // this signal — but key.left is not a member of the row that fired, so the chord does not own the release.
+        Assert.Equal(
+            actual: Assert.Single(collection: bindings.Resolve(
+                pressesWithheld: false,
+                signal: InputSignal.Release(source: "key.left"),
+                slot: 0
+            )!).Command,
+            expected: ActionCommand
+        );
+        // The latch cleared with that release, so the next press resolves rather than being swallowed.
+        Assert.Equal(
+            actual: Assert.Single(collection: bindings.Resolve(
+                pressesWithheld: false,
+                signal: InputSignal.Press(source: "key.left"),
+                slot: 0
+            )!).Command,
+            expected: ActionCommand
+        );
+    }
+    [Fact]
+    public void AWithheldCompletionArmsNothingAndEmitsOnlyTheBreak() {
+        var bindings = new PagedInputBindings(profile: OverlappingChordProfile());
+
+        Resolve(bindings: bindings, signal: InputSignal.Press(source: "key.left"));
+        Resolve(bindings: bindings, signal: InputSignal.Press(source: "key.right"));
+        _ = bindings.DrainChordEdges(slot: 0);
+
+        // The router will discard every press this resolve produces, so the shorter row that key.left's release
+        // leaves exactly satisfied must be neither started nor ARMED — only the deeper row's break is owed.
+        Resolve(
+            bindings: bindings,
+            pressesWithheld: true,
+            signal: InputSignal.Release(source: "key.left")
+        );
+
+        var withheld = bindings.DrainChordEdges(slot: 0).ToArray();
+        var broke = Assert.Single(collection: withheld);
+
+        Assert.Equal(actual: broke.Command, expected: LongChordCommand);
+        Assert.Equal(actual: broke.Phase, expected: CommandPhase.Completed);
+
+        // An unarmed row owes nothing: releasing its remaining member emits no completion for a command that never
+        // started.
+        Resolve(bindings: bindings, signal: InputSignal.Release(source: "key.right"));
+        Assert.Empty(collection: bindings.DrainChordEdges(slot: 0).ToArray());
+
+        // And the row is not stuck: a later real press completes it exactly as it always did.
+        Resolve(bindings: bindings, signal: InputSignal.Press(source: "key.right"));
+
+        var pressed = Assert.Single(collection: bindings.DrainChordEdges(slot: 0).ToArray());
+
+        Assert.Equal(actual: pressed.Command, expected: ShortChordCommand);
+        Assert.Equal(actual: pressed.Phase, expected: CommandPhase.Started);
+    }
+    [Fact]
+    public void AModifierReleaseThatSatisfiesAShorterRowStillFiresThatRowsPressEdge() {
+        var bindings = new PagedInputBindings(profile: OverlappingChordProfile());
+
+        _ = bindings.Resolve(
+            pressesWithheld: false,
+            signal: InputSignal.Press(source: "key.left"),
+            slot: 0
+        );
+        _ = bindings.Resolve(
+            pressesWithheld: false,
+            signal: InputSignal.Press(source: "key.right"),
+            slot: 0
+        );
+        _ = bindings.DrainChordEdges(slot: 0);
+        _ = bindings.Resolve(
+            pressesWithheld: false,
+            signal: InputSignal.Release(source: "key.left"),
+            slot: 0
+        );
+
+        var edges = bindings.DrainChordEdges(slot: 0).ToArray();
+
+        Assert.Contains(collection: edges, filter: static edge => ((edge.Command == LongChordCommand) && (edge.Phase == CommandPhase.Completed)));
+        Assert.Contains(collection: edges, filter: static edge => ((edge.Command == ShortChordCommand) && (edge.Phase == CommandPhase.Started)));
+    }
+    [Fact]
+    public void AChordCompletingPressIsStillJudgedByTheActivePagesTappedActivator() {
+        var bindings = new PagedInputBindings(profile: BindingProfile.Compile(document: new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [],
+            Chords: [
+                new BindingChordDefinition(
+                    Group: "play",
+                    Chord: [],
+                    Page: new BindingPageDefinition(Id: "base", Entries: [new BindingPageEntryDefinition(
+                        Sources: null,
+                        Command: ActionCommand,
+                        Activator: new BindingActivatorDefinition(
+                            Sequence: ["key.a", "key.b"],
+                            Mode: BindingActivatorMode.Tapped
+                        )
+                    )])
+                ),
+                new BindingChordDefinition(
+                    Group: "play",
+                    Chord: ["key.x"],
+                    Command: new BindingCommandDefinition(Command: ShortChordCommand)
+                ),
+            ]
+        )));
+
+        _ = bindings.Resolve(
+            pressesWithheld: false,
+            signal: InputSignal.Press(source: "key.a"),
+            slot: 0
+        );
+        // The chord row owns this press — and the half-finished tap must still see it as the wrong input it is.
+        Assert.Null(@object: bindings.Resolve(
+            pressesWithheld: false,
+            signal: InputSignal.Press(source: "key.x"),
+            slot: 0
+        ));
+        _ = bindings.DrainChordEdges(slot: 0);
+        _ = bindings.Resolve(
+            pressesWithheld: false,
+            signal: InputSignal.Press(source: "key.b"),
+            slot: 0
+        );
+
+        Assert.DoesNotContain(collection: bindings.DrainChordEdges(slot: 0).ToArray(), filter: static edge => (edge.Command == ActionCommand));
+    }
+    [Fact]
+    public void ResetClearsTheChordConsumptionAndThePressLatches() {
+        var bindings = new PagedInputBindings(profile: GroupProfile());
+
+        _ = bindings.Resolve(
+            pressesWithheld: false,
+            signal: InputSignal.Press(source: "key.left"),
+            slot: 0
+        );
+        Assert.Null(@object: bindings.Resolve(
+            pressesWithheld: false,
+            signal: InputSignal.Press(source: "key.right"),
+            slot: 0
+        ));
+        Assert.True(condition: bindings.SetActiveGroup(
+            group: "editor",
+            slot: 0
+        ));
+        bindings.Reset(slot: 0);
+
+        // The latch is gone: the release answers from the page active NOW, not the one its press latched.
+        Assert.Equal(
+            actual: Assert.Single(collection: bindings.Resolve(
+                pressesWithheld: false,
+                signal: InputSignal.Release(source: "key.left"),
+                slot: 0
+            )!).Command,
+            expected: EditorCommand
+        );
+        // And the chord no longer owns key.right, so its reassertion resolves instead of being swallowed.
+        Assert.Equal(
+            actual: Assert.Single(collection: bindings.Resolve(
+                pressesWithheld: false,
+                signal: Reassert(source: "key.right"),
+                slot: 0
+            )!).Command,
+            expected: EditorCommand
+        );
+    }
+    [Fact]
+    public void AModeFlipTouchesNeitherTheLatchesNorTheChordTracker() {
+        var bindings = new PagedInputBindings(profile: GroupProfile());
+
+        _ = bindings.Resolve(
+            pressesWithheld: false,
+            signal: InputSignal.Press(source: "key.left"),
+            slot: 0
+        );
+        Assert.True(condition: bindings.SetActiveGroup(
+            group: "editor",
+            slot: 0
+        ));
+
+        // The tracker survived: the new group re-resolves against the SAME held modifiers.
+        Assert.Equal(expected: "edit-left", actual: bindings.ViewFor(slot: 0).PageId);
+        // The latch survived: a held action stays itself across the flip.
+        Assert.Equal(
+            actual: Assert.Single(collection: bindings.Resolve(
+                pressesWithheld: false,
+                signal: InputSignal.Release(source: "key.left"),
+                slot: 0
+            )!).Command,
+            expected: ActionCommand
+        );
+        // A new press uses the new group's page.
+        Assert.Equal(
+            actual: Assert.Single(collection: bindings.Resolve(
+                pressesWithheld: false,
+                signal: InputSignal.Press(source: "key.right"),
+                slot: 0
+            )!).Command,
+            expected: EditorCommand
+        );
+    }
+    [Fact]
+    public void AGroupFlipLeavesAnArmedCommandChordToReleaseAgainstTheRowThatPressedIt() {
+        var bindings = new PagedInputBindings(profile: GroupProfile());
+
+        _ = bindings.Resolve(
+            pressesWithheld: false,
+            signal: InputSignal.Press(source: "key.left"),
+            slot: 0
+        );
+        _ = bindings.Resolve(
+            pressesWithheld: false,
+            signal: InputSignal.Press(source: "key.right"),
+            slot: 0
+        );
+        _ = bindings.DrainChordEdges(slot: 0);
+        Assert.True(condition: bindings.SetActiveGroup(
+            group: "editor",
+            slot: 0
+        ));
+        Assert.Null(@object: bindings.Resolve(
+            pressesWithheld: false,
+            signal: InputSignal.Release(source: "key.right"),
+            slot: 0
+        ));
+
+        var release = Assert.Single(collection: bindings.DrainChordEdges(slot: 0).ToArray());
+
+        Assert.Equal(expected: LongChordCommand, actual: release.Command);
+        Assert.Equal(expected: CommandPhase.Completed, actual: release.Phase);
+    }
+    [Fact]
+    public void AGroupFlipAbandonsTheOutgoingPagesActivatorProgress() {
+        var bindings = new PagedInputBindings(profile: BindingProfile.Compile(document: new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [],
+            Chords: [
+                new BindingChordDefinition(
+                    Group: "play",
+                    Chord: [],
+                    Page: new BindingPageDefinition(Id: "base", Entries: [new BindingPageEntryDefinition(
+                        Sources: null,
+                        Command: ActionCommand,
+                        Activator: new BindingActivatorDefinition(
+                            Sequence: ["key.a", "key.b"],
+                            Mode: BindingActivatorMode.Tapped
+                        )
+                    )])
+                ),
+                new BindingChordDefinition(
+                    Group: "editor",
+                    Chord: [],
+                    Page: new BindingPageDefinition(Id: "edit", Entries: [])
+                ),
+            ]
+        )));
+
+        _ = bindings.Resolve(
+            pressesWithheld: false,
+            signal: InputSignal.Press(source: "key.a"),
+            slot: 0
+        );
+        Assert.True(condition: bindings.SetActiveGroup(
+            group: "editor",
+            slot: 0
+        ));
+        Assert.True(condition: bindings.SetActiveGroup(
+            group: "play",
+            slot: 0
+        ));
+        _ = bindings.Resolve(
+            pressesWithheld: false,
+            signal: InputSignal.Press(source: "key.b"),
+            slot: 0
+        );
+
+        Assert.Empty(collection: bindings.DrainChordEdges(slot: 0).ToArray());
+    }
+    [Fact]
+    public void WheelForAnswersFromTheLoadedProfileAlone() {
+        var bindings = new PagedInputBindings(profile: WheelProfile(wheelId: "tools"));
+
+        // A slot with no state answers from its group's resting page rather than establishing state to read.
+        Assert.Equal(expected: "tools", actual: bindings.WheelFor(slot: 3)?.Id);
+
+        bindings.Reload(profile: WheelProfile(wheelId: "belt"));
+
+        Assert.Equal(expected: "belt", actual: bindings.WheelFor(slot: 3)?.Id);
+        Assert.Equal(expected: "belt", actual: bindings.WheelFor(slot: 0)?.Id);
+    }
+    [Fact]
+    public async Task WheelForNeverCreatesSlotStateBeneathTheSnapshotThread() {
+        // WheelFor is called off the snapshot thread, once per presentation frame. A mutating read — one that
+        // establishes slot state to answer from — races the snapshot thread over the SAME slot entry: the render
+        // thread reads the loaded profile, builds a fresh state against it, and stores it AFTER the snapshot thread
+        // has stored (and pressed a modifier into) its own. The chord is silently gone, and the very next signal
+        // resolves against the resting page instead of the held one. ViewFor has the analogous test; this is
+        // WheelFor's, and reverting WheelFor to the StateFor(slot) form fails it.
+        var profile = BindingProfile.Compile(document: new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [new BindingModifierDefinition(Id: "hold", Sources: ["key.hold"])],
+            Chords: [
+                new BindingChordDefinition(
+                    Group: "play",
+                    Chord: [],
+                    Page: new BindingPageDefinition(
+                        Id: "rest",
+                        Entries: [new BindingPageEntryDefinition(Sources: ["key.action"], Command: ActionCommand)]
+                    )
+                ),
+                new BindingChordDefinition(
+                    Group: "play",
+                    Held: ["hold"],
+                    Page: new BindingPageDefinition(
+                        Id: "held",
+                        Entries: [new BindingPageEntryDefinition(Sources: ["key.action"], Command: EditorCommand)]
+                    )
+                ),
+            ],
+            Wheels: [new BindingWheelDefinition(
+                Id: "tools",
+                Group: "play",
+                HoldPages: ["held"],
+                Rings: [Ring(id: "inner")]
+            )]
+        ));
+        var bindings = new PagedInputBindings(profile: profile);
+        var reading = true;
+        var reads = Task.Run(action: () => {
+            while (Volatile.Read(location: ref reading)) {
+                _ = bindings.WheelFor(slot: 0);
+            }
+        }, cancellationToken: TestContext.Current.CancellationToken);
+
+        try {
+            for (var index = 0; (index < 20_000); index++) {
+                // Reload drops every slot state, so each pass re-opens the window the render thread can store into.
+                bindings.Reload(profile: profile);
+                _ = bindings.Resolve(
+                    pressesWithheld: false,
+                    signal: InputSignal.Press(source: "key.hold"),
+                    slot: 0
+                );
+
+                var resolved = bindings.Resolve(
+                    pressesWithheld: false,
+                    signal: InputSignal.Press(source: "key.action"),
+                    slot: 0
+                );
+
+                Assert.Equal(
+                    actual: Assert.Single(collection: (resolved ?? [])).Command,
+                    expected: EditorCommand
+                );
+                _ = bindings.Resolve(
+                    pressesWithheld: false,
+                    signal: InputSignal.Release(source: "key.action"),
+                    slot: 0
+                );
+                _ = bindings.Resolve(
+                    pressesWithheld: false,
+                    signal: InputSignal.Release(source: "key.hold"),
+                    slot: 0
+                );
+            }
+        } finally {
+            Volatile.Write(location: ref reading, value: false);
+        }
+
+        await reads;
+    }
+
+    private static CompiledBindingProfile GroupProfile() {
+        return BindingProfile.Compile(document: new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [
+                new BindingModifierDefinition(Id: "left", Sources: ["key.left"]),
+                new BindingModifierDefinition(Id: "right", Sources: ["key.right"]),
+            ],
+            Chords: [
+                new BindingChordDefinition(
+                    Group: "play",
+                    Chord: [],
+                    Page: new BindingPageDefinition(Id: "base", Entries: [
+                        new BindingPageEntryDefinition(Sources: ["key.left"], Command: ActionCommand),
+                        new BindingPageEntryDefinition(Sources: ["key.right"], Command: ActionCommand),
+                    ])
+                ),
+                new BindingChordDefinition(
+                    Group: "play",
+                    Chord: ["left", "right"],
+                    Command: new BindingCommandDefinition(Command: LongChordCommand, HoldRelease: true)
+                ),
+                new BindingChordDefinition(
+                    Group: "editor",
+                    Chord: [],
+                    Page: new BindingPageDefinition(Id: "edit", Entries: [
+                        new BindingPageEntryDefinition(Sources: ["key.left"], Command: EditorCommand),
+                        new BindingPageEntryDefinition(Sources: ["key.right"], Command: EditorCommand),
+                    ])
+                ),
+                new BindingChordDefinition(
+                    Group: "editor",
+                    Chord: ["left"],
+                    Page: new BindingPageDefinition(Id: "edit-left", Entries: [])
+                ),
+            ]
+        ));
+    }
+    private static CompiledBindingProfile OverlappingChordProfile() {
+        return BindingProfile.Compile(document: new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [
+                new BindingModifierDefinition(Id: "left", Sources: ["key.left"]),
+                new BindingModifierDefinition(Id: "right", Sources: ["key.right"]),
+            ],
+            Chords: [
+                new BindingChordDefinition(
+                    Group: "play",
+                    Chord: [],
+                    Page: new BindingPageDefinition(Id: "base", Entries: [new BindingPageEntryDefinition(
+                        Sources: ["key.left"],
+                        Command: ActionCommand
+                    )])
+                ),
+                new BindingChordDefinition(
+                    Group: "play",
+                    Chord: ["right"],
+                    Command: new BindingCommandDefinition(Command: ShortChordCommand)
+                ),
+                new BindingChordDefinition(
+                    Group: "play",
+                    Chord: ["left", "right"],
+                    Command: new BindingCommandDefinition(Command: LongChordCommand, HoldRelease: true)
+                ),
+            ]
+        ));
+    }
+    private static InputSignal Reassert(string source) {
+        return new InputSignal(
+            Source: source,
+            DeviceId: default,
+            Value: CommandValue.Digital(active: true),
+            Phase: CommandPhase.Active
+        );
+    }
+
+    [Fact]
+    public void HoldsSourceGoesFalseOnceAnAnalogChordSourceHasReturnedToRest() {
+        var bindings = new PagedInputBindings(profile: AnalogChordProfile());
+
+        Resolve(
+            bindings: bindings,
+            signal: Trigger(value: 0.9f)
+        );
+
+        Assert.True(condition: bindings.HoldsSource(slot: 0, source: "pad.leftTrigger"));
+
+        // A CONTINUOUS producer reports its release the only way it can — an Active-phase inactive sample. That is
+        // the release everywhere else (BindingChordTracker.Apply, InputRouter.ApplySignal), so the chord's claim on
+        // the source ends with it; otherwise the router's focus-exempt idle gate is answered "held" forever.
+        Resolve(
+            bindings: bindings,
+            signal: Trigger(value: 0f)
+        );
+
+        Assert.False(condition: bindings.HoldsSource(slot: 0, source: "pad.leftTrigger"));
+    }
+    [Fact]
+    public void AnAnalogChordSourcesPageBindingResolvesAgainAfterItReturnsToRest() {
+        var bindings = new PagedInputBindings(profile: AnalogChordProfile());
+
+        Resolve(
+            bindings: bindings,
+            signal: Trigger(value: 0.9f)
+        );
+        Resolve(
+            bindings: bindings,
+            signal: Trigger(value: 0f)
+        );
+
+        // The group carrying the chord row is no longer active, and the trigger's own claim ended when it centred,
+        // so the menu page's entry for it is what the next deflection resolves to.
+        Assert.True(condition: bindings.SetActiveGroup(group: "menu", slot: 0));
+
+        var deflected = Trigger(value: 0.9f);
+
+        Assert.NotNull(@object: bindings.Resolve(
+            pressesWithheld: false,
+            signal: in deflected,
+            slot: 0
+        ));
+    }
+
+    private static CompiledBindingProfile AnalogChordProfile() {
+        return BindingProfile.Compile(
+            channelCommandName: static _ => ChannelCommand,
+            document: new BindingProfileDocument(
+                Version: BindingProfileDocument.CurrentVersion,
+                Modifiers: [new BindingModifierDefinition(Id: "lt", Sources: ["pad.leftTrigger"])],
+                Chords: [
+                    new BindingChordDefinition(
+                        Group: "play",
+                        Chord: [],
+                        Page: new BindingPageDefinition(Id: "play.base", Entries: [new BindingPageEntryDefinition(
+                            Sources: ["pad.leftTrigger"],
+                            Channel: new ChannelRef.Name(Value: "aim")
+                        )])
+                    ),
+                    new BindingChordDefinition(
+                        Group: "play",
+                        Held: ["lt"],
+                        Command: new BindingCommandDefinition(Command: ActionCommand)
+                    ),
+                    new BindingChordDefinition(
+                        Group: "menu",
+                        Chord: [],
+                        Page: new BindingPageDefinition(Id: "menu.base", Entries: [new BindingPageEntryDefinition(
+                            Sources: ["pad.leftTrigger"],
+                            Channel: new ChannelRef.Name(Value: "scroll")
+                        )])
+                    ),
+                ]
+            )
+        );
+    }
+    private static InputSignal Trigger(float value) => new(
+        Source: "pad.leftTrigger",
+        DeviceId: default,
+        Value: CommandValue.Axis(value: value),
+        Phase: CommandPhase.Active
+    );
+    private static CompiledBindingProfile WheelProfile(string wheelId) {
+        return BindingProfile.Compile(document: new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [],
+            Chords: [new BindingChordDefinition(
+                Group: "play",
+                Chord: [],
+                Page: new BindingPageDefinition(Id: "hold", Entries: [])
+            )],
+            Wheels: [new BindingWheelDefinition(
+                Id: wheelId,
+                Group: "play",
+                HoldPages: ["hold"],
+                Rings: [Ring(id: "inner")]
+            )]
+        ));
     }
 }

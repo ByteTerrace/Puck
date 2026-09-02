@@ -7,6 +7,12 @@ public enum BindingSessionStatus {
 
     /// <summary>Every step confirmed; <see cref="BindingSession.Result"/> holds the full capture list.</summary>
     Completed,
+
+    /// <summary>The host gave up on the session (<see cref="BindingSession.Abandon"/>) before the last step
+    /// confirmed. Further signals are ignored, and <see cref="BindingSession.Result"/> holds the partial capture
+    /// list — which <see cref="BindingSessionResult.Apply"/> folds in cleanly, leaving the unwalked steps on their
+    /// existing bindings.</summary>
+    Abandoned,
 }
 /// <summary>
 /// The guided-rebind state machine: walks a player through a <see cref="BindingSessionPlan"/> one step at a
@@ -14,7 +20,9 @@ public enum BindingSessionStatus {
 /// only after <see cref="BindingSessionPlan.RequiredPresses"/> presses of the same source, resetting the step
 /// when a confirmation press wanders, and refusing reserved or already-captured sources. Feed it
 /// <see cref="InputSignal"/>s in the router's deterministic capture order and its whole life is a pure function
-/// of that sequence — no wall clock, no randomness — so a recorded session replays bit-for-bit.
+/// of that sequence — no wall clock, no randomness — so a recorded session replays bit-for-bit. The one thing that
+/// ends a session early is the host saying so: <see cref="Abandon"/> stops the machine and keeps the partial
+/// captures.
 /// </summary>
 /// <remarks>
 /// The machine is deliberately slot-agnostic: it judges every signal it is handed, so the host decides whose
@@ -32,8 +40,12 @@ public sealed class BindingSession {
     private readonly BindingSessionPlan m_plan;
     private readonly HashSet<string> m_reservedSources;
 
+    private bool m_abandoned;
     private string? m_pendingSource;
     private int m_pressesRemaining;
+    // The last Result handed out, invalidated by the only thing that can change it (a confirmed capture). Hosts poll
+    // Result to render progress, and rebuilding the capture list on every read would allocate once per frame.
+    private BindingSessionResult? m_result;
     private int m_stepIndex;
 
     /// <summary>Initializes a new instance of the <see cref="BindingSession"/> class.</summary>
@@ -69,12 +81,14 @@ public sealed class BindingSession {
             );
         }
 
+        m_abandoned = false;
         m_captures = new List<BindingSessionCapture>(capacity: plan.Steps.Count);
         m_capturedSources = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
         m_held = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
         m_pendingSource = null;
         m_plan = plan;
         m_pressesRemaining = 0;
+        m_result = null;
         m_reservedSources = new HashSet<string>(
             collection: (plan.ReservedSources ?? []),
             comparer: StringComparer.OrdinalIgnoreCase
@@ -97,17 +111,21 @@ public sealed class BindingSession {
     public BindingSessionPlan Plan => m_plan;
     /// <summary>Gets the presses still needed to lock the pending capture in (0 while waiting on a first press).</summary>
     public int PressesRemaining => m_pressesRemaining;
-    /// <summary>Gets the result over the captures confirmed so far (complete, or partial for an abandoned session).</summary>
-    public BindingSessionResult Result => new(Captures: [.. m_captures,]);
+    /// <summary>Gets the result over the captures confirmed so far (complete, or partial for an abandoned session).
+    /// Cached: the same instance answers every read until the next capture confirms.</summary>
+    public BindingSessionResult Result => (m_result ??= new BindingSessionResult(Captures: [.. m_captures,]));
     /// <summary>Gets the session's lifecycle status.</summary>
-    public BindingSessionStatus Status => ((m_stepIndex < m_plan.Steps.Count)
+    public BindingSessionStatus Status => (m_abandoned
+        ? BindingSessionStatus.Abandoned
+        : ((m_stepIndex < m_plan.Steps.Count)
         ? BindingSessionStatus.InProgress
-        : BindingSessionStatus.Completed
+        : BindingSessionStatus.Completed)
     );
 
     private BindingSessionEvent Confirm(string source, BindingSessionStep step, int stepIndex) {
         m_captures.Add(item: new BindingSessionCapture(
             ActivateOn: step.ActivateOn,
+            Channel: step.Channel,
             Command: step.Command,
             Label: step.Label,
             MatchedSuggestion: string.Equals(
@@ -120,6 +138,7 @@ public sealed class BindingSession {
         _ = m_capturedSources.Add(item: source);
         m_pendingSource = null;
         m_pressesRemaining = 0;
+        m_result = null;
         m_stepIndex++;
 
         return new BindingSessionEvent(
@@ -172,19 +191,39 @@ public sealed class BindingSession {
         }
     }
 
+    /// <summary>Gives up on the session where it stands — the host's cancel seam (the player backed out, the menu
+    /// closed, the device walked away). Idempotent, and refused once every step has confirmed: a completed session
+    /// has nothing left to abandon. The captures confirmed so far survive on <see cref="Result"/>, so a host may
+    /// still apply the partial rebind.</summary>
+    /// <returns><see langword="true"/> when this call abandoned an in-progress session.</returns>
+    public bool Abandon() {
+        if (Status != BindingSessionStatus.InProgress) {
+            return false;
+        }
+
+        m_abandoned = true;
+        m_pendingSource = null;
+        m_pressesRemaining = 0;
+        m_held.Clear();
+
+        return true;
+    }
     /// <summary>
     /// Applies one signal, in capture order, and reports what it meant. Only rising edges advance the machine;
-    /// everything else returns <see cref="BindingSessionEventKind.None"/>.
+    /// everything else returns <see cref="BindingSessionEventKind.None"/> against the step still being prompted.
     /// </summary>
     /// <param name="signal">The signal to judge.</param>
     /// <returns>The event the signal produced.</returns>
     public BindingSessionEvent Advance(in InputSignal signal) {
-        if (!TryDetectPress(signal: signal)) {
-            return BindingSessionEvent.None;
+        // The lifecycle check comes FIRST: a finished session must be inert, and TryDetectPress is a mutation (it
+        // owns the per-source held set), so running it after the machine has stopped would leave the session's
+        // state depending on signals it is no longer judging.
+        if (Status != BindingSessionStatus.InProgress) {
+            return BindingSessionEvent.None(stepIndex: m_stepIndex);
         }
 
-        if (Status == BindingSessionStatus.Completed) {
-            return BindingSessionEvent.None;
+        if (!TryDetectPress(signal: signal)) {
+            return BindingSessionEvent.None(stepIndex: m_stepIndex);
         }
 
         var source = signal.Source;

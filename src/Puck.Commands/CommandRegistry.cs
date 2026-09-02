@@ -1,5 +1,7 @@
 using System.Collections.Frozen;
+using System.Collections.Immutable;
 using System.CommandLine;
+using System.CommandLine.Parsing;
 using System.Numerics;
 
 namespace Puck.Commands;
@@ -17,75 +19,78 @@ namespace Puck.Commands;
 /// </list>
 /// There is no fourth door: dispatch requires a <see cref="CommandContext"/>, which only this type and the mixer can
 /// build, and <see cref="Definitions"/> hands out <see cref="CommandMetadata"/> rather than an invocable handler.
+/// <para>A registry is single-threaded by contract: the frame thread that drains <see cref="TextCommandSource"/> and
+/// applies snapshots is its only caller. Construction is the only thread-safe operation; the acknowledgement mode, the
+/// rejection count, and the re-entrancy depth are plain fields read and written on that one thread.</para>
 /// </remarks>
 public sealed class CommandRegistry {
     private readonly Dictionary<string, CommandDefinition> m_byName = new(comparer: StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<Command, CommandDefinition> m_byTextCommand = [];
-    private readonly Command m_helpCommand = new(
-        description: "Lists the available commands.",
-        name: HelpCommandName
-    );
     private readonly RootCommand m_root = new(description: "Puck commands.");
     private readonly Dictionary<string, int> m_mapIndexByName = new(comparer: StringComparer.OrdinalIgnoreCase);
     // Interned command identity: a stable ushort id per command, assigned by ordinal-sorting the canonical
     // names so the id↔name mapping is identical on every machine. This is the command's deterministic,
     // hashable, wire-compact identity in a CommandSnapshot — strings stay on the text/config side.
     private readonly Dictionary<string, ushort> m_idByName = new(comparer: StringComparer.OrdinalIgnoreCase);
-    // The built-in `wire.ack [on|quiet]` verb, registered beside `help`: it reports or flips m_acksQuiet. Handled inline
-    // in Submit (like help), so it never enters a module or the wire-native path.
-    private readonly Argument<string[]> m_wireAckArgument = new(name: "mode") {
-        Arity = ArgumentArity.ZeroOrMore,
-        Description = "on | quiet",
-    };
-    // The built-in `wire.errors [reset]` verb, registered beside `help`/`wire.ack`: it reports (or clears) the count of
-    // submitted lines this registry REFUSED. Every rejection — an unknown verb, a parse error, a handler's IsError
-    // result on either dispatch path, a Simulation re-parse that failed to reach its handler, and a host's DEFERRED
-    // refusal reported through NoteDeferredRejection — increments the same counter, so a scripted driver reads one
-    // number back instead of pattern-matching free-form error text.
-    private readonly Argument<string[]> m_wireErrorsArgument = new(name: "mode") {
-        Arity = ArgumentArity.ZeroOrMore,
-        Description = "reset",
-    };
 
     // The attributed owner name for the registry's own built-in command names (help, wire.ack, wire.errors) in the
     // ClaimName ledger — so a colliding module's error message names the true owner rather than an empty module list.
     private const string BuiltInOwnerName = "CommandRegistry";
-    // The registry's own verb names, declared once because they are used TWICE — to construct the built-in Command and
-    // to claim the name against module collision. Two hand-transcribed copies would let a rename guard a name nothing
-    // dispatches, silently reopening the wire-path hijack the claim exists to prevent.
+    // The registry's own verb names. They are ORDINARY REGISTRATIONS: the registry yields three definitions of its own
+    // before it reads a module's, so a built-in is interned, described by Definitions, resolved by TryGetId and
+    // TryGetMetadata, and dispatched by the same table every other verb goes through. They are declared
+    // CommandBindability.Unbindable, which is how a binding document is refused one — by the bindability axis every
+    // other unbindable verb is refused by, rather than by being absent from the vocabulary and reported as unknown.
     private const string HelpCommandName = "help";
     private const int MaxCommandCount = (ushort.MaxValue + 1);
+    // How deeply a handler may re-enter Submit before the registry refuses. A handler that submits a line whose handler
+    // submits again is legitimate (a macro verb), but an unbounded chain overflows the stack and takes the session with
+    // it; refusing with an ordinary error result keeps the failure inside the wire's own reporting surfaces.
+    private const int MaxSubmitDepth = 8;
     /// <summary>The cap on whitespace-delimited tokens the wire path handles from a <see langword="stackalloc"/> buffer;
-    /// a line with more falls through to the full parse. Far above any real console verb's token count.</summary>
-    private const int MaxWireTokens = 16;
+    /// a line with more falls through to the full parse. The widest indexed argument list in the tree is eight tokens,
+    /// but a free-text tail (<see cref="WireArgs.Tail"/>) — a chat line, an inline JSON row — is unbounded, so this sits
+    /// far above both rather than at the arity of the widest verb.</summary>
+    private const int MaxWireTokens = 64;
     private const string WireAckCommandName = "wire.ack";
     private const string WireErrorsCommandName = "wire.errors";
 
     // The Digital impulse most wire-native verbs carry, hoisted so those contexts do not recompute it.
     private static readonly CommandValue DigitalImpulse = CommandValue.Digital(active: true);
+    // The one parser configuration BOTH full-parse sites use. System.CommandLine enables RESPONSE FILES by default, so
+    // a default-configured parse of `chat.log 1 @everyone hello` reads `everyone` off the filesystem — a console line
+    // performing I/O, a parse result that depends on the working directory rather than on the line, and (for a
+    // simulation-routed line, parsed once at submit and again at apply) a replay that can diverge from its recording.
+    // Null-ing the replacer makes an '@'-prefixed token an ordinary token, which is the only thing a Puck verb ever
+    // means by one.
+    private static readonly ParserConfiguration WireParserConfiguration = new() {
+        ResponseFileTokenReplacer = null,
+    };
 
     // The span-keyed alternate view over m_byName, so RoutesToSimulation classifies a line's verb token without
     // materializing it. Built once at construction, after registration completes.
     private readonly Dictionary<string, CommandDefinition>.AlternateLookup<ReadOnlySpan<char>> m_byNameAlt;
     private readonly CommandDefinition[] m_definitionById;
     private readonly int[] m_mapIndexById;
-    private readonly string[] m_mapNames;
+    private readonly ImmutableArray<string> m_mapNames;
     // The public read-only face of the registered set, materialized once at construction: a listing verb and the
-    // binding vocabulary read these facts, and neither is handed anything invocable.
-    private readonly CommandMetadata[] m_metadata;
+    // binding vocabulary read these facts, and neither is handed anything invocable. ImmutableArray rather than an
+    // array behind IReadOnlyList — the affordance manifest is a fact about the registry, and a caller that can cast
+    // the interface back to its backing array can rewrite it.
+    private readonly ImmutableArray<CommandMetadata> m_metadata;
     private readonly CommandMetadata[] m_metadataById;
     private readonly string[] m_nameById;
     private readonly ICommandObserver[] m_observers;
-    private readonly Command m_wireAckCommand;
-    private readonly Command m_wireErrorsCommand;
     // The wire-native dispatch table (see Submit): every command built via CommandDefinition.WithWireArgs, keyed
-    // ORDINAL by its name and each alias — ordinal because System.CommandLine matches command
-    // names case-SENSITIVELY, so a case-insensitive key here would wire-dispatch a line the full parse would reject. Frozen
-    // once at construction (read-only, read-heavy). A miss falls through to the unchanged System.CommandLine parse.
+    // case-INSENSITIVELY by its name and each alias, matching m_byName/m_idByName and the binding vocabulary. Command
+    // identity is one thing on every surface: a binding row naming `Player.Move`, the interned id it resolves to, and
+    // the line the router builds from that spelling must all reach the same handler. System.CommandLine matches
+    // case-sensitively, so the full-parse fallback substitutes the canonical name (CanonicalizeVerb) rather than this
+    // table narrowing to match the parser. Frozen once at construction (read-only, read-heavy).
     private readonly FrozenDictionary<string, CommandDefinition> m_wirePath;
     // The span-keyed alternate view over m_wirePath: the wire path looks a verb up by the line's leading-token SPAN, so
-    // the verb token never materializes as a string. StringComparer.Ordinal supplies the IAlternateEqualityComparer that
-    // makes this legal; built once, reused every dispatch.
+    // the verb token never materializes as a string. StringComparer.OrdinalIgnoreCase supplies the
+    // IAlternateEqualityComparer that makes this legal; built once, reused every dispatch.
     private readonly FrozenDictionary<string, CommandDefinition>.AlternateLookup<ReadOnlySpan<char>> m_wirePathAlt;
 
     // The wire acknowledgement mode: false (the default) echoes every accepted line exactly as before; true (`wire.ack
@@ -96,11 +101,19 @@ public sealed class CommandRegistry {
     // null until a host wires one (the live console-driving registry), so every other registry keeps the inline path.
     // The sink carries its OWN bound principal — this field never chooses one.
     private CommandInjectionSink? m_injectionSink;
-    // TextCommandSource uses this as a FIFO barrier: after it submits a deferred simulation mutation, later
-    // Immediate-routed stdin lines stay queued until the mutation's snapshot has actually applied. Further
-    // Simulation-routed lines keep draining — they fold into the same pending snapshot in FIFO order.
-    private int m_pendingSimulationSubmissions;
+    // How many observer notifications were swallowed because the sink threw. Counted SEPARATELY from m_rejections
+    // because the two answer different questions: a rejection is a line the caller submitted and this registry
+    // refused, while an observer fault is a reporting surface that broke while describing a line nobody refused. They
+    // were one counter, so three faulty sinks turned one bound gamepad press — a line the caller never submitted at
+    // all — into `[wire.errors: 3 rejected]`, and a scripted driver asserting zero refusals was poisoned by a UI sink.
+    // Saturating like m_rejections, and reported beside it (never folded into it) by `wire.errors`.
+    private int m_observerFaults;
+    // The count wire.errors reports. Saturating rather than wrapping: a run that refused int.MaxValue lines has a
+    // number that stops being useful, but a NEGATIVE count reads as a defect in the counter rather than in the run.
     private int m_rejections;
+    // How many Submit calls are on the stack right now (a handler that submits a line re-enters). Guarded by
+    // MaxSubmitDepth so an accidental cycle refuses instead of overflowing.
+    private int m_submitDepth;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CommandRegistry"/> class, registering the commands
@@ -120,103 +133,40 @@ public sealed class CommandRegistry {
             : ((observers as ICommandObserver[]) ?? observers.ToArray())
         );
 
-        // Attribution for the loud-failure name guard below: which owner first claimed a given command
-        // name/alias. Ctor-scoped — the registry is immutable once built, so nothing after this loop can
-        // introduce a new collision. The registry's own built-ins claim their names FIRST, so a module that
-        // declares e.g. "wire.errors" collides and throws exactly like colliding with another module.
+        // Attribution for Register's loud-failure name guard: which owner first claimed a given command name/alias.
+        // Ctor-scoped — the registry is immutable once built, so nothing after construction can introduce a new
+        // collision.
         var claimedBy = new Dictionary<string, string>(comparer: StringComparer.OrdinalIgnoreCase);
-
-        ClaimName(
-            claimedBy: claimedBy,
-            name: HelpCommandName,
-            owner: BuiltInOwnerName
-        );
-        ClaimName(
-            claimedBy: claimedBy,
-            name: WireAckCommandName,
-            owner: BuiltInOwnerName
-        );
-        ClaimName(
-            claimedBy: claimedBy,
-            name: WireErrorsCommandName,
-            owner: BuiltInOwnerName
-        );
-
         var commandCount = 0;
+
+        // The registry's own three verbs go through EXACTLY the registration a module's definition goes through, and
+        // they go first. Registering them at all is what makes Definitions the whole dispatchable catalogue and lets
+        // TryGetId/TryGetMetadata answer for a verb Submit does dispatch; registering them first is what keeps the
+        // collision message honest, so a module declaring `wire.errors` is refused by name against BuiltInOwnerName
+        // rather than shadowing a verb the registry would still answer itself.
+        foreach (var definition in BuiltInCommands()) {
+            Register(
+                definition: definition,
+                owner: BuiltInOwnerName
+            );
+        }
 
         foreach (var module in modules) {
             var moduleName = module.GetType().Name;
 
             foreach (var definition in module.GetCommands()) {
-                if (commandCount == MaxCommandCount) {
-                    throw new InvalidOperationException(message: $"A command registry supports at most {MaxCommandCount} distinct commands because snapshot command ids are 16-bit.");
-                }
-
-                commandCount++;
-
-                // The loud-completeness gate for the bindability axis: a registration that declared nothing would
-                // otherwise land on whichever member sits at 0, silently deciding whether an authority verb is
-                // reachable from a binding page. Refuse it BY NAME instead — this is a composition-root error.
-                if (definition.Bindability == CommandBindability.Unspecified) {
-                    throw new InvalidOperationException(message: $"Command '{definition.Name}' (registered by {moduleName}) declares no bindability. Every registration must pass CommandBindability.Bindable or CommandBindability.Unbindable.");
-                }
-
-                if (
-                    !Enum.IsDefined(value: definition.Bindability) ||
-                    !Enum.IsDefined(value: definition.Routing) ||
-                    !Enum.IsDefined(value: definition.ValueKind)
-                ) {
-                    throw new InvalidOperationException(message: $"Command '{definition.Name}' (registered by {moduleName}) declares an invalid bindability, routing, or value kind.");
-                }
-
-                if (string.IsNullOrWhiteSpace(value: definition.Map)) {
-                    throw new InvalidOperationException(message: $"Command '{definition.Name}' (registered by {moduleName}) declares an empty command map.");
-                }
-
-                m_root.Subcommands.Add(item: definition.TextCommand);
-                m_byTextCommand[definition.TextCommand] = definition;
-                ClaimName(
-                    name: definition.Name,
-                    owner: moduleName,
-                    claimedBy: claimedBy
+                Register(
+                    definition: definition,
+                    owner: moduleName
                 );
-                m_byName[definition.Name] = definition;
-
-                foreach (var alias in definition.Aliases) {
-                    ClaimName(
-                        claimedBy: claimedBy,
-                        name: alias,
-                        owner: moduleName
-                    );
-                    m_byName[alias] = definition;
-                    definition.TextCommand.Aliases.Add(item: alias);
-                }
             }
         }
 
-        m_root.Subcommands.Add(item: m_helpCommand);
-
-        // The wire's own control verb, beside help: `wire.ack [on|quiet]` reports or flips the acknowledgement mode.
-        m_wireAckCommand = new Command(
-            description: "Sets or reports the stdin acknowledgement mode: wire.ack [on|quiet] — `on` (default) echoes every accepted command; `quiet` drops the success acks of side-effecting verbs (errors and query verbs like body.where still echo); no argument reports the current mode.",
-            name: WireAckCommandName
-        ) {
-            m_wireAckArgument,
-        };
-        m_root.Subcommands.Add(item: m_wireAckCommand);
-
-        // The wire's rejection readback, beside wire.ack: `wire.errors [reset]`.
-        m_wireErrorsCommand = new Command(
-            description: "Reports the number of submitted lines this session REFUSED (unknown verb, parse error, a handler's failure result, or a deferred refusal a host raised a tick after accepting the line): wire.errors [reset] — no argument reports the running count; `reset` reports it and zeroes the counter. A scripted run asserts `[wire.errors: 0 rejected]` to prove no step silently no-opped.",
-            name: WireErrorsCommandName
-        ) {
-            m_wireErrorsArgument,
-        };
-        m_root.Subcommands.Add(item: m_wireErrorsCommand);
-
         // Intern a stable id per distinct command. Ordinal-sort the canonical names so the assignment is
         // identical across machines and builds (independent of module registration order); aliases resolve to
-        // their command's id. `help` is handled by the text path and is never bound to input, so it is not interned.
+        // their command's id. The registry's own built-ins are interned beside a module's commands: they are
+        // dispatched, so they are named, described and resolvable exactly like everything else this registry answers
+        // for. Being unbindable is what keeps them off a binding page, not being absent from the catalogue.
         m_nameById = m_byName.Values
             .Select(selector: static definition => definition.Name)
             .Distinct(comparer: StringComparer.OrdinalIgnoreCase)
@@ -267,9 +217,9 @@ public sealed class CommandRegistry {
         // The wire-native table: every name/alias whose definition carries a WireArgs handler. Immediate commands
         // dispatch through it now; Simulation commands use the same tokenization before injection and again when the
         // tick applies, avoiding two System.CommandLine object graphs while preserving the original line as payload.
-        // Ordinal-keyed to mirror
-        // System.CommandLine's case-sensitive command matching. m_byName's keys carry each name and alias verbatim.
-        var wirePath = new Dictionary<string, CommandDefinition>(comparer: StringComparer.Ordinal);
+        // Case-INSENSITIVE, exactly like m_byName and m_idByName, so one identity rule governs every surface a
+        // command name reaches. m_byName's keys carry each name and alias verbatim.
+        var wirePath = new Dictionary<string, CommandDefinition>(comparer: StringComparer.OrdinalIgnoreCase);
 
         foreach (var (name, definition) in m_byName) {
             if (definition.WireArgsHandler is not null) {
@@ -277,17 +227,95 @@ public sealed class CommandRegistry {
             }
         }
 
-        m_wirePath = wirePath.ToFrozenDictionary(comparer: StringComparer.Ordinal);
+        m_wirePath = wirePath.ToFrozenDictionary(comparer: StringComparer.OrdinalIgnoreCase);
         m_wirePathAlt = m_wirePath.GetAlternateLookup<ReadOnlySpan<char>>();
         m_byNameAlt = m_byName.GetAlternateLookup<ReadOnlySpan<char>>();
-        m_metadata = m_byTextCommand.Values
+        m_metadata = [.. m_byTextCommand.Values
             .Select(selector: static definition => definition.Metadata)
             .OrderBy(
             keySelector: static metadata => metadata.Name,
             comparer: StringComparer.Ordinal
-        )
-            .ToArray();
+        )];
 
+        // The one registration body, so the registry's own verbs cannot be registered on a slightly different set of
+        // rules than a module's.
+        void Register(CommandDefinition definition, string owner) {
+            if (commandCount == MaxCommandCount) {
+                throw new InvalidOperationException(message: $"A command registry supports at most {MaxCommandCount} distinct commands because snapshot command ids are 16-bit.");
+            }
+
+            commandCount++;
+
+            // The loud-completeness gate for the bindability axis: a registration that declared nothing would
+            // otherwise land on whichever member sits at 0, silently deciding whether an authority verb is
+            // reachable from a binding page. Refuse it BY NAME instead — this is a composition-root error.
+            if (definition.Bindability == CommandBindability.Unspecified) {
+                throw new InvalidOperationException(message: $"Command '{definition.Name}' (registered by {owner}) declares no bindability. Every registration must pass CommandBindability.Bindable or CommandBindability.Unbindable.");
+            }
+
+            if (
+                !Enum.IsDefined(value: definition.Bindability) ||
+                !Enum.IsDefined(value: definition.Routing) ||
+                !Enum.IsDefined(value: definition.ValueKind)
+            ) {
+                throw new InvalidOperationException(message: $"Command '{definition.Name}' (registered by {owner}) declares an invalid bindability, routing, or value kind.");
+            }
+
+            if (string.IsNullOrWhiteSpace(value: definition.Map)) {
+                throw new InvalidOperationException(message: $"Command '{definition.Name}' (registered by {owner}) declares an empty command map.");
+            }
+
+            // A command has ONE name, and these are the two halves of it: Name is what the interned id, the
+            // binding vocabulary and the wire table resolve, while TextCommand.Name is what the parser matches.
+            // Split them and the command registers, answers TryGetId for one spelling, and dispatches only for the
+            // other — which the registry then reports as unknown. Closing CommandDefinition's identity setters
+            // puts that out of a consumer's reach, so this is the guard for THIS assembly: the two factories are
+            // the only builders today, and an internal `with` that set one half would otherwise be a silent
+            // half-registered command rather than a composition-root refusal. Ordinally, because CanonicalizeVerb
+            // rewrites a line's verb to Name before the parser, which matches VERBATIM.
+            if (!string.Equals(
+                a: definition.Name,
+                b: definition.TextCommand.Name,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                throw new InvalidOperationException(message: $"Command '{definition.Name}' (registered by {owner}) carries a text command named '{definition.TextCommand.Name}'. A command's dispatch identity and its text identity are one name; build definitions through CommandDefinition.Verb or CommandDefinition.WithWireArgs and do not rename the text command afterwards.");
+            }
+
+            // A definition owns a System.CommandLine object graph, and registering it MUTATES that graph (a root
+            // parent, and one alias per declared alias). Handing the same cached instance to two registries would
+            // therefore let the second registry's construction rewrite the first one's live parser state — a
+            // cross-registry coupling nothing at the call site can see. Refuse it by name; a module that must serve
+            // two registries yields a fresh definition per call.
+            if (definition.TextCommand.Parents.Any()) {
+                throw new InvalidOperationException(message: $"Command '{definition.Name}' (registered by {owner}) is already registered in another command registry. A module must yield a fresh CommandDefinition per registry; a definition's text command carries per-registry parser state.");
+            }
+
+            m_root.Subcommands.Add(item: definition.TextCommand);
+            m_byTextCommand[definition.TextCommand] = definition;
+            ClaimName(
+                name: definition.Name,
+                owner: owner,
+                claimedBy: claimedBy
+            );
+            m_byName[definition.Name] = definition;
+
+            foreach (var alias in definition.Aliases) {
+                // Refused here rather than three frames down: an unchecked null reached the claim ledger's
+                // Dictionary and threw naming the parameter 'key', which tells a composition root nothing about
+                // which module declared which command's alias list badly.
+                if (string.IsNullOrWhiteSpace(value: alias)) {
+                    throw new InvalidOperationException(message: $"Command '{definition.Name}' (registered by {owner}) declares a null or blank entry in its 'aliases'. Every alias is a name a line can be spelled with.");
+                }
+
+                ClaimName(
+                    claimedBy: claimedBy,
+                    name: alias,
+                    owner: owner
+                );
+                m_byName[alias] = definition;
+                definition.TextCommand.Aliases.Add(item: alias);
+            }
+        }
     }
 
     internal CommandModality CreateModality(ReadOnlySpan<string> activeMaps) {
@@ -342,157 +370,289 @@ public sealed class CommandRegistry {
         );
     }
 
-    // Executes a simulation-routed text command from its tick snapshot. Submit already parsed and identified the line
-    // before injection; parsing again here recreates the handler's ordinary text context without re-routing it. The
-    // principal rides the entry rather than being re-derived: the door that queued the line already stamped it.
-    private void ApplySubmittedSimulation(string line, ushort expectedCommandId, CommandPrincipal principal, int slot, bool completesTextSubmission, TextSubmissionBarrier? submissionBarrier) {
-        try {
-            Span<Range> tokenRanges = stackalloc Range[MaxWireTokens];
-
+    // Applies one snapshot entry. Extracted from ApplySnapshot's loop so the loop is nothing but the per-entry
+    // exception boundary and the barrier release — a body inline there would invite a future `continue` to skip past
+    // one or the other, which is the exact defect the boundary exists to close.
+    private void ApplyEntry(in CommandEntry entry, int slot) {
+        // A submitted text entry is routed FIRST — before the defensive id-range check below, which would otherwise
+        // fall through to the bound-entry path with an id that indexes nothing.
+        //
+        // The range check on THIS branch is unreachable from any public path and is deliberately kept: an injected
+        // entry's id is interned from this very registry (CommandInjectionSink resolves it through TryGetId), and a
+        // snapshot built for another registry is refused whole before the loop starts, so the two ways an id could
+        // exceed m_nameById are both already closed. Nothing here decides whether the entry's barrier is released
+        // either — ApplySnapshot's per-entry finally owns that — so skipping the dispatch is the whole of what this
+        // guard does. It is therefore untested BY CONSTRUCTION: a test would have to forge an entry, which is exactly
+        // what CommandEntry's internal construction prevents.
+        if (entry.Text is { } line) {
             if (
-                TryResolveWireLine(
-                definition: out var wireDefinition,
-                line: line,
-                tokenCount: out var tokenCount,
-                tokenRanges: tokenRanges
-            ) &&
-                (expectedCommandId < m_definitionById.Length) &&
-                ReferenceEquals(
-                objA: wireDefinition,
-                objB: m_definitionById[expectedCommandId]
-            )
+                entry.Dispatch &&
+                (((int)entry.CommandId) < m_nameById.Length)
             ) {
-                var wireResult = DispatchWire(
-                    definition: wireDefinition!,
+                ApplySubmittedSimulation(
                     line: line,
-                    argumentRanges: tokenRanges[1..tokenCount],
-                    principal: principal,
-                    slot: slot,
-                    observe: true,
-                    contextText: line
+                    expectedCommandId: entry.CommandId,
+                    phase: entry.Phase,
+                    value: entry.Value,
+                    principal: entry.Principal,
+                    slot: slot
                 );
-
-                if (wireResult.IsError) {
-                    m_rejections++;
-                }
-
-                return;
             }
 
-            var parseResult = m_root.Parse(commandLine: line);
+            return;
+        }
 
-            if (
-                (parseResult.Errors.Count != 0) ||
-                !m_byTextCommand.TryGetValue(
-                key: parseResult.CommandResult.Command,
-                value: out var definition
-            ) ||
-                (expectedCommandId >= m_definitionById.Length) ||
-                !ReferenceEquals(
-                objA: definition,
-                objB: m_definitionById[expectedCommandId]
-            )
-            ) {
-                // A snapshot-routed line that no longer re-parses to the command it was injected as never reaches its
-                // handler. Submit already returned None for it, so this is the only place it can be counted — without
-                // it a Simulation-routed rejection stays invisible to wire.errors.
-                m_rejections++;
+        if (
+            !entry.Dispatch ||
+            (((int)entry.CommandId) >= m_nameById.Length)
+        ) {
+            return;
+        }
 
-                return;
-            }
+        var definition = m_definitionById[entry.CommandId];
+        var context = new CommandContext(
+            assignedSlot: entry.AssignedSlot,
+            deviceId: entry.Device,
+            origin: entry.Origin,
+            parse: null,
+            phase: entry.Phase,
+            principal: entry.Principal,
+            registry: this,
+            slot: slot,
+            source: entry.Source,
+            text: null,
+            value: entry.Value
+        );
 
-            var value = ImpulseValue(kind: definition.ValueKind);
-            var context = new CommandContext(
-                origin: CommandOrigin.Text,
-                parse: parseResult,
-                phase: CommandPhase.Completed,
+        // One entry's handler must not decide whether the REST of the tick runs: Dispatch converts an escaped
+        // exception into an error result observers see, and a fault is counted here so it reaches wire.errors
+        // (an ordinary IsError verdict from a bound press is not a refused submission and is not counted).
+        _ = Dispatch(
+            context: in context,
+            definition: definition,
+            faulted: out var faulted
+        );
+
+        if (faulted) {
+            NoteRejection();
+        }
+    }
+    // Executes a simulation-routed text command from its tick snapshot. Submit identified the line's verb before
+    // injection but did NOT parse its arguments; this is the line's one and only parse, and it recreates the handler's
+    // ordinary text context without re-routing it. The entry's phase, value and principal ride the entry rather than
+    // being re-derived: the door that queued the line already decided them.
+    //
+    // The entry's read-after-write barrier is NOT this method's to release: ApplySnapshot's per-entry boundary owns
+    // that, so a throw anywhere in here — the parse, CanonicalizeVerb, a handler's exception rendering — releases it
+    // exactly once and cannot strand the session.
+    private void ApplySubmittedSimulation(string line, ushort expectedCommandId, CommandPhase phase, CommandValue value, CommandPrincipal principal, int slot) {
+        Span<Range> tokenRanges = stackalloc Range[MaxWireTokens];
+
+        if (
+            TryResolveWireLine(
+            definition: out var wireDefinition,
+            line: line,
+            tokenCount: out var tokenCount,
+            tokenRanges: tokenRanges
+        ) &&
+            (expectedCommandId < m_definitionById.Length) &&
+            ReferenceEquals(
+            objA: wireDefinition,
+            objB: m_definitionById[expectedCommandId]
+        )
+        ) {
+            var wireResult = DispatchWire(
+                definition: wireDefinition!,
+                line: line,
+                argumentRanges: tokenRanges[1..tokenCount],
+                phase: phase,
+                value: value,
                 principal: principal,
-                registry: this,
                 slot: slot,
-                text: line,
-                value: value
+                observe: true,
+                faulted: out _
             );
 
-            // Submit returned None when it injected this line, so its handler's verdict lands here rather than at the
-            // console call site — count a failure so a deferred mutation's rejection reaches wire.errors too.
-            if (Dispatch(
-                context: in context,
-                definition: definition,
-                suppressWireAck: true
-            ).IsError) {
-                m_rejections++;
+            if (wireResult.IsError) {
+                NoteRejection();
             }
-        } finally {
-            if (submissionBarrier is not null) {
-                submissionBarrier.Complete();
-            } else {
-                ReleaseSubmissionBarrier(completesTextSubmission: completesTextSubmission);
-            }
+
+            return;
+        }
+
+        var parseResult = m_root.Parse(
+            commandLine: CanonicalizeVerb(line: line),
+            configuration: WireParserConfiguration
+        );
+
+        if (
+            (parseResult.Errors.Count != 0) ||
+            !m_byTextCommand.TryGetValue(
+            key: parseResult.CommandResult.Command,
+            value: out var definition
+        ) ||
+            (expectedCommandId >= m_definitionById.Length) ||
+            !ReferenceEquals(
+            objA: definition,
+            objB: m_definitionById[expectedCommandId]
+        )
+        ) {
+            // A snapshot-routed line that does not parse to the command it was injected as never reaches its
+            // handler. Submit returned None for it, so this is the only place it can be counted OR reported —
+            // without this a Simulation-routed rejection would leave the operator nothing but a wire.errors bump
+            // to notice, on a line whose refusal arrives a tick after the prompt accepted it.
+            NoteRejection();
+            NotifyRefusal(
+                errors: parseResult.Errors,
+                expectedCommandId: expectedCommandId,
+                line: line,
+                phase: phase,
+                principal: principal,
+                slot: slot
+            );
+
+            return;
+        }
+
+        var context = new CommandContext(
+            origin: CommandOrigin.Text,
+            parse: parseResult,
+            phase: phase,
+            principal: principal,
+            registry: this,
+            slot: slot,
+            text: line,
+            value: value
+        );
+
+        // Submit returned None when it injected this line, so its handler's verdict lands here rather than at the
+        // console call site — count a failure so a deferred mutation's rejection reaches wire.errors too.
+        if (Dispatch(
+            context: in context,
+            definition: definition,
+            faulted: out _,
+            suppressWireAck: true
+        ).IsError) {
+            NoteRejection();
         }
     }
     /// <summary>Reports or flips the wire acknowledgement mode for the built-in <c>wire.ack</c> verb.</summary>
-    /// <param name="mode">The parsed trailing tokens: empty reports the current mode; <c>on</c>/<c>quiet</c> set it.</param>
+    /// <param name="args">The trailing tokens: empty reports the current mode; <c>on</c>/<c>quiet</c> set it.</param>
     /// <returns>A result echoing the resulting mode, or an <see cref="CommandResult.IsError"/> result for a bad argument.</returns>
-    private CommandResult ApplyWireAck(string[] mode) {
-        if (mode.Length == 0) {
+    private CommandResult ApplyWireAck(in WireArgs args) {
+        if (args.Count == 0) {
             return new CommandResult((m_acksQuiet
                 ? "[wire.ack: quiet]"
                 : "[wire.ack: on]"));
         }
 
-        if (mode.Length > 1) {
+        if (args.Count > 1) {
             return CommandResult.Error(output: "[wire.ack: expected one of on | quiet]");
         }
 
-        switch (mode[0]) {
-            case "on":
-                m_acksQuiet = false;
+        // Case-insensitively, through WireArgs.Is — every module verb reads its mode words that way, and a built-in
+        // that refused `QUIET` while `player.move UP` worked would be the odd one out.
+        if (args.Is(
+            index: 0,
+            value: "on"
+        )) {
+            m_acksQuiet = false;
 
-                return new CommandResult(Output: "[wire.ack: on]");
-            case "quiet":
-                m_acksQuiet = true;
-
-                return new CommandResult(Output: "[wire.ack: quiet]");
-            default:
-                return CommandResult.Error(output: $"[wire.ack: unknown mode '{mode[0]}' — expected on | quiet]");
+            return new CommandResult(Output: "[wire.ack: on]");
         }
+
+        if (args.Is(
+            index: 0,
+            value: "quiet"
+        )) {
+            m_acksQuiet = true;
+
+            return new CommandResult(Output: "[wire.ack: quiet]");
+        }
+
+        return CommandResult.Error(output: $"[wire.ack: unknown mode '{args[0]}' — expected on | quiet]");
     }
-    /// <summary>Reports (and optionally clears) the refused-submission count for the built-in <c>wire.errors</c> verb.</summary>
-    /// <param name="mode">The parsed trailing tokens: empty reports the count; <c>reset</c> reports and zeroes it.</param>
+    /// <summary>Reports (and optionally clears) the refused-submission count for the built-in <c>wire.errors</c> verb.
+    /// The count is over the lines the CALLER submitted — see <see cref="Submit"/>'s remarks for what a macro verb's
+    /// own nested submissions do and do not contribute. A swallowed observer notification is reported beside it as its
+    /// own segment, never folded into it: a broken reporting sink says nothing about whether a line was refused.</summary>
+    /// <param name="args">The trailing tokens: empty reports the count; <c>reset</c> reports and zeroes it.</param>
     /// <returns>A result echoing the count, or an <see cref="CommandResult.IsError"/> result for a bad argument.</returns>
-    private CommandResult ApplyWireErrors(string[] mode) {
-        if (mode.Length > 1) {
+    private CommandResult ApplyWireErrors(in WireArgs args) {
+        if (args.Count > 1) {
             return CommandResult.Error(output: "[wire.errors: expected no argument or `reset`]");
         }
 
+        var reset = args.Is(
+            index: 0,
+            value: "reset"
+        );
+
         if (
-            (mode.Length == 1) &&
-            !string.Equals(
-            a: mode[0],
-            b: "reset",
-            comparisonType: StringComparison.Ordinal
-        )
+            (args.Count == 1) &&
+            !reset
         ) {
-            return CommandResult.Error(output: $"[wire.errors: unknown mode '{mode[0]}' — expected `reset`]");
+            return CommandResult.Error(output: $"[wire.errors: unknown mode '{args[0]}' — expected `reset`]");
         }
 
-        // Read the count BEFORE `reset` zeroes it, and do not let this verb's own report count as a rejection.
+        // Read the counts BEFORE `reset` zeroes them, and do not let this verb's own report count as a rejection.
+        var faults = m_observerFaults;
         var rejected = m_rejections;
 
-        if (mode.Length == 1) {
+        if (reset) {
+            m_observerFaults = 0;
             m_rejections = 0;
         }
 
-        return new CommandResult(Output: $"[wire.errors: {rejected} rejected]");
+        // The refusal count is the answer, and it is reported alone whenever it IS the whole story — a driver reading
+        // `[wire.errors: 0 rejected]` must not have to parse a second number that is almost always zero. A broken
+        // reporting sink is a different fault about a different thing, so it earns its own segment rather than being
+        // folded into the refusals, and it is named only when it happened.
+        return new CommandResult(Output: ((faults == 0)
+            ? $"[wire.errors: {rejected} rejected]"
+            : $"[wire.errors: {rejected} rejected | {faults} observer fault{((faults == 1)
+                ? string.Empty
+                : "s")}]"));
     }
-    /// <summary>Builds the help listing of every registered command and its description, ordered by name.</summary>
+    // The registry's own three verbs, as ordinary definitions built by the same factory a module uses. They were once
+    // bare System.CommandLine Command objects that Submit special-cased after the parse, which meant the registry
+    // DISPATCHED three verbs that TryGetId, TryGetMetadata and Definitions all denied existed — a listing verb, a help
+    // text and a vocabulary check could each be right and still disagree. As definitions they are one thing on every
+    // surface, and CommandBindability.Unbindable is what refuses a binding row naming `help`: by the axis that refuses
+    // every other unbindable verb, with a message about bindability rather than "unknown command".
+    private IEnumerable<CommandDefinition> BuiltInCommands() {
+        yield return CommandDefinition.WithWireArgs(
+            name: HelpCommandName,
+            description: "Lists the available commands: help — one `name - description` line per registered verb, this registry's own built-ins included, ordinal-ordered by name.",
+            handler: (_, args) => (CommandResult.RequireNoArguments(
+                args: in args,
+                verb: HelpCommandName
+            ) ?? new CommandResult(Output: BuildHelpText())),
+            bindability: CommandBindability.Unbindable
+        );
+        yield return CommandDefinition.WithWireArgs(
+            name: WireAckCommandName,
+            description: "Sets or reports the acknowledgement mode for accepted commands: wire.ack [on|quiet] — `on` (default) echoes every accepted command; `quiet` drops the bare success acknowledgements of side-effecting verbs, while failures and any verb that answers with data still echo; no argument reports the current mode.",
+            handler: (_, args) => ApplyWireAck(args: in args),
+            bindability: CommandBindability.Unbindable
+        );
+        yield return CommandDefinition.WithWireArgs(
+            name: WireErrorsCommandName,
+            description: "Reports the number of submitted lines this session REFUSED — an unknown verb, a parse error, a handler's failure result, or a refusal raised after the line was accepted: wire.errors [reset] — no argument reports the running count; `reset` reports it and zeroes the counter. It is the one number that says whether any submitted line silently no-opped. It counts the lines YOU submitted: a verb that submits lines of its own contributes one refusal when it reports the failure back, and none when it swallows it. A command observer that threw while being told about a dispatch is a broken reporting surface rather than a refused line, so it is reported as a separate trailing `| <n> observer faults` segment, and only when there have been some.",
+            handler: (_, args) => ApplyWireErrors(args: in args),
+            bindability: CommandBindability.Unbindable
+        );
+    }
+    /// <summary>Builds the help listing of every registered command and its description, ordinal-ordered by name — the
+    /// same order <see cref="Definitions"/> and the interned id assignment use, so a listing verb and the help text
+    /// never disagree about where a command sits.</summary>
     /// <returns>A newline-separated list of <c>name - description</c> entries.</returns>
     private string BuildHelpText() {
         return string.Join(
             separator: '\n',
             values: m_root.Subcommands
                 .OrderBy(
-                comparer: StringComparer.OrdinalIgnoreCase,
+                comparer: StringComparer.Ordinal,
                 keySelector: command => command.Name
             )
                 .Select(selector: command => $"{command.Name} - {command.Description}")
@@ -545,13 +705,26 @@ public sealed class CommandRegistry {
             activeMaps: mapActivity
         );
     }
-    /// <summary>Runs a command's handler and notifies every observer of the dispatch.</summary>
+    /// <summary>Runs a command's handler behind the registry's exception boundary and notifies every observer of the
+    /// dispatch.</summary>
     /// <param name="context">The invocation state passed to the handler.</param>
     /// <param name="definition">The command being dispatched.</param>
+    /// <param name="faulted">When this method returns, whether the handler THREW rather than returning a verdict.</param>
     /// <param name="suppressWireAck">Whether quiet wire mode may suppress a successful acknowledgement.</param>
-    /// <returns>The result the handler returned.</returns>
-    private CommandResult Dispatch(in CommandContext context, CommandDefinition definition, bool suppressWireAck = false) {
-        var result = definition.Handler(arg: context);
+    /// <returns>The result the handler returned, or an error result describing the exception it threw.</returns>
+    private CommandResult Dispatch(in CommandContext context, CommandDefinition definition, out bool faulted, bool suppressWireAck = false) {
+        CommandResult result;
+
+        try {
+            faulted = false;
+            result = definition.Handler(arg: context);
+        } catch (Exception exception) when (IsContainable(exception: exception)) {
+            faulted = true;
+            result = HandlerFault(
+                definition: definition,
+                exception: exception
+            );
+        }
 
         if (suppressWireAck) {
             result = SuppressAckIfQuiet(
@@ -568,34 +741,51 @@ public sealed class CommandRegistry {
 
         return result;
     }
+    // Runs a wire-native handler over the line's trailing token ranges. Phase and value are supplied by the caller
+    // rather than assumed: a submitted line dispatches Completed with the command's declared impulse, while a line
+    // replayed from its snapshot entry carries the phase and value that entry recorded (a HELD wire verb branching on
+    // phase would otherwise always see the release branch).
     private CommandResult DispatchWire(
         CommandDefinition definition,
         string line,
         ReadOnlySpan<Range> argumentRanges,
+        CommandPhase phase,
+        CommandValue value,
         CommandPrincipal principal,
         int slot,
         bool observe,
-        string? contextText = null
+        out bool faulted
     ) {
         var quiet = (m_acksQuiet && definition.AcknowledgementOnly);
         var context = new CommandContext(
             origin: CommandOrigin.Text,
             parse: null,
-            phase: CommandPhase.Completed,
+            phase: phase,
             principal: principal,
             registry: this,
             slot: slot,
-            text: contextText,
-            value: ImpulseValue(kind: definition.ValueKind)
+            text: line,
+            value: value
         );
-        var result = definition.WireArgsHandler!(
-            arg1: context,
-            arg2: new WireArgs(
-                echo: !quiet,
-                line: line,
-                ranges: argumentRanges
-            )
-        );
+        CommandResult result;
+
+        try {
+            faulted = false;
+            result = definition.WireArgsHandler!(
+                arg1: context,
+                arg2: new WireArgs(
+                    echo: !quiet,
+                    line: line,
+                    ranges: argumentRanges
+                )
+            );
+        } catch (Exception exception) when (IsContainable(exception: exception)) {
+            faulted = true;
+            result = HandlerFault(
+                definition: definition,
+                exception: exception
+            );
+        }
 
         result = SuppressAckIfQuiet(
             definition: definition,
@@ -612,6 +802,23 @@ public sealed class CommandRegistry {
 
         return result;
     }
+    /// <summary>Renders a handler's escaped exception as the error result the wire reports it through.</summary>
+    /// <param name="definition">The command whose handler threw.</param>
+    /// <param name="exception">The escaped exception.</param>
+    /// <returns>An <see cref="CommandResult.IsError"/> result naming the command, the exception type, and its message.</returns>
+    private static CommandResult HandlerFault(CommandDefinition definition, Exception exception) =>
+        CommandResult.Error(output: $"[{definition.Name}: handler threw {exception.GetType().Name}: {exception.Message}]");
+    // The one rule every dispatch boundary in this type filters on, written once so the three handler boundaries, the
+    // observer boundary and the per-entry boundary cannot drift apart.
+    //
+    // An OperationCanceledException is a HOST SIGNAL, not a verdict about a command: a handler raises it by observing
+    // the host's own shutdown/cancellation token, so it belongs to the pump that owns that token and must unwind to it
+    // — reporting it as `[verb: handler threw OperationCanceledException]` and a wire.errors bump would turn a
+    // requested shutdown into a line the host has to pattern-match its way back out of, and would let the tick carry on
+    // dispatching entries after the host asked it to stop. Everything else is CONTAINED: a module verb's own bug is a
+    // verdict about that verb alone, and must not decide whether the rest of the tick's entries run, whether the other
+    // observers hear about this dispatch, or whether a later submitted line's read-after-write barrier is released.
+    private static bool IsContainable(Exception exception) => (exception is not OperationCanceledException);
     /// <summary>Returns the default "fully active" value used for a text invocation that supplies no explicit value.</summary>
     /// <param name="kind">The value kind of the command being invoked.</param>
     /// <returns>An active value for digital and axis kinds; an inactive value for kinds that have no meaningful impulse.</returns>
@@ -638,6 +845,117 @@ public sealed class CommandRegistry {
 
         return line;
     }
+    // Rewrites a line's leading verb to the canonical spelling of the command it names, when the two differ. Command
+    // identity is case-INSENSITIVE everywhere in Puck — m_byName, the interned ids, the binding vocabulary, the wire
+    // table — but System.CommandLine matches command names and aliases case-SENSITIVELY, so without this a line whose
+    // verb passed every vocabulary check ('Player.Move' authored in a binding row) would reach the parser and miss.
+    // Allocates only on the cold path, and only when the spelling actually differs.
+    private string CanonicalizeVerb(string line) {
+        var trimmed = line.AsSpan().TrimStart();
+        var verb = LeadingVerb(line: trimmed);
+
+        if (verb.IsEmpty) {
+            return line;
+        }
+
+        var canonical = CanonicalNameFor(verb: verb);
+
+        if (canonical is null) {
+            // A QUOTED verb (`"SUM" 2 3`) reaches the parser with its quotes already removed, so the identity that has
+            // to be canonicalised is the one INSIDE them — the raw token carries the quotes and matches nothing here.
+            // Rewriting it to the bare canonical name is what the parser would have accepted had the line been spelled
+            // that way, and it is exactly what the unquoted path does; without it `"SUM" 2 3` was the one spelling of a
+            // command that neither half of the routing decision could see, and it was refused as unknown.
+            canonical = CanonicalNameFor(verb: UnquotedVerb(verb: verb));
+        }
+
+        if (canonical is null) {
+            return line;
+        }
+
+        return string.Concat(
+            str0: canonical,
+            str1: trimmed[verb.Length..]
+        );
+    }
+    // The content of a verb token that is one whole double-quoted run, or an empty span for anything else. A token
+    // carrying a further '"' inside it is not one run — the parser splices such a token together from several — and is
+    // left to the parse rather than being guessed at here.
+    private static ReadOnlySpan<char> UnquotedVerb(ReadOnlySpan<char> verb) {
+        if (
+            (verb.Length >= 2) &&
+            (verb[0] == '"') &&
+            (verb[^1] == '"')
+        ) {
+            var inner = verb[1..^1];
+
+            if (inner.IndexOf(value: '"') < 0) {
+                return inner;
+            }
+        }
+
+        return [];
+    }
+    // The canonical spelling a verb token must be rewritten to before the parser sees it, or null when it needs no
+    // rewrite (it already matches verbatim, or names nothing this registry knows and will be refused anyway). The
+    // registry's own built-ins need no special case here: they are ordinary registrations in m_byName, so
+    // `WIRE.ERRORS` resolves through the same lookup `Player.Move` does.
+    private string? CanonicalNameFor(ReadOnlySpan<char> verb) {
+        if (m_byNameAlt.TryGetValue(
+            key: verb,
+            value: out var definition
+        )) {
+            return (NamesCommandExactly(
+                definition: definition,
+                verb: verb
+            )
+                ? null
+                : definition.Name);
+        }
+
+        return null;
+    }
+    // Whether the verb token is one of the command's spellings VERBATIM — its name or one of its aliases. A verb that
+    // already matches ordinally needs no substitution, and an alias must not be rewritten to the canonical name when
+    // the parser would have accepted it as written.
+    private static bool NamesCommandExactly(CommandDefinition definition, ReadOnlySpan<char> verb) {
+        if (verb.Equals(
+            comparisonType: StringComparison.Ordinal,
+            other: definition.Name
+        )) {
+            return true;
+        }
+
+        for (var index = 0; (index < definition.Aliases.Count); index++) {
+            if (verb.Equals(
+                comparisonType: StringComparison.Ordinal,
+                other: definition.Aliases[index]
+            )) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    // The one refusal for a line whose leading token names nothing this registry registered, written once so both
+    // places that can reach that verdict — the parse that resolved no subcommand, and the resolved-but-unregistered
+    // fallback — say the same thing, and say it before any parser text.
+    private static CommandResult UnknownCommand(ReadOnlySpan<char> verb) =>
+        CommandResult.Error(output: $"[wire.reject: unknown command '{verb}' — run `help` for the registered verbs]");
+    // Counts one swallowed observer notification, saturating like NoteRejection and for the same reason.
+    private void NoteObserverFault() {
+        if (m_observerFaults != int.MaxValue) {
+            m_observerFaults++;
+        }
+    }
+    // Counts one refusal, saturating at int.MaxValue. A count that wrapped negative would read as a defect in the
+    // counter rather than in the run wire.errors exists to describe.
+    private void NoteRejection() {
+        if (m_rejections != int.MaxValue) {
+            m_rejections++;
+        }
+    }
+    // Reports one DISPATCHED command's verdict to every observer (see PublishActivation for the per-observer boundary).
     private void NotifyObservers(in CommandContext context, CommandDefinition definition, CommandResult result) {
         if (m_observers.Length == 0) {
             return;
@@ -652,22 +970,70 @@ public sealed class CommandRegistry {
             Slot: context.Slot
         );
 
+        PublishActivation(activation: in activation);
+    }
+    // Reports a DEFERRED refusal — a submitted Simulation line that reached its tick and then failed to decode as the
+    // command it was injected as — through the same observer surface a dispatched line's verdict travels.
+    //
+    // Deferring a line defers its parse, so Submit answered CommandResult.None a tick earlier and has no verdict left
+    // to return; every sink that shows an operator what a submitted line did (a launcher's stdout split, a host's
+    // console tape) keys on the activation's Text, so without this the refusal is invisible on every surface but the
+    // wire.errors counter nobody polls. The alternative — a synchronous shape check at submit — would re-parse the
+    // line at both ends, which is exactly the double parse the deferred route exists to avoid.
+    private void NotifyRefusal(string line, ushort expectedCommandId, IReadOnlyList<ParseError> errors, CommandPhase phase, CommandPrincipal principal, int slot) {
+        if (m_observers.Length == 0) {
+            return;
+        }
+
+        // Named for the command the line was INJECTED as, which is what the operator asked for; the line's own text
+        // rides Text, so a sink can show both when they disagree.
+        var name = ((((int)expectedCommandId) < m_nameById.Length)
+            ? m_nameById[expectedCommandId]
+            : LeadingVerb(line: line).ToString()
+        );
+        var reason = ((errors.Count != 0)
+            ? string.Join(
+                separator: " | ",
+                values: errors.Select(selector: static error => error.Message)
+            )
+            : $"'{line}' no longer names '{name}'"
+        );
+        var activation = new CommandActivation(
+            Name: name,
+            Phase: phase,
+            Result: CommandResult.Error(output: $"[wire.reject: {reason}]"),
+            Text: line,
+            Principal: principal,
+            Slot: slot
+        );
+
+        PublishActivation(activation: in activation);
+    }
+    // Hands one activation to every observer, each behind its own boundary. An observer is an I/O SINK (a launcher
+    // writing the verdict to stdout, a host publishing a console frame), so a throw from one is a fault in a reporting
+    // surface, never in the tick: one broken sink must not silence the sinks after it, abandon the rest of the tick's
+    // entries, or strand a later submitted line's read-after-write barrier. A swallowed notification is counted — the
+    // verdict it carried never reached the operator — but as an OBSERVER FAULT, never as a refusal: wire.errors answers
+    // "how many of the lines I submitted were refused", and one activation is published to every observer, so counting
+    // faults there measured sink health times observer count instead. A bound gamepad press with three broken sinks
+    // submitted no line at all and used to report three refusals.
+    private void PublishActivation(in CommandActivation activation) {
         for (var index = 0; (index < m_observers.Length); index++) {
-            m_observers[index].OnCommand(activation: in activation);
+            try {
+                m_observers[index].OnCommand(activation: in activation);
+            } catch (Exception exception) when (IsContainable(exception: exception)) {
+                NoteObserverFault();
+            }
         }
     }
-    private void QueueSimulation(
+    private static void QueueSimulation(
         ushort commandId,
         string line,
         TextCommandSession? session,
         CommandInjectionSink sink,
         CommandValue value
     ) {
-        if (session is null) {
-            m_pendingSimulationSubmissions++;
-        } else {
-            session.Barrier.Begin();
-        }
+        session?.Barrier.Begin();
 
         try {
             sink.Inject(
@@ -675,33 +1041,38 @@ public sealed class CommandRegistry {
                 value: value,
                 phase: CommandPhase.Started,
                 text: line,
-                completesTextSubmission: true,
                 submissionBarrier: session?.Barrier
             );
         } catch {
-            if (session is null) {
-                m_pendingSimulationSubmissions--;
-            } else {
-                session.Barrier.Complete();
-            }
+            session?.Barrier.Complete();
 
             throw;
         }
     }
-    // Releases one submitted simulation line's FIFO barrier exactly once. The defensive non-zero guard keeps a
-    // malformed or repeated completion from underflowing and blocking every later immediate read-back forever.
-    private void ReleaseSubmissionBarrier(bool completesTextSubmission) {
-        if (
-            completesTextSubmission &&
-            (m_pendingSimulationSubmissions != 0)
-        ) {
-            m_pendingSimulationSubmissions--;
+    // Releases the read-after-write barriers of every entry a cancelled tick abandons — the ones from
+    // (fromLane, fromEntry) to the end of the snapshot. The cancelling entry's OWN barrier is not among them:
+    // ApplySnapshot's per-entry finally releases that one as the exception unwinds through it, and completing it twice
+    // would decrement a count another line is holding.
+    private static void ReleaseAbandonedBarriers(in CommandSnapshot snapshot, int fromLane, int fromEntry) {
+        for (var laneIndex = fromLane; (laneIndex < snapshot.Lanes.Length); laneIndex++) {
+            var entries = snapshot.Lanes[laneIndex].Entries;
+
+            for (var entryIndex = ((laneIndex == fromLane)
+                ? fromEntry
+                : 0); (entryIndex < entries.Length); entryIndex++) {
+                entries[entryIndex].SubmissionBarrier?.Complete();
+            }
         }
     }
     // Submit's body. Submit itself owns the rejection accounting so no return path here has to remember to count.
     private CommandResult SubmitCore(string line, TextCommandSession? session) {
+        // A blank line is REFUSED rather than quietly answering None. wire.errors is advertised as the one number that
+        // says whether any submitted line silently no-opped, and a blank line is the purest no-op there is; answering
+        // success for it made the counter's own promise false. Nothing in the live drain path pays for this: a script's
+        // blank lines and `#` comments are dropped by TextCommandSource.Collect before Submit ever sees them, so a
+        // blank line reaching here is a caller that built one and thinks it sent a command.
         if (string.IsNullOrWhiteSpace(value: line)) {
-            return CommandResult.None;
+            return CommandResult.Error(output: "[wire.reject: a blank line names no command]");
         }
 
         var principal = (session?.Principal ?? CommandPrincipal.Console);
@@ -709,8 +1080,8 @@ public sealed class CommandRegistry {
 
         // WIRE-NATIVE PATH for the plain `verb arg arg…` line shape — skips the System.CommandLine parse (measured
         // ~5.2 µs + ~8.6 KB per line at the World's command surface), the measured cause of stdin burst dips. Eligible
-        // when the line carries neither `"` nor `@` and exactly names a WithWireArgs command. Immediate commands run
-        // now; Simulation commands inject the original line and use the same path when their tick applies.
+        // when the line carries no `"` and names a WithWireArgs command. Immediate commands run now; Simulation
+        // commands inject the original line and use the same path when their tick applies.
         //
         // ZERO-COPY: the line is tokenized into a stackalloc Span<Range> (Tokenize reproduces
         // Split((char[])null, RemoveEmptyEntries) whitespace semantics exactly), the verb is looked up by its SPAN via
@@ -727,98 +1098,122 @@ public sealed class CommandRegistry {
             tokenCount: out var tokenCount,
             tokenRanges: tokenRanges
         )) {
-            if (
-                (wireDefinition!.Routing == CommandRouting.Simulation) &&
-                ((session?.SimulationSink ?? m_injectionSink) is { } wireSink) &&
-                TryGetId(
-                name: wireDefinition.Name,
-                id: out var wireCommandId
-            )
-            ) {
-                QueueSimulation(
-                    commandId: wireCommandId,
-                    line: line,
-                    session: session,
-                    sink: wireSink,
-                    value: ImpulseValue(kind: wireDefinition.ValueKind)
-                );
-
+            if (TryQueueSimulation(
+                definition: wireDefinition!,
+                line: line,
+                session: session
+            )) {
                 return CommandResult.None;
             }
 
             return DispatchWire(
-                definition: wireDefinition,
+                definition: wireDefinition!,
                 line: line,
                 argumentRanges: tokenRanges[1..tokenCount],
+                phase: CommandPhase.Completed,
+                value: ImpulseValue(kind: wireDefinition!.ValueKind),
                 principal: principal,
                 slot: slot,
-                observe: false
+                observe: false,
+                faulted: out _
             );
         }
 
-        var parseResult = m_root.Parse(commandLine: line);
+        // THE FIRST HALF OF THE ROUTING DECISION: a Simulation-class line whose verb token stands on its own is routed
+        // by that leading VERB alone, before any parse. Submit's only decision for such a line is which command it
+        // names and whether a sink is wired; its arguments are read by the handler at apply time, from a parse
+        // ApplySubmittedSimulation must do anyway. Parsing here as well would parse the same line twice — the cost the
+        // wire path exists to avoid, paid on the one path that cannot skip a parse — so a malformed argument on a
+        // deferred line is refused a tick later (through wire.errors) rather than synchronously.
+        //
+        // This lookup reads the raw token, so it resolves exactly the spellings the parser resolves VERBATIM. A verb
+        // the parser would unquote (`"sim.record" payload`) is not one of them, and is routed after the parse instead —
+        // see the second half, below. Routing must never be decided by only one of the two.
+        var verb = LeadingVerb(line: line);
+
+        if (
+            !verb.IsEmpty &&
+            m_byNameAlt.TryGetValue(
+            key: verb,
+            value: out var routed
+        ) &&
+            TryQueueSimulation(
+            definition: routed,
+            line: line,
+            session: session
+        )
+        ) {
+            return CommandResult.None;
+        }
+
+        var parseResult = m_root.Parse(
+            commandLine: CanonicalizeVerb(line: line),
+            configuration: WireParserConfiguration
+        );
 
         if (parseResult.Errors.Count > 0) {
+            // The parser resolved NO subcommand, which is the one case where its errors are about its own grammar
+            // rather than about the line: an unknown verb comes back as "Required command was not provided. |
+            // Unrecognized command or argument 'nope'.", and the leading half tells an operator nothing they asked
+            // about. Say what happened instead. The parser's own text is worth reading when the verb WAS resolved and
+            // something about its arguments was wrong, which is what the branch below reports.
+            if (ReferenceEquals(
+                objA: parseResult.CommandResult.Command,
+                objB: m_root
+            )) {
+                return UnknownCommand(verb: LeadingVerb(line: line));
+            }
+
             return CommandResult.Error(output: $"[wire.reject: {string.Join(
                 separator: " | ",
                 values: parseResult.Errors.Select(selector: error => error.Message)
             )}]");
         }
 
-        var command = parseResult.CommandResult.Command;
-
-        if (command == m_helpCommand) {
-            return new CommandResult(BuildHelpText());
-        }
-
-        if (command == m_wireAckCommand) {
-            return ApplyWireAck(mode: (parseResult.GetValue(argument: m_wireAckArgument) ?? []));
-        }
-
-        if (command == m_wireErrorsCommand) {
-            return ApplyWireErrors(mode: (parseResult.GetValue(argument: m_wireErrorsArgument) ?? []));
-        }
-
         if (m_byTextCommand.TryGetValue(
-            key: command,
+            key: parseResult.CommandResult.Command,
             value: out var definition
         )) {
-            var value = ImpulseValue(kind: definition.ValueKind);
-
-            // A simulation command's effect mutates the deterministic sim, so it must be tick-aligned and recorded:
-            // fold it into the snapshot stream rather than run it here. The handler still runs — later, when the
-            // host applies that tick's snapshot — so a recording reproduces it. Console impulses inject as a Started
-            // edge (the press the snapshot dispatch fires on) on the local slot.
-            if (
-                (definition.Routing == CommandRouting.Simulation) &&
-                ((session?.SimulationSink ?? m_injectionSink) is { } sink) &&
-                TryGetId(
-                name: definition.Name,
-                id: out var commandId
-            )
-            ) {
-                QueueSimulation(
-                    commandId: commandId,
-                    line: line,
-                    session: session,
-                    sink: sink,
-                    value: value
-                );
-
+            // THE SECOND HALF OF THE ROUTING DECISION, and the one that is authoritative: it routes by the command the
+            // PARSER resolved rather than by the line's leading token. The pre-parse lookup above reads a raw span, so
+            // it cannot see through a quote — `"sim.record" payload` carries a '"', which the wire path refuses and
+            // which System.CommandLine strips — and every spelling the parser accepts but that span lookup does not
+            // would otherwise run its Simulation handler INLINE at submit: outside the deterministic lane, and missing
+            // from every replay of the session. Routing here costs nothing on the hot path (this branch has already
+            // paid for a parse) and cannot double-queue: the pre-parse route returns before reaching it.
+            if (TryQueueSimulation(
+                definition: definition,
+                line: line,
+                session: session
+            )) {
                 return CommandResult.None;
             }
 
-            // The text path returns its result to the caller, so it is not observed (the caller displays
-            // it); observers exist for the snapshot-driven path, which has no return value to inspect.
-            var result = definition.Handler(arg: new CommandContext(
+            var context = new CommandContext(
                 origin: CommandOrigin.Text,
                 parse: parseResult,
                 phase: CommandPhase.Completed,
                 principal: principal,
                 registry: this,
                 slot: slot,
-                value: value
-            ));
+                text: line,
+                value: ImpulseValue(kind: definition.ValueKind)
+            );
+
+            // The text path returns its result to the caller, so it is not observed (the caller displays
+            // it); observers exist for the snapshot-driven path, which has no return value to inspect. The handler
+            // runs behind the same exception boundary every other dispatch path uses: a throwing handler becomes an
+            // error result the caller sees and wire.errors counts.
+            CommandResult result;
+
+            try {
+                result = definition.Handler(arg: context);
+            } catch (Exception exception) when (IsContainable(exception: exception)) {
+                result = HandlerFault(
+                    definition: definition,
+                    exception: exception
+                );
+            }
 
             // A quoted or many-token wire line takes this full parse; it obeys wire.ack through the same rule the fast
             // wire-native path does.
@@ -828,21 +1223,72 @@ public sealed class CommandRegistry {
             );
         }
 
-        return CommandResult.Error(output: $"[wire.reject: unknown command '{line}']");
+        return UnknownCommand(verb: LeadingVerb(line: line));
     }
     private CommandResult SubmitStamped(string line, TextCommandSession? session) {
-        var result = SubmitCore(
-            line: line,
-            session: session
-        );
+        // A handler may submit a line of its own (a macro verb); an accidental cycle would otherwise recurse until the
+        // stack gave out and took the session with it. Refuse past the bound with an ordinary error result, counted by
+        // the outermost frame like every other refusal as it unwinds.
+        if (m_submitDepth >= MaxSubmitDepth) {
+            return CommandResult.Error(output: $"[wire.reject: command submission nested more than {MaxSubmitDepth} deep — '{line}' refused]");
+        }
+
+        m_submitDepth++;
+
+        CommandResult result;
+
+        try {
+            result = SubmitCore(
+                line: line,
+                session: session
+            );
+        } finally {
+            m_submitDepth--;
+        }
 
         // The one place every text-path outcome is visible: count each failure so `wire.errors` can report it. This
-        // covers the registry's own refusals AND a module handler's IsError result on either dispatch path.
-        if (result.IsError) {
-            m_rejections++;
+        // covers the registry's own refusals AND a module handler's IsError result (or escaped exception) on either
+        // dispatch path.
+        //
+        // ONLY THE OUTERMOST FRAME COUNTS. wire.errors answers "how many of the lines I submitted were refused", so
+        // it must be a function of the driver's own lines and not of how deeply a handler re-entered: a refused
+        // re-entrant chain returns ONE error result that every unwinding frame observes, and counting per frame
+        // reported nine refusals for one console line. A macro verb's internal submissions are the handler's business
+        // — what it makes of a nested failure is its verdict to return, and that verdict is what is counted.
+        if (
+            result.IsError &&
+            (m_submitDepth == 0)
+        ) {
+            NoteRejection();
         }
 
         return result;
+    }
+    // Folds a Simulation-class line into the deterministic per-tick snapshot instead of running it inline, when the
+    // command defers and a sink is wired. The handler still runs — later, when the host applies that tick — so a
+    // recording reproduces it. Console impulses inject as a Started edge (the press the snapshot dispatch fires on) on
+    // the session's slot.
+    private bool TryQueueSimulation(CommandDefinition definition, string line, TextCommandSession? session) {
+        if (
+            (definition.Routing != CommandRouting.Simulation) ||
+            ((session?.SimulationSink ?? m_injectionSink) is not { } sink) ||
+            !TryGetId(
+            name: definition.Name,
+            id: out var commandId
+        )
+        ) {
+            return false;
+        }
+
+        QueueSimulation(
+            commandId: commandId,
+            line: line,
+            session: session,
+            sink: sink,
+            value: ImpulseValue(kind: definition.ValueKind)
+        );
+
+        return true;
     }
     // The one definition of the wire.ack-quiet suppression rule, applied on every text dispatch path (fast, full
     // parse, snapshot re-dispatch): in quiet mode a successful acknowledgement-only result carries no answer, so drop
@@ -855,8 +1301,24 @@ public sealed class CommandRegistry {
     }
     /// <summary>Splits a line into whitespace-delimited token ranges without allocating. A token is a maximal run of
     /// non-whitespace characters (<see cref="char.IsWhiteSpace(char)"/>, matching <see cref="string.Split(char[], StringSplitOptions)"/>'s
-    /// null-separator semantics exactly), so this reproduces the System.CommandLine tokenizer for unquoted input.
+    /// null-separator semantics), which agrees with the System.CommandLine splitter on every unquoted line: both split
+    /// on space, tab, vertical tab and form feed alike.
     /// Fills <paramref name="tokens"/> with one <see cref="Range"/> per token.</summary>
+    /// <remarks>
+    /// TWO grammars still decide a line, and they agree on everything except these, verified against System.CommandLine
+    /// 2.0.11:
+    /// <list type="bullet">
+    /// <item><description><b>Quotes.</b> A line containing <c>"</c> never reaches this tokenizer — the wire path
+    /// refuses it up front so the parser's quote handling is the only one in play. Not a divergence, an exclusion.</description></item>
+    /// <item><description><b>A bare <c>--</c>.</b> The parser CONSUMES it as the end-of-options marker; this tokenizer
+    /// passes it through as an ordinary token. A verb whose argument is literally <c>--</c> therefore sees it on the
+    /// wire path and not on the fallback. No verb in the tree takes one.</description></item>
+    /// </list>
+    /// <c>-x</c>/<c>--flag</c> tokens are NOT a divergence: the wire commands declare a single trailing
+    /// <c>ZeroOrMore</c> argument and no options, so the parser hands them through verbatim too. Neither is
+    /// <c>--help</c>/<c>--version</c>: this version's <see cref="RootCommand"/> contributes neither option, so both are
+    /// refused as unknown commands on both paths.
+    /// </remarks>
     /// <param name="line">The line to tokenize.</param>
     /// <param name="tokens">The destination span (capacity <see cref="MaxWireTokens"/>).</param>
     /// <returns>The token count, or <c>-1</c> when the line has more tokens than <paramref name="tokens"/> can hold
@@ -898,14 +1360,15 @@ public sealed class CommandRegistry {
 
         return count;
     }
+    // Resolves a plain `verb arg arg…` line to its wire-native definition and token ranges. Only a QUOTE sends a line
+    // to the full parse: an '@'-prefixed token used to as well, because System.CommandLine would have expanded it from
+    // a file on disk, but response files are off (WireParserConfiguration) so '@everyone' is an ordinary token on both
+    // paths and belongs on the fast one.
     private bool TryResolveWireLine(string line, Span<Range> tokenRanges, out CommandDefinition? definition, out int tokenCount) {
         definition = null;
         tokenCount = 0;
 
-        if (
-            (line.IndexOf(value: '"') >= 0) ||
-            (line.IndexOf(value: '@') >= 0)
-        ) {
+        if (line.IndexOf(value: '"') >= 0) {
             return false;
         }
 
@@ -917,7 +1380,7 @@ public sealed class CommandRegistry {
         return (
             (tokenCount > 0) &&
             m_wirePathAlt.TryGetValue(
-            key: LeadingVerb(line: line),
+            key: line.AsSpan()[tokenRanges[0]],
             value: out definition
         )
         );
@@ -932,6 +1395,21 @@ public sealed class CommandRegistry {
     /// argument is what is closed, not the method: <see cref="CommandSnapshot"/>, <see cref="CommandLane"/>, and
     /// <see cref="CommandEntry"/> are all internal to construct, so the only snapshot a caller can obtain is one the
     /// mixer built. Narrowing this method instead would leave the forgeable value type in a caller's hands.</para>
+    /// <para>ONCE THE SNAPSHOT IS ACCEPTED, this method propagates nothing but a cancellation: every entry runs inside
+    /// its own boundary, so no exception raised while applying one entry — a handler's, an observer's, or one the
+    /// registry's own decoding of a submitted line raised — decides whether the rest of the tick's entries run, and each
+    /// entry's submitted-line read-after-write barrier is released whether its body completed or threw. A contained
+    /// fault is counted in the <c>wire.errors</c> total, and a handler fault additionally becomes an error result
+    /// observers see. The single exception is an <see cref="OperationCanceledException"/>, which is a HOST SIGNAL rather
+    /// than a verdict about a command: it unwinds to the pump that owns the cancelled token, so a cancelled tick applies
+    /// a PREFIX of its entries and leaves the rest unapplied, which is what a requested shutdown asks for. The entries
+    /// it abandons still have their read-after-write barriers released on the way out — an unapplied entry is one no
+    /// later tick will ever reach, so a barrier left standing for it would suspend its <see cref="TextCommandSession"/>
+    /// forever and the host could never drain that session again, cancelled or not.</para>
+    /// <para>The registry-mismatch refusal below is the one throw this method still makes, and it happens BEFORE any
+    /// entry is examined: a snapshot built for another registry carries entries this one cannot decode at all, so it is
+    /// refused whole rather than half-applied. Nothing has been dispatched and no barrier has been touched when it
+    /// throws — the caller that mixed two registries owns the stranded queue, and the fix is at that call site.</para>
     /// </summary>
     /// <param name="snapshot">The tick's input snapshot to apply.</param>
     /// <exception cref="ArgumentException"><paramref name="snapshot"/> was produced for a different registry.</exception>
@@ -950,57 +1428,41 @@ public sealed class CommandRegistry {
             );
         }
 
-        foreach (var lane in snapshot.Lanes) {
-            foreach (var entry in lane.Entries) {
-                if (((int)entry.CommandId) >= m_nameById.Length) {
-                    continue;
+        // Indexed rather than foreach because a cancellation has to name the entries BEHIND the one that raised it: it
+        // abandons them, and abandoning an entry without releasing its barrier is what strands a session.
+        for (var laneIndex = 0; (laneIndex < snapshot.Lanes.Length); laneIndex++) {
+            var lane = snapshot.Lanes[laneIndex];
+
+            for (var entryIndex = 0; (entryIndex < lane.Entries.Length); entryIndex++) {
+                var entry = lane.Entries[entryIndex];
+
+                // The boundary is the ENTRY, not the handler: the handler's own catch cannot cover the code that
+                // decodes a submitted line (the parse, CanonicalizeVerb) or renders a fault, and an escape from either
+                // would abandon the rest of the lane and strand every later entry's barrier. Releasing the barrier in
+                // the finally is what makes that guarantee structural rather than a rule each branch remembers.
+                try {
+                    ApplyEntry(
+                        entry: in entry,
+                        slot: lane.Slot
+                    );
+                } catch (Exception exception) when (IsContainable(exception: exception)) {
+                    NoteRejection();
+                } catch (Exception exception) when (!IsContainable(exception: exception)) {
+                    // A host cancellation is the one throw that leaves the loop, so the entries behind this one are
+                    // never applied and never will be — no later tick revisits an abandoned snapshot. Their barriers
+                    // are released here, before the unwind, because the alternative is a TextCommandSession that
+                    // reports a pending submission forever and can therefore never drain another line: a shutdown
+                    // request would silently break every session whose lines shared the cancelled tick.
+                    ReleaseAbandonedBarriers(
+                        fromEntry: (entryIndex + 1),
+                        fromLane: laneIndex,
+                        snapshot: in snapshot
+                    );
+
+                    throw;
+                } finally {
+                    entry.SubmissionBarrier?.Complete();
                 }
-
-                // A submitted text entry owns a FIFO-barrier count. Always route it through the completion helper first:
-                // even a defensive name-table miss must reach that helper's finally block and release the barrier.
-                if (entry.Text is { } line) {
-                    if (entry.Dispatch) {
-                        ApplySubmittedSimulation(
-                            line: line,
-                            expectedCommandId: entry.CommandId,
-                            principal: entry.Principal,
-                            slot: lane.Slot,
-                            completesTextSubmission: entry.CompletesTextSubmission,
-                            submissionBarrier: entry.SubmissionBarrier
-                        );
-                    } else if (
-                        entry.CompletesTextSubmission
-                    ) {
-                        ReleaseSubmissionBarrier(completesTextSubmission: true);
-                    }
-
-                    continue;
-                }
-
-                var definition = m_definitionById[entry.CommandId];
-
-                if (!entry.Dispatch) {
-                    continue;
-                }
-
-                var context = new CommandContext(
-                    assignedSlot: entry.AssignedSlot,
-                    deviceId: entry.Device,
-                    origin: entry.Origin,
-                    parse: null,
-                    phase: entry.Phase,
-                    principal: entry.Principal,
-                    registry: this,
-                    slot: lane.Slot,
-                    source: entry.Source,
-                    text: null,
-                    value: entry.Value
-                );
-
-                _ = Dispatch(
-                    context: in context,
-                    definition: definition
-                );
             }
         }
     }
@@ -1024,7 +1486,7 @@ public sealed class CommandRegistry {
     /// <c>wire.errors</c> reports.
     /// </remarks>
     public void NoteDeferredRejection() {
-        m_rejections++;
+        NoteRejection();
     }
     /// <summary>
     /// Routes <see cref="CommandRouting.Simulation"/>-class submitted commands to a deterministic input sink instead
@@ -1041,18 +1503,49 @@ public sealed class CommandRegistry {
     /// <summary>Parses a command line, runs the matching handler, and returns its transcript output.</summary>
     /// <param name="line">The command line to parse and execute.</param>
     /// <returns>
-    /// The handler's result; <see cref="CommandResult.None"/> for an empty or whitespace line; the help
-    /// listing for the <c>help</c> command; no immediate result for a simulation command routed to the deterministic
-    /// input path (its real result is produced when its tick is applied); or a message describing parse errors or an
-    /// unknown command.
+    /// The handler's result; the help listing for the <c>help</c> command; no immediate result for a simulation
+    /// command routed to the deterministic input path (its real result is produced when its tick is applied); or a
+    /// message describing parse errors, an unknown command, an empty or whitespace line, or an exception the handler
+    /// let escape.
     /// </returns>
     /// <remarks>
     /// This path is never gated by command maps; it is the deliberate console entry point. A
     /// <see cref="CommandRouting.Simulation"/> command is injected into the per-tick <see cref="CommandSnapshot"/>
     /// (so it is tick-aligned and applied deterministically) when a sink is wired via <see cref="RouteSimulationTo"/>;
     /// otherwise — and for every <see cref="CommandRouting.Immediate"/> command — the handler runs inline.
+    /// <para>A BLANK LINE IS A REFUSAL, not a quiet success. <c>wire.errors</c> is the one number that says whether any
+    /// submitted line silently no-opped, and a line naming no command is exactly that, so answering
+    /// <see cref="CommandResult.None"/> for it made the counter's own promise false. It costs the drain path nothing:
+    /// <see cref="TextCommandSource.Collect"/> drops a script's blank lines and <c>#</c> comments before they reach
+    /// here, so a blank line arriving at this method is a caller that built one and believes it sent a command.</para>
+    /// <para>The line is data: it names a command and supplies its tokens, and nothing about it reaches the
+    /// filesystem. System.CommandLine's response-file expansion is switched OFF for both of this type's parse sites,
+    /// so an <c>@</c>-prefixed token is an ordinary token rather than a file to splice in.</para>
+    /// <para>Deferring a Simulation command DEFERS ITS ARGUMENTS TOO: for a line whose verb token stands on its own,
+    /// only that leading verb is resolved here and the line's own parse happens once, when its tick applies. A
+    /// malformed argument on such a line is therefore refused a tick later — through the <c>wire.errors</c> count —
+    /// rather than in this call's return value. A line the parser must unquote to name its verb
+    /// (<c>"sim.record" payload</c>) is routed AFTER that parse instead, so it costs one extra parse; what a line is
+    /// never allowed to cost is running a <see cref="CommandRouting.Simulation"/> handler inline, outside the
+    /// deterministic lane and outside every replay of the session.</para>
+    /// <para><c>wire.errors</c> COUNTS THE LINES ITS CALLER SUBMITTED, not the calls this method made. A handler may
+    /// submit lines of its own (a macro verb), and those nested lines reach the count only through the verdict that
+    /// handler returns: a macro that propagates a nested refusal as <see cref="CommandResult.IsError"/> contributes
+    /// exactly one refusal however deeply it nested, and a macro that swallows one and answers success contributes
+    /// nothing. That is the question the number answers — "how many of the lines I sent were refused" — so a macro
+    /// verb that must not hide a failure has to propagate it; counting every frame instead reported the nesting depth
+    /// of one console line.</para>
+    /// <para>An exception a handler lets escape never leaves this method: it becomes an
+    /// <see cref="CommandResult.IsError"/> result naming the exception, counted like any other refusal. The one
+    /// exception is an <see cref="OperationCanceledException"/> — a handler raises that by observing the HOST's
+    /// cancellation token, so it is a signal to the caller rather than a verdict about the command, and it propagates
+    /// unchanged and uncounted. The same rule governs <see cref="ApplySnapshot"/>, where containment additionally
+    /// guarantees that one throwing handler cannot skip the rest of the tick's entries. Read-after-write ordering across
+    /// submitted lines is not this method's to give — it is a <see cref="TextCommandSession"/> guarantee, honored by
+    /// <see cref="TextCommandSource.Collect"/>.</para>
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="line"/> is <see langword="null"/>.</exception>
+    /// <exception cref="OperationCanceledException">A handler observed the host's cancellation token.</exception>
     public CommandResult Submit(string line) {
         ArgumentNullException.ThrowIfNull(line);
 
@@ -1076,8 +1569,11 @@ public sealed class CommandRegistry {
     }
     /// <summary>Gets the declared facts for a command name or alias — the affordance-vocabulary lookup
     /// <see cref="BindingVocabularyCheck"/> consumers resolve a binding document's <c>Command</c> strings through.
-    /// Covers exactly the names <see cref="TryGetId"/> can dispatch (module-registered commands and their aliases;
-    /// the registry's own text-path built-ins are never bindable and never answer here).</summary>
+    /// Covers exactly the names <see cref="Submit"/> can dispatch — every module-registered command and its aliases,
+    /// AND the registry's own <c>help</c>/<c>wire.ack</c>/<c>wire.errors</c>, which answer here as
+    /// <see cref="CommandBindability.Unbindable"/>. A vocabulary check therefore refuses a binding row naming one of
+    /// them by its bindability, with a message about what it is, rather than calling a verb the registry dispatches
+    /// unknown.</summary>
     /// <param name="name">The command name or alias to resolve.</param>
     /// <param name="metadata">When this method returns, the command's declared facts, or the default when the name
     /// is unknown.</param>
@@ -1104,18 +1600,19 @@ public sealed class CommandRegistry {
     /// wire-native handler reads this (via <see cref="WireArgs.Echo"/>) to skip building a success echo it would drop.</summary>
     internal bool AcksEnabled => !m_acksQuiet;
     internal CommandModality DefaultModality { get; }
-    /// <summary>Whether a submitted simulation command is waiting for its fixed-step snapshot to apply.</summary>
-    internal bool HasPendingSimulationSubmission => (m_pendingSimulationSubmissions != 0);
 
     /// <summary>The number of distinct commands; each has an interned id in <c>[0, <see cref="CommandCount"/>)</c>.</summary>
     public int CommandCount => m_nameById.Length;
     /// <summary>Gets the distinct registered commands' declared facts, ordinal-sorted by name — the affordance manifest
-    /// source a listing verb (e.g. <c>world.affordances</c>) emits as data. Excludes the registry's own text-path
-    /// built-ins (<c>help</c>/<c>wire.ack</c>/<c>wire.errors</c>), which are never bindable.</summary>
+    /// source a listing verb (e.g. <c>world.affordances</c>) emits as data. This is the WHOLE dispatchable catalogue,
+    /// the registry's own <c>help</c>/<c>wire.ack</c>/<c>wire.errors</c> included; they carry
+    /// <see cref="CommandBindability.Unbindable"/>, which is what keeps them off a binding page.</summary>
     /// <remarks>Metadata only, never a handler. A caller that could reach a definition's handler could invoke an authority
     /// verb with a context of its own making, which would be a dispatch door beside the stamped ones; describing the
-    /// vocabulary must not confer the ability to drive it.</remarks>
-    public IReadOnlyList<CommandMetadata> Definitions => m_metadata;
+    /// vocabulary must not confer the ability to drive it. <see cref="ImmutableArray{T}"/> rather than
+    /// <see cref="IReadOnlyList{T}"/>: the manifest is a fact, and an interface over an array is a cast away from
+    /// being rewritten under the registry's feet.</remarks>
+    public ImmutableArray<CommandMetadata> Definitions => m_metadata;
     /// <summary>Gets the registered command-map names. <see cref="CommandMaps.Global"/> is always first.</summary>
-    public IReadOnlyList<string> Maps => m_mapNames;
+    public ImmutableArray<string> Maps => m_mapNames;
 }

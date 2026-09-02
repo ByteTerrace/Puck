@@ -179,7 +179,8 @@ public sealed class WorldSeatAuthorityRouter {
     // Splices ` instance:<name>` just inside a bracketed echo's closing ']' — the same surgery the world's own
     // instance-addressed verbs use, so a routed answer reports which instance answered.
     private static string WithInstanceTag(string text, string instanceName) => CommandEcho.SpliceTag(
-        tag: $"instance:{instanceName}",
-        text: text
+        prefix: "instance:",
+        text: text,
+        value: instanceName
     );
 }

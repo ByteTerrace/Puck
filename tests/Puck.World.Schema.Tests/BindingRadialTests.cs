@@ -10,7 +10,7 @@ public sealed class BindingRadialTests {
     public void AuthoredExcursionDeadZoneRangesAndHysteresisSelectRings() {
         var bindings = new PagedInputBindings(profile: BindingProfile.Compile(document: ExcursionProfile()));
 
-        _ = bindings.Resolve(slot: 0, signal: InputSignal.Press(source: "keyboard.tab"));
+        _ = bindings.Resolve(pressesWithheld: false, slot: 0, signal: InputSignal.Press(source: "keyboard.tab"));
         var excursion = bindings.WheelFor(slot: 0)!.Excursion;
 
         Assert.NotNull(@object: excursion);
@@ -110,7 +110,7 @@ public sealed class BindingRadialTests {
             }],
         }));
 
-        _ = bindings.Resolve(slot: 0, signal: InputSignal.Press(source: "keyboard.tab"));
+        _ = bindings.Resolve(pressesWithheld: false, slot: 0, signal: InputSignal.Press(source: "keyboard.tab"));
         var view = bindings.WheelFor(slot: 0)!;
         var neutral = new Vector2(x: 100f, y: 100f);
         var hub = new Vector2(x: 200f, y: 100f);
@@ -432,7 +432,7 @@ public sealed class BindingRadialTests {
         var registry = new CommandRegistry(modules: []);
         var router = new InputRouter(registry: registry, bindings: bindings, principalResolver: new FixedPrincipalResolver(principal: CommandPrincipal.Console));
 
-        _ = bindings.Resolve(slot: 2, signal: InputSignal.Press(source: "keyboard.tab"));
+        _ = bindings.Resolve(pressesWithheld: false, slot: 2, signal: InputSignal.Press(source: "keyboard.tab"));
         var activation = bindings.WheelFor(slot: 2)!.Rings[0].Sectors[0].Activation;
         var outcome = BindingWheelCommitResult.Dispatch(
             activation: activation,
@@ -452,7 +452,7 @@ public sealed class BindingRadialTests {
     public void SeveralSourcesCanHoldOneRadialAndAGroupCanCarryAnother() {
         var bindings = new PagedInputBindings(profile: BindingProfile.Compile(document: Profile()));
 
-        _ = bindings.Resolve(slot: 2, signal: InputSignal.Press(source: "keyboard.tab"));
+        _ = bindings.Resolve(pressesWithheld: false, slot: 2, signal: InputSignal.Press(source: "keyboard.tab"));
         var primary = bindings.WheelFor(slot: 2);
 
         Assert.NotNull(@object: primary);
@@ -464,16 +464,16 @@ public sealed class BindingRadialTests {
 
         Assert.Equal(expected: "test.radial.select", actual: selector.Command);
 
-        _ = bindings.Resolve(slot: 2, signal: InputSignal.Press(source: "gamepad.leftTrigger"));
-        _ = bindings.Resolve(slot: 2, signal: InputSignal.Release(source: "keyboard.tab"));
+        _ = bindings.Resolve(pressesWithheld: false, slot: 2, signal: InputSignal.Press(source: "gamepad.leftTrigger"));
+        _ = bindings.Resolve(pressesWithheld: false, slot: 2, signal: InputSignal.Release(source: "keyboard.tab"));
 
         Assert.Same(expected: primary, actual: bindings.WheelFor(slot: 2));
 
-        _ = bindings.Resolve(slot: 2, signal: InputSignal.Release(source: "gamepad.leftTrigger"));
+        _ = bindings.Resolve(pressesWithheld: false, slot: 2, signal: InputSignal.Release(source: "gamepad.leftTrigger"));
 
         Assert.Null(@object: bindings.WheelFor(slot: 2));
 
-        _ = bindings.Resolve(slot: 2, signal: InputSignal.Press(source: "gamepad.rightTrigger"));
+        _ = bindings.Resolve(pressesWithheld: false, slot: 2, signal: InputSignal.Press(source: "gamepad.rightTrigger"));
 
         Assert.Equal(expected: "secondary", actual: bindings.WheelFor(slot: 2)?.Id);
     }
@@ -484,7 +484,7 @@ public sealed class BindingRadialTests {
         var expectedPrincipal = CommandPrincipal.Peer(generation: 4, index: 17);
         var router = new InputRouter(registry: registry, bindings: bindings, principalResolver: new FixedPrincipalResolver(principal: expectedPrincipal));
 
-        _ = bindings.Resolve(slot: 2, signal: InputSignal.Press(source: "keyboard.tab"));
+        _ = bindings.Resolve(pressesWithheld: false, slot: 2, signal: InputSignal.Press(source: "keyboard.tab"));
         var activation = bindings.WheelFor(slot: 2)!.Rings[0].Sectors[0].Activation;
 
         Assert.True(condition: router.Activate(activation: activation, slot: 2));

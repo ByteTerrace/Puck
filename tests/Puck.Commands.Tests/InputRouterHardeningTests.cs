@@ -272,6 +272,27 @@ public sealed class InputRouterHardeningTests {
         _ = Assert.Throws<ArgumentException>(testCode: () => router.Capture(signal: InputSignal.Press(source: "")));
     }
     [Fact]
+    public void CaptureRefusesANegativeSlotThatIsNotTheUnresolvedSentinel() {
+        var router = Router(bindings: new EmptyBindings());
+
+        // Every negative used to read as "resolve the lane from the device", so a caller's arithmetic slip landed
+        // the signal in whichever seat the resolver named rather than the authored one.
+        _ = Assert.Throws<ArgumentException>(testCode: () => router.Capture(signal: InputSignal.Press(source: "key.x") with { Slot = -5, }));
+        _ = Assert.Throws<ArgumentException>(testCode: () => router.CaptureFocusExempt(signal: InputSignal.Press(source: "key.x") with { Slot = int.MinValue, }));
+
+        router.Capture(signal: InputSignal.Press(source: "key.x") with { Slot = InputSignal.UnresolvedSlot, });
+        router.Capture(signal: InputSignal.Press(source: "key.y") with { Slot = 0, });
+    }
+    [Fact]
+    public void SnapshotForTickRefusesATickBehindTheOneItLastProduced() {
+        var router = Router(bindings: new EmptyBindings());
+
+        _ = router.SnapshotForTick(tick: 10UL, windowEndTick: 10UL);
+        // Non-decreasing, not strictly increasing: a host that re-produces its current tick is not mis-wired.
+        _ = router.SnapshotForTick(tick: 10UL, windowEndTick: 11UL);
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => router.SnapshotForTick(tick: 9UL, windowEndTick: 12UL));
+    }
+    [Fact]
     public void TheCaptureQueueDropsItsOldestBeyondTheCap() {
         const int overflow = 5;
 
@@ -290,6 +311,29 @@ public sealed class InputRouterHardeningTests {
         Assert.Equal(actual: bindings.Resolved[0], expected: $"key.{overflow}");
     }
     [Fact]
+    public void TheInjectionQueueDropsItsOldestBeyondTheCap() {
+        // The injection door is the one a diverged clock base — or a stalled pump — floods just as easily as the raw
+        // signal door: every entry stamped ahead of the window is retained and re-scanned on every drain.
+        const int total = (InputRouter.MaxCapturedInjections * 4);
+
+        var activation = Activation();
+        var router = Router(bindings: new EmptyBindings());
+
+        for (var index = 0; (index < total); index++) {
+            Assert.True(condition: router.Activate(
+                activation: activation,
+                slot: 0
+            ));
+        }
+
+        Assert.Equal(actual: router.DroppedInjectionCount, expected: ((long)(total - InputRouter.MaxCapturedInjections)));
+        Assert.Equal(actual: router.DroppedCaptureCount, expected: 0L);
+        Assert.Equal(
+            actual: Assert.Single(collection: router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue).Lanes).Entries.Count,
+            expected: InputRouter.MaxCapturedInjections
+        );
+    }
+    [Fact]
     public void TypedCharactersAreNeverLatchedAsRepeatedPresses() {
         var bindings = new RecordingBindings();
         var router = Router(bindings: bindings);
@@ -303,6 +347,36 @@ public sealed class InputRouterHardeningTests {
         // A typed character is a Started signal with no release, so latching it would seat its source forever and
         // swallow every character after the first as an OS repeat.
         Assert.Equal(actual: bindings.Resolved.Count, expected: 4);
+    }
+    [Fact]
+    public void DeviceKindClassificationIsCaseInsensitiveLikeEverySourceIdResolution() {
+        var slots = new FakeSlotResolver(raiseDisconnect: out _);
+        var router = new InputRouter(
+            registry: new CommandRegistry(modules: [new ProbeModule()]),
+            bindings: new EmptyBindings(),
+            principalResolver: new ConsolePrincipal(),
+            slotResolver: slots
+        );
+
+        // A source id is case-insensitive everywhere it is RESOLVED — the compiled profile's table, the router's own
+        // dispatch — and a console line reaches the router with whatever case it was typed in. A mis-cased keyboard
+        // classified as a Gamepad hands the kind-aware couch-sharing rule a wrong answer about the very slot it is
+        // deciding, which is the one thing this classification exists to inform.
+        router.Capture(signal: InputSignal.Press(source: "KEYBOARD.A"));
+        router.Capture(signal: InputSignal.Press(source: "Mouse.Button1"));
+        router.Capture(signal: InputSignal.Press(source: "keyboard.b"));
+        router.Capture(signal: InputSignal.Press(source: "pad.a"));
+        _ = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
+        Assert.Equal(
+            actual: slots.ObservedKinds,
+            expected: [
+                InputDeviceKind.Keyboard,
+                InputDeviceKind.Mouse,
+                InputDeviceKind.Keyboard,
+                InputDeviceKind.Gamepad,
+            ]
+        );
     }
     [Fact]
     public void DisposeDetachesTheRouterFromItsCollaborators() {
@@ -326,6 +400,21 @@ public sealed class InputRouterHardeningTests {
         router.Dispose();
 
         Assert.False(condition: bindings.HasSubscribers);
+    }
+    [Fact]
+    public void ADisposedRouterRefusesEveryIngressDoor() {
+        var activation = Activation();
+        var router = Router(bindings: new EmptyBindings());
+
+        router.Dispose();
+
+        _ = Assert.Throws<ObjectDisposedException>(testCode: () => router.Capture(signal: InputSignal.Press(source: "key.x")));
+        _ = Assert.Throws<ObjectDisposedException>(testCode: () => router.CaptureFocusExempt(signal: InputSignal.Press(source: "key.x")));
+        _ = Assert.Throws<ObjectDisposedException>(testCode: () => router.Activate(
+            activation: activation,
+            slot: 0
+        ));
+        _ = Assert.Throws<ObjectDisposedException>(testCode: () => router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue));
     }
     [Fact]
     public void HeldSeedingEmitsOneSlotsHoldsInCommandIdOrder() {
@@ -424,9 +513,11 @@ public sealed class InputRouterHardeningTests {
         public event Action<InputDeviceId>? DeviceSlotChanging;
 
         public bool HasSubscribers => (DeviceSlotChanging is not null);
+        public List<InputDeviceKind> ObservedKinds { get; } = [];
 
         public int ResolveSlot(InputDeviceId device) => 0;
         public bool CommitSlot(InputDeviceId device, int slot) => true;
+        public void ObserveDeviceKind(InputDeviceId device, InputDeviceKind kind) => ObservedKinds.Add(item: kind);
     }
     private sealed class RecordingBindings : IInputBindings {
         public List<string> Resolved { get; } = [];

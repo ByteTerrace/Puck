@@ -31,27 +31,19 @@ namespace Puck.World;
 internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, WorldScreenBinder screenBinder, Client.WorldAudioDirector audioDirector, PresentPacingControl pacing, Client.WorldBindingBarVisibility bindingBarVisibility, Client.WorldTextCatalog textCatalog) : ICommandModule {
     // Buffer a mutation over the link and return a quiet ack — the server prints the loud accept/reject line when the
     // buffered edit applies at the tick boundary, and the barrier guarantees a following world.status sees the result.
-    // world.load's own trailing-token grammar: <path> [force], where `force` is recognized only as the LAST
-    // whitespace-separated token (a path itself never needs quoting today — see RawArgument's own remarks on why
-    // this module does not tokenize paths). Empty/whitespace-only input (after stripping a trailing "force") fails.
-    private static bool TryParseLoadArgs(string raw, out string path, out bool force) {
-        var trimmed = raw.Trim();
-        var lastSpace = trimmed.LastIndexOfAny(anyOf: [' ', '\t']);
-
-        if (
-            (lastSpace >= 0) &&
-            string.Equals(
-            a: trimmed[(lastSpace + 1)..],
-            b: "force",
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )
-        ) {
-            force = true;
-            path = trimmed[..lastSpace].TrimEnd();
-        } else {
-            force = false;
-            path = trimmed;
-        }
+    // world.load's own trailing-token grammar: <path> [force], where `force` is recognized only as the LAST token.
+    // Delegated to WorldCommandArguments so BOTH ends of the reconstruction split the line the way the registry's own
+    // tokenizer split it: the hand-rolled `anyOf: [' ', '\t']` scan that used to sit here found no separator in
+    // `world.load <path>\vforce`, so the flag the tokenizer had already separated was absorbed into the path and the
+    // load refused a file name nobody wrote. Empty/whitespace-only input (after stripping a trailing "force") fails.
+    private static bool TryParseLoadArgs(CommandContext context, in WireArgs args, out string path, out bool force) {
+        path = WorldCommandArguments.RawBeforeKeyword(
+            args: in args,
+            context: context,
+            keyword: "force",
+            leadingTokens: 1,
+            present: out force
+        );
 
         return !string.IsNullOrWhiteSpace(value: path);
     }
@@ -216,10 +208,8 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             description: "Loads a DIFFERENT world file and rebuilds from it — the loaded document becomes the new base (fully validated off disk, then re-validated at the apply boundary → swap → derived rebuild → journal RESET): world.load <path> [force]. Refused (naming world.save/world.reset/force as the outs) while the journal is DIRTY unless force is passed — a load discards unsaved work, and doing that silently is dishonest. A missing/invalid file, or the every-section Mutate hold world.load/world.undo have always needed, leaves the running world untouched and echoes a loud line naming why. Fully replay-compatible: captured on the tape, CAS-pinned by a sha256-64 hash of the exact bytes read off disk — a re-drive re-reads the same path and refuses BY NAME if the file has moved since the recording was made. The accept echo names the new origin.",
             handler: (context, args) => {
                 if (!TryParseLoadArgs(
-                    raw: WorldCommandArguments.Raw(
-                        args: args,
-                        context: context
-                    ),
+                    args: in args,
+                    context: context,
                     path: out var path,
                     force: out var force
                 )) {

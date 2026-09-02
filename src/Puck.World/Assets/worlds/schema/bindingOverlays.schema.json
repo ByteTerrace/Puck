@@ -173,21 +173,6 @@
                     ]
                   },
                   "default": null
-                },
-                "isResting": {
-                  "type": "boolean"
-                },
-                "members": {
-                  "type": [
-                    "array",
-                    "null"
-                  ],
-                  "items": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  }
                 }
               },
               "required": [

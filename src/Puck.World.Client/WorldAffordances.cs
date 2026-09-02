@@ -25,8 +25,9 @@ namespace Puck.World;
 /// binding a channel it never declares, because some other world happened to declare it.</para>
 /// <para>Native binding source kinds resolve through <see cref="InputSourceVocabulary"/>'s full value range. This
 /// door feeds <see cref="InputRouter"/> directly, whose <see cref="CommandValue"/> carries Axis3D and Orientation;
-/// it must not inherit the narrower two-lane payload limit of a scripted addon input act. A future/unknown source
-/// still skips the kind half of the check, while a source explicitly marked unaddressable is refused.</para></remarks>
+/// it must not inherit the narrower two-lane payload limit of a scripted addon input act. A source this catalog
+/// cannot resolve is REFUSED by name — it compiles to a control that will never signal, so the row is permanently
+/// dead — and a source explicitly marked unaddressable is refused for that reason instead, never both.</para></remarks>
 public static class WorldAffordances {
     private static volatile CommandRegistry? Registry;
 
@@ -37,7 +38,8 @@ public static class WorldAffordances {
     // The physical source's FULL declared kind, via the engine's one reflection-derived source catalog. Native
     // bindings ride CommandValue and therefore admit its whole range (including Axis3D and Orientation); only addon
     // input records apply AddonSourceVocabulary's narrower payload shape. Unknown and explicitly unaddressable
-    // sources answer null — the kind check is skipped for them, while the latter is refused by sourceAddressable.
+    // sources both answer null, and null is itself a refusal: an unaddressable source is refused by name through
+    // sourceAddressable, and a source nothing at all declares is refused as an unknown control.
     private static CommandValueKind? SourceKind(string source) {
         if (
             InputSourceVocabulary.IsExplicitlyUnaddressable(sourceId: source) ||
@@ -174,27 +176,28 @@ public static class WorldAffordances {
         // as --world. Whether a document is valid must not depend on which door it walked through.
         var registry = Registry;
 
-        BindingVocabularyCheck.Validate(
-            command: ((registry is null)
-            ? null
-            : name => (registry.TryGetMetadata(
-                    metadata: out var metadata,
-                    name: name
-                )
-                ? metadata
-                : null)),
+        errors.AddRange(collection: BindingVocabularyCheck.Validate(
             document: document,
-            sourceKind: SourceKind,
-            errors: errors,
-            channel: reference => channels.TryGetOrdinal(
-                ordinal: out _,
-                reference: reference
-            ),
-            channelBinary: reference => (channels.TryGetOrdinal(
-                ordinal: out var ordinal,
-                reference: reference
-            ) && (channels.Shape(ordinal: ordinal) == ChannelShape.Binary)),
-            sourceAddressable: source => !InputSourceVocabulary.IsExplicitlyUnaddressable(sourceId: source)
-        );
+            lookups: new BindingVocabularyLookups(
+                Command: ((registry is null)
+                ? null
+                : name => (registry.TryGetMetadata(
+                        metadata: out var metadata,
+                        name: name
+                    )
+                    ? metadata
+                    : null)),
+                SourceKind: SourceKind,
+                Channel: reference => channels.TryGetOrdinal(
+                    ordinal: out _,
+                    reference: reference
+                ),
+                ChannelBinary: reference => (channels.TryGetOrdinal(
+                    ordinal: out var ordinal,
+                    reference: reference
+                ) && (channels.Shape(ordinal: ordinal) == ChannelShape.Binary)),
+                SourceAddressable: source => !InputSourceVocabulary.IsExplicitlyUnaddressable(sourceId: source)
+            )
+        ).Errors);
     }
 }

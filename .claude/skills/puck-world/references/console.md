@@ -123,15 +123,19 @@ reports `[wire.errors: N rejected]`.
 
 ## The stdin drain barrier and `world.wait`
 
-The barrier lives in `TextCommandSource.Collect` (`Puck.Commands`): while a
-Simulation submission is pending (`CommandRegistry.
-HasPendingSimulationSubmission`), a following line that does NOT route to
-Simulation is held — so a scripted write-then-read pair (`world.row.set kits …`
-then `world.status`) needs no polling. Further Simulation lines keep
-draining FIFO into the same pending snapshot. Blank lines and `#` comments
+The barrier lives in `TextCommandSource.Collect` (`Puck.Commands`) and is
+PER-SESSION, not registry-wide: while a session's own Simulation submission is
+pending (`TextCommandSession.HasPendingSimulationSubmission`, over the
+`TextSubmissionBarrier` that rides that submission's snapshot entry), a
+following line from THAT session that does NOT route to Simulation is held — so
+a scripted write-then-read pair (`world.row.set kits …` then `world.status`)
+needs no polling, and another seat's ready text keeps draining meanwhile.
+Further Simulation lines keep draining FIFO into the same pending snapshot.
+Blank lines and `#` comments
 are skipped, so piped scripts can be self-documenting. **The barrier holds
 only `Immediate` lines** — it fences reads behind writes; it does not delay
-Simulation traffic.
+Simulation traffic. It releases whether or not the submission's handler
+dispatched or threw, so a throwing verb can no longer strand a session's stdin.
 
 `world.wait <ticks>` (`WorldWaitCommandModule` + `WorldConsoleWaitGate`) is
 the explicit fence: Immediate, 1..144000 ticks (ten minutes at the 240 Hz

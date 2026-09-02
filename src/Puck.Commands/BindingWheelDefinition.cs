@@ -11,12 +11,18 @@ namespace Puck.Commands;
 /// concentric shells rather than selected by chord; each ring's entries are the wheel's SECTORS, and every sector is
 /// an ordinary command binding activated through the originating seat's input-router lane.
 /// </summary>
-/// <remarks>A sector row deliberately narrows the page-entry shape: it carries a
-/// <see cref="BindingPageEntryDefinition.Command"/> destination and an optional stable id, and NOTHING else — no
-/// <c>Sources</c>/<c>Activator</c> (the radial gesture is the trigger), no <c>Channel</c>/<c>Scale</c> (a radial choice
-/// is a one-shot command activation), no <c>Mode</c> (it has no held state), and no <c>Text</c> (the activation is a
-/// value, not a submitted line). Command <c>Value</c> and <c>ActivateOn</c> remain meaningful and compile into the
-/// same activation shape an ordinary binding uses. Ring page ids share the document-wide page-id namespace.</remarks>
+/// <remarks>A sector row deliberately narrows the page-entry shape. It REQUIRES a
+/// <see cref="BindingPageEntryDefinition.Command"/> destination, and every member that would mean nothing on a
+/// radial choice is refused BY NAME rather than ignored — no <c>Sources</c>/<c>Activator</c> (the radial gesture is
+/// the trigger), no <c>Channel</c>/<c>Scale</c> (a radial choice is a one-shot command activation), no <c>Mode</c>
+/// (it has no held state), and no <c>Label</c> (display text resolves from <paramref name="LabelRow"/>, keyed by the
+/// sector's id). What remains is the optional stable id and the command's own shape: <c>Value</c>, <c>ActivateOn</c>,
+/// and <c>Text</c> compile into the same activation an ordinary binding uses — a sector's
+/// commit is a press, so its <see cref="BindingPageEntryDefinition.Text"/> rides the activation as the submitted line
+/// <c>&lt;command&gt; &lt;text&gt;</c> under exactly the page entry's contract — nonblank, single-line, no longer
+/// than <see cref="BindingProfile.MaxTextPayloadLength"/>, targeting a wire-args command, and refused beside an
+/// <c>ActivateOn</c> phase other than <see cref="CommandPhase.Started"/>. Ring page ids share the document-wide
+/// page-id namespace.</remarks>
 /// <param name="Id">The profile-unique radial id. Composition and runtime continuity key on this identity.</param>
 /// <param name="Group">The page group this wheel belongs to — the seat's ACTIVE group decides which wheel presents,
 /// so a group without a wheel simply presents nothing. A containing world may bind the name to a Text state cell
@@ -55,6 +61,7 @@ public sealed record BindingWheelDefinition(
 }
 /// <summary>A spatial input's sector-selection geometry. Pointer input authors this today; a future touch binding
 /// can reuse the same policy without pretending a touch location is an analog stick.</summary>
+[JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<BindingWheelSpatialSelectionMode>))]
 public enum BindingWheelSpatialSelectionMode {
     /// <summary>The spatial input does not participate in radial selection.</summary>
     Disabled,
@@ -69,6 +76,7 @@ public enum BindingWheelSpatialSelectionMode {
     HitTarget,
 }
 /// <summary>Where the radial hub is anchored for the lifetime of one open gesture.</summary>
+[JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<BindingWheelPlacement>))]
 public enum BindingWheelPlacement {
     /// <summary>At the pointer's opening position when one is available; otherwise at viewport center.</summary>
     Pointer,
@@ -77,6 +85,7 @@ public enum BindingWheelPlacement {
     ViewportCenter,
 }
 /// <summary>How a wheel chooses among its authored rings.</summary>
+[JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<BindingWheelRingSelectionMode>))]
 public enum BindingWheelRingSelectionMode {
     /// <summary>The active ring is selected explicitly by <c>player.wheel.ring</c> bindings or pointer-wheel input.</summary>
     Explicit,

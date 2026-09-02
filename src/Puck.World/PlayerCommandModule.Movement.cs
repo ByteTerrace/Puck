@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Numerics;
 using Puck.Commands;
 using Puck.Maths;
@@ -1045,8 +1046,9 @@ internal sealed partial class PlayerCommandModule {
         }
 
         return CommandEcho.SpliceTag(
+            prefix: "anchor=body:",
             text: text,
-            tag: $"anchor=body:{m_anchor.PerceivedBody(slot: index)}"
+            value: m_anchor.PerceivedBody(slot: index).ToString(provider: CultureInfo.InvariantCulture)
         );
     }
 }

@@ -23,7 +23,7 @@ namespace Puck.World;
 /// (<see cref="DescribeContextDerivation"/> — the <c>player.bindings</c> read-back).
 /// </summary>
 /// <remarks>Single-threaded, like every input-fold type here: recomposition runs on the launcher's window-pump thread
-/// (a verb handler, a roster mutation, or the post-step overlay sync), and <see cref="Resolve(int, in InputSignal)"/>
+/// (a verb handler, a roster mutation, or the post-step overlay sync), and <see cref="Resolve(int, in InputSignal, bool)"/>
 /// runs on the same thread inside the router's snapshot fold. No lock guards this state. Constructed early in
 /// composition (before the container is built) from the boot world definition; the per-seat profile and session
 /// layers start null, and the roster/verbs push them in as they change. Chord-command edges (<see cref="IChordEdgeSource"/>) forward to the
@@ -1067,6 +1067,13 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         return false;
     }
     /// <inheritdoc/>
+    public bool HoldsSource(int slot, string source) {
+        return ((((uint)slot) < SeatCount) && m_seats[slot].HoldsSource(
+            slot: slot,
+            source: source
+        ));
+    }
+    /// <inheritdoc/>
     public void Reset(int slot) {
         if (((uint)slot) < SeatCount) {
             m_seats[slot].Reset(slot: slot);
@@ -1089,9 +1096,10 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         );
     }
     /// <inheritdoc/>
-    public IReadOnlyList<CommandBinding>? Resolve(int slot, in InputSignal signal) {
+    public IReadOnlyList<CommandBinding>? Resolve(int slot, in InputSignal signal, bool pressesWithheld) {
         return ((((uint)slot) < SeatCount)
             ? m_seats[slot].Resolve(
+                pressesWithheld: pressesWithheld,
                 signal: in signal,
                 slot: slot
             )

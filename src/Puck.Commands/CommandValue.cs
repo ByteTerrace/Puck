@@ -19,6 +19,7 @@ namespace Puck.Commands;
 /// </remarks>
 /// <param name="Kind">The shape that determines how <paramref name="Raw"/> is interpreted.</param>
 /// <param name="Raw">The packed component data for the value.</param>
+[System.Text.Json.Serialization.JsonConverter(typeof(CommandValueJsonConverter))]
 public readonly record struct CommandValue(CommandValueKind Kind, Vector4 Raw) {
     /// <summary>Creates an <see cref="CommandValueKind.Axis1D"/> value.</summary>
     /// <param name="value">The axis magnitude, conventionally in the range -1 to 1.</param>

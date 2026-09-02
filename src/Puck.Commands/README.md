@@ -14,8 +14,43 @@ running one snapshot per step and for keeping command handlers and simulation
 code deterministic.
 
 `dotnet pack` produces `ByteTerrace.Puck.Commands`; the first NuGet.org release
-has not been published yet. The project depends on `ByteTerrace.Puck.Maths` and
-[`System.CommandLine`](https://www.nuget.org/packages/System.CommandLine).
+has not been published yet. The project depends on
+`ByteTerrace.Puck.Abstractions`, `ByteTerrace.Puck.Assets`,
+`ByteTerrace.Puck.Maths`, and
+[`System.CommandLine`](https://www.nuget.org/packages/System.CommandLine), each
+named directly, so the package's declared dependencies are the whole closure
+rather than part of it plus whatever another package happens to carry along.
+
+Native AOT and trimming are worth checking before a publish.
+`BindingProfileJsonContext` is a source-generated `System.Text.Json` context
+over `BindingProfileDocument` and every row, converted leaf, and enum beneath
+it, so saving and reloading a player's controller mapping reaches no reflection
+of this project's making, and this assembly builds under the repository's AOT
+and trim analyzers. `ByteTerrace.Puck.Assets` still declares itself not
+AOT-compatible, for its own reflection-based document path; those warnings are
+assembly-scoped, and nothing on the binding graph reaches that path, but the
+package cannot promise for what it depends on what it can promise for itself.
+
+## ⚖️ Licensing
+
+ByteTerrace.Puck is source-available and dual-licensed. It is not open source.
+The default is the
+[PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0),
+under which noncommercial use is free: study, hobby projects, research,
+evaluation, and use by any school, university, public research organization,
+charity, or government body. Shipping or operating it commercially requires a
+paid commercial license from ByteTerrace, whatever the size of the user.
+
+Both documents ride inside the package.
+[`LICENSE.md`](https://github.com/ByteTerrace/Puck/blob/main/LICENSE.md) is the
+binding noncommercial license;
+[`LICENSING.md`](https://github.com/ByteTerrace/Puck/blob/main/LICENSING.md) is
+the plain-language summary of who needs which, and how to ask for commercial
+terms. PolyForm Noncommercial is not on NuGet.org's allowlist of license
+expressions, which admits only OSI- and FSF-approved licenses, so the package
+declares its license as the packed `LICENSE.md` file instead. The gallery page
+therefore links that file rather than naming a license in its own vocabulary,
+and the two documents above are the terms themselves.
 
 ## ✨ Key features
 
@@ -44,7 +79,23 @@ has not been published yet. The project depends on `ByteTerrace.Puck.Maths` and
 ## 📐 How input becomes a command
 
 There are two public routes to a handler: the fixed-step router and submitted
-text. Both choose the acting principal before anything dispatches:
+text. Both choose the acting principal before anything dispatches.
+
+Device signals and authored interface activations enter `InputRouter`, which
+orders them per slot, stamps the principal the host resolves for that slot, and
+emits one `CommandSnapshot`. The host's fixed-step pump applies that snapshot to
+`CommandRegistry` for map-gated dispatch, then hands the same snapshot to the
+simulation's `Step`. A submitted line, from administrative stdin or from a
+seat's own text session, instead reaches `CommandRegistry.Submit`: an
+`Immediate` command parses and runs there as the stamped principal, while a
+`Simulation` command is resolved to the command it names and queued through that
+principal's sink into the router, so it dispatches on a tick exactly as a bound
+press does. That queueing is what wiring a sink buys: a host that never calls
+`RouteSimulationTo` and hands its seats no session sink has no lane to queue
+into, and its `Simulation` lines run inline like immediate ones.
+
+*(The two diagrams below draw that flow. They render on GitHub; NuGet.org's
+markdown shows them as their source text.)*
 
 ```mermaid
 graph LR
@@ -53,17 +104,20 @@ graph LR
     Console(["⌨️ Administrative stdin"]) --> Submit
     SeatText(["⌨️ Seat text session"]) --> Submit
     Submit(["submitted line"]) -->|"Immediate: parse + run as stamped principal"| Handler
-    Submit -->|"Simulation: queue through that principal's sink"| Router
+    Submit -->|"Simulation, sink wired: resolve the command it names,<br/>queue through that principal's sink<br/>(parsed at apply time; a quoted verb<br/>also parses at submit)"| Router
+    Submit -->|"Simulation, no sink wired: run inline"| Handler
     Router(["🎚️ InputRouter<br/>orders commands per slot and<br/>stamps the host-resolved principal"]) --> Snapshot(["📋 CommandSnapshot"])
     Snapshot --> Pump(["⏱️ Host fixed-step pump"])
     Pump -->|"ApplySnapshot"| Apply(["🗄️ CommandRegistry<br/>map-gated dispatch"])
     Apply --> Handler(["🎯 handler(CommandContext)"])
-    Pump -->|"Step(tick, snapshot)"| Simulation(["🌍 Simulation"])
+    Pump -->|"Step(in FixedStepContext, in CommandSnapshot)"| Simulation(["🌍 Simulation"])
 ```
 
 For a simulation that owns the final state, the loop is fixed-step: producers
 capture whenever input arrives, and the host pulls one snapshot per host-owned
-tick:
+tick. Each tick the host calls `SnapshotForTick`, receives the ordered per-slot
+snapshot, applies it to the registry, and steps the simulation, in that order,
+once:
 
 ```mermaid
 sequenceDiagram
@@ -74,10 +128,10 @@ sequenceDiagram
     participant S as Simulation
     loop every fixed tick
         P->>R: Capture(signal…)
-        H->>R: SnapshotForTick(tick)
+        H->>R: SnapshotForTick(tick, windowEndTick)
         R-->>H: ordered per-slot snapshot
         H->>G: ApplySnapshot — map-gated dispatch
-        H->>S: Step(tick, snapshot)
+        H->>S: Step(in FixedStepContext, in CommandSnapshot)
     end
 ```
 
@@ -156,26 +210,75 @@ registry.ApplySnapshot(snapshot: in snapshot);
 CommandResult help = registry.Submit(line: "help");
 ```
 
-Inside this repository, `Puck.Launcher` owns that loop end to end. A composition
-root first supplies the command registry, capture clock, principal resolver, and
-terminal services; this registration then adds the simulation and its router:
+The pump itself is the host's job. `ByteTerrace.Puck.Hosting` publishes the seam
+a simulation implements, so a host that owns its own accumulator can drive the
+loop above without taking anything else from this repository:
 
 ```csharp
-services.AddFixedStepSimulation<GameSimulation>(bindings);
+using Puck.Commands;
+using Puck.Hosting;
 
 sealed class GameSimulation : IFixedStepSimulation {
+    // Must divide EngineTicks.PerSecond exactly; the host reads it to size a step.
+    public uint RatePerSecond => 60U;
+
     public void Step(in FixedStepContext context, in CommandSnapshot commands) {
-        // Advance authoritative state exactly once. Launcher already applied commands.
+        // Advance authoritative state exactly once. The host already applied commands.
     }
 }
 ```
 
-Once those services are composed, `FixedStepPump` owns the accumulator, capture
-windows, console-injection wiring, snapshot application, catch-up, interpolation
-remainder, and the apply-before-step order. `InputRouter` carries held input
-between ticks, while the window host releases it on focus loss. Bound input
-always passes through an `InputRouter`; without one, a composition root cannot
-dispatch a binding.
+`InputRouter` carries held input between ticks, and the host releases it on focus
+loss. Bound input always passes through an `InputRouter`; without one, a
+composition root cannot dispatch a binding.
+
+Two rules the loop depends on are enforced rather than merely documented. A
+snapshot is produced once per host-owned tick, in non-decreasing tick order: a
+tick behind the one the router last answered is a mis-wired pump, and it is
+refused with `ArgumentOutOfRangeException` on the first frame instead of quietly
+producing nonsense. And a snapshot's buffers are BORROWED from the router and
+retired by its next `SnapshotForTick`; reading a retained snapshot afterward
+throws `InvalidOperationException` rather than answering with the newer tick's
+contents under the old tick number. Copy what you need to keep.
+
+The reference host lives in this repository rather than in a package.
+`Puck.Launcher` owns the accumulator, capture windows, console-injection wiring,
+snapshot application, catch-up, the interpolation remainder, and the
+apply-before-step order; it is a composition root for Puck's own executables and
+is not published, so read it as a worked example of the loop, not as a
+dependency to take.
+
+Every edge the router synthesizes rather than captures (a transient impulse's
+inactive twin, and every deterministic cancellation from focus loss, a
+disconnect, a binding reload, or a map transition) is delivered on the tick
+after the one that caused it. That delay comes from drain ORDER rather than from
+any clock stamp: `SnapshotForTick` drains the owed edges at its top, before the
+tick's own due signals, so anything synthesized during a fold is visible only to
+the next call. A catch-up of N steps therefore cannot stretch the gap between an
+input's active and inactive edge.
+
+A device whose terminal focus is released captures through
+`CaptureFocusExempt`. Only commands declaring `CommandInputScope.FocusExempt`
+may dispatch, and only the host-owned always-active plane answers, so a typed
+key cannot press a gameplay page's binding. A RELEASE is still forwarded through
+the page resolver, because that resolver holds the chord tracker, the press
+latches, and the armed command rows; a release those never observe would leave a
+page flipped and a row armed until the console closes.
+
+The resolver, not the router, is where that press is refused. The signal arrives
+with `pressesWithheld` set on `IInputBindings.Resolve`, which tells a stateful
+resolver to arm nothing and start nothing: it delivers what the release owes,
+such as an armed row's completion, and leaves every shorter row that the break
+happens to satisfy unarmed. A row armed under withheld presses would owe a
+completion for a command that never started, and could not fire again until it
+produced one. An inactive CONTINUOUS sample is a separate question, answered the
+same way: a stick sitting at centre reports every frame and is the device
+reporting rather than a release, so it is forwarded only when
+`IInputBindings.HoldsSource` says the resolver is holding that source down. A
+flat resolver holds nothing, answers `false` by default, and never sees one.
+The paged resolver reads such a sample as a RELEASE, exactly as it reads a
+`Completed` or `Canceled` edge, so an analog chord member returning to rest is
+released rather than left held for the life of the slot's state.
 
 Edge-reported controls may stream digital `Active` reassertions while physically
 held. Reassertions rebuild modifier/page state and recover continuous channel
@@ -218,15 +321,25 @@ modal replacement.
 `CommandMaps.Global` is implicit for every slot and is the default map for a
 definition. Removing a map deterministically cancels that slot's affected
 holds and resets that slot's binding tracker so streamed held controls can
-re-establish only continuous state through the newly active maps. Text commands remain outside player modality; their stamped principal
-and the handler's authority checks decide what they may do.
+re-establish only continuous state through the newly active maps. Text
+commands remain outside player modality; their stamped principal and the
+handler's authority checks decide what they may do.
+
+A map exists because a command declared it, and `SetActiveMaps` refuses a name no
+registration claimed. Two more definitions in the quick start's `GameplayModule`
+are what make the maps below nameable:
 
 ```csharp
-router.SetActiveMaps(slot: 0, maps: ["OnFoot"]);
-router.SetActiveMaps(slot: 1, maps: ["Vehicle"]);
-router.SetActiveMaps(slot: 2, maps: ["Plan", "Menu"]);
+// In GetCommands, alongside "jump": the same Verb call, with a different map.
+yield return CommandDefinition.Verb(/* "steer", … */ map: "Vehicle");
+yield return CommandDefinition.Verb(/* "menu.confirm", … */ map: "Menu");
 
-bool planning = router.IsMapActive(slot: 2, map: "Plan");
+// Then, on the host thread:
+router.SetActiveMaps(slot: 0, maps: ["Gameplay"]);
+router.SetActiveMaps(slot: 1, maps: ["Vehicle"]);
+router.SetActiveMaps(slot: 2, maps: ["Gameplay", "Menu"]); // an overlay
+
+bool driving = router.IsMapActive(slot: 1, map: "Vehicle");
 ```
 
 ## 🎛️ Bindings
@@ -237,37 +350,210 @@ constant when a digital key should drive a fixed `move` axis. Channel
 destinations use the separate `ChannelScale` path described in the generated
 API reference.
 
+A command that stays on while its input is down declares itself HELD, through
+the `held:` parameter on `CommandDefinition.Verb` and `WithWireArgs`, and a
+handler for one reads `context.Phase` to tell the two edges apart: it is active
+on `Started` and `Active`, and released on `Completed` and `Canceled`. What that
+declaration buys an author is that a plain binding entry, one carrying no
+`activateOn`, delivers BOTH edges, exactly as a channel destination does. So a
+crouch or an aim is bound once, and nobody authors a release twin beside it;
+only an explicit `activateOn` narrows the entry back to a single edge.
+
 One physical input may bind to commands in several maps; only commands active
 for the source's resolved slot enter its snapshot, so mode changes do not
 rewrite the binding table or affect another player.
 `PagedInputBindings` adds named pages, modifier keys, multi-key chords, and
-radial selection wheels. A flat `IInputBindings` implementation can ignore all
-of those features.
+radial selection wheels.
 
-`BindingVocabularyCheck` validates a document against the registered commands.
-It refuses an unknown command, a command not declared `Bindable`, or a value
-whose kind differs from the command's declaration. The check is a host
-responsibility rather than an `InputRouter` runtime check. `Puck.World` routes
-its documents through this validator and supplies command metadata when its live
-registry is available. Another host can obtain the same guarantee by supplying
-its registry before accepting authored bindings. This keeps an authored page
-from exposing a protected administrative command that its author was not meant
-to reach.
+**The paged-binding layer is optional.** Most of the exported surface is it: the
+`Binding*` document model, the `Compiled*` profile shapes it compiles into, and
+the `BindingWheel*` view and geometry types a radial presenter reads. A host that
+implements `IInputBindings` as a flat table needs none of them, so what
+IntelliSense lists is not the API you have to learn. The core types table below
+is.
+
+A wheel's sector decision (`BindingWheelGeometry`) reads the same on every
+machine: the angle comes from `Puck.Maths`' fixed-point `FixedQ4816.Atan2` and
+every other step is an exactly-rounded IEEE operation, because the sector a
+commit dispatches enters the deterministic command lane. The sector rule is
+half-open and identical in every quadrant: sector `k` is centred `k +
+SectorOffset` sectors clockwise of twelve o'clock and sweeps from half a sector
+before that centre, so a direction lying exactly on a seam selects the sector
+CLOCKWISE of the seam. The reading is quantised, so that promise holds to within
+one and a half steps of the Q16 angle grid (2.3e-5 rad); inside that band of a
+seam, the clockwise sector is selected too. A wheel with no sectors selects
+nothing, so `SelectAxis`, `SelectDirection` and `SelectSpatial` each refuse a
+`sectorCount` of zero or less with `ArgumentOutOfRangeException` before any
+policy runs. `BindingWheelGrace` holds the selection-grace window separately,
+counted on engine ticks the caller supplies rather than on a clock of its own.
+
+Modifier ids compare case-insensitively, so a chord member that differs from a
+declared modifier only in case resolves to that modifier, and two modifiers
+whose ids differ only in case are refused at compile. Physical source ids
+compare the same way, in `Puck.Input`'s `InputSourceVocabulary` and in the
+compiled page tables alike, so a row authored `"Gamepad.ButtonSouth"` presses
+and releases exactly as the canonical spelling does.
+
+A binding document has exactly one JSON spelling.
+`BindingProfileJsonContext` is the sanctioned entry point for reading and
+writing one from this package, and every bespoke spelling in the graph is
+declared at the type rather than on a context: `CommandValue` and `ChannelRef`
+carry their own converters, and every enum, `CommandValue`'s own `kind` among
+them, is written and read by exact declared member name, with a numeric token
+refused. That is why a profile written from this package and the same profile
+written as a section of a `Puck.World` document are the same bytes rather than
+two shapes a reader has to guess between. Reads are strict in both directions: a
+member the model does not have is refused by name, and so is a member the model
+requires and the document omits.
+
+`BindingSessionPlan.FromPage` builds a guided rebinding session from one page,
+walking that page's EFFECTIVE entries: a page carrying `inherits` presents its
+own overrides plus everything it merely keeps, flattened by the same
+inheritance walk `BindingProfile.Compile` runs rather than a second copy of it.
+A document `Compile` refuses (an `inherits` naming a page in another group, a
+cycle) is therefore refused here too. It reserves every source that drives page
+selection, declared modifiers and raw chord members alike, because capturing one
+would break page selection for the whole profile.
+
+`BindingVocabularyCheck.Validate(document, lookups)` validates a document
+against the live vocabularies and returns a `BindingVocabularyReport`: every
+refusal line the document earned, in document order, or none at all. The
+vocabularies arrive as one `BindingVocabularyLookups`, each lookup
+independently optional, so a caller with no registry keeps the physical checks
+and a caller with no channel table keeps the command ones. A report is the whole
+answer rather than a delta, so the check appends to nothing the caller already
+holds, and a default-constructed one reads clean rather than throwing: `Errors`
+answers an empty array for the report an initializer never reached.
+
+On the command half it refuses an unknown command, a command not declared
+`Bindable`, a value whose kind differs from the command's declaration, and
+authored text bound to a command that accepts no wire arguments. The registry's
+own `help`, `wire.ack` and `wire.errors` are refused by that second rule rather
+than the first: they are ordinary registrations declared `Unbindable`, so a row
+naming one is answered by what the verb is rather than by calling a verb the
+registry dispatches unknown. On the physical half it refuses, by name, a source
+the caller's control catalog cannot resolve in any of the four places a document
+can name one: a page entry's `sources`, an activator step, a declared modifier's
+own `sources`, and a chord row's `held`/`chord` member that names no declared
+modifier. All four compile into a control that never signals, which is the class
+of typo this gate exists to turn loud.
+
+The check is a host responsibility rather than an `InputRouter` runtime check.
+`Puck.World` routes its documents through it and supplies command metadata when
+its live registry is available; another host obtains the same guarantee by
+supplying its registry before accepting authored bindings. This keeps an
+authored page from exposing a protected administrative command that its author
+was not meant to reach.
 
 ## 🚪 Who can dispatch a command
 
 Two public paths reach a handler:
 
 1. **Fixed-step input.** `InputRouter.Capture` accepts device-style signals,
-   while `InputRouter.Activate` accepts a command activation produced by an
-   authored interface. `SnapshotForTick` groups both by logical slot. For each
-   slot, `ICommandPrincipalResolver.PrincipalOf(slot)` supplies the actor that
-   the host currently recognizes there; the router does not guess that a slot
+   refusing one that names no source, while `InputRouter.Activate` accepts a
+   command activation produced by an authored interface for a non-negative slot.
+   `SnapshotForTick` groups both by logical slot. For each slot,
+   `ICommandPrincipalResolver.PrincipalOf(slot)` supplies the actor that the
+   host currently recognizes there; the router does not guess that a slot
    belongs to a local seat.
 2. **Submitted text.** `CommandRegistry.Submit` runs an immediate command as
    `CommandPrincipal.Console`. A command declared `CommandRouting.Simulation`
-   instead enters the router through `ConsoleTextSink` and runs when the host
-   applies its fixed-step snapshot.
+   defers instead, but only once a sink is wired for it: either the registry's
+   own through `RouteSimulationTo`, or the one a `TextCommandSession` carries. A
+   wired line enters the router through that sink and runs when the host applies
+   its fixed-step snapshot. With no sink, there is nowhere to defer to and the
+   line dispatches inline like an immediate one, so a host that wants the
+   deferral must wire the sink; the quick start's
+   `registry.RouteSimulationTo(sink: router.ConsoleTextSink)` is that call. For
+   a deferred line whose verb token stands on its own, `Submit` resolves it by
+   that leading verb alone and the line's own parse happens once, when its tick
+   applies. A line the parser must unquote to name its verb
+   (`"sim.record" payload`) is routed after that parse instead, so it costs one
+   extra parse; what a line is never allowed to cost is running a `Simulation`
+   handler inline once its lane exists. Resolving that leading verb reads the
+   line through an allocation-free tokenizer bounded at 64 whitespace tokens; a
+   longer line falls through to the full parse and reaches the same handler by
+   the slower road.
+
+Six properties of the submitted line are worth stating outright, because a
+scripted driver depends on them:
+
+- **A line that names no command is refused, not ignored.** A blank or
+  whitespace-only line answers `[wire.reject: a blank line names no command]`
+  and is counted, because `wire.errors` promises to say whether a submitted line
+  silently no-opped and a blank line is the purest no-op there is. An unknown
+  verb leads with the sentence that answers the question, the
+  `wire.reject: unknown command '…'` line pointing at `help`, rather than with
+  System.CommandLine's "Required command was not provided", which is about its
+  own grammar and not about the line.
+- **An `@`-prefixed argument is an ordinary token.** System.CommandLine's
+  response-file expansion is switched off for both of the registry's parse
+  sites, so a submitted line never reads the filesystem and never depends on the
+  working directory.
+- **Command identity is case-insensitive end to end.** A binding row naming
+  `Player.Move`, the interned id it resolves to, and the line built from that
+  spelling all reach the same handler. System.CommandLine itself matches
+  case-sensitively, so the full parse substitutes the canonical spelling for the
+  leading verb rather than the registry narrowing to match the parser.
+- **A handler that throws never propagates out of `Submit` or `ApplySnapshot`.**
+  The escaped exception becomes an `IsError` result naming it, counted by
+  `wire.errors`. Where that result goes differs by path: on `ApplySnapshot` it
+  reaches every registered `ICommandObserver`, which is the only report a pushed
+  activation has, while `Submit` returns it to the caller who submitted the line
+  and notifies no observer. A host cannot watch `Submit` faults through an
+  observer; it reads them from the returned `CommandResult`.
+  The boundary is the ENTRY rather than
+  the handler, so it also contains what the registry's own decoding of a
+  submitted line raises; an observer gets a boundary of its own, one per
+  observer, so a broken sink cannot silence the sinks after it. The rest of the
+  tick's entries still run, and each entry's read-after-write barrier releases
+  whether its body completed or threw. The single exception is an
+  `OperationCanceledException`, which a handler raises by observing the HOST's
+  cancellation token: that is a signal to the caller rather than a verdict about
+  a command, so it propagates unchanged and uncounted, leaving the tick's
+  remaining entries unapplied, which is what a requested shutdown asks for.
+  `ApplySnapshot` still releases the read-after-write barrier of every entry it
+  abandons behind the one that raised, so the owning `TextCommandSession` can
+  drain again rather than waiting forever on a submission no later tick reaches.
+- **A deferred line's argument errors arrive a tick late.** Because a
+  Simulation-class line whose verb stands alone is not parsed at submit, a
+  malformed argument SHAPE is counted into `wire.errors` AND published to
+  observers as an error when its tick applies, rather than answered by
+  `Submit`'s return value. A handler-level refusal, such as an unparsable inline
+  JSON row, always ran at apply time and still echoes there.
+- **`wire.errors` counts the lines its CALLER submitted**, not the calls the
+  registry made. A handler may submit lines of its own (a macro verb), and those
+  reach the count only through the verdict that handler returns: a macro that
+  propagates a nested refusal as an error contributes exactly one refusal
+  however deeply it nested, and a macro that swallows one and answers success
+  contributes nothing. That is the question the number answers, so a macro verb
+  that must not hide a failure has to propagate it. The nesting itself is
+  bounded at eight: a chain that submits deeper is refused with
+  `[wire.reject: command submission nested more than 8 deep — '<line>' refused]`,
+  so an accidental cycle answers as an ordinary error rather than overflowing
+  the stack and taking the session with it. An `ICommandObserver` that throws
+  while being told about a dispatch is not one of those lines either. It is a
+  reporting surface that broke rather than a line anybody refused, so it is
+  counted on its own and reported beside the refusals as a trailing
+  `| <n> observer faults` segment, named only when there have been some;
+  `[wire.errors: 0 rejected]` stays the whole answer for a run that refused
+  nothing. Three broken sinks watching one bound gamepad press, a line no
+  caller submitted at all, therefore add nothing to the refused count.
+
+Read-after-write ordering across submitted lines is a `TextCommandSession`
+guarantee rather than a `Submit` one: `TextCommandSource.Collect` holds that
+session's following non-Simulation line until its pending Simulation submission
+has applied, and each session's hold is independent of every other session's.
+
+That drain does two more things a piped script depends on. It skips a blank line
+and a line whose first non-whitespace character is `#`, so a driving script can
+carry its own commentary (a header saying what the run proves, a note beside
+each step) and only the real verbs run. And `TextCommandSource.HoldGate` is an
+optional predicate the drain consults before each line: while it answers true
+nothing dequeues, so a verb that arms it (a `step <n>` or `settle`) stops the
+rest of the frame's drain and the queued lines behind it wait, in order, for a
+later frame to let them go. Left `null`, the gate never holds and every queued
+line drains each frame.
 
 The addon pump (`Puck.World.Addons`' `AddonSimulationPump`) is not a third
 `Puck.Commands` path. `Puck.World.Addons` reads its typed submissions and turns
@@ -275,27 +561,36 @@ them directly into world intents under the addon's mounted identity.
 
 The public API prevents callers from inventing another path. A handler needs a
 `CommandContext`, whose constructor is internal, and
-`CommandRegistry.Definitions` returns non-invokable `CommandMetadata`.
+`CommandRegistry.Definitions` returns non-invokable `CommandMetadata` as an
+`ImmutableArray<CommandMetadata>`, since an `IReadOnlyList` over the backing
+array would be one cast away from being rewritten (`CommandRegistry.Maps`
+returns an `ImmutableArray<string>` for the same reason).
 `ApplySnapshot` remains public because the host loop lives in another assembly,
 but `CommandEntry`, `CommandLane`, and `CommandSnapshot` are internal to
 construct and public only to read. The only snapshot a caller can create
-directly is an empty one, which dispatches nothing.
+directly is an empty one, which dispatches nothing. A snapshot another
+registry's router built is refused with `ArgumentException` before any entry is
+examined, so a host that mixed two registries learns it at the call site rather
+than through a half-applied tick. `ApiSurfaceTests` fails the
+suite if a public constructor appears on any of the four, so this is enforced
+rather than merely asserted.
 
 ## 📋 Core types
 
-This table is the conceptual map. The [generated API reference](../../docs/api)
-owns the complete member-by-member surface.
+This table is the conceptual map. The
+[generated API reference](https://byteterrace.com/reference/) owns the complete
+member-by-member surface.
 
 | Type | Role |
 |------|------|
-| `CommandRegistry` | The immutable command catalog and dispatch hub. Aggregates modules, interns command and map metadata, and dispatches snapshots and text lines. |
-| `CommandDefinition` | Named, typed, invokable command — the shared identity behind every way it can be driven. |
+| `CommandRegistry` | The immutable command catalog and dispatch hub. Aggregates modules and its own three verbs, interns command and map metadata, and dispatches snapshots and text lines. |
+| `CommandDefinition` | Named, typed, invokable command — the shared identity behind every way it can be driven. Its identity-bearing members (`Name`, `TextCommand`, `Description`, `Map`) are readable but settable only inside the assembly, so a `with` expression cannot split a command's dispatch identity from its text identity. Build one through `Verb` or `WithWireArgs`, which refuse a null handler, name, or description at the registration rather than at the first dispatch. |
 | `ICommandModule` | Unit of composition: contributes a set of `CommandDefinition`s. |
 | `CommandContext` | Per-invocation state handed to a handler (value, phase, logical slot, stamped principal, local device, parse result, text, registry). Internal to construct. |
 | `CommandPrincipal` / `CommandPrincipalKind` | The acting identity a dispatch carries: `Console`, `Seat`, `Addon`, or `Peer`. |
 | `ICommandPrincipalResolver` | The host's answer to *who is acting through slot N*, which the router stamps onto that slot's commands. |
 | `CommandBindability` | Whether a binding document may name a command. Required at every registration; `Unspecified` is refused by name. |
-| `CommandMetadata` | The public read-only face of a registration (name, value kind, routing, bindability, input scope, map) — what `Definitions` returns. |
+| `CommandMetadata` | The public read-only face of a registration, the registry's own three verbs included — what `Definitions` returns. Its eight members are the name, value kind, routing, bindability, input scope, map, whether the command is a held verb, and whether it accepts wire arguments; the vocabulary gate reads that last one to decide whether a binding row may carry authored text. |
 | `CommandResult` | What a handler returns for the transcript (output text + optional clear). |
 | `CommandValue` / `CommandValueKind` | The per-frame value, tagged with its shape, packed into a `Vector4`. |
 | `CommandPhase` | Transition the activation represents: `Started`, `Active`, `Completed`, `Canceled`. |
@@ -305,7 +600,8 @@ owns the complete member-by-member surface.
 | `IInputBindings` / `PagedInputBindings` | The slot-aware binding boundary, and the stateful chord/page/wheel implementation of it. |
 | `CommandInjectionSink` | The read-only public face of the console sink used to queue simulation-class submitted text under `CommandPrincipal.Console`. |
 | `TextCommandSource` | Queue and per-frame pump for command lines through the registry's text path. |
-| `InputRouter` | Owns each slot's active maps, captures timestamped physical signals and pre-resolved injections, then emits ordered per-tick, per-slot snapshots. |
+| `InputRouter` | Owns each slot's active maps, captures timestamped physical signals and pre-resolved injections, then emits ordered per-tick, per-slot snapshots. Disposable: a host that replaces a router must dispose the old one, or it keeps mutating its held tables on every binding reload and device disconnect. |
+| `CommandEcho` | The bracketed `[verb: key=value …]` echo grammar a read-back or mutation verb writes, defined once rather than hand-spelled per verb. `Field` routes its value through `Quote`, and `SpliceTag(text, prefix, value)` quotes only the VALUE, because the tag's declared literal prefix has to stay readable to the readers that test for it. Either way a reserved character inside a value cannot end the token, the segment, the envelope, or the line. `Quote` emits a value verbatim unless it carries whitespace, a backslash, or one of the grammar's own delimiters, and otherwise as a double-quoted run in which a backslash doubles, newline, carriage return and tab take their short spellings, and every other control character, both Unicode line and paragraph separators, and an interior quote ride as `\uXXXX`. One encoding serves two readers, which is why an interior quote rides as `\u0022` rather than `\"` and a value carrying a backslash is always quoted: the console's resubmit splitter knows quoted runs and no escapes at all, so once it has stripped the run every backslash left is unambiguously an escape for `Unescape` to invert. `Unquote` is the exact inverse of `Quote` for a token already in hand, and `TryReadToken` is what a driver reading a whole echo line wants instead. |
 | `CommandSnapshot` / `CommandLane` / `CommandEntry` | Canonical deterministic input for one fixed tick, built and applied within it — ephemeral, never itself persisted, with local device identities excluded from its deterministic content. |
 
 ## 📌 Design notes
@@ -325,13 +621,49 @@ owns the complete member-by-member surface.
   principal inside a handler would discard that attribution.
 - **Unknown / inactive is silent.** A signal naming an unknown command, or one
   whose map is inactive, is ignored without error.
-- **`help` is built in.** The registry auto-registers a `help` command listing
-  every command and description.
+- **The registry's own three verbs are ordinary registrations.** `help`,
+  `wire.ack` and `wire.errors` are `CommandDefinition`s the registry yields
+  before it reads a module's, declared `Unbindable` and `Immediate`. So
+  `TryGetId` and `TryGetMetadata` answer for them, `Definitions` is the whole
+  dispatchable catalogue rather than the catalogue minus three, and the `help`
+  listing covers every command and description including its own.
+- **`wire.ack` sets how loud an accepted line is.** `wire.ack on`, the default,
+  echoes every accepted command; `wire.ack quiet` drops the bare success
+  acknowledgements, and only those. A verb opts into being droppable by
+  declaring `CommandDefinition.AcknowledgementOnly`, which says its success
+  output acknowledges a side effect rather than answering a question. An error
+  is never suppressed, and neither is the output of a verb that answers with
+  data, so a scripted driver quiets the noise without losing a refusal or a
+  read-back. Given no argument the verb reports the current mode. A wire-native
+  handler can read `WireArgs.Echo` and skip building a string the registry would
+  drop anyway.
 - **Thread-safety.** `InputRouter.Capture` accepts signals from device I/O
-  threads while the fixed-step thread builds snapshots. `TextCommandSource`'s
-  queue likewise permits a background producer while the frame thread
-  collects. `CommandRegistry`, `SnapshotForTick`, and the remaining mutable
-  router operations are driven from the host's single fixed-step thread.
+  threads while the fixed-step thread builds snapshots; it refuses a signal that
+  names no source, and past `InputRouter.MaxCapturedSignals` (4096) it drops the
+  OLDEST queued signal and counts it in `InputRouter.DroppedCaptureCount`, so a
+  producer stamping capture ticks the host loop never reaches cannot grow the
+  queue forever. The injection door has the same bound and the same counter,
+  `InputRouter.MaxCapturedInjections` and `InputRouter.DroppedInjectionCount`,
+  for the same reason. Both counters are zero for a well-behaved producer; a
+  non-zero one means a diverged clock base or a pump that has stopped advancing.
+  `TextCommandSource`'s queue likewise permits a background
+  producer while the frame thread collects. `CommandRegistry`,
+  `SnapshotForTick`, and the remaining mutable router operations are driven from
+  the host's single fixed-step thread.
+  `PagedInputBindings` mutates only on that thread as well; `ViewFor` and
+  `WheelFor` are its two cross-thread readers, and both are non-mutating reads
+  answered from the currently-loaded compiled profile, so a reader can never
+  create slot state or observe a page row left over from a profile a `Reload`
+  has replaced.
+- **Lifetime.** `InputRouter` is `IDisposable`. `Dispose` detaches it from the
+  binding-reload and device-slot edges it subscribed to at construction and is
+  pump-thread-only, called after the producers have stopped. A router owned for
+  the process lifetime needs no explicit call, since the container that resolved
+  it disposes it with the host. Afterward every door refuses with
+  `ObjectDisposedException` — `Capture`, `CaptureFocusExempt`, `Activate`, the
+  `ConsoleTextSink`'s injection path, and `SnapshotForTick` — so a producer
+  still holding a replaced router learns it is stale instead of quietly
+  re-populating tables nothing will read.
 
 ## 🧪 Testing
 
@@ -339,9 +671,41 @@ owns the complete member-by-member surface.
 dotnet test tests/Puck.Commands.Tests
 ```
 
-The suite covers registry composition and collision refusals, router capture
-ordering and snapshot determinism, paged bindings (chords, modifiers, pages,
-wheels), held-input ordering, binding sessions, vocabulary checks, and argument
-parsing.
+Each file pins one area, so a failure names the contract that moved.
 
-See the [generated API reference](../../docs/api) for full member docs.
+- **Dispatch and text.** `CommandRegistryTests` covers the text-dispatch
+  surface, the wire-native fast path, and its rejection wording;
+  `CommandRegistryBoundaryTests` covers the per-entry exception boundary
+  `ApplySnapshot` promises. `TextCommandSourceTests` drives the drain and its
+  hold gate, `TextCommandSessionTests` the per-session read-after-write barrier.
+  `CommandArgsTests` and `WireArgsTests` pin argument parsing and the zero-copy
+  trailing-token view; `CommandEchoTests` pins the echo grammar's quoting.
+- **The router.** `InputRouterTests` covers held-command edge logic over
+  physical signals, `CommandModalityTests` per-slot maps, `HeldOrderTrackerTests`
+  and `HeldCommandReleaseLawTests` press ordering and a held verb's two edges.
+  `InputRouterHardeningTests` pins the behaviors an audit found unproven,
+  `InputRouterFocusExemptTests` what a focus-exempt signal may and may not do,
+  `InputRouterMomentaryReleaseTests` the one-release-per-command rule, and
+  `InputRouterReleaseOrderTests` the total order of every synthesized release.
+  `InputRouterConcurrencyTests` drives the headline thread-safety claim rather
+  than asserting it. `CommandBufferTests` covers the borrowed per-tick view.
+- **Bindings.** `PagedInputBindingsTests` covers pages, chords, modifiers, and
+  wheels end to end; `BindingProfileCompilationLawTests`,
+  `BindingProfileValidationTests`, and `BindingRowMemberLawTests` the compiler's
+  laws and structural refusals; `BindingChannelLoweringLawTests` and
+  `BindingChannelScaleLawTests` the channel path; `BindingVocabularyCheckTests`
+  the vocabulary gate, including its tolerance for documents it exists to
+  refuse; `BindingProfileJsonTests` the one wire shape, from a whole document's
+  lossless round trip down to an enum refusing a numeric token.
+  `BindingSessionTests` and `BindingSessionPlanReservationTests` cover guided
+  rebinding and what a plan must reserve. `BindingWheelGeometryTests`,
+  `BindingWheelGestureStateTests`, `BindingWheelGraceTests`, and
+  `BindingWheelSectorTextTests` cover radial geometry, gesture state, the
+  grace window, and a sector's authored text.
+- **The published surface itself.** `ApiSurfaceTests` and `PackagingTests` pin
+  that the snapshot shapes stay internal to construct, that no public member
+  carries `[Obsolete]`, a retired-shape name, or a mutable field, and that the
+  package identity and the shipped XML documentation survive a pack.
+
+See the [generated API reference](https://byteterrace.com/reference/) for full
+member docs.

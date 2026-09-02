@@ -7,9 +7,10 @@ namespace Puck.World.Tests;
 
 /// <summary>Pins the ONE physical-control vocabulary an authored document speaks — input source ids, the same
 /// vocabulary a binding entry's <c>sources</c> already resolve through — at both doors that used to keep their own:
-/// a binding-bar slot and an icon badge row. A numeric spelling, a device-enum member name, and a mis-cased id are
-/// all refused; every declared id round-trips; and a source the gamepad catalog knows nothing about
-/// (<c>mouse.button1</c>) is badgeable purely by authoring its row.</summary>
+/// a binding-bar slot and an icon badge row. A numeric spelling, a device-enum member name, and a surrounding space
+/// are all refused; every declared id round-trips, in any casing, because the binding compiler dispatches source ids
+/// case-insensitively and a catalog that disagreed would refuse rows that work; and a source the gamepad catalog
+/// knows nothing about (<c>mouse.button1</c>) is badgeable purely by authoring its row.</summary>
 public sealed class InputSourceVocabularyLawTests {
     public static IEnumerable<object[]> SourceCases() {
         yield return [InputSources.Gamepad.DpadUp, true];
@@ -23,7 +24,10 @@ public sealed class InputSourceVocabularyLawTests {
         yield return ["01", false];
         yield return ["+1", false];
         yield return ["DpadUp", false];
-        yield return ["gamepad.DpadUp", false];
+        // Case is authored-document noise, never identity: the binding compiler tables and dispatches source ids
+        // OrdinalIgnoreCase, so the catalog answers the same way (see InputSourceVocabulary's remarks).
+        yield return ["gamepad.DpadUp", true];
+        yield return ["GAMEPAD.DPADUP", true];
         yield return [" gamepad.dpadUp", false];
         yield return ["gamepad.dpadUp ", false];
         yield return ["mouse.button0", false];
