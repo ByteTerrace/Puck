@@ -939,6 +939,11 @@ public sealed class CommandRegistry {
 
         return false;
     }
+    // The one refusal for a line whose leading token names nothing this registry registered, written once so both
+    // places that can reach that verdict — the parse that resolved no subcommand, and the resolved-but-unregistered
+    // fallback — say the same thing, and say it before any parser text.
+    private static CommandResult UnknownCommand(ReadOnlySpan<char> verb) =>
+        CommandResult.Error(output: $"[wire.reject: unknown command '{verb}' — run `help` for the registered verbs]");
     // Counts one swallowed observer notification, saturating like NoteRejection and for the same reason.
     private void NoteObserverFault() {
         if (m_observerFaults != int.MaxValue) {
@@ -1063,8 +1068,13 @@ public sealed class CommandRegistry {
     }
     // Submit's body. Submit itself owns the rejection accounting so no return path here has to remember to count.
     private CommandResult SubmitCore(string line, TextCommandSession? session) {
+        // A blank line is REFUSED rather than quietly answering None. wire.errors is advertised as the one number that
+        // says whether any submitted line silently no-opped, and a blank line is the purest no-op there is; answering
+        // success for it made the counter's own promise false. Nothing in the live drain path pays for this: a script's
+        // blank lines and `#` comments are dropped by TextCommandSource.Collect before Submit ever sees them, so a
+        // blank line reaching here is a caller that built one and thinks it sent a command.
         if (string.IsNullOrWhiteSpace(value: line)) {
-            return CommandResult.None;
+            return CommandResult.Error(output: "[wire.reject: a blank line names no command]");
         }
 
         var principal = (session?.Principal ?? CommandPrincipal.Console);
@@ -1144,6 +1154,18 @@ public sealed class CommandRegistry {
         );
 
         if (parseResult.Errors.Count > 0) {
+            // The parser resolved NO subcommand, which is the one case where its errors are about its own grammar
+            // rather than about the line: an unknown verb comes back as "Required command was not provided. |
+            // Unrecognized command or argument 'nope'.", and the leading half tells an operator nothing they asked
+            // about. Say what happened instead. The parser's own text is worth reading when the verb WAS resolved and
+            // something about its arguments was wrong, which is what the branch below reports.
+            if (ReferenceEquals(
+                objA: parseResult.CommandResult.Command,
+                objB: m_root
+            )) {
+                return UnknownCommand(verb: LeadingVerb(line: line));
+            }
+
             return CommandResult.Error(output: $"[wire.reject: {string.Join(
                 separator: " | ",
                 values: parseResult.Errors.Select(selector: error => error.Message)
@@ -1203,7 +1225,7 @@ public sealed class CommandRegistry {
             );
         }
 
-        return CommandResult.Error(output: $"[wire.reject: unknown command '{line}']");
+        return UnknownCommand(verb: LeadingVerb(line: line));
     }
     private CommandResult SubmitStamped(string line, TextCommandSession? session) {
         // A handler may submit a line of its own (a macro verb); an accidental cycle would otherwise recurse until the
@@ -1483,16 +1505,21 @@ public sealed class CommandRegistry {
     /// <summary>Parses a command line, runs the matching handler, and returns its transcript output.</summary>
     /// <param name="line">The command line to parse and execute.</param>
     /// <returns>
-    /// The handler's result; <see cref="CommandResult.None"/> for an empty or whitespace line; the help
-    /// listing for the <c>help</c> command; no immediate result for a simulation command routed to the deterministic
-    /// input path (its real result is produced when its tick is applied); or a message describing parse errors, an
-    /// unknown command, or an exception the handler let escape.
+    /// The handler's result; the help listing for the <c>help</c> command; no immediate result for a simulation
+    /// command routed to the deterministic input path (its real result is produced when its tick is applied); or a
+    /// message describing parse errors, an unknown command, an empty or whitespace line, or an exception the handler
+    /// let escape.
     /// </returns>
     /// <remarks>
     /// This path is never gated by command maps; it is the deliberate console entry point. A
     /// <see cref="CommandRouting.Simulation"/> command is injected into the per-tick <see cref="CommandSnapshot"/>
     /// (so it is tick-aligned and applied deterministically) when a sink is wired via <see cref="RouteSimulationTo"/>;
     /// otherwise — and for every <see cref="CommandRouting.Immediate"/> command — the handler runs inline.
+    /// <para>A BLANK LINE IS A REFUSAL, not a quiet success. <c>wire.errors</c> is the one number that says whether any
+    /// submitted line silently no-opped, and a line naming no command is exactly that, so answering
+    /// <see cref="CommandResult.None"/> for it made the counter's own promise false. It costs the drain path nothing:
+    /// <see cref="TextCommandSource.Collect"/> drops a script's blank lines and <c>#</c> comments before they reach
+    /// here, so a blank line arriving at this method is a caller that built one and believes it sent a command.</para>
     /// <para>The line is data: it names a command and supplies its tokens, and nothing about it reaches the
     /// filesystem. System.CommandLine's response-file expansion is switched OFF for both of this type's parse sites,
     /// so an <c>@</c>-prefixed token is an ordinary token rather than a file to splice in.</para>

@@ -29,6 +29,32 @@ public sealed class CommandRegistryTests {
         Assert.True(condition: result.IsError);
     }
     [Fact]
+    public void AnUnknownVerbsRefusalLeadsWithWhatHappened() {
+        var registry = new CommandRegistry(modules: [new CoreModule()]);
+
+        // System.CommandLine describes an unknown verb as two errors, and the first of them — "Required command was
+        // not provided." — is about its own grammar rather than about the line. An operator reading
+        // `[wire.reject: Required command was not provided. | Unrecognized command or argument 'nope'.]` has to get
+        // past a sentence that answers nothing they asked.
+        Assert.Equal(expected: "[wire.reject: unknown command 'nope' — run `help` for the registered verbs]", actual: registry.Submit(line: "nope").Output);
+        Assert.Equal(expected: "[wire.reject: unknown command 'nope' — run `help` for the registered verbs]", actual: registry.Submit(line: "nope with args").Output);
+
+        // A verb the parser DID resolve is a different question — something about its arguments was wrong — and there
+        // the parser's own text is the useful part, so it still rides through.
+        Assert.Contains(actualString: registry.Submit(line: "help extra").Output, comparisonType: StringComparison.Ordinal, expectedSubstring: "extra");
+    }
+    [Fact]
+    public void ABlankLineIsARefusalRatherThanASilentNoOp() {
+        var registry = new CommandRegistry(modules: [new CoreModule()]);
+
+        // wire.errors is advertised as the one number that says whether any submitted line silently no-opped, and a
+        // line naming no command is exactly that; answering IsError=false with no rejection made the counter's own
+        // promise false for the simplest case there is.
+        Assert.True(condition: registry.Submit(line: "").IsError);
+        Assert.True(condition: registry.Submit(line: "   \t ").IsError);
+        Assert.Equal(expected: "[wire.errors: 2 rejected]", actual: registry.Submit(line: "wire.errors").Output);
+    }
+    [Fact]
     public void WireErrorsCountsRefusalsAndResetZeroesThem() {
         var registry = new CommandRegistry(modules: [new CoreModule()]);
 
