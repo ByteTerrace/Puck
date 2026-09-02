@@ -236,6 +236,13 @@ public sealed class CommandRegistry {
                 m_byName[definition.Name] = definition;
 
                 foreach (var alias in definition.Aliases) {
+                    // Refused here rather than three frames down: an unchecked null reached the claim ledger's
+                    // Dictionary and threw naming the parameter 'key', which tells a composition root nothing about
+                    // which module declared which command's alias list badly.
+                    if (string.IsNullOrWhiteSpace(value: alias)) {
+                        throw new InvalidOperationException(message: $"Command '{definition.Name}' (registered by {moduleName}) declares a null or blank entry in its 'aliases'. Every alias is a name a line can be spelled with.");
+                    }
+
                     ClaimName(
                         claimedBy: claimedBy,
                         name: alias,

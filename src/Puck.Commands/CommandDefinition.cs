@@ -140,6 +140,14 @@ public sealed record CommandDefinition {
         CommandInputScope inputScope = CommandInputScope.Focused,
         bool held = false
     ) {
+        // A composition-root mistake refuses HERE, naming the parameter that was wrong. A null handler used to
+        // construct and register happily and then surface as `[boom: handler threw NullReferenceException]` on the
+        // first dispatch — a registration bug reported as a runtime command failure, with nothing pointing back at the
+        // registration.
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: name);
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: description);
+        ArgumentNullException.ThrowIfNull(argument: handler);
+
         return new CommandDefinition(
             Name: name,
             Description: description,
@@ -205,6 +213,12 @@ public sealed record CommandDefinition {
         CommandInputScope inputScope = CommandInputScope.Focused,
         bool held = false
     ) {
+        // See Verb: the registration is refused where it is written rather than reported as a handler fault on the
+        // first line that reaches it.
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: name);
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: description);
+        ArgumentNullException.ThrowIfNull(argument: handler);
+
         var rest = new Argument<string[]>(name: "args") {
             Arity = ArgumentArity.ZeroOrMore,
             Description = description,

@@ -472,6 +472,51 @@ public sealed class CommandRegistryTests {
         // the first one's parser graph.
         _ = Assert.Throws<InvalidOperationException>(testCode: () => new CommandRegistry(modules: [module]));
     }
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ARegistrationMissingItsHandlerNameOrDescriptionIsRefusedWhereItIsWritten(bool wireNative) {
+        // A null handler used to construct and register happily, then surface on the first dispatch as
+        // `[boom: handler threw NullReferenceException]` — a composition-root bug reported as a runtime command
+        // failure, with nothing naming the registration that caused it.
+        _ = Assert.Throws<ArgumentNullException>(testCode: () => Register(handler: null, name: "boom", description: "Throws.", wireNative: wireNative));
+        _ = Assert.Throws<ArgumentNullException>(testCode: () => Register(handler: Nothing, name: null, description: "Throws.", wireNative: wireNative));
+        _ = Assert.Throws<ArgumentNullException>(testCode: () => Register(handler: Nothing, name: "boom", description: null, wireNative: wireNative));
+        _ = Assert.Throws<ArgumentException>(testCode: () => Register(handler: Nothing, name: "  ", description: "Throws.", wireNative: wireNative));
+        _ = Assert.Throws<ArgumentException>(testCode: () => Register(handler: Nothing, name: "boom", description: string.Empty, wireNative: wireNative));
+
+        static CommandResult Nothing() => CommandResult.None;
+
+        static CommandDefinition Register(Func<CommandResult>? handler, string? name, string? description, bool wireNative) => (wireNative
+            ? CommandDefinition.WithWireArgs(
+                name: name!,
+                description: description!,
+                handler: ((handler is null)
+                    ? null!
+                    : (_, _) => handler()),
+                bindability: CommandBindability.Unbindable
+            )
+            : CommandDefinition.Verb(
+                name: name!,
+                description: description!,
+                valueKind: CommandValueKind.Digital,
+                handler: ((handler is null)
+                    ? null!
+                    : _ => handler()),
+                bindability: CommandBindability.Unbindable
+            )
+        );
+    }
+    [Fact]
+    public void ABlankAliasIsRefusedNamingTheCommandAndItsAliasList() {
+        // Unchecked, this reached the claim ledger's Dictionary and threw naming the parameter 'key' — which tells a
+        // composition root nothing about which module declared which command's alias list badly.
+        var error = Assert.Throws<InvalidOperationException>(testCode: () => new CommandRegistry(modules: [new BlankAliasModule()]));
+
+        Assert.Contains(actualString: error.Message, expectedSubstring: "'alias.probe'");
+        Assert.Contains(actualString: error.Message, expectedSubstring: "aliases");
+        Assert.Contains(actualString: error.Message, expectedSubstring: nameof(BlankAliasModule));
+    }
     [Fact]
     public void ACommandsDispatchIdentityAndTextIdentityCannotBeSplitApart() {
         // A `with` expression bypasses both factories, so the identity-bearing members are readable but not settable
@@ -777,6 +822,18 @@ public sealed class CommandRegistryTests {
 
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return m_definition;
+        }
+    }
+    private sealed class BlankAliasModule : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.Verb(
+                name: "alias.probe",
+                description: "Declares a blank alias.",
+                valueKind: CommandValueKind.Digital,
+                handler: static _ => CommandResult.None,
+                bindability: CommandBindability.Bindable,
+                aliases: ["ok", null!]
+            );
         }
     }
     private sealed class MacroModule : ICommandModule {
