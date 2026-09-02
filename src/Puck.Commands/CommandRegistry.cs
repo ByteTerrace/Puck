@@ -1120,11 +1120,9 @@ public sealed class CommandRegistry {
     }
     private CommandResult SubmitStamped(string line, TextCommandSession? session) {
         // A handler may submit a line of its own (a macro verb); an accidental cycle would otherwise recurse until the
-        // stack gave out and took the session with it. Refuse past the bound with an ordinary error result, which the
-        // accounting below counts like every other refusal.
+        // stack gave out and took the session with it. Refuse past the bound with an ordinary error result, counted by
+        // the outermost frame like every other refusal as it unwinds.
         if (m_submitDepth >= MaxSubmitDepth) {
-            NoteRejection();
-
             return CommandResult.Error(output: $"[wire.reject: command submission nested more than {MaxSubmitDepth} deep — '{line}' refused]");
         }
 
@@ -1144,7 +1142,16 @@ public sealed class CommandRegistry {
         // The one place every text-path outcome is visible: count each failure so `wire.errors` can report it. This
         // covers the registry's own refusals AND a module handler's IsError result (or escaped exception) on either
         // dispatch path.
-        if (result.IsError) {
+        //
+        // ONLY THE OUTERMOST FRAME COUNTS. wire.errors answers "how many of the lines I submitted were refused", so
+        // it must be a function of the driver's own lines and not of how deeply a handler re-entered: a refused
+        // re-entrant chain returns ONE error result that every unwinding frame observes, and counting per frame
+        // reported nine refusals for one console line. A macro verb's internal submissions are the handler's business
+        // — what it makes of a nested failure is its verdict to return, and that verdict is what is counted.
+        if (
+            result.IsError &&
+            (m_submitDepth == 0)
+        ) {
             NoteRejection();
         }
 

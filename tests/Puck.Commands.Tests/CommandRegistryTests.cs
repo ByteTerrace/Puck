@@ -480,6 +480,23 @@ public sealed class CommandRegistryTests {
 
         Assert.True(condition: result.IsError);
         Assert.Contains(actualString: result.Output, expectedSubstring: "nested more than");
+        // ONE console line was submitted, so wire.errors reports one refusal. The depth guard used to count, and then
+        // every unwinding frame counted the same error result again, so a driver asserting a refusal count read the
+        // nesting depth rather than the number of lines it had sent.
+        Assert.Equal(expected: "[wire.errors: 1 rejected]", actual: registry.Submit(line: "wire.errors").Output);
+    }
+    [Fact]
+    public void AMacroVerbsOwnSubmissionsAreCountedThroughItsVerdictRatherThanBesideIt() {
+        var registry = new CommandRegistry(modules: [new MacroModule()]);
+
+        // The macro submits a line that IS refused and answers success anyway: the operator's line succeeded, so
+        // wire.errors — which answers "how many of the lines I sent were refused" — records nothing.
+        Assert.False(condition: registry.Submit(line: "macro.swallows").IsError);
+        Assert.Equal(expected: "[wire.errors: 0 rejected]", actual: registry.Submit(line: "wire.errors").Output);
+
+        // The macro that PROPAGATES its nested refusal counts exactly one, not two.
+        Assert.True(condition: registry.Submit(line: "macro.propagates").IsError);
+        Assert.Equal(expected: "[wire.errors: 1 rejected]", actual: registry.Submit(line: "wire.errors").Output);
     }
 
     private sealed class CoreModule : ICommandModule {
@@ -748,6 +765,28 @@ public sealed class CommandRegistryTests {
 
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return m_definition;
+        }
+    }
+    private sealed class MacroModule : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.WithWireArgs(
+                name: "macro.swallows",
+                description: "Submits a line that is refused, and answers success anyway.",
+                handler: static (context, args) => {
+                    var nested = (context.Registry?.Submit(line: "does.not.exist") ?? CommandResult.None);
+
+                    Assert.True(condition: nested.IsError);
+
+                    return new CommandResult(Output: "ok");
+                },
+                bindability: CommandBindability.Unbindable
+            );
+            yield return CommandDefinition.WithWireArgs(
+                name: "macro.propagates",
+                description: "Submits a line that is refused, and returns its refusal.",
+                handler: static (context, _) => (context.Registry?.Submit(line: "does.not.exist") ?? CommandResult.None),
+                bindability: CommandBindability.Unbindable
+            );
         }
     }
     private sealed class ReEntrantModule : ICommandModule {
