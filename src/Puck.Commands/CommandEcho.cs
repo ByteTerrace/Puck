@@ -359,7 +359,7 @@ public sealed class CommandEcho {
             (line[(index + 1)] == 'u') &&
             ((index + 6) <= line.Length) &&
             ushort.TryParse(
-            s: line.AsSpan(start: (index + 2), length: 4),
+            s: line.AsSpan(length: 4, start: (index + 2)),
             provider: CultureInfo.InvariantCulture,
             style: NumberStyles.AllowHexSpecifier,
             result: out var scalar

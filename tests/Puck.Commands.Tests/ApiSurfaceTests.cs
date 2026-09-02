@@ -34,7 +34,7 @@ public sealed class ApiSurfaceTests {
     // An `init` accessor is an ordinary setter whose return parameter carries a required custom modifier of
     // IsExternalInit — the only thing that distinguishes the two in metadata.
     private static bool IsInitOnly(MethodInfo setter) =>
-        Array.IndexOf(array: setter.ReturnParameter.GetRequiredCustomModifiers(), value: typeof(IsExternalInit)) >= 0;
+        (Array.IndexOf(array: setter.ReturnParameter.GetRequiredCustomModifiers(), value: typeof(IsExternalInit)) >= 0);
     private static IEnumerable<Type> ExportedTypes() =>
         typeof(CommandRegistry).Assembly.GetExportedTypes().OrderBy(keySelector: static type => type.FullName, comparer: StringComparer.Ordinal);
 

@@ -219,7 +219,7 @@ public sealed class CommandRegistryTests {
     public void MoreCommandsThanTheSnapshotIdSpaceCanRepresentAreRefused() {
         // The registry's own three verbs are ordinary registrations and take three of the 16-bit ids, so a module may
         // contribute one fewer than the module cap this used to name.
-        _ = Assert.Throws<InvalidOperationException>(testCode: static () => new CommandRegistry(modules: [new ManyCommandsModule(count: ((ushort.MaxValue + 1) - BuiltInCommandCount + 1))]));
+        _ = Assert.Throws<InvalidOperationException>(testCode: static () => new CommandRegistry(modules: [new ManyCommandsModule(count: (((ushort.MaxValue + 1) - BuiltInCommandCount) + 1))]));
     }
     [Fact]
     public void TheFinalRepresentableCommandIdStillResolves() {
