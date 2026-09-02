@@ -496,6 +496,28 @@ public sealed class BindingVocabularyCheckTests {
         );
     }
 
+    [Fact]
+    public void ADefaultReportReadsAsAnEmptyCleanOne() {
+        // A struct's default is always reachable — an unassigned field, a `new T[n]` slot, a `default` in a switch
+        // arm — and this one wrapped a default ImmutableArray, so reading the report's ONLY member threw a bare
+        // NullReferenceException. "No refusals" is the honest reading of an unfilled report, so that is what it
+        // answers.
+        var report = default(BindingVocabularyReport);
+
+        Assert.True(condition: report.IsClean);
+        // The member the crash came out of: reading Length off a default ImmutableArray is the NRE.
+        Assert.False(condition: report.Errors.IsDefault);
+        Assert.Empty(collection: report.Errors);
+    }
+    [Fact]
+    public void AReportConstructedFromADefaultArrayReadsAsAnEmptyCleanOne() {
+        // The same hole reached through the constructor rather than around it.
+        var report = new BindingVocabularyReport(Errors: default);
+
+        Assert.True(condition: report.IsClean);
+        Assert.Empty(collection: report.Errors);
+    }
+
     private static BindingProfileDocument Document(BindingPageEntryDefinition entry) {
         return new BindingProfileDocument(
             Version: BindingProfileDocument.CurrentVersion,
