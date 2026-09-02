@@ -175,7 +175,7 @@ public sealed class CommandRegistryTests {
         registry.ApplySnapshot(snapshot: in snapshot);
 
         Assert.Equal(expected: CommandPrincipal.Seat(slot: 0), actual: seenPrincipal);
-        Assert.Equal(expected: "bound   first; second && privileged | fourth  ", actual: seenLine);
+        Assert.Equal(actual: seenLine, expected: "bound   first; second && privileged | fourth  ");
         Assert.False(condition: secondCommandInvoked);
     }
     [Fact]
@@ -380,7 +380,7 @@ public sealed class CommandRegistryTests {
         Assert.False(condition: definitions.IsDefault);
         Assert.False(condition: maps.IsDefault);
         Assert.Equal(expected: ["alpha", "beta", "ping", "sum"], actual: definitions.Select(selector: static metadata => metadata.Name));
-        Assert.Equal(expected: [CommandMaps.Global, "combat"], actual: maps);
+        Assert.Equal(actual: maps, expected: [CommandMaps.Global, "combat"]);
     }
     [Fact]
     public void ALineWiderThanTheWireTokenCapAgreesWithItsQuotedForm() {

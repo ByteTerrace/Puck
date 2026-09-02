@@ -65,10 +65,10 @@ public sealed class CommandEchoTests {
     public void AValueIsQuotedExactlyWhenItCarriesAReservedCharacter(string value, string expected) {
         Assert.Equal(actual: CommandEcho.Quote(value: value), expected: expected);
     }
-    [Theory]
     [InlineData("line\tbreak", "\"line\\tbreak\"")]
     [InlineData("two\nlines", "\"two\\nlines\"")]
     [InlineData("two\r\nlines", "\"two\\r\\nlines\"")]
+    [Theory]
     public void ALineBreakIsEscapedRatherThanCarriedSoAnEchoIsAlwaysOneLine(string value, string expected) {
         var quoted = CommandEcho.Quote(value: value);
 

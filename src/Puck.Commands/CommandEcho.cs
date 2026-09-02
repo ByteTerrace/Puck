@@ -114,7 +114,6 @@ public sealed class CommandEcho {
 
         return false;
     }
-
     private void FlushPendingSegment() {
         if (m_pendingSegment) {
             _ = m_builder.Append(value: " |");

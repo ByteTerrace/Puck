@@ -66,8 +66,9 @@ public sealed record CompiledBindingBarLayout(ReadOnlyMemory<BindingBarFrame> Fr
 
         foreach (var frame in frames) {
             // Plates are one pitch wide: a frame spans (extent + 1) pitches, plus its inset along its own axis.
-            var alongPitches = (frame.Along + 1f + frame.Inset);
+            var alongPitches = ((frame.Along + 1f) + frame.Inset);
             var acrossPitches = (frame.Across + 1f);
+
             var (alongLimit, acrossLimit) = (frame.Sideways
                 ? (aspect, 1f)
                 : (1f, aspect)

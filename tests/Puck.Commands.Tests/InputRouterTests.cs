@@ -396,7 +396,7 @@ public sealed class InputRouterTests {
         _ = router.SnapshotForTick(tick: 3UL, windowEndTick: ulong.MaxValue);
 
         Assert.True(condition: router.TryGetLastInputTick(slot: 0, tick: out var lastInput));
-        Assert.Equal(expected: 3UL, actual: lastInput);
+        Assert.Equal(actual: lastInput, expected: 3UL);
     }
     [Fact]
     public void SnapshotIdentityIsStructuralAndExcludesLocalDeviceAnnotations() {
@@ -508,6 +508,7 @@ public sealed class InputRouterTests {
 
         return retired;
     }
+
     [Fact]
     public void BoundDispatchCarriesTheBindingRowsTextAndNeverTheSignalsTypedPayload() {
         // A bound press with authored argument text: the entry carries the LINE the binding row composes, which is
