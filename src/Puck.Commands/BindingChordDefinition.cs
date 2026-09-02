@@ -38,8 +38,16 @@ public sealed record BindingChordDefinition(
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Held = null
 ) {
     /// <summary>Gets a value indicating whether this row names the group's resting page (no members).</summary>
+    /// <remarks>Never on the wire: it is READ OFF <see cref="Chord"/> and <see cref="Held"/>, and the record's
+    /// constructor has no parameter to read it back into. Writing it would put a member in every saved document
+    /// that the strict reader must then either ignore (losing the writer/reader symmetry a round-trip test pins)
+    /// or refuse, and it would appear in the generated JSON Schema as an authorable field nobody may author.</remarks>
+    [System.Text.Json.Serialization.JsonIgnore]
     public bool IsResting => ((Chord is not { Count: > 0 }) && (Held is not { Count: > 0 }));
     /// <summary>Gets every member — held first, then the chord in order.</summary>
+    /// <remarks>Never on the wire, for the same reason as <see cref="IsResting"/>: it is the concatenation of
+    /// <see cref="Held"/> and <see cref="Chord"/>, both of which the document already carries.</remarks>
+    [System.Text.Json.Serialization.JsonIgnore]
     public IEnumerable<string> Members => (Held ?? []).Concat(second: (Chord ?? []));
 }
 /// <summary>
