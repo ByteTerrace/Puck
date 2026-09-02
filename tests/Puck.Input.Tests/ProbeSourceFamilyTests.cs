@@ -13,6 +13,8 @@ public sealed class ProbeSourceFamilyTests {
     [InlineData("probe.head-x")]
     [InlineData("probe.a")]
     [InlineData("probe.mouth-open")]
+    // Case is authored-document noise, never identity — see InputSourceVocabularyCaseTests.
+    [InlineData("probe.Head-X")]
     [Theory]
     public void KebabNamesResolveToNonRelativeAxis1D(string sourceId) {
         Assert.True(condition: InputSourceVocabulary.TryResolveDeclaredKind(kind: out var kind, sourceId: sourceId));
@@ -21,7 +23,6 @@ public sealed class ProbeSourceFamilyTests {
         Assert.False(condition: InputSourceVocabulary.IsRelative(sourceId: sourceId));
     }
     [InlineData("probe.")]
-    [InlineData("probe.Head-X")]
     [InlineData("probe.head_x")]
     [InlineData("probe.head x")]
     [Theory]
