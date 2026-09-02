@@ -59,8 +59,8 @@ public readonly struct CommandBuffer<T> : IReadOnlyList<T>, IEquatable<CommandBu
             return ((m_items is null)
                 ? []
                 : m_items.AsSpan(
-                    start: 0,
-                    length: m_count
+                    length: m_count,
+                    start: 0
                 )
             );
         }

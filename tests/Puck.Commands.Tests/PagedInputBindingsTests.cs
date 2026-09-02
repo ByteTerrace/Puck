@@ -1206,6 +1206,7 @@ public sealed class PagedInputBindingsTests {
             Phase: CommandPhase.Active
         );
     }
+
     [Fact]
     public void HoldsSourceGoesFalseOnceAnAnalogChordSourceHasReturnedToRest() {
         var bindings = new PagedInputBindings(profile: AnalogChordProfile());
@@ -1242,7 +1243,7 @@ public sealed class PagedInputBindingsTests {
 
         // The group carrying the chord row is no longer active, and the trigger's own claim ended when it centred,
         // so the menu page's entry for it is what the next deflection resolves to.
-        Assert.True(condition: bindings.SetActiveGroup(slot: 0, group: "menu"));
+        Assert.True(condition: bindings.SetActiveGroup(group: "menu", slot: 0));
 
         var deflected = Trigger(value: 0.9f);
 
