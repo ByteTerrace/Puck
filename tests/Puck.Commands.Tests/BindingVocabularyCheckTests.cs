@@ -321,6 +321,16 @@ public sealed class BindingVocabularyCheckTests {
         Assert.Equal(expected: 2, actual: errors.Length);
         Assert.Contains(collection: errors, filter: static error => (error == "modifier \"aim\" declares unknown control \"gamepad.buttonSouht\""));
         Assert.Contains(collection: errors, filter: static error => (error == "modifier \"type\" declares unaddressable control \"keyboard.text\""));
+
+        // The addressability half stands on its own, exactly as it does for a page source: a caller with no kind
+        // lookup keeps it.
+        Assert.Equal(
+            actual: BindingVocabularyCheck.Validate(
+                document: document,
+                lookups: new BindingVocabularyLookups(SourceAddressable: static source => (source != "keyboard.text"))
+            ).Errors,
+            expected: ["modifier \"type\" declares unaddressable control \"keyboard.text\"",]
+        );
     }
     [Fact]
     public void AMisCasedSourceIsNotAnUnknownControl() {

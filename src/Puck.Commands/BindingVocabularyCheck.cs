@@ -116,10 +116,7 @@ public static class BindingVocabularyCheck {
         // latch, so every page that modifier selects is dead forever — the same failure a typo'd page source
         // causes, refused in the same words for the same reason.
         foreach (var modifier in (document.Modifiers ?? [])) {
-            if (
-                (modifier is null) ||
-                (sourceKind is null)
-            ) {
+            if (modifier is null) {
                 continue;
             }
 
@@ -129,10 +126,14 @@ public static class BindingVocabularyCheck {
                 }
 
                 // One refusal per source, matching the page-source rule: an unaddressable control answers null
-                // for its kind too, so falling through would report it twice.
+                // for its kind too, so falling through would report it twice. The addressability half stands on
+                // its own, so a caller with no kind lookup still gets it.
                 if (!(sourceAddressable?.Invoke(arg: modifierSource) ?? true)) {
                     errors.Add(item: $"modifier \"{modifier.Id}\" declares unaddressable control \"{modifierSource}\"");
-                } else if (sourceKind(arg: modifierSource) is null) {
+                } else if (
+                    (sourceKind is not null) &&
+                    (sourceKind(arg: modifierSource) is null)
+                ) {
                     errors.Add(item: $"modifier \"{modifier.Id}\" declares unknown control \"{modifierSource}\"");
                 }
             }
