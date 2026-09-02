@@ -303,6 +303,35 @@ public sealed class CommandRegistryTests {
         Assert.Equal(expected: "[wire.errors: 0 rejected]", actual: registry.Submit(line: "wire.errors").Output);
     }
     [Fact]
+    public void ASimulationLineWhoseVerbIsQUOTEDIsStillQueuedRatherThanRunInline() {
+        var applied = new List<string>();
+        var registry = new CommandRegistry(modules: [new CoreModule(), new RecordingSimulationModule(applied: applied)]);
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new EmptyBindings(),
+            principalResolver: new ConsolePrincipal()
+        );
+
+        registry.RouteSimulationTo(sink: router.ConsoleTextSink);
+
+        // A quoted verb token is the PARSER's to unquote — the wire path refuses the line for its '"' and the
+        // leading-token span lookup cannot see through the quote — so the routing decision has to survive to the far
+        // side of the parse. Without that, this Simulation-routed handler ran INLINE at submit: absent from the
+        // deterministic lane, and absent from every replay of it.
+        Assert.Equal(expected: CommandResult.None, actual: registry.Submit(line: "\"sim.record\" payload"));
+        Assert.Empty(collection: applied);
+
+        // An Immediate verb spelled the same way is unaffected: it has no lane to wait for and still answers inline.
+        Assert.Equal(expected: "5", actual: registry.Submit(line: "\"sum\" 2 3").Output);
+
+        var snapshot = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
+        registry.ApplySnapshot(snapshot: in snapshot);
+
+        Assert.Equal(actual: applied, expected: ["payload"]);
+        Assert.Equal(expected: "[wire.errors: 0 rejected]", actual: registry.Submit(line: "wire.errors").Output);
+    }
+    [Fact]
     public void ADeferredLineDispatchesWithTheEdgeItsSnapshotEntryRecorded() {
         var phases = new List<CommandPhase>();
         var registry = new CommandRegistry(modules: [new PhaseProbeModule(phases: phases)]);
