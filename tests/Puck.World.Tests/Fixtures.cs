@@ -94,7 +94,7 @@ internal static class Fixtures {
 
     /// <summary>The full parameter set <c>ValidateProducerParameters</c> requires for a kit naming the "wander"
     /// producer — shared by every fixture kit that declares one (<see cref="BuildKits"/>'s own "traveler" row, and
-    /// any other suite file's own custom kit — see <see cref="TransferAbortKitWideningLawTests"/>'s vehicle/swim
+    /// any other suite file's own custom kit — see <see cref="TransferAbortKitWideningLawTests"/>'s vehicle/medium
     /// kits). Values mirror the shipped worlds' own "traveler"-style kit; none of them is exercised by any of these
     /// suites' laws — WorldPopulation.SeedSeatWander unconditionally resolves this producer on the assigned kit's
     /// row regardless of whether anything actually wanders (see <see cref="BuildKits"/>'s own remarks on why the
@@ -726,9 +726,9 @@ internal static class Fixtures {
     public static WorldDefinition WithLattice(WorldDefinition definition, WorldFieldsSection composite) =>
         (definition with { StateRaw = WorldFieldsSection.ToStateSection(composite: composite) });
 
-    /// <summary>The swim-floatable medium row a swim-kit fixture splices into its <c>state.world</c>: a
+    /// <summary>The floatable medium row a medium-hold fixture splices into its <c>state.world</c>: a
     /// full-value lattice row over <paramref name="topology"/> whose <paramref name="heightScale"/> places the free
-    /// surface at that Y — the level the retired global waterline section floated bodies against.</summary>
+    /// surface at that Y.</summary>
     public static WorldStateRow MediumRow(string topology = "world", string name = "medium", float heightScale = 5f) => new(
         Name: WorldCellName.Parse(candidate: name),
         Kind: CellKind.Fixed,

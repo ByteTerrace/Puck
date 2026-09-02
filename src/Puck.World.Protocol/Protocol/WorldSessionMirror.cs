@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Numerics;
 using Puck.Hosting;
+using Puck.Physics.Motion;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -72,6 +73,7 @@ public sealed class WorldSessionMirror : IClientSink {
     private readonly Vector3[] m_currentPosition = new Vector3[EntityCapacity];
     private readonly Quaternion[] m_currentOrientation = new Quaternion[EntityCapacity];
     private readonly float[] m_heading = new float[EntityCapacity];
+    private readonly BodyFacts[] m_facts = new BodyFacts[EntityCapacity];
     private readonly Vector3[] m_bodyColor = new Vector3[EntityCapacity];
     private readonly byte[] m_look = new byte[EntityCapacity];
     private readonly byte[] m_catalogRig = new byte[EntityCapacity];
@@ -281,6 +283,10 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <summary>Gets an entity's latest authoritative heading in radians about world up (<see cref="EntitySnapshot.Heading"/>)
     /// — not interpolated; the composition seam that reads it wants the authority's current value.</summary>
     public float Heading(int index) => m_heading[index];
+    /// <summary>Gets an entity's latest authoritative fact mask (<see cref="EntitySnapshot.Facts"/>) — not
+    /// interpolated; the facts are discrete authority answers.</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    public BodyFacts Facts(int index) => m_facts[index];
     /// <summary>The entity's latest-tick render position (the other interpolation endpoint).</summary>
     /// <param name="index">The 0-based entity index.</param>
     public Vector3 CurrentPosition(int index) => m_currentPosition[index];
@@ -379,6 +385,7 @@ public sealed class WorldSessionMirror : IClientSink {
                 m_currentPosition[index] = entry.Position;
                 m_currentOrientation[index] = entry.Orientation;
                 m_heading[index] = entry.Heading;
+                m_facts[index] = entry.Facts;
                 // The release write is the publication edge for every pose/color/look field above. A local instance
                 // delivers and renders on one thread, but a federated observer necessarily writes from its socket task;
                 // IsActive's acquire read makes the completed record visible before an emitter consumes it.

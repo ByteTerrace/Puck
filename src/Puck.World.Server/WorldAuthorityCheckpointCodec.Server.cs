@@ -609,7 +609,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteInt64(value: state.VehicleLongRemainder);
         writer.WriteInt64(value: state.VehicleLatRemainder);
         writer.WriteInt64(value: state.VehicleResidualRemainder);
-        writer.WriteInt64(value: state.SwimThrustRampRemainder);
+        writer.WriteInt64(value: state.MediumThrustRampRemainder);
         writer.WriteInt64(value: state.PlanarFollowerPositionRawX);
         writer.WriteInt64(value: state.PlanarFollowerPositionRawY);
         writer.WriteInt64(value: state.PlanarFollowerPositionRawZ);
@@ -729,7 +729,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var vehicleLongRemainder = reader.ReadInt64();
         var vehicleLatRemainder = reader.ReadInt64();
         var vehicleResidualRemainder = reader.ReadInt64();
-        var swimThrustRampRemainder = reader.ReadInt64();
+        var mediumThrustRampRemainder = reader.ReadInt64();
         var planarFollowerPositionRawX = reader.ReadInt64();
         var planarFollowerPositionRawY = reader.ReadInt64();
         var planarFollowerPositionRawZ = reader.ReadInt64();
@@ -860,7 +860,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             PlanarVelocity: planarVelocity,
             PreviousChannelBit: previousChannelBit,
             Source: source,
-            SwimThrustRampRemainder: swimThrustRampRemainder,
+            MediumThrustRampRemainder: mediumThrustRampRemainder,
             TapeIntents: tapeIntents,
             TapeRemainingTicks: tapeRemainingTicks,
             VehicleLatRemainder: vehicleLatRemainder,
@@ -942,6 +942,11 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             residue: residue.Attachment
         );
+        writer.WriteInt32(value: residue.HoldIndex);
+        writer.WriteFixedVector(value: residue.HoldAnchor);
+        writer.WriteFixedVector(value: residue.HoldNormal);
+        writer.WriteInt64(value: residue.HoldSpendRemainder);
+        writer.WriteFixedVector(value: residue.Home);
     }
     private static WorldBody.IntegrationResidue ReadResidue(ref WireReader reader) {
         var previousPosition = reader.ReadFixedVector();
@@ -969,10 +974,20 @@ public static partial class WorldAuthorityCheckpointCodec {
         var planarFollowerSeeded = reader.ReadBoolean();
         var verticalFollowerSeeded = reader.ReadBoolean();
         var attachment = ReadAttachmentResidue(reader: ref reader);
+        var holdIndex = reader.ReadInt32();
+        var holdAnchor = reader.ReadFixedVector();
+        var holdNormal = reader.ReadFixedVector();
+        var holdSpendRemainder = reader.ReadInt64();
+        var home = reader.ReadFixedVector();
 
         return new WorldBody.IntegrationResidue(
             AffectingSubject: affectingSubject,
             Attachment: attachment,
+            HoldAnchor: holdAnchor,
+            HoldIndex: holdIndex,
+            HoldNormal: holdNormal,
+            HoldSpendRemainder: holdSpendRemainder,
+            Home: home,
             ContactUpTurnRemainder: contactUpTurnRemainder,
             ContinuumConsumedThroughEngineTick: continuumConsumedThroughEngineTick,
             Engaged: engaged,
@@ -999,15 +1014,6 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteByte(value: ((byte)residue.Mode));
         writer.WriteBoolean(value: residue.AttachPreviousBit);
         writer.WriteBoolean(value: residue.DetachPreviousBit);
-        writer.WriteFixedVector(value: residue.ClimbAnchor);
-        writer.WriteFixedVector(value: residue.ClimbNormal);
-        writer.WriteFixedVector(value: residue.ClimbTangentRight);
-        writer.WriteFixedVector(value: residue.ClimbTangentUp);
-        writer.WriteFixedVector(value: residue.ClimbVelocity);
-        writer.WriteInt64(value: residue.ClimbRemainderX);
-        writer.WriteInt64(value: residue.ClimbRemainderY);
-        writer.WriteInt64(value: residue.ClimbRemainderZ);
-        writer.WriteBoolean(value: residue.ClimbGrantedByOverride);
         writer.WriteBoolean(value: residue.Tether.HasValue);
 
         if (residue.Tether is { } tether) {
@@ -1034,15 +1040,6 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         var attachPreviousBit = reader.ReadBoolean();
         var detachPreviousBit = reader.ReadBoolean();
-        var climbAnchor = reader.ReadFixedVector();
-        var climbNormal = reader.ReadFixedVector();
-        var climbTangentRight = reader.ReadFixedVector();
-        var climbTangentUp = reader.ReadFixedVector();
-        var climbVelocity = reader.ReadFixedVector();
-        var climbRemainderX = reader.ReadInt64();
-        var climbRemainderY = reader.ReadInt64();
-        var climbRemainderZ = reader.ReadInt64();
-        var climbGrantedByOverride = reader.ReadBoolean();
         var tether = (reader.ReadBoolean()
             ? new FixedTetherConstraintState(
                 Length: reader.ReadFixed(),
@@ -1056,15 +1053,6 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         return new WorldBody.AttachmentResidue(
             AttachPreviousBit: attachPreviousBit,
-            ClimbAnchor: climbAnchor,
-            ClimbGrantedByOverride: climbGrantedByOverride,
-            ClimbNormal: climbNormal,
-            ClimbRemainderX: climbRemainderX,
-            ClimbRemainderY: climbRemainderY,
-            ClimbRemainderZ: climbRemainderZ,
-            ClimbTangentRight: climbTangentRight,
-            ClimbTangentUp: climbTangentUp,
-            ClimbVelocity: climbVelocity,
             DetachPreviousBit: detachPreviousBit,
             Mode: mode,
             Tether: tether,

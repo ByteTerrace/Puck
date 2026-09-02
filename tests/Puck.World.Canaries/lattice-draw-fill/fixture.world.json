@@ -1,0 +1,62 @@
+{
+  "schema": "puck.world.def.v1",
+  "documentId": "lattice-draw-fill-canary",
+  "simulation": {
+    "rateHz": 240
+  },
+  "state": {
+    "world": [
+      {
+        "name": "tiles",
+        "kind": "fixed",
+        "lattice": {
+          "topology": "grid",
+          "initial": 0,
+          "min": 0,
+          "max": 4,
+          "heightScale": 0,
+          "paint": [
+            {
+              "$type": "draw",
+              "generator": {
+                "source": "WeightedNumeric",
+                "mode": "ReshuffleOnExhaustion",
+                "weighted": [
+                  {
+                    "value": 16384,
+                    "weight": 1,
+                    "count": 2
+                  },
+                  {
+                    "value": 32768,
+                    "weight": 1
+                  },
+                  {
+                    "value": 65536,
+                    "weight": 1
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "lattices": [
+      {
+        "name": "grid",
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "cellSize": 1,
+        "width": 4,
+        "depth": 1,
+        "layers": 1,
+        "stepEveryTicks": 1,
+        "reactions": []
+      }
+    ]
+  }
+}

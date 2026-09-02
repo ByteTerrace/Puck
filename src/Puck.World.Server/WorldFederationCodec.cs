@@ -291,6 +291,18 @@ public static class WorldFederationCodec {
         var seconds = reader.ReadSingle();
         var generation = reader.ReadInt32();
         var placementId = reader.ReadNullableString(field: $"snapshot entity {ordinal} placement id");
+        // Read wide and test wide: narrowing to the enum first would drop the very bits the admission test exists to
+        // catch.
+        var factBits = reader.ReadUInt32();
+
+        if ((factBits & ~((uint)BodyFacts.All)) != 0U) {
+            reader.Fail(
+                detail: $"snapshot entity {ordinal} facts 0x{factBits:x8} carries bits outside the declared set",
+                refusal: WireRefusal.EnumValueUnknown
+            );
+        }
+
+        var facts = ((BodyFacts)((ushort)(factBits & ((uint)BodyFacts.All))));
 
         if (
             !reader.Failed &&
@@ -317,7 +329,8 @@ public static class WorldFederationCodec {
             ),
             generation,
             placementId,
-            heading
+            heading,
+            facts
         );
     }
     private static IntentSource ReadIntentSource(ref WireReader reader) {
@@ -736,6 +749,7 @@ public static class WorldFederationCodec {
             writer.WriteSingle(value: entry.Continuity.Seconds);
             writer.WriteInt32(value: entry.Generation);
             writer.WriteNullableString(value: entry.PlacementId);
+            writer.WriteUInt32(value: ((uint)entry.Facts));
         }
 
         writer.WriteBoolean(value: snapshot.FieldsFull);

@@ -177,59 +177,13 @@ public sealed class WorldFieldLattice {
         foreach (var fill in (document.Paint ?? [])) {
             var field = FieldIndex(name: fill.Field);
 
-            switch (fill) {
-                case WorldLatticeFill.Noise noise:
-                    ApplyNoiseFill(
-                        field: field,
-                        fill: noise,
-                        worldSeed: worldSeed
-                    );
-                    continue;
-                case WorldLatticeFill.Scatter scatter:
-                    ApplyScatterFill(
-                        field: field,
-                        fill: scatter,
-                        worldSeed: worldSeed
-                    );
-                    continue;
-                case WorldLatticeFill.Rect paint: {
-                        var value = Clamp(
-                            field: field,
-                            value: FixedQ4816.FromDouble(value: paint.Value)
-                        );
-                        var minX = FixedQ4816.FromDouble(value: paint.MinX);
-                        var maxX = FixedQ4816.FromDouble(value: paint.MaxX);
-                        var minZ = FixedQ4816.FromDouble(value: paint.MinZ);
-                        var maxZ = FixedQ4816.FromDouble(value: paint.MaxZ);
-                        var half = (m_cellSize / FixedQ4816.FromInteger(value: 2));
-
-                        for (var z = 0; (z < m_depth); z++) {
-                            var centreZ = ((m_origin.Z + (m_cellSize * FixedQ4816.FromInteger(value: z))) + half);
-
-                            if (
-                                (centreZ < minZ) ||
-                                (centreZ > maxZ)
-                            ) {
-                                continue;
-                            }
-
-                            for (var x = 0; (x < m_width); x++) {
-                                var centreX = ((m_origin.X + (m_cellSize * FixedQ4816.FromInteger(value: x))) + half);
-
-                                if (
-                                    (centreX < minX) ||
-                                    (centreX > maxX)
-                                ) {
-                                    continue;
-                                }
-
-                                for (var y = 0; (y < m_layers); y++) {
-                                    m_values[field][CellIndex(x: x, y: y, z: z)] = value;
-                                }
-                            }
-                        }
-                        break;
-                    }
+            if (fill is not WorldLatticeFill.Draw) {
+                ApplyPaintFill(
+                    field: field,
+                    fill: fill,
+                    trackDeltas: false,
+                    worldSeed: worldSeed
+                );
             }
         }
 
@@ -253,6 +207,21 @@ public sealed class WorldFieldLattice {
     public FixedVector3 Origin => m_origin;
     /// <summary>Gets a counter that moves on every cell write.</summary>
     public int Revision => m_revision;
+
+    // The field portion of WorldRuntimeStateHash's authoritative boundary. Field-major/cell-major is the same
+    // canonical order Capture and the checkpoint codec use, without allocating a checkpoint-shaped jagged array.
+    internal void AppendStateHash(ref Fnv1aHash hash) {
+        hash.Add(value: ((uint)FieldCount));
+        hash.Add(value: ((uint)CellCount));
+
+        for (var field = 0; (field < FieldCount); field++) {
+            hash.Add(value: Fnv1aHash.Compute(values: m_names[field].AsSpan()));
+
+            for (var cell = 0; (cell < CellCount); cell++) {
+                hash.Add(value: m_values[field][cell].Value);
+            }
+        }
+    }
 
     /// <summary>Describes the exact structural field-program work performed on one cadence step.</summary>
     /// <param name="activeBodyCount">The number of active body slots.</param>
@@ -431,6 +400,63 @@ public sealed class WorldFieldLattice {
         }
 
         m_revision++;
+    }
+
+    /// <summary>Sets or adds one bounded spherical neighborhood. Coordinates and radius are lattice-cell units;
+    /// cells outside the topology are clipped and every written value is clamped to the field envelope.</summary>
+    /// <param name="fieldName">The declared field row to paint.</param>
+    /// <param name="centerX">The sphere center on the lattice X axis, in cells.</param>
+    /// <param name="centerY">The sphere center on the lattice Y axis, in cells.</param>
+    /// <param name="centerZ">The sphere center on the lattice Z axis, in cells.</param>
+    /// <param name="radius">The non-negative sphere radius, in cells.</param>
+    /// <param name="operation">The set or add operation.</param>
+    /// <param name="value">The value to set or add before the field envelope is applied.</param>
+    /// <returns>The number of cells whose value changed.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="radius"/> is negative or
+    /// <paramref name="operation"/> is not defined.</exception>
+    public int PaintSphere(string fieldName, int centerX, int centerY, int centerZ, int radius, WorldFieldWriteOp operation, FixedQ4816 value) {
+        if (!TryFieldIndex(name: fieldName, field: out var field)) {
+            return 0;
+        }
+        ArgumentOutOfRangeException.ThrowIfNegative(value: radius);
+        if (!Enum.IsDefined(value: operation)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(operation), actualValue: operation, message: "The field write operation is not defined.");
+        }
+
+        var minimumX = Math.Max(0, centerX - radius);
+        var maximumX = Math.Min(m_width - 1, centerX + radius);
+        var minimumY = Math.Max(0, centerY - radius);
+        var maximumY = Math.Min(m_layers - 1, centerY + radius);
+        var minimumZ = Math.Max(0, centerZ - radius);
+        var maximumZ = Math.Min(m_depth - 1, centerZ + radius);
+        var radiusSquared = checked(radius * radius);
+        var changed = 0;
+
+        for (var z = minimumZ; z <= maximumZ; z++) {
+            var dz = (z - centerZ);
+            for (var y = minimumY; y <= maximumY; y++) {
+                var dy = (y - centerY);
+                for (var x = minimumX; x <= maximumX; x++) {
+                    var dx = (x - centerX);
+                    if (checked((dx * dx) + (dy * dy) + (dz * dz)) > radiusSquared) {
+                        continue;
+                    }
+
+                    var cell = CellIndex(x: x, y: y, z: z);
+                    var before = m_values[field][cell];
+                    var requested = ((operation == WorldFieldWriteOp.Add)
+                        ? AddClamped(field: field, x: before, y: value)
+                        : value
+                    );
+                    Write(field: field, cell: cell, value: requested);
+                    if (m_values[field][cell] != before) {
+                        changed++;
+                    }
+                }
+            }
+        }
+
+        return changed;
     }
 
     /// <summary>Resolves the cell a BODY couples to for the <see cref="WorldReaction.Emit"/>/
@@ -626,6 +652,49 @@ public sealed class WorldFieldLattice {
         return best;
     }
 
+    /// <summary>Writes one whole-field pass of drawn cell values — <paramref name="raw"/> holds one raw
+    /// <see cref="FixedQ4816"/> value per cell in cell-index order — then reapplies every later authored paint for
+    /// the same field, preserving document order. Every changed cell is marked for the next snapshot delta.</summary>
+    /// <param name="field">The field index (see <see cref="TryFieldIndex"/>).</param>
+    /// <param name="raw">The drawn raw values, exactly <see cref="CellCount"/> long.</param>
+    /// <param name="worldSeed">The deterministic seed later noise/scatter fills use.</param>
+    /// <exception cref="ArgumentException"><paramref name="raw"/> is not one value per cell.</exception>
+    public void FillFromDraw(int field, ReadOnlySpan<long> raw, ulong worldSeed) {
+        if (raw.Length != CellCount) {
+            throw new ArgumentException(message: $"a draw fill supplies one value per cell ({CellCount}); received {raw.Length}", paramName: nameof(raw));
+        }
+
+        for (var cell = 0; (cell < raw.Length); cell++) {
+            Write(
+                cell: cell,
+                field: field,
+                value: FixedQ4816.FromRawBits(value: raw[cell])
+            );
+        }
+
+        var afterDraw = false;
+
+        foreach (var fill in (m_document.Paint ?? [])) {
+            if (!string.Equals(a: fill.Field, b: m_names[field], comparisonType: StringComparison.Ordinal)) {
+                continue;
+            }
+
+            if (fill is WorldLatticeFill.Draw) {
+                afterDraw = true;
+
+                continue;
+            }
+
+            if (afterDraw) {
+                ApplyPaintFill(
+                    field: field,
+                    fill: fill,
+                    trackDeltas: true,
+                    worldSeed: worldSeed
+                );
+            }
+        }
+    }
     /// <summary>Gets the lattice's width in cells.</summary>
     public int Width => m_width;
     /// <summary>Gets the lattice's depth in cells.</summary>
@@ -633,7 +702,82 @@ public sealed class WorldFieldLattice {
     /// <summary>Gets the lattice's layer count.</summary>
     public int Layers => m_layers;
 
-    private void ApplyNoiseFill(int field, WorldLatticeFill.Noise fill, ulong worldSeed) {
+    private void ApplyPaintFill(int field, WorldLatticeFill fill, bool trackDeltas, ulong worldSeed) {
+        switch (fill) {
+            case WorldLatticeFill.Noise noise:
+                ApplyNoiseFill(
+                    field: field,
+                    fill: noise,
+                    trackDeltas: trackDeltas,
+                    worldSeed: worldSeed
+                );
+                break;
+            case WorldLatticeFill.Scatter scatter:
+                ApplyScatterFill(
+                    field: field,
+                    fill: scatter,
+                    trackDeltas: trackDeltas,
+                    worldSeed: worldSeed
+                );
+                break;
+            case WorldLatticeFill.Rect rect:
+                ApplyRectFill(
+                    field: field,
+                    fill: rect,
+                    trackDeltas: trackDeltas
+                );
+                break;
+        }
+    }
+    private void SetPaintValue(int field, int cell, FixedQ4816 value, bool trackDeltas) {
+        if (trackDeltas) {
+            Write(
+                cell: cell,
+                field: field,
+                value: value
+            );
+        }
+        else {
+            m_values[field][cell] = value;
+        }
+    }
+    private void ApplyRectFill(int field, WorldLatticeFill.Rect fill, bool trackDeltas) {
+        var value = Clamp(
+            field: field,
+            value: FixedQ4816.FromDouble(value: fill.Value)
+        );
+        var minX = FixedQ4816.FromDouble(value: fill.MinX);
+        var maxX = FixedQ4816.FromDouble(value: fill.MaxX);
+        var minZ = FixedQ4816.FromDouble(value: fill.MinZ);
+        var maxZ = FixedQ4816.FromDouble(value: fill.MaxZ);
+        var half = (m_cellSize / FixedQ4816.FromInteger(value: 2));
+
+        for (var z = 0; (z < m_depth); z++) {
+            var centreZ = ((m_origin.Z + (m_cellSize * FixedQ4816.FromInteger(value: z))) + half);
+
+            if ((centreZ < minZ) || (centreZ > maxZ)) {
+                continue;
+            }
+
+            for (var x = 0; (x < m_width); x++) {
+                var centreX = ((m_origin.X + (m_cellSize * FixedQ4816.FromInteger(value: x))) + half);
+
+                if ((centreX < minX) || (centreX > maxX)) {
+                    continue;
+                }
+
+                for (var y = 0; (y < m_layers); y++) {
+                    SetPaintValue(
+                        cell: CellIndex(x: x, y: y, z: z),
+                        field: field,
+                        trackDeltas: trackDeltas,
+                        value: value
+                    );
+                }
+            }
+        }
+    }
+    private void ApplyNoiseFill(int field, WorldLatticeFill.Noise fill, bool trackDeltas, ulong worldSeed) {
         var value = Clamp(
             field: field,
             value: FixedQ4816.FromDouble(value: fill.Value)
@@ -672,15 +816,17 @@ public sealed class WorldFieldLattice {
                 var scaled = ((span.Value > 0) ? (value * ((n - threshold) / span)) : value);
 
                 for (var y = 0; (y < m_layers); y++) {
-                    m_values[field][CellIndex(x: x, y: y, z: z)] = Clamp(
+                    SetPaintValue(
+                        cell: CellIndex(x: x, y: y, z: z),
                         field: field,
-                        value: scaled
+                        trackDeltas: trackDeltas,
+                        value: Clamp(field: field, value: scaled)
                     );
                 }
             }
         }
     }
-    private void ApplyScatterFill(int field, WorldLatticeFill.Scatter fill, ulong worldSeed) {
+    private void ApplyScatterFill(int field, WorldLatticeFill.Scatter fill, bool trackDeltas, ulong worldSeed) {
         var value = Clamp(
             field: field,
             value: FixedQ4816.FromDouble(value: fill.Value)
@@ -723,7 +869,12 @@ public sealed class WorldFieldLattice {
                 }
 
                 for (var y = 0; (y < m_layers); y++) {
-                    m_values[field][CellIndex(x: x, y: y, z: z)] = value;
+                    SetPaintValue(
+                        cell: CellIndex(x: x, y: y, z: z),
+                        field: field,
+                        trackDeltas: trackDeltas,
+                        value: value
+                    );
                 }
             }
         }

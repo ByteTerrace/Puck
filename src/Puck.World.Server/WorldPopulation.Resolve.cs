@@ -42,6 +42,7 @@ public sealed partial class WorldPopulation {
             section: definition.Attachment
         );
         m_bodyUpPolicy = WorldBodyUpPolicyCompiler.Compile(collision: definition.Collision);
+        m_walkableThreshold = FixedWorldCollision.Compile(collision: definition.Collision).GroundedThreshold;
         m_targetRows = definition.TargetRegisters;
         m_targets = WorldTargetRegisterTable.Compile(
             registers: definition.TargetRegisters,
@@ -434,7 +435,8 @@ public sealed partial class WorldPopulation {
             if (m_entries[index] is { Active: true, Body: { } body }) {
                 body.SetContactConfiguration(
                     field: m_contactField,
-                    upPolicy: m_bodyUpPolicy
+                    upPolicy: m_bodyUpPolicy,
+                walkableThreshold: m_walkableThreshold
                 );
                 body.SetGravityField(field: m_gravityField);
             }
@@ -550,13 +552,15 @@ public sealed partial class WorldPopulation {
                 maxSmoothError: m_fixedMotion.MaxSmoothError,
                 sprintChannelOrdinal: kit.SprintChannelOrdinal,
                 driftChannelOrdinal: kit.DriftChannelOrdinal,
-                planarDynamics: kit.PlanarDynamics
+                holds: kit.Holds,
+            planarDynamics: kit.PlanarDynamics
             );
             // Hand the (possibly rebuilt) contact field to every live body, so a live solid-geometry or collision-tuning
             // edit takes effect on the next tick.
             body.SetContactConfiguration(
                 field: m_contactField,
-                upPolicy: m_bodyUpPolicy
+                upPolicy: m_bodyUpPolicy,
+                walkableThreshold: m_walkableThreshold
             );
             body.SetGravityField(field: m_gravityField);
             body.SetAttachmentPolicy(policy: m_fixedAttachment);

@@ -25,12 +25,14 @@ public sealed partial class WorldPopulation {
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             sprintChannelOrdinal: kit.SprintChannelOrdinal,
             driftChannelOrdinal: kit.DriftChannelOrdinal,
+            holds: kit.Holds,
             planarDynamics: kit.PlanarDynamics
         );
 
         body.SetContactConfiguration(
             field: m_contactField,
-            upPolicy: m_bodyUpPolicy
+            upPolicy: m_bodyUpPolicy,
+                walkableThreshold: m_walkableThreshold
         );
         body.SetGravityField(field: m_gravityField);
         body.SetAttachmentPolicy(policy: m_fixedAttachment);
@@ -50,6 +52,9 @@ public sealed partial class WorldPopulation {
             pitchRadians: FixedQ4816.Zero,
             rollRadians: FixedQ4816.Zero
         );
+        // An inhabitant's home is the ground its row activated it on — the placement's position plus its own
+        // distribution sample — so its producer wanders THERE rather than at the world origin.
+        body.SetHome(home: (spawn with { Y = altitude }));
 
         body.SetIntentSource(source: inhabit.Source);
         entry.Body = body;
@@ -88,12 +93,14 @@ public sealed partial class WorldPopulation {
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             sprintChannelOrdinal: kit.SprintChannelOrdinal,
             driftChannelOrdinal: kit.DriftChannelOrdinal,
+            holds: kit.Holds,
             planarDynamics: kit.PlanarDynamics
         );
 
         player.SetContactConfiguration(
             field: m_contactField,
-            upPolicy: m_bodyUpPolicy
+            upPolicy: m_bodyUpPolicy,
+                walkableThreshold: m_walkableThreshold
         );
         player.SetGravityField(field: m_gravityField);
         player.SetAttachmentPolicy(policy: m_fixedAttachment);
@@ -104,6 +111,7 @@ public sealed partial class WorldPopulation {
             pitchRadians: FixedQ4816.Zero,
             rollRadians: FixedQ4816.Zero
         );
+        player.SetHome(home: entry.SpawnPosition);
 
         player.SetIntentSource(source: (source ?? m_defaultPeerSource));
         entry.Body = player;
@@ -254,6 +262,7 @@ public sealed partial class WorldPopulation {
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             sprintChannelOrdinal: m_kits[m_seatKit].SprintChannelOrdinal,
             driftChannelOrdinal: m_kits[m_seatKit].DriftChannelOrdinal,
+            holds: m_kits[m_seatKit].Holds,
             planarDynamics: m_kits[m_seatKit].PlanarDynamics
         ) {
             Profile = profile,
@@ -261,7 +270,8 @@ public sealed partial class WorldPopulation {
 
         body.SetContactConfiguration(
             field: m_contactField,
-            upPolicy: m_bodyUpPolicy
+            upPolicy: m_bodyUpPolicy,
+                walkableThreshold: m_walkableThreshold
         );
         body.SetGravityField(field: m_gravityField);
         body.SetAttachmentPolicy(policy: m_fixedAttachment);
@@ -274,6 +284,7 @@ public sealed partial class WorldPopulation {
             pitchRadians: FixedQ4816.Zero,
             rollRadians: FixedQ4816.Zero
         );
+        body.SetHome(home: spawnPoint.Position);
         // Seats default Live and are never touched by population operations; producer state is seeded so a later
         // body.control producer:<name> uses the same deterministic path as a peer.
         ClearDesignations(entry: entry);
@@ -689,6 +700,7 @@ public sealed partial class WorldPopulation {
                 maxSmoothError: m_fixedMotion.MaxSmoothError,
                 sprintChannelOrdinal: m_kits[kitIndex].SprintChannelOrdinal,
                 driftChannelOrdinal: m_kits[kitIndex].DriftChannelOrdinal,
+                holds: m_kits[kitIndex].Holds,
                 planarDynamics: m_kits[kitIndex].PlanarDynamics
             );
         }
@@ -795,7 +807,7 @@ public sealed partial class WorldPopulation {
     /// <see cref="ActivateSeat"/>'s fresh-spawn path, the body is posed at <paramref name="position"/>/<paramref name="yawRadians"/>
     /// instead of the seat's authored spawn point, so a transfer that must abort after this seat already departed
     /// restores play exactly where it left off rather than teleporting it home. The seat kit every local seat
-    /// constructs today authors no <c>vehicle</c>/<c>swim</c> model, so <see cref="WorldBody.FixedOrientation"/> is
+    /// constructs today authors no <c>vehicle</c> model, so <see cref="WorldBody.FixedOrientation"/> is
     /// always a pure yaw rotation (pitch = roll = 0) for a seat body — capturing position and yaw alone therefore
     /// reconstructs the departed body's orientation bit-for-bit, the identical construction <see cref="ActivateSeat"/>'s
     /// own spawn already relies on. A seat kit that someday adopts a genuine free/vehicle attitude for a local seat
@@ -851,6 +863,7 @@ public sealed partial class WorldPopulation {
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             sprintChannelOrdinal: m_kits[m_seatKit].SprintChannelOrdinal,
             driftChannelOrdinal: m_kits[m_seatKit].DriftChannelOrdinal,
+            holds: m_kits[m_seatKit].Holds,
             planarDynamics: m_kits[m_seatKit].PlanarDynamics
         ) {
             Profile = profile,
@@ -858,7 +871,8 @@ public sealed partial class WorldPopulation {
 
         body.SetContactConfiguration(
             field: m_contactField,
-            upPolicy: m_bodyUpPolicy
+            upPolicy: m_bodyUpPolicy,
+                walkableThreshold: m_walkableThreshold
         );
         body.SetGravityField(field: m_gravityField);
         body.SetAttachmentPolicy(policy: m_fixedAttachment);

@@ -64,10 +64,46 @@ internal static class FixedContactPushMath {
     /// <param name="groundedThreshold">The <c>cos(maxSlope)</c> <paramref name="normal"/>'s alignment with
     /// <paramref name="up"/> must clear to read as walkable.</param>
     internal static Trial ComputeOrdinary(FixedVector3 normal, FixedQ4816 penetration, in FixedVector3 velocity, FixedVector3 up, FixedQ4816 groundedThreshold) {
-        var grounded = (FixedVector3.Dot(
+        var alignment = FixedVector3.Dot(
             left: normal,
             right: up
-        ) >= groundedThreshold);
+        );
+        var grounded = (alignment >= groundedThreshold);
+
+        // A face steeper than the walkable slope is a wall, and a wall pushes across `up`, never along its own
+        // normal: the normal push's up-component is a lift, and against a body driving into the face every tick
+        // that lift outruns gravity, so the face the slope limit refuses to ground on would still carry the body
+        // to its top. The projected push resolves the same penetration (penetration / |normal ⊥ up|), and the clamp
+        // removes only the horizontal approach, so a body falling past a wall keeps falling along it. A face within
+        // the walkable cone of straight down is a ceiling: its projection is degenerate and its push is its normal.
+        if (
+            !grounded &&
+            (alignment > -groundedThreshold)
+        ) {
+            var across = (normal - (up * alignment));
+
+            if (
+                across.TryLength(length: out var acrossLength) &&
+                (acrossLength > FixedQ4816.Zero)
+            ) {
+                var wall = (across / acrossLength);
+                var intoWall = FixedVector3.Dot(
+                    left: velocity,
+                    right: wall
+                );
+
+                return new Trial(
+                    Grounded: false,
+                    Normal: normal,
+                    PositionDelta: (wall * (penetration / acrossLength)),
+                    VelocityDelta: ((intoWall < FixedQ4816.Zero)
+                        ? -(wall * intoWall)
+                        : FixedVector3.Zero
+                    )
+                );
+            }
+        }
+
         var into = FixedVector3.Dot(
             left: velocity,
             right: normal

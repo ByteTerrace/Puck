@@ -310,7 +310,7 @@ public static partial class WorldDefinitionValidator {
 
             if (
                 (interaction.CoOccurrence == WorldInteractionCoOccurrence.Distance) &&
-                (interaction.Range < 0f)
+                (interaction.Range < decimal.Zero)
             ) {
                 errors.Add(item: $"{path}.range {interaction.Range} is negative — a distance threshold cannot be negative.");
             }
@@ -689,6 +689,10 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
+        if (rules.Count > WorldRuleCapacity.MaxRules) {
+            errors.Add(item: $"rules count {rules.Count} exceeds the maximum of {WorldRuleCapacity.MaxRules}.");
+        }
+
         for (var index = 0; (index < rules.Count); index++) {
             var rule = rules[index];
             var path = $"rules[{index}]";
@@ -714,8 +718,8 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: exception.Message);
         }
     }
-    /// <summary>Gets whether the document declares at least one medium lattice field — the premise a swim-model kit
-    /// requires (see <c>ValidateSwimMotion</c>).</summary>
+    /// <summary>Gets whether the document declares at least one medium lattice field — the premise a kit authoring
+    /// a <c>Medium</c> hold row requires.</summary>
     private static bool HasMediumField(WorldDefinition definition) {
         var fields = (definition.Fields?.Fields ?? []);
 
@@ -1165,6 +1169,8 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"fields.paint declares {paint.Count} rows, exceeding the {WorldFieldCapacity.MaxPaint}-row ceiling.");
         }
 
+        var drawnFields = new HashSet<string>(comparer: StringComparer.Ordinal);
+
         for (var index = 0; (index < paint.Count); index++) {
             var path = $"fields.paint[{index}]";
             var row = paint[index];
@@ -1209,6 +1215,64 @@ public static partial class WorldDefinitionValidator {
                     }
                     if ((noise.Octaves < 1) || (noise.Octaves > 4)) {
                         errors.Add(item: $"{path}.octaves must be in 1..4 (was {noise.Octaves}).");
+                    }
+
+                    break;
+                case WorldLatticeFill.Draw draw:
+                    if (!drawnFields.Add(item: row.Field)) {
+                        errors.Add(item: $"{path} is a second draw fill on field '{row.Field}' — a lattice row deals one whole-field pass at a time through its own cursor and decks, so it carries at most one draw fill.");
+                    }
+
+                    if (!WorldGeneratorEngine.TryResolveSource(
+                        generators: definition.Generators,
+                        draw: new WorldDraw(Source: draw.Source, Generator: draw.Generator),
+                        generator: out var drawSource,
+                        reason: out var drawReason
+                    )) {
+                        errors.Add(item: $"{path} {drawReason}.");
+
+                        break;
+                    }
+
+                    if (draw.Generator is { } inlineSource) {
+                        ValidateSource(
+                            errors: errors,
+                            generator: inlineSource,
+                            path: $"{path}.generator"
+                        );
+                    }
+
+                    if (!WorldGeneratorEngine.TryCheckTargetKind(
+                        source: drawSource.Source,
+                        targetKind: CellKind.Fixed,
+                        reason: out var kindReason
+                    )) {
+                        errors.Add(item: $"{path} {kindReason} — a lattice cell is a fixed value.");
+                    }
+
+                    var latticeSamples = ((((long)lattice.Width) * lattice.Depth) * lattice.Layers);
+                    var drawDecks = WorldDefinitionRows.FindStateRow(
+                        rows: definition.State,
+                        name: row.Field
+                    )?.DrawDecks;
+
+                    ValidateDrawDecks(
+                        decks: drawDecks,
+                        errors: errors,
+                        generator: drawSource,
+                        path: $"state row '{row.Field}' drawDecks"
+                    );
+
+                    if (
+                        (latticeSamples > 0L) &&
+                        !WorldGeneratorEngine.TryCheckBatchCapacity(
+                            generator: drawSource,
+                            decks: drawDecks,
+                            sampleCount: latticeSamples,
+                            reason: out var batchReason
+                        )
+                    ) {
+                        errors.Add(item: $"{path} {batchReason}.");
                     }
 
                     break;

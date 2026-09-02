@@ -335,6 +335,104 @@ internal sealed partial class PlayerCommandModule {
             return new CommandResult(Output: $"[body.pose: '{instance.Name}' seat {instanceSlot} ({ix:0.00}, {iy:0.00}, {iz:0.00}) yaw={iyaw:0}° pitch={ipitch:0}° roll={iroll:0}°]");
         }
 
+        // The spawn-point form — body.pose spawn:<id> [body] — is the console mirror of the rule-side pose effect's
+        // spawnPoint branch (WorldServer.Step), read against the LIVE definition so a mutated spawns section is honored.
+        if (
+            (args.Count is 1 or 2) &&
+            args[0].StartsWith(
+                value: SpawnPrefix,
+                comparisonType: StringComparison.Ordinal
+            )
+        ) {
+            var spawnId = args[0][SpawnPrefix.Length..].ToString();
+
+            if (!WorldArgs.TryParseIndex(
+                args: in args,
+                at: 1,
+                min: 0,
+                max: (m_population.Capacity - 1),
+                fallback: 0,
+                value: out var requestedSpawnIndex
+            )) {
+                return CommandResult.Error(output: $"[body.pose: body index must be an integer 0..{(m_population.Capacity - 1)}]");
+            }
+
+            if (IsSeat(index: requestedSpawnIndex)) {
+                var location = seatRouter.Route(slot: requestedSpawnIndex);
+
+                if (
+                    m_roster.IsJoined(slot: requestedSpawnIndex) &&
+                    !string.Equals(
+                        a: location.Endpoint.Identity,
+                        b: WorldInstanceHost.BootInstanceName,
+                        comparisonType: StringComparison.Ordinal
+                    )
+                ) {
+                    if (WorldDefinitionRows.FindSpawnPoint(
+                        spawnPoints: location.Endpoint.Definition.SpawnPoints,
+                        id: spawnId
+                    ) is not { } routedPoint) {
+                        return CommandResult.Error(output: $"[body.pose: spawnPoint '{spawnId}' is not declared by '{location.Endpoint.Identity}' — see its spawnPoints section]");
+                    }
+
+                    Vector3 routedSpawnPosition = routedPoint.Position;
+
+                    location.Endpoint.Submissions.SubmitCommand(command: new WorldCommand.SnapPose(
+                        Principal: context.ActingPrincipal(),
+                        EntityIndex: location.EntityIndex,
+                        Position: routedSpawnPosition,
+                        YawRadians: (routedPoint.YawDegrees * (MathF.PI / 180f)),
+                        PitchRadians: 0f,
+                        RollRadians: 0f,
+                        Mode: SnapPoseMode.Pose
+                    ));
+
+                    return Echoed(
+                        args: in args,
+                        handler: $"[body.pose: body:{requestedSpawnIndex} via '{location.Endpoint.Identity}' body={location.EntityIndex} -> spawn '{spawnId}' ({routedSpawnPosition.X:0.00}, {routedSpawnPosition.Y:0.00}, {routedSpawnPosition.Z:0.00}) yaw={routedPoint.YawDegrees:0}° pitch=0° roll=0°]"
+                    );
+                }
+            }
+
+            var (spawnPlayer, spawnIndex, spawnError) = ResolveTarget(
+                args: in args,
+                requiredCount: 1,
+                verb: "body.pose"
+            );
+
+            if (spawnPlayer is null) {
+                return CommandResult.Error(output: spawnError!);
+            }
+
+            if (WorldDefinitionRows.FindSpawnPoint(
+                spawnPoints: m_server.Definition.SpawnPoints,
+                id: spawnId
+            ) is not { } point) {
+                return CommandResult.Error(output: $"[body.pose: spawnPoint '{spawnId}' is not declared — see the spawnPoints section]");
+            }
+
+            if (ReplayDriveError(verb: "body.pose") is { } spawnDriveError) {
+                return spawnDriveError;
+            }
+
+            Vector3 spawnPosition = point.Position;
+
+            m_link.SubmitCommand(command: new WorldCommand.SnapPose(
+                Principal: context.ActingPrincipal(),
+                EntityIndex: spawnIndex,
+                Position: spawnPosition,
+                YawRadians: (point.YawDegrees * (MathF.PI / 180f)),
+                PitchRadians: 0f,
+                RollRadians: 0f,
+                Mode: SnapPoseMode.Pose
+            ));
+
+            return Echoed(
+                args: in args,
+                handler: $"[body.pose: body:{spawnIndex} -> spawn '{spawnId}' ({spawnPosition.X:0.00}, {spawnPosition.Y:0.00}, {spawnPosition.Z:0.00}) yaw={point.YawDegrees:0}° pitch=0° roll=0°]"
+            );
+        }
+
         if (instanceTarget.EffectiveCount is not (6 or 7)) {
             return CommandResult.Error(output: "[body.pose: expected 6 values — <x> <y> <z> <yawDeg> <pitchDeg> <rollDeg>, any of which may be - to hold its current value — plus an optional body index]");
         }
@@ -675,6 +773,7 @@ internal sealed partial class PlayerCommandModule {
     }
     // Parses a body.pose positional axis token: a literal "-" holds the value already read into `current`;
     // anything else must parse as a finite float, exactly like every other drive-a-player float argument.
+    private const string SpawnPrefix = "spawn:";
     private static bool TryFloatOrHold(in WireArgs args, int index, float current, out float value) {
         if (args.Is(
             index: index,
@@ -894,7 +993,7 @@ internal sealed partial class PlayerCommandModule {
                 tagInstance: true
             )
             ) {
-                // player.where's own anchor=body:N suffix, off the route as it stands now — it may have moved on
+                // body.where's own anchor=body:N suffix, off the route as it stands now — it may have moved on
                 // since the query was submitted.
                 var current = (seatRouter.TryRoute(slot: rosterSlot) ?? location);
 

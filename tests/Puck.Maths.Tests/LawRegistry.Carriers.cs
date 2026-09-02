@@ -381,6 +381,13 @@ internal static partial class LawRegistry {
             )
         ),
         Case(
+            id: "core.big-integer-to-double-vs-exact-neighbours",
+            run: () => Laws.Claim(
+                claim: CoreSurfaceClaims.BigIntegerToDoubleSurface,
+                lawId: "core.big-integer-to-double-vs-exact-neighbours"
+            )
+        ),
+        Case(
             id: "core.big-integer-modular-inverse-vs-hensel",
             run: () => Laws.Claim(
                 claim: CoreSurfaceClaims.BigIntegerModularInverseSurface,
@@ -422,10 +429,17 @@ internal static partial class LawRegistry {
             )
         ),
         Case(
-            id: "core.quadratic-surd-field-and-conversion",
+            id: "core.real-quadratic-field-descriptor",
             run: () => Laws.Claim(
-                claim: CoreSurfaceClaims.QuadraticSurdSurface,
-                lawId: "core.quadratic-surd-field-and-conversion"
+                claim: CoreSurfaceClaims.RealQuadraticFieldSurface,
+                lawId: "core.real-quadratic-field-descriptor"
+            )
+        ),
+        Case(
+            id: "core.real-quadratic-field-and-conversion",
+            run: () => Laws.Claim(
+                claim: CoreSurfaceClaims.RealQuadraticSurface,
+                lawId: "core.real-quadratic-field-and-conversion"
             )
         ),
         Case(

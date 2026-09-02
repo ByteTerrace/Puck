@@ -10,6 +10,10 @@
       {
         "Type": "Puck.Maths.CyclicRotation",
         "Name": "Rotate"
+      },
+      {
+        "Type": "Puck.Maths.CyclicRotation",
+        "Name": "Rotor"
       }
     ],
     "Legs": [
@@ -1851,7 +1855,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "QuadraticSurd.ToString renders identically under a host culture whose negative sign is U+2212 as it does invariantly, checked by switching CurrentCulture around the call and restoring it. Formatting BigInteger components with the ambient provider let a host culture inject U+200E, U+061C or U+2212 into text that reaches logs, snapshots and golden files, against this library's stated contract that nothing in it reads the current culture. The probe proves its own teeth in the same breath, by requiring that ambient formatting of the SAME component really does differ -- otherwise a host that changed nothing would green it vacuously. ENVELOPE: the member cannot be named in Members because the coverage surface excludes ToString, so this law gates it without crediting it",
+        "Subject": "RealQuadratic.ToString renders identically under a host culture whose negative sign is U+2212 as it does invariantly, checked by switching CurrentCulture around the call and restoring it. Formatting BigInteger components with the ambient provider let a host culture inject U+200E, U+061C or U+2212 into text that reaches logs, snapshots and golden files, against this library's stated contract that nothing in it reads the current culture. The probe proves its own teeth in the same breath, by requiring that ambient formatting of the SAME component really does differ -- otherwise a host that changed nothing would green it vacuously. ENVELOPE: the member cannot be named in Members because the coverage surface excludes ToString, so this law gates it without crediting it",
         "Against": "",
         "Shared": "",
         "Citation": "",

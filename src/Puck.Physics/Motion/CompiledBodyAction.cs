@@ -8,9 +8,17 @@ public enum CompiledPredicateKind : byte {
     Recently,
     CompareState,
     TimerElapsed,
+    All,
+    Any,
+    Not,
 }
 /// <summary>The flattened, fixed-point form of one predicate.</summary>
-public readonly record struct CompiledPredicate(ActionFact Fact, int RecencySlot, int StateSlot, FixedQ4816 Value, ActionStateComparison Comparison, CompiledPredicateKind Kind);
+public readonly record struct CompiledPredicate(ActionFact Fact, int RecencySlot, int StateSlot, FixedQ4816 Value, ActionStateComparison Comparison, CompiledPredicateKind Kind, int Arity = 0);
+/// <summary>Representation bound for one compiled body predicate program.</summary>
+public static class CompiledPredicateCapacity {
+    /// <summary>The most postfix tokens one body gate may execute.</summary>
+    public const int MaxTokens = 256;
+}
 /// <summary>One compiled instruction shared by program phases and action triggers.</summary>
 /// <remarks><c>StateName</c> carries <see cref="BodyMotionOp.Generate"/>'s draw site — the one row a generate names,
 /// since a site's source and cursor are its own — and is <see langword="null"/> for every other operation except

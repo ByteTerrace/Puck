@@ -6,6 +6,37 @@ using Puck.Physics.Motion;
 namespace Puck.World.Server;
 
 public sealed partial class WorldBody {
+    // The action-state portion of WorldRuntimeStateHash's authoritative boundary. Definition order is the compiled
+    // register order, so no sort or temporary collection is needed.
+    internal void AppendActionStateHash(ref Fnv1aHash hash) {
+        hash.Add(value: ((uint)m_actionStateDefinitions.Length));
+
+        for (var slot = 0; (slot < m_actionStateDefinitions.Length); slot++) {
+            var definition = m_actionStateDefinitions[slot];
+
+            hash.Add(value: Fnv1aHash.Compute(values: definition.Name.AsSpan()));
+            hash.Add(value: ((byte)definition.Kind));
+            hash.Add(value: ((byte)definition.Lifetime));
+            hash.Add(value: m_actionStateValues[slot].Value);
+            hash.Add(value: m_actionStateTimers[slot]);
+        }
+
+        hash.Add(value: ((uint)m_laneActions.Length));
+
+        for (var lane = 0; (lane < m_laneActions.Length); lane++) {
+            ref var runtime = ref m_laneActions[lane];
+
+            hash.Add(value: runtime.Latch);
+            hash.Add(value: runtime.FactHeld);
+            hash.Add(value: ((uint)(runtime.Recency?.Length ?? 0)));
+
+            if (runtime.Recency is { } recency) {
+                for (var index = 0; (index < recency.Length); index++) {
+                    hash.Add(value: recency[index]);
+                }
+            }
+        }
+    }
     internal void AppendDurableStateDeclarations(List<(string Name, ActionStateKind Kind)> declarations) {
         foreach (var definition in m_actionStateDefinitions) {
             if (definition.Lifetime == ActionStateLifetime.Durable) {
@@ -446,6 +477,8 @@ public sealed partial class WorldBody {
             ActionFact.Falling => (m_verticalVelocity < FixedQ4816.Zero),
             ActionFact.Submerged => m_submerged,
             ActionFact.AtSurface => m_atSurface,
+            ActionFact.Climbing => HoldsUnwalkableSurface(),
+            ActionFact.Flying => HoldsFree(),
             _ => (m_affectingSubject >= 0),
         };
     }
@@ -462,7 +495,33 @@ public sealed partial class WorldBody {
         return -1;
     }
     private bool GateOpen(CompiledPredicate[] gate, in LaneActionRuntime state) {
+        if (gate.Length == 0) {
+            return true;
+        }
+
+        Span<bool> stack = stackalloc bool[CompiledPredicateCapacity.MaxTokens];
+        var top = 0;
+
         foreach (var predicate in gate) {
+            if (predicate.Kind == CompiledPredicateKind.Not) {
+                stack[top - 1] = !stack[top - 1];
+                continue;
+            }
+            if (predicate.Kind is CompiledPredicateKind.All or CompiledPredicateKind.Any) {
+                var start = (top - predicate.Arity);
+                var holdsGroup = (predicate.Kind == CompiledPredicateKind.All);
+
+                for (var index = start; index < top; index++) {
+                    holdsGroup = ((predicate.Kind == CompiledPredicateKind.All)
+                        ? (holdsGroup && stack[index])
+                        : (holdsGroup || stack[index]));
+                }
+
+                top = start;
+                stack[top++] = holdsGroup;
+                continue;
+            }
+
             var holds = predicate.Kind switch {
                 CompiledPredicateKind.Now => FactHolds(fact: predicate.Fact),
                 CompiledPredicateKind.Recently => (state.Recency![predicate.RecencySlot] > 0),
@@ -473,12 +532,10 @@ public sealed partial class WorldBody {
                 _ => (m_actionStateTimers[predicate.StateSlot] == 0),
             };
 
-            if (!holds) {
-                return false;
-            }
+            stack[top++] = holds;
         }
 
-        return true;
+        return ((top == 1) && stack[0]);
     }
     private static long InitialRaw(in CompiledActionStateSlot definition) => ((definition.Kind == ActionStateKind.Counter)
         ? definition.InitialValue.Value
@@ -540,22 +597,46 @@ public sealed partial class WorldBody {
             m_laneTimers[ordinal] = holdTicks;
         }
     }
-    // A motion-response gate: a flattened conjunction of BODY-FACT predicates only (Now/Recently — the validator rejects
-    // action-state predicates on a response gate). Every element must hold.
+    // A motion-response gate: a postfix Boolean program of BODY-FACT predicates only (Now/Recently — the validator
+    // rejects action-state predicates on a response gate).
     private bool MotionGateOpen(CompiledPredicate[] gate) {
+        if (gate.Length == 0) {
+            return true;
+        }
+
+        Span<bool> stack = stackalloc bool[CompiledPredicateCapacity.MaxTokens];
+        var top = 0;
+
         foreach (var predicate in gate) {
+            if (predicate.Kind == CompiledPredicateKind.Not) {
+                stack[top - 1] = !stack[top - 1];
+                continue;
+            }
+            if (predicate.Kind is CompiledPredicateKind.All or CompiledPredicateKind.Any) {
+                var start = (top - predicate.Arity);
+                var holdsGroup = (predicate.Kind == CompiledPredicateKind.All);
+
+                for (var index = start; index < top; index++) {
+                    holdsGroup = ((predicate.Kind == CompiledPredicateKind.All)
+                        ? (holdsGroup && stack[index])
+                        : (holdsGroup || stack[index]));
+                }
+
+                top = start;
+                stack[top++] = holdsGroup;
+                continue;
+            }
+
             var holds = predicate.Kind switch {
                 CompiledPredicateKind.Now => FactHolds(fact: predicate.Fact),
                 CompiledPredicateKind.Recently => (m_motionRecency[predicate.RecencySlot] > 0),
                 _ => false,
             };
 
-            if (!holds) {
-                return false;
-            }
+            stack[top++] = holds;
         }
 
-        return true;
+        return ((top == 1) && stack[0]);
     }
     // The per-tick action machinery: for each ordinal carrying a compiled binding, derive its edge (the folded value
     // crossing the channel's threshold against the previous sub-step — never carried), refresh the recency clocks (a

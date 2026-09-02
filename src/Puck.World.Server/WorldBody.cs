@@ -158,13 +158,17 @@ public sealed partial class WorldBody {
     // so a teleport can never manufacture a target-velocity impulse out of the zeroed previous target.
     private FixedVector3 m_planarPreviousTarget;
     private bool m_planarFollowerSeeded;
-    // The swim vertical dynamics follower's own Q32 state and previous target — the one-dimensional counterparts of
-    // m_planarFollower/m_planarPreviousTarget, stepped by ApplyBuoyancyAndSurface under the SAME compiled
-    // FixedMotionDynamics.Planar propagator a swim kit's planar lanes step. m_verticalFollowerSeeded is the vertical
-    // lane's counterpart to m_planarFollowerSeeded.
+    // The medium law's vertical dynamics follower's own Q32 state and previous target — the one-dimensional
+    // counterparts of m_planarFollower/m_planarPreviousTarget, stepped by ApplyHold's medium law under the SAME
+    // compiled FixedMotionDynamics.Planar propagator the kit's planar lanes step. m_verticalFollowerSeeded is the
+    // vertical lane's counterpart to m_planarFollowerSeeded.
     private SecondOrderState m_verticalFollower;
     private FixedQ4816 m_verticalPreviousTarget;
     private bool m_verticalFollowerSeeded;
+    // Where this body belongs — the position its activation placed it at. Producers measure their own steering
+    // against it (see ProduceWanderIntent), so it is simulation state: it decides trajectories. A teleport never
+    // moves it, which is what separates "where the body is" from "where the body is from".
+    private FixedVector3 m_home;
     // The avatar's simulation position. See Position.
     private FixedVector3 m_position;
     // The position captured at the top of the most recent Advance — the swept portal-crossing scan's segment start
@@ -180,13 +184,6 @@ public sealed partial class WorldBody {
     // device image or a remote client's submission), admitted unless the source is Idle; the producer image is the
     // server-side producer's output, used only when no submission arrived and the source names it.
     private PlayerIntent m_submittedIntent;
-    // The swim-specific compiled half (null for every non-swim kit) and the swim integrator's own carry: ONE ramp
-    // accumulator for the whole thrust convergence (planar and vertical alike), the same "remainder binds to the
-    // tick base" shape as m_planarRampAccumulator — so alternating engage/release rates through it stays exact, no
-    // separate accumulator per stage. The medium surface arrives fresh every tick from the population's field lattice
-    // (SetMediumSurface, sampled before this body's own Advance runs); the two swim facts are written by the surface
-    // stage and read one tick behind, the same discipline m_grounded follows.
-    private FixedSwimTuning? m_swimTuning;
     private int m_tapeCount;
     private int m_tapeHead;
     // A committed authority handoff can precede the new input stream's first publication by one or more destination
@@ -221,11 +218,10 @@ public sealed partial class WorldBody {
     private FixedQ4816 m_yaw;
 
     // Which arm's compiled tuning ResolveMoveSpeed (and every other per-arm resolve) dispatches on — set by
-    // SetTuning alongside the compiled tuning itself, never re-derived. A new model arm (swim) is a localized
-    // addition: a new member here, its SetTuning case, and its ResolveMoveSpeed case — the same localized-addition
-    // rule SetTuning's own remarks already state. Swim compiles its speed into the SAME shared FixedMotionTuning
-    // slots grounded reads, so its ResolveMoveSpeed case rides grounded's case rather than forking one.
-    private enum CompiledMotionArm : byte { Grounded, Vehicle, Swim }
+    // SetTuning alongside the compiled tuning itself, never re-derived. A new model arm is a localized addition: a
+    // new member here, its SetTuning case, and its ResolveMoveSpeed case — the same localized-addition rule
+    // SetTuning's own remarks already state.
+    private enum CompiledMotionArm : byte { Grounded, Vehicle }
 
     // The vehicle arm's held drift channel: -1 (cannot drift) unless the kit's model names one that resolves —
     // the same resolved-outside/consumed-as-ordinal pattern as m_sprintChannelOrdinal.
@@ -344,7 +340,10 @@ public sealed partial class WorldBody {
     // (Warp/Face/Pose/SetBodyMotionProgram, and an over-ceiling Reconcile) write Teleport; a smoothed Reconcile writes Correction.
     // Last write wins within a tick; TakeContinuity consumes it at snapshot emit.
     private EntityContinuity m_continuity = EntityContinuity.Continuous;
-    private FixedRateAccumulator m_swimThrustRampAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
+    // The medium law's thrust convergence carry: ONE ramp accumulator for the whole convergence, the same
+    // "remainder binds to the tick base" shape as m_planarRampAccumulator — so alternating engage/release rates
+    // through it stays exact, with no separate accumulator per stage.
+    private FixedRateAccumulator m_mediumThrustRampAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
 
     /// <summary>Initializes a new instance of the <see cref="WorldBody"/> class under a motion model, its kit's
     /// per-channel action bindings, and its kit's body motion program. A <see langword="null"/> binding leaves that ordinal
@@ -367,9 +366,11 @@ public sealed partial class WorldBody {
     /// <param name="planarDynamics">The kit's compiled second-order follower
     /// (<see cref="FixedWorldKit.PlanarDynamics"/>), or <see langword="null"/> when the kit shapes planar velocity
     /// through its response table instead.</param>
+    /// <param name="holds">The kit's compiled ordered hold list (<see cref="FixedWorldKit.Holds"/>), or
+    /// <see langword="null"/> for a kit authoring none.</param>
     /// <exception cref="ArgumentNullException"><paramref name="program"/> or <paramref name="programs"/> is <see langword="null"/>.</exception>
-    public WorldBody(WorldMotionModel motion, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedQ4816 maxSmoothError, CompiledActionSpec?[]? actions = null, FixedQ4816[]? actionThresholds = null, ChannelShape[]? actionShapes = null, bool[]? roleMask = null, RoleChannelOrdinals roleOrdinals = default, CompiledActionStateSlot[]? actionState = null, FixedWorldCollider? collider = null, int sprintChannelOrdinal = -1, int driftChannelOrdinal = -1, FixedMotionDynamics? planarDynamics = null) {
-        SetTuning(motion: motion, planarDynamics: planarDynamics);
+    public WorldBody(WorldMotionModel motion, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedQ4816 maxSmoothError, CompiledActionSpec?[]? actions = null, FixedQ4816[]? actionThresholds = null, ChannelShape[]? actionShapes = null, bool[]? roleMask = null, RoleChannelOrdinals roleOrdinals = default, CompiledActionStateSlot[]? actionState = null, FixedWorldCollider? collider = null, int sprintChannelOrdinal = -1, int driftChannelOrdinal = -1, FixedMotionDynamics? planarDynamics = null, FixedBodyHold[]? holds = null) {
+        SetTuning(holds: holds, motion: motion, planarDynamics: planarDynamics);
         m_bodyMotionProgram = (program ?? throw new ArgumentNullException(paramName: nameof(program)));
         m_bodyMotionPrograms = (programs ?? throw new ArgumentNullException(paramName: nameof(programs)));
         CopyChannelBindings(

@@ -20,6 +20,7 @@ public static class CreationCanonicalizer {
 
     private static readonly HashSet<string> KnownMemberNames = new(comparer: StringComparer.OrdinalIgnoreCase) {
         "schema", "name", "palette", "shapes", "frames", "chains", "cameras", "behavior", "textRuns", "parts",
+        "noise", "drivers", "effectors",
     };
 
     private static bool IsFinite(Vector3 vector) =>
@@ -360,6 +361,621 @@ public static class CreationCanonicalizer {
                     Message: $"duplicate chain id {chains[i].Id}."
                 ));
             }
+        }
+    }
+    private static void ValidateDrivers(CreationDocument document, List<DocumentValidationError> errors) {
+        if (document.Drivers is not { Count: > 0 } drivers) {
+            return;
+        }
+
+        if (drivers.Count > CreationDocument.MaxDrivers) {
+            errors.Add(item: new(
+                Message: $"{drivers.Count} entries exceeds the {CreationDocument.MaxDrivers}-driver list.",
+                Path: "drivers"
+            ));
+        }
+
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        for (var i = 0; (i < drivers.Count); i++) {
+            var driver = drivers[i];
+
+            if (string.IsNullOrWhiteSpace(value: driver.Name)) {
+                errors.Add(item: new(
+                    Message: "name is empty.",
+                    Path: $"drivers[{i}].name"
+                ));
+            } else if (!names.Add(item: driver.Name)) {
+                errors.Add(item: new(
+                    Message: $"duplicate driver name '{driver.Name}'.",
+                    Path: $"drivers[{i}].name"
+                ));
+            }
+            if (!CreationDriverDocument.IsSignal(signal: driver.Signal)) {
+                errors.Add(item: new(
+                    Message: $"signal '{driver.Signal}' is not recognized; the signals are '{CreationDriverDocument.SignalPlanarTravel}', '{CreationDriverDocument.SignalTravel}', '{CreationDriverDocument.SignalTime}', '{CreationDriverDocument.SignalSpeed}', '{CreationDriverDocument.SignalVerticalSpeed}', and '{CreationDriverDocument.SignalTurnRate}'.",
+                    Path: $"drivers[{i}].signal"
+                ));
+            }
+            if (
+                (driver.Cadence.Reference is null) &&
+                (!float.IsFinite(f: driver.Cadence.Value) ||
+                (MathF.Abs(x: driver.Cadence.Value) > CreationDriverDocument.MaxCadence))
+            ) {
+                errors.Add(item: new(
+                    Message: $"cadence {driver.Cadence.Value} is outside ±{CreationDriverDocument.MaxCadence}.",
+                    Path: $"drivers[{i}].cadence"
+                ));
+            }
+
+            ValidateGate(
+                errors: errors,
+                gate: driver.When,
+                path: $"drivers[{i}].when"
+            );
+        }
+    }
+    // A bone's index in `shapes`, or −1. Names are the same handle `parent` resolves against, so the two agree by
+    // construction.
+    private static int ShapeIndex(IReadOnlyList<ShapeDocument> shapes, string? name) {
+        if (name is null) {
+            return -1;
+        }
+        for (var index = 0; (index < shapes.Count); index++) {
+            if (string.Equals(
+                a: shapes[index].Name?.Value,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+    // Whether `descendant` reaches `ancestor` by walking `parent`. A parent is validated to be declared earlier, so
+    // the walk strictly decreases and terminates even on a document that bypassed that check.
+    private static bool DescendsFrom(IReadOnlyList<ShapeDocument> shapes, int descendant, int ancestor) {
+        var cursor = descendant;
+
+        while (cursor > ancestor) {
+            var next = ShapeIndex(
+                name: shapes[cursor].Parent,
+                shapes: shapes
+            );
+
+            if (next >= cursor) {
+                return false;
+            }
+
+            cursor = next;
+        }
+
+        return (cursor == ancestor);
+    }
+    private static void ValidateEffectors(CreationDocument document, List<DocumentValidationError> errors) {
+        if (document.Effectors is not { Count: > 0 } effectors) {
+            return;
+        }
+
+        if (effectors.Count > CreationDocument.MaxEffectors) {
+            errors.Add(item: new(
+                Message: $"{effectors.Count} entries exceeds the {CreationDocument.MaxEffectors}-effector list.",
+                Path: "effectors"
+            ));
+        }
+
+        var shapes = (document.Shapes ?? []);
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        for (var i = 0; (i < effectors.Count); i++) {
+            var effector = effectors[i];
+            var path = $"effectors[{i}]";
+
+            if (string.IsNullOrWhiteSpace(value: effector.Name)) {
+                errors.Add(item: new(
+                    Message: "name is empty.",
+                    Path: $"{path}.name"
+                ));
+            } else if (!names.Add(item: effector.Name)) {
+                errors.Add(item: new(
+                    Message: $"duplicate effector name '{effector.Name}'.",
+                    Path: $"{path}.name"
+                ));
+            }
+
+            ValidateGate(
+                errors: errors,
+                gate: effector.When,
+                path: $"{path}.when"
+            );
+
+            if (
+                (effector.Weight is { Reference: null } weight) &&
+                (!float.IsFinite(f: weight.Value) ||
+                (weight.Value < 0f) ||
+                (weight.Value > 1f))
+            ) {
+                errors.Add(item: new(
+                    Message: $"weight {weight.Value} is outside [0, 1].",
+                    Path: $"{path}.weight"
+                ));
+            }
+
+            ValidateEffectorChain(
+                effector: effector,
+                errors: errors,
+                path: path,
+                shapes: shapes
+            );
+            ValidateEffectorTarget(
+                errors: errors,
+                path: $"{path}.target",
+                target: effector.Target
+            );
+            ValidateEffectorPlant(
+                document: document,
+                errors: errors,
+                path: $"{path}.plant",
+                plant: effector.Plant
+            );
+        }
+    }
+    private static void ValidateEffectorChain(IReadOnlyList<ShapeDocument> shapes, CreationEffectorDocument effector, List<DocumentValidationError> errors, string path) {
+        var chain = (effector.Chain ?? []);
+
+        if (chain.Count < CreationEffectorDocument.MinChainBones) {
+            errors.Add(item: new(
+                Message: $"{chain.Count} bones is fewer than the {CreationEffectorDocument.MinChainBones} a chain needs; one bone has no joint to bend at, which a swing already says.",
+                Path: $"{path}.chain"
+            ));
+
+            return;
+        }
+        if (chain.Count > CreationEffectorDocument.MaxChainBones) {
+            errors.Add(item: new(
+                Message: $"{chain.Count} bones exceeds the {CreationEffectorDocument.MaxChainBones}-bone chain.",
+                Path: $"{path}.chain"
+            ));
+
+            return;
+        }
+
+        var bones = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var previous = -1;
+        var resolved = true;
+
+        for (var i = 0; (i < chain.Count); i++) {
+            var index = ShapeIndex(
+                name: chain[i],
+                shapes: shapes
+            );
+
+            if (index < 0) {
+                errors.Add(item: new(
+                    Message: $"names no shape '{chain[i]}'.",
+                    Path: $"{path}.chain[{i}]"
+                ));
+                resolved = false;
+
+                continue;
+            }
+            if (!bones.Add(item: chain[i])) {
+                errors.Add(item: new(
+                    Message: $"duplicate bone '{chain[i]}'.",
+                    Path: $"{path}.chain[{i}]"
+                ));
+                resolved = false;
+
+                continue;
+            }
+            if (shapes[index].Domain is { Count: > 0 }) {
+                errors.Add(item: new(
+                    Message: $"bone '{chain[i]}' carries domain operators, so it rides the placement root's transform and a solve could not move it.",
+                    Path: $"{path}.chain[{i}]"
+                ));
+            }
+            if (
+                (previous >= 0) &&
+                !DescendsFrom(
+                ancestor: previous,
+                descendant: index,
+                shapes: shapes
+            )
+            ) {
+                errors.Add(item: new(
+                    Message: $"bone '{chain[i]}' does not descend from '{chain[i - 1]}' through parent, so the chain is not one limb.",
+                    Path: $"{path}.chain[{i}]"
+                ));
+                resolved = false;
+            }
+
+            previous = index;
+        }
+
+        var tip = ShapeIndex(
+            name: effector.Tip,
+            shapes: shapes
+        );
+
+        if (tip < 0) {
+            errors.Add(item: new(
+                Message: $"names no shape '{effector.Tip}'.",
+                Path: $"{path}.tip"
+            ));
+        } else if (
+            resolved &&
+            (previous >= 0) &&
+            !DescendsFrom(
+            ancestor: previous,
+            descendant: tip,
+            shapes: shapes
+        )
+        ) {
+            errors.Add(item: new(
+                Message: $"tip '{effector.Tip}' does not descend from the chain's last bone '{chain[^1]}', so a solve could not move it.",
+                Path: $"{path}.tip"
+            ));
+        }
+    }
+    private static void ValidateEffectorTarget(CreationEffectorTargetDocument? target, List<DocumentValidationError> errors, string path) {
+        if (target is null) {
+            errors.Add(item: new(
+                Message: "target is required.",
+                Path: path
+            ));
+
+            return;
+        }
+        if (!CreationEffectorTargetDocument.IsKind(kind: target.Kind)) {
+            errors.Add(item: new(
+                Message: $"kind '{target.Kind}' is not recognized; the kinds are '{CreationEffectorTargetDocument.KindSurface}', '{CreationEffectorTargetDocument.KindBody}', and '{CreationEffectorTargetDocument.KindState}'.",
+                Path: $"{path}.kind"
+            ));
+
+            return;
+        }
+
+        switch (target.Kind) {
+            case CreationEffectorTargetDocument.KindSurface: {
+                if (target.Direction is not { } direction) {
+                    errors.Add(item: new(
+                        Message: "direction is required for a surface target.",
+                        Path: $"{path}.direction"
+                    ));
+                } else if (!IsFinite(vector: direction)) {
+                    errors.Add(item: new(
+                        Message: "direction is non-finite.",
+                        Path: $"{path}.direction"
+                    ));
+                } else if (direction.Value == Vector3.Zero) {
+                    errors.Add(item: new(
+                        Message: "direction is zero, which names no direction.",
+                        Path: $"{path}.direction"
+                    ));
+                }
+                if (target.Reach is not { } reach) {
+                    errors.Add(item: new(
+                        Message: "reach is required for a surface target.",
+                        Path: $"{path}.reach"
+                    ));
+                } else if (
+                    (reach.Reference is null) &&
+                    (!float.IsFinite(f: reach.Value) ||
+                    (reach.Value <= 0f) ||
+                    (reach.Value > CreationEffectorTargetDocument.MaxReach))
+                ) {
+                    errors.Add(item: new(
+                        Message: $"reach {reach.Value} is outside (0, {CreationEffectorTargetDocument.MaxReach}] world units.",
+                        Path: $"{path}.reach"
+                    ));
+                }
+                if (
+                    (target.Standoff is { Reference: null } standoff) &&
+                    (!float.IsFinite(f: standoff.Value) ||
+                    (standoff.Value < 0f) ||
+                    (standoff.Value > CreationEffectorTargetDocument.MaxStandoff))
+                ) {
+                    errors.Add(item: new(
+                        Message: $"standoff {standoff.Value} is outside [0, {CreationEffectorTargetDocument.MaxStandoff}] world units.",
+                        Path: $"{path}.standoff"
+                    ));
+                }
+
+                break;
+            }
+            case CreationEffectorTargetDocument.KindBody: {
+                if (target.Index is not { } index) {
+                    errors.Add(item: new(
+                        Message: "index is required for a body target.",
+                        Path: $"{path}.index"
+                    ));
+                } else if (index < 0) {
+                    errors.Add(item: new(
+                        Message: $"index {index} is negative.",
+                        Path: $"{path}.index"
+                    ));
+                }
+                if (target.Offset is { } offset) {
+                    if (!IsFinite(vector: offset)) {
+                        errors.Add(item: new(
+                            Message: "offset is non-finite.",
+                            Path: $"{path}.offset"
+                        ));
+                    } else if (offset.Length() > CreationEffectorTargetDocument.MaxOffset) {
+                        errors.Add(item: new(
+                            Message: $"offset reaches {offset.Length()}, past the {CreationEffectorTargetDocument.MaxOffset}-unit bound.",
+                            Path: $"{path}.offset"
+                        ));
+                    }
+                }
+
+                break;
+            }
+            default: {
+                if (!CreationDriverDocument.IsStateSignal(signal: target.Reference)) {
+                    errors.Add(item: new(
+                        Message: $"reference '{target.Reference}' is not a '{CreationDriverDocument.SignalStatePrefix}<row>[.<key>]' state reference.",
+                        Path: $"{path}.reference"
+                    ));
+                }
+
+                break;
+            }
+        }
+    }
+    private static void ValidateEffectorPlant(CreationDocument document, CreationPlantDocument? plant, List<DocumentValidationError> errors, string path) {
+        if (plant is null) {
+            return;
+        }
+        if ((document.Drivers ?? []).All(predicate: row => !string.Equals(
+            a: row.Name,
+            b: plant.Driver,
+            comparisonType: StringComparison.Ordinal
+        ))) {
+            errors.Add(item: new(
+                Message: $"names no declared driver '{plant.Driver}'.",
+                Path: $"{path}.driver"
+            ));
+        }
+        if (plant.Window.Reference is not null) {
+            return;
+        }
+
+        var window = plant.Window.Value;
+
+        if (
+            !float.IsFinite(f: window.X) ||
+            !float.IsFinite(f: window.Y) ||
+            (window.X < 0f) ||
+            (window.Y < 0f) ||
+            (window.X >= CreationPlantDocument.TwoPi) ||
+            (window.Y >= CreationPlantDocument.TwoPi)
+        ) {
+            errors.Add(item: new(
+                Message: $"window [{window.X}, {window.Y}] is outside [0, 2π) radians; a driver's phase is wrapped, so a window past one turn names phases that never occur.",
+                Path: $"{path}.window"
+            ));
+        }
+    }
+    // The token vocabulary is split across two assemblies on purpose: the BodyFacts names belong to the simulation's
+    // motion vocabulary, which this document family does not reference, so only the shape of the gate and the two
+    // presentation tokens are decidable here. An unresolvable fact name gates the driver off at the consumer.
+    private static void ValidateGate(IReadOnlyList<string>? gate, List<DocumentValidationError> errors, string path) {
+        if (gate is not { Count: > 0 } tokens) {
+            return;
+        }
+
+        if (tokens.Count > CreationDriverDocument.MaxGateTokens) {
+            errors.Add(item: new(
+                Message: $"{tokens.Count} tokens exceeds the {CreationDriverDocument.MaxGateTokens}-token gate.",
+                Path: path
+            ));
+        }
+
+        var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        for (var i = 0; (i < tokens.Count); i++) {
+            var token = tokens[i];
+
+            if (string.IsNullOrWhiteSpace(value: token)) {
+                errors.Add(item: new(
+                    Message: "token is empty.",
+                    Path: $"{path}[{i}]"
+                ));
+
+                continue;
+            }
+            if (!seen.Add(item: token)) {
+                errors.Add(item: new(
+                    Message: $"duplicate gate token '{token}'.",
+                    Path: $"{path}[{i}]"
+                ));
+            }
+            if (
+                (tokens.Count > 1) &&
+                string.Equals(
+                a: token,
+                b: CreationDriverDocument.WhenAlways,
+                comparisonType: StringComparison.Ordinal
+            )
+            ) {
+                errors.Add(item: new(
+                    Message: $"'{CreationDriverDocument.WhenAlways}' is the absence of a condition, so it cannot join a conjunction; drop it or drop the other tokens.",
+                    Path: $"{path}[{i}]"
+                ));
+            }
+        }
+
+        if (
+            seen.Contains(item: CreationDriverDocument.TokenMoving) &&
+            seen.Contains(item: CreationDriverDocument.TokenStill)
+        ) {
+            errors.Add(item: new(
+                Message: $"'{CreationDriverDocument.TokenMoving}' and '{CreationDriverDocument.TokenStill}' are negations, so the gate can never hold.",
+                Path: path
+            ));
+        }
+    }
+    // A swing or a slide is presentation-only, so nothing downstream throws on a bad one — it would simply draw wrong
+    // (a zero axis is an identity rotation, an unresolvable driver never advances, either facet beside a domain op
+    // composes onto a transform nothing reads for that shape's geometry). Each of those is refused rather than folded
+    // to a default: a limb that silently never moves reads as a rig defect, not as authored data.
+    private static void ValidateShapeAnimation(CreationDocument document, ShapeDocument shape, List<DocumentValidationError> errors, string path) {
+        var swings = (shape.Swings ?? []);
+        var slides = (shape.Slides ?? []);
+
+        if (shape.Parent is { } parent) {
+            var shapes = (document.Shapes ?? []);
+            var index = 0;
+            var parentIndex = -1;
+
+            while ((index < shapes.Count) && !ReferenceEquals(objA: shapes[index], objB: shape)) {
+                index++;
+            }
+
+            for (var candidate = 0; (candidate < shapes.Count); candidate++) {
+                if (string.Equals(
+                    a: shapes[candidate].Name?.Value,
+                    b: parent,
+                    comparisonType: StringComparison.Ordinal
+                )) {
+                    parentIndex = candidate;
+
+                    break;
+                }
+            }
+
+            if (parentIndex < 0) {
+                errors.Add(item: new(
+                    Message: $"names no shape '{parent}'.",
+                    Path: $"{path}.parent"
+                ));
+            } else if (parentIndex >= index) {
+                errors.Add(item: new(
+                    Message: $"parent '{parent}' must be declared before the shape it carries.",
+                    Path: $"{path}.parent"
+                ));
+            }
+            if (shape.Domain is { Count: > 0 }) {
+                errors.Add(item: new(
+                    Message: "a shape carrying domain operators rides the placement root's transform, so a parent's motion could not carry it.",
+                    Path: $"{path}.parent"
+                ));
+            }
+        }
+
+        if ((swings.Count + slides.Count) == 0) {
+            return;
+        }
+
+        if (swings.Count > ShapeDocument.MaxSwings) {
+            errors.Add(item: new(
+                Message: $"{swings.Count} entries exceeds the {ShapeDocument.MaxSwings}-swing list.",
+                Path: $"{path}.swings"
+            ));
+        }
+        if (slides.Count > ShapeDocument.MaxSlides) {
+            errors.Add(item: new(
+                Message: $"{slides.Count} entries exceeds the {ShapeDocument.MaxSlides}-slide list.",
+                Path: $"{path}.slides"
+            ));
+        }
+        if (shape.Domain is { Count: > 0 }) {
+            errors.Add(item: new(
+                Message: "a shape carrying domain operators rides the placement root's transform, so an animated facet on it would compose onto a transform its geometry does not read.",
+                Path: path
+            ));
+        }
+
+        for (var i = 0; (i < swings.Count); i++) {
+            var swing = swings[i];
+            var swingPath = $"{path}.swings[{i}]";
+
+            ValidateAnimationFacet(
+                amplitude: swing.Amplitude,
+                amplitudeUnit: "radians",
+                axis: swing.Axis,
+                document: document,
+                driver: swing.Driver,
+                errors: errors,
+                maxAmplitude: ShapeSwingDocument.MaxAmplitude,
+                path: swingPath,
+                phase: swing.Phase,
+                wave: swing.Wave
+            );
+
+            if (!IsFinite(vector: swing.Pivot)) {
+                errors.Add(item: new(
+                    Message: "pivot is non-finite.",
+                    Path: $"{swingPath}.pivot"
+                ));
+            }
+        }
+
+        for (var i = 0; (i < slides.Count); i++) {
+            var slide = slides[i];
+
+            ValidateAnimationFacet(
+                amplitude: slide.Amplitude,
+                amplitudeUnit: "creation units",
+                axis: slide.Axis,
+                document: document,
+                driver: slide.Driver,
+                errors: errors,
+                maxAmplitude: ShapeSlideDocument.MaxAmplitude,
+                path: $"{path}.slides[{i}]",
+                phase: slide.Phase,
+                wave: slide.Wave
+            );
+        }
+    }
+    private static void ValidateAnimationFacet(CreationDocument document, List<DocumentValidationError> errors, string path, string driver, DocumentVector3 axis, DocumentScalar amplitude, float maxAmplitude, string amplitudeUnit, DocumentScalar? phase, string? wave) {
+        if ((document.Drivers ?? []).All(predicate: row => !string.Equals(
+            a: row.Name,
+            b: driver,
+            comparisonType: StringComparison.Ordinal
+        ))) {
+            errors.Add(item: new(
+                Message: $"names no declared driver '{driver}'.",
+                Path: $"{path}.driver"
+            ));
+        }
+        if (!IsFinite(vector: axis)) {
+            errors.Add(item: new(
+                Message: "axis is non-finite.",
+                Path: $"{path}.axis"
+            ));
+        } else if (axis.Value == Vector3.Zero) {
+            errors.Add(item: new(
+                Message: "axis is zero, which names no direction.",
+                Path: $"{path}.axis"
+            ));
+        }
+        if (
+            (amplitude.Reference is null) &&
+            (!float.IsFinite(f: amplitude.Value) ||
+            (MathF.Abs(x: amplitude.Value) > maxAmplitude))
+        ) {
+            errors.Add(item: new(
+                Message: $"amplitude {amplitude.Value} is outside ±{maxAmplitude} {amplitudeUnit}.",
+                Path: $"{path}.amplitude"
+            ));
+        }
+        if (
+            (phase is { Reference: null } offset) &&
+            !float.IsFinite(f: offset.Value)
+        ) {
+            errors.Add(item: new(
+                Message: "phase is non-finite.",
+                Path: $"{path}.phase"
+            ));
+        }
+        if (!CreationWave.IsEvaluable(wave: wave)) {
+            errors.Add(item: new(
+                Message: $"wave '{wave}' is not recognized; the waveforms are '{CreationWave.Sine}', '{CreationWave.HalfSine}', '{CreationWave.Linear}', '{CreationWave.Constant}', and '{CreationWave.CurvePrefix}<row>'.",
+                Path: $"{path}.wave"
+            ));
         }
     }
     // A NaN/infinite param would reach SdfProgramBuilder's own throwing guards at emission time (e.g.
@@ -815,6 +1431,138 @@ public static class CreationCanonicalizer {
 
         return normalized;
     }
+    // Absent stays absent through all three animation lists, so a creation authored without them keeps its canonical
+    // bytes and hash; a present list writes every optional member out in full with a unit axis, the form the client's
+    // per-frame composition reads without re-deciding anything.
+    private static List<CreationDriverDocument>? NormalizeDrivers(IReadOnlyList<CreationDriverDocument>? drivers) {
+        if (drivers is not { Count: > 0 } source) {
+            return null;
+        }
+
+        var normalized = new List<CreationDriverDocument>(capacity: source.Count);
+
+        foreach (var driver in source) {
+            normalized.Add(item: driver with {
+                Cadence = ((driver.Cadence.Reference is not null)
+                ? driver.Cadence
+                : Math.Clamp(
+                value: (float.IsFinite(f: driver.Cadence.Value)
+                ? driver.Cadence.Value
+                : 0f),
+                max: CreationDriverDocument.MaxCadence,
+                min: -CreationDriverDocument.MaxCadence
+            )),
+                When = ((driver.When is { Count: > 0 } gate)
+                ? [.. gate]
+                : [CreationDriverDocument.WhenAlways]),
+            });
+        }
+
+        return normalized;
+    }
+    // Absent stays absent so a creation authored without effectors keeps its canonical bytes and hash; a present list
+    // writes the gate and the weight out in full and normalizes a surface probe's direction to a unit vector, so the
+    // per-frame solve reads a settled form.
+    private static List<CreationEffectorDocument>? NormalizeEffectors(IReadOnlyList<CreationEffectorDocument>? effectors) {
+        if (effectors is not { Count: > 0 } source) {
+            return null;
+        }
+
+        var normalized = new List<CreationEffectorDocument>(capacity: source.Count);
+
+        foreach (var effector in source) {
+            normalized.Add(item: effector with {
+                Chain = [.. (effector.Chain ?? [])],
+                Target = (effector.Target with {
+                    Direction = ((effector.Target.Direction is { } direction)
+                    ? ((direction.Reference is not null)
+                        ? direction
+                        : NormalizeDirection(value: direction.Value))
+                    : null),
+                }),
+                Weight = ((effector.Weight is { Reference: not null } bound)
+                ? bound
+                : new DocumentScalar(value: Math.Clamp(
+                    value: (float.IsFinite(f: (effector.Weight?.Value ?? 1f))
+                    ? (effector.Weight?.Value ?? 1f)
+                    : 1f),
+                    max: 1f,
+                    min: 0f
+                ))),
+                When = ((effector.When is { Count: > 0 } gate)
+                ? [.. gate]
+                : [CreationDriverDocument.WhenAlways]),
+            });
+        }
+
+        return normalized;
+    }
+    private static List<ShapeSlideDocument>? NormalizeSlides(IReadOnlyList<ShapeSlideDocument>? slides) {
+        if (slides is not { Count: > 0 } source) {
+            return null;
+        }
+
+        var normalized = new List<ShapeSlideDocument>(capacity: source.Count);
+
+        foreach (var slide in source) {
+            normalized.Add(item: slide with {
+                Amplitude = ((slide.Amplitude.Reference is not null)
+                ? slide.Amplitude
+                : NormalizeAmplitude(
+                max: ShapeSlideDocument.MaxAmplitude,
+                value: slide.Amplitude.Value
+            )),
+                Axis = NormalizeDirection(value: slide.Axis),
+                Phase = ((slide.Phase is { Reference: not null } boundPhase)
+                ? boundPhase
+                : ((NormalizePhase(value: slide.Phase?.Value) is { } literalPhase)
+                    ? new DocumentScalar(value: literalPhase)
+                    : null)),
+                Wave = (slide.Wave ?? CreationWave.Sine),
+            });
+        }
+
+        return normalized;
+    }
+    private static List<ShapeSwingDocument>? NormalizeSwings(IReadOnlyList<ShapeSwingDocument>? swings) {
+        if (swings is not { Count: > 0 } source) {
+            return null;
+        }
+
+        var normalized = new List<ShapeSwingDocument>(capacity: source.Count);
+
+        foreach (var swing in source) {
+            normalized.Add(item: swing with {
+                Amplitude = ((swing.Amplitude.Reference is not null)
+                ? swing.Amplitude
+                : NormalizeAmplitude(
+                max: ShapeSwingDocument.MaxAmplitude,
+                value: swing.Amplitude.Value
+            )),
+                Axis = NormalizeDirection(value: swing.Axis),
+                Phase = ((swing.Phase is { Reference: not null } boundPhase)
+                ? boundPhase
+                : ((NormalizePhase(value: swing.Phase?.Value) is { } literalPhase)
+                    ? new DocumentScalar(value: literalPhase)
+                    : null)),
+                Wave = (swing.Wave ?? CreationWave.Sine),
+            });
+        }
+
+        return normalized;
+    }
+    private static float NormalizeAmplitude(float value, float max) =>
+        Math.Clamp(
+            value: (float.IsFinite(f: value)
+            ? value
+            : 0f),
+            max: max,
+            min: -max
+        );
+    private static float NormalizePhase(float? value) => (float.IsFinite(f: (value ?? 0f))
+        ? (value ?? 0f)
+        : 0f
+    );
     private static ShapeDomainOp NormalizeDomainOp(ShapeDomainOp op) {
         return op switch {
             ShapeDomainOp.Symmetry symmetry => new ShapeDomainOp.Symmetry(
@@ -1034,6 +1782,8 @@ public static class CreationCanonicalizer {
         foreach (var shape in (document.Shapes ?? [])) {
             shapes.Add(item: shape with {
                 Domain = NormalizeDomain(domain: shape.Domain),
+                Slides = NormalizeSlides(slides: shape.Slides),
+                Swings = NormalizeSwings(swings: shape.Swings),
                 Bend = Math.Clamp(
                 value: (shape.Bend ?? 0f),
                 max: ShapeDocument.MaxBend,
@@ -1126,6 +1876,8 @@ public static class CreationCanonicalizer {
             shapeIds: shapeIds
         ),
             Chains = chains,
+            Drivers = NormalizeDrivers(drivers: document.Drivers),
+            Effectors = NormalizeEffectors(effectors: document.Effectors),
             // A world-backed name has already resolved for validation, but its reference token remains the authored
             // source of truth. Preserve that token just like the creation's spatial document values do.
             Name = ((document.Name?.Reference is not null)
@@ -1234,13 +1986,37 @@ public static class CreationCanonicalizer {
                     Path: $"shapes[{i}].rotation"
                 ));
             }
+            if (
+                (shape.Joint is { } joint) &&
+                !IsFinite(vector: joint)
+            ) {
+                errors.Add(item: new(
+                    Message: "joint is non-finite.",
+                    Path: $"shapes[{i}].joint"
+                ));
+            }
 
             ValidateDomain(
                 domain: shape.Domain,
                 errors: errors,
                 path: $"shapes[{i}].domain"
             );
+            ValidateShapeAnimation(
+                document: document,
+                errors: errors,
+                path: $"shapes[{i}]",
+                shape: shape
+            );
         }
+
+        ValidateDrivers(
+            document: document,
+            errors: errors
+        );
+        ValidateEffectors(
+            document: document,
+            errors: errors
+        );
 
         ValidatePalette(
             document: document,

@@ -92,12 +92,12 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
         // A reserved channel (never a custom State row): WorldOwnedWorlds seeds each authored identity from a
         // TRIMMED copy of the template document that drops State, so a rule gated on a custom state row refuses at
         // load for the identity catalog even though the live server accepts it fine — $population needs no row at
-        // all and can never exceed float.MaxValue, so this gate is provably always false.
+        // all and can never exceed the signed integer carrier's maximum, so this gate is provably always false.
         var definition = Fixtures.BuildDocument() with {
             Rules = [
                 new WorldRule(
                     Name: ruleName,
-                    Gate: new ActionPredicate.CompareState(State: "$population", Comparison: ActionStateComparison.Greater, Value: float.MaxValue),
+                    Gate: new ActionPredicate.CompareState(State: "$population", Comparison: ActionStateComparison.Greater, Value: long.MaxValue),
                     Effects: [new ActionEffect.Save()]),
             ],
         };

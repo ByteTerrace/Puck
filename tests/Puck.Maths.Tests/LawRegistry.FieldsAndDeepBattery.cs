@@ -1274,6 +1274,14 @@ internal static partial class LawRegistry {
                 lawId: "integer.symmetry-lattice-exact-structure"
             )
         ),
+        // Default rather than Deep: twelve words over 240 nodes and one 240 x 240 pairing sweep is well under a second.
+        Case(
+            id: "integer.symmetry-word-permutation-order-and-pairing",
+            run: () => Laws.Claim(
+                claim: LatticeClaims.SymmetryWordAndPairingSurface,
+                lawId: "integer.symmetry-word-permutation-order-and-pairing"
+            )
+        ),
     ];
     private static LawCase[] HilbertCurveCases() => [
         // ---- HilbertCurve (locality-preserving space-filling curve) ----
@@ -2052,10 +2060,10 @@ internal static partial class LawRegistry {
             )
         ),
         Case(
-            id: "algebra.quadratic-surd-twin-lane",
+            id: "algebra.real-quadratic-twin-lane",
             run: () => Laws.Claim(
-                claim: DoublingTowerClaims.QuadraticSurdTwinLaneSurface,
-                lawId: "algebra.quadratic-surd-twin-lane"
+                claim: DoublingTowerClaims.RealQuadraticTwinLaneSurface,
+                lawId: "algebra.real-quadratic-twin-lane"
             )
         ),
         Case(

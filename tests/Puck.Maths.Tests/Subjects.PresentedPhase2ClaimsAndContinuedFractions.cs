@@ -1267,13 +1267,13 @@ internal static partial class Subjects {
     public static string? ResolventRemultiplies() {
         const int Order = 3;
 
-        var algebra = PresentedAlgebra<QuadraticSurd, RationalMaterial>.Create(presentation: CodiscreteQuiver<QuadraticSurd, RationalMaterial>(
+        var algebra = PresentedAlgebra<RealQuadratic, RationalMaterial>.Create(presentation: CodiscreteQuiver<RealQuadratic, RationalMaterial>(
             material: default,
             order: Order
         ));
         var keys = new long[(Order * Order)];
-        var transitions = new QuadraticSurd[(Order * Order)];
-        var quarter = QuadraticSurd.Rational(
+        var transitions = new RealQuadratic[(Order * Order)];
+        var quarter = RealQuadratic.Rational(
             denominator: 4,
             numerator: 1
         );
@@ -1313,7 +1313,7 @@ internal static partial class Subjects {
             return $"the resolvent was refused (attempted {resolventRefusal.Attempted}, key {resolventRefusal.SupportKey}, rank {resolventRefusal.StepsTaken})";
         }
 
-        var negated = new QuadraticSurd[chain.SupportCount];
+        var negated = new RealQuadratic[chain.SupportCount];
 
         for (var index = 0; (index < negated.Length); ++index) { negated[index] = -chain.Coefficients[index]; }
 
@@ -1368,11 +1368,11 @@ internal static partial class Subjects {
 
         // Each row sums to three quarters, so every expected absorption count is four; the exact value is the point.
         for (var source = 0; (source < Order); ++source) {
-            var total = QuadraticSurd.Zero;
+            var total = RealQuadratic.Zero;
 
             for (var target = 0; (target < Order); ++target) { total += fundamental[((source * ((long)Order)) + target)]; }
 
-            if (total != QuadraticSurd.Rational(
+            if (total != RealQuadratic.Rational(
                 denominator: 1,
                 numerator: 4
             )) { return $"the expected absorption count from state {source} is {total}, expected four"; }
@@ -1383,7 +1383,7 @@ internal static partial class Subjects {
         if (algebra.TrySolve(
             divisor: algebra.FromSupport(
                 keys: [0L],
-                coefficients: [QuadraticSurd.One]
+                coefficients: [RealQuadratic.One]
             ),
             target: algebra.Identity,
             quotient: out _,
@@ -1524,11 +1524,11 @@ internal static partial class Subjects {
         // inverts its own prefix sums by a construction sharing nothing with a convolution.
         foreach (var (numerator, denominator) in (((long Numerator, long Denominator)[])[(1L, 1L), (2L, 1L), (3L, 2L), (5L, 3L), (7L, 4L)])) {
             var measure = DiscreteMeasure.Create(
-                rate: QuadraticSurd.Rational(
+                rate: RealQuadratic.Rational(
                     denominator: denominator,
                     numerator: numerator
                 ),
-                offset: QuadraticSurd.Zero
+                offset: RealQuadratic.Zero
             );
             var steps = new BigInteger[(DegreeBound + 1)];
 

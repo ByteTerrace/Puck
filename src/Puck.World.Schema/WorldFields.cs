@@ -403,6 +403,7 @@ public sealed record WorldFieldRow(
 [JsonDerivedType(typeof(WorldLatticeFill.Rect), typeDiscriminator: "rect")]
 [JsonDerivedType(typeof(WorldLatticeFill.Noise), typeDiscriminator: "noise")]
 [JsonDerivedType(typeof(WorldLatticeFill.Scatter), typeDiscriminator: "scatter")]
+[JsonDerivedType(typeof(WorldLatticeFill.Draw), typeDiscriminator: "draw")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldLatticeFill {
     /// <summary>Gets the filled row's name -- compile-stamped, never authored inside a trait.</summary>
@@ -437,6 +438,29 @@ public abstract record WorldLatticeFill {
     /// envelope, refused otherwise).</param>
     /// <param name="Seed">The hash seed, folded with the world seed.</param>
     public sealed record Scatter(float Value, int Spacing, int Radius = 1, uint Seed = 0u) : WorldLatticeFill;
+    /// <summary>Every cell drawn from a numeric authored-randomness source — the per-cell lattice draw. The fill is
+    /// one pass of the row's own draw stream (seeded through the same ladder as a state-row site, under the row's
+    /// <c>state.&lt;row&gt;</c> descriptor): cell <c>k</c>, in cell-index order, takes the sample a site at
+    /// <c>drawCursor + k</c> would draw, so a weighted source under a deck mode deals its cards across the field and
+    /// reshuffles as it goes. The row's <see cref="WorldStateRow.DrawCursor"/>/<see cref="WorldStateRow.DrawDecks"/>
+    /// name the pass currently painted; <c>generate &lt;row&gt;</c> advances them one whole pass and repaints. Draw
+    /// occupies its authored paint position (overwriting earlier fills and preceding later fills); boot, rebuild,
+    /// load/reset, and a draw-rewinding undo repaint the pass the document names.</summary>
+    /// <param name="Source">A declared <c>generators</c> row, or <see langword="null"/> when <paramref name="Generator"/> is inlined.</param>
+    /// <param name="Generator">An inline numeric source, or <see langword="null"/> when <paramref name="Source"/> is named.</param>
+    public sealed record Draw([property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCellName? Source = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldGenerator? Generator = null) : WorldLatticeFill;
+
+    /// <summary>Returns the one <see cref="Draw"/> fill a lattice trait's paint carries, or <see langword="null"/>.</summary>
+    /// <param name="trait">The trait, or <see langword="null"/> for a row that is not a lattice.</param>
+    public static Draw? FindDraw(WorldStateLatticeTrait? trait) {
+        foreach (var fill in (trait?.Paint ?? [])) {
+            if (fill is Draw draw) {
+                return draw;
+            }
+        }
+
+        return null;
+    }
 }
 /// <summary>A reaction scalar: a literal number, or a reference to a scalar <c>fixed</c>-kind state row's slot cell
 /// read at each lattice step -- how a rule-driven row (a season, a weather intensity) modulates reaction chemistry

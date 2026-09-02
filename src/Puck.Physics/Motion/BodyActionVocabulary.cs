@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
 using Puck.Maths;
@@ -24,14 +25,170 @@ public enum ActionFact : byte {
     /// <summary>A targeted effect was applied by another body on the preceding completed tick.</summary>
     AffectedBy,
 
-    /// <summary>The body's origin is below the medium surface. Written by the swim model's surface stage
-    /// (<see cref="BodyMotionOp.ApplyBuoyancyAndSurface"/>); holds one tick behind that stage's evaluation, the same
+    /// <summary>The body's origin is below the medium surface. Written by the medium hold's law
+    /// (<see cref="BodyMotionOp.ApplyHold"/>); holds one tick behind that stage's evaluation, the same
     /// one-tick-behind discipline <see cref="Grounded"/> reads under.</summary>
     Submerged,
 
-    /// <summary>The body's origin is inside the swim model's surface bob band (within its float depth of the float
-    /// line). Written by the same surface stage as <see cref="Submerged"/>, on the same one-tick-behind terms.</summary>
+    /// <summary>The body's origin is inside the medium's surface bob band (within its float depth of the float
+    /// line). Written by the same medium law as <see cref="Submerged"/>, on the same one-tick-behind terms.</summary>
     AtSurface,
+
+    /// <summary>The body holds a surface the contact resolve would refuse to stand it on — a face outside the
+    /// world's own walkable cone. Not mutually exclusive with <see cref="Grounded"/>/<see cref="Airborne"/>: a gate
+    /// wanting "on a wall only" names this fact rather than negating the other two.</summary>
+    Climbing,
+
+    /// <summary>The body holds itself up with no surface at all — a free hold with lift.</summary>
+    Flying,
+}
+/// <summary>The publishable per-body fact set — one bit per body-state <see cref="ActionFact"/>, so the simulation's
+/// predicates and the wire share one vocabulary rather than a parallel enum. <see cref="ActionFact.AffectedBy"/> has
+/// no bit: it names a relationship to another body for one tick, not a state of this one.</summary>
+/// <remarks>The declared bit values are the wire encoding. A decoder refuses any bit outside <see cref="All"/> by
+/// name; the mask is not a closed set of legal COMBINATIONS, since a body can legitimately be grounded and rising in
+/// the same tick.</remarks>
+[Flags]
+public enum BodyFacts : ushort {
+    /// <summary>No fact holds — an inactive or never-advanced body.</summary>
+    None = 0,
+
+    /// <inheritdoc cref="ActionFact.Grounded"/>
+    Grounded = (1 << 0),
+
+    /// <inheritdoc cref="ActionFact.Airborne"/>
+    Airborne = (1 << 1),
+
+    /// <inheritdoc cref="ActionFact.Rising"/>
+    Rising = (1 << 2),
+
+    /// <inheritdoc cref="ActionFact.Falling"/>
+    Falling = (1 << 3),
+
+    /// <inheritdoc cref="ActionFact.Submerged"/>
+    Submerged = (1 << 4),
+
+    /// <inheritdoc cref="ActionFact.AtSurface"/>
+    AtSurface = (1 << 5),
+
+    /// <inheritdoc cref="ActionFact.Climbing"/>
+    Climbing = (1 << 6),
+
+    /// <inheritdoc cref="ActionFact.Flying"/>
+    Flying = (1 << 7),
+
+    /// <summary>Every declared bit — the decoder's admission mask.</summary>
+    All = (Grounded | Airborne | Rising | Falling | Submerged | AtSurface | Climbing | Flying),
+}
+/// <summary>The one mapping between the predicate vocabulary and its publishable bit, plus the wire spelling every
+/// read-back echoes.</summary>
+public static class BodyFactVocabulary {
+    /// <summary>The body-state facts carrying a <see cref="BodyFacts"/> bit, in bit order — the order every echo
+    /// joins them in.</summary>
+    public static ReadOnlySpan<ActionFact> Publishable => [
+        ActionFact.Grounded,
+        ActionFact.Airborne,
+        ActionFact.Rising,
+        ActionFact.Falling,
+        ActionFact.Submerged,
+        ActionFact.AtSurface,
+        ActionFact.Climbing,
+        ActionFact.Flying,
+    ];
+
+    /// <summary>Returns the mask bit a publishable fact carries, or <see cref="BodyFacts.None"/> for a fact with no
+    /// bit (<see cref="ActionFact.AffectedBy"/>).</summary>
+    /// <param name="fact">The fact to map.</param>
+    /// <returns>The bit.</returns>
+    public static BodyFacts Bit(ActionFact fact) => fact switch {
+        ActionFact.Grounded => BodyFacts.Grounded,
+        ActionFact.Airborne => BodyFacts.Airborne,
+        ActionFact.Rising => BodyFacts.Rising,
+        ActionFact.Falling => BodyFacts.Falling,
+        ActionFact.Submerged => BodyFacts.Submerged,
+        ActionFact.AtSurface => BodyFacts.AtSurface,
+        ActionFact.Climbing => BodyFacts.Climbing,
+        ActionFact.Flying => BodyFacts.Flying,
+        _ => BodyFacts.None,
+    };
+    /// <summary>Formats a mask as lower-case, <c>|</c>-joined tokens in bit order, or <c>none</c> when empty — the
+    /// read-back spelling <c>body.where</c> echoes.</summary>
+    /// <param name="facts">The mask to spell.</param>
+    /// <returns>The token string.</returns>
+    public static string Describe(BodyFacts facts) {
+        if ((facts & BodyFacts.All) == BodyFacts.None) {
+            return "none";
+        }
+
+        var text = new StringBuilder();
+
+        foreach (var fact in Publishable) {
+            if ((facts & Bit(fact: fact)) == BodyFacts.None) {
+                continue;
+            }
+            if (text.Length > 0) {
+                _ = text.Append(value: '|');
+            }
+
+            _ = text.Append(value: Token(fact: fact));
+        }
+
+        return text.ToString();
+    }
+    /// <summary>The gate token meaning "no gate" — a driver's weight holds regardless of the body's facts.</summary>
+    public const string Always = "always";
+
+    /// <summary>Resolves an authored gate token to the single <see cref="BodyFacts"/> bit it tests: a publishable
+    /// fact's member name (case-sensitive, like every document token), or <see cref="Always"/>/null for no gate.</summary>
+    /// <param name="name">The authored token.</param>
+    /// <param name="gate">The bit, or <see cref="BodyFacts.None"/> for an ungated token; zero on failure.</param>
+    /// <returns><see langword="true"/> when the token names a publishable fact or no gate.</returns>
+    public static bool TryResolve(string? name, out BodyFacts gate) {
+        gate = BodyFacts.None;
+
+        if (
+            (name is null) ||
+            string.Equals(
+                a: name,
+                b: Always,
+                comparisonType: StringComparison.Ordinal
+            )
+        ) {
+            return true;
+        }
+
+        foreach (var fact in Publishable) {
+            if (string.Equals(
+                a: name,
+                b: fact.ToString(),
+                comparisonType: StringComparison.Ordinal
+            )) {
+                gate = Bit(fact: fact);
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+    /// <summary>Returns whether a gate holds against a body's facts — an ungated token always holds.</summary>
+    /// <param name="gate">The gate bit, or <see cref="BodyFacts.None"/>.</param>
+    /// <param name="facts">The body's published facts.</param>
+    public static bool Holds(BodyFacts gate, BodyFacts facts) => ((gate == BodyFacts.None) || ((facts & gate) == gate));
+    /// <summary>Returns a publishable fact's lower-case wire spelling.</summary>
+    /// <param name="fact">The fact to spell.</param>
+    /// <returns>The token.</returns>
+    public static string Token(ActionFact fact) => fact switch {
+        ActionFact.Grounded => "grounded",
+        ActionFact.Airborne => "airborne",
+        ActionFact.Rising => "rising",
+        ActionFact.Falling => "falling",
+        ActionFact.Submerged => "submerged",
+        ActionFact.AtSurface => "atsurface",
+        ActionFact.Climbing => "climbing",
+        ActionFact.Flying => "flying",
+        _ => "affectedby",
+    };
 }
 /// <summary>The entity an action effect addresses.</summary>
 [JsonConverter(typeof(StrictEnumConverter<ActionTarget>))]

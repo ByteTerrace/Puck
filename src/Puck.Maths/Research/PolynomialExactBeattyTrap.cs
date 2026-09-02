@@ -43,21 +43,21 @@ public readonly record struct PolynomialExactBeattyNormWitness(
 public readonly record struct PolynomialExactBeattyTrapCertificate(
     PolynomialExactBeattyTrapFamily Family,
     PolynomialContinuedFractionParameters Parameters,
-    QuadraticSurd Slope,
-    QuadraticSurd Offset,
-    QuadraticSurd TrapWidth,
+    RealQuadratic Slope,
+    RealQuadratic Offset,
+    RealQuadratic TrapWidth,
     BigInteger CharacteristicDiscriminant,
     BigInteger NormResidue,
     BigInteger MinimumPositiveNorm,
     BigInteger SuccessorDeficit,
     BigInteger MinimumSlopeCoefficient,
-    QuadraticSurd NormImageBound,
-    QuadraticSurd ContractionFactor
+    RealQuadratic NormImageBound,
+    RealQuadratic ContractionFactor
 ) {
     /// <summary>Returns the exact affine center <c>x_n</c>.</summary>
-    public QuadraticSurd Center(BigInteger tailIndex) {
+    public RealQuadratic Center(BigInteger tailIndex) {
         PolynomialTailIndex.RequirePositive(tailIndex: tailIndex);
-        return ((Slope * QuadraticSurd.Rational(value: tailIndex)) + Offset);
+        return ((Slope * RealQuadratic.Rational(value: tailIndex)) + Offset);
     }
     /// <summary>Constructs the exact integral norm witness for an integer boundary.</summary>
     public PolynomialExactBeattyNormWitness NormWitness(BigInteger tailIndex, BigInteger boundary) {
@@ -87,9 +87,9 @@ public readonly record struct PolynomialExactBeattyTrapCertificate(
     /// <summary>Returns the certified floor of the unique positive tail at <paramref name="tailIndex"/>.</summary>
     public BigInteger TailFloor(BigInteger tailIndex) => Center(tailIndex: tailIndex).Floor();
     /// <summary>Returns the strict trapping interval endpoints <c>(x_n,x_n+C/n)</c>.</summary>
-    public (QuadraticSurd Lower, QuadraticSurd Upper) Trap(BigInteger tailIndex) {
+    public (RealQuadratic Lower, RealQuadratic Upper) Trap(BigInteger tailIndex) {
         var lower = Center(tailIndex: tailIndex);
-        var width = (TrapWidth / QuadraticSurd.Rational(value: tailIndex));
+        var width = (TrapWidth / RealQuadratic.Rational(value: tailIndex));
 
         return (lower, (lower + width));
     }
@@ -193,18 +193,18 @@ public static class PolynomialExactBeattyTrap {
         }
 
         var discriminant = ((p * p) + (4 * r));
-        var slope = QuadraticSurd.Create(
+        var slope = RealQuadratic.Create(
             rationalNumerator: p,
             surdNumerator: BigInteger.One,
             radicand: discriminant,
             denominator: 2
         );
-        var pSurd = QuadraticSurd.Rational(value: p);
-        var qSurd = QuadraticSurd.Rational(value: q);
-        var rSurd = QuadraticSurd.Rational(value: r);
+        var pSurd = RealQuadratic.Rational(value: p);
+        var qSurd = RealQuadratic.Rational(value: q);
+        var rSurd = RealQuadratic.Rational(value: r);
         var slopeSquared = (slope * slope);
         var offset = (((qSurd * slopeSquared) - (rSurd * slope)) / (slopeSquared + rSurd));
-        var discriminantRoot = ((QuadraticSurd.Rational(value: 2) * slope) - pSurd);
+        var discriminantRoot = ((RealQuadratic.Rational(value: 2) * slope) - pSurd);
         var c = (slope + offset);
         var trapWidth = (((rSurd * c) * c) / ((slope * slope) * slope));
         var normResidue = (r * ((q * (p + q)) - r));
@@ -212,7 +212,7 @@ public static class PolynomialExactBeattyTrap {
         var successorDeficit = ((2 * r) - (p * q));
         var minimumSlopeCoefficient = (discriminant - successorDeficit);
         var normImageBound = (
-            (QuadraticSurd.Rational(value: discriminant) * discriminantRoot) * trapWidth
+            (RealQuadratic.Rational(value: discriminant) * discriminantRoot) * trapWidth
         );
         var contractionFactor = (rSurd / (pSurd * slope));
         var family = PolynomialExactBeattyTrapFamily.NormGap;
@@ -278,17 +278,17 @@ public static class PolynomialExactBeattyTrap {
         }
         if (certificate.Family != expectedFamily) { return false; }
 
-        var pSurd = QuadraticSurd.Rational(value: p);
-        var qSurd = QuadraticSurd.Rational(value: q);
-        var rSurd = QuadraticSurd.Rational(value: r);
+        var pSurd = RealQuadratic.Rational(value: p);
+        var qSurd = RealQuadratic.Rational(value: q);
+        var rSurd = RealQuadratic.Rational(value: r);
         var discriminant = ((p * p) + (4 * r));
-        var expectedSlope = QuadraticSurd.Create(
+        var expectedSlope = RealQuadratic.Create(
             denominator: 2,
             radicand: discriminant,
             rationalNumerator: p,
             surdNumerator: BigInteger.One
         );
-        var discriminantRoot = ((QuadraticSurd.Rational(value: 2) * expectedSlope) - pSurd);
+        var discriminantRoot = ((RealQuadratic.Rational(value: 2) * expectedSlope) - pSurd);
         var slopeSquared = (expectedSlope * expectedSlope);
         var expectedOffset = ((
             (qSurd * slopeSquared) - (rSurd * expectedSlope)
@@ -301,7 +301,7 @@ public static class PolynomialExactBeattyTrap {
         var successorDeficit = ((2 * r) - (p * q));
         var minimumSlopeCoefficient = (discriminant - successorDeficit);
         var expectedNormImageBound = (
-            (QuadraticSurd.Rational(value: discriminant) *
+            (RealQuadratic.Rational(value: discriminant) *
             discriminantRoot) * expectedTrapWidth
         );
         var expectedContractionFactor = (rSurd / (pSurd * expectedSlope));
@@ -335,10 +335,10 @@ public static class PolynomialExactBeattyTrap {
             (successorDeficit <= BigInteger.Zero) ||
             (minimumSlopeCoefficient <= BigInteger.Zero) ||
             ((discriminantRoot * expectedTrapWidth) >=
-                QuadraticSurd.Rational(value: successorDeficit)) ||
-            (expectedNormImageBound >= QuadraticSurd.Rational(value: minimumPositiveNorm)) ||
+                RealQuadratic.Rational(value: successorDeficit)) ||
+            (expectedNormImageBound >= RealQuadratic.Rational(value: minimumPositiveNorm)) ||
             (expectedContractionFactor.Sign <= 0) ||
-            (expectedContractionFactor >= QuadraticSurd.One) ||
+            (expectedContractionFactor >= RealQuadratic.One) ||
             ((pSurd * slopeSquared).Sign <= 0) ||
             (((expectedSlope * slopeSquared) + (rSurd * c)).Sign <= 0)
         ) {
@@ -451,7 +451,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         }
 
         var c = (Slope + Offset);
-        var r = QuadraticSurd.Rational(value: Parameters.NumeratorQuadratic);
+        var r = RealQuadratic.Rational(value: Parameters.NumeratorQuadratic);
 
         return (AffineResidual == (((r * c) * c) / (Slope * Slope)));
     }

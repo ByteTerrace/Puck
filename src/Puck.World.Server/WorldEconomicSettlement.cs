@@ -423,7 +423,8 @@ public sealed class WorldEconomicSettlement {
             Value: value,
             Advance: existing?.Advance,
             Provenance: existing?.Provenance,
-            Dynamics: existing?.Dynamics
+            Dynamics: existing?.Dynamics,
+            Cycle: existing?.Cycle
         );
         var cells = ReplaceOrAppend(
             list: (row.Cells ?? []),

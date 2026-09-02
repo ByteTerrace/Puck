@@ -73,7 +73,7 @@ internal static class AutomaticSequenceClaims {
             }
         }
 
-        var squareRootTwo = QuadraticSurd.Create(
+        var squareRootTwo = RealQuadratic.Create(
             denominator: 1,
             radicand: 2,
             rationalNumerator: 0,
@@ -152,7 +152,7 @@ internal static class AutomaticSequenceClaims {
             (analysis.Law.ActivationThreshold.Sign != 0) ||
             (analysis.Law.ChannelNormModulus != 8) ||
             (analysis.Law.ChannelNormResidue != 0) ||
-            (analysis.Law.AffineCenterAt(index: 3) != (QuadraticSurd.Rational(value: 4) * squareRootTwo)) ||
+            (analysis.Law.AffineCenterAt(index: 3) != (RealQuadratic.Rational(value: 4) * squareRootTwo)) ||
             (analysis.Law.AffineFloorAt(index: 3) != 5)
         ) {
             return "the derived exact affine law is wrong for d=2,u=4,v=2,w=0";

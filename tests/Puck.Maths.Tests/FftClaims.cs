@@ -474,6 +474,86 @@ internal static class FftClaims {
             if (!aliased.AsSpan().SequenceEqual(other: destination)) {
                 return $"length {length}: PointwiseMultiply with destination aliasing left disagrees with the non-aliased product";
             }
+
+            var rightAliased = ((FixedComplex[])b.Clone());
+
+            FixedFourierTransform.PointwiseMultiply(destination: rightAliased, left: a, right: rightAliased);
+
+            if (!rightAliased.AsSpan().SequenceEqual(other: destination)) {
+                return $"length {length}: PointwiseMultiply with destination aliasing right disagrees with the non-aliased product";
+            }
+        }
+
+        var overlap = Sequence(length: 9, stream: 13_000UL);
+        var overlapBefore = ((FixedComplex[])overlap.Clone());
+        var disjoint = Sequence(length: 8, stream: 13_001UL);
+        var refusal = Refuses(
+            action: () => FixedFourierTransform.PointwiseMultiply(destination: overlap.AsSpan(start: 1, length: 8), left: overlap.AsSpan(start: 0, length: 8), right: disjoint),
+            parameterName: "destination",
+            type: typeof(ArgumentException),
+            what: "PointwiseMultiply with a shifted destination overlap"
+        );
+
+        if (refusal is not null) { return refusal; }
+
+        return overlap.AsSpan().SequenceEqual(other: overlapBefore)
+            ? null
+            : "PointwiseMultiply mutated an operand before refusing a shifted destination overlap";
+    }
+    /// <summary>Proves exact same-span operands take the self-convolution path, while partial operand overlap and any
+    /// destination overlap are refused before an operand is mutated.</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? ConvolutionAliasingContract() {
+        foreach (var length in DefaultLengths) {
+            var plan = FixedFourierTransformPlan.Create(length: length);
+            var input = Sequence(amplitude: ConvolutionAmplitudeRaw, length: length, stream: (13_500UL + ((ulong)length)));
+            var separateLeft = ((FixedComplex[])input.Clone());
+            var separateRight = ((FixedComplex[])input.Clone());
+            var expected = new FixedComplex[length];
+
+            FixedFourierTransform.Convolve(destination: expected, left: separateLeft, plan: plan, right: separateRight);
+
+            var aliased = ((FixedComplex[])input.Clone());
+            var actual = new FixedComplex[length];
+
+            FixedFourierTransform.Convolve(destination: actual, left: aliased, plan: plan, right: aliased);
+
+            if (!actual.AsSpan().SequenceEqual(other: expected)) {
+                return $"length {length}: exact same-span self-convolution disagrees with two equal disjoint operands";
+            }
+        }
+
+        var plan8 = FixedFourierTransformPlan.Create(length: 8);
+        var partial = Sequence(length: 9, stream: 14_000UL);
+        var partialBefore = ((FixedComplex[])partial.Clone());
+        var partialDestination = new FixedComplex[8];
+        var refusal = Refuses(
+            action: () => FixedFourierTransform.Convolve(destination: partialDestination, left: partial.AsSpan(start: 0, length: 8), plan: plan8, right: partial.AsSpan(start: 1, length: 8)),
+            parameterName: "right",
+            type: typeof(ArgumentException),
+            what: "Convolve with partially overlapping operands"
+        );
+
+        if (refusal is not null) { return refusal; }
+        if (!partial.AsSpan().SequenceEqual(other: partialBefore)) {
+            return "Convolve mutated an operand before refusing partially overlapping operands";
+        }
+
+        var left = Sequence(length: 8, stream: 14_001UL);
+        var right = Sequence(length: 8, stream: 14_002UL);
+        var leftBefore = ((FixedComplex[])left.Clone());
+        var rightBefore = ((FixedComplex[])right.Clone());
+
+        refusal = Refuses(
+            action: () => FixedFourierTransform.Convolve(destination: left, left: left, plan: plan8, right: right),
+            parameterName: "destination",
+            type: typeof(ArgumentException),
+            what: "Convolve with destination aliasing left"
+        );
+
+        if (refusal is not null) { return refusal; }
+        if (!left.AsSpan().SequenceEqual(other: leftBefore) || !right.AsSpan().SequenceEqual(other: rightBefore)) {
+            return "Convolve mutated an operand before refusing an overlapping destination";
         }
 
         return null;

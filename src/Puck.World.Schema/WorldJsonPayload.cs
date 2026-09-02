@@ -63,8 +63,11 @@ public static class WorldJsonPayload {
     /// <param name="info">The source-generated contract.</param>
     /// <param name="value">The parsed row on success.</param>
     /// <param name="error">The one-line rejection reason, or empty on success.</param>
+    /// <param name="deferDrawSites">For a <see cref="WorldDefinition"/> payload, whether a state reference into a draw
+    /// site that has not filled yet stays attached for the loader's post-draw pass rather than refusing — see
+    /// <see cref="WorldStateDocumentValues.TryResolve"/>.</param>
     /// <returns><see langword="true"/> when the payload parsed to a non-null row.</returns>
-    public static bool TryParse<T>(string json, JsonTypeInfo<T> info, out T value, out string error) {
+    public static bool TryParse<T>(string json, JsonTypeInfo<T> info, out T value, out string error, bool deferDrawSites = false) {
         value = default!;
 
         if (string.IsNullOrWhiteSpace(value: json)) {
@@ -87,7 +90,8 @@ public static class WorldJsonPayload {
                 (parsed is WorldDefinition definition) &&
                 !WorldStateDocumentValues.TryResolve(
                 definition: definition,
-                reason: out var spatialReason
+                reason: out var spatialReason,
+                deferDrawSites: deferDrawSites
             )
             ) {
                 throw new InvalidOperationException(message: spatialReason);

@@ -607,9 +607,17 @@ public sealed partial class WorldServer {
             if (request.Kind != WorldRebuildKind.Reset) {
                 m_machines.SetDocumentPath(documentPath: request.PathHint);
             }
+            // The lattice allocation and every evolved cell survive a rebuild, the hash and scatter paints included;
+            // a draw fill repaints only where the loaded document names a different pass than the one on the field.
+            var rebuiltFrom = m_definition;
+
             Install(
                 definition: candidate,
                 rebuildPopulation: true
+            );
+            RepaintChangedLatticeDraws(
+                previous: rebuiltFrom,
+                current: candidate
             );
 
             if (rebuildAddonPlan is not null) {
@@ -768,7 +776,8 @@ public sealed partial class WorldServer {
                 : body.PeekContinuity()),
                 Generation: m_population.Generation(index: index),
                 PlacementId: m_population.InhabitantPlacementId(index: index),
-                Heading: body.Yaw
+                Heading: body.Yaw,
+                Facts: body.Facts
             );
         }
 
@@ -874,6 +883,24 @@ public sealed partial class WorldServer {
             );
         }
     }
+    // A scalar state write changes runtime values, not declaration shape. Keep the authoritative document as the
+    // journal/save source while retaining the compiled rule/catalog/group/machine products that depend only on
+    // declarations; only state-sensitive grants and field reactions observe the new value immediately.
+    private void InstallRuntimeStateValue(WorldDefinition definition) {
+        m_definition = definition;
+        m_grants.SyncState(definition: definition);
+        m_population.InstallFields(definition: definition);
+    }
+
+    private static bool TryValidateMutationCandidate(WorldDefinition candidate, WorldMutation mutation, out string reason) => mutation switch {
+        WorldMutation.UpsertStateCell state => WorldDefinitionValidator.TryValidateRuntimeStateCell(
+            definition: candidate,
+            rowName: state.Row,
+            key: state.Key,
+            reason: out reason
+        ),
+        _ => WorldDefinitionValidator.TryValidateLocally(definition: candidate, reason: out reason),
+    };
     private void Reject(WorldMutation mutation, string reason, int connectionId, long correlationId) {
         Console.Error.WriteLine(value: $"[world.mutation rejected: {Describe(mutation: mutation)} — {reason}]");
         EchoTap?.Invoke(obj: new WorldEditEcho(
@@ -1050,10 +1077,7 @@ public sealed partial class WorldServer {
             return false;
         }
 
-        if (!WorldDefinitionValidator.TryValidateLocally(
-            definition: candidate,
-            reason: out var validationReason
-        )) {
+        if (!TryValidateMutationCandidate(candidate: candidate, mutation: mutation, reason: out var validationReason)) {
             Reject(
                 connectionId: connectionId,
                 correlationId: correlationId,
@@ -1216,12 +1240,33 @@ public sealed partial class WorldServer {
             // narration, disposal of a superseded guest) moves until then. Narration and superseded-guest disposal
             // (Finish) run only AFTER the journal write below, so neither can still be unwound by what Finish
             // itself does.
-            Install(
-                definition: candidate,
-                rebuildPopulation: (AffectsPopulation(mutation: mutation) || RefreshesLookAssignment(
-                candidate: candidate,
-                mutation: mutation
-            ) || (solidAffecting && WorldContactSelection.RequiresField(collision: candidate.Collision)))
+            // A scalar state write keeps the compiled rules, catalog, groups and machines only while the candidate
+            // still carries the SAME state catalog identity the rules were compiled against — a document-value refresh
+            // or a slot-to-keyed reshape mints a new one, and a look-assignment rebind needs the population rebuild —
+            // so those cases take the full install like every other mutation.
+            var previous = m_definition;
+
+            if (
+                (mutation is WorldMutation.UpsertStateCell) &&
+                ReferenceEquals(objA: candidate.StateCatalog, objB: previous.StateCatalog) &&
+                !RefreshesLookAssignment(candidate: candidate, mutation: mutation)
+            ) {
+                InstallRuntimeStateValue(definition: candidate);
+            } else {
+                Install(
+                    definition: candidate,
+                    rebuildPopulation: (AffectsPopulation(mutation: mutation) || RefreshesLookAssignment(
+                    candidate: candidate,
+                    mutation: mutation
+                ) || (solidAffecting && WorldContactSelection.RequiresField(collision: candidate.Collision)))
+                );
+            }
+
+            // Whatever moved a lattice row's draw pass — a Generate, or a whole-row upsert that re-authored its
+            // cursor, decks or fill — repaints that row; every other row keeps its evolved cells.
+            RepaintChangedLatticeDraws(
+                previous: previous,
+                current: candidate
             );
 
             if (addonPlan is not null) {

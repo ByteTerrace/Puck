@@ -15,8 +15,9 @@ namespace Puck.Maths;
 /// the recursive doubling <c>H(2N) = [[H(N), H(N)], [H(N), -H(N)]]</c> produces, not the sequency ordering. Because
 /// <c>H * H = N * I</c>, applying <see cref="Forward{T}"/> twice returns <c>N</c> times the input, and
 /// <see cref="Inverse{T}"/> is exactly that: a second forward pass followed by an arithmetic shift right by
-/// <c>log2(N)</c> — a floor division by <c>N</c>, which is exact on any spectrum <see cref="Forward{T}"/> produced
-/// (every element of <c>H * H * x</c> is a multiple of <c>N</c>) and a floor on any other.
+/// <c>log2(N)</c> — a floor division by <c>N</c>. It restores a spectrum <see cref="Forward{T}"/> produced exactly
+/// when that forward pass and the inverse butterfly stay inside the carrier's no-wrap envelope; outside it, lost
+/// high bits cannot be recovered. On an arbitrary spectrum the shift is a floor division.
 /// </para>
 /// <para>
 /// Arithmetic is unchecked, the posture <see cref="FixedQ4816"/>'s own <c>+</c> takes: the transform is exact
@@ -145,8 +146,8 @@ public static class WalshHadamardTransform {
         Butterfly(values: values);
     }
     /// <summary>Computes the inverse transform in place: a second forward pass, then an arithmetic shift right by
-    /// <c>log2(N)</c> — exact on any spectrum <see cref="Forward{T}"/> produced, a floor division by <c>N</c> on any
-    /// other.</summary>
+    /// <c>log2(N)</c> — exact on a spectrum <see cref="Forward{T}"/> produced when both passes stay inside the
+    /// carrier's no-wrap envelope, and a floor division by <c>N</c> on an arbitrary spectrum.</summary>
     /// <typeparam name="T">The integer carrier.</typeparam>
     /// <param name="values">The transformed sequence, restored in place; its length must be a positive power of two.</param>
     /// <exception cref="ArgumentException">The length of <paramref name="values"/> is not a positive power of two.</exception>

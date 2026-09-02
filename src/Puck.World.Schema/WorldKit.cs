@@ -87,6 +87,8 @@ public enum WorldBodyContactMode : byte {
 /// <param name="PlanarDynamics">The compiled second-order follower the kit's declared motion model's <c>dynamics</c>
 /// row names, or <see langword="null"/> when it shapes planar velocity through its response table instead
 /// (validation has already refused any other combination by the time this compiles).</param>
+/// <param name="Holds">The kit's compiled ordered hold list (<see cref="WorldMotionModel.Grounded.Holds"/>), empty
+/// for a kit authoring none.</param>
 public readonly record struct FixedWorldKit(
     CompiledBodyMotionProgram BodyMotionProgram,
     IReadOnlyDictionary<string, CompiledBodyProducer> Producers,
@@ -101,6 +103,7 @@ public readonly record struct FixedWorldKit(
     RoleChannelOrdinals RoleOrdinals,
     bool[] RoleMask,
     CompiledActionStateSlot[] ActionState,
+    FixedBodyHold[] Holds,
     FixedMotionDynamics? PlanarDynamics = null
 ) {
     private static (CompiledActionStateSlot[] Slots, Dictionary<string, int> ByName) CompileActionState(IReadOnlyList<ActionStateSlot> bodyState, IReadOnlyList<ActionStateSlot> identityState) {
@@ -232,7 +235,7 @@ public readonly record struct FixedWorldKit(
 
         // An arm without a held-multiplier channel resolves -1 here the same way a kit with the field unset does —
         // "no sprint" by construction, not a special case (DeclaredSprintChannel is the one arm-dispatch read,
-        // covering Grounded's and Swim's sprint and the vehicle arm's boost, the same held-multiplier seam). The
+        // covering Grounded's sprint and the vehicle arm's boost, the same held-multiplier seam). The
         // vehicle arm's drift channel is its own held read, resolved the same way below.
         var sprintOrdinal = (((kit.Motion.DeclaredSprintChannel is { Length: > 0 } sprintChannel)
             && channels.TryGetOrdinal(
@@ -327,6 +330,10 @@ public readonly record struct FixedWorldKit(
             RoleOrdinals: roleOrdinals,
             RoleMask: roleMask,
             ActionState: actionState,
+            Holds: WorldHoldFactory.Compile(
+                channels: channels,
+                holds: kit.Motion.DeclaredHolds
+            ),
             PlanarDynamics: planarDynamics
         );
     }

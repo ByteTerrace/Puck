@@ -273,7 +273,25 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "PointwiseMultiply(left, right) is EXACTLY bit-identical to left[i] * right[i] through FixedComplex.operator* at every lane, at lengths 1 through 256, and stays so when the destination aliases left. A wiring statement about the lane loop rather than an accuracy statement about the product (complex.* pins that kernel): a lane skipped, an index crossed between the operands, or an aliasing read-after-write reddens this case.",
+        "Subject": "PointwiseMultiply(left, right) is EXACTLY bit-identical to left[i] * right[i] through FixedComplex.operator* at every lane, at lengths 1 through 256, and stays so when the destination is the exact same span as either operand. A shifted overlap is refused before writing, by exception type and destination parameter name. A wiring statement about the lane loop rather than an accuracy statement about the product (complex.* pins that kernel): a lane skipped, an index crossed between the operands, or an aliasing read-after-write reddens this case.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "fft.convolution-aliasing-contract",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedFourierTransform", "Name": "Convolve" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Convolve(x, x, destination) with exact same-span operands is bit-identical to Convolve(copy(x), copy(x), destination) at lengths 1 through 256. Partial operand overlap is refused naming right, and any destination overlap is refused naming destination; both refusals occur before either operand changes. This pins the dedicated one-forward self-convolution path and the zero-allocation overlap boundary independently of the bounded arithmetic accuracy statement in fft.convolution-vs-oracle-bound.",
         "Against": "",
         "Shared": "",
         "Citation": "",

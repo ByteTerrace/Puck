@@ -49,7 +49,7 @@ public sealed class QuadraticQuasicrystalIndex {
         var trace = (A + D);
         var determinant = ((A * D) - (B * C));
 
-        ExactLongTileLength = QuadraticSurd.Create(
+        ExactLongTileLength = RealQuadratic.Create(
             rationalNumerator: (trace - (2 * D)),
             surdNumerator: BigInteger.One,
             radicand: ((trace * trace) - (4 * determinant)),
@@ -66,7 +66,7 @@ public sealed class QuadraticQuasicrystalIndex {
     /// <summary>Gets the bottom-right entry of the exact substitution matrix.</summary>
     public BigInteger D { get; }
     /// <summary>Gets the exact long-tile length when the short tile has length one.</summary>
-    public QuadraticSurd ExactLongTileLength { get; }
+    public RealQuadratic ExactLongTileLength { get; }
     /// <summary>Gets the length of the eventually periodic continued-fraction block.</summary>
     public int PeriodLength => m_period.Length;
 
@@ -226,12 +226,12 @@ public sealed class QuadraticQuasicrystalIndex {
         }
     }
     /// <summary>Returns the exact physical coordinate of the tile at <paramref name="index"/>.</summary>
-    public QuadraticSurd PositionAt(BigInteger index) {
+    public RealQuadratic PositionAt(BigInteger index) {
         ArgumentOutOfRangeException.ThrowIfNegative(index);
         var longCount = CountLongTiles(exclusiveEnd: index);
         var shortCount = (index - longCount);
 
-        return (QuadraticSurd.Rational(value: shortCount) + (QuadraticSurd.Rational(value: longCount) * ExactLongTileLength));
+        return (RealQuadratic.Rational(value: shortCount) + (RealQuadratic.Rational(value: longCount) * ExactLongTileLength));
     }
     /// <summary>Returns the tile at a non-negative zero-based index; <see langword="true"/> denotes long.</summary>
     public bool TileAt(BigInteger index) {

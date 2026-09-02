@@ -392,6 +392,9 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// composition, screen op), and inside <see cref="Step"/> for the kinds buffered to the tick boundary (mutation,
     /// rebuild, undo, addon lifecycle) and for a fired world-rule effect.</summary>
     public Action<WorldEditEcho>? EchoTap { get; set; }
+    /// <summary>Observes deterministic presentation-neutral cues emitted by world rules. The callback runs
+    /// synchronously on the tick thread; consumers must hand off any presentation work without blocking it.</summary>
+    public Action<WorldGameplayCue>? GameplayCueTap { get; set; }
     /// <summary>Gets the engagement fold (headless design §1.8) — the seat/peer→screen route decision
     /// (<see cref="WorldCommand.ComposeControl"/>/<see cref="WorldCommand.DissolveControl"/> apply through it, from
     /// <see cref="ApplyCommand"/>), its per-tick pad fold (<see cref="Server.WorldEngagement.FoldTick"/>, folded into
@@ -738,6 +741,9 @@ public sealed partial class WorldServer : IWorldServerHost {
         // Same reasoning as the cable links above: a rules row authored in the BOOT document needs its own compile
         // call here, since Install never runs at construction.
         RecompileRules(definition: definition);
+        // The lattice exists (the population allocated it) and the instance identity is known only from here on, so
+        // this is the first point a lattice row's draw fill can be seeded through the site ladder and painted.
+        PaintLatticeDraws(definition: definition);
     }
 
 }

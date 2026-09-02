@@ -32,6 +32,22 @@ public sealed record PaletteEntryDocument(string Color, float? Emissive, float? 
 /// point in creation space, before its own translate/rotate/scale (null = none). Every op the copy expansion covers
 /// reaches contact as well as render; <c>wallpaper</c> does not expand, and a solid placement carrying one is refused
 /// at validation.</param>
+/// <param name="Swings">The driver-fed rotations this shape rides (<see cref="ShapeSwingDocument"/>), at most
+/// <see cref="MaxSwings"/> (null = none).</param>
+/// <param name="Slides">The driver-fed translations this shape rides (<see cref="ShapeSlideDocument"/>), at most
+/// <see cref="MaxSlides"/> (null = none). Applied after every swing, along the authored axis.
+/// <para>Both facets are presentation-only — composed onto the shape's per-frame dynamic transform and read nowhere
+/// else, so the SDF program, the colliders, the solid field, and simulation state are all blind to them. A shape
+/// carrying <paramref name="Domain"/> rides the placement root's transform rather than its own, leaving nowhere for
+/// either to compose, so they are refused alongside a domain list at validation.</para></param>
+/// <param name="Parent">The <see cref="Name"/> of the shape this one hangs from (null = the creation root): the
+/// parent's animated motion carries this shape and its own pivots with it, so a forearm swung at the elbow also rides
+/// the upper arm's swing at the shoulder. The parent must be declared earlier in <c>shapes</c> (so a chain resolves
+/// in one pass and can never cycle); presentation-only on the same terms as the swings it composes with.</param>
+/// <param name="Joint">The point this shape hinges about when it acts as a bone of a
+/// <see cref="CreationEffectorDocument"/> chain and declares no <paramref name="Swings"/> (null = the pivot of the
+/// first swing, or the shape's own position when it has neither). Author-frame, like every other point here. Read only
+/// by the effector solve, so it changes no pose on its own.</param>
 public sealed record ShapeDocument(
     int Id,
     DocumentIdentifier? Name,
@@ -47,7 +63,11 @@ public sealed record ShapeDocument(
     float? Onion = null,
     float? Bend = null,
     float? Dilate = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ShapeDomainOp>? Domain = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ShapeDomainOp>? Domain = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ShapeSwingDocument>? Swings = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ShapeSlideDocument>? Slides = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Parent = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? Joint = null
 ) {
     /// <summary>The largest bend rate, in radians per unit of local Y, moderated below <see cref="MaxTwist"/>'s
     /// ceiling: the bend operator's Lipschitz factor is worse than twist's (see
@@ -63,6 +83,11 @@ public sealed record ShapeDocument(
     public const float MaxOnion = 0.2f;
     /// <summary>The largest smooth-blend radius a shape's clamp normalizes to.</summary>
     public const float MaxSmooth = 0.5f;
+    /// <summary>The most entries <see cref="Slides"/> carries.</summary>
+    public const int MaxSlides = 4;
+    /// <summary>The most entries <see cref="Swings"/> carries — one shape is one limb segment, and four covers a
+    /// two-driver limb hinging on two axes.</summary>
+    public const int MaxSwings = 4;
     /// <summary>The largest twist rate, in radians per unit of local Y (not an isometry, so this stays moderate —
     /// see <see cref="SdfProgramBuilder.TwistY"/>).</summary>
     public const float MaxTwist = 3.0f;
@@ -371,6 +396,12 @@ public sealed record CreationBehaviorDocument(
 /// <param name="Noise">The creation-level noise-relief facet (null = none) — see
 /// <see cref="CreationNoiseDocument"/>. Omitted from the wire when null, so a creation authored without it
 /// serializes to unchanged bytes.</param>
+/// <param name="Drivers">The named animation drivers (null = none), at most <see cref="MaxDrivers"/> — see
+/// <see cref="CreationDriverDocument"/>. A shape's <see cref="ShapeDocument.Swings"/>/<see cref="ShapeDocument.Slides"/>
+/// name one of these. Presentation-only, like the facets that read them.</param>
+/// <param name="Effectors">The inverse-kinematics effectors (null = none), at most <see cref="MaxEffectors"/> — see
+/// <see cref="CreationEffectorDocument"/>. Each corrects a chain of this creation's own shapes so its tip reaches a
+/// target, composing after the drivers and the parent chain. Presentation-only, like the drivers.</param>
 public sealed record CreationDocument(
     string? Schema,
     DocumentIdentifier? Name,
@@ -385,10 +416,20 @@ public sealed record CreationDocument(
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<CreationPartDocument>? Parts = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    CreationNoiseDocument? Noise = null
+    CreationNoiseDocument? Noise = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<CreationDriverDocument>? Drivers = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<CreationEffectorDocument>? Effectors = null
 ) {
     /// <summary>The version tag every saved document carries.</summary>
     public const string CurrentSchema = "puck.creation.v1";
+    /// <summary>The most entries <see cref="Drivers"/> carries — the width of the per-body phase/weight table a
+    /// consuming client keeps per stamped creation.</summary>
+    public const int MaxDrivers = 8;
+    /// <summary>The most entries <see cref="Effectors"/> carries — the width of the per-body effector weight/latch
+    /// table a consuming client keeps per stamped creation. Eight covers a spider's legs.</summary>
+    public const int MaxEffectors = 8;
     /// <summary>The material palette's slot count — <see cref="ShapeDocument.Material"/>/<see cref="TextRunDocument.Material"/>
     /// clamp into <c>[0, PaletteSize)</c> at normalization.</summary>
     public const int PaletteSize = 16;

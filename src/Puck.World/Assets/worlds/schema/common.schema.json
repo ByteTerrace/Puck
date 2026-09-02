@@ -2612,7 +2612,9 @@
         "Falling",
         "AffectedBy",
         "Submerged",
-        "AtSurface"
+        "AtSurface",
+        "Climbing",
+        "Flying"
       ]
     },
     "ActionPredicateNow": {
@@ -2724,7 +2726,7 @@
           "const": "all"
         },
         "predicates": {
-          "$ref": "#/$defs/ActionPredicateList"
+          "$ref": "#/$defs/ActionPredicateListNonNullable"
         }
       },
       "required": [
@@ -2732,7 +2734,90 @@
       ],
       "additionalProperties": false
     },
+    "ActionPredicateList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ActionPredicateNullable"
+      }
+    },
+    "ActionPredicateAny": {
+      "description": "At least one inner predicate holds (disjunction). The list must be non-empty.",
+      "properties": {
+        "$type": {
+          "const": "any"
+        },
+        "predicates": {
+          "$ref": "#/$defs/ActionPredicateList",
+          "description": "The non-empty child-predicate list."
+        }
+      },
+      "required": [
+        "predicates"
+      ],
+      "additionalProperties": false
+    },
+    "ActionPredicateNot": {
+      "description": "Inverts one predicate.",
+      "properties": {
+        "$type": {
+          "const": "not"
+        },
+        "predicate": {
+          "$ref": "#/$defs/ActionPredicate"
+        }
+      },
+      "required": [
+        "predicate"
+      ],
+      "additionalProperties": false
+    },
     "ActionPredicate": {
+      "description": "A data-composable gate over body facts and named action state. A trigger fires only while its gate holds. The $type string is the JSON discriminator, the same convention every polymorphic row family uses; a new predicate kind is a new derived record plus its JsonDerivedTypeAttribute line.",
+      "type": "object",
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ActionPredicateNow"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateRecently"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateCompareState"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateTimerElapsed"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateAll"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateAny"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateNot"
+        }
+      ]
+    },
+    "ActionPredicateNotNonNullable": {
+      "description": "Inverts one predicate.",
+      "properties": {
+        "$type": {
+          "const": "not"
+        },
+        "predicate": {
+          "$ref": "#/$defs/ActionPredicate",
+          "description": "The child predicate to invert."
+        }
+      },
+      "required": [
+        "predicate"
+      ],
+      "additionalProperties": false
+    },
+    "ActionPredicateNullable": {
       "description": "A data-composable gate over body facts and named action state. A trigger fires only while its gate holds. The $type string is the JSON discriminator, the same convention every polymorphic row family uses; a new predicate kind is a new derived record plus its JsonDerivedTypeAttribute line.",
       "type": [
         "object",
@@ -2756,14 +2841,65 @@
         },
         {
           "$ref": "#/$defs/ActionPredicateAll"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateAny"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateNotNonNullable"
         }
       ]
     },
-    "ActionPredicateList": {
+    "ActionPredicateListNonNullable": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/ActionPredicate"
+        "$ref": "#/$defs/ActionPredicateNullable"
       }
+    },
+    "ActionPredicateAnyNonNullable": {
+      "description": "At least one inner predicate holds (disjunction). The list must be non-empty.",
+      "properties": {
+        "$type": {
+          "const": "any"
+        },
+        "predicates": {
+          "$ref": "#/$defs/ActionPredicateListNonNullable"
+        }
+      },
+      "required": [
+        "predicates"
+      ],
+      "additionalProperties": false
+    },
+    "ActionPredicateNonNullable": {
+      "description": "A data-composable gate over body facts and named action state. A trigger fires only while its gate holds. The $type string is the JSON discriminator, the same convention every polymorphic row family uses; a new predicate kind is a new derived record plus its JsonDerivedTypeAttribute line.",
+      "type": "object",
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ActionPredicateNow"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateRecently"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateCompareState"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateTimerElapsed"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateAll"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateAnyNonNullable"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateNot"
+        }
+      ]
     },
     "MotionResponse": {
       "description": "One row of a kit\u0027s velocity-response table: how fast planar velocity converges on the commanded target while Gate holds. Rows evaluate in order, first match wins; a body matching no row snaps instantly (the built-in behavior, and the behavior of a kit with no table). The gate reuses the action-lane predicate vocabulary \u2014 only body-fact kinds (now/recently/all) are admissible.",
@@ -2781,7 +2917,7 @@
           "type": "number"
         },
         "gate": {
-          "$ref": "#/$defs/ActionPredicate",
+          "$ref": "#/$defs/ActionPredicateNullable",
           "description": "The body-fact predicate that must hold for this row to win, or null for the always-row (permitted only as the final row).",
           "default": null
         }
@@ -2807,6 +2943,175 @@
           "type": "number"
         }
       },
+      "additionalProperties": false
+    },
+    "WorldHoldSpend": {
+      "description": "What a hold spends while it is held: a body-lane state slot and the rate it drains at. The hold releases the tick the slot can no longer pay; refilling it, or trading for it, is a world\u0027s own rules\u0027 business.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "state": {
+          "description": "The declared state.body slot name.",
+          "type": "string"
+        },
+        "ratePerSecond": {
+          "description": "The positive rate the slot drains at, per second.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "state",
+        "ratePerSecond"
+      ],
+      "additionalProperties": false
+    },
+    "WorldHoldMedium": {
+      "description": "What the medium does to a body standing in it \u2014 the authored half of a Medium hold, and the one place buoyancy is described. Required for that bond and refused on every other.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "buoyancy": {
+          "description": "The idle vertical drift velocity below the bob band, signed (u/s).",
+          "type": "number"
+        },
+        "maxRiseSpeed": {
+          "description": "The terminal ascent speed (u/s).",
+          "type": "number"
+        },
+        "maxSinkSpeed": {
+          "description": "The terminal descent speed (u/s).",
+          "type": "number"
+        },
+        "surfaceSettleRate": {
+          "description": "The proportional settle gain toward the float line (1/s).",
+          "type": "number"
+        },
+        "floatDepth": {
+          "description": "The float line\u0027s depth below the medium surface, and the bob band\u0027s half-width (u).",
+          "type": "number"
+        },
+        "thrustFraction": {
+          "description": "The fraction of the hold\u0027s travel speed the MoveUp role commands vertically \u2014 a body climbs and dives slower than it cruises. 1 is fully isotropic thrust.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "buoyancy",
+        "maxRiseSpeed",
+        "maxSinkSpeed",
+        "surfaceSettleRate",
+        "floatDepth",
+        "thrustFraction"
+      ],
+      "additionalProperties": false
+    },
+    "WorldHold": {
+      "description": "One authored hold row of a grounded kit\u0027s ordered Holds list \u2014 what may hold this body, in preference order. ResolveHold keeps the hold it has while its surface is still there and the same face, and otherwise takes the first row the world offers; ApplyHold applies Hold.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "name": {
+          "description": "The row\u0027s name, unique within the list \u2014 the body.hold read-back token.",
+          "type": "string"
+        },
+        "bond": {
+          "description": "Whether this row needs a surface (Surface) or holds the body where it is (Free).",
+          "enum": [
+            "Surface",
+            "Free",
+            "Medium"
+          ]
+        },
+        "hold": {
+          "description": "What holds the body once the row is taken.",
+          "enum": [
+            "None",
+            "Gravity",
+            "Grip",
+            "Lift"
+          ]
+        },
+        "cone": {
+          "description": "The inclusive angle band, in degrees, between an admitted surface normal and gravity-up: [0, 60] is floors, [60, 120] walls, [0, 180] everything. Required for Surface, refused for Free.",
+          "default": null
+        },
+        "grip": {
+          "description": "The inward pull, world units per second, under Grip. Applied as a positional standoff, so it closes a gap the surface opens without ever pushing the body through it.",
+          "type": "number",
+          "default": 0
+        },
+        "lift": {
+          "description": "The fraction of gravity cancelled under Lift: 1 hovers, 0.5 halves the fall.",
+          "type": "number",
+          "default": 0
+        },
+        "speed": {
+          "description": "The travel speed along the hold\u0027s tangent plane, world units per second, or null to ride the kit\u0027s own resolved move speed.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "reach": {
+          "description": "How far a surface row\u0027s probes search, world units. Required positive for Surface.",
+          "type": "number",
+          "default": 0
+        },
+        "upLean": {
+          "description": "How far the body\u0027s up axis blends from gravity-up toward the surface normal, in [0, 1].",
+          "type": "number",
+          "default": 0
+        },
+        "forward": {
+          "description": "Where the hold\u0027s frame takes its forward direction when the surface leaves it free.",
+          "enum": [
+            "Heading",
+            "Intent",
+            "Velocity"
+          ],
+          "default": "Heading"
+        },
+        "onDrive": {
+          "description": "Whether driving into an admitted face takes this row with no channel press.",
+          "type": "boolean",
+          "default": false
+        },
+        "driveAlignment": {
+          "description": "The least alignment, in [0, 1], between the commanded direction and the face\u0027s inward normal before OnDrive takes it. Inert without it.",
+          "type": "number",
+          "default": 0
+        },
+        "release": {
+          "description": "The declared channel name whose held read drops this row, or null for a row no channel can drop.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "spend": {
+          "$ref": "#/$defs/WorldHoldSpend",
+          "description": "What the row spends while held, or null for a row that spends nothing.",
+          "default": null
+        },
+        "medium": {
+          "$ref": "#/$defs/WorldHoldMedium",
+          "description": "The medium\u0027s own displacement law. Required for Medium and refused on every other bond.",
+          "default": null
+        }
+      },
+      "required": [
+        "name",
+        "bond",
+        "hold"
+      ],
       "additionalProperties": false
     },
     "ActionEffectSetVerticalVelocity": {
@@ -2884,6 +3189,171 @@
       ],
       "additionalProperties": false
     },
+    "WorldValueTokenConstant": {
+      "description": "An exact authored decimal, converted to the destination row\u0027s numeric kind at compile time.",
+      "properties": {
+        "$type": {
+          "const": "constant"
+        },
+        "value": {
+          "description": "The exact decimal literal.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "WorldValueTokenState": {
+      "description": "A live state cell or reserved world-rule channel.",
+      "properties": {
+        "$type": {
+          "const": "state"
+        },
+        "name": {
+          "description": "The state row or reserved-channel name.",
+          "type": "string"
+        },
+        "key": {
+          "description": "The optional keyed-row cell.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "WorldValueTokenAdd": {
+      "description": "Consumes two values and pushes their sum.",
+      "properties": {
+        "$type": {
+          "const": "add"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldValueTokenSubtract": {
+      "description": "Consumes two values and pushes left minus right.",
+      "properties": {
+        "$type": {
+          "const": "subtract"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldValueTokenMultiply": {
+      "description": "Consumes two values and pushes their product in the destination row\u0027s numeric domain.",
+      "properties": {
+        "$type": {
+          "const": "multiply"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldValueTokenDivide": {
+      "description": "Consumes two values and pushes left divided by right; zero fails the effect or transaction.",
+      "properties": {
+        "$type": {
+          "const": "divide"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldValueTokenMin": {
+      "description": "Consumes two values and pushes the lesser.",
+      "properties": {
+        "$type": {
+          "const": "min"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldValueTokenMax": {
+      "description": "Consumes two values and pushes the greater.",
+      "properties": {
+        "$type": {
+          "const": "max"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldValueTokenClamp": {
+      "description": "Consumes value, minimum, maximum (in that authored order) and pushes the inclusive clamp.",
+      "properties": {
+        "$type": {
+          "const": "clamp"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldValueToken": {
+      "description": "One authored token in a WorldValueExpression.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WorldValueTokenConstant"
+        },
+        {
+          "$ref": "#/$defs/WorldValueTokenState"
+        },
+        {
+          "$ref": "#/$defs/WorldValueTokenAdd"
+        },
+        {
+          "$ref": "#/$defs/WorldValueTokenSubtract"
+        },
+        {
+          "$ref": "#/$defs/WorldValueTokenMultiply"
+        },
+        {
+          "$ref": "#/$defs/WorldValueTokenDivide"
+        },
+        {
+          "$ref": "#/$defs/WorldValueTokenMin"
+        },
+        {
+          "$ref": "#/$defs/WorldValueTokenMax"
+        },
+        {
+          "$ref": "#/$defs/WorldValueTokenClamp"
+        }
+      ]
+    },
+    "WorldValueTokenList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/WorldValueToken"
+      }
+    },
+    "WorldValueExpression": {
+      "description": "A bounded postfix numeric expression evaluated by a world rule. Each token either pushes a value or consumes preceding values; the compiler proves stack shape and numeric kind before simulation begins.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "tokens": {
+          "$ref": "#/$defs/WorldValueTokenList",
+          "description": "The postfix tokens, in evaluation order."
+        }
+      },
+      "required": [
+        "tokens"
+      ],
+      "additionalProperties": false
+    },
     "ActionEffectSetState": {
       "description": "Writes a named state cell \u2014 a kit counter slot at body scope, a state-section row\u0027s cell at world scope (see WorldRule).",
       "properties": {
@@ -2950,6 +3420,11 @@
             "null"
           ],
           "default": null
+        },
+        "expression": {
+          "$ref": "#/$defs/WorldValueExpression",
+          "description": "World scope only: a bounded numeric expression evaluated in the destination row\u0027s integer or fixed-point domain. Exactly one source spelling is authored.",
+          "default": null
         }
       },
       "required": [
@@ -3014,6 +3489,11 @@
             "number",
             "null"
           ],
+          "default": null
+        },
+        "expression": {
+          "$ref": "#/$defs/WorldValueExpression",
+          "description": "World scope only \u2014 see Expression.",
           "default": null
         }
       },
@@ -3754,19 +4234,19 @@
       }
     },
     "WorldPlacementGrip": {
-      "description": "A placement\u0027s grip facet \u2014 overrides the world\u0027s DefaultGrip climb policy for every collider this row compiles, composing as the tighter authoring layer: present, it decides; absent, the row\u0027s colliders fall back to the world default. Requires Solid (nothing else compiles a collider a grip trait could apply to). Every collider a distribution/mirror expands from one row shares the row\u0027s single grip decision \u2014 a lattice of climbable handholds is authored as one placement, not one per copy.",
+      "description": "A placement\u0027s grip facet \u2014 overrides the world\u0027s DefaultHold hold policy for every collider this row compiles, composing as the tighter authoring layer: present, it decides; absent, the row\u0027s colliders fall back to the world default. Requires Solid (nothing else compiles a collider a grip trait could apply to). Every collider a distribution/mirror expands from one row shares the row\u0027s single grip decision \u2014 a lattice of holdable handholds is authored as one placement, not one per copy.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
-        "climbable": {
-          "description": "Whether this row\u0027s compiled surface(s) are climbable, overriding the world default.",
+        "holdable": {
+          "description": "Whether a body\u0027s surface hold may take this row\u0027s compiled surface(s), overriding the world default.",
           "type": "boolean"
         }
       },
       "required": [
-        "climbable"
+        "holdable"
       ],
       "additionalProperties": false
     },
@@ -3845,7 +4325,7 @@
         },
         "grip": {
           "$ref": "#/$defs/WorldPlacementGrip",
-          "description": "The placement\u0027s grip facet (see WorldPlacementGrip) \u2014 overrides the world\u0027s default climb policy for this row\u0027s compiled surface(s), or null to inherit the world default. Omitted from the wire when null. Requires Solid (validated).",
+          "description": "The placement\u0027s grip facet (see WorldPlacementGrip) \u2014 overrides the world\u0027s default hold policy for this row\u0027s compiled surface(s), or null to inherit the world default. Omitted from the wire when null. Requires Solid (validated).",
           "default": null
         }
       },
@@ -3942,6 +4422,797 @@
       ],
       "additionalProperties": false
     },
+    "ActionEffectRemoveStateCell": {
+      "description": "Removes one addressed cell from a declared world-state row. World scope only.",
+      "properties": {
+        "$type": {
+          "const": "removeStateCell"
+        },
+        "state": {
+          "description": "The row to remove from.",
+          "type": "string"
+        },
+        "key": {
+          "description": "The optional cell key.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "ActionEffectScheduleState": {
+      "description": "Writes an absolute simulation due tick into an integer state cell. The delay is converted against the world\u0027s authored simulation rate and rounded up, so it never fires early. A companion rule compares $tick against the cell and removes it after handling, forming a bounded, document-backed scheduler.",
+      "properties": {
+        "$type": {
+          "const": "scheduleState"
+        },
+        "state": {
+          "description": "The integer destination row.",
+          "type": "string"
+        },
+        "delaySeconds": {
+          "description": "The non-negative delay, rounded up to simulation ticks.",
+          "type": "number"
+        },
+        "key": {
+          "description": "The optional cell key.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "state",
+        "delaySeconds"
+      ],
+      "additionalProperties": false
+    },
+    "WorldTransactionStepSetCell": {
+      "description": "Sets one state cell from exactly one numeric source spelling.",
+      "properties": {
+        "$type": {
+          "const": "setState"
+        },
+        "state": {
+          "description": "The destination row.",
+          "type": "string"
+        },
+        "key": {
+          "description": "The optional destination cell key.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "value": {
+          "description": "The literal source.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "fromState": {
+          "description": "The live source row or reserved channel.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "fromKey": {
+          "description": "The optional source cell key.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "valueSeconds": {
+          "description": "The exact engine-tick duration source.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "expression": {
+          "$ref": "#/$defs/WorldValueExpression",
+          "description": "The bounded postfix numeric source.",
+          "default": null
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "WorldTransactionStepAddCell": {
+      "description": "Adds exactly one numeric source to a state cell.",
+      "properties": {
+        "$type": {
+          "const": "addState"
+        },
+        "state": {
+          "description": "The destination row.",
+          "type": "string"
+        },
+        "key": {
+          "description": "The optional destination cell key.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "value": {
+          "description": "The literal source.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "fromState": {
+          "description": "The live source row or reserved channel.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "fromKey": {
+          "description": "The optional source cell key.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "valueSeconds": {
+          "description": "The exact engine-tick duration source.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "expression": {
+          "$ref": "#/$defs/WorldValueExpression",
+          "description": "The bounded postfix numeric source.",
+          "default": null
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "WorldTransactionStepCountdownCell": {
+      "description": "Consumes one non-negative integer countdown by the current engine-step width.",
+      "properties": {
+        "$type": {
+          "const": "countdownState"
+        },
+        "state": {
+          "description": "The countdown row.",
+          "type": "string"
+        },
+        "key": {
+          "description": "The optional cell key.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "WorldTransactionStepScheduleCell": {
+      "description": "Writes one absolute simulation-tick deadline.",
+      "properties": {
+        "$type": {
+          "const": "scheduleState"
+        },
+        "state": {
+          "description": "The integer destination row.",
+          "type": "string"
+        },
+        "delaySeconds": {
+          "description": "The non-negative delay, converted with the world\u0027s simulation rate and rounded up.",
+          "type": "number"
+        },
+        "key": {
+          "description": "The optional cell key.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "state",
+        "delaySeconds"
+      ],
+      "additionalProperties": false
+    },
+    "WorldTransactionStepGenerateStep": {
+      "description": "Redraws one declared state draw site.",
+      "properties": {
+        "$type": {
+          "const": "generate"
+        },
+        "row": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "row"
+      ],
+      "additionalProperties": false
+    },
+    "WorldTransactionStepUpsertHudPanelStep": {
+      "description": "Upserts one world HUD panel.",
+      "properties": {
+        "$type": {
+          "const": "upsertHudPanel"
+        },
+        "panel": {
+          "$ref": "#/$defs/WorldHudPanel"
+        }
+      },
+      "required": [
+        "panel"
+      ],
+      "additionalProperties": false
+    },
+    "WorldTransactionStepRemoveHudPanelStep": {
+      "description": "Removes one world HUD panel.",
+      "properties": {
+        "$type": {
+          "const": "removeHudPanel"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "WorldTransactionStepUpsertPlacementStep": {
+      "description": "Upserts one placement row.",
+      "properties": {
+        "$type": {
+          "const": "upsertPlacement"
+        },
+        "placement": {
+          "$ref": "#/$defs/WorldPlacement"
+        }
+      },
+      "required": [
+        "placement"
+      ],
+      "additionalProperties": false
+    },
+    "WorldTransactionStepRemovePlacementStep": {
+      "description": "Removes one placement row.",
+      "properties": {
+        "$type": {
+          "const": "removePlacement"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "WorldTransactionStepPoseStep": {
+      "description": "Teleports an active body.",
+      "properties": {
+        "$type": {
+          "const": "pose"
+        },
+        "key": {
+          "type": "string"
+        },
+        "spawnPoint": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "position": {
+          "default": null
+        },
+        "yawDegrees": {
+          "type": "number",
+          "default": 0
+        },
+        "pitchDegrees": {
+          "type": "number",
+          "default": 0
+        },
+        "rollDegrees": {
+          "type": "number",
+          "default": 0
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "additionalProperties": false
+    },
+    "WorldTransactionStepEmitCueStep": {
+      "description": "Emits one deterministic gameplay cue.",
+      "properties": {
+        "$type": {
+          "const": "emitCue"
+        },
+        "name": {
+          "type": "string"
+        },
+        "payload": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "key": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "WorldTransactionStepSetBodyVerticalVelocityStep": {
+      "description": "Sets an active body\u0027s vertical velocity.",
+      "properties": {
+        "$type": {
+          "const": "setBodyVerticalVelocity"
+        },
+        "key": {
+          "type": "string"
+        },
+        "velocity": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "key",
+        "velocity"
+      ],
+      "additionalProperties": false
+    },
+    "WorldTransactionStepScaleBodyVerticalVelocityStep": {
+      "description": "Scales an active body\u0027s vertical velocity.",
+      "properties": {
+        "$type": {
+          "const": "scaleBodyVerticalVelocity"
+        },
+        "key": {
+          "type": "string"
+        },
+        "factor": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "key",
+        "factor"
+      ],
+      "additionalProperties": false
+    },
+    "WorldTransactionStepApplyBodyImpulseStep": {
+      "description": "Applies a timed body-local planar impulse.",
+      "properties": {
+        "$type": {
+          "const": "applyBodyImpulse"
+        },
+        "key": {
+          "type": "string"
+        },
+        "bodyDirection": {},
+        "speed": {
+          "type": "number"
+        },
+        "durationSeconds": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "key",
+        "bodyDirection",
+        "speed",
+        "durationSeconds"
+      ],
+      "additionalProperties": false
+    },
+    "WorldTransactionStepDesignateBodyStep": {
+      "description": "Sets or clears an active body\u0027s target register.",
+      "properties": {
+        "$type": {
+          "const": "designateBody"
+        },
+        "key": {
+          "type": "string"
+        },
+        "register": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "Body",
+            "Clear"
+          ]
+        },
+        "targetKey": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "key",
+        "register",
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "WorldTransactionStepPaintFieldStep": {
+      "description": "Sets or adds a bounded live field neighborhood.",
+      "properties": {
+        "$type": {
+          "const": "paintField"
+        },
+        "field": {
+          "type": "string"
+        },
+        "x": {
+          "type": "integer"
+        },
+        "y": {
+          "type": "integer"
+        },
+        "z": {
+          "type": "integer"
+        },
+        "value": {
+          "type": "number"
+        },
+        "operation": {
+          "enum": [
+            "Set",
+            "Add"
+          ],
+          "default": "Set"
+        },
+        "radius": {
+          "type": "integer",
+          "default": 0
+        }
+      },
+      "required": [
+        "field",
+        "x",
+        "y",
+        "z",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "WorldTransactionStep": {
+      "description": "The finite, non-recursive effect vocabulary admitted inside an atomic world-rule transaction. It mirrors the rollback-safe world-scope effects explicitly; nested transactions and persistence I/O have no wire shape.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WorldTransactionStepSetCell"
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepAddCell"
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepCountdownCell"
+        },
+        {
+          "$ref": "#/$defs/ActionEffectRemoveStateCell",
+          "description": "Removes one addressed state cell."
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepScheduleCell"
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepGenerateStep"
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepUpsertHudPanelStep"
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepRemoveHudPanelStep"
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepUpsertPlacementStep"
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepRemovePlacementStep"
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepPoseStep"
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepEmitCueStep"
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepSetBodyVerticalVelocityStep"
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepScaleBodyVerticalVelocityStep"
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepApplyBodyImpulseStep"
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepDesignateBodyStep"
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepPaintFieldStep"
+        }
+      ]
+    },
+    "ActionEffectTransaction": {
+      "description": "Applies a bounded list of state, document, body, cue, and field effects atomically after preflight. When any effect refuses, none apply and OnFailure runs instead. Nested transactions and save effects are structurally unavailable because persistence I/O cannot be rolled back.",
+      "properties": {
+        "$type": {
+          "const": "transaction"
+        },
+        "effects": {
+          "description": "The main transaction branch.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/WorldTransactionStep"
+          }
+        },
+        "onFailure": {
+          "description": "The optional branch run after a main-branch refusal.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/WorldTransactionStep"
+          },
+          "default": null
+        }
+      },
+      "required": [
+        "effects"
+      ],
+      "additionalProperties": false
+    },
+    "ActionEffectEmitCue": {
+      "description": "Emits a deterministic, presentation-neutral gameplay cue. World scope only.",
+      "properties": {
+        "$type": {
+          "const": "emitCue"
+        },
+        "name": {
+          "description": "The stable authored cue identifier.",
+          "type": "string"
+        },
+        "payload": {
+          "description": "The optional bounded consumer payload.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "key": {
+          "description": "The optional body key used for spatial presentation.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "ActionEffectSetBodyVerticalVelocity": {
+      "description": "Sets an active body\u0027s vertical velocity. Key accepts the ordinary body-key indirection and rule bindings.",
+      "properties": {
+        "$type": {
+          "const": "setBodyVerticalVelocity"
+        },
+        "key": {
+          "description": "The body index or dynamic body-key spelling.",
+          "type": "string"
+        },
+        "velocity": {
+          "description": "The fixed-point vertical velocity.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "key",
+        "velocity"
+      ],
+      "additionalProperties": false
+    },
+    "ActionEffectScaleBodyVerticalVelocity": {
+      "description": "Scales an active body\u0027s vertical velocity.",
+      "properties": {
+        "$type": {
+          "const": "scaleBodyVerticalVelocity"
+        },
+        "key": {
+          "description": "The body index or dynamic body-key spelling.",
+          "type": "string"
+        },
+        "factor": {
+          "description": "The fixed-point scale factor.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "key",
+        "factor"
+      ],
+      "additionalProperties": false
+    },
+    "ActionEffectApplyBodyImpulse": {
+      "description": "Applies a timed body-local planar impulse to an active body.",
+      "properties": {
+        "$type": {
+          "const": "applyBodyImpulse"
+        },
+        "key": {
+          "description": "The body index or dynamic body-key spelling.",
+          "type": "string"
+        },
+        "bodyDirection": {
+          "description": "The finite unit direction in body-local space."
+        },
+        "speed": {
+          "description": "The fixed-point impulse speed.",
+          "type": "number"
+        },
+        "durationSeconds": {
+          "description": "The non-negative exact engine-tick duration.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "key",
+        "bodyDirection",
+        "speed",
+        "durationSeconds"
+      ],
+      "additionalProperties": false
+    },
+    "ActionEffectDesignateBody": {
+      "description": "Sets or clears one active body\u0027s declared target register.",
+      "properties": {
+        "$type": {
+          "const": "designateBody"
+        },
+        "key": {
+          "description": "The body whose register changes.",
+          "type": "string"
+        },
+        "register": {
+          "description": "The declared target-register name.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Whether to set a body target or clear the register.",
+          "enum": [
+            "Body",
+            "Clear"
+          ]
+        },
+        "targetKey": {
+          "description": "The required target body for Body.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "key",
+        "register",
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "ActionEffectPaintField": {
+      "description": "Sets or adds a value over a bounded spherical neighborhood in a live lattice field.",
+      "properties": {
+        "$type": {
+          "const": "paintField"
+        },
+        "field": {
+          "description": "The declared lattice field.",
+          "type": "string"
+        },
+        "x": {
+          "description": "The center X coordinate, in lattice cells.",
+          "type": "integer"
+        },
+        "y": {
+          "description": "The center Y coordinate, in lattice cells.",
+          "type": "integer"
+        },
+        "z": {
+          "description": "The center Z coordinate, in lattice cells.",
+          "type": "integer"
+        },
+        "value": {
+          "description": "The fixed-point value to set or add.",
+          "type": "number"
+        },
+        "operation": {
+          "description": "The set or add operation.",
+          "enum": [
+            "Set",
+            "Add"
+          ],
+          "default": "Set"
+        },
+        "radius": {
+          "description": "The sphere radius, in lattice cells.",
+          "type": "integer",
+          "default": 0
+        }
+      },
+      "required": [
+        "field",
+        "x",
+        "y",
+        "z",
+        "value"
+      ],
+      "additionalProperties": false
+    },
     "ActionEffect": {
       "description": "An authored operand row lowered to a BodyMotionOp and executed by the body instruction interpreter when its trigger fires.",
       "type": [
@@ -3999,6 +5270,33 @@
         },
         {
           "$ref": "#/$defs/ActionEffectPose"
+        },
+        {
+          "$ref": "#/$defs/ActionEffectRemoveStateCell"
+        },
+        {
+          "$ref": "#/$defs/ActionEffectScheduleState"
+        },
+        {
+          "$ref": "#/$defs/ActionEffectTransaction"
+        },
+        {
+          "$ref": "#/$defs/ActionEffectEmitCue"
+        },
+        {
+          "$ref": "#/$defs/ActionEffectSetBodyVerticalVelocity"
+        },
+        {
+          "$ref": "#/$defs/ActionEffectScaleBodyVerticalVelocity"
+        },
+        {
+          "$ref": "#/$defs/ActionEffectApplyBodyImpulse"
+        },
+        {
+          "$ref": "#/$defs/ActionEffectDesignateBody"
+        },
+        {
+          "$ref": "#/$defs/ActionEffectPaintField"
         }
       ]
     },
@@ -4020,7 +5318,7 @@
           "description": "The effects applied on fire, in order."
         },
         "gate": {
-          "$ref": "#/$defs/ActionPredicate",
+          "$ref": "#/$defs/ActionPredicateNullable",
           "description": "The predicate that must hold to fire, or null for always.",
           "default": null
         },
@@ -4380,6 +5678,8 @@
         "AffectedBy",
         "Submerged",
         "AtSurface",
+        "Climbing",
+        "Flying",
         null
       ]
     },

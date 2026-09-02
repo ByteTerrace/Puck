@@ -50,9 +50,9 @@ public readonly record struct ScreenPadSnapshot(int ScreenIndex, MachinePadState
 /// is structurally excluded from the replay tape's recorded intent list — exactly like a mounted addon's driving.
 /// It is re-derived at replay time by re-running this same fold against the source seat's own recorded submission
 /// (which is captured, ordinarily) and the recorded set state (the <see cref="WorldCommand.ComposeControl"/> command
-/// itself, and any Grant/Revoke touching an applied target, all travel as ordinary tape entries). The pose hash
-/// needs no format change either: it already hashes every active body's position/orientation each tick, so a
-/// possessed body's motion and a captured source's stillness are covered automatically.</para>
+/// itself, and any Grant/Revoke touching an applied target, all travel as ordinary tape entries). Replay's
+/// state-system verdict includes the population pose digest, so a possessed body's motion and a captured source's
+/// stillness are covered automatically; the separate pose trace keeps that divergence inspectable.</para>
 /// <para>Single-threaded, like the grant table it views: <see cref="WorldServer.ApplyCommand"/> mutates it on the
 /// command-apply window and <see cref="FoldTick"/> reads it during <see cref="WorldServer.Step"/>, both on the
 /// launcher's window-pump thread, so no lock guards this state.</para>

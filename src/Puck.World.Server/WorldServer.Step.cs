@@ -6,6 +6,7 @@ using Puck.Physics.Motion;
 namespace Puck.World.Server;
 
 public sealed partial class WorldServer {
+    private bool m_ruleStatePreflightRejected;
     /// <summary>Observes a music segment transition the instant it commits (the same tick <c>MusicDirector</c>
     /// records it, from the music-step call site in <see cref="StepCore"/>) — mirroring
     /// <see cref="SaveEffectTap"/>/<see cref="WorldMachineHost.MachineLifecycleTap"/>'s "the server calls out, the
@@ -269,14 +270,37 @@ public sealed partial class WorldServer {
             return false;
         }
 
+        return FireWorldRuleEffects(effects: rule.Effects, ruleName: rule.Name, tick: tick, stepTicks: stepTicks);
+    }
+    private static bool IsAtomicStateEffect(WorldRuleEffectKind kind) => kind is
+        WorldRuleEffectKind.Write or WorldRuleEffectKind.Countdown or WorldRuleEffectKind.RemoveStateCell or WorldRuleEffectKind.ScheduleState;
+    private bool FireWorldRuleEffects(CompiledWorldEffect[] effects, string ruleName, ulong tick, ulong stepTicks) {
         var applied = false;
 
-        foreach (var effect in rule.Effects) {
-            applied |= FireWorldRuleEffect(
-                effect: effect,
-                stepTicks: stepTicks,
-                tick: tick
-            );
+        for (var index = 0; index < effects.Length;) {
+            if (IsAtomicStateEffect(kind: effects[index].Kind)) {
+                var end = (index + 1);
+
+                while ((end < effects.Length) && IsAtomicStateEffect(kind: effects[end].Kind)) {
+                    end++;
+                }
+
+                // A single effect performs its own refusal-suppressing preflight. A longer run preflights as one
+                // candidate so no earlier write leaks when a later one refuses.
+                var preflighted = ((end - index) > 1);
+                if (!preflighted || PreflightWorldRuleStateEffects(effects: effects, ruleName: ruleName, start: index, end: end, tick: tick, stepTicks: stepTicks)) {
+                    for (; index < end; index++) {
+                        applied |= FireWorldRuleEffect(effect: effects[index], ruleName: ruleName, stepTicks: stepTicks, tick: tick, strict: preflighted);
+                    }
+                } else {
+                    index = end;
+                }
+
+                continue;
+            }
+
+            applied |= FireWorldRuleEffect(effect: effects[index], ruleName: ruleName, stepTicks: stepTicks, tick: tick);
+            index++;
         }
 
         return applied;
@@ -380,7 +404,8 @@ public sealed partial class WorldServer {
             rows: m_definition.State,
             name: row
         ) is { Cells: { } cells }) {
-            foreach (var cell in cells) {
+            for (var index = 0; index < cells.Count; index++) {
+                var cell = cells[index];
                 if (WorldStateReader.TryParseCandidateIndex(
                     index: out var key,
                     key: cell.Key
@@ -404,7 +429,8 @@ public sealed partial class WorldServer {
             return;
         }
 
-        foreach (var cell in cells) {
+        for (var cellIndex = 0; cellIndex < cells.Count; cellIndex++) {
+            var cell = cells[cellIndex];
             if (
                 !WorldStateReader.TryParseCandidateIndex(
                 index: out var index,
@@ -415,7 +441,7 @@ public sealed partial class WorldServer {
                 continue;
             }
 
-            var nonzero = ((cell.Advance is null)
+            var nonzero = (((cell.Advance is null) && (cell.Cycle is null))
                 ? (cell.Value != 0L)
                 : (ReadStateCell(
                     row: row,
@@ -477,12 +503,38 @@ public sealed partial class WorldServer {
     // (the one exception being a removePlacement on a possessed carrier, which the CarrierPossessed guard below skips
     // outright rather than submitting). SAVE is the one exception to all of this: it submits no WorldMutation at all (see
     // ActionEffect.Save's remarks) and is handled before the mutation switch below ever runs.
-    private bool FireWorldRuleEffect(CompiledWorldEffect effect, ulong tick, ulong stepTicks) {
+    private bool FireWorldRuleEffect(CompiledWorldEffect effect, string ruleName, ulong tick, ulong stepTicks, bool preflight = false, bool strict = false) {
+        if (effect.Kind == WorldRuleEffectKind.Transaction) {
+            return FireWorldRuleTransaction(transaction: effect, ruleName: ruleName, tick: tick, stepTicks: stepTicks);
+        }
+        if (effect.Kind == WorldRuleEffectKind.EmitCue) {
+            if (!preflight) {
+                FireGameplayCue(effect: effect, tick: tick);
+            }
+            return false;
+        }
+        if (effect.Kind == WorldRuleEffectKind.Body) {
+            FireBodyEffect(effect: effect, ruleName: ruleName, tick: tick, preflight: preflight);
+            return false;
+        }
+        if (effect.Kind == WorldRuleEffectKind.PaintField) {
+            FireFieldPaint(effect: effect, ruleName: ruleName, tick: tick, preflight: preflight);
+            return false;
+        }
         if (effect.Kind == WorldRuleEffectKind.Save) {
+            if (preflight) {
+                m_ruleStatePreflightRejected = true;
+                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.SaveUnavailable, ruleName: ruleName, effect: in effect, tick: tick, detail: "save effects are not atomic transaction steps");
+                return false;
+            }
             // No compose, no validate, no install, no journal — SaveEffectTap performs the identical settle-at-save
             // capture 'world.save' itself runs, straight to the world's own loaded file. A null tap (no composition
             // root wired) is a silent no-op, the same convention EchoTap follows.
-            SaveEffectTap?.Invoke(tick);
+            if (SaveEffectTap is { } save) {
+                save(tick);
+            } else {
+                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.SaveUnavailable, ruleName: ruleName, effect: in effect, tick: tick, detail: "no save-effect host is attached");
+            }
 
             return false;
         }
@@ -490,10 +542,29 @@ public sealed partial class WorldServer {
         if (effect.Kind == WorldRuleEffectKind.Pose) {
             FirePoseEffect(
                 effect: effect,
-                tick: tick
+                ruleName: ruleName,
+                tick: tick,
+                preflight: preflight
             );
 
             return false;
+        }
+
+        // An ordinary rule mutation is preflighted before it reaches the loud mutation door. This turns a standing
+        // Level-rule refusal into one bounded structured diagnostic instead of one rejection line per tick. A
+        // transaction/contiguous-run commit passes strict=true because its whole branch was already preflighted.
+        if (!preflight && !strict) {
+            var installed = m_definition;
+            m_ruleStatePreflightRejected = false;
+            try {
+                _ = FireWorldRuleEffect(effect: effect, ruleName: ruleName, tick: tick, stepTicks: stepTicks, preflight: true, strict: true);
+            } finally {
+                m_definition = installed;
+            }
+            if (m_ruleStatePreflightRejected) {
+                m_ruleStatePreflightRejected = false;
+                return false;
+            }
         }
 
         // A '$cell:' destination resolves its key fresh every firing, exactly as a gate operand's does.
@@ -503,7 +574,34 @@ public sealed partial class WorldServer {
             tick: tick
         );
 
-        if (effect.Kind is WorldRuleEffectKind.Write or WorldRuleEffectKind.Countdown) {
+        if (effect.Kind == WorldRuleEffectKind.RemoveStateCell) {
+            if (WorldStateReader.TryRead(
+                definition: m_definition,
+                rowName: effect.Row,
+                key: destinationKey,
+                tick: tick,
+                row: out _,
+                rawValue: out var existing,
+                text: out var existingText
+            ) && (existing is null) && (existingText is null)) {
+                if (!strict) {
+                    return false;
+                }
+            }
+
+            return ApplyWorldRuleMutation(
+                effect: in effect,
+                ruleName: ruleName,
+                mutation: new WorldMutation.RemoveStateCell(Principal: WorldPrincipal.World, Row: effect.Row, Key: destinationKey),
+                tick: tick,
+                connectionId: SubmissionEnvelope.LocalConnectionId,
+                correlationId: 0,
+                preMetered: false,
+                preflight: preflight
+            );
+        }
+
+        if (effect.Kind is WorldRuleEffectKind.Write or WorldRuleEffectKind.Countdown or WorldRuleEffectKind.ScheduleState) {
             // The destination's CURRENT value through the same shared resolver the gate read: an absent cell reads as
             // zero (an Add mints it), an absent ROW is nothing to write. On an ADVANCING row that is the LIVE value,
             // not the stored base, which is what the could-this-move skip below needs: a base is a fixed point of
@@ -557,7 +655,9 @@ public sealed partial class WorldServer {
                     return false;
                 }
 
-                return TryApplyMutation(
+                return ApplyWorldRuleMutation(
+                    effect: in effect,
+                    ruleName: ruleName,
                     mutation: new WorldMutation.UpsertStateCell(
                         Principal: WorldPrincipal.World,
                         Row: effect.Row,
@@ -569,11 +669,23 @@ public sealed partial class WorldServer {
                     tick: tick,
                     connectionId: SubmissionEnvelope.LocalConnectionId,
                     correlationId: 0,
-                    preMetered: false
+                    preMetered: false,
+                    preflight: preflight
                 );
             }
 
             var current = (destination ?? 0L);
+
+            // A cycling cell stores its PHASE and reads its rotation; a write moves the phase, so the value an add
+            // turns from and the value the could-this-move test compares against is the stored phase, not the live
+            // rotation the trait carried it to this tick.
+            if (
+                WorldCellName.TryParse(candidate: destinationKey, name: out var destinationCell, reason: out _) &&
+                (WorldDefinitionRows.FindCell(cells: row.Cells, key: destinationCell) is { } storedCell) &&
+                ((storedCell.Cycle is not null) || ((storedCell.Key == WorldStateRow.SlotKey) && (row.Cycle is not null)))
+            ) {
+                current = storedCell.Value;
+            }
 
             // A live 'from' operand is read fresh EVERY firing (Install swaps m_definition on every apply, so this
             // reads the same settled state a compareState comparand would this tick) and converted to the
@@ -591,21 +703,34 @@ public sealed partial class WorldServer {
                 return false;
             }
 
-            var raw = ((effect.Kind == WorldRuleEffectKind.Countdown)
-                ? -Math.Min(
+            var expressionFailed = false;
+            long raw;
+
+            if (effect.Kind == WorldRuleEffectKind.Countdown) {
+                raw = -Math.Min(
                     val1: current,
                     val2: checked((long)stepTicks)
-                )
-                : ((effect.From is { } from)
-                    ? ConvertWorldFactToRaw(
-                        value: ReadWorldFact(
-                            operand: from,
-                            tick: tick
-                        ).Value,
-                        kind: row.Kind
-                    )
-                    : effect.RawValue
-            ));
+                );
+            } else if (effect.Kind == WorldRuleEffectKind.ScheduleState) {
+                raw = ScheduleDueTick(tick: tick, delayTicks: effect.RawValue, failed: out expressionFailed);
+            } else if (effect.Expression is { } expression) {
+                raw = (TryEvaluateExpression(program: expression, kind: row.Kind, tick: tick, value: out var evaluated)
+                    ? evaluated
+                    : FailedExpression(out expressionFailed)
+                );
+            } else if (effect.From is { } from) {
+                raw = ConvertWorldFactToRaw(value: ReadWorldFact(operand: from, tick: tick), kind: row.Kind);
+            } else {
+                raw = effect.RawValue;
+            }
+
+            if (expressionFailed) {
+                if (preflight) {
+                    m_ruleStatePreflightRejected = true;
+                }
+                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.Arithmetic, ruleName: ruleName, effect: in effect, tick: tick, detail: "the expression overflowed, divided by zero, or produced an invalid stack result");
+                return false;
+            }
             var next = ((effect.Write == WorldDocumentWriteKind.Add)
                 ? unchecked((current + raw))
                 : raw
@@ -625,7 +750,9 @@ public sealed partial class WorldServer {
                 return false;
             }
 
-            return TryApplyMutation(
+            return ApplyWorldRuleMutation(
+                effect: in effect,
+                ruleName: ruleName,
                 mutation: new WorldMutation.UpsertStateCell(
                     Principal: WorldPrincipal.World,
                     Row: effect.Row,
@@ -636,7 +763,8 @@ public sealed partial class WorldServer {
                 tick: tick,
                 connectionId: SubmissionEnvelope.LocalConnectionId,
                 correlationId: 0,
-                preMetered: false
+                preMetered: false,
+                preflight: preflight
             );
         }
 
@@ -657,7 +785,10 @@ public sealed partial class WorldServer {
             holder: out var possessor
         )
         ) {
-            Console.Error.WriteLine(value: $"[world.rule: despawn refused ({WorldRuleEffectRefusal.CarrierPossessed}) — placement '{effect.Row}' carries inhabitant body:{possessedBody}, possessed by {possessor.Describe()}; revoke the drive grant before despawning, or clear the possession in the rule's own effects first]");
+            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.CarrierPossessed, ruleName: ruleName, effect: in effect, tick: tick, detail: $"placement '{effect.Row}' carries inhabitant body:{possessedBody}, possessed by {possessor.Describe()}");
+            if (preflight) {
+                m_ruleStatePreflightRejected = true;
+            }
 
             return false;
         }
@@ -686,18 +817,363 @@ public sealed partial class WorldServer {
             _ => throw new InvalidOperationException(message: $"world rule effect kind '{effect.Kind}' has no fire mapping."),
         };
 
-        return TryApplyMutation(
+        return ApplyWorldRuleMutation(
+            effect: in effect,
+            ruleName: ruleName,
             connectionId: SubmissionEnvelope.LocalConnectionId,
             correlationId: 0,
             mutation: mutation,
             preMetered: false,
-            tick: tick
+            tick: tick,
+            preflight: preflight
         );
+    }
+    private static long FailedExpression(out bool failed) {
+        failed = true;
+        return 0L;
+    }
+    private static long ScheduleDueTick(ulong tick, long delayTicks, out bool failed) {
+        failed = (delayTicks < 0L) || (tick > ((ulong)(long.MaxValue - Math.Max(0L, delayTicks))));
+        return failed ? 0L : checked(((long)tick) + delayTicks);
+    }
+    private bool TryEvaluateExpression(CompiledWorldExpressionToken[] program, CellKind kind, ulong tick, out long value) {
+        Span<long> stack = stackalloc long[WorldRuleCapacity.MaxExpressionTokens];
+        var top = 0;
+
+        try {
+            foreach (var token in program) {
+                if (token.Operation == WorldExpressionOp.Constant) {
+                    stack[top++] = token.Constant;
+                    continue;
+                }
+                if (token.Operation == WorldExpressionOp.Operand) {
+                    var fact = ReadWorldFact(operand: token.Operand!.Value, tick: tick);
+                    if (fact.IsForever) {
+                        value = 0L;
+                        return false;
+                    }
+                    stack[top++] = ConvertWorldFactToRaw(value: fact, kind: kind);
+                    continue;
+                }
+                if (token.Operation == WorldExpressionOp.Clamp) {
+                    var maximum = stack[--top];
+                    var minimum = stack[--top];
+                    var input = stack[--top];
+                    if (minimum > maximum) {
+                        value = 0L;
+                        return false;
+                    }
+                    stack[top++] = Math.Clamp(value: input, min: minimum, max: maximum);
+                    continue;
+                }
+
+                var right = stack[--top];
+                var left = stack[--top];
+                long result;
+
+                if (kind == CellKind.Fixed) {
+                    var a = FixedQ4816.FromRawBits(value: left);
+                    var b = FixedQ4816.FromRawBits(value: right);
+                    result = token.Operation switch {
+                        WorldExpressionOp.Add => checked(left + right),
+                        WorldExpressionOp.Subtract => checked(left - right),
+                        WorldExpressionOp.Multiply => checked(a * b).Value,
+                        WorldExpressionOp.Divide when right != 0L => checked(a / b).Value,
+                        WorldExpressionOp.Minimum => Math.Min(left, right),
+                        WorldExpressionOp.Maximum => Math.Max(left, right),
+                        _ => throw new DivideByZeroException(),
+                    };
+                } else {
+                    result = token.Operation switch {
+                        WorldExpressionOp.Add => checked(left + right),
+                        WorldExpressionOp.Subtract => checked(left - right),
+                        WorldExpressionOp.Multiply => checked(left * right),
+                        WorldExpressionOp.Divide when right != 0L => checked(left / right),
+                        WorldExpressionOp.Minimum => Math.Min(left, right),
+                        WorldExpressionOp.Maximum => Math.Max(left, right),
+                        _ => throw new DivideByZeroException(),
+                    };
+                }
+
+                stack[top++] = result;
+            }
+        } catch (ArithmeticException) {
+            value = 0L;
+            return false;
+        }
+
+        value = ((top == 1) ? stack[0] : 0L);
+        return (top == 1);
+    }
+    private bool FireWorldRuleTransaction(CompiledWorldEffect transaction, string ruleName, ulong tick, ulong stepTicks) {
+        var effects = transaction.Effects!;
+        var installed = m_definition;
+        m_ruleStatePreflightRejected = false;
+
+        try {
+            for (var index = 0; index < effects.Length; index++) {
+                var effect = effects[index];
+                _ = FireWorldRuleEffect(effect: effect, ruleName: ruleName, tick: tick, stepTicks: stepTicks, preflight: true, strict: true);
+                if (m_ruleStatePreflightRejected) {
+                    break;
+                }
+            }
+        } finally {
+            m_definition = installed;
+        }
+
+        if (m_ruleStatePreflightRejected) {
+            m_ruleStatePreflightRejected = false;
+            var failure = (transaction.OnFailure ?? []);
+            if (failure.Length == 0) {
+                return false;
+            }
+
+            installed = m_definition;
+            try {
+                for (var index = 0; index < failure.Length; index++) {
+                    var effect = failure[index];
+                    _ = FireWorldRuleEffect(effect: effect, ruleName: ruleName, tick: tick, stepTicks: stepTicks, preflight: true, strict: true);
+                    if (m_ruleStatePreflightRejected) {
+                        return false;
+                    }
+                }
+            } finally {
+                m_definition = installed;
+                m_ruleStatePreflightRejected = false;
+            }
+
+            var failureApplied = false;
+            for (var index = 0; index < failure.Length; index++) {
+                var effect = failure[index];
+                failureApplied |= FireWorldRuleEffect(effect: effect, ruleName: ruleName, tick: tick, stepTicks: stepTicks, strict: true);
+            }
+            return failureApplied;
+        }
+
+        var applied = false;
+        for (var index = 0; index < effects.Length; index++) {
+            var effect = effects[index];
+            applied |= FireWorldRuleEffect(effect: effect, ruleName: ruleName, tick: tick, stepTicks: stepTicks, strict: true);
+        }
+        return applied;
+    }
+    private void FireGameplayCue(CompiledWorldEffect effect, ulong tick) {
+        int? body = null;
+        if (effect.Key.Length > 0) {
+            var key = ResolveOperandKey(key: effect.Key, keyFrom: effect.KeyFrom, tick: tick);
+            if (int.TryParse(s: key, style: System.Globalization.NumberStyles.Integer, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var parsed) && (Body(index: parsed) is not null)) {
+                body = parsed;
+            }
+        }
+
+        var cue = new WorldGameplayCue(Name: effect.Cue!, Payload: effect.Payload, Body: body, Tick: tick);
+        GameplayCueTap?.Invoke(obj: cue);
+        Console.Error.WriteLine(value: $"[world.cue: {cue.Name} tick={tick}{(body is { } index ? $" body:{index}" : string.Empty)}]");
+    }
+    private void FireBodyEffect(CompiledWorldEffect effect, string ruleName, ulong tick, bool preflight) {
+        var key = ResolveOperandKey(key: effect.Key, keyFrom: effect.KeyFrom, tick: tick);
+        if (!int.TryParse(s: key, style: System.Globalization.NumberStyles.Integer, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var bodyIndex) || (Body(index: bodyIndex) is not { } body)) {
+            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.BodyInactive, ruleName: ruleName, effect: in effect, tick: tick, detail: $"body '{key}' is inactive");
+            if (preflight) {
+                m_ruleStatePreflightRejected = true;
+            }
+            return;
+        }
+
+        var operation = effect.Body!.Value;
+        if (operation.Operation == BodyMotionOp.Designate) {
+            if (!m_population.TryResolveTargetRegister(name: operation.Register!, index: out var registerIndex)) {
+                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.BodyTargetInvalid, ruleName: ruleName, effect: in effect, tick: tick, detail: $"target register '{operation.Register}' is unavailable");
+                if (preflight) {
+                    m_ruleStatePreflightRejected = true;
+                }
+                return;
+            }
+            if (operation.Designation == WorldBodyDesignationKind.Clear) {
+                if (!preflight) {
+                    m_population.SetDesignation(bodyIndex: bodyIndex, registerIndex: registerIndex, target: WorldTargetDesignation.None);
+                }
+                return;
+            }
+
+            var targetKey = ResolveOperandKey(key: operation.TargetKey, keyFrom: operation.TargetKeyFrom, tick: tick);
+            if (!int.TryParse(s: targetKey, style: System.Globalization.NumberStyles.Integer, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var targetIndex)) {
+                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.BodyTargetInvalid, ruleName: ruleName, effect: in effect, tick: tick, detail: $"target body key '{targetKey}' is invalid");
+                if (preflight) {
+                    m_ruleStatePreflightRejected = true;
+                }
+                return;
+            }
+            if ((targetIndex == bodyIndex) || (Body(index: targetIndex) is null)) {
+                var detail = ((targetIndex == bodyIndex)
+                    ? $"body:{bodyIndex} cannot designate itself"
+                    : $"target body:{targetIndex} is inactive"
+                );
+                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.BodyTargetInvalid, ruleName: ruleName, effect: in effect, tick: tick, detail: detail);
+                if (preflight) {
+                    m_ruleStatePreflightRejected = true;
+                }
+                return;
+            }
+            if (preflight) {
+                return;
+            }
+            _ = ApplyDesignationCore(
+                designation: new WorldDesignation(EntityIndex: bodyIndex, Register: operation.Register!, Subject: GrantSubject.Body(index: targetIndex)),
+                principal: WorldPrincipal.World,
+                knownSubject: true,
+                connectionId: SubmissionEnvelope.LocalConnectionId,
+                correlationId: 0
+            );
+            return;
+        }
+
+        if (preflight) {
+            return;
+        }
+        _ = body.ApplyTargetedEffect(
+            // A world-authored kinematic effect has no affecting body. Passing the recipient here would mint a
+            // false Affected fact on its next action pass and could recursively trigger unrelated body actions.
+            sourceIndex: -1,
+            instruction: new CompiledBodyInstruction(
+                Operation: operation.Operation,
+                Value: operation.Value,
+                Direction: operation.Direction,
+                DurationTicks: operation.DurationTicks,
+                StateSlot: -1
+            )
+        );
+    }
+    private void FireFieldPaint(CompiledWorldEffect effect, string ruleName, ulong tick, bool preflight) {
+        if (m_population.Fields is not { } lattice) {
+            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.FieldUnavailable, ruleName: ruleName, effect: in effect, tick: tick, detail: "no live field lattice is installed");
+            if (preflight) {
+                m_ruleStatePreflightRejected = true;
+            }
+            return;
+        }
+
+        var paint = effect.Paint!.Value;
+        if (!lattice.TryFieldIndex(name: paint.Field, field: out _)) {
+            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.FieldUnavailable, ruleName: ruleName, effect: in effect, tick: tick, detail: $"live field '{paint.Field}' is unavailable");
+            if (preflight) {
+                m_ruleStatePreflightRejected = true;
+            }
+            return;
+        }
+        if (preflight) {
+            return;
+        }
+        _ = lattice.PaintSphere(
+            fieldName: paint.Field,
+            centerX: paint.X,
+            centerY: paint.Y,
+            centerZ: paint.Z,
+            radius: paint.Radius,
+            operation: paint.Operation,
+            value: paint.Value
+        );
+    }
+    private bool ApplyWorldRuleMutation(in CompiledWorldEffect effect, string ruleName, WorldMutation mutation, ulong tick, int connectionId, long correlationId, bool preMetered, bool preflight) {
+        if (!preflight) {
+            var applied = TryApplyMutation(
+                mutation: mutation,
+                tick: tick,
+                connectionId: connectionId,
+                correlationId: correlationId,
+                preMetered: preMetered
+            );
+            if (!applied) {
+                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.MutationRejected, ruleName: ruleName, effect: in effect, tick: tick, detail: "the ordinary mutation door refused the effect; its mutation rejection names the concrete reason");
+            }
+            return applied;
+        }
+
+        var current = m_definition;
+
+        if (!TryCompose(
+            current: current,
+            mutation: mutation,
+            tick: tick,
+            instanceIdentity: InstanceIdentity,
+            candidate: out var candidate,
+            reason: out var composeReason,
+            evictedKey: out _
+        )) {
+            m_ruleStatePreflightRejected = true;
+            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.MutationRejected, ruleName: ruleName, effect: in effect, tick: tick, detail: composeReason);
+            return false;
+        }
+
+        candidate = RebaseCellTraits(candidate: candidate, mutation: mutation, original: current, tick: tick);
+
+        if (!TryValidateMutationCandidate(candidate: candidate, mutation: mutation, reason: out var validationReason)) {
+            m_ruleStatePreflightRejected = true;
+            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.MutationRejected, ruleName: ruleName, effect: in effect, tick: tick, detail: validationReason);
+            return false;
+        }
+
+        string? refusal = null;
+        if (
+            (candidate.Adjacencies is { Count: > 0 }) &&
+            AdjacencyProofInputsChanged(candidate: candidate, current: current, mutation: mutation)
+        ) {
+            refusal = "the mutation changes an adjacency overlap input and requires world.load/world.reload";
+        } else if (ExceedsBootDerivedFaceReservation(candidate: candidate, reason: out var reservationReason)) {
+            refusal = reservationReason;
+        } else if (AffectsRenderEnvelope(mutation: mutation) && !m_envelope.TryFit(candidate: candidate, reason: out var capacityReason)) {
+            refusal = capacityReason;
+        } else if (!m_population.CanInstallFields(definition: candidate, reason: out var fieldReason)) {
+            refusal = fieldReason;
+        } else if (AffectsSolidField(mutation: mutation) && !TryBuildSolids(definition: candidate, reason: out var solidReason, solids: out _)) {
+            refusal = solidReason;
+        }
+        if (refusal is not null) {
+            m_ruleStatePreflightRejected = true;
+            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.MutationRejected, ruleName: ruleName, effect: in effect, tick: tick, detail: refusal);
+            return false;
+        }
+
+        // Make the private candidate visible to the next preflighted effect. Transaction steps cannot add or remove
+        // state rows, so their compiled row ordinals remain valid while cell values and keys move.
+        m_definition = candidate;
+
+        return true;
+    }
+    // A contiguous run of state effects is one transaction boundary. Compose and validate the entire ordered run
+    // against a private candidate first; only a clean run is replayed through the ordinary apply/journal door. Live
+    // fromState reads still see every preceding candidate write because m_definition is temporarily the candidate,
+    // but no candidate escapes this synchronous preflight and the installed definition is restored in finally.
+    private bool PreflightWorldRuleStateEffects(CompiledWorldEffect[] effects, string ruleName, int start, int end, ulong tick, ulong stepTicks) {
+        var installed = m_definition;
+        m_ruleStatePreflightRejected = false;
+
+        try {
+            for (var index = start; index < end; index++) {
+                _ = FireWorldRuleEffect(
+                    effect: effects[index],
+                    ruleName: ruleName,
+                    stepTicks: stepTicks,
+                    tick: tick,
+                    preflight: true
+                );
+
+                if (m_ruleStatePreflightRejected) {
+                    return false;
+                }
+            }
+
+            return true;
+        } finally {
+            m_definition = installed;
+            m_ruleStatePreflightRejected = false;
+        }
     }
     // Body state, not document state: the same WorldBody.Pose door ApplyCommand's SnapPose arm (body.pose) uses,
     // but as the world's own act — no drive-gate or grant check, since a gated body is one a rule still needs to
     // move.
-    private void FirePoseEffect(CompiledWorldEffect effect, ulong tick) {
+    private void FirePoseEffect(CompiledWorldEffect effect, string ruleName, ulong tick, bool preflight) {
         // A '$cell:' indirection yields the cell's integer, which may exceed int — a body index it can never name.
         var spelled = ResolveOperandKey(
             key: effect.Key,
@@ -715,7 +1191,10 @@ public sealed partial class WorldServer {
             (resolved < 0L) ||
             (resolved > int.MaxValue)
         ) {
-            Console.Error.WriteLine(value: $"[world.rule: pose skipped — key '{spelled}' is not a body index]");
+            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.BodyInactive, ruleName: ruleName, effect: in effect, tick: tick, detail: $"key '{spelled}' is not a body index");
+            if (preflight) {
+                m_ruleStatePreflightRejected = true;
+            }
 
             return;
         }
@@ -723,7 +1202,10 @@ public sealed partial class WorldServer {
         var bodyIndex = ((int)resolved);
 
         if (Body(index: bodyIndex) is not { } body) {
-            Console.Error.WriteLine(value: $"[world.rule: pose skipped — body:{bodyIndex} is inactive]");
+            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.BodyInactive, ruleName: ruleName, effect: in effect, tick: tick, detail: $"body:{bodyIndex} is inactive");
+            if (preflight) {
+                m_ruleStatePreflightRejected = true;
+            }
 
             return;
         }
@@ -750,6 +1232,9 @@ public sealed partial class WorldServer {
             return;
         }
 
+        if (preflight) {
+            return;
+        }
         body.Pose(
             position: pose.Position,
             yawRadians: pose.YawRadians,
@@ -769,7 +1254,33 @@ public sealed partial class WorldServer {
         m_interactionGateHeld.Prune(compiled: m_interactions);
     }
     private bool RuleGateOpen(CompiledWorldPredicate[] gate, ulong tick) {
+        if (gate.Length == 0) {
+            return true;
+        }
+
+        Span<bool> stack = stackalloc bool[WorldRuleCapacity.MaxPredicateTokens];
+        var top = 0;
+
         foreach (var predicate in gate) {
+            if (predicate.Kind == CompiledWorldPredicateKind.Not) {
+                stack[top - 1] = !stack[top - 1];
+                continue;
+            }
+            if (predicate.Kind is CompiledWorldPredicateKind.All or CompiledWorldPredicateKind.Any) {
+                var start = (top - predicate.Arity);
+                var result = (predicate.Kind == CompiledWorldPredicateKind.All);
+
+                for (var index = start; index < top; index++) {
+                    result = ((predicate.Kind == CompiledWorldPredicateKind.All)
+                        ? (result && stack[index])
+                        : (result || stack[index]));
+                }
+
+                top = start;
+                stack[top++] = result;
+                continue;
+            }
+
             var value = ReadWorldFact(
                 operand: predicate.Left,
                 tick: tick
@@ -786,21 +1297,38 @@ public sealed partial class WorldServer {
                 )
                 : new WorldFact(
                     Value: predicate.Value,
+                    Kind: predicate.ValueKind,
                     IsForever: false
                 )
             );
 
-            if (!predicate.Comparison.Holds(
+            stack[top++] = WorldFactHolds(
+                comparison: predicate.Comparison,
                 value: value.Value,
                 valueIsForever: value.IsForever,
                 expected: expected.Value,
                 expectedIsForever: expected.IsForever
-            )) {
-                return false;
-            }
+            );
         }
 
-        return true;
+        return ((top == 1) && stack[0]);
+    }
+    private static bool WorldFactHolds(ActionStateComparison comparison, long value, bool valueIsForever, long expected, bool expectedIsForever) {
+        var sign = ((valueIsForever, expectedIsForever)) switch {
+            (true, true) => 0,
+            (true, false) => 1,
+            (false, true) => -1,
+            _ => value.CompareTo(value: expected),
+        };
+
+        return comparison switch {
+            ActionStateComparison.Equal => (sign == 0),
+            ActionStateComparison.NotEqual => (sign != 0),
+            ActionStateComparison.Less => (sign < 0),
+            ActionStateComparison.LessOrEqual => (sign <= 0),
+            ActionStateComparison.Greater => (sign > 0),
+            _ => (sign >= 0),
+        };
     }
     // The live half of link liveness: each DIRECT projection in the tick's frozen graph whose delivered snapshot tick
     // advanced is one refresh. An authored row the source could not resolve contributes no projection at all, which
@@ -888,8 +1416,8 @@ public sealed partial class WorldServer {
 
         var stepStartEngineTick = (context.ElapsedTicks - context.StepTicks);
 
-        // Sample every active body's medium surface BEFORE either half of the tick advances it, so a swim kit's
-        // phase-4 buoyancy stage (inside AdvanceSimulated/AdvanceSeats' own body.Advance calls) reads this tick's
+        // Sample every active body's medium surface BEFORE either half of the tick advances it, so a medium
+        // hold's phase-4 law (inside AdvanceSimulated/AdvanceSeats' own body.Advance calls) reads this tick's
         // surface, never last tick's.
         m_population.SampleMediumSurfaces();
         m_population.AdvanceSimulated(
@@ -1492,6 +2020,42 @@ public sealed partial class WorldServer {
         }
 
         public void BeginSweep() => m_touched.Clear();
+        public void AppendStateHash(ref Fnv1aHash hash, CompiledWorldRule[] compiled) {
+            hash.Add(value: ((uint)compiled.Length));
+
+            foreach (var rule in compiled) {
+                hash.Add(value: Fnv1aHash.Compute(values: rule.Name.AsSpan()));
+
+                if (!m_byRule.TryGetValue(
+                    key: rule.Name,
+                    value: out var bindings
+                )) {
+                    hash.Add(value: 0U);
+                    continue;
+                }
+
+                var ordered = bindings.ToArray();
+
+                Array.Sort(
+                    array: ordered,
+                    comparison: static (left, right) => {
+                        var result = left.Key.Left.CompareTo(value: right.Key.Left);
+
+                        return ((result != 0)
+                            ? result
+                            : left.Key.Right.CompareTo(value: right.Key.Right)
+                        );
+                    }
+                );
+                hash.Add(value: ((uint)ordered.Length));
+
+                foreach (var (binding, held) in ordered) {
+                    hash.Add(value: ((uint)binding.Left));
+                    hash.Add(value: ((uint)binding.Right));
+                    hash.Add(value: ((byte)(held ? 1 : 0)));
+                }
+            }
+        }
         public Dictionary<LatchKey, bool> Bindings(string name) {
             ref var bindings = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(
                 dictionary: m_byRule,

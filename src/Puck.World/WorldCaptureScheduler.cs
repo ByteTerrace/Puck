@@ -519,46 +519,21 @@ internal sealed class WorldCaptureScheduler {
     // WorldReplayTape already trusts rather than inventing a second one. Body/identity state lanes are ephemeral
     // per-body counters/timers outside the world-scoped decision surface a capture cares about (state.world is what
     // a rule/capture-station row lives in) and are left out, same as the pose hash's own documented scope.
-    internal static ulong ComputeStateHash(WorldServer server, ulong tick) {
-        var hash = Fnv1aHash.Create();
+    internal static ulong ComputeStateHash(WorldServer server, ulong tick) => WorldRuntimeStateHash.Hash(
+        scope: WorldStateHashScope.Capture,
+        server: server,
+        tick: tick
+    );
 
-        hash.Add(value: WorldReplaySnapshot.HashState(population: server.Population));
-
-        var rows = server.Definition.State;
-
-        for (var rowIndex = 0; (rowIndex < rows.Count); rowIndex++) {
-            var row = rows[rowIndex];
-            var keys = (row.IsSlot
-                ? ((IReadOnlyList<WorldCellName>)[WorldStateRow.SlotKey])
-                : (row.Cells?.Select(selector: static cell => cell.Key).ToArray() ?? [])
-            );
-
-            for (var keyIndex = 0; (keyIndex < keys.Count); keyIndex++) {
-                if (!WorldStateReader.TryRead(
-                    definition: server.Definition,
-                    key: keys[keyIndex],
-                    rawValue: out var rawValue,
-                    row: out _,
-                    rowName: row.Name,
-                    text: out var text,
-                    tick: tick
-                )) {
-                    continue;
-                }
-
-                hash.Add(value: (rawValue ?? 0L));
-
-                if (
-                    (row.Kind == CellKind.Text) &&
-                    (text is { Length: > 0 })
-                ) {
-                    hash.Add(values: System.Text.Encoding.UTF8.GetBytes(s: text));
-                }
-            }
-        }
-
-        return hash.Value;
-    }
+    internal static ulong ComputeStateHash(WorldServer server, ulong tick, WorldStateHashScope scope) => scope switch {
+        WorldStateHashScope.Capture => ComputeStateHash(server: server, tick: tick),
+        WorldStateHashScope.Pose or WorldStateHashScope.World or WorldStateHashScope.Authoritative => WorldRuntimeStateHash.Hash(
+            scope: scope,
+            server: server,
+            tick: tick
+        ),
+        _ => throw new ArgumentOutOfRangeException(paramName: nameof(scope)),
+    };
 
     private static string ToHex(ulong hash) => hash.ToString(
         format: "x16",

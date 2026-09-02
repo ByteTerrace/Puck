@@ -4512,7 +4512,9 @@
                                     "Falling",
                                     "AffectedBy",
                                     "Submerged",
-                                    "AtSurface"
+                                    "AtSurface",
+                                    "Climbing",
+                                    "Flying"
                                   ]
                                 }
                               },
@@ -4535,7 +4537,9 @@
                                     "Falling",
                                     "AffectedBy",
                                     "Submerged",
-                                    "AtSurface"
+                                    "AtSurface",
+                                    "Climbing",
+                                    "Flying"
                                   ]
                                 },
                                 "windowSeconds": {
@@ -4655,7 +4659,9 @@
                                               "Falling",
                                               "AffectedBy",
                                               "Submerged",
-                                              "AtSurface"
+                                              "AtSurface",
+                                              "Climbing",
+                                              "Flying"
                                             ]
                                           }
                                         },
@@ -4678,7 +4684,9 @@
                                               "Falling",
                                               "AffectedBy",
                                               "Submerged",
-                                              "AtSurface"
+                                              "AtSurface",
+                                              "Climbing",
+                                              "Flying"
                                             ]
                                           },
                                           "windowSeconds": {
@@ -4780,6 +4788,220 @@
                                           "predicates"
                                         ],
                                         "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "At least one inner predicate holds (disjunction). The list must be non-empty.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "any"
+                                          },
+                                          "predicates": {
+                                            "description": "The non-empty child-predicate list.",
+                                            "type": "array",
+                                            "items": {
+                                              "$ref": "#/properties/kits/items/properties/motion/anyOf/0/properties/response/items/properties/gate/anyOf/4/properties/predicates/items"
+                                            }
+                                          }
+                                        },
+                                        "required": [
+                                          "predicates"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Inverts one predicate.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "not"
+                                          },
+                                          "predicate": {
+                                            "description": "The child predicate to invert.",
+                                            "type": "object",
+                                            "required": [
+                                              "$type"
+                                            ],
+                                            "anyOf": [
+                                              {
+                                                "description": "The fact holds this tick.",
+                                                "properties": {
+                                                  "$type": {
+                                                    "const": "now"
+                                                  },
+                                                  "fact": {
+                                                    "enum": [
+                                                      "Grounded",
+                                                      "Airborne",
+                                                      "Rising",
+                                                      "Falling",
+                                                      "AffectedBy",
+                                                      "Submerged",
+                                                      "AtSurface",
+                                                      "Climbing",
+                                                      "Flying"
+                                                    ]
+                                                  }
+                                                },
+                                                "required": [
+                                                  "fact"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "description": "The fact held within the last WindowSeconds \u2014 a per-instance recency clock, refreshed while the fact holds and decaying otherwise (coyote time is Recently(Grounded, w)).",
+                                                "properties": {
+                                                  "$type": {
+                                                    "const": "recently"
+                                                  },
+                                                  "fact": {
+                                                    "enum": [
+                                                      "Grounded",
+                                                      "Airborne",
+                                                      "Rising",
+                                                      "Falling",
+                                                      "AffectedBy",
+                                                      "Submerged",
+                                                      "AtSurface",
+                                                      "Climbing",
+                                                      "Flying"
+                                                    ]
+                                                  },
+                                                  "windowSeconds": {
+                                                    "type": "number"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "fact",
+                                                  "windowSeconds"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "description": "Compares a named state cell against either a fixed authored value, or \u2014 world scope only \u2014 another named state cell/reserved channel read live at the same evaluation. Both spellings are authorable; exactly one of Value and ComparandState may be present (refused by name when both or neither are). The comparand-row spelling is what lets a gate track a moving threshold \u2014 $tick compared against a schedule row the rule\u0027s own effects advance is \u0022every N ticks\u0022; a round row compared against a declared length row is a round boundary \u2014 composition over the same two-sided comparison, never a new mechanism.",
+                                                "properties": {
+                                                  "$type": {
+                                                    "const": "compareState"
+                                                  },
+                                                  "state": {
+                                                    "description": "At body scope, a named counter slot the kit declares. At world scope (see WorldRule), a declared state-section row name, or one of WorldRuleFacts\u0027s reserved channels.",
+                                                    "type": "string"
+                                                  },
+                                                  "comparison": {
+                                                    "description": "The comparison to apply.",
+                                                    "enum": [
+                                                      "Equal",
+                                                      "NotEqual",
+                                                      "Less",
+                                                      "LessOrEqual",
+                                                      "Greater",
+                                                      "GreaterOrEqual"
+                                                    ]
+                                                  },
+                                                  "value": {
+                                                    "description": "The authored constant comparand, or null when ComparandState spells the comparand instead. Required (non-null) at body scope, where a comparand row reference is refused.",
+                                                    "type": [
+                                                      "number",
+                                                      "null"
+                                                    ],
+                                                    "default": null
+                                                  },
+                                                  "key": {
+                                                    "description": "At world scope, the cell inside State to read \u2014 null reads the row\u0027s slot cell, which a keyed row does not have (refused by name rather than silently reading cells[0]). At body scope a non-null key is refused: a per-body action-state slot is not keyed, and a parsed-and-discarded field is worse than no field.",
+                                                    "type": [
+                                                      "string",
+                                                      "null"
+                                                    ],
+                                                    "default": null
+                                                  },
+                                                  "comparandState": {
+                                                    "description": "world scope only (refused at body scope, on the same terms as Key): another declared state-section row name, or one of WorldRuleFacts\u0027s reserved channels, read live and compared instead of Value. A dotted spelling (an author reaching for row.key in one string) is refused by name \u2014 address the cell with ComparandKey instead. Comparing across incompatible cell kinds (an int row against a fixed row, say) is refused by name \u2014 mixing scales silently is worse than naming the mismatch.",
+                                                    "type": [
+                                                      "string",
+                                                      "null"
+                                                    ],
+                                                    "default": null
+                                                  },
+                                                  "comparandKey": {
+                                                    "description": "The cell inside ComparandState, on the same (row, key) terms as Key. Refused when ComparandState names a reserved channel or is absent.",
+                                                    "type": [
+                                                      "string",
+                                                      "null"
+                                                    ],
+                                                    "default": null
+                                                  }
+                                                },
+                                                "required": [
+                                                  "state",
+                                                  "comparison"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "description": "Whether a named timer slot has drained.",
+                                                "properties": {
+                                                  "$type": {
+                                                    "const": "timerElapsed"
+                                                  },
+                                                  "state": {
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "state"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "description": "Every inner predicate holds (conjunction).",
+                                                "properties": {
+                                                  "$type": {
+                                                    "const": "all"
+                                                  },
+                                                  "predicates": {
+                                                    "$ref": "#/properties/kits/items/properties/motion/anyOf/0/properties/response/items/properties/gate/anyOf/4/properties/predicates"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "predicates"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "description": "At least one inner predicate holds (disjunction). The list must be non-empty.",
+                                                "properties": {
+                                                  "$type": {
+                                                    "const": "any"
+                                                  },
+                                                  "predicates": {
+                                                    "$ref": "#/properties/kits/items/properties/motion/anyOf/0/properties/response/items/properties/gate/anyOf/4/properties/predicates/items/anyOf/5/properties/predicates"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "predicates"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "description": "Inverts one predicate.",
+                                                "properties": {
+                                                  "$type": {
+                                                    "const": "not"
+                                                  },
+                                                  "predicate": {
+                                                    "$ref": "#/properties/kits/items/properties/motion/anyOf/0/properties/response/items/properties/gate/anyOf/4/properties/predicates/items/anyOf/6/properties/predicate"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "predicate"
+                                                ],
+                                                "additionalProperties": false
+                                              }
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "predicate"
+                                        ],
+                                        "additionalProperties": false
                                       }
                                     ]
                                   }
@@ -4787,6 +5009,36 @@
                               },
                               "required": [
                                 "predicates"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "At least one inner predicate holds (disjunction). The list must be non-empty.",
+                              "properties": {
+                                "$type": {
+                                  "const": "any"
+                                },
+                                "predicates": {
+                                  "$ref": "#/properties/kits/items/properties/motion/anyOf/0/properties/response/items/properties/gate/anyOf/4/properties/predicates/items/anyOf/5/properties/predicates"
+                                }
+                              },
+                              "required": [
+                                "predicates"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "Inverts one predicate.",
+                              "properties": {
+                                "$type": {
+                                  "const": "not"
+                                },
+                                "predicate": {
+                                  "$ref": "#/properties/kits/items/properties/motion/anyOf/0/properties/response/items/properties/gate/anyOf/4/properties/predicates/items/anyOf/6/properties/predicate"
+                                }
+                              },
+                              "required": [
+                                "predicate"
                               ],
                               "additionalProperties": false
                             }
@@ -4850,8 +5102,177 @@
                     "additionalProperties": false,
                     "default": null
                   },
+                  "holds": {
+                    "description": "The ordered list of what may hold this body \u2014 see WorldHold \u2014 read by the ResolveHold/ApplyHold operations, or null (the default) for a kit whose vertical channel is ApplyVerticalGravity\u0027s alone.",
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "description": "One authored hold row of a grounded kit\u0027s ordered Holds list \u2014 what may hold this body, in preference order. ResolveHold keeps the hold it has while its surface is still there and the same face, and otherwise takes the first row the world offers; ApplyHold applies Hold.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "name": {
+                          "description": "The row\u0027s name, unique within the list \u2014 the body.hold read-back token.",
+                          "type": "string"
+                        },
+                        "bond": {
+                          "description": "Whether this row needs a surface (Surface) or holds the body where it is (Free).",
+                          "enum": [
+                            "Surface",
+                            "Free",
+                            "Medium"
+                          ]
+                        },
+                        "hold": {
+                          "description": "What holds the body once the row is taken.",
+                          "enum": [
+                            "None",
+                            "Gravity",
+                            "Grip",
+                            "Lift"
+                          ]
+                        },
+                        "cone": {
+                          "description": "The inclusive angle band, in degrees, between an admitted surface normal and gravity-up: [0, 60] is floors, [60, 120] walls, [0, 180] everything. Required for Surface, refused for Free.",
+                          "default": null
+                        },
+                        "grip": {
+                          "description": "The inward pull, world units per second, under Grip. Applied as a positional standoff, so it closes a gap the surface opens without ever pushing the body through it.",
+                          "type": "number",
+                          "default": 0
+                        },
+                        "lift": {
+                          "description": "The fraction of gravity cancelled under Lift: 1 hovers, 0.5 halves the fall.",
+                          "type": "number",
+                          "default": 0
+                        },
+                        "speed": {
+                          "description": "The travel speed along the hold\u0027s tangent plane, world units per second, or null to ride the kit\u0027s own resolved move speed.",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "reach": {
+                          "description": "How far a surface row\u0027s probes search, world units. Required positive for Surface.",
+                          "type": "number",
+                          "default": 0
+                        },
+                        "upLean": {
+                          "description": "How far the body\u0027s up axis blends from gravity-up toward the surface normal, in [0, 1].",
+                          "type": "number",
+                          "default": 0
+                        },
+                        "forward": {
+                          "description": "Where the hold\u0027s frame takes its forward direction when the surface leaves it free.",
+                          "enum": [
+                            "Heading",
+                            "Intent",
+                            "Velocity"
+                          ],
+                          "default": "Heading"
+                        },
+                        "onDrive": {
+                          "description": "Whether driving into an admitted face takes this row with no channel press.",
+                          "type": "boolean",
+                          "default": false
+                        },
+                        "driveAlignment": {
+                          "description": "The least alignment, in [0, 1], between the commanded direction and the face\u0027s inward normal before OnDrive takes it. Inert without it.",
+                          "type": "number",
+                          "default": 0
+                        },
+                        "release": {
+                          "description": "The declared channel name whose held read drops this row, or null for a row no channel can drop.",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "spend": {
+                          "description": "What the row spends while held, or null for a row that spends nothing.",
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "state": {
+                              "description": "The declared state.body slot name.",
+                              "type": "string"
+                            },
+                            "ratePerSecond": {
+                              "description": "The positive rate the slot drains at, per second.",
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "state",
+                            "ratePerSecond"
+                          ],
+                          "additionalProperties": false,
+                          "default": null
+                        },
+                        "medium": {
+                          "description": "The medium\u0027s own displacement law. Required for Medium and refused on every other bond.",
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "buoyancy": {
+                              "description": "The idle vertical drift velocity below the bob band, signed (u/s).",
+                              "type": "number"
+                            },
+                            "maxRiseSpeed": {
+                              "description": "The terminal ascent speed (u/s).",
+                              "type": "number"
+                            },
+                            "maxSinkSpeed": {
+                              "description": "The terminal descent speed (u/s).",
+                              "type": "number"
+                            },
+                            "surfaceSettleRate": {
+                              "description": "The proportional settle gain toward the float line (1/s).",
+                              "type": "number"
+                            },
+                            "floatDepth": {
+                              "description": "The float line\u0027s depth below the medium surface, and the bob band\u0027s half-width (u).",
+                              "type": "number"
+                            },
+                            "thrustFraction": {
+                              "description": "The fraction of the hold\u0027s travel speed the MoveUp role commands vertically \u2014 a body climbs and dives slower than it cruises. 1 is fully isotropic thrust.",
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "buoyancy",
+                            "maxRiseSpeed",
+                            "maxSinkSpeed",
+                            "surfaceSettleRate",
+                            "floatDepth",
+                            "thrustFraction"
+                          ],
+                          "additionalProperties": false,
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "bond",
+                        "hold"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "default": null
+                  },
                   "declaredSprintChannel": {
-                    "description": "The declared held-multiplier channel of whichever arm this is \u2014 SprintChannel, SprintChannel, or the vehicle arm\u0027s BoostChannel (the same held-multiplier seam under a different name) \u2014 or null for an arm (or a declaration) without one. The one sprint-resolution read Compile and the seat binding surfaces share, so a new arm extends it here instead of each caller growing its own cast chain.",
+                    "description": "The declared held-multiplier channel of whichever arm this is \u2014 SprintChannel or the vehicle arm\u0027s BoostChannel (the same held-multiplier seam under a different name) \u2014 or null for an arm (or a declaration) without one. The one sprint-resolution read Compile and the seat binding surfaces share, so a new arm extends it here instead of each caller growing its own cast chain.",
                     "type": [
                       "string",
                       "null"
@@ -4869,7 +5290,7 @@
                     "type": "number"
                   },
                   "declaredResponse": {
-                    "description": "The declared velocity-response table of whichever arm this is (see Response/ Response), null-coalesced to the empty table \u2014 a kit\u0027s authored null and a kit with no planar-shaping arm at all read identically here.",
+                    "description": "The declared velocity-response table of whichever arm this is (see Response), null-coalesced to the empty table \u2014 a kit\u0027s authored null and a kit with no planar-shaping arm at all read identically here.",
                     "type": [
                       "array",
                       "null"
@@ -4879,11 +5300,21 @@
                     }
                   },
                   "declaredDynamics": {
-                    "description": "The declared dynamics row name of whichever arm this is (see Dynamics/ Dynamics), or null for an arm shaped by DeclaredResponse instead, or with no planar-shaping arm at all.",
+                    "description": "The declared dynamics row name of whichever arm this is (see Dynamics), or null for an arm shaped by DeclaredResponse instead, or with no planar-shaping arm at all.",
                     "type": [
                       "string",
                       "null"
                     ]
+                  },
+                  "declaredHolds": {
+                    "description": "Gets the declared hold list of whichever arm this is (see Holds), null-coalesced to the empty list \u2014 an arm with no hold vocabulary reads identically to a row authoring none.",
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "$ref": "#/properties/kits/items/properties/motion/anyOf/0/properties/holds/items"
+                    }
                   }
                 },
                 "required": [
@@ -5005,7 +5436,7 @@
                     "default": null
                   },
                   "declaredSprintChannel": {
-                    "description": "The declared held-multiplier channel of whichever arm this is \u2014 SprintChannel, SprintChannel, or the vehicle arm\u0027s BoostChannel (the same held-multiplier seam under a different name) \u2014 or null for an arm (or a declaration) without one. The one sprint-resolution read Compile and the seat binding surfaces share, so a new arm extends it here instead of each caller growing its own cast chain.",
+                    "description": "The declared held-multiplier channel of whichever arm this is \u2014 SprintChannel or the vehicle arm\u0027s BoostChannel (the same held-multiplier seam under a different name) \u2014 or null for an arm (or a declaration) without one. The one sprint-resolution read Compile and the seat binding surfaces share, so a new arm extends it here instead of each caller growing its own cast chain.",
                     "type": [
                       "string",
                       "null"
@@ -5023,7 +5454,7 @@
                     "type": "number"
                   },
                   "declaredResponse": {
-                    "description": "The declared velocity-response table of whichever arm this is (see Response/ Response), null-coalesced to the empty table \u2014 a kit\u0027s authored null and a kit with no planar-shaping arm at all read identically here.",
+                    "description": "The declared velocity-response table of whichever arm this is (see Response), null-coalesced to the empty table \u2014 a kit\u0027s authored null and a kit with no planar-shaping arm at all read identically here.",
                     "type": [
                       "array",
                       "null"
@@ -5033,11 +5464,21 @@
                     }
                   },
                   "declaredDynamics": {
-                    "description": "The declared dynamics row name of whichever arm this is (see Dynamics/ Dynamics), or null for an arm shaped by DeclaredResponse instead, or with no planar-shaping arm at all.",
+                    "description": "The declared dynamics row name of whichever arm this is (see Dynamics), or null for an arm shaped by DeclaredResponse instead, or with no planar-shaping arm at all.",
                     "type": [
                       "string",
                       "null"
                     ]
+                  },
+                  "declaredHolds": {
+                    "description": "Gets the declared hold list of whichever arm this is (see Holds), null-coalesced to the empty list \u2014 an arm with no hold vocabulary reads identically to a row authoring none.",
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "$ref": "#/properties/kits/items/properties/motion/anyOf/0/properties/holds/items"
+                    }
                   }
                 },
                 "required": [
@@ -5054,156 +5495,6 @@
                   "riseGravity",
                   "fallGravity",
                   "maxFallSpeed"
-                ],
-                "additionalProperties": false
-              },
-              {
-                "description": "Submerged locomotion in the world\u0027s standing-water medium (the water section, which a kit declaring this arm requires): 3D thrust in the body\u0027s yaw frame with an explicit vertical channel, planar velocity converged through the response table (thrust against water drag \u2014 the engage rate is thrust authority, the release rate is the drag coast), and a single vertical channel owned end to end by the surface stage \u2014 the medium\u0027s own drift/settle folded into the commanded thrust target before that same response-row convergence runs, so nothing else writes vertical velocity independently. The ops family: ResolveYawAttitudeAndPlanarFrame, ComputeSwimTargetVelocity, ShapePlanarVelocity, ApplyBuoyancyAndSurface, IntegratePlanarAndVerticalVelocity. The body\u0027s attitude stays a pure yaw rotation. Aim-directed diving is the seat\u0027s composition, and only under World (MoveFrame): the rendered camera\u0027s elevation splits the commanded forward direction into planar and vertical channels client-side (the same determinism seam MoveFrame documents), never a camera pose entering the sim. The explicit MoveUp channel this splits into is orthogonal to that composition and stays live regardless of MoveFrame \u2014 a body dives on raw MoveUp input alone with no aim-composed seat at all.",
-                "properties": {
-                  "$type": {
-                    "const": "swim"
-                  },
-                  "thrustSpeed": {
-                    "description": "Peak swim speed in world units per second \u2014 the profileless fallback (a seated player reads its live profile\u0027s move speed instead, exactly as MoveSpeed does).",
-                    "type": "number"
-                  },
-                  "turnSpeed": {
-                    "description": "Turn speed in radians per second (the profileless fallback counterpart).",
-                    "type": "number"
-                  },
-                  "verticalThrustFraction": {
-                    "description": "The fraction of ThrustSpeed the vertical channel commands \u2014 swimmers climb and dive slower than they cruise. 1 is fully isotropic thrust.",
-                    "type": "number"
-                  },
-                  "buoyancy": {
-                    "description": "The medium\u0027s idle vertical drift velocity (u/s, signed) below the bob band: positive drifts the body up toward its float line, negative sinks, zero holds depth. Folded into the commanded thrust target \u2014 see FixedSwimTuning \u2014 never applied as a separate acceleration.",
-                    "type": "number"
-                  },
-                  "maxRiseSpeed": {
-                    "description": "The terminal ascent speed (u/s) the vertical channel is clamped to.",
-                    "type": "number"
-                  },
-                  "maxSinkSpeed": {
-                    "description": "The terminal descent speed (u/s) the vertical channel is clamped to.",
-                    "type": "number"
-                  },
-                  "surfaceSettleRate": {
-                    "description": "The proportional settle gain (1/s) toward the float line, applied inside the bob band and above it (breach recovery): the medium\u0027s target velocity there is the displacement from the line times this gain, so a held ascent parks where thrust and settle balance instead of breaching.",
-                    "type": "number"
-                  },
-                  "floatDepth": {
-                    "description": "How far below the medium surface (world units) the body origin rests when floating \u2014 and the bob band\u0027s half-width around that rest line (one knob deliberately: the band a body settles in is the depth scale it settles at). The validator only checks this is positive and finite \u2014 it cannot see the document\u0027s contact geometry, so it does not (and cannot) check this against the local water column\u0027s depth. A FloatDepth deeper than the floor below it parks the body on the floor instead of at the float line, with AtSurface never true there \u2014 a geometry fact deliberately outside this validator\u0027s reach.",
-                    "type": "number"
-                  },
-                  "sprintMultiplier": {
-                    "description": "The held-burst speed multiplier applied while SprintChannel reads held; 1 is a no-op. Scales the whole thrust vector, vertical included.",
-                    "type": "number"
-                  },
-                  "response": {
-                    "description": "The velocity-response table (see MotionResponse) \u2014 read for both the planar and the vertical convergence \u2014 or null (the default) when Dynamics shapes both instead; exactly one of the two is authored. The empty table snaps instantly (no drag, no coast); a water feel wants at least an always-row. DeclaredResponse is the null-coalesced read every caller uses.",
-                    "type": [
-                      "array",
-                      "null"
-                    ],
-                    "items": {
-                      "$ref": "#/properties/kits/items/properties/motion/anyOf/0/properties/response/items"
-                    },
-                    "default": null
-                  },
-                  "dynamics": {
-                    "description": "The dynamics row a second-order follower shapes both the planar and the vertical convergence through instead of Response \u2014 the same seam as Dynamics \u2014 or null (the default) for the response table. Exactly one of the two is authored.",
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "default": null
-                  },
-                  "sprintChannel": {
-                    "description": "The declared channel name read while held for the burst, or null (the default) for a kit with no burst \u2014 the same resolution path SprintChannel documents.",
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "default": null
-                  },
-                  "moveFrame": {
-                    "description": "Which frame MoveAdvance/MoveStrafe resolve in \u2014 the same two-frame choice, and the same client-side camera composition seam, as MoveFrame.",
-                    "enum": [
-                      "Heading",
-                      "World"
-                    ],
-                    "default": "World"
-                  },
-                  "facingSnap": {
-                    "description": "Under World only: snap facing to the commanded planar direction each tick carrying input, as FacingSnap documents.",
-                    "type": "boolean",
-                    "default": true
-                  },
-                  "thrustSpeedEnvelope": {
-                    "description": "The inclusive bound a seated player\u0027s live profile speed (and the profileless ThrustSpeed fallback) is clamped to at seat time, or null (the default) for no bound \u2014 the same seam as MoveSpeedEnvelope, for this arm\u0027s own thrust speed. null reproduces unclamped behavior exactly; Min == Max pins the effective thrust speed outright regardless of what a profile requests. See MotionScalarEnvelope.",
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "properties": {
-                      "min": {
-                        "description": "The least admitted value (inclusive).",
-                        "type": "number"
-                      },
-                      "max": {
-                        "description": "The greatest admitted value (inclusive) \u2014 WorldDefinitionValidator refuses Max \u003C Min by name. Equal to Min pins the scalar outright regardless of what a profile requests.",
-                        "type": "number"
-                      }
-                    },
-                    "additionalProperties": false,
-                    "default": null
-                  },
-                  "declaredSprintChannel": {
-                    "description": "The declared held-multiplier channel of whichever arm this is \u2014 SprintChannel, SprintChannel, or the vehicle arm\u0027s BoostChannel (the same held-multiplier seam under a different name) \u2014 or null for an arm (or a declaration) without one. The one sprint-resolution read Compile and the seat binding surfaces share, so a new arm extends it here instead of each caller growing its own cast chain.",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
-                  "declaredMoveFrame": {
-                    "description": "The declared move frame of whichever arm this is \u2014 Heading for an arm without the choice. The client\u0027s camera composition keys off this, arm-agnostically.",
-                    "enum": [
-                      "Heading",
-                      "World"
-                    ]
-                  },
-                  "declaredTurnSpeed": {
-                    "description": "The declared Turn-channel rate of whichever arm this is, in radians per second at full deflection \u2014 zero for an arm without one. The client\u0027s steer follow keys off this, arm-agnostically.",
-                    "type": "number"
-                  },
-                  "declaredResponse": {
-                    "description": "The declared velocity-response table of whichever arm this is (see Response/ Response), null-coalesced to the empty table \u2014 a kit\u0027s authored null and a kit with no planar-shaping arm at all read identically here.",
-                    "type": [
-                      "array",
-                      "null"
-                    ],
-                    "items": {
-                      "$ref": "#/properties/kits/items/properties/motion/anyOf/0/properties/response/items"
-                    }
-                  },
-                  "declaredDynamics": {
-                    "description": "The declared dynamics row name of whichever arm this is (see Dynamics/ Dynamics), or null for an arm shaped by DeclaredResponse instead, or with no planar-shaping arm at all.",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  }
-                },
-                "required": [
-                  "thrustSpeed",
-                  "turnSpeed",
-                  "verticalThrustFraction",
-                  "buoyancy",
-                  "maxRiseSpeed",
-                  "maxSinkSpeed",
-                  "surfaceSettleRate",
-                  "floatDepth",
-                  "sprintMultiplier"
                 ],
                 "additionalProperties": false
               }
@@ -7332,19 +7623,19 @@
             "default": null
           },
           "grip": {
-            "description": "The placement\u0027s grip facet (see WorldPlacementGrip) \u2014 overrides the world\u0027s default climb policy for this row\u0027s compiled surface(s), or null to inherit the world default. Omitted from the wire when null. Requires Solid (validated).",
+            "description": "The placement\u0027s grip facet (see WorldPlacementGrip) \u2014 overrides the world\u0027s default hold policy for this row\u0027s compiled surface(s), or null to inherit the world default. Omitted from the wire when null. Requires Solid (validated).",
             "type": [
               "object",
               "null"
             ],
             "properties": {
-              "climbable": {
-                "description": "Whether this row\u0027s compiled surface(s) are climbable, overriding the world default.",
+              "holdable": {
+                "description": "Whether a body\u0027s surface hold may take this row\u0027s compiled surface(s), overriding the world default.",
                 "type": "boolean"
               }
             },
             "required": [
-              "climbable"
+              "holdable"
             ],
             "additionalProperties": false,
             "default": null
@@ -7886,14 +8177,14 @@
           "description": "Gets the cue table. The absence-coalesce lives in the accessor for the same reason Response\u0027s does.",
           "type": "array",
           "items": {
-            "description": "One world-event \u2192 sound binding \u2014 a row of the Audio section\u0027s cue table: when the named engine event fires, the referenced patch voices through a short-lived transient emitter placed per Placement. Event tokens are a closed, published vocabulary of engine mechanisms (EventTokens): a genre ships different cue rows; new tokens appear only when the engine grows new mechanisms.",
+            "description": "One world-event \u2192 sound binding \u2014 a row of the Audio section\u0027s cue table: when the named engine event fires, the referenced patch voices through a short-lived transient emitter placed per Placement. Event tokens are either a published engine mechanism (EventTokens) or a cue name emitted by one of the same world\u0027s rules. A genre can therefore bind authored rule events without widening the engine vocabulary.",
             "type": [
               "object",
               "null"
             ],
             "properties": {
               "event": {
-                "description": "The event token (must be one of EventTokens).",
+                "description": "The published engine token or rule-emitted cue name.",
                 "type": "string"
               },
               "patchId": {
@@ -7962,6 +8253,11 @@
         "gradientProbe": {
           "description": "The finite-difference step field contact samples the surface normal with, in world units; 0 takes the evaluator\u0027s own default. Meaningful only when a requirement selects field contact.",
           "type": "number"
+        },
+        "defaultHold": {
+          "description": "Whether a body\u0027s surface hold may take any solid surface by default. A placement\u0027s own WorldPlacementGrip overrides this for the colliders it compiles; the field lattice\u0027s own terrain, which no placement row owns, has only this. false (the default) holds nothing.",
+          "type": "boolean",
+          "default": false
         }
       },
       "required": [
@@ -10163,6 +10459,220 @@
                   "spacing"
                 ],
                 "additionalProperties": false
+              },
+              {
+                "description": "Every cell drawn from a numeric authored-randomness source \u2014 the per-cell lattice draw. The fill is one pass of the row\u0027s own draw stream (seeded through the same ladder as a state-row site, under the row\u0027s state.\u003Crow\u003E descriptor): cell k, in cell-index order, takes the sample a site at drawCursor \u002B k would draw, so a weighted source under a deck mode deals its cards across the field and reshuffles as it goes. The row\u0027s DrawCursor/DrawDecks name the pass currently painted; generate \u003Crow\u003E advances them one whole pass and repaints. Draw occupies its authored paint position (overwriting earlier fills and preceding later fills); boot, rebuild, load/reset, and a draw-rewinding undo repaint the pass the document names.",
+                "properties": {
+                  "$type": {
+                    "const": "draw"
+                  },
+                  "source": {
+                    "description": "A declared generators row, or null when Generator is inlined.",
+                    "default": null,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "generator": {
+                    "description": "An inline numeric source, or null when Source is named.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "source": {
+                        "description": "Which draw shape this source fires.",
+                        "enum": [
+                          "Markov",
+                          "UniformRange",
+                          "WeightedNumeric",
+                          "StreamDraw",
+                          "SymmetryOrbit"
+                        ],
+                        "default": "Markov"
+                      },
+                      "start": {
+                        "description": "Markov only: the context every emission begins from. Must name a declared context.",
+                        "default": null,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "bound": {
+                        "description": "Markov only: the maximum tokens one emission may draw before refusing by name, 1..MaxEmissionBound. Left at DefaultBound by a numeric source.",
+                        "type": "integer",
+                        "default": 1
+                      },
+                      "contexts": {
+                        "description": "Markov only: the declared contexts, at least one, uniquely keyed.",
+                        "type": [
+                          "array",
+                          "null"
+                        ],
+                        "items": {
+                          "description": "One named context of a WorldGenerator \u2014 the state the walk may be sitting in and the weighted alternatives it may pick while there. A context declaring NO alternatives is TERMINAL: reaching it ends the emission.",
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "key": {
+                              "description": "The stable context key, unique within the generator.",
+                              "type": "string"
+                            },
+                            "alternatives": {
+                              "description": "The weighted alternatives out of this context, or empty for a terminal context.",
+                              "type": [
+                                "array",
+                                "null"
+                              ],
+                              "items": {
+                                "description": "One weighted alternative of a WorldGeneratorContext: the token it emits, its relative weight, and the context the walk moves into after it is picked. The authored Next is what makes this a real Markov process rather than a bag of independent draws \u2014 the context key is the process state, so an author folds exactly as much history into it as the chain needs.",
+                                "type": [
+                                  "object",
+                                  "null"
+                                ],
+                                "properties": {
+                                  "token": {
+                                    "description": "The opaque game-authored token this alternative emits. The engine never interprets it; it is space-joined with the emission\u0027s other tokens and written into the target text cell. Bounded by MaxTokenLength.",
+                                    "type": "string"
+                                  },
+                                  "weight": {
+                                    "description": "The alternative\u0027s positive relative weight. At least one alternative in a context must carry a non-zero weight.",
+                                    "type": "integer"
+                                  },
+                                  "next": {
+                                    "description": "The context the walk moves into after this alternative is picked. Must name a declared Key; naming a context that declares NO alternatives ends the emission (a terminal is a context with nothing to say, never a reserved token spelling).",
+                                    "type": "string"
+                                  },
+                                  "count": {
+                                    "description": "How many cards of this alternative one deck pass holds, at least one; null is one. Under WithReplacement a count only scales the weight; under a deck mode each card is dealt once per pass. A context\u0027s cards total at most MaxCardsPerSet.",
+                                    "type": [
+                                      "integer",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  }
+                                },
+                                "required": [
+                                  "token",
+                                  "weight",
+                                  "next"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "default": null
+                            }
+                          },
+                          "required": [
+                            "key"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "default": null
+                      },
+                      "mode": {
+                        "description": "Markov, weighted numeric and symmetry orbit: how the entries are consumed (see WorldGeneratorMode).",
+                        "enum": [
+                          "WithReplacement",
+                          "WithoutReplacement",
+                          "ReshuffleOnExhaustion"
+                        ],
+                        "default": "WithReplacement"
+                      },
+                      "rangeMin": {
+                        "description": "UniformRange only: the closed range\u0027s inclusive lower bound \u2014 both bounds present or neither. Raw-encoded per the destination site\u0027s CellKind (raw FixedQ4816 bits for a fixed site) \u2014 unlike a site row\u0027s own min/max, which a fixed row authors as decimal text, since a source is not bound to one site and cannot know the kind it will write.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "rangeMax": {
+                        "description": "UniformRange only: the inclusive upper bound, same encoding as RangeMin.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "weighted": {
+                        "description": "WeightedNumeric only: the weighted numeric outcomes, at least one, at least one carrying a non-zero weight; under a deck Mode each outcome contributes Count cards to the pass.",
+                        "type": [
+                          "array",
+                          "null"
+                        ],
+                        "items": {
+                          "description": "One numeric outcome of a WeightedNumeric source: the raw value it writes and its relative weight \u2014 the numeric twin of WorldGeneratorAlternative, minus Token (nothing to join into text) and Next (a numeric draw is one terminal pick, never a walk).",
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "value": {
+                              "description": "The raw value this outcome writes on selection (a plain integer for Int, raw FixedQ4816 bits for Fixed).",
+                              "type": "integer"
+                            },
+                            "weight": {
+                              "description": "The outcome\u0027s relative weight, fed straight to Puck.Maths.WeightedSampler\u0027s exact ulong overload. At least one outcome must carry a non-zero weight.",
+                              "type": "integer"
+                            },
+                            "count": {
+                              "description": "How many cards of this outcome one deck pass holds, at least one; null is one. Under WithReplacement a count only scales the weight; under a deck mode each card is dealt once per pass, so an outcome that should come out twice per pass declares 2 rather than being authored twice. A source\u0027s cards total at most MaxCardsPerSet.",
+                              "type": [
+                                "integer",
+                                "null"
+                              ],
+                              "default": null
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "weight"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "default": null
+                      },
+                      "ring": {
+                        "description": "SymmetryOrbit only: the ring, 0..7, whose thirty nodes are the cards \u2014 exactly one of Ring and Node.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "node": {
+                        "description": "SymmetryOrbit only: the node, 0..239, whose orbit under Word is the cards.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "word": {
+                        "description": "SymmetryOrbit beside Node only: the word of reflections (one to eight mirror nodes, applied first to last) the orbit is taken under, or null for the lattice\u0027s own cycle \u2014 the same generator vocabulary a WorldStateCycle authors.",
+                        "type": [
+                          "array",
+                          "null"
+                        ],
+                        "items": {
+                          "type": "integer"
+                        },
+                        "default": null
+                      }
+                    },
+                    "additionalProperties": false,
+                    "default": null
+                  },
+                  "field": {
+                    "description": "Gets the filled row\u0027s name -- compile-stamped, never authored inside a trait.",
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
               }
             ]
           },
@@ -10231,7 +10741,7 @@
                 ]
               },
               "range": {
-                "description": "The distance threshold, for Distance alone \u2014 ignored (and unchecked) under Region.",
+                "description": "The distance threshold, for Distance alone \u2014 an exact JSON decimal lowered directly to deterministic fixed point, with no binary32 intermediate. Ignored (and unchecked) under Region.",
                 "type": "number"
               },
               "effects": {
@@ -10388,6 +10898,139 @@
                             "null"
                           ],
                           "default": null
+                        },
+                        "expression": {
+                          "description": "World scope only: a bounded numeric expression evaluated in the destination row\u0027s integer or fixed-point domain. Exactly one source spelling is authored.",
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "tokens": {
+                              "description": "The postfix tokens, in evaluation order.",
+                              "type": "array",
+                              "items": {
+                                "description": "One authored token in a WorldValueExpression.",
+                                "type": [
+                                  "object",
+                                  "null"
+                                ],
+                                "required": [
+                                  "$type"
+                                ],
+                                "anyOf": [
+                                  {
+                                    "description": "An exact authored decimal, converted to the destination row\u0027s numeric kind at compile time.",
+                                    "properties": {
+                                      "$type": {
+                                        "const": "constant"
+                                      },
+                                      "value": {
+                                        "description": "The exact decimal literal.",
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "value"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "description": "A live state cell or reserved world-rule channel.",
+                                    "properties": {
+                                      "$type": {
+                                        "const": "state"
+                                      },
+                                      "name": {
+                                        "description": "The state row or reserved-channel name.",
+                                        "type": "string"
+                                      },
+                                      "key": {
+                                        "description": "The optional keyed-row cell.",
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ],
+                                        "default": null
+                                      }
+                                    },
+                                    "required": [
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "description": "Consumes two values and pushes their sum.",
+                                    "properties": {
+                                      "$type": {
+                                        "const": "add"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "description": "Consumes two values and pushes left minus right.",
+                                    "properties": {
+                                      "$type": {
+                                        "const": "subtract"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "description": "Consumes two values and pushes their product in the destination row\u0027s numeric domain.",
+                                    "properties": {
+                                      "$type": {
+                                        "const": "multiply"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "description": "Consumes two values and pushes left divided by right; zero fails the effect or transaction.",
+                                    "properties": {
+                                      "$type": {
+                                        "const": "divide"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "description": "Consumes two values and pushes the lesser.",
+                                    "properties": {
+                                      "$type": {
+                                        "const": "min"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "description": "Consumes two values and pushes the greater.",
+                                    "properties": {
+                                      "$type": {
+                                        "const": "max"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "description": "Consumes value, minimum, maximum (in that authored order) and pushes the inclusive clamp.",
+                                    "properties": {
+                                      "$type": {
+                                        "const": "clamp"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          "required": [
+                            "tokens"
+                          ],
+                          "additionalProperties": false,
+                          "default": null
                         }
                       },
                       "required": [
@@ -10452,6 +11095,23 @@
                             "number",
                             "null"
                           ],
+                          "default": null
+                        },
+                        "expression": {
+                          "description": "World scope only \u2014 see Expression.",
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "tokens": {
+                              "$ref": "#/properties/interactions/properties/interactions/items/properties/effects/items/anyOf/3/properties/expression/properties/tokens"
+                            }
+                          },
+                          "required": [
+                            "tokens"
+                          ],
+                          "additionalProperties": false,
                           "default": null
                         }
                       },
@@ -10794,6 +11454,903 @@
                       },
                       "required": [
                         "key"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Removes one addressed cell from a declared world-state row. World scope only.",
+                      "properties": {
+                        "$type": {
+                          "const": "removeStateCell"
+                        },
+                        "state": {
+                          "description": "The row to remove from.",
+                          "type": "string"
+                        },
+                        "key": {
+                          "description": "The optional cell key.",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "state"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Writes an absolute simulation due tick into an integer state cell. The delay is converted against the world\u0027s authored simulation rate and rounded up, so it never fires early. A companion rule compares $tick against the cell and removes it after handling, forming a bounded, document-backed scheduler.",
+                      "properties": {
+                        "$type": {
+                          "const": "scheduleState"
+                        },
+                        "state": {
+                          "description": "The integer destination row.",
+                          "type": "string"
+                        },
+                        "delaySeconds": {
+                          "description": "The non-negative delay, rounded up to simulation ticks.",
+                          "type": "number"
+                        },
+                        "key": {
+                          "description": "The optional cell key.",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "delaySeconds"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Applies a bounded list of state, document, body, cue, and field effects atomically after preflight. When any effect refuses, none apply and OnFailure runs instead. Nested transactions and save effects are structurally unavailable because persistence I/O cannot be rolled back.",
+                      "properties": {
+                        "$type": {
+                          "const": "transaction"
+                        },
+                        "effects": {
+                          "description": "The main transaction branch.",
+                          "type": "array",
+                          "items": {
+                            "description": "The finite, non-recursive effect vocabulary admitted inside an atomic world-rule transaction. It mirrors the rollback-safe world-scope effects explicitly; nested transactions and persistence I/O have no wire shape.",
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "required": [
+                              "$type"
+                            ],
+                            "anyOf": [
+                              {
+                                "description": "Sets one state cell from exactly one numeric source spelling.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "setState"
+                                  },
+                                  "state": {
+                                    "description": "The destination row.",
+                                    "type": "string"
+                                  },
+                                  "key": {
+                                    "description": "The optional destination cell key.",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  },
+                                  "value": {
+                                    "description": "The literal source.",
+                                    "type": [
+                                      "number",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  },
+                                  "fromState": {
+                                    "description": "The live source row or reserved channel.",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  },
+                                  "fromKey": {
+                                    "description": "The optional source cell key.",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  },
+                                  "valueSeconds": {
+                                    "description": "The exact engine-tick duration source.",
+                                    "type": [
+                                      "number",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  },
+                                  "expression": {
+                                    "description": "The bounded postfix numeric source.",
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ],
+                                    "properties": {
+                                      "tokens": {
+                                        "$ref": "#/properties/interactions/properties/interactions/items/properties/effects/items/anyOf/3/properties/expression/properties/tokens"
+                                      }
+                                    },
+                                    "required": [
+                                      "tokens"
+                                    ],
+                                    "additionalProperties": false,
+                                    "default": null
+                                  }
+                                },
+                                "required": [
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "Adds exactly one numeric source to a state cell.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "addState"
+                                  },
+                                  "state": {
+                                    "description": "The destination row.",
+                                    "type": "string"
+                                  },
+                                  "key": {
+                                    "description": "The optional destination cell key.",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  },
+                                  "value": {
+                                    "description": "The literal source.",
+                                    "type": [
+                                      "number",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  },
+                                  "fromState": {
+                                    "description": "The live source row or reserved channel.",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  },
+                                  "fromKey": {
+                                    "description": "The optional source cell key.",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  },
+                                  "valueSeconds": {
+                                    "description": "The exact engine-tick duration source.",
+                                    "type": [
+                                      "number",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  },
+                                  "expression": {
+                                    "description": "The bounded postfix numeric source.",
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ],
+                                    "properties": {
+                                      "tokens": {
+                                        "$ref": "#/properties/interactions/properties/interactions/items/properties/effects/items/anyOf/3/properties/expression/properties/tokens"
+                                      }
+                                    },
+                                    "required": [
+                                      "tokens"
+                                    ],
+                                    "additionalProperties": false,
+                                    "default": null
+                                  }
+                                },
+                                "required": [
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "Consumes one non-negative integer countdown by the current engine-step width.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "countdownState"
+                                  },
+                                  "state": {
+                                    "description": "The countdown row.",
+                                    "type": "string"
+                                  },
+                                  "key": {
+                                    "description": "The optional cell key.",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  }
+                                },
+                                "required": [
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "Removes one addressed state cell.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "removeStateCell"
+                                  },
+                                  "state": {
+                                    "description": "The row to remove from.",
+                                    "type": "string"
+                                  },
+                                  "key": {
+                                    "description": "The optional cell key.",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  }
+                                },
+                                "required": [
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "Writes one absolute simulation-tick deadline.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "scheduleState"
+                                  },
+                                  "state": {
+                                    "description": "The integer destination row.",
+                                    "type": "string"
+                                  },
+                                  "delaySeconds": {
+                                    "description": "The non-negative delay, converted with the world\u0027s simulation rate and rounded up.",
+                                    "type": "number"
+                                  },
+                                  "key": {
+                                    "description": "The optional cell key.",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  }
+                                },
+                                "required": [
+                                  "state",
+                                  "delaySeconds"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "Redraws one declared state draw site.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "generate"
+                                  },
+                                  "row": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "row"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "Upserts one world HUD panel.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "upsertHudPanel"
+                                  },
+                                  "panel": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "description": "The panel\u0027s stable id (unique within the section \u2014 the world.row.set hud.panels/world.row.remove hud.panels mutation address).",
+                                        "type": "string"
+                                      },
+                                      "rect": {
+                                        "$ref": "#/properties/hud/properties/panels/items/properties/rect"
+                                      },
+                                      "layer": {
+                                        "description": "Which band the panel draws in.",
+                                        "enum": [
+                                          "Under",
+                                          "Over",
+                                          "Replace"
+                                        ]
+                                      },
+                                      "style": {
+                                        "description": "The panel\u0027s chrome recipe.",
+                                        "enum": [
+                                          "Panel",
+                                          "Strip",
+                                          "Chip"
+                                        ]
+                                      },
+                                      "visible": {
+                                        "$ref": "#/properties/hud/properties/panels/items/properties/visible",
+                                        "default": null
+                                      },
+                                      "elements": {
+                                        "$ref": "#/properties/hud/properties/panels/items/properties/elements"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "rect",
+                                      "layer",
+                                      "style",
+                                      "elements"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "panel"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "Removes one world HUD panel.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "removeHudPanel"
+                                  },
+                                  "id": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "Upserts one placement row.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "upsertPlacement"
+                                  },
+                                  "placement": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "description": "The row\u0027s stable string id (its mutation address).",
+                                        "type": "string"
+                                      },
+                                      "prototypeId": {
+                                        "description": "The referenced Id (must resolve; removal of a referenced creation rejects loudly).",
+                                        "type": "string"
+                                      },
+                                      "position": {
+                                        "description": "The stamp position, world space. Inert (still validated and stored, but read by nothing \u2014 neither the resolve nor the renderer) when Attach is set: the row\u0027s live position is the resolved attachment, never this authored one."
+                                      },
+                                      "yawDegrees": {
+                                        "description": "The stamp yaw about \u002BY, degrees. Same attach caveat as Position.",
+                                        "type": "number"
+                                      },
+                                      "scale": {
+                                        "description": "The uniform stamp scale (clamped to the placement policy envelope by validation).",
+                                        "type": "number"
+                                      },
+                                      "distribution": {
+                                        "$ref": "#/properties/placements/items/properties/distribution",
+                                        "default": null
+                                      },
+                                      "mirror": {
+                                        "$ref": "#/properties/placements/items/properties/mirror",
+                                        "default": null
+                                      },
+                                      "emission": {
+                                        "$ref": "#/properties/placements/items/properties/emission",
+                                        "default": null
+                                      },
+                                      "solid": {
+                                        "$ref": "#/properties/placements/items/properties/solid",
+                                        "default": null
+                                      },
+                                      "inhabit": {
+                                        "$ref": "#/properties/placements/items/properties/inhabit",
+                                        "default": null
+                                      },
+                                      "faceSources": {
+                                        "$ref": "#/properties/placements/items/properties/faceSources",
+                                        "default": null
+                                      },
+                                      "region": {
+                                        "$ref": "#/properties/placements/items/properties/region",
+                                        "default": null
+                                      },
+                                      "attach": {
+                                        "$ref": "#/properties/placements/items/properties/attach",
+                                        "default": null
+                                      },
+                                      "contribution": {
+                                        "$ref": "#/properties/placements/items/properties/contribution",
+                                        "default": null
+                                      },
+                                      "respond": {
+                                        "$ref": "#/properties/placements/items/properties/respond",
+                                        "default": null
+                                      },
+                                      "grip": {
+                                        "$ref": "#/properties/placements/items/properties/grip",
+                                        "default": null
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "prototypeId",
+                                      "position",
+                                      "yawDegrees",
+                                      "scale"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "placement"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "Removes one placement row.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "removePlacement"
+                                  },
+                                  "id": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "Teleports an active body.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "pose"
+                                  },
+                                  "key": {
+                                    "type": "string"
+                                  },
+                                  "spawnPoint": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  },
+                                  "position": {
+                                    "default": null
+                                  },
+                                  "yawDegrees": {
+                                    "type": "number",
+                                    "default": 0
+                                  },
+                                  "pitchDegrees": {
+                                    "type": "number",
+                                    "default": 0
+                                  },
+                                  "rollDegrees": {
+                                    "type": "number",
+                                    "default": 0
+                                  }
+                                },
+                                "required": [
+                                  "key"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "Emits one deterministic gameplay cue.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "emitCue"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "payload": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  },
+                                  "key": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  }
+                                },
+                                "required": [
+                                  "name"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "Sets an active body\u0027s vertical velocity.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "setBodyVerticalVelocity"
+                                  },
+                                  "key": {
+                                    "type": "string"
+                                  },
+                                  "velocity": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "key",
+                                  "velocity"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "Scales an active body\u0027s vertical velocity.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "scaleBodyVerticalVelocity"
+                                  },
+                                  "key": {
+                                    "type": "string"
+                                  },
+                                  "factor": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "key",
+                                  "factor"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "Applies a timed body-local planar impulse.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "applyBodyImpulse"
+                                  },
+                                  "key": {
+                                    "type": "string"
+                                  },
+                                  "bodyDirection": {},
+                                  "speed": {
+                                    "type": "number"
+                                  },
+                                  "durationSeconds": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "key",
+                                  "bodyDirection",
+                                  "speed",
+                                  "durationSeconds"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "Sets or clears an active body\u0027s target register.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "designateBody"
+                                  },
+                                  "key": {
+                                    "type": "string"
+                                  },
+                                  "register": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "Body",
+                                      "Clear"
+                                    ]
+                                  },
+                                  "targetKey": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "default": null
+                                  }
+                                },
+                                "required": [
+                                  "key",
+                                  "register",
+                                  "kind"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "description": "Sets or adds a bounded live field neighborhood.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "paintField"
+                                  },
+                                  "field": {
+                                    "type": "string"
+                                  },
+                                  "x": {
+                                    "type": "integer"
+                                  },
+                                  "y": {
+                                    "type": "integer"
+                                  },
+                                  "z": {
+                                    "type": "integer"
+                                  },
+                                  "value": {
+                                    "type": "number"
+                                  },
+                                  "operation": {
+                                    "enum": [
+                                      "Set",
+                                      "Add"
+                                    ],
+                                    "default": "Set"
+                                  },
+                                  "radius": {
+                                    "type": "integer",
+                                    "default": 0
+                                  }
+                                },
+                                "required": [
+                                  "field",
+                                  "x",
+                                  "y",
+                                  "z",
+                                  "value"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          }
+                        },
+                        "onFailure": {
+                          "description": "The optional branch run after a main-branch refusal.",
+                          "type": [
+                            "array",
+                            "null"
+                          ],
+                          "items": {
+                            "$ref": "#/properties/interactions/properties/interactions/items/properties/effects/items/anyOf/18/properties/effects/items"
+                          },
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "effects"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Emits a deterministic, presentation-neutral gameplay cue. World scope only.",
+                      "properties": {
+                        "$type": {
+                          "const": "emitCue"
+                        },
+                        "name": {
+                          "description": "The stable authored cue identifier.",
+                          "type": "string"
+                        },
+                        "payload": {
+                          "description": "The optional bounded consumer payload.",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "key": {
+                          "description": "The optional body key used for spatial presentation.",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Sets an active body\u0027s vertical velocity. Key accepts the ordinary body-key indirection and rule bindings.",
+                      "properties": {
+                        "$type": {
+                          "const": "setBodyVerticalVelocity"
+                        },
+                        "key": {
+                          "description": "The body index or dynamic body-key spelling.",
+                          "type": "string"
+                        },
+                        "velocity": {
+                          "description": "The fixed-point vertical velocity.",
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "velocity"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Scales an active body\u0027s vertical velocity.",
+                      "properties": {
+                        "$type": {
+                          "const": "scaleBodyVerticalVelocity"
+                        },
+                        "key": {
+                          "description": "The body index or dynamic body-key spelling.",
+                          "type": "string"
+                        },
+                        "factor": {
+                          "description": "The fixed-point scale factor.",
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "factor"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Applies a timed body-local planar impulse to an active body.",
+                      "properties": {
+                        "$type": {
+                          "const": "applyBodyImpulse"
+                        },
+                        "key": {
+                          "description": "The body index or dynamic body-key spelling.",
+                          "type": "string"
+                        },
+                        "bodyDirection": {
+                          "description": "The finite unit direction in body-local space."
+                        },
+                        "speed": {
+                          "description": "The fixed-point impulse speed.",
+                          "type": "number"
+                        },
+                        "durationSeconds": {
+                          "description": "The non-negative exact engine-tick duration.",
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "bodyDirection",
+                        "speed",
+                        "durationSeconds"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Sets or clears one active body\u0027s declared target register.",
+                      "properties": {
+                        "$type": {
+                          "const": "designateBody"
+                        },
+                        "key": {
+                          "description": "The body whose register changes.",
+                          "type": "string"
+                        },
+                        "register": {
+                          "description": "The declared target-register name.",
+                          "type": "string"
+                        },
+                        "kind": {
+                          "description": "Whether to set a body target or clear the register.",
+                          "enum": [
+                            "Body",
+                            "Clear"
+                          ]
+                        },
+                        "targetKey": {
+                          "description": "The required target body for Body.",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "register",
+                        "kind"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Sets or adds a value over a bounded spherical neighborhood in a live lattice field.",
+                      "properties": {
+                        "$type": {
+                          "const": "paintField"
+                        },
+                        "field": {
+                          "description": "The declared lattice field.",
+                          "type": "string"
+                        },
+                        "x": {
+                          "description": "The center X coordinate, in lattice cells.",
+                          "type": "integer"
+                        },
+                        "y": {
+                          "description": "The center Y coordinate, in lattice cells.",
+                          "type": "integer"
+                        },
+                        "z": {
+                          "description": "The center Z coordinate, in lattice cells.",
+                          "type": "integer"
+                        },
+                        "value": {
+                          "description": "The fixed-point value to set or add.",
+                          "type": "number"
+                        },
+                        "operation": {
+                          "description": "The set or add operation.",
+                          "enum": [
+                            "Set",
+                            "Add"
+                          ],
+                          "default": "Set"
+                        },
+                        "radius": {
+                          "description": "The sphere radius, in lattice cells.",
+                          "type": "integer",
+                          "default": 0
+                        }
+                      },
+                      "required": [
+                        "field",
+                        "x",
+                        "y",
+                        "z",
+                        "value"
                       ],
                       "additionalProperties": false
                     }

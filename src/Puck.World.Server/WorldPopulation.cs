@@ -150,6 +150,9 @@ public sealed partial class WorldPopulation {
     // geometric facts; every body receives this policy separately so provider composition (including adjacency)
     // never decides how those facts orient simulation state.
     private WorldBodyUpPolicy m_bodyUpPolicy;
+    // The world's compiled cos(collision.maxSlopeDegrees), handed to every body on the same terms as the frame
+    // policy above so a hold and the ground it ends on cannot disagree about which faces are walkable.
+    private FixedQ4816 m_walkableThreshold = FixedQ4816.One;
     private WorldContactCensus m_contactCensus;
     private IContactField? m_contactField;
     // The compiled population distribution (fixed point). SIM-AFFECTING: SeedSimulated reads only this, never the authored floats.

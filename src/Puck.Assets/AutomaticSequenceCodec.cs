@@ -193,14 +193,14 @@ public static class AutomaticIntegerSequenceCodec {
         return writer.WrittenSpan.ToArray();
     }
 
-    private static QuadraticSurd ReadSurd(ref CanonicalBinaryReader reader, int maximumBigIntegerBytes) =>
-        QuadraticSurd.Create(
+    private static RealQuadratic ReadSurd(ref CanonicalBinaryReader reader, int maximumBigIntegerBytes) =>
+        RealQuadratic.Create(
             denominator: reader.ReadBigInteger(maximumByteCount: maximumBigIntegerBytes),
             radicand: reader.ReadBigInteger(maximumByteCount: maximumBigIntegerBytes),
             rationalNumerator: reader.ReadBigInteger(maximumByteCount: maximumBigIntegerBytes),
             surdNumerator: reader.ReadBigInteger(maximumByteCount: maximumBigIntegerBytes)
         );
-    private static void WriteSurd(ArrayBufferWriter<byte> writer, QuadraticSurd value) {
+    private static void WriteSurd(ArrayBufferWriter<byte> writer, RealQuadratic value) {
         writer.WriteBigInteger(value: value.Denominator);
         writer.WriteBigInteger(value: value.Radicand);
         writer.WriteBigInteger(value: value.RationalNumerator);

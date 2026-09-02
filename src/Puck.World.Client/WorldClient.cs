@@ -3,6 +3,7 @@ using Puck.Hosting;
 using Puck.Maths;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
+using Puck.SignedDistance.Queries;
 using Puck.World.Protocol;
 using Puck.Physics.Motion;
 
@@ -41,10 +42,17 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     // applied mutation batch or a swap. The frame source re-reads scene/screens from this behind the revision check.
     private WorldDefinition m_definition;
     private WorldClientFieldLattice? m_fields;
+    // The static-scene query field, rebuilt by WorldFramePresenter whenever the composed program changes and parked
+    // here so every presentation consumer reads ONE evaluator: the chase camera's clearance sweep and the stamp
+    // pool's limb probes ask the same geometry the same way. Null before the first composed program, and for a world
+    // whose program carries render-only warps no fixed-point query can interpret.
+    private SdfFieldEvaluator? m_staticField;
 
     /// <summary>Gets the mirror of the authority's field lattice, or <see langword="null"/> for a world without a
     /// <c>fields</c> section.</summary>
     public WorldClientFieldLattice? Fields => m_fields;
+    /// <summary>Gets the static-scene query field, or <see langword="null"/> when none is resolved.</summary>
+    public SdfFieldEvaluator? StaticField => m_staticField;
 
     private int m_definitionRevision;
     // The accepted-lever applier (see WorldSessionLeverSink). Optional so a client composed without the presentation
@@ -72,6 +80,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     // The LOOK row index per entity — the frame source reads it to resolve each body's appearance (catalog rig vs.
     // creation stamp), scale, and gait amplitude. PRESENTATION-ONLY.
     private readonly byte[] m_look = new byte[EntityCapacity];
+    private readonly BodyFacts[] m_facts = new BodyFacts[EntityCapacity];
     // The occupant-owned procedural rig. This is deliberately distinct from the authority-local entity index: a
     // seamless transfer may move the occupant to another slot without changing its implicit shape.
     private readonly byte[] m_catalogRig = new byte[EntityCapacity];
@@ -736,6 +745,10 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
         );
         m_definitionRevision++;
     }
+    /// <summary>Publishes the static-scene query field every presentation consumer shares.</summary>
+    /// <param name="field">The evaluator built over the composed program's static layers, or <see langword="null"/>
+    /// when the program admits no fixed-point query.</param>
+    public void PublishStaticField(SdfFieldEvaluator? field) => m_staticField = field;
     /// <inheritdoc/>
     public void DeliverSessionLever(WorldSessionLever lever) {
         // Already past the server's Mutate check on the lever's folded-into section (see WorldServer.ApplySessionLever),
@@ -757,6 +770,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
             m_color[index] = entry.BodyColor;
             m_kit[index] = entry.Kit;
             m_look[index] = entry.Look;
+            m_facts[index] = entry.Facts;
             m_catalogRig[index] = entry.CatalogRig;
             m_generation[index] = entry.Generation;
             m_placementId[index] = entry.PlacementId;
@@ -883,6 +897,10 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// <summary>The entity's per-frame render position (interpolated and correction-eased).</summary>
     /// <param name="index">The 0-based entity index.</param>
     public Vector3 Position(int index) => m_renderPosition[index];
+    /// <summary>The entity's authoritative fact mask from the latest snapshot — the presentation's gate for
+    /// fact-keyed animation. An inactive index reports whatever its last snapshot carried.</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    public BodyFacts Facts(int index) => m_facts[index];
     /// <summary>Submits each joined, active seat's device intent (and live-held lane image) for this tick — the
     /// client's per-tick outbound half, run immediately before the server step. A pending seat submits nothing (its
     /// inputs drive the profile picker, not locomotion), and a seat submits only under

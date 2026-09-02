@@ -12,21 +12,6 @@ public static partial class WorldDefinitionValidator {
 
         RequireNonNegative(
             errors: errors,
-            name: $"{Path}.climbReach",
-            value: attachment.ClimbReach
-        );
-        RequireNonNegative(
-            errors: errors,
-            name: $"{Path}.climbSpeed",
-            value: attachment.ClimbSpeed
-        );
-        RequireNonNegative(
-            errors: errors,
-            name: $"{Path}.gripCost",
-            value: attachment.GripCost
-        );
-        RequireNonNegative(
-            errors: errors,
             name: $"{Path}.grappleMaxDistance",
             value: attachment.GrappleMaxDistance
         );

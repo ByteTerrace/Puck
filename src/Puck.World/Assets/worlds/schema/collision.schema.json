@@ -30,6 +30,11 @@
     "gradientProbe": {
       "description": "The finite-difference step field contact samples the surface normal with, in world units; 0 takes the evaluator\u0027s own default. Meaningful only when a requirement selects field contact.",
       "type": "number"
+    },
+    "defaultHold": {
+      "description": "Whether a body\u0027s surface hold may take any solid surface by default. A placement\u0027s own WorldPlacementGrip overrides this for the colliders it compiles; the field lattice\u0027s own terrain, which no placement row owns, has only this. false (the default) holds nothing.",
+      "type": "boolean",
+      "default": false
     }
   },
   "required": [

@@ -258,17 +258,17 @@ public readonly record struct PolynomialBeattyShadowPellChannel {
 }
 /// <summary>Finite quadratic-norm and generalized-Pell reductions for polynomial continued-fraction Beatty shadows.</summary>
 public static class PolynomialBeattyShadow {
-    private static QuadraticSurd[] BoundaryResidualCoefficients(
-        IReadOnlyList<QuadraticSurd> coefficients,
-        QuadraticSurd leadingConjugateGap,
-        QuadraticSurd constantConjugateGap,
-        QuadraticSurd normValue) {
+    private static RealQuadratic[] BoundaryResidualCoefficients(
+        IReadOnlyList<RealQuadratic> coefficients,
+        RealQuadratic leadingConjugateGap,
+        RealQuadratic constantConjugateGap,
+        RealQuadratic normValue) {
         var termCount = coefficients.Count;
-        var residual = new QuadraticSurd[((2 * termCount) + 1)];
+        var residual = new RealQuadratic[((2 * termCount) + 1)];
 
         Array.Fill(
             array: residual,
-            value: QuadraticSurd.Zero
+            value: RealQuadratic.Zero
         );
         residual[0] = -normValue;
 
@@ -286,7 +286,7 @@ public static class PolynomialBeattyShadow {
         }
 
         for (var inversePower = 0; (inversePower < termCount); ++inversePower) {
-            if (residual[inversePower] != QuadraticSurd.Zero) {
+            if (residual[inversePower] != RealQuadratic.Zero) {
                 throw new InvalidOperationException(message: "the boundary coefficients did not cancel the required residual orders");
             }
         }
@@ -294,7 +294,7 @@ public static class PolynomialBeattyShadow {
         return residual[termCount..];
     }
     private static void ChoosePositiveBounds(
-        QuadraticSurd value,
+        RealQuadratic value,
         out BigInteger scale,
         out BigInteger upperLowerNumerator,
         out BigInteger lowerLowerNumerator) {
@@ -309,7 +309,7 @@ public static class PolynomialBeattyShadow {
 
         while (true) {
             scale = (BigInteger.One << precisionBits);
-            upperLowerNumerator = ((value * QuadraticSurd.Rational(value: scale)).Floor() - 1);
+            upperLowerNumerator = ((value * RealQuadratic.Rational(value: scale)).Floor() - 1);
             lowerLowerNumerator = (upperLowerNumerator / 2);
             if (lowerLowerNumerator > 0) { return; }
             precisionBits = checked((precisionBits * 2));
@@ -355,7 +355,7 @@ public static class PolynomialBeattyShadow {
     /// Returns the first <paramref name="termCount"/> exact coefficients <c>a_1,...,a_k</c> of the near-center
     /// integer-boundary gap <c>m_h(n)-(lambda*n+beta)</c> for cleared norm <paramref name="norm"/>.
     /// </summary>
-    public static IReadOnlyList<QuadraticSurd> BoundaryAsymptoticCoefficients(
+    public static IReadOnlyList<RealQuadratic> BoundaryAsymptoticCoefficients(
         PolynomialContinuedFractionAnalysis analysis,
         BigInteger norm,
         int termCount) {
@@ -375,28 +375,28 @@ public static class PolynomialBeattyShadow {
             norm: norm
         );
         var scale = certificate.CommonDenominator;
-        var normValue = QuadraticSurd.Rational(
+        var normValue = RealQuadratic.Rational(
             denominator: (scale * scale),
             numerator: norm
         );
-        var leadingConjugateGap = QuadraticSurd.Create(
+        var leadingConjugateGap = RealQuadratic.Create(
             rationalNumerator: BigInteger.Zero,
             surdNumerator: (2 * certificate.SlopeSurdNumerator),
             radicand: certificate.Radicand,
             denominator: scale
         );
-        var constantConjugateGap = QuadraticSurd.Create(
+        var constantConjugateGap = RealQuadratic.Create(
             rationalNumerator: BigInteger.Zero,
             surdNumerator: (2 * certificate.OffsetSurdNumerator),
             radicand: certificate.Radicand,
             denominator: scale
         );
-        var coefficients = new QuadraticSurd[termCount];
+        var coefficients = new RealQuadratic[termCount];
 
         coefficients[0] = (normValue / leadingConjugateGap);
 
         for (var coefficientIndex = 1; (coefficientIndex < termCount); ++coefficientIndex) {
-            var convolution = QuadraticSurd.Zero;
+            var convolution = RealQuadratic.Zero;
 
             for (var leftIndex = 0; (leftIndex <= (coefficientIndex - 2)); ++leftIndex) {
                 convolution += (coefficients[leftIndex] *
@@ -437,17 +437,17 @@ public static class PolynomialBeattyShadow {
             termCount: termCount
         );
         var scaleZ = normCertificate.CommonDenominator;
-        var normValue = QuadraticSurd.Rational(
+        var normValue = RealQuadratic.Rational(
             denominator: (scaleZ * scaleZ),
             numerator: norm
         );
-        var leadingConjugateGap = QuadraticSurd.Create(
+        var leadingConjugateGap = RealQuadratic.Create(
             denominator: scaleZ,
             radicand: normCertificate.Radicand,
             rationalNumerator: BigInteger.Zero,
             surdNumerator: (2 * normCertificate.SlopeSurdNumerator)
         );
-        var constantConjugateGap = QuadraticSurd.Create(
+        var constantConjugateGap = RealQuadratic.Create(
             denominator: scaleZ,
             radicand: normCertificate.Radicand,
             rationalNumerator: BigInteger.Zero,
@@ -460,11 +460,11 @@ public static class PolynomialBeattyShadow {
             normValue: normValue
         );
         var residualMagnitude = residualCoefficients.Aggregate(
-            QuadraticSurd.Zero,
+            RealQuadratic.Zero,
             (sum, coefficient) => (sum + coefficient.Abs())
         );
         var coefficientMagnitude = coefficients.Aggregate(
-            QuadraticSurd.Zero,
+            RealQuadratic.Zero,
             (sum, coefficient) => (sum + coefficient.Abs())
         );
 
@@ -474,13 +474,13 @@ public static class PolynomialBeattyShadow {
             out var deltaLowerNumerator,
             out var denominatorLowerNumerator
         );
-        var denominatorLower = QuadraticSurd.Rational(
+        var denominatorLower = RealQuadratic.Rational(
             denominator: lowerScale,
             numerator: denominatorLowerNumerator
         );
         var residualMagnitudeCeiling = residualMagnitude.Ceiling();
-        var radius = (QuadraticSurd.Rational(value: residualMagnitudeCeiling) / denominatorLower).Ceiling();
-        var deltaLower = QuadraticSurd.Rational(
+        var radius = (RealQuadratic.Rational(value: residualMagnitudeCeiling) / denominatorLower).Ceiling();
+        var deltaLower = RealQuadratic.Rational(
             denominator: lowerScale,
             numerator: deltaLowerNumerator
         );
@@ -488,16 +488,16 @@ public static class PolynomialBeattyShadow {
 
         while (true) {
             var deltaAtCutoff = (leadingConjugateGap +
-                (constantConjugateGap / QuadraticSurd.Rational(value: cutoff)));
-            var discriminantLower = ((deltaLower * deltaLower) * QuadraticSurd.Rational(value: (cutoff * cutoff)));
+                (constantConjugateGap / RealQuadratic.Rational(value: cutoff)));
+            var discriminantLower = ((deltaLower * deltaLower) * RealQuadratic.Rational(value: (cutoff * cutoff)));
             var denominatorLoss = (coefficientMagnitude +
-                ((QuadraticSurd.Rational(value: 2) * normValue.Abs()) / deltaLower));
+                ((RealQuadratic.Rational(value: 2) * normValue.Abs()) / deltaLower));
             var denominatorMargin = ((deltaLower - denominatorLower) *
-                QuadraticSurd.Rational(value: (cutoff * cutoff)));
+                RealQuadratic.Rational(value: (cutoff * cutoff)));
 
             if (
                 (deltaAtCutoff >= deltaLower) &&
-                (discriminantLower >= (QuadraticSurd.Rational(value: 4) * normValue.Abs())) &&
+                (discriminantLower >= (RealQuadratic.Rational(value: 4) * normValue.Abs())) &&
                 (denominatorMargin >= denominatorLoss)
             ) {
                 var certificate = new PolynomialBeattyBoundaryAsymptoticCertificate(
@@ -652,7 +652,7 @@ public static class PolynomialBeattyShadow {
                 analysis: analysis,
                 norm: norm
             )) {
-                var positiveEmbedding = QuadraticSurd.Create(
+                var positiveEmbedding = RealQuadratic.Create(
                     denominator: BigInteger.One,
                     radicand: envelope.Radicand,
                     rationalNumerator: channel.BaseX,
@@ -754,11 +754,11 @@ public static class PolynomialBeattyShadow {
         var comparisonOrder = 1;
         var comparison = (boundaryCoefficients[0] - tailCoefficients[1]);
 
-        if (comparison == QuadraticSurd.Zero) {
-            if (tailCoefficients[1] == QuadraticSurd.Zero) {
+        if (comparison == RealQuadratic.Zero) {
+            if (tailCoefficients[1] == RealQuadratic.Zero) {
                 if (
                     !norm.IsZero ||
-                    (analysis.AffineResidual != QuadraticSurd.Zero)
+                    (analysis.AffineResidual != RealQuadratic.Zero)
                 ) {
                     throw new InvalidOperationException(message: "zero leading comparison did not reduce to the exact affine case");
                 }
@@ -774,15 +774,15 @@ public static class PolynomialBeattyShadow {
 
             comparisonOrder = 2;
             comparison = (boundaryCoefficients[1] - tailCoefficients[2]);
-            var forcedDifference = (((QuadraticSurd.Rational(value: analysis.Parameters.Linear) * analysis.Slope) *
+            var forcedDifference = (((RealQuadratic.Rational(value: analysis.Parameters.Linear) * analysis.Slope) *
                 tailCoefficients[1]) /
                 ((analysis.Slope * analysis.Slope) +
-                    QuadraticSurd.Rational(value: analysis.Parameters.NumeratorQuadratic)));
+                    RealQuadratic.Rational(value: analysis.Parameters.NumeratorQuadratic)));
 
             if ((tailCoefficients[2] - boundaryCoefficients[1]) != -forcedDifference) {
                 throw new InvalidOperationException(message: "the second-order collision identity failed");
             }
-            if (comparison == QuadraticSurd.Zero) {
+            if (comparison == RealQuadratic.Zero) {
                 throw new InvalidOperationException(message: "a nonzero first-order collision persisted to second order");
             }
         }
@@ -794,7 +794,7 @@ public static class PolynomialBeattyShadow {
             termCount: comparisonOrder
         );
         var errorRadius = (tailCertificate.RadiusNumerator + boundaryCertificate.RadiusNumerator);
-        var dominanceCutoff = ((QuadraticSurd.Rational(value: errorRadius) / comparison.Abs()).Floor() + 1);
+        var dominanceCutoff = ((RealQuadratic.Rational(value: errorRadius) / comparison.Abs()).Floor() + 1);
         var orientationCutoff = BigInteger.One;
         var slopeSurd = normCertificate.SlopeSurdNumerator;
         var offsetSurd = normCertificate.OffsetSurdNumerator;
@@ -847,18 +847,18 @@ public static class PolynomialBeattyShadow {
         }
 
         var offsetFloor = analysis.Offset.Floor();
-        var offsetFraction = (analysis.Offset - QuadraticSurd.Rational(value: offsetFloor));
+        var offsetFraction = (analysis.Offset - RealQuadratic.Rational(value: offsetFloor));
 
-        if (offsetFraction != QuadraticSurd.Zero) {
+        if (offsetFraction != RealQuadratic.Zero) {
             var certificate = analysis.AsymptoticIntervalCertificate(termCount: 1);
-            var upperDistance = (QuadraticSurd.One - offsetFraction);
+            var upperDistance = (RealQuadratic.One - offsetFraction);
             var boundaryDistance = ((offsetFraction <= upperDistance)
                 ? offsetFraction
                 : upperDistance
             );
             var cutoff = BigInteger.Max(
                 left: certificate.Cutoff,
-                right: ((QuadraticSurd.Rational(value: certificate.RadiusNumerator) / boundaryDistance).Floor() + 1)
+                right: ((RealQuadratic.Rational(value: certificate.RadiusNumerator) / boundaryDistance).Floor() + 1)
             );
 
             return new PolynomialBeattyShadowRationalDecisionCertificate(
@@ -870,8 +870,8 @@ public static class PolynomialBeattyShadow {
         var coefficients = analysis.AsymptoticCoefficients(termCount: 2);
         var leadingError = coefficients[1];
 
-        if (leadingError == QuadraticSurd.Zero) {
-            if (analysis.AffineResidual != QuadraticSurd.Zero) {
+        if (leadingError == RealQuadratic.Zero) {
+            if (analysis.AffineResidual != RealQuadratic.Zero) {
                 throw new InvalidOperationException(message: "zero leading error did not reduce to the exact affine case");
             }
 
@@ -882,10 +882,10 @@ public static class PolynomialBeattyShadow {
         }
 
         var errorCertificate = analysis.AsymptoticIntervalCertificate(termCount: 2);
-        var signCutoff = ((QuadraticSurd.Rational(value: errorCertificate.RadiusNumerator) /
+        var signCutoff = ((RealQuadratic.Rational(value: errorCertificate.RadiusNumerator) /
             leadingError.Abs()).Floor() + 1);
         var unitCutoff = ((leadingError.Abs() +
-            QuadraticSurd.Rational(value: errorCertificate.RadiusNumerator)).Floor() + 1);
+            RealQuadratic.Rational(value: errorCertificate.RadiusNumerator)).Floor() + 1);
         var finalCutoff = BigInteger.Max(
             left: errorCertificate.Cutoff,
             right: BigInteger.Max(
@@ -1077,17 +1077,17 @@ public static class PolynomialBeattyShadow {
             termCount: certificate.CoefficientCount
         );
         var scaleZ = normCertificate.CommonDenominator;
-        var normValue = QuadraticSurd.Rational(
+        var normValue = RealQuadratic.Rational(
             denominator: (scaleZ * scaleZ),
             numerator: certificate.Norm
         );
-        var leadingConjugateGap = QuadraticSurd.Create(
+        var leadingConjugateGap = RealQuadratic.Create(
             denominator: scaleZ,
             radicand: normCertificate.Radicand,
             rationalNumerator: BigInteger.Zero,
             surdNumerator: (2 * normCertificate.SlopeSurdNumerator)
         );
-        var constantConjugateGap = QuadraticSurd.Create(
+        var constantConjugateGap = RealQuadratic.Create(
             denominator: scaleZ,
             radicand: normCertificate.Radicand,
             rationalNumerator: BigInteger.Zero,
@@ -1100,20 +1100,20 @@ public static class PolynomialBeattyShadow {
             normValue: normValue
         );
         var residualMagnitude = residualCoefficients.Aggregate(
-            QuadraticSurd.Zero,
+            RealQuadratic.Zero,
             (sum, coefficient) => (sum + coefficient.Abs())
         );
 
-        if (QuadraticSurd.Rational(value: certificate.ResidualMagnitudeCeiling) < residualMagnitude) {
+        if (RealQuadratic.Rational(value: certificate.ResidualMagnitudeCeiling) < residualMagnitude) {
             return false;
         }
 
         var lowerScale = certificate.LowerBoundDenominator;
-        var deltaLower = QuadraticSurd.Rational(
+        var deltaLower = RealQuadratic.Rational(
             denominator: lowerScale,
             numerator: certificate.DeltaLowerNumerator
         );
-        var denominatorLower = QuadraticSurd.Rational(
+        var denominatorLower = RealQuadratic.Rational(
             denominator: lowerScale,
             numerator: certificate.DenominatorLowerNumerator
         );
@@ -1121,28 +1121,28 @@ public static class PolynomialBeattyShadow {
         if (
             (denominatorLower >= deltaLower) ||
             (deltaLower >= leadingConjugateGap) ||
-            (QuadraticSurd.Rational(value: certificate.RadiusNumerator) <
-                (QuadraticSurd.Rational(value: certificate.ResidualMagnitudeCeiling) / denominatorLower))
+            (RealQuadratic.Rational(value: certificate.RadiusNumerator) <
+                (RealQuadratic.Rational(value: certificate.ResidualMagnitudeCeiling) / denominatorLower))
         ) {
             return false;
         }
 
         var coefficientMagnitude = coefficients.Aggregate(
-            QuadraticSurd.Zero,
+            RealQuadratic.Zero,
             (sum, coefficient) => (sum + coefficient.Abs())
         );
         var cutoff = certificate.Cutoff;
         var deltaAtCutoff = (leadingConjugateGap +
-            (constantConjugateGap / QuadraticSurd.Rational(value: cutoff)));
-        var discriminantLower = ((deltaLower * deltaLower) * QuadraticSurd.Rational(value: (cutoff * cutoff)));
+            (constantConjugateGap / RealQuadratic.Rational(value: cutoff)));
+        var discriminantLower = ((deltaLower * deltaLower) * RealQuadratic.Rational(value: (cutoff * cutoff)));
         var denominatorLoss = (coefficientMagnitude +
-            ((QuadraticSurd.Rational(value: 2) * normValue.Abs()) / deltaLower));
+            ((RealQuadratic.Rational(value: 2) * normValue.Abs()) / deltaLower));
         var denominatorMargin = ((deltaLower - denominatorLower) *
-            QuadraticSurd.Rational(value: (cutoff * cutoff)));
+            RealQuadratic.Rational(value: (cutoff * cutoff)));
 
         return (
             (deltaAtCutoff >= deltaLower) &&
-            (discriminantLower >= (QuadraticSurd.Rational(value: 4) * normValue.Abs())) &&
+            (discriminantLower >= (RealQuadratic.Rational(value: 4) * normValue.Abs())) &&
             (denominatorMargin >= denominatorLoss)
         );
     }

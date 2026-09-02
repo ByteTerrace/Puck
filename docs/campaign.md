@@ -54,7 +54,7 @@ a parallel version or a compatibility shim.
 
 **Second-order "personality" is one document section, referenced by every follower.** A world declares
 named pole-matched second-order responses (t3ssel8r's `f`/`ζ`/`r` vocabulary) once, in `dynamics`, and
-four independent consumers — a look's root/part followers, a camera boom, a grounded/swim kit's planar
+four independent consumers — a look's root/part followers, a camera boom, a grounded kit's planar
 shaping, a `state` cell's eased read — name a row rather than each inventing its own ease. The matched
 Z-transform state transition is transcribed into exactly two homes: `Puck.Maths` (fixed-point, simulation
 state) and `Puck.SdfVm.Views` (a `MathF` twin, presentation-only, never fed back into the tick) — never a
@@ -79,7 +79,7 @@ home is `WorldStateRow.Draw`; `bodies.capacityRow`/`host.backendRow` are boot-ti
 already-resolved row rather than sites of their own, and nothing settles-and-clears any more — a
 boot-drawn row is the persisted evidence, re-read on every fresh load, never a value that becomes
 indistinguishable from an authored literal. A `state.lattices` topology plus a `lattice` trait on
-ordinary `fixed` rows is the field/terrain primitive, not a sibling section: `rect`/`noise`/`scatter`
+ordinary `fixed` rows is the field/terrain primitive, not a sibling section: `rect`/`noise`/`scatter`/`draw`
 paint seeds a row deterministically (integer-hash + Q48.16, seeded from `generation.worldSeed`), and
 `diffuse`/`decay`/`transform`/`emit`/`expose`/`flow` reactions evolve it each `stepEveryTicks`, every
 reaction scalar a literal or a `{"row": "name"}` read fresh per step — a season or weather-intensity row
@@ -104,7 +104,7 @@ dissolved into placements' own policy block); `prototypes` (`prototypeId` refere
 `playerDefaults`/`seatLook`. `puck.world.frozen.json` (the frozen diorama — see
 the 2026-08-31 reset below) is the worked example: the island lattice burns,
 freezes, melts, and evaporates on the folded spelling, and its bodies carry the
-hp/targeting/attack, elemental-status, and state-driven-look suites.
+hp/targeting/attack, elemental-status, and state-driven-look suites. A value that turns with the tick is a `cycle` trait on a state row (`WorldStateCycle`, beside `advance` and `dynamics`), driven by a generator of the symmetry lattice's reflection group (`Puck.Maths.SymmetryWord`: an authored word of mirrors whose derived order is the period, or the lattice's own thirty-step `Puck.Maths.CyclicRotation` cycle) and, for its lattice outputs, `Puck.Maths.SymmetryLattice` — a looping animation, a twelve-position dial, a phase or a ring-slot address enters the game as a row every draw, rule, binding and HUD element already reads, never as a shader-side clock; rules read the lattice's own pairing through `$symmetry:innerProduct`, and a `symmetryOrbit` generator source deals a ring or a word's orbit as a shuffle bag.
 
 **Gravity authoring names acceleration independently of geometry.** A world may
 author a uniform acceleration directly, retain explicit placement-plus-mass
@@ -154,7 +154,7 @@ fold — git history only — and rows citing `puck.world.json` describe what is
 `water` field marked `medium` (a 5-unit pool) beside the existing fire/char chemistry, transported by a
 `flow` reaction that spills its edge share into `falls-flux`, which gates a `falls-mist` rule — plus
 `fish`/`critter` placements and `pond-cam`/`south-fall-cam` view layouts. `puck canary medium-submersion`
-proves a swim kit's `Submerged` fact flips both ways off `WorldPopulation.SampleMediumSurfaces`; `puck
+proves a medium hold's `Submerged` fact flips both ways off `WorldPopulation.SampleMediumSurfaces`; `puck
 canary flow-conservation-live` proves a spill row climbs strictly, live, only while a reaction keeps
 feeding its source. `puck parity` (both backends) holds unchanged — the parity world authors neither
 facet.
@@ -169,7 +169,9 @@ and the old basis froze with it as `puck.basis.frozen.json` — only the frozen 
 The new `puck.world.json` is a delta over the new `standard.basis.json`, which carries the standards,
 defined AS STATE (owner ruling, same day) — a `transforms` text row (`identity`/`origin`/`unit`) and
 a `colors` text row that document values reference by `state.<row>.<key>` instead of restating
-literals, so no shipped document carries a literal `[0, 0, 0, 1]` again — plus the INFINITE SAFETY
+literals, so no shipped document carries a literal `[0, 0, 0, 1]` again — the standard `theme`
+(without it the overlay resolves to the zeroed absent theme and the console panel is a 1 px-cell
+black corner) — plus the INFINITE SAFETY
 NET and its debug texture (owner rulings, same day): one solid Plane placement (`groundPlane`, the
 `groundContact` precedent) at y = −16, a reasonable distance below origin, catching anything that
 falls, never the level's own floor — its single shape both rendered and collided, one declaration,
@@ -186,7 +188,90 @@ the `walker` kit, bindings, the chase rig, and the pip look. A lattice trait's `
 grammar (resolved live at emit — a state cell write recolors a height field on the next frame with no
 re-bake, since bricks hold only distances; `world.fields` echoes each height field's authored color
 token; the check: author a lattice row's color as a state reference and boot).
-Everything else returns as deliberate evolution steps on this foundation. The checks: boot headless,
+Everything else returns as deliberate evolution steps on this foundation. The first (2026-09-02): the
+platform at origin is a DEBUG AREA — one fixture per contact contract, each with a `spawnPoints` row
+and `body.pose spawn:<id>` to stand in front of it (`ramps`, `stairs`, `wall`, `pit`, `ladder`,
+`edge`; compass posts colored by engine axis; a far pillar on the net for fog). Walking the fixtures
+under `body.fly` found two defects the old canaries never could: a face steeper than
+`maxSlopeDegrees` was still CLIMBABLE (the normal push's up-component out-lifted gravity — 65° at
+walking speed, 75° as a creep), now a horizontal wall push in `FixedContactPushMath` with its own
+law tests; and a `Subtraction` carve was walked over, then stood in mid-air inside, because a
+subtraction is only a bound in its own void (the contact field grounds on the carve's phantom
+faces) — an authoring rule recorded in `sdf-world`, the pit carve now extends from below the net.
+The stairs measured the walker's implicit step-up (0.25 m steps, 0.5 m blocks; no authored step
+height). The checks: `body.pose spawn:ramps` then `body.fly 1 0 0 0 0 0 2` from x = 7.5 and 9.5
+leaves `body.where` at the ramp foot (y = −0.48), from x = 1.5/3.5/5.5 it crests and lands beyond;
+`body.pose 0 0 3 0 0 0` + `body.fly -1 0 0 0 0 0 1` ends on the net at y = −15.98 inside the pit. The second
+(2026-09-02): climbing and a limbed avatar, built on two primitives that name no game at all. The
+sim publishes a per-body FACT MASK (`BodyFacts`, one bit per `ActionFact` — grounded, airborne,
+rising, falling, submerged, at surface, climbing, flying — derived from the same predicates the action
+gates read; `EntitySnapshot.Facts`, echoed by `body.where`'s `facts=`), never a regime enum, so a
+submarine is a vehicle body that is submerged and a plane one that is airborne. A creation look
+binds DRIVERS to signals (`drivers[]`: planar travel, travel, time, speed, vertical speed, turn rate;
+gated on facts plus the client-derived `moving`/`still`; a phase and an eased weight) and shapes
+compose JOINTS from them (`swings[]` about a pivot and axis, `slides[]` along an axis; sine or linear
+waveforms) — the same parts make a walker's stride, a climber's reach, a wheel, a rotor, or gills.
+Climbing is no longer a mode of its own: a grounded kit authors an ORDERED HOLD LIST
+(`motion.holds`) of what may hold it — a `bond` (a field face inside a `cone` of degrees from
+gravity-up, or nothing at all), a `hold` law (gravity, a positional grip, a fraction of gravity
+lifted), a tangent `speed`, an `upLean`, an `onDrive` grab, a `release` channel, and a `spend`
+against a body-lane slot — and the `ResolveHold`/`ApplyHold` operations read it. A wall, a ledge, a
+ceiling and a hover are the same primitive under different cones, so a spider and a dragonfly are
+data rather than code. Every surface probe is directed and the grip is a positional constraint, so
+tunnelling through a wall is impossible by construction; `grip: {holdable: true}` on the debug room
+(and `collision.defaultHold`) decides which surfaces admit a hold at all, and `body.hold` echoes
+which row holds a body. Three follow-ups settled the primitive: `upLean` moves the body's CONTACT
+axis only for a hold gravity keeps (a kart on a loop) — a grip's lean is the frame it travels in and
+the attitude it is drawn at, because leaning the contact axis onto a ceiling tells the solver the
+floor is a ceiling and a released body falls through it; a producer's inward pull steers against the
+body's own HOME (its activation position, echoed by `body.where`'s `home=`) rather than the world
+origin, so a population spread over placements keeps to its own ground instead of congregating; and
+`bond: "medium"` carries buoyancy and the surface band in the hold vocabulary — the one spelling of that
+law, pinned by `WorldMediumLawTests` to a recorded fixed-point trace. The vehicle arm did not fold: its drive facets are how a velocity
+is SHAPED, not what holds a body. The pip carries two arms and
+two legs on `stride` (contralateral, about X) and `reach` (diagonal pairs, in the wall plane). The
+checks: `body.pose spawn:wall`, `body.fly 0 1 0 0 0 0 2.5` (drive into the wall), then
+`body.fly 1 0 0 0 0 0 2.5` — `body.where` reads `facts=grounded|climbing` at the standoff, rises
+1 m per 0.5 s, and ends `grounded` at y = 2.57 on the wall top; `body.press jump 1 0.2` mid-climb
+ends `grounded` on the floor; `world.screenshot` mid-climb shows the limbs spread in the wall plane
+and mid-walk shows them swung fore and aft, vertical when standing. The avatar since became `wren` — an original
+traveller (copper side-swept hair and ponytail, slate shoulder-cape, ivory tunic, mustard sash, plum
+trousers, cuffed boots, satchel, pendant) built as a JOINT CHAIN: a shape's `parent` carries its
+children, pivots included, and `halfSine` bends a knee or elbow one way — no more straight-rod limbs.
+Her character is the world's data, not typed numbers: a driver's `cadence` and a facet's
+`amplitude`/`phase` may reference a numeric state cell (her stride cadence and sway rate are
+`uniformRange` boot draws, rolled once per world), a driver's `signal` may be a state cell (her sway
+rides a `cycle`-trait rotor row, tick-exact on every client), and a `wave` may be `curve:<row>`,
+sampling the world's `curves` table (her stride is an overshooting curve, not a sine). Found in
+passing: a numeric draw landed in a fixed row as raw Q48.16 bits (7 read as 7/65536) — promoted to
+whole units at both landing sites. A `constant` waveform is the pose blend (`amplitude · w`): Wren's climb is a
+posture — arms overhead with hands at the wall, elbows slightly bent, knees frogged — blended in on
+a `cling` driver gated `Climbing`, with a `reach` driver alternating the limbs up and down the wall
+about the sagittal axis; the sideways flail of swinging about the into-wall axis is gone. The
+checks: `world.state strideCadence` reads an integer in [5, 8] after boot; `body.fly 1 0 0 0 0 0 3`
+mid-walk shows knees and elbows bent through the chain; on the wall (`body.pose spawn:wall`, strafe
+in, forward) `world.screenshot` shows the overhead reach, and on the ledge the posture eases out.
+**The kinematics rework, squash 1**: climbing stopped being a concept. A grounded kit authors an
+ordered `holds` list (`bond` surface/free, a `cone` of surface normals against gravity-up, `hold`
+gravity/grip/lift, reach, speed, `upLean`, `forward`, `onDrive`, `release`, `spend` against a body
+state slot), and two program ops — `ResolveHold` picks the hold the world offers each tick and sets
+the frame, `ApplyHold` is its vertical law; the attachment section's climb members are gone
+(grapple stays a tether), `BodyFacts.Flying` joins the mask, and `body.hold` reads the hold back. A
+ledge is the next hold, not a mantle state; stamina is the world's own body slot, refilled by its
+`resetFact`. On the rig, `effectors` solve a joint chain to a target (two-bone analytic, CCD beyond)
+from a surface probe, a body, or a state cell, gated on facts, with `plant` windows that latch a foot
+through stance — hands on the wall, feet on the step, from the same primitive that plants a spider's
+eight legs. Three creatures now wander the debug area over those primitives: a spider (whole-sphere
+grip), a dragonfly (full lift, altitude held by its producer), a hound (four-beat trot, planted paws).
+Found in passing: the client's query field refused the wallpaper-folded ground texture, so limb
+probes and the chase camera's clearance sweep were inert (it now builds from solid placements only);
+a flat ellipsoid's eccentricity taxes every march in the frame (the dragonfly's first wings made the
+whole world render inflated — `world.budget`'s stepScale is the tell, ~1.6× baseline now); a full
+lift hold must bleed its vertical channel or a glance off a walkable face carries the body upward
+forever. Open: `upLean: 1` under a ceiling defeats the floor's contact (the spider leans 0 for now).
+The checks: `body.pose spawn:wall`, strafe in, forward: `body.hold 0` reads `hold=wall` with
+`spend` draining, `world.screenshot` shows both hands on the face; `body.where 5..7` after a minute
+reads every creature on the platform; `world.budget` reads a stepScale near 0.6. The checks: boot headless,
 `body.where 0` spawns at origin, falls ~1 s, and settles at y=-15.98 (the net's surface -16 plus
 `contactSkin` 0.02); `body.press forward 1 2 0` then `body.where 0` shows 8 m in 2 s (the authored
 4 m/s); windowed `world.screenshot` shows the body standing on the same checkered net it collides
@@ -201,7 +286,7 @@ body reads live, and refuses by name for an identity not owned here). An identit
 before the reshape still carries its seeded 0.01 rows and reads as an explicit 0.01 claim — cure it
 with `identity.motion`, or delete the state dir.
 
-**The foundation is complete and overshot.** Three motion arms (grounded, vehicle, swim); the portal
+**The foundation is complete and overshot.** Two motion arms (grounded, vehicle); the portal
 lane end to end — step into a frame and the whole party transfers, all-or-nothing across capacity
 *and* authorization; input vocabulary with ordered chord activators; the radial wheel; roster sync;
 durations authored in seconds with ticks derived at compile; per-world clocks; the market/auction
@@ -564,8 +649,9 @@ What survives them, as work rather than prose:
   mutation naming an ordinary verb applies.
 - **Replay coverage.** `WorldReplayEntry` captures the full submission stream now — mutation, undo,
   composition, query, rebuild, screen op, transfer, and the `LinkDelivery` federation-liveness leaf
-  included — but `replay.verify` still proves the pose trajectory only: the hash covers no document,
-  grant-table, or HUD state, and delivered neighbour CONTENT stays untaped.
+  included. `replay.verify` now compares the state-system trace (world state, rule/interaction latches,
+  body action state, live fields, and poses), while retaining the pose trace for inspection. Whole-document,
+  grant-table, HUD, screen-machine, and delivered-neighbour content remain outside that digest.
 - **Unverified, check before scheduling** — session-lever routing (`world.volume`, the render levers,
   `world.save`); a screen route's pad kit and channel masks (document-only, no `body.engage` override
   for the mask); whether fuel is still the only stop for a spinning guest.

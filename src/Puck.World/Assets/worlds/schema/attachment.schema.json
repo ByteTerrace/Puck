@@ -8,22 +8,6 @@
       "description": "Whether the whole surface is live. false makes every other field inert \u2014 a body\u0027s attach/detach/reel channels (even if separately declared and bound) never reach the attachment state machine.",
       "type": "boolean"
     },
-    "defaultGrip": {
-      "description": "The world-level climb policy every solid placement\u0027s compiled surface(s) inherit absent a per-placement WorldPlacementGrip override: true climbs everything, false (the default) climbs nothing.",
-      "type": "boolean"
-    },
-    "climbReach": {
-      "description": "The non-negative world-unit radius a climb attach searches for the nearest climbable surface within, from the body\u0027s own position.",
-      "type": "number"
-    },
-    "climbSpeed": {
-      "description": "The non-negative world-units-per-second a climbing body moves along its gripped surface\u0027s tangent plane.",
-      "type": "number"
-    },
-    "gripCost": {
-      "description": "The non-negative authored cost-per-second a climbing body accrues \u2014 read back (body.attachment) for a future economy hook; it spends no resource channel on its own today.",
-      "type": "number"
-    },
     "grappleMaxDistance": {
       "description": "The non-negative world-unit ceiling a grapple aim searches along the body\u0027s facing direction \u2014 also the tether\u0027s rope length at attach (the resolved anchor\u0027s actual distance, always within this ceiling).",
       "type": "number"
@@ -45,7 +29,7 @@
       "type": "number"
     },
     "attachChannel": {
-      "description": "The declared channel name (validated) whose rising edge attempts an attach \u2014 climb first, then grapple. null leaves attach unreachable from any channel.",
+      "description": "The declared channel name (validated) whose rising edge throws the grapple. null leaves attach unreachable from any channel.",
       "type": [
         "string",
         "null"
@@ -53,7 +37,7 @@
       "default": null
     },
     "detachChannel": {
-      "description": "The declared channel name (validated) whose rising edge clears whichever mode is active. null leaves detach unreachable from any channel.",
+      "description": "The declared channel name (validated) whose rising edge clears an active tether. null leaves detach unreachable from any channel.",
       "type": [
         "string",
         "null"
@@ -61,7 +45,7 @@
       "default": null
     },
     "reelChannel": {
-      "description": "The declared channel name (validated) whose held bipolar value drives the grapple rope length every tick (meaningless while climbing or unattached). null leaves reel inert.",
+      "description": "The declared channel name (validated) whose held bipolar value drives the grapple rope length every tick. null leaves reel inert.",
       "type": [
         "string",
         "null"
@@ -71,10 +55,6 @@
   },
   "required": [
     "enabled",
-    "defaultGrip",
-    "climbReach",
-    "climbSpeed",
-    "gripCost",
     "grappleMaxDistance",
     "grappleAssistHalfAngleDegrees",
     "reelRate",

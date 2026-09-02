@@ -32,6 +32,20 @@ internal static partial class LawRegistry {
             )
         ),
         Case(
+            id: "ntt.pointwise-multiply-is-elementwise-product",
+            run: () => Laws.Claim(
+                claim: NttClaims.PointwiseMultiplyIsElementwiseProduct,
+                lawId: "ntt.pointwise-multiply-is-elementwise-product"
+            )
+        ),
+        Case(
+            id: "ntt.convolution-aliasing-contract",
+            run: () => Laws.Claim(
+                claim: NttClaims.ConvolutionAliasingContract,
+                lawId: "ntt.convolution-aliasing-contract"
+            )
+        ),
+        Case(
             id: "ntt.length-refusals",
             run: () => Laws.Claim(
                 claim: NttClaims.LengthRefusals,
@@ -138,6 +152,13 @@ internal static partial class LawRegistry {
             run: () => Laws.Claim(
                 claim: FftClaims.PointwiseMultiplyIsElementwiseProduct,
                 lawId: "fft.pointwise-multiply-is-elementwise-product"
+            )
+        ),
+        Case(
+            id: "fft.convolution-aliasing-contract",
+            run: () => Laws.Claim(
+                claim: FftClaims.ConvolutionAliasingContract,
+                lawId: "fft.convolution-aliasing-contract"
             )
         ),
     ];

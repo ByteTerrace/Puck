@@ -318,6 +318,95 @@ public static partial class WorldDefinitionValidator {
     // through CreationCanonicalizer (the ONE pipeline — never a re-implementation), the hash pin (the carried
     // hash must equal the canonical hash — a tampered/corrupt row rejects loudly), and the per-stamp shape budget
     // (word-exact ceiling). Returns the resolved id set for the placement gate.
+    // The animation facets that reach outside the creation: a curve waveform names a row of this world's curves, a
+    // state signal names a numeric row of its state — neither is knowable to the portable document alone.
+    private static void ValidateCreationBindings(WorldDefinition definition, Puck.World.Authoring.CreationDocument document, List<string> errors, string path) {
+        var drivers = (document.Drivers ?? []);
+
+        for (var index = 0; (index < drivers.Count); index++) {
+            var signal = drivers[index].Signal;
+
+            if (!Puck.World.Authoring.CreationDriverDocument.IsStateSignal(signal: signal)) {
+                continue;
+            }
+            if (
+                !WorldColor.TryParseBinding(
+                key: out _,
+                row: out var rowName,
+                value: signal!
+            ) ||
+                (WorldDefinitionRows.FindStateRow(
+                rows: definition.State,
+                name: rowName
+            ) is not { } row)
+            ) {
+                errors.Add(item: $"{path}.drivers[{index}].signal '{signal}' names no declared state row.");
+            } else if (row.Kind is not (CellKind.Int or CellKind.Fixed)) {
+                errors.Add(item: $"{path}.drivers[{index}].signal '{signal}' names a {WorldRefusalSpelling.Kind(kind: row.Kind)} row; a signal reads an int or fixed cell.");
+            }
+        }
+
+        var effectors = (document.Effectors ?? []);
+
+        for (var index = 0; (index < effectors.Count); index++) {
+            var target = effectors[index].Target;
+
+            if (
+                (target is null) ||
+                !string.Equals(
+                a: target.Kind,
+                b: Puck.World.Authoring.CreationEffectorTargetDocument.KindState,
+                comparisonType: StringComparison.Ordinal
+            )
+            ) {
+                continue;
+            }
+            if (
+                !WorldColor.TryParseBinding(
+                key: out _,
+                row: out var targetRow,
+                value: (target.Reference ?? string.Empty)
+            ) ||
+                (WorldDefinitionRows.FindStateRow(
+                rows: definition.State,
+                name: targetRow
+            ) is not { } cell)
+            ) {
+                errors.Add(item: $"{path}.effectors[{index}].target.reference '{target.Reference}' names no declared state row.");
+            } else if (cell.Kind != CellKind.Text) {
+                errors.Add(item: $"{path}.effectors[{index}].target.reference '{target.Reference}' names a {WorldRefusalSpelling.Kind(kind: cell.Kind)} row; a state target reads a text cell spelling [x, y, z].");
+            }
+        }
+
+        var shapes = (document.Shapes ?? []);
+
+        for (var index = 0; (index < shapes.Count); index++) {
+            var shape = shapes[index];
+            var swings = (shape.Swings ?? []);
+            var slides = (shape.Slides ?? []);
+
+            for (var i = 0; (i < swings.Count); i++) {
+                RequireCurveRow(definition: definition, errors: errors, path: $"{path}.shapes[{index}].swings[{i}].wave", wave: swings[i].Wave);
+            }
+            for (var i = 0; (i < slides.Count); i++) {
+                RequireCurveRow(definition: definition, errors: errors, path: $"{path}.shapes[{index}].slides[{i}].wave", wave: slides[i].Wave);
+            }
+        }
+    }
+    private static void RequireCurveRow(WorldDefinition definition, List<string> errors, string path, string? wave) {
+        if (!Puck.World.Authoring.CreationWave.TryCurveName(
+            name: out var name,
+            wave: wave
+        )) {
+            return;
+        }
+        if (WorldDefinitionRows.FindCurve(
+            curves: definition.Curves,
+            name: name
+        ) is null) {
+            errors.Add(item: $"{path} '{wave}' names no declared curves row.");
+        }
+    }
     private static HashSet<string> ValidateCreations(WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, HashSet<string> fontNames, bool hasTextCatalog, List<string> errors) {
         var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -377,6 +466,13 @@ public static partial class WorldDefinitionValidator {
             }
 
             // A palette entry bound to state resolves against THIS world; the canonicalizer admits only the syntax.
+            ValidateCreationBindings(
+                definition: definition,
+                document: creation.Document,
+                errors: errors,
+                path: $"{path}.doc"
+            );
+
             var palette = (creation.Document.Palette ?? []);
 
             for (var slot = 0; (slot < palette.Count); slot++) {
@@ -685,6 +781,7 @@ public static partial class WorldDefinitionValidator {
                 dynamicsNames: dynamicsNames,
                 hasMedium: hasMedium,
                 simulationRateHz: definition.SimulationRateHz,
+                stateSlots: stateSlots,
                 errors: errors
             );
             ValidateProducerParameters(

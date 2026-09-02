@@ -24,7 +24,8 @@
               "Markov",
               "UniformRange",
               "WeightedNumeric",
-              "StreamDraw"
+              "StreamDraw",
+              "SymmetryOrbit"
             ],
             "default": "Markov"
           },
@@ -82,6 +83,14 @@
                       "next": {
                         "description": "The context the walk moves into after this alternative is picked. Must name a declared Key; naming a context that declares NO alternatives ends the emission (a terminal is a context with nothing to say, never a reserved token spelling).",
                         "type": "string"
+                      },
+                      "count": {
+                        "description": "How many cards of this alternative one deck pass holds, at least one; null is one. Under WithReplacement a count only scales the weight; under a deck mode each card is dealt once per pass. A context\u0027s cards total at most MaxCardsPerSet.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
                       }
                     },
                     "required": [
@@ -102,7 +111,7 @@
             "default": null
           },
           "mode": {
-            "description": "Markov only: how alternatives are consumed (see WorldGeneratorMode).",
+            "description": "Markov, weighted numeric and symmetry orbit: how the entries are consumed (see WorldGeneratorMode).",
             "enum": [
               "WithReplacement",
               "WithoutReplacement",
@@ -127,7 +136,7 @@
             "default": null
           },
           "weighted": {
-            "description": "WeightedNumeric only: the weighted numeric outcomes, at least one, at least one carrying a non-zero weight.",
+            "description": "WeightedNumeric only: the weighted numeric outcomes, at least one, at least one carrying a non-zero weight; under a deck Mode each outcome contributes Count cards to the pass.",
             "type": [
               "array",
               "null"
@@ -146,6 +155,14 @@
                 "weight": {
                   "description": "The outcome\u0027s relative weight, fed straight to Puck.Maths.WeightedSampler\u0027s exact ulong overload. At least one outcome must carry a non-zero weight.",
                   "type": "integer"
+                },
+                "count": {
+                  "description": "How many cards of this outcome one deck pass holds, at least one; null is one. Under WithReplacement a count only scales the weight; under a deck mode each card is dealt once per pass, so an outcome that should come out twice per pass declares 2 rather than being authored twice. A source\u0027s cards total at most MaxCardsPerSet.",
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "default": null
                 }
               },
               "required": [
@@ -153,6 +170,33 @@
                 "weight"
               ],
               "additionalProperties": false
+            },
+            "default": null
+          },
+          "ring": {
+            "description": "SymmetryOrbit only: the ring, 0..7, whose thirty nodes are the cards \u2014 exactly one of Ring and Node.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "node": {
+            "description": "SymmetryOrbit only: the node, 0..239, whose orbit under Word is the cards.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "word": {
+            "description": "SymmetryOrbit beside Node only: the word of reflections (one to eight mirror nodes, applied first to last) the orbit is taken under, or null for the lattice\u0027s own cycle \u2014 the same generator vocabulary a WorldStateCycle authors.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "integer"
             },
             "default": null
           }

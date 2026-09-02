@@ -557,6 +557,7 @@ public sealed partial class WorldPopulation {
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             sprintChannelOrdinal: kit.SprintChannelOrdinal,
             driftChannelOrdinal: kit.DriftChannelOrdinal,
+            holds: kit.Holds,
             planarDynamics: kit.PlanarDynamics
         ) {
             Profile = profile,

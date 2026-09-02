@@ -309,6 +309,11 @@ internal static class WorldSessionCapture {
         return false;
     }
     private static WorldStateRow SettleRow(WorldDefinition definition, WorldStateRow row, ulong tick) {
+        // A declared-but-never-set slot row holds no cell yet, so there is nothing to settle and nothing to index.
+        if (row.Cells is not { Count: > 0 }) {
+            return row;
+        }
+
         // A slot-shaped row's OWN trait governs its one cell — the row-level counterpart of a keyed cell's own trait
         // below, and never both on the SAME cell (the validator refuses a slot-shaped row from declaring Advance or
         // Dynamics beside a keyed cells array, or the two together, in the first place).
@@ -343,9 +348,20 @@ internal static class WorldSessionCapture {
             return (row with {
                 Dynamics = (rowDynamics with {
                     EpochTick = 0,
-                    V0 = WorldStateReader.DynamicsFixedToRaw(row: row, value: sample.Velocity),
-                    Y0 = WorldStateReader.DynamicsFixedToRaw(row: row, value: sample.Value),
+                    V0 = WorldStateReader.DynamicsFixedToTraitRaw(value: sample.Velocity),
+                    Y0 = WorldStateReader.DynamicsFixedToTraitRaw(value: sample.Value),
                 }),
+            });
+        }
+
+        // A cycling slot settles to its current rotation index (or node) at epoch zero and carries its current
+        // substep remainder, so reload preserves both the value now and the tick of the next transition.
+        if (row.Cycle is { } rowCycle) {
+            var slot = row.Cells![0];
+
+            return (row with {
+                Cycle = (rowCycle with { EpochTick = 0, SubstepTicks = rowCycle.SettledSubstep(currentTick: tick) }),
+                Cells = [(slot with { Value = rowCycle.SettledPhase(baseValue: slot.Value, currentTick: tick, row: row) })],
             });
         }
 
@@ -372,6 +388,16 @@ internal static class WorldSessionCapture {
                 continue;
             }
 
+            if (cell.Cycle is { } cellCycle) {
+                settledCells ??= new List<WorldStateCell>(collection: cells);
+                settledCells[index] = (cell with {
+                    Value = cellCycle.SettledPhase(baseValue: cell.Value, currentTick: tick, row: row),
+                    Cycle = (cellCycle with { EpochTick = 0, SubstepTicks = cellCycle.SettledSubstep(currentTick: tick) }),
+                });
+
+                continue;
+            }
+
             if (
                 (cell.Dynamics is { } cellDynamics) &&
                 WorldStateReader.TryEvaluateDynamics(
@@ -387,8 +413,8 @@ internal static class WorldSessionCapture {
                 settledCells[index] = (cell with {
                     Dynamics = (cellDynamics with {
                         EpochTick = 0,
-                        V0 = WorldStateReader.DynamicsFixedToRaw(row: row, value: cellSample.Velocity),
-                        Y0 = WorldStateReader.DynamicsFixedToRaw(row: row, value: cellSample.Value),
+                        V0 = WorldStateReader.DynamicsFixedToTraitRaw(value: cellSample.Velocity),
+                        Y0 = WorldStateReader.DynamicsFixedToTraitRaw(value: cellSample.Value),
                     }),
                 });
             }

@@ -60,6 +60,10 @@ public class FftForwardVsDirectSum {
 [MemoryDiagnoser]
 [DisassemblyDiagnoser(maxDepth: 3)]
 public class FftForwardInverse {
+    private FixedComplex[] m_smallForwardInput = [];
+    private FixedComplex[] m_largeForwardInput = [];
+    private FixedComplex[] m_smallInverseInput = [];
+    private FixedComplex[] m_largeInverseInput = [];
     private FixedComplex[] m_smallValues = [];
     private FixedComplex[] m_largeValues = [];
     private FixedFourierTransformPlan m_smallPlan = null!;
@@ -71,12 +75,27 @@ public class FftForwardInverse {
 
         m_smallPlan = FixedFourierTransformPlan.Create(length: 256);
         m_largePlan = FixedFourierTransformPlan.Create(length: 16384);
+        m_smallForwardInput = new FixedComplex[256];
+        m_largeForwardInput = new FixedComplex[16384];
         m_smallValues = new FixedComplex[256];
         m_largeValues = new FixedComplex[16384];
 
-        for (var i = 0; (i < m_smallValues.Length); ++i) { m_smallValues[i] = new(Real: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng)), Imaginary: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng))); }
-        for (var i = 0; (i < m_largeValues.Length); ++i) { m_largeValues[i] = new(Real: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng)), Imaginary: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng))); }
+        for (var i = 0; (i < m_smallForwardInput.Length); ++i) { m_smallForwardInput[i] = new(Real: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng)), Imaginary: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng))); }
+        for (var i = 0; (i < m_largeForwardInput.Length); ++i) { m_largeForwardInput[i] = new(Real: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng)), Imaginary: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng))); }
+
+        m_smallInverseInput = ((FixedComplex[])m_smallForwardInput.Clone());
+        m_largeInverseInput = ((FixedComplex[])m_largeForwardInput.Clone());
+        FixedFourierTransform.Forward(plan: m_smallPlan, values: m_smallInverseInput);
+        FixedFourierTransform.Forward(plan: m_largePlan, values: m_largeInverseInput);
     }
+    [IterationSetup(Target = nameof(ForwardSmall))]
+    public void ResetForwardSmall() => m_smallForwardInput.CopyTo(array: m_smallValues, index: 0);
+    [IterationSetup(Target = nameof(InverseSmall))]
+    public void ResetInverseSmall() => m_smallInverseInput.CopyTo(array: m_smallValues, index: 0);
+    [IterationSetup(Target = nameof(ForwardLarge))]
+    public void ResetForwardLarge() => m_largeForwardInput.CopyTo(array: m_largeValues, index: 0);
+    [IterationSetup(Target = nameof(InverseLarge))]
+    public void ResetInverseLarge() => m_largeInverseInput.CopyTo(array: m_largeValues, index: 0);
     [Benchmark]
     public FixedQ4816 ForwardSmall() {
         FixedFourierTransform.Forward(plan: m_smallPlan, values: m_smallValues);

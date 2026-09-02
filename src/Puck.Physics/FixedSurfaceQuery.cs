@@ -30,7 +30,7 @@ public readonly record struct FixedSurfaceAttachCandidate(
     int ColliderIndex
 );
 /// <summary>
-/// The nearest-surface-point primitive climbing (surface attach/conform) and grappling (tether anchor selection)
+/// The nearest-surface-point primitive surface holds (attach/conform) and grappling (tether anchor selection)
 /// both resolve against — one deterministic query over the same analytic collider vocabulary
 /// <see cref="FixedStaticContactSolver"/> depenetrates a body out of: <see cref="FixedStaticColliderKind.Sphere"/>,
 /// <see cref="FixedStaticColliderKind.AxisAlignedBox"/>, and <see cref="FixedStaticColliderKind.HalfSpace"/>. A
@@ -285,7 +285,7 @@ public static class FixedSurfaceQuery {
     }
 
     /// <summary>Finds the nearest analytic surface point to a probe within a caller-supplied reach — the surface-
-    /// attach query climbing resolves an anchor against.</summary>
+    /// attach query a surface hold resolves an anchor against.</summary>
     /// <param name="colliders">The colliders compiled once (<see cref="FixedSurfaceColliderSource.Static"/>).</param>
     /// <param name="dynamicColliders">The colliders the caller recomputes per tick
     /// (<see cref="FixedSurfaceColliderSource.Dynamic"/>), or empty.</param>

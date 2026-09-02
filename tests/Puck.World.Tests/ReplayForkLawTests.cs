@@ -49,6 +49,7 @@ public sealed class ReplayForkLawTests {
             ForkedFrom = forkedFrom,
             MountedAddons = [],
             RecordedHashes = hashes,
+            RecordedAuthoritativeHashes = [.. hashes],
             Seats = [],
             SimulationRate = 240U,
             Ticks = tickInputs,

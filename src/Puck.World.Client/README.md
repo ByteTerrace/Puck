@@ -88,7 +88,15 @@ root-crossing dependency was the audio director, narrowed to
   float twin of `Puck.Maths.SecondOrderDynamics`, stepped once per frame in
   `PackTransforms` off a `Tick`-latched delta; `WorldSceneEmitter`'s
   catalog-avatar-root path carries the identical root follower for a
-  catalog-sourced look. Both reseed on `WorldClient.PoseEpoch` moving (an
+  catalog-sourced look. `WorldGaitDrivers.cs` is the per-body animation-driver
+  runtime beside them: a stamped creation's declared `drivers` yield a phase and
+  an eased weight each, advanced once per `PackTransforms` from the body's
+  rendered pose delta and its `WorldClient.Facts`, gated by a conjunction of
+  tokens that may include the client-derived `moving`/`still` (an eased rendered
+  speed against `WorldGaitDrivers.MovingSpeed`, so a stride releases on a stop
+  with no sim fact involved); the shapes' `swings`/`slides` compose off them —
+  presentation-only, written into the dynamic transform buffer and read nowhere
+  else. Both reseed on `WorldClient.PoseEpoch` moving (an
   activation, a teleport, an over-threshold correction) rather than streak a
   discontinuous pose.
 - `WorldSessionSceneEmitter.cs`, `WorldAdjacencySceneEmitter.cs` — the session

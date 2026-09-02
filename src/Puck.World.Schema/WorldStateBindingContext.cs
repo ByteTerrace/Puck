@@ -14,13 +14,15 @@ public static class WorldStateBindingContext {
     /// <summary>The prefix a <c>state.&lt;row&gt;</c> row reference carries.</summary>
     public const string RowReferencePrefix = "state.";
 
+    // Whether any cell of the row reads differently from one tick to the next with no write in between — an advance
+    // or a cycle on the row or on any cell. A control context must change only through explicit state writes.
     private static bool Advances(WorldStateRow row) {
-        if (row.Advance is not null) {
+        if ((row.Advance is not null) || (row.Cycle is not null)) {
             return true;
         }
 
         foreach (var cell in (row.Cells ?? [])) {
-            if (cell?.Advance is not null) {
+            if ((cell?.Advance is not null) || (cell?.Cycle is not null)) {
                 return true;
             }
         }
@@ -183,7 +185,7 @@ public static class WorldStateBindingContext {
                 continue;
             }
             if (Advances(row: row)) {
-                errors.Add(item: $"contexts row {index} names family \"{context.Family}\", whose row advances continuously; control contexts must change through explicit state writes");
+                errors.Add(item: $"contexts row {index} names family \"{context.Family}\", whose row advances or turns with the tick; control contexts must change through explicit state writes");
 
                 continue;
             }

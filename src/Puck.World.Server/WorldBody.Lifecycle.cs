@@ -110,33 +110,40 @@ public sealed partial class WorldBody {
             ? new ulong[m_tuning.RecencySlots]
             : []
         );
-        // A program that lacks the surface stage must not leave stale medium facts behind — a swim→other switch
-        // clears them here; the swim program rewrites them next tick if the switch lands back on it.
+        // A program that lacks the medium law must not leave stale medium facts behind — a switch away from one
+        // clears them here; a switch back rewrites them next tick.
         m_submerged = false;
         m_atSurface = false;
         CommitTeleport(resetVertical: program.OwnsVerticalContactState);
         m_continuity = EntityContinuity.Teleport;
     }
     // The one dispatch point from a kit's declared WorldMotionModel to the compiled fixed-point tuning this class
-    // integrates under. A new model arm (swim/vehicle) is a localized addition here — a new case producing that
-    // model's own compiled/integrator state — never a hunt through Advance's op handlers, which stay generic over
-    // whatever the kit's body motion program selects. WorldDefinitionValidator has already refused an incoherent
+    // integrates under. A new model arm is a localized addition here — a new case producing that model's own
+    // compiled/integrator state — never a hunt through Advance's op handlers, which stay generic over whatever the
+    // kit's body motion program selects. WorldDefinitionValidator has already refused an incoherent
     // pairing (a program whose operations need a facet the declared model doesn't supply) before this ever runs.
     //
     // The vehicle arm also fills m_tuning, from its own gravity trio: ApplyVerticalGravity/ApplyVerticalDecay read
     // m_tuning's Rise/Fall/MaxFall whichever model authored them (the validator's GravityArc/GravityBleed facets
     // guarantee the vehicle row carries all three), and MoveSpeed/TurnSpeed mirror TopSpeed/SteerRate so the
-    // pre-dispatch Speed resolve stays well-formed — the vehicle ops themselves read only m_vehicleTuning. The swim
-    // arm compiles STRAIGHT into the shared m_tuning slots (WorldMotionTuningFactory.Compile(WorldMotionModel.Swim) maps
-    // ThrustSpeed/ThrustSpeedEnvelope onto MoveSpeed/MoveSpeedEnvelope) — no fork, so the grounded-shaped resolve is
-    // already arm-correct for swim; only the swim-specific half (buoyancy, float depth, ...) needs its own record.
-    private void SetTuning(WorldMotionModel motion, FixedMotionDynamics? planarDynamics = null) {
+    // pre-dispatch Speed resolve stays well-formed — the vehicle ops themselves read only m_vehicleTuning.
+    private void SetTuning(WorldMotionModel motion, FixedMotionDynamics? planarDynamics = null, FixedBodyHold[]? holds = null) {
+        m_holds = (holds ?? []);
+
+        if (m_holdIndex >= m_holds.Length) {
+            // A retune that shortened (or dropped) the list cannot leave the body holding a row that no longer
+            // exists; the next ResolveHold re-takes from the new list.
+            m_holdIndex = -1;
+            m_holdAnchor = FixedVector3.Zero;
+            m_holdNormal = FixedVector3.Zero;
+            m_holdSpendAccumulator.Reset();
+        }
+
         switch (motion) {
             case WorldMotionModel.Grounded grounded:
                 m_motionArm = CompiledMotionArm.Grounded;
                 m_tuning = WorldMotionTuningFactory.Compile(dynamics: planarDynamics, tuning: grounded);
                 m_vehicleTuning = default;
-                m_swimTuning = null;
                 break;
             case WorldMotionModel.Vehicle vehicle:
                 m_motionArm = CompiledMotionArm.Vehicle;
@@ -149,13 +156,6 @@ public sealed partial class WorldBody {
                     MaxFallSpeed: vehicle.MaxFallSpeed,
                     SprintMultiplier: 1f
                 ));
-                m_swimTuning = null;
-                break;
-            case WorldMotionModel.Swim swim:
-                m_motionArm = CompiledMotionArm.Swim;
-                m_tuning = WorldMotionTuningFactory.Compile(dynamics: planarDynamics, tuning: swim);
-                m_vehicleTuning = default;
-                m_swimTuning = WorldMotionTuningFactory.CompileSwim(tuning: swim);
                 break;
             default:
                 throw new NotSupportedException(message: $"Motion model '{motion.GetType().Name}' has no compiled WorldBody integrator.");
@@ -181,20 +181,22 @@ public sealed partial class WorldBody {
         );
     }
     /// <summary>Formats the standalone <c>body.where</c> echo — the bracket-tagged, index-prefixed line a piped run
-    /// asserts against — as the full 6DOF pose:
-    /// <c>[body.where: body:{N} pos=(x.xx, y.yy, z.zz) yaw=ddd° pitch=ddd° roll=ddd°]</c>. One format always. A grounded
-    /// entity keeps a canonical level orientation — <c>pitch=0 roll=0</c> — while <c>y</c> is its resolved ground foot
-    /// point (<c>0.00</c> on the flat plane, following the contact field where solids lift it). The bare planar
-    /// fragment is <see cref="DescribePose"/>.</summary>
+    /// asserts against — as the full 6DOF pose plus the fact mask:
+    /// <c>[body.where: body:{N} pos=(x.xx, y.yy, z.zz) yaw=ddd° pitch=ddd° roll=ddd° facts=grounded|climbing]</c>. One
+    /// format always. A grounded entity keeps a canonical level orientation — <c>pitch=0 roll=0</c> — while <c>y</c> is
+    /// its resolved ground foot point (<c>0.00</c> on the flat plane, following the contact field where solids lift
+    /// it). <c>facts=</c> is <see cref="Facts"/> spelled lower-case and <c>|</c>-joined in bit order (<c>none</c> when
+    /// empty), the same mask the snapshot publishes. The bare planar fragment is <see cref="DescribePose"/>.</summary>
     /// <param name="index">The 0-based body index to tag the line with.</param>
     /// <returns>The full bracketed <c>body.where</c> echo line.</returns>
     public string DescribeWhere(int index) {
         var (yaw, pitch, roll) = EulerRadians();
+        var home = m_home.ToVector3();
         var position = m_position.ToVector3();
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[body.where: body:{index} pos=({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: yaw):0}° pitch={CompassDegrees(radians: pitch):0}° roll={CompassDegrees(radians: roll):0}°]"
+            handler: $"[body.where: body:{index} pos=({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: yaw):0}° pitch={CompassDegrees(radians: pitch):0}° roll={CompassDegrees(radians: roll):0}° facts={BodyFactVocabulary.Describe(facts: Facts)} home=({home.X:0.00}, {home.Y:0.00}, {home.Z:0.00})]"
         );
     }
     /// <summary>Enqueues a timed scripted segment onto the tape: while it is live it drives the avatar with
@@ -420,8 +422,14 @@ public sealed partial class WorldBody {
     /// <param name="planarDynamics">The kit's compiled second-order follower
     /// (<see cref="FixedWorldKit.PlanarDynamics"/>), or <see langword="null"/> when the kit shapes planar velocity
     /// through its response table instead.</param>
-    public void RecompileKit(WorldMotionModel motion, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, int sprintChannelOrdinal = -1, int driftChannelOrdinal = -1, FixedMotionDynamics? planarDynamics = null) {
-        SetTuning(motion: motion, planarDynamics: planarDynamics);
+    /// <param name="holds">The kit's compiled ordered hold list (<see cref="FixedWorldKit.Holds"/>), or
+    /// <see langword="null"/> for a kit authoring none.</param>
+    public void RecompileKit(WorldMotionModel motion, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, int sprintChannelOrdinal = -1, int driftChannelOrdinal = -1, FixedMotionDynamics? planarDynamics = null, FixedBodyHold[]? holds = null) {
+        SetTuning(
+            holds: holds,
+            motion: motion,
+            planarDynamics: planarDynamics
+        );
         CopyChannelBindings(
             actionShapes: actionShapes,
             actionThresholds: actionThresholds,
@@ -526,6 +534,12 @@ public sealed partial class WorldBody {
         SetBodyMotionProgram(program: program);
         return true;
     }
+    /// <summary>Sets the body's home — the position it was activated at. Written once per activation, beside the
+    /// pose that put the body there; nothing on the step path moves it.</summary>
+    /// <param name="home">The activation position.</param>
+    public void SetHome(FixedVector3 home) {
+        m_home = home;
+    }
     /// <summary>Sets (or clears) the world contact field this body's grounded integrator solves its swept position
     /// against — the population hands it the live field on activation and every rebuild.</summary>
     /// <param name="field">The world contact field.</param>
@@ -537,8 +551,11 @@ public sealed partial class WorldBody {
     /// that public physics abstraction provider-neutral.</summary>
     /// <param name="field">The world contact field.</param>
     /// <param name="upPolicy">The body-frame policy compiled from the live world's contact requirements.</param>
-    internal void SetContactConfiguration(IContactField? field, WorldBodyUpPolicy upPolicy) {
+    /// <param name="walkableThreshold">The compiled <c>cos(collision.maxSlopeDegrees)</c> a surface normal's
+    /// alignment with the body's up axis must clear to read as ground.</param>
+    internal void SetContactConfiguration(IContactField? field, WorldBodyUpPolicy upPolicy, FixedQ4816 walkableThreshold) {
         SetContactField(field: field);
+        SetWalkableThreshold(threshold: walkableThreshold);
 
         if (m_upPolicy != upPolicy) {
             // A policy transition invalidates the authority that produced the held axis. Snap to the new ambient
@@ -597,9 +614,9 @@ public sealed partial class WorldBody {
         m_source = source;
         ClearTransientInput();
     }
-    /// <summary>Sets (or clears) the medium free surface this body's swim stages integrate against — sampled fresh
+    /// <summary>Sets (or clears) the medium free surface this body's medium hold integrates against — sampled fresh
     /// every tick from the population's field lattice at this body's coupled cell, before this body's own Advance
-    /// runs. Meaningful only to a swim-model kit; every other body carries it inertly.</summary>
+    /// runs. Meaningful only to a kit authoring a medium hold; every other body carries it inertly.</summary>
     /// <param name="surface">The medium surface's world-space Y, or <see langword="null"/> for no medium at this
     /// body's position.</param>
     public void SetMediumSurface(FixedQ4816? surface) {
@@ -703,9 +720,9 @@ public sealed partial class WorldBody {
     /// <summary>Gets the body that applied the latest targeted effect, held for one recipient advance.</summary>
     internal int AffectingSubject => m_affectingSubject;
 
-    /// <summary>Gets a value indicating whether the body's origin is inside the swim model's surface bob band as of
-    /// its last surface stage — the <c>world.contacts</c> read-back's swim witness. Always <see langword="false"/>
-    /// for a non-swim kit.</summary>
+    /// <summary>Gets a value indicating whether the body's origin is inside the medium's surface bob band as of the
+    /// medium hold's last evaluation — the <c>world.contacts</c> read-back's medium witness. Always
+    /// <see langword="false"/> for a kit authoring no medium hold.</summary>
     public bool AtSurface => m_atSurface;
     /// <summary>Gets the body motion program this player currently executes.</summary>
     public string BodyMotionProgram => m_bodyMotionProgram.Name;
@@ -726,10 +743,7 @@ public sealed partial class WorldBody {
     /// <summary>Gets the base move speed the sim integrates under right now, arm-aware. Under the grounded arm:
     /// <see cref="Profile"/>'s requested rate (or the tuning's profileless fallback) after the kit's
     /// <see cref="WorldMotionModel.Grounded.MoveSpeedEnvelope"/> clamp; a held sprint channel scales this after the
-    /// clamp (the envelope pins the base rate, not the sprinting rate). Under the swim arm: the same resolve,
-    /// verbatim — <see cref="WorldMotionModel.Swim.ThrustSpeedEnvelope"/> compiles into the identical shared
-    /// <c>MoveSpeedEnvelope</c> slot the grounded arm reads, so a seated player's live profile speed clamps the same
-    /// way. Under the vehicle arm: the kit's own <see cref="WorldMotionModel.Vehicle.TopSpeed"/> after its
+    /// clamp (the envelope pins the base rate, not the sprinting rate). Under the vehicle arm: the kit's own <see cref="WorldMotionModel.Vehicle.TopSpeed"/> after its
     /// <see cref="WorldMotionModel.Vehicle.TopSpeedEnvelope"/> clamp — the vehicle arm deliberately never reads
     /// <see cref="Profile"/>'s speed (a kart's speed is the kit's, not the seat's identity), and a held boost
     /// channel scales this after the clamp, on the same sprint-after-clamp precedent. Every arm, this is the same
@@ -749,6 +763,15 @@ public sealed partial class WorldBody {
     public FixedQuaternion FixedOrientation => m_orientation;
     /// <summary>Gets the authoritative deterministic position.</summary>
     public FixedVector3 FixedPosition => m_position;
+    /// <summary>Gets the body's home — the position it was activated at (a seat's spawn point, an inhabitant's
+    /// placement plus its own distribution sample). Producers steer relative to this, so a population spread over
+    /// several placements keeps to its own ground instead of converging on the world origin. A teleport does not
+    /// move it: <see cref="Pose(FixedVector3, FixedQ4816, FixedQ4816, FixedQ4816)"/> puts a body somewhere,
+    /// <see cref="SetHome"/> says where it belongs.</summary>
+    public FixedVector3 FixedHome => m_home;
+    /// <summary>Gets the body's up axis — the direction its gravity opposes, its planar move plane is perpendicular
+    /// to, and its contact walkable test measures a surface normal against.</summary>
+    public FixedVector3 FixedUp => m_up;
     /// <summary>Gets the avatar's position at the top of the most recent <see cref="Advance"/> — the start point of
     /// the swept segment a portal-crossing scan tests against a slab. A hard teleport (<c>Pose</c>,
     /// <see cref="Reconcile"/>) resets this to the landing position, so the segment collapses to a point exactly
@@ -762,6 +785,23 @@ public sealed partial class WorldBody {
     /// <summary>Gets a value indicating whether the body is grounded this tick (resting on a walkable contact surface) — the
     /// <c>world.contacts</c> read-back.</summary>
     public bool Grounded => m_grounded;
+    /// <summary>Gets this body's publishable fact mask this tick — evaluated through the SAME predicate the kit's
+    /// action gates read (<c>FactHolds</c>), so the snapshot, the gates, and the <c>body.where</c> echo can never
+    /// disagree. Facts are not mutually exclusive: a body can be grounded and rising in one tick, and a climbing
+    /// body keeps whichever grounded/airborne answer its last contact resolve produced.</summary>
+    public BodyFacts Facts {
+        get {
+            var facts = BodyFacts.None;
+
+            foreach (var fact in BodyFactVocabulary.Publishable) {
+                if (FactHolds(fact: fact)) {
+                    facts |= BodyFactVocabulary.Bit(fact: fact);
+                }
+            }
+
+            return facts;
+        }
+    }
     /// <summary>Gets the latched resolved non-walkable contact normal — <see cref="FixedVector3.Zero"/> when nothing
     /// obstructs the body, a unit surface normal otherwise. A walkable push (the ground, a ramp) never sets this —
     /// only a contact whose alignment fails the grounded test does, which is exactly the witness
@@ -796,9 +836,9 @@ public sealed partial class WorldBody {
     /// <c>body.control</c> verb's read/write). <see cref="IntentSource.Live"/> by default; see
     /// <see cref="IntentSource"/> for the merge rule.</summary>
     public IntentSource Source => m_source;
-    /// <summary>Gets a value indicating whether the body's origin is below the medium surface as of the swim model's last
-    /// surface stage — the <c>world.contacts</c> read-back's swim witness. Always <see langword="false"/> for a
-    /// non-swim kit.</summary>
+    /// <summary>Gets a value indicating whether the body's origin is below the medium surface as of the medium
+    /// hold's last evaluation — the <c>world.contacts</c> read-back's medium witness. Always
+    /// <see langword="false"/> for a kit authoring no medium hold.</summary>
     public bool Submerged => m_submerged;
     /// <summary>Gets the avatar's current heading in radians (0 = facing -Z; increases turning left / counter-clockwise).
     /// Under the grounded model this returns the authoritative heading scalar <c>m_yaw</c> directly (the orientation is a

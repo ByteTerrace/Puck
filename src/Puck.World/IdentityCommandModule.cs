@@ -337,7 +337,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         }
         var hud = DescribeHudSummary(identity: identity!);
         // moveEffective is WorldBody's OWN read-back (EffectiveMoveSpeed), never a re-derivation here, so this line
-        // can never disagree with what the body is really doing — grounded, swim, or vehicle, WorldBody's per-arm
+        // can never disagree with what the body is really doing — grounded or vehicle, WorldBody's per-arm
         // resolve decides which envelope (if any) clamps which base rate. No live body (not yet seated) reports the
         // claimed rate, or "kit" for an identity claiming none.
         var effectiveMoveSpeed = ((m_server.Body(index: PlayerRoster.SlotFromDisplay(number: player)) is { } body)
@@ -427,7 +427,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "identity.show",
-            description: "Shows the identity driving a seat, including its private HUD panel (id/layer/style/rect/element count, or 'none') and its move rate BOTH as claimed and as actually applied: identity.show [player]. move= is the profile's own claimed rate, or 'kit' for an identity claiming none (the kit's authored rate then drives, until identity.motion mints a claim); moveEffective= is what the sim integrates under, arm-aware — under a grounded OR SWIM kit, the claimed-or-kit rate after the kit's own speed envelope (grounded's moveSpeedEnvelope, or swim's thrustSpeedEnvelope, which compiles into the SAME shared slot) clamps it; under a VEHICLE kit, the kit's OWN topSpeed after its topSpeedEnvelope (if authored) clamps it — move= never applies to a vehicle seat, since a kart's speed is the kit's, not the profile's.",
+            description: "Shows the identity driving a seat, including its private HUD panel (id/layer/style/rect/element count, or 'none') and its move rate BOTH as claimed and as actually applied: identity.show [player]. move= is the profile's own claimed rate, or 'kit' for an identity claiming none (the kit's authored rate then drives, until identity.motion mints a claim); moveEffective= is what the sim integrates under, arm-aware — under a grounded kit, the claimed-or-kit rate after the kit's own moveSpeedEnvelope clamps it; under a VEHICLE kit, the kit's OWN topSpeed after its topSpeedEnvelope (if authored) clamps it — move= never applies to a vehicle seat, since a kart's speed is the kit's, not the profile's.",
             handler: Show
         );
         yield return CommandDefinition.WithWireArgs(

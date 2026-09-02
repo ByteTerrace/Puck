@@ -40,7 +40,7 @@ namespace Puck.World.Client;
 /// emits every slot in its worst-case form (full modifier envelope, worst placement scale) — the frame source measures
 /// it once at construction, so a body-rooted stamp never grows the frozen floor. Single-threaded on the window-pump
 /// thread, like every editor/render type here.</remarks>
-public sealed class WorldStampPool {
+public sealed partial class WorldStampPool {
     private const float GroupBoundMargin = 0.4f;
     // Per-shape dynamic-instance bound at unit scale — a cull contract, not a policy: too tight clips a shape at
     // its own tile boundary.
@@ -133,6 +133,17 @@ public sealed class WorldStampPool {
         // index and creation hash, so a same-content edit never inherits a stale follower position across it).
         public int RootEpoch = -1;
 
+        // The per-driver animation state of the body this registration rides, advanced once per PackTransforms by
+        // WorldGaitDrivers. A registration with no BodyIndex never advances them, so its weights stay zero and every
+        // authored swing/slide on it composes the identity — a placed creation has no body facts to gate on.
+        public bool DriverSeeded;
+        public WorldEntityAddress DriverAddress;
+        public Vector3 DriverPosition;
+        public Quaternion DriverOrientation = Quaternion.Identity;
+        public float DriverSpeed;
+        public readonly float[] DriverPhase = new float[CreationDocument.MaxDrivers];
+        public readonly float[] DriverWeight = new float[CreationDocument.MaxDrivers];
+
         public WorldEntityAddress RootAddress;
         public SecondOrderResponse RootResponse;
         public SecondOrderFollower3 RootPositionFollower;
@@ -144,6 +155,31 @@ public sealed class WorldStampPool {
         // indexed by shape slot (the same index PackTransforms's per-shape loop and Parts.TryResolve's
         // transformSlot use), sized once to the fixed per-stamp shape budget.
         public readonly bool[] PartFollows = new bool[WorldPlacementPolicy.MaxAnimatedStampShapes];
+        // The rigid delta each shape's animation produced this frame, kept so a later shape naming it as `parent`
+        // rides it; PartParent is the resolved parent index per shape (−1 = the root), filled on first pack.
+        public readonly Quaternion[] PartDeltaRotation = new Quaternion[WorldPlacementPolicy.MaxAnimatedStampShapes];
+        public readonly Vector3[] PartDeltaTranslation = new Vector3[WorldPlacementPolicy.MaxAnimatedStampShapes];
+        public readonly int[] PartParent = new int[WorldPlacementPolicy.MaxAnimatedStampShapes];
+        public bool PartParentsResolved;
+        // Each shape's OWN delta before the parent chain — kept because an effector folds its correction into a
+        // bone's own delta and the whole chain then re-chains off these.
+        public readonly Quaternion[] PartOwnRotation = new Quaternion[WorldPlacementPolicy.MaxAnimatedStampShapes];
+        public readonly Vector3[] PartOwnTranslation = new Vector3[WorldPlacementPolicy.MaxAnimatedStampShapes];
+
+        // The per-effector solve state: each effector's eased gate weight, its resolved bone/tip shape slots
+        // (−1 = unresolved, so the effector is inert), and its plant latch. Sized to the document ceilings, resolved
+        // once per registration.
+        public readonly float[] EffectorWeight = new float[CreationDocument.MaxEffectors];
+        public readonly bool[] EffectorPlanted = new bool[CreationDocument.MaxEffectors];
+        public readonly Vector3[] EffectorPlantTarget = new Vector3[CreationDocument.MaxEffectors];
+        // The world point each effector resolved this frame, latched purely so `body.rig` can echo the decision the
+        // solve acted on; a frame that resolved nothing leaves EffectorHasTarget false.
+        public readonly Vector3[] EffectorTarget = new Vector3[CreationDocument.MaxEffectors];
+        public readonly bool[] EffectorHasTarget = new bool[CreationDocument.MaxEffectors];
+        public readonly int[] EffectorBoneSlot = new int[CreationDocument.MaxEffectors * CreationEffectorDocument.MaxChainBones];
+        public readonly int[] EffectorBoneCount = new int[CreationDocument.MaxEffectors];
+        public readonly int[] EffectorTipSlot = new int[CreationDocument.MaxEffectors];
+        public bool EffectorsResolved;
         public readonly SecondOrderResponse[] PartResponse = new SecondOrderResponse[WorldPlacementPolicy.MaxAnimatedStampShapes];
         public readonly SecondOrderFollower3[] PartFollower = new SecondOrderFollower3[WorldPlacementPolicy.MaxAnimatedStampShapes];
     }
@@ -941,10 +977,12 @@ public sealed class WorldStampPool {
                 live: live
             );
 
-            if (live.HasRootDynamics) {
-                var body = live.BodyIndex!.Value;
-                var epoch = client.PoseEpoch(index: body);
-                var address = client.EntityAddress(index: body);
+            // The pose-continuity watch is read for EVERY body-rooted registration, not only a follower-bearing one:
+            // a teleport or a reused body slot invalidates a latched contact point the same way it invalidates a
+            // follower — the world point a foot was planted at belongs to where the body WAS.
+            if (live.BodyIndex is { } watched) {
+                var epoch = client.PoseEpoch(index: watched);
+                var address = client.EntityAddress(index: watched);
 
                 if ((live.RootEpoch != epoch) || (live.RootAddress != address)) {
                     live.RootPositionFollower.Reseed();
@@ -955,8 +993,12 @@ public sealed class WorldStampPool {
                     for (var shapeSlot = 0; (shapeSlot < WorldPlacementPolicy.MaxAnimatedStampShapes); shapeSlot++) {
                         live.PartFollower[shapeSlot].Reseed();
                     }
-                }
 
+                    Array.Clear(array: live.EffectorPlanted);
+                }
+            }
+
+            if (live.HasRootDynamics) {
                 StepRootFollower(
                     deltaSeconds: deltaSeconds,
                     live: live,
@@ -976,16 +1018,94 @@ public sealed class WorldStampPool {
                 Position: rootPosition
             );
 
-            var shapes = (live.Creation.EngineDocument.Shapes ?? []);
+            var document = live.Creation.EngineDocument;
+            var drivers = document.Drivers;
+
+            if (live.BodyIndex is { } drivenBody) {
+                WorldGaitDrivers.Advance(
+                    address: client.EntityAddress(index: drivenBody),
+                    deltaSeconds: deltaSeconds,
+                    drivers: drivers,
+                    facts: client.Facts(index: drivenBody),
+                    easedSpeed: ref live.DriverSpeed,
+                    lastAddress: ref live.DriverAddress,
+                    lastOrientation: ref live.DriverOrientation,
+                    lastPosition: ref live.DriverPosition,
+                    orientation: rootRotation,
+                    phases: live.DriverPhase,
+                    position: rootPosition,
+                    seeded: ref live.DriverSeeded,
+                    weights: live.DriverWeight,
+                    definition: client.Definition,
+                    tick: client.Tick
+                );
+            }
+
+            var shapes = (document.Shapes ?? []);
             var poses = FramePoses(
                 frameCursor: live.EffectiveCursor,
                 live: live
             );
+            var shapeCount = Math.Min(
+                val1: shapes.Count,
+                val2: WorldPlacementPolicy.MaxAnimatedStampShapes
+            );
+
+            // The animated facets compose in the creation's own space, on top of whichever rest/frame pose the write
+            // pass chooses — a uniform placement scale commutes with a rotation about a scaled pivot, so scaling there
+            // is the same pose either way. A shape's own delta chains under its parent's (already composed: a parent
+            // is validated to precede its children), and is kept for the children that follow.
+            if (!live.PartParentsResolved) {
+                ResolvePartParents(
+                    live: live,
+                    shapes: shapes
+                );
+            }
+
+            for (var shapeIndex = 0; (shapeIndex < shapeCount); shapeIndex++) {
+                WorldGaitDrivers.ComposeDelta(
+                    drivers: drivers,
+                    phases: live.DriverPhase,
+                    rotation: out var ownRotation,
+                    shape: shapes[shapeIndex],
+                    translation: out var ownTranslation,
+                    weights: live.DriverWeight,
+                    definition: client.Definition
+                );
+
+                live.PartOwnRotation[shapeIndex] = ownRotation;
+                live.PartOwnTranslation[shapeIndex] = ownTranslation;
+            }
+
+            ChainPartDeltas(
+                live: live,
+                shapeCount: shapeCount
+            );
+            // The effectors correct the driver-posed chain, then everything downstream of a corrected bone re-chains
+            // off the corrected own delta — so a hand parented to a solved forearm rides the solve with no effector
+            // of its own.
+            if (ApplyEffectors(
+                client: client,
+                deltaSeconds: deltaSeconds,
+                document: document,
+                live: live,
+                placementScale: placementScale,
+                poses: poses,
+                rootPosition: rootPosition,
+                rootRotation: rootRotation,
+                shapeCount: shapeCount,
+                shapes: shapes
+            )) {
+                ChainPartDeltas(
+                    live: live,
+                    shapeCount: shapeCount
+                );
+            }
 
             for (var shapeIndex = 0; (shapeIndex < WorldPlacementPolicy.MaxAnimatedStampShapes); shapeIndex++) {
                 var slot = ((rootSlot + 1) + shapeIndex);
 
-                if (shapeIndex >= shapes.Count) {
+                if (shapeIndex >= shapeCount) {
                     transforms[slot] = new DynamicTransform(
                         Orientation: Quaternion.Identity,
                         Position: parkPosition
@@ -994,15 +1114,18 @@ public sealed class WorldStampPool {
                     continue;
                 }
 
-                var shape = shapes[shapeIndex];
-
-                var (position, rotation) = (((poses is not null) && poses.TryGetValue(
-                    key: shape.Id,
-                    value: out var pose
-                ))
-                    ? (pose.Position, pose.Rotation)
-                    : (shape.Position, shape.Rotation)
+                var (position, rotation) = BasePose(
+                    poses: poses,
+                    shape: shapes[shapeIndex]
                 );
+
+                WorldGaitDrivers.Apply(
+                    deltaRotation: live.PartDeltaRotation[shapeIndex],
+                    deltaTranslation: live.PartDeltaTranslation[shapeIndex],
+                    position: ref position,
+                    rotation: ref rotation
+                );
+
                 var worldPosition = (rootPosition + Vector3.Transform(
                     rotation: rootRotation,
                     value: (position * placementScale)
@@ -1023,6 +1146,68 @@ public sealed class WorldStampPool {
                 );
             }
         }
+    }
+    // The shape's rest pose, or the timeline frame's snapshot of it when the registration's cursor names one.
+    private static (Vector3 Position, Quaternion Rotation) BasePose(ShapeDocument shape, Dictionary<int, FrameTransformDocument>? poses) => (((poses is not null) && poses.TryGetValue(
+        key: shape.Id,
+        value: out var pose
+    ))
+        ? (pose.Position.Value, pose.Rotation.Value)
+        : (shape.Position.Value, shape.Rotation.Value)
+    );
+    // Chains every shape's own delta under its parent's chained delta, in declaration order — a parent is validated to
+    // precede its children, so one forward pass resolves the whole skeleton.
+    private static void ChainPartDeltas(Registration live, int shapeCount) {
+        for (var shapeIndex = 0; (shapeIndex < shapeCount); shapeIndex++) {
+            var rotation = live.PartOwnRotation[shapeIndex];
+            var translation = live.PartOwnTranslation[shapeIndex];
+            var parent = live.PartParent[shapeIndex];
+
+            if (parent >= 0) {
+                WorldGaitDrivers.Chain(
+                    parentRotation: live.PartDeltaRotation[parent],
+                    parentTranslation: live.PartDeltaTranslation[parent],
+                    rotation: ref rotation,
+                    translation: ref translation
+                );
+            }
+
+            live.PartDeltaRotation[shapeIndex] = rotation;
+            live.PartDeltaTranslation[shapeIndex] = translation;
+        }
+    }
+    // Resolves each shape's `parent` name to the index of an EARLIER shape (−1 = the root); the canonicalizer refuses a
+    // parent that is missing or declared later, so an unresolved name here can only be a bypassed document.
+    private static void ResolvePartParents(Registration live, IReadOnlyList<ShapeDocument> shapes) {
+        Array.Fill(
+            array: live.PartParent,
+            value: -1
+        );
+
+        var bound = Math.Min(
+            val1: shapes.Count,
+            val2: WorldPlacementPolicy.MaxAnimatedStampShapes
+        );
+
+        for (var child = 0; (child < bound); child++) {
+            if (shapes[child].Parent is not { } parent) {
+                continue;
+            }
+
+            for (var candidate = 0; (candidate < child); candidate++) {
+                if (string.Equals(
+                    a: shapes[candidate].Name?.Value,
+                    b: parent,
+                    comparisonType: StringComparison.Ordinal
+                )) {
+                    live.PartParent[child] = candidate;
+
+                    break;
+                }
+            }
+        }
+
+        live.PartParentsResolved = true;
     }
     /// <summary>Reconciles the pool against a delivered definition (call at the delivery boundary, before the program
     /// rebuild): the animated placements root statically, the attached ones root on their target body, and the body
@@ -1222,12 +1407,16 @@ public sealed class WorldStampPool {
             }
         }
     }
-    /// <summary>Resolves a body-rooted creation look's current authored part pose without a packed buffer.</summary>
+    /// <summary>Resolves a body-rooted creation look's current part pose without a packed buffer.</summary>
     /// <param name="bodyIndex">The population entity index.</param>
     /// <param name="partId">The ordinal, case-sensitive authored part identifier.</param>
     /// <param name="client">The client supplying the entity root pose.</param>
     /// <param name="pose">The current part pose, or default when unresolved.</param>
     /// <returns><see langword="true"/> when the live creation look publishes the part.</returns>
+    /// <remarks>The pose carries the shape's COMPOSED delta — its own swings and slides, the parent chain, and any
+    /// effector correction — read off the latch the last <see cref="PackTransforms"/> left, so an anchor consumer
+    /// and the rendered geometry answer with the same pose. A shape with no animation has an identity delta, so its
+    /// anchor is the authored pose exactly as before.</remarks>
     public bool TryBodyPartAuthoredPose(int bodyIndex, string partId, WorldClient client, out SdfAnchor pose) {
         if (
             !TryFindBody(
@@ -1253,13 +1442,23 @@ public sealed class WorldStampPool {
             live: live
         );
 
-        var (localPosition, localRotation) = (((poses is not null) && poses.TryGetValue(
-            key: shape.Id,
-            value: out var framePose
-        ))
-            ? (framePose.Position, framePose.Rotation)
-            : (shape.Position, shape.Rotation)
+        var (localPosition, localRotation) = BasePose(
+            poses: poses,
+            shape: shape
         );
+
+        // The same composed delta the write pass applies, read off the last pack's latch rather than recomputed: the
+        // drivers advance once a frame, so recomputing here would either double-advance them or answer at a phase
+        // nothing was drawn at.
+        if (shapeSlot < WorldPlacementPolicy.MaxAnimatedStampShapes) {
+            WorldGaitDrivers.Apply(
+                deltaRotation: live.PartDeltaRotation[shapeSlot],
+                deltaTranslation: live.PartDeltaTranslation[shapeSlot],
+                position: ref localPosition,
+                rotation: ref localRotation
+            );
+        }
+
         var (rootPosition, rootRotation, scale) = FollowedRootPose(
             client: client,
             live: live

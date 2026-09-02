@@ -69,7 +69,7 @@ public sealed partial class WorldBody {
 
         return m_planarVelocity;
     }
-    // The swim vertical lane's counterpart to StepPlanarFollower, under the SAME compiled propagator — clamped to
+    // The medium's vertical lane counterpart to StepPlanarFollower, under the SAME compiled propagator — clamped to
     // the medium's own terminal speeds rather than a target-magnitude ceiling (the vertical target is already signed
     // and asymmetric, unlike the planar target's isotropic disc).
     private FixedQ4816 StepVerticalFollower(in SecondOrderStep step, FixedQ4816 target, FixedQ4816 minimum, FixedQ4816 maximum) {

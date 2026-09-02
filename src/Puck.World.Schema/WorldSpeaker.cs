@@ -166,10 +166,10 @@ public sealed record WorldEmission(string PatchId, float Level, float? Radius = 
 /// <summary>
 /// One world-event → sound binding — a row of the Audio section's cue table: when the named engine
 /// event fires, the referenced patch voices through a short-lived transient emitter placed per <see cref="Placement"/>.
-/// Event tokens are a closed, published vocabulary of engine mechanisms (<see cref="EventTokens"/>): a genre ships
-/// different cue rows; new tokens appear only when the engine grows new mechanisms.
+/// Event tokens are either a published engine mechanism (<see cref="EventTokens"/>) or a cue name emitted by one of
+/// the same world's rules. A genre can therefore bind authored rule events without widening the engine vocabulary.
 /// </summary>
-/// <param name="Event">The event token (must be one of <see cref="EventTokens"/>).</param>
+/// <param name="Event">The published engine token or rule-emitted cue name.</param>
 /// <param name="PatchId">The referenced <see cref="WorldPatch.Name"/> the cue voices (must resolve).</param>
 /// <param name="Placement">Where the cue sounds: <see cref="PlacementAtSite"/> (spatial, at the event's world
 /// position — the shimmer's audio twin; events with no derivable site fall back to the listener),

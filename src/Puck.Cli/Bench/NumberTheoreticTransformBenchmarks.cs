@@ -65,6 +65,10 @@ public class NttConvolveVsNaive {
 // of a small audio block and one representative of a large one.
 [MemoryDiagnoser]
 public class NttForwardInverse {
+    private ulong[] m_smallForwardInput = [];
+    private ulong[] m_largeForwardInput = [];
+    private ulong[] m_smallInverseInput = [];
+    private ulong[] m_largeInverseInput = [];
     private ulong[] m_smallValues = [];
     private ulong[] m_largeValues = [];
     private NumberTheoreticTransformPlan m_smallPlan = null!;
@@ -76,12 +80,27 @@ public class NttForwardInverse {
 
         m_smallPlan = NumberTheoreticTransformPlan.Create(length: 256);
         m_largePlan = NumberTheoreticTransformPlan.Create(length: 16384);
+        m_smallForwardInput = new ulong[256];
+        m_largeForwardInput = new ulong[16384];
         m_smallValues = new ulong[256];
         m_largeValues = new ulong[16384];
 
-        for (var i = 0; (i < m_smallValues.Length); ++i) { m_smallValues[i] = ((ulong)rng.NextInt64(maxValue: 1_000_000L)); }
-        for (var i = 0; (i < m_largeValues.Length); ++i) { m_largeValues[i] = ((ulong)rng.NextInt64(maxValue: 1_000_000L)); }
+        for (var i = 0; (i < m_smallForwardInput.Length); ++i) { m_smallForwardInput[i] = ((ulong)rng.NextInt64(maxValue: 1_000_000L)); }
+        for (var i = 0; (i < m_largeForwardInput.Length); ++i) { m_largeForwardInput[i] = ((ulong)rng.NextInt64(maxValue: 1_000_000L)); }
+
+        m_smallInverseInput = ((ulong[])m_smallForwardInput.Clone());
+        m_largeInverseInput = ((ulong[])m_largeForwardInput.Clone());
+        NumberTheoreticTransform.Forward(plan: m_smallPlan, values: m_smallInverseInput);
+        NumberTheoreticTransform.Forward(plan: m_largePlan, values: m_largeInverseInput);
     }
+    [IterationSetup(Target = nameof(ForwardSmall))]
+    public void ResetForwardSmall() => m_smallForwardInput.CopyTo(array: m_smallValues, index: 0);
+    [IterationSetup(Target = nameof(InverseSmall))]
+    public void ResetInverseSmall() => m_smallInverseInput.CopyTo(array: m_smallValues, index: 0);
+    [IterationSetup(Target = nameof(ForwardLarge))]
+    public void ResetForwardLarge() => m_largeForwardInput.CopyTo(array: m_largeValues, index: 0);
+    [IterationSetup(Target = nameof(InverseLarge))]
+    public void ResetInverseLarge() => m_largeInverseInput.CopyTo(array: m_largeValues, index: 0);
     [Benchmark]
     public ulong ForwardSmall() {
         NumberTheoreticTransform.Forward(plan: m_smallPlan, values: m_smallValues);

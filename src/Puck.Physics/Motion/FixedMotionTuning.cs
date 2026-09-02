@@ -26,7 +26,7 @@ public readonly record struct FixedMotionResponse(CompiledPredicate[] Gate, Fixe
 /// <summary>The one-time fixed-point compilation of a kit's <c>dynamics</c>-row planar shaping — the second-order
 /// follower alternative to <see cref="FixedMotionResponse"/>'s response table, bound to the world's own simulation
 /// step width. <see cref="Planar"/> steps the three-lane planar follower <c>ShapePlanarVelocity</c> reads and, for a
-/// swim kit, the SAME compiled step also drives the one-dimensional vertical lane <c>ApplyBuoyancyAndSurface</c>
+/// kit authoring a medium hold, the same compiled step also drives the one-dimensional vertical lane that hold's law
 /// reads (one authored row, one compiled propagator, two lane counts) — never a second compile.</summary>
 public readonly record struct FixedMotionDynamics(SecondOrderStep Planar);
 /// <summary>The compiled fixed-point form of an authored motion scalar envelope — the reusable seat-time clamp bound
@@ -81,21 +81,4 @@ public readonly record struct FixedVehicleTuning(
     FixedQ4816 DriftSteerScale,
     FixedQ4816 BoostMultiplier,
     FixedMotionScalarEnvelope? TopSpeedEnvelope
-);
-/// <summary>The one-time fixed-point compilation of an authored swim motion row's swim-specific half. The shared half
-/// (speeds, response table, sprint, frame) compiles into the same <see cref="FixedMotionTuning"/> every model rides,
-/// so the generic stages never dispatch on the model; only the swim operations read this record.</summary>
-/// <param name="VerticalThrustFraction">The vertical channel's fraction of the thrust speed.</param>
-/// <param name="Buoyancy">The medium's idle vertical drift velocity below the bob band, signed (u/s).</param>
-/// <param name="MaxRiseSpeed">The terminal ascent speed (u/s).</param>
-/// <param name="MaxSinkSpeed">The terminal descent speed (u/s).</param>
-/// <param name="SurfaceSettleRate">The surface interface's proportional settle gain toward the float line (1/s).</param>
-/// <param name="FloatDepth">The float line's depth below the medium surface, and the bob band's half-width (u).</param>
-public readonly record struct FixedSwimTuning(
-    FixedQ4816 VerticalThrustFraction,
-    FixedQ4816 Buoyancy,
-    FixedQ4816 MaxRiseSpeed,
-    FixedQ4816 MaxSinkSpeed,
-    FixedQ4816 SurfaceSettleRate,
-    FixedQ4816 FloatDepth
 );

@@ -145,28 +145,28 @@
       ]
     },
     {
-      "Id": "Puck.Maths.BeattyQuantization.CertifySlope(Puck.Maths.QuadraticSurd,System.Int32)",
+      "Id": "Puck.Maths.BeattyQuantization.CertifySlope(Puck.Maths.RealQuadratic,System.Int32)",
       "State": "covered",
       "CoveredBy": [
         "quantization.first-divergence-vs-brute-force"
       ]
     },
     {
-      "Id": "Puck.Maths.BeattyQuantization.FirstFloorDisagreement(Puck.Maths.QuadraticSurd,System.Numerics.BigInteger,System.Numerics.BigInteger)",
+      "Id": "Puck.Maths.BeattyQuantization.FirstFloorDisagreement(Puck.Maths.RealQuadratic,System.Numerics.BigInteger,System.Numerics.BigInteger)",
       "State": "covered",
       "CoveredBy": [
         "quantization.first-divergence-vs-brute-force"
       ]
     },
     {
-      "Id": "Puck.Maths.BeattyQuantization.QuantizeNearest(Puck.Maths.QuadraticSurd,System.Int32)",
+      "Id": "Puck.Maths.BeattyQuantization.QuantizeNearest(Puck.Maths.RealQuadratic,System.Int32)",
       "State": "covered",
       "CoveredBy": [
         "quantization.quantize-nearest-vs-cleared-comparison"
       ]
     },
     {
-      "Id": "Puck.Maths.BeattyQuantizationCertificate..ctor(Puck.Maths.QuadraticSurd,System.Int32,System.Numerics.BigInteger,System.Int32,System.Numerics.BigInteger,System.Numerics.BigInteger)",
+      "Id": "Puck.Maths.BeattyQuantizationCertificate..ctor(Puck.Maths.RealQuadratic,System.Int32,System.Numerics.BigInteger,System.Int32,System.Numerics.BigInteger,System.Numerics.BigInteger)",
       "State": "covered",
       "CoveredBy": [
         "quantization.first-divergence-vs-brute-force"
@@ -250,6 +250,20 @@
       "State": "covered",
       "CoveredBy": [
         "core.big-integer-square-root-vs-unsigned"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.BigIntegerFunctions.ToDouble(System.Numerics.BigInteger,System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.big-integer-to-double-vs-exact-neighbours"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.BigIntegerFunctions.ToDouble(System.Numerics.BigInteger,System.Int32,System.Boolean)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.big-integer-to-double-vs-exact-neighbours"
       ]
     },
     {
@@ -3667,6 +3681,22 @@
       ]
     },
     {
+      "Id": "Puck.Maths.CyclicRotation.Rotor(System.Int64)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing",
+        "scalar.cyclic-rotation-closes-its-loop"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CyclicRotation.Rotor(System.Int64,System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing",
+        "scalar.cyclic-rotation-closes-its-loop"
+      ]
+    },
+    {
       "Id": "Puck.Maths.CyclicRotation.Step(System.Int32,System.Int64)",
       "State": "covered",
       "CoveredBy": [
@@ -3843,7 +3873,7 @@
       ]
     },
     {
-      "Id": "Puck.Maths.DiscreteMeasure.Create(Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd)",
+      "Id": "Puck.Maths.DiscreteMeasure.Create(Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic)",
       "State": "covered",
       "CoveredBy": [
         "core.discrete-measure-exact-and-compiled"
@@ -5202,6 +5232,7 @@
       "Id": "Puck.Maths.FixedFourierTransform.Convolve(Puck.Maths.FixedFourierTransformPlan,System.Span<Puck.Maths.FixedComplex>,System.Span<Puck.Maths.FixedComplex>,System.Span<Puck.Maths.FixedComplex>)",
       "State": "covered",
       "CoveredBy": [
+        "fft.convolution-aliasing-contract",
         "fft.convolution-vs-oracle-bound",
         "fft.length-refusals"
       ]
@@ -11059,7 +11090,7 @@
       ]
     },
     {
-      "Id": "Puck.Maths.IntegerNumerationSystem.QuadraticOstrowski(Puck.Maths.QuadraticSurd)",
+      "Id": "Puck.Maths.IntegerNumerationSystem.QuadraticOstrowski(Puck.Maths.RealQuadratic)",
       "State": "covered",
       "CoveredBy": [
         "core.automatic-sequence-and-radical-shadow-exactness"
@@ -12339,6 +12370,7 @@
       "Id": "Puck.Maths.NumberTheoreticTransform.Convolve(Puck.Maths.NumberTheoreticTransformPlan,System.Span<System.UInt64>,System.Span<System.UInt64>,System.Span<System.UInt64>)",
       "State": "covered",
       "CoveredBy": [
+        "ntt.convolution-aliasing-contract",
         "ntt.convolution-vs-oracle",
         "ntt.length-refusals"
       ]
@@ -12385,8 +12417,8 @@
       "Id": "Puck.Maths.NumberTheoreticTransform.PointwiseMultiply(System.ReadOnlySpan<System.UInt64>,System.ReadOnlySpan<System.UInt64>,System.Span<System.UInt64>)",
       "State": "covered",
       "CoveredBy": [
-        "ntt.convolution-vs-oracle",
-        "ntt.length-refusals"
+        "ntt.length-refusals",
+        "ntt.pointwise-multiply-is-elementwise-product"
       ]
     },
     {
@@ -13280,7 +13312,7 @@
       "State": "uncovered"
     },
     {
-      "Id": "Puck.Maths.PolynomialContinuedFractionAnalysis.Map(System.Numerics.BigInteger,Puck.Maths.QuadraticSurd)",
+      "Id": "Puck.Maths.PolynomialContinuedFractionAnalysis.Map(System.Numerics.BigInteger,Puck.Maths.RealQuadratic)",
       "State": "uncovered"
     },
     {
@@ -13312,7 +13344,7 @@
       "State": "uncovered"
     },
     {
-      "Id": "Puck.Maths.PolynomialContinuedFractionAnalysis.TryCertifiedRationalTail(System.Numerics.BigInteger,Puck.Maths.QuadraticSurd&)",
+      "Id": "Puck.Maths.PolynomialContinuedFractionAnalysis.TryCertifiedRationalTail(System.Numerics.BigInteger,Puck.Maths.RealQuadratic&)",
       "State": "uncovered"
     },
     {
@@ -13476,7 +13508,7 @@
       "State": "uncovered"
     },
     {
-      "Id": "Puck.Maths.PolynomialExactBeattyTrapCertificate..ctor(Puck.Maths.PolynomialExactBeattyTrapFamily,Puck.Maths.PolynomialContinuedFractionParameters,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd,System.Numerics.BigInteger,System.Numerics.BigInteger,System.Numerics.BigInteger,System.Numerics.BigInteger,System.Numerics.BigInteger,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd)",
+      "Id": "Puck.Maths.PolynomialExactBeattyTrapCertificate..ctor(Puck.Maths.PolynomialExactBeattyTrapFamily,Puck.Maths.PolynomialContinuedFractionParameters,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic,System.Numerics.BigInteger,System.Numerics.BigInteger,System.Numerics.BigInteger,System.Numerics.BigInteger,System.Numerics.BigInteger,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic)",
       "State": "uncovered"
     },
     {
@@ -13564,7 +13596,7 @@
       "State": "uncovered"
     },
     {
-      "Id": "Puck.Maths.PolynomialLinearFractionalTailCertificate..ctor(Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd)",
+      "Id": "Puck.Maths.PolynomialLinearFractionalTailCertificate..ctor(Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic)",
       "State": "uncovered"
     },
     {
@@ -13588,7 +13620,7 @@
       "State": "uncovered"
     },
     {
-      "Id": "Puck.Maths.PolynomialRationalTailCertificate..ctor(Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd,System.Collections.Generic.IEnumerable<Puck.Maths.QuadraticSurd>)",
+      "Id": "Puck.Maths.PolynomialRationalTailCertificate..ctor(Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic,System.Collections.Generic.IEnumerable<Puck.Maths.RealQuadratic>)",
       "State": "uncovered"
     },
     {
@@ -13668,7 +13700,7 @@
       "State": "uncovered"
     },
     {
-      "Id": "Puck.Maths.PolynomialTailEulerHausdorffExclusionCertificate..ctor(System.Numerics.BigInteger,System.Numerics.BigInteger,System.Numerics.BigInteger,System.Int32,System.Int32,Puck.Maths.QuadraticSurd)",
+      "Id": "Puck.Maths.PolynomialTailEulerHausdorffExclusionCertificate..ctor(System.Numerics.BigInteger,System.Numerics.BigInteger,System.Numerics.BigInteger,System.Int32,System.Int32,Puck.Maths.RealQuadratic)",
       "State": "uncovered"
     },
     {
@@ -13696,7 +13728,7 @@
       "State": "uncovered"
     },
     {
-      "Id": "Puck.Maths.PolynomialTailEulerMomentExclusionCertificate..ctor(System.Numerics.BigInteger,System.Numerics.BigInteger,System.Numerics.BigInteger,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd)",
+      "Id": "Puck.Maths.PolynomialTailEulerMomentExclusionCertificate..ctor(System.Numerics.BigInteger,System.Numerics.BigInteger,System.Numerics.BigInteger,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic)",
       "State": "uncovered"
     },
     {
@@ -13740,7 +13772,7 @@
       "State": "uncovered"
     },
     {
-      "Id": "Puck.Maths.PolynomialTailEulerRegularization..ctor(System.Numerics.BigInteger,System.Numerics.BigInteger,System.Numerics.BigInteger,Puck.Maths.QuadraticSurd,System.Numerics.BigInteger,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd,System.Numerics.BigInteger,System.Numerics.BigInteger)",
+      "Id": "Puck.Maths.PolynomialTailEulerRegularization..ctor(System.Numerics.BigInteger,System.Numerics.BigInteger,System.Numerics.BigInteger,Puck.Maths.RealQuadratic,System.Numerics.BigInteger,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic,System.Numerics.BigInteger,System.Numerics.BigInteger)",
       "State": "uncovered"
     },
     {
@@ -13792,7 +13824,7 @@
       "State": "uncovered"
     },
     {
-      "Id": "Puck.Maths.PolynomialTailEulerRegularizedHausdorffExclusionCertificate..ctor(System.Numerics.BigInteger,System.Numerics.BigInteger,System.Numerics.BigInteger,Puck.Maths.QuadraticSurd,System.Numerics.BigInteger,System.Int32,System.Int32,System.Int32,System.Int32,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd)",
+      "Id": "Puck.Maths.PolynomialTailEulerRegularizedHausdorffExclusionCertificate..ctor(System.Numerics.BigInteger,System.Numerics.BigInteger,System.Numerics.BigInteger,Puck.Maths.RealQuadratic,System.Numerics.BigInteger,System.Int32,System.Int32,System.Int32,System.Int32,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic)",
       "State": "uncovered"
     },
     {
@@ -13868,7 +13900,7 @@
       "State": "uncovered"
     },
     {
-      "Id": "Puck.Maths.PolynomialTailMinimalityReduction..ctor(System.Numerics.BigInteger,System.Numerics.BigInteger,Puck.Maths.QuadraticSurd,System.Numerics.BigInteger,System.Numerics.BigInteger,System.Numerics.BigInteger,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd)",
+      "Id": "Puck.Maths.PolynomialTailMinimalityReduction..ctor(System.Numerics.BigInteger,System.Numerics.BigInteger,Puck.Maths.RealQuadratic,System.Numerics.BigInteger,System.Numerics.BigInteger,System.Numerics.BigInteger,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic)",
       "State": "uncovered"
     },
     {
@@ -13916,7 +13948,7 @@
       "State": "uncovered"
     },
     {
-      "Id": "Puck.Maths.PolynomialTailOnePeriodReduction..ctor(System.Numerics.BigInteger,System.Numerics.BigInteger,Puck.Maths.QuadraticSurd,System.Numerics.BigInteger,System.Numerics.BigInteger,System.Numerics.BigInteger,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd,System.Numerics.BigInteger,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd)",
+      "Id": "Puck.Maths.PolynomialTailOnePeriodReduction..ctor(System.Numerics.BigInteger,System.Numerics.BigInteger,Puck.Maths.RealQuadratic,System.Numerics.BigInteger,System.Numerics.BigInteger,System.Numerics.BigInteger,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic,System.Numerics.BigInteger,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic)",
       "State": "uncovered"
     },
     {
@@ -16386,8 +16418,8 @@
       "Id": "Puck.Maths.QuadraticAlgebra<TScalar>.Add(Puck.Maths.QuadraticAlgebra<TScalar>.Element,Puck.Maths.QuadraticAlgebra<TScalar>.Element)",
       "State": "covered",
       "CoveredBy": [
-        "algebra.quadratic-surd-twin-lane",
-        "algebra.quadratic-twin-linear-ops-full-range"
+        "algebra.quadratic-twin-linear-ops-full-range",
+        "algebra.real-quadratic-twin-lane"
       ]
     },
     {
@@ -16402,8 +16434,8 @@
       "Id": "Puck.Maths.QuadraticAlgebra<TScalar>.Conjugate(Puck.Maths.QuadraticAlgebra<TScalar>.Element)",
       "State": "covered",
       "CoveredBy": [
-        "algebra.quadratic-surd-twin-lane",
         "algebra.quadratic-twin-linear-ops-full-range",
+        "algebra.real-quadratic-twin-lane",
         "quadratic-integer.class-number-one-worlds-factor-prime-canonical"
       ]
     },
@@ -16416,8 +16448,8 @@
         "algebra.fractional-mul-vs-oracle",
         "algebra.fractional-norm-vs-oracle",
         "algebra.monogenic-degree2-and-degree3-match-independent-reference",
-        "algebra.quadratic-surd-twin-lane",
         "algebra.quadratic-twin-linear-ops-full-range",
+        "algebra.real-quadratic-twin-lane",
         "complex.twin-quad",
         "deep.fractional-mul-vs-oracle",
         "dual.twin-quad",
@@ -16478,7 +16510,7 @@
         "algebra.complex-lane-vs-oracle",
         "algebra.fractional-mul-vs-oracle",
         "algebra.monogenic-degree2-and-degree3-match-independent-reference",
-        "algebra.quadratic-surd-twin-lane",
+        "algebra.real-quadratic-twin-lane",
         "complex.twin-quad",
         "deep.fractional-mul-vs-oracle",
         "dual.twin-quad",
@@ -16505,7 +16537,7 @@
       "CoveredBy": [
         "algebra.fractional-norm-vs-oracle",
         "algebra.monogenic-degree2-and-degree3-match-independent-reference",
-        "algebra.quadratic-surd-twin-lane",
+        "algebra.real-quadratic-twin-lane",
         "quadratic-integer.audit-hang-completes-forced-sign",
         "quadratic-integer.class-number-one-worlds-factor-prime-canonical",
         "quadratic-integer.fast-tier-routing-vs-independent-reference",
@@ -16558,8 +16590,8 @@
       "Id": "Puck.Maths.QuadraticAlgebra<TScalar>.Subtract(Puck.Maths.QuadraticAlgebra<TScalar>.Element,Puck.Maths.QuadraticAlgebra<TScalar>.Element)",
       "State": "covered",
       "CoveredBy": [
-        "algebra.quadratic-surd-twin-lane",
-        "algebra.quadratic-twin-linear-ops-full-range"
+        "algebra.quadratic-twin-linear-ops-full-range",
+        "algebra.real-quadratic-twin-lane"
       ]
     },
     {
@@ -16567,7 +16599,7 @@
       "State": "covered",
       "CoveredBy": [
         "algebra.monogenic-degree2-and-degree3-match-independent-reference",
-        "algebra.quadratic-surd-twin-lane"
+        "algebra.real-quadratic-twin-lane"
       ]
     },
     {
@@ -16885,7 +16917,7 @@
       "State": "uncovered"
     },
     {
-      "Id": "Puck.Maths.QuadraticOstrowskiSystem.Create(Puck.Maths.QuadraticSurd)",
+      "Id": "Puck.Maths.QuadraticOstrowskiSystem.Create(Puck.Maths.RealQuadratic)",
       "State": "covered",
       "CoveredBy": [
         "presented.transfer-functor-vs-legacy-copies"
@@ -17064,182 +17096,6 @@
     {
       "Id": "Puck.Maths.QuadraticQuasicrystalIndex.TileAt(System.Numerics.BigInteger)",
       "State": "uncovered"
-    },
-    {
-      "Id": "Puck.Maths.QuadraticSurd.Abs()",
-      "State": "covered",
-      "CoveredBy": [
-        "core.quadratic-surd-field-and-conversion"
-      ]
-    },
-    {
-      "Id": "Puck.Maths.QuadraticSurd.Ceiling()",
-      "State": "covered",
-      "CoveredBy": [
-        "core.quadratic-surd-field-and-conversion"
-      ]
-    },
-    {
-      "Id": "Puck.Maths.QuadraticSurd.CompareTo(Puck.Maths.QuadraticSurd)",
-      "State": "covered",
-      "CoveredBy": [
-        "core.quadratic-surd-field-and-conversion"
-      ]
-    },
-    {
-      "Id": "Puck.Maths.QuadraticSurd.Create(System.Numerics.BigInteger,System.Numerics.BigInteger,System.Numerics.BigInteger,System.Numerics.BigInteger)",
-      "State": "covered",
-      "CoveredBy": [
-        "core.quadratic-surd-field-and-conversion"
-      ]
-    },
-    {
-      "Id": "Puck.Maths.QuadraticSurd.Denominator",
-      "State": "covered",
-      "CoveredBy": [
-        "core.quadratic-surd-field-and-conversion"
-      ]
-    },
-    {
-      "Id": "Puck.Maths.QuadraticSurd.Floor()",
-      "State": "covered",
-      "CoveredBy": [
-        "core.quadratic-surd-field-and-conversion"
-      ]
-    },
-    {
-      "Id": "Puck.Maths.QuadraticSurd.IsRational",
-      "State": "covered",
-      "CoveredBy": [
-        "core.quadratic-surd-field-and-conversion",
-        "presented.rational-material-admits-only-rationals"
-      ]
-    },
-    {
-      "Id": "Puck.Maths.QuadraticSurd.One",
-      "State": "covered",
-      "CoveredBy": [
-        "core.quadratic-surd-field-and-conversion"
-      ]
-    },
-    {
-      "Id": "Puck.Maths.QuadraticSurd.Radicand",
-      "State": "covered",
-      "CoveredBy": [
-        "core.quadratic-surd-field-and-conversion"
-      ]
-    },
-    {
-      "Id": "Puck.Maths.QuadraticSurd.Rational(System.Numerics.BigInteger)",
-      "State": "covered",
-      "CoveredBy": [
-        "core.quadratic-surd-field-and-conversion"
-      ]
-    },
-    {
-      "Id": "Puck.Maths.QuadraticSurd.Rational(System.Numerics.BigInteger,System.Numerics.BigInteger)",
-      "State": "covered",
-      "CoveredBy": [
-        "core.quadratic-surd-field-and-conversion"
-      ]
-    },
-    {
-      "Id": "Puck.Maths.QuadraticSurd.RationalNumerator",
-      "State": "covered",
-      "CoveredBy": [
-        "core.quadratic-surd-field-and-conversion"
-      ]
-    },
-    {
-      "Id": "Puck.Maths.QuadraticSurd.Sign",
-      "State": "covered",
-      "CoveredBy": [
-        "core.quadratic-surd-field-and-conversion"
-      ]
-    },
-    {
-      "Id": "Puck.Maths.QuadraticSurd.SurdNumerator",
-      "State": "covered",
-      "CoveredBy": [
-        "core.quadratic-surd-field-and-conversion"
-      ]
-    },
-    {
-      "Id": "Puck.Maths.QuadraticSurd.ToDouble()",
-      "State": "covered",
-      "CoveredBy": [
-        "core.quadratic-surd-field-and-conversion"
-      ]
-    },
-    {
-      "Id": "Puck.Maths.QuadraticSurd.Zero",
-      "State": "covered",
-      "CoveredBy": [
-        "core.quadratic-surd-field-and-conversion"
-      ]
-    },
-    {
-      "Id": "Puck.Maths.QuadraticSurd.op_Addition(Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd)",
-      "State": "covered",
-      "CoveredBy": [
-        "core.quadratic-surd-field-and-conversion"
-      ]
-    },
-    {
-      "Id": "Puck.Maths.QuadraticSurd.op_Division(Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd)",
-      "State": "covered",
-      "CoveredBy": [
-        "core.quadratic-surd-field-and-conversion"
-      ]
-    },
-    {
-      "Id": "Puck.Maths.QuadraticSurd.op_GreaterThan(Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd)",
-      "State": "covered",
-      "CoveredBy": [
-        "core.quadratic-surd-field-and-conversion"
-      ]
-    },
-    {
-      "Id": "Puck.Maths.QuadraticSurd.op_GreaterThanOrEqual(Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd)",
-      "State": "covered",
-      "CoveredBy": [
-        "core.quadratic-surd-field-and-conversion"
-      ]
-    },
-    {
-      "Id": "Puck.Maths.QuadraticSurd.op_LessThan(Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd)",
-      "State": "covered",
-      "CoveredBy": [
-        "core.quadratic-surd-field-and-conversion"
-      ]
-    },
-    {
-      "Id": "Puck.Maths.QuadraticSurd.op_LessThanOrEqual(Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd)",
-      "State": "covered",
-      "CoveredBy": [
-        "core.quadratic-surd-field-and-conversion"
-      ]
-    },
-    {
-      "Id": "Puck.Maths.QuadraticSurd.op_Multiply(Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd)",
-      "State": "covered",
-      "CoveredBy": [
-        "core.quadratic-surd-field-and-conversion"
-      ]
-    },
-    {
-      "Id": "Puck.Maths.QuadraticSurd.op_Subtraction(Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd)",
-      "State": "covered",
-      "CoveredBy": [
-        "core.quadratic-surd-field-and-conversion"
-      ]
-    },
-    {
-      "Id": "Puck.Maths.QuadraticSurd.op_UnaryNegation(Puck.Maths.QuadraticSurd)",
-      "State": "covered",
-      "CoveredBy": [
-        "core.quadratic-surd-field-and-conversion"
-      ]
     },
     {
       "Id": "Puck.Maths.QueryCapabilities..ctor(System.Boolean,System.Boolean,System.Boolean)",
@@ -17654,7 +17510,49 @@
       ]
     },
     {
+      "Id": "Puck.Maths.Rational.Abs()",
+      "State": "covered",
+      "CoveredBy": [
+        "algebra.rational-field-axioms"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Rational.Ceiling()",
+      "State": "covered",
+      "CoveredBy": [
+        "algebra.rational-field-axioms"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Rational.CompareTo(Puck.Maths.Rational)",
+      "State": "covered",
+      "CoveredBy": [
+        "algebra.rational-field-axioms"
+      ]
+    },
+    {
       "Id": "Puck.Maths.Rational.Denominator",
+      "State": "covered",
+      "CoveredBy": [
+        "algebra.rational-field-axioms"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Rational.Floor()",
+      "State": "covered",
+      "CoveredBy": [
+        "algebra.rational-field-axioms"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Rational.IsInteger",
+      "State": "covered",
+      "CoveredBy": [
+        "algebra.rational-field-axioms"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Rational.IsZero",
       "State": "covered",
       "CoveredBy": [
         "algebra.rational-field-axioms"
@@ -17675,7 +17573,35 @@
       ]
     },
     {
+      "Id": "Puck.Maths.Rational.Reciprocal()",
+      "State": "covered",
+      "CoveredBy": [
+        "algebra.rational-field-axioms"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Rational.Sign",
+      "State": "covered",
+      "CoveredBy": [
+        "algebra.rational-field-axioms"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Rational.ToDouble()",
+      "State": "covered",
+      "CoveredBy": [
+        "algebra.rational-field-axioms"
+      ]
+    },
+    {
       "Id": "Puck.Maths.Rational.Two",
+      "State": "covered",
+      "CoveredBy": [
+        "algebra.rational-field-axioms"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Rational.Zero",
       "State": "covered",
       "CoveredBy": [
         "algebra.rational-field-axioms"
@@ -17690,6 +17616,41 @@
     },
     {
       "Id": "Puck.Maths.Rational.op_Division(Puck.Maths.Rational,Puck.Maths.Rational)",
+      "State": "covered",
+      "CoveredBy": [
+        "algebra.rational-field-axioms"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Rational.op_GreaterThan(Puck.Maths.Rational,Puck.Maths.Rational)",
+      "State": "covered",
+      "CoveredBy": [
+        "algebra.rational-field-axioms"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Rational.op_GreaterThanOrEqual(Puck.Maths.Rational,Puck.Maths.Rational)",
+      "State": "covered",
+      "CoveredBy": [
+        "algebra.rational-field-axioms"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Rational.op_Implicit(System.Numerics.BigInteger)",
+      "State": "covered",
+      "CoveredBy": [
+        "algebra.rational-field-axioms"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Rational.op_LessThan(Puck.Maths.Rational,Puck.Maths.Rational)",
+      "State": "covered",
+      "CoveredBy": [
+        "algebra.rational-field-axioms"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Rational.op_LessThanOrEqual(Puck.Maths.Rational,Puck.Maths.Rational)",
       "State": "covered",
       "CoveredBy": [
         "algebra.rational-field-axioms"
@@ -17717,7 +17678,7 @@
       ]
     },
     {
-      "Id": "Puck.Maths.RationalMaterial.Add(Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd)",
+      "Id": "Puck.Maths.RationalMaterial.Add(Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic)",
       "State": "covered",
       "CoveredBy": [
         "presented.braid-relation-holds",
@@ -17740,14 +17701,14 @@
       ]
     },
     {
-      "Id": "Puck.Maths.RationalMaterial.Canonicalize(Puck.Maths.QuadraticSurd)",
+      "Id": "Puck.Maths.RationalMaterial.Canonicalize(Puck.Maths.RealQuadratic)",
       "State": "covered",
       "CoveredBy": [
         "presented.rational-material-admits-only-rationals"
       ]
     },
     {
-      "Id": "Puck.Maths.RationalMaterial.FusedChargedLinear(System.ReadOnlySpan<Puck.Maths.QuadraticSurd>,System.ReadOnlySpan<Puck.Maths.QuadraticSurd>,Puck.Maths.ChargeLane)",
+      "Id": "Puck.Maths.RationalMaterial.FusedChargedLinear(System.ReadOnlySpan<Puck.Maths.RealQuadratic>,System.ReadOnlySpan<Puck.Maths.RealQuadratic>,Puck.Maths.ChargeLane)",
       "State": "covered",
       "CoveredBy": [
         "presented.braid-relation-holds",
@@ -17770,7 +17731,7 @@
       ]
     },
     {
-      "Id": "Puck.Maths.RationalMaterial.FusedChargedSum(System.ReadOnlySpan<Puck.Maths.QuadraticSurd>,System.ReadOnlySpan<Puck.Maths.QuadraticSurd>,System.ReadOnlySpan<Puck.Maths.QuadraticSurd>,Puck.Maths.ChargeLane)",
+      "Id": "Puck.Maths.RationalMaterial.FusedChargedSum(System.ReadOnlySpan<Puck.Maths.RealQuadratic>,System.ReadOnlySpan<Puck.Maths.RealQuadratic>,System.ReadOnlySpan<Puck.Maths.RealQuadratic>,Puck.Maths.ChargeLane)",
       "State": "covered",
       "CoveredBy": [
         "presented.braid-relation-holds",
@@ -17793,7 +17754,7 @@
       ]
     },
     {
-      "Id": "Puck.Maths.RationalMaterial.IsZero(Puck.Maths.QuadraticSurd)",
+      "Id": "Puck.Maths.RationalMaterial.IsZero(Puck.Maths.RealQuadratic)",
       "State": "covered",
       "CoveredBy": [
         "presented.braid-relation-holds",
@@ -17816,7 +17777,7 @@
       ]
     },
     {
-      "Id": "Puck.Maths.RationalMaterial.Multiply(Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd)",
+      "Id": "Puck.Maths.RationalMaterial.Multiply(Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic)",
       "State": "covered",
       "CoveredBy": [
         "presented.braid-relation-holds",
@@ -17839,7 +17800,7 @@
       ]
     },
     {
-      "Id": "Puck.Maths.RationalMaterial.Negate(Puck.Maths.QuadraticSurd)",
+      "Id": "Puck.Maths.RationalMaterial.Negate(Puck.Maths.RealQuadratic)",
       "State": "covered",
       "CoveredBy": [
         "presented.braid-relation-holds",
@@ -17885,7 +17846,7 @@
       ]
     },
     {
-      "Id": "Puck.Maths.RationalMaterial.Subtract(Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd)",
+      "Id": "Puck.Maths.RationalMaterial.Subtract(Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic)",
       "State": "covered",
       "CoveredBy": [
         "presented.braid-relation-holds",
@@ -17908,7 +17869,7 @@
       ]
     },
     {
-      "Id": "Puck.Maths.RationalMaterial.TryInvert(Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd&)",
+      "Id": "Puck.Maths.RationalMaterial.TryInvert(Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic&)",
       "State": "covered",
       "CoveredBy": [
         "presented.braid-relation-holds",
@@ -17984,6 +17945,287 @@
       "Id": "Puck.Maths.RayHit.Point",
       "State": "waived",
       "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own."
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.Abs()",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-and-conversion"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.Ceiling()",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-and-conversion"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.CompareTo(Puck.Maths.RealQuadratic)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-and-conversion"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.Conjugate()",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-descriptor"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.Create(System.Numerics.BigInteger,System.Numerics.BigInteger,System.Numerics.BigInteger,System.Numerics.BigInteger)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-and-conversion"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.Denominator",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-and-conversion"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.Field",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-descriptor"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.Floor()",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-and-conversion"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.FromRational(Puck.Maths.Rational)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-descriptor"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.IsRational",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-and-conversion",
+        "presented.rational-material-admits-only-rationals"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.Norm()",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-descriptor"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.One",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-and-conversion"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.Radicand",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-and-conversion"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.Rational(System.Numerics.BigInteger)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-and-conversion"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.Rational(System.Numerics.BigInteger,System.Numerics.BigInteger)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-and-conversion"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.RationalNumerator",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-and-conversion"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.RationalPart",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-descriptor"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.Sign",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-and-conversion"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.SurdNumerator",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-and-conversion"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.SurdPart",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-descriptor"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.ToDouble()",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-and-conversion"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.Trace()",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-descriptor"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.Zero",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-and-conversion"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.op_Addition(Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-and-conversion"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.op_Division(Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-and-conversion"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.op_GreaterThan(Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-and-conversion"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.op_GreaterThanOrEqual(Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-and-conversion"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.op_LessThan(Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-and-conversion"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.op_LessThanOrEqual(Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-and-conversion"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.op_Multiply(Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-and-conversion"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.op_Subtraction(Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-and-conversion"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadratic.op_UnaryNegation(Puck.Maths.RealQuadratic)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-and-conversion"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadraticField.Create(System.Numerics.BigInteger)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-descriptor"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadraticField.Create(System.Numerics.BigInteger,System.Numerics.BigInteger&)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-descriptor"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadraticField.Element(System.Numerics.BigInteger,System.Numerics.BigInteger,System.Numerics.BigInteger)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-descriptor"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadraticField.IsRationals",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-descriptor"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadraticField.Radicand",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-descriptor"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadraticField.Rationals",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-descriptor"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadraticField.SmallPrimeBound",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-descriptor"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RealQuadraticField.Sqrt",
+      "State": "covered",
+      "CoveredBy": [
+        "core.real-quadratic-field-descriptor"
+      ]
     },
     {
       "Id": "Puck.Maths.ReedSolomon.BuildGenerator(Puck.Maths.BinaryField<T>,T,System.Int32,System.Span<T>)",
@@ -18402,7 +18644,7 @@
       "State": "uncovered"
     },
     {
-      "Id": "Puck.Maths.Research.FibonacciFastComponentMinimum..ctor(System.Int32,Puck.Maths.QuadraticSurd,System.Collections.Generic.IReadOnlyDictionary<Puck.Maths.QuadraticSurd,System.Int32>)",
+      "Id": "Puck.Maths.Research.FibonacciFastComponentMinimum..ctor(System.Int32,Puck.Maths.RealQuadratic,System.Collections.Generic.IReadOnlyDictionary<Puck.Maths.RealQuadratic,System.Int32>)",
       "State": "uncovered"
     },
     {
@@ -18992,7 +19234,7 @@
       "State": "uncovered"
     },
     {
-      "Id": "Puck.Maths.Research.SturmianComponentMinimum..ctor(System.Int32,Puck.Maths.Research.SturmianReturnSpectrum,Puck.Maths.Research.SturmianCongruencePhase,System.Collections.Generic.IReadOnlyDictionary<Puck.Maths.QuadraticSurd,System.Int32>)",
+      "Id": "Puck.Maths.Research.SturmianComponentMinimum..ctor(System.Int32,Puck.Maths.Research.SturmianReturnSpectrum,Puck.Maths.Research.SturmianCongruencePhase,System.Collections.Generic.IReadOnlyDictionary<Puck.Maths.RealQuadratic,System.Int32>)",
       "State": "uncovered"
     },
     {
@@ -19036,7 +19278,7 @@
       "State": "uncovered"
     },
     {
-      "Id": "Puck.Maths.Research.SturmianReturnPhaseValue..ctor(Puck.Maths.Research.SturmianCongruencePhase,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd,Puck.Maths.Research.SturmianReturnVector,Puck.Maths.Research.SturmianReturnVector)",
+      "Id": "Puck.Maths.Research.SturmianReturnPhaseValue..ctor(Puck.Maths.Research.SturmianCongruencePhase,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic,Puck.Maths.Research.SturmianReturnVector,Puck.Maths.Research.SturmianReturnVector)",
       "State": "uncovered"
     },
     {
@@ -19068,7 +19310,7 @@
       "State": "uncovered"
     },
     {
-      "Id": "Puck.Maths.Research.SturmianReturnSpectrum..ctor(System.Collections.Generic.IReadOnlyList<Puck.Maths.Research.SturmianReturnPhaseValue>,Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd)",
+      "Id": "Puck.Maths.Research.SturmianReturnSpectrum..ctor(System.Collections.Generic.IReadOnlyList<Puck.Maths.Research.SturmianReturnPhaseValue>,Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic)",
       "State": "uncovered"
     },
     {
@@ -20331,7 +20573,7 @@
       ]
     },
     {
-      "Id": "Puck.Maths.SimplestRational.InOpenInterval(Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd)",
+      "Id": "Puck.Maths.SimplestRational.InOpenInterval(Puck.Maths.RealQuadratic,Puck.Maths.RealQuadratic)",
       "State": "covered",
       "CoveredBy": [
         "quantization.simplest-rational-minimality"
@@ -20587,9 +20829,24 @@
       ]
     },
     {
+      "Id": "Puck.Maths.SymmetryLattice.Cycle(System.Int32,System.Int64)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-lattice-exact-structure",
+        "presented.reflection-action-lattice"
+      ]
+    },
+    {
       "Id": "Puck.Maths.SymmetryLattice.Dimension",
       "State": "waived",
       "Reason": "Node arithmetic on a fixed reflection lattice, not fixed-point algebra: THIS member carries no operand domain, subject shape or oracle in this suite (AreOrthogonal, Cycle, RayCycleFactors, RayCycleOrder and Reflect do, and are covered by the two reflection cases rather than waived). NARROW, and deliberately not smoothed over: the no-oracle argument is the whole of it, and no gate anywhere stands over these members — nothing in or out of this suite checks the E8/Ising mass spectrum or the reflection-world group-order closure, so they are gated by nothing. OWED: an in-suite E8/Ising mass-spectrum law and a group-order closure law, either of which would promote most of this list out of the register."
+    },
+    {
+      "Id": "Puck.Maths.SymmetryLattice.InnerProduct(System.Int32,System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing"
+      ]
     },
     {
       "Id": "Puck.Maths.SymmetryLattice.NodeCount",
@@ -20655,10 +20912,87 @@
       "Reason": "Node arithmetic on a fixed reflection lattice, not fixed-point algebra: THIS member carries no operand domain, subject shape or oracle in this suite (AreOrthogonal, Cycle, RayCycleFactors, RayCycleOrder and Reflect do, and are covered by the two reflection cases rather than waived). NARROW, and deliberately not smoothed over: the no-oracle argument is the whole of it, and no gate anywhere stands over these members — nothing in or out of this suite checks the E8/Ising mass spectrum or the reflection-world group-order closure, so they are gated by nothing. OWED: an in-suite E8/Ising mass-spectrum law and a group-order closure law, either of which would promote most of this list out of the register."
     },
     {
+      "Id": "Puck.Maths.SymmetryLattice.RingNode(System.Int32,System.Int64)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing"
+      ]
+    },
+    {
       "Id": "Puck.Maths.SymmetryLattice.RingSize",
       "State": "covered",
       "CoveredBy": [
         "integer.symmetry-lattice-exact-structure"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SymmetryWord.Apply(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SymmetryWord.Apply(System.Int32,System.Int64)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SymmetryWord.Coxeter",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SymmetryWord.Create(System.ReadOnlySpan<System.Int32>)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SymmetryWord.IsIdentity",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SymmetryWord.Length",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SymmetryWord.MaximumLength",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SymmetryWord.Mirrors",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SymmetryWord.OrbitLength(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SymmetryWord.Order",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-word-permutation-order-and-pairing"
       ]
     },
     {

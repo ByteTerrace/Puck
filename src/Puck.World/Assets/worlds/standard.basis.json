@@ -126,6 +126,14 @@
       {
         "cells": [
           {
+            "key": "axisX",
+            "value": "#FF3B30"
+          },
+          {
+            "key": "axisZ",
+            "value": "#2F6BFF"
+          },
+          {
             "key": "avatarBody",
             "value": "#FF73BF"
           },
@@ -166,5 +174,203 @@
         "name": "colors"
       }
     ]
+  },
+  "theme": {
+    "chrome": {
+      "barHintAlpha": 0.6,
+      "barLabelAlpha": 0.9,
+      "cursorAlpha": 0.9,
+      "cursorDotMaxHalf": 4,
+      "cursorDotRatio": 0.22,
+      "cursorLabelGap": 5,
+      "dimQuietAlpha": 0.7,
+      "wheelActiveRingAlpha": 0.95,
+      "wheelActiveRingOffset": 1.5,
+      "wheelHubDotHalf": 3,
+      "wheelHubLabelGap": 2,
+      "wheelLabelAlpha": 1,
+      "wheelMarkerGapRatio": 1.6,
+      "wheelMarkerHalf": 3.5,
+      "wheelRingAlpha": 0.55
+    },
+    "color": {
+      "accent": "#FF6A2B",
+      "accentInk": "#160A04",
+      "accentLine": "#FF6A2B73",
+      "accentQuiet": "#FF6A2B24",
+      "badgeDark": "#0D0D12",
+      "badgeLight": "#F5F5FA",
+      "danger": "#F2565B",
+      "lineHair": "#FFFFFF17",
+      "lineInset": "#0000008C",
+      "lineSoft": "#FFFFFFB3",
+      "lineStrong": "#FFFFFF29",
+      "phosphor": "#5CFAA0",
+      "phosphorCyan": "#5EEBE0",
+      "phosphorDim": "#5CFAA06B",
+      "positive": "#5BC98C",
+      "scrimChip": {
+        "alpha": 0.94,
+        "color": "#171B1F"
+      },
+      "scrimPanel": {
+        "alpha": 0.9,
+        "color": "#121519"
+      },
+      "scrimStrip": {
+        "alpha": 0.86,
+        "color": "#121519"
+      },
+      "surfaceBase": "#0E1013",
+      "surfaceInset": "#0B0D0F",
+      "surfacePanel": "#15181C",
+      "surfaceRaised": "#1D2126",
+      "textDim": "#9BA3AB",
+      "textMute": "#5C646C",
+      "textPrimary": "#EDEFF2",
+      "warning": "#E8B341"
+    },
+    "diegetic": {
+      "bezelEdge": "#05070A",
+      "bezelInner": "#14181A",
+      "bezelOuter": "#23282B",
+      "embossFill": "#DFE6E1",
+      "embossShadowDropAlpha": 0.8,
+      "embossShadowDropBlur": 2,
+      "embossShadowDropOffsetY": 2,
+      "embossShadowLitAlpha": 0.3,
+      "embossShadowLitOffsetY": -1,
+      "engraveFill": "#14171A",
+      "engraveShadowLipAlpha": 0.16,
+      "engraveShadowLipOffsetY": 1,
+      "engraveShadowRecessAlpha": 0.85,
+      "engraveShadowRecessBlur": 1,
+      "engraveShadowRecessOffsetY": -1,
+      "phosphorGlowBlur": 6,
+      "plateBottom": "#1C1F22",
+      "plateMid": "#24272B",
+      "plateStripeColor": "#FFFFFF05",
+      "plateTop": "#2C2F33",
+      "screenWellInner": "#05100C",
+      "screenWellOuter": "#0C221A"
+    },
+    "elevation": {
+      "bloomAccent": {
+        "halo": "#FF6A2B6B",
+        "ring": "#FF6A2B8C"
+      },
+      "bloomDanger": {
+        "halo": "#F2565B6B",
+        "ring": "#F2565B8C"
+      },
+      "bloomHaloAlpha": 0.42,
+      "bloomHaloBlur": 18,
+      "bloomHaloSpread": -3,
+      "bloomHeldInsetAlpha": 0.5,
+      "bloomHeldInsetBlur": 12,
+      "bloomHeldInsetSpread": -3,
+      "bloomNeutral": {
+        "halo": "#EDEFF238",
+        "ring": "#EDEFF24C"
+      },
+      "bloomNeutralHaloAlpha": 0.22,
+      "bloomNeutralRingAlpha": 0.3,
+      "bloomPositive": {
+        "halo": "#5BC98C6B",
+        "ring": "#5BC98C8C"
+      },
+      "bloomRingAlpha": 0.55,
+      "bloomRingWidth": 1,
+      "bloomWarning": {
+        "halo": "#E8B3416B",
+        "ring": "#E8B3418C"
+      },
+      "catchlightColor": "#FFFFFF0D",
+      "catchlightOffsetY": 1,
+      "chipRestOpacity": 0.62,
+      "edgeHairlineWidth": 1,
+      "pressHeldGlowBlur": 12,
+      "pressHeldGlowColor": "#EDEFF23D",
+      "pressHeldGlowSpread": -3,
+      "pressHeldShadowBlur": 6,
+      "pressHeldShadowColor": "#00000099",
+      "pressHeldShadowOffsetY": 2,
+      "pressHeldTranslateY": 1,
+      "ringStatusAlpha": 0.6,
+      "ringStatusWidth": 2,
+      "shadowSeatBlur": 44,
+      "shadowSeatColor": "#000000B8",
+      "shadowSeatOffsetY": 18,
+      "shadowSeatSpread": -18,
+      "shadowSeatStripColor": "#000000BF",
+      "shadowSeatStripSpread": -20
+    },
+    "icon": {
+      "strokeHalfWidth": 0.08
+    },
+    "motion": {
+      "caretBlink": 1080,
+      "durFast": 120,
+      "durMed": 180,
+      "durPanel": 280,
+      "easeOut": {
+        "x1": 0.4,
+        "x2": 1,
+        "y1": 0,
+        "y2": 1
+      },
+      "easeStd": {
+        "x1": 0.2,
+        "x2": 0,
+        "y1": 0,
+        "y2": 1
+      }
+    },
+    "radius": {
+      "radius1": 3,
+      "radius2": 6,
+      "radius3": 9
+    },
+    "space": {
+      "heightBadge": 24,
+      "heightBindBar": 64,
+      "heightChip": 40,
+      "heightConsoleHead": 38,
+      "heightModeRow": 30,
+      "heightPromptRow": 34,
+      "heightTrackerBar": 52,
+      "heightTrackerCell": 26,
+      "space0": 0,
+      "space1": 4,
+      "space2": 8,
+      "space3": 12,
+      "space4": 16,
+      "space5": 20,
+      "space6": 24,
+      "space8": 32
+    },
+    "type": {
+      "bodyLine": 18,
+      "bodySize": 13,
+      "bodyWeight": 400,
+      "labelLine": 24,
+      "labelSize": 12,
+      "labelTracking": 0.01,
+      "labelWeight": 500,
+      "microLine": 13,
+      "microSize": 11,
+      "microTracking": 0.08,
+      "microWeight": 500,
+      "monoBadgeSize": 11,
+      "monoLine": 18,
+      "monoReadoutSize": 15,
+      "monoSize": 12,
+      "monoTracking": 0.04,
+      "monoWeight": 400,
+      "titleLine": 18,
+      "titleSize": 16,
+      "titleTracking": 0.01,
+      "titleWeight": 600
+    }
   }
 }

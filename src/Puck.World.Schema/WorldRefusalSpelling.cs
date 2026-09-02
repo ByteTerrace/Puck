@@ -13,4 +13,7 @@ internal static class WorldRefusalSpelling {
     /// <returns>The source's authored token.</returns>
     internal static string GeneratorSource(WorldGeneratorSource source) =>
         (char.ToLowerInvariant(c: source.ToString()[0]) + source.ToString()[1..]);
+    /// <summary>The document spelling of a <see cref="WorldCycleOutput"/> — the enum's own name, as the strict enum
+    /// converter reads and writes it.</summary>
+    internal static string CycleOutput(WorldCycleOutput output) => output.ToString();
 }

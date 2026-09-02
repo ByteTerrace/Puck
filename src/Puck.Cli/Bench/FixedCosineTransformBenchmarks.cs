@@ -58,6 +58,10 @@ public class DctForwardVsDirectSum {
 [MemoryDiagnoser]
 [DisassemblyDiagnoser(maxDepth: 3)]
 public class DctForwardInverse {
+    private FixedQ4816[] m_smallForwardInput = [];
+    private FixedQ4816[] m_largeForwardInput = [];
+    private FixedQ4816[] m_smallInverseInput = [];
+    private FixedQ4816[] m_largeInverseInput = [];
     private FixedQ4816[] m_smallValues = [];
     private FixedQ4816[] m_largeValues = [];
     private FixedComplex[] m_smallScratch = [];
@@ -71,14 +75,29 @@ public class DctForwardInverse {
 
         m_smallPlan = FixedCosineTransformPlan.Create(length: 256);
         m_largePlan = FixedCosineTransformPlan.Create(length: 16384);
+        m_smallForwardInput = new FixedQ4816[256];
+        m_largeForwardInput = new FixedQ4816[16384];
         m_smallValues = new FixedQ4816[256];
         m_largeValues = new FixedQ4816[16384];
         m_smallScratch = new FixedComplex[256];
         m_largeScratch = new FixedComplex[16384];
 
-        for (var i = 0; (i < m_smallValues.Length); ++i) { m_smallValues[i] = FixedQ4816.FromRawBits(value: Operands.NarrowRaw(rng: rng)); }
-        for (var i = 0; (i < m_largeValues.Length); ++i) { m_largeValues[i] = FixedQ4816.FromRawBits(value: Operands.NarrowRaw(rng: rng)); }
+        for (var i = 0; (i < m_smallForwardInput.Length); ++i) { m_smallForwardInput[i] = FixedQ4816.FromRawBits(value: Operands.NarrowRaw(rng: rng)); }
+        for (var i = 0; (i < m_largeForwardInput.Length); ++i) { m_largeForwardInput[i] = FixedQ4816.FromRawBits(value: Operands.NarrowRaw(rng: rng)); }
+
+        m_smallInverseInput = ((FixedQ4816[])m_smallForwardInput.Clone());
+        m_largeInverseInput = ((FixedQ4816[])m_largeForwardInput.Clone());
+        FixedCosineTransform.Forward(plan: m_smallPlan, scratch: m_smallScratch, values: m_smallInverseInput);
+        FixedCosineTransform.Forward(plan: m_largePlan, scratch: m_largeScratch, values: m_largeInverseInput);
     }
+    [IterationSetup(Target = nameof(ForwardSmall))]
+    public void ResetForwardSmall() => m_smallForwardInput.CopyTo(array: m_smallValues, index: 0);
+    [IterationSetup(Target = nameof(InverseSmall))]
+    public void ResetInverseSmall() => m_smallInverseInput.CopyTo(array: m_smallValues, index: 0);
+    [IterationSetup(Target = nameof(ForwardLarge))]
+    public void ResetForwardLarge() => m_largeForwardInput.CopyTo(array: m_largeValues, index: 0);
+    [IterationSetup(Target = nameof(InverseLarge))]
+    public void ResetInverseLarge() => m_largeInverseInput.CopyTo(array: m_largeValues, index: 0);
     [Benchmark]
     public FixedQ4816 ForwardSmall() {
         FixedCosineTransform.Forward(plan: m_smallPlan, scratch: m_smallScratch, values: m_smallValues);

@@ -78,9 +78,9 @@ internal static class AngularFrequencyAndRationalClaims {
     /// the invalid <c>0/0</c> its own zero-initialized storage would otherwise carry — and that reading survives
     /// <see cref="FixedPointRounding.TryRoundRational"/>; the constructor refuses an explicit zero denominator by
     /// exception type AND parameter name; and <c>/</c> refuses a zero-numerator divisor, both an explicit one and
-    /// the defaulted one, by exception type. Only then are the field-axiom identities checked EXACTLY, by
-    /// cross-multiplication rather than by reducing either side (the type never reduces, so <c>==</c> on the record's
-    /// own generated equality is not a valid rational-equality test) — commutativity and associativity of
+    /// the defaulted one, by exception type. Every constructed value is in lowest terms with a positive denominator,
+    /// so the record's own equality is rational equality; the field-axiom identities are still checked by
+    /// cross-multiplication, which does not lean on that reduction — commutativity and associativity of
     /// <c>+</c>/<c>*</c>, distributivity, additive and multiplicative identity and inverse, and that <c>-</c>/<c>/</c>
     /// agree with their defining identities <c>a − b = a + (−b)</c> and <c>(a / b)·b = a</c>. The independent leg
     /// reconstructs every operator result as a <see cref="double"/> from the operands' own numerator/denominator
@@ -139,13 +139,98 @@ internal static class AngularFrequencyAndRationalClaims {
             new(Numerator: -(BigInteger.One << 96), Denominator: (BigInteger.One << 40)),
         };
 
-        // The ctor and Numerator/Denominator readback: a constructed value reports back exactly what it was given.
+        // Reduction on construction: every constructed value is in lowest terms with a positive denominator, so it
+        // reads back the reduced pair — never the operands as given — and rebuilding it from that pair is a fixed point.
+        (BigInteger Numerator, BigInteger Denominator, BigInteger ReducedNumerator, BigInteger ReducedDenominator)[] reductions = [
+            (6, 4, 3, 2),
+            (-6, 4, -3, 2),
+            (6, -4, -3, 2),
+            (0, 3, 0, 1),
+            ((BigInteger.One << 96), (BigInteger.One << 40), (BigInteger.One << 56), 1),
+            (7, 7, 1, 1),
+        ];
+
+        foreach (var (numerator, denominator, reducedNumerator, reducedDenominator) in reductions) {
+            var reduced = new Rational(Numerator: numerator, Denominator: denominator);
+
+            if ((reduced.Numerator != reducedNumerator) || (reduced.Denominator != reducedDenominator)) {
+                return $"Rational({numerator}, {denominator}) read back {reduced.Numerator}/{reduced.Denominator} rather than {reducedNumerator}/{reducedDenominator}";
+            }
+            if (new Rational(Numerator: reduced.Numerator, Denominator: reduced.Denominator) != reduced) {
+                return $"Rational({numerator}, {denominator}) is not a fixed point of its own reduction";
+            }
+        }
+
         foreach (var sample in samples) {
             var reconstructed = new Rational(Numerator: sample.Numerator, Denominator: sample.Denominator);
 
-            if ((reconstructed.Numerator != sample.Numerator) || (reconstructed.Denominator != sample.Denominator)) {
-                return $"Rational({sample.Numerator}, {sample.Denominator}) did not read back its own operands";
+            if (reconstructed != sample) {
+                return $"Rational({sample.Numerator}, {sample.Denominator}) did not read back as itself";
             }
+            if ((sample.Denominator.Sign <= 0) || !BigInteger.GreatestCommonDivisor(left: BigInteger.Abs(value: sample.Numerator), right: sample.Denominator).IsOne) {
+                return $"{sample} is not in lowest terms with a positive denominator";
+            }
+
+            // The accessors against BigInteger's own division: the floor and ceiling bracket the value, the sign and
+            // zero and integer tests read the reduced pair, and the reciprocal multiplies back to one.
+            var floor = sample.Floor();
+            var ceiling = sample.Ceiling();
+
+            if ((floor * sample.Denominator) > sample.Numerator) { return $"Floor({sample}) = {floor} exceeds the value"; }
+            if (((floor + BigInteger.One) * sample.Denominator) <= sample.Numerator) { return $"Floor({sample}) = {floor} is not the greatest integer below the value"; }
+            if ((ceiling * sample.Denominator) < sample.Numerator) { return $"Ceiling({sample}) = {ceiling} is below the value"; }
+            if (((ceiling - BigInteger.One) * sample.Denominator) >= sample.Numerator) { return $"Ceiling({sample}) = {ceiling} is not the least integer above the value"; }
+            if (sample.Sign != sample.Numerator.Sign) { return $"Sign({sample}) disagrees with its numerator"; }
+            if (sample.IsZero != sample.Numerator.IsZero) { return $"IsZero({sample}) disagrees with its numerator"; }
+            if (sample.IsInteger != sample.Denominator.IsOne) { return $"IsInteger({sample}) disagrees with its denominator"; }
+            if (sample.Abs().Numerator != BigInteger.Abs(value: sample.Numerator)) { return $"Abs({sample}) is wrong"; }
+            if (!sample.IsZero && ((sample.Reciprocal() * sample) != Rational.One)) { return $"{sample} * Reciprocal is not one"; }
+
+            // ToDouble is correctly rounded: the returned double is at least as close to the exact quotient as either of
+            // its binary64 neighbours, decided by exact integer arithmetic.
+            if (!Oracles.IsNearestDouble(numerator: sample.Numerator, denominator: sample.Denominator, candidate: sample.ToDouble())) {
+                return $"ToDouble({sample}) = {sample.ToDouble()} is not the nearest double";
+            }
+
+            foreach (var other in samples) {
+                var ordered = sample.CompareTo(other: other);
+                var crossOrdered = (sample.Numerator * other.Denominator).CompareTo(other: (other.Numerator * sample.Denominator));
+
+                if (Math.Sign(value: ordered) != Math.Sign(value: crossOrdered)) { return $"CompareTo({sample}, {other}) disagrees with cross-multiplication"; }
+                if (((sample < other) != (crossOrdered < 0)) || ((sample >= other) != (crossOrdered >= 0))) { return $"the ordering operators on ({sample}, {other}) disagree with CompareTo"; }
+            }
+        }
+
+        // Conversions the platform's truncating cast gets wrong, plus the overflow, underflow and tie edges.
+        var conversionEdges = new (BigInteger Numerator, BigInteger Denominator)[] {
+            ((BigInteger.One << 60) + 129, BigInteger.One),
+            ((BigInteger.One << 60) + 128, BigInteger.One),
+            ((BigInteger.One << 54) + 3, BigInteger.One),
+            (-((BigInteger.One << 60) + 129), BigInteger.One),
+            ((BigInteger.One << 200) + 1, (BigInteger.One << 100) + 1),
+            (BigInteger.One, new BigInteger(value: 3)),
+            (-BigInteger.One, new BigInteger(value: 3)),
+            (BigInteger.One, (BigInteger.One << 1074)),
+            (new BigInteger(value: 3), (BigInteger.One << 1076)),
+            (BigInteger.One, (BigInteger.One << 1075)),
+            (BigInteger.One, (BigInteger.One << 1076)),
+            (-BigInteger.One, (BigInteger.One << 1200)),
+            ((BigInteger.One << 1024), BigInteger.One),
+            ((((BigInteger.One << 54) - 1) << 970), BigInteger.One),
+            (((((BigInteger.One << 54) - 1) << 970) - 1), BigInteger.One),
+            (-((BigInteger.One << 1024) + 1), new BigInteger(value: 7)),
+        };
+
+        foreach (var (numerator, denominator) in conversionEdges) {
+            var edge = new Rational(Numerator: numerator, Denominator: denominator);
+
+            if (!Oracles.IsNearestDouble(numerator: numerator, denominator: denominator, candidate: edge.ToDouble())) {
+                return $"ToDouble({edge}) = {edge.ToDouble()} is not the nearest double";
+            }
+        }
+
+        if ((Rational.Zero != new Rational(Numerator: BigInteger.Zero, Denominator: 9)) || (((Rational)new BigInteger(value: 5)) != new Rational(Numerator: 5, Denominator: 1))) {
+            return "Rational.Zero or the BigInteger widening is not the canonical value";
         }
 
         if (!CrossEqual(left: Rational.Two, right: (Rational.One + Rational.One))) {

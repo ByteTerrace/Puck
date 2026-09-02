@@ -137,8 +137,8 @@ internal static class CoreSurfaceClaims {
         );
 
         Assert.Equal(expected: DiscreteMeasure.Zero, actual: default);
-        Assert.Equal(expected: QuadraticSurd.Rational(denominator: 3, numerator: 4), actual: source.Rate);
-        Assert.Equal(expected: QuadraticSurd.Rational(denominator: 3, numerator: 1), actual: source.Offset);
+        Assert.Equal(expected: RealQuadratic.Rational(denominator: 3, numerator: 4), actual: source.Rate);
+        Assert.Equal(expected: RealQuadratic.Rational(denominator: 3, numerator: 1), actual: source.Offset);
         Assert.True(condition: source.IsPeriodic);
         Assert.Equal(expected: new BigInteger(value: 3), actual: source.Period);
         Assert.Equal(expected: BigInteger.One, actual: source.MinimumAmount);
@@ -211,8 +211,8 @@ internal static class CoreSurfaceClaims {
         _ = Assert.Throws<OverflowException>(testCode: () => oversizedRational.CompileInt64());
 
         var oversizedRadicand = DiscreteMeasure.Create(
-            rate: QuadraticSurd.One,
-            offset: QuadraticSurd.Create(0, 1, ((BigInteger.One << 64) + 1), 1)
+            rate: RealQuadratic.One,
+            offset: RealQuadratic.Create(0, 1, ((BigInteger.One << 64) + 1), 1)
         );
 
         Assert.False(condition: oversizedRadicand.TryCompileInt64(compiled: out _, failure: out var radicandFailure));
@@ -222,14 +222,14 @@ internal static class CoreSurfaceClaims {
         // (-2^63 + 2^63·√2)/(2^63 - 1) lies in [0, 1) with both rational parts inside signed 64-bit storage, so its
         // surd numerator is the only coefficient that refuses. The refusal must not depend on which operand carries
         // the surd: a rational rate and an irrational one both report the coefficient outcome, never an irrational one.
-        var wideOffsetSurd = QuadraticSurd.Create(
+        var wideOffsetSurd = RealQuadratic.Create(
             rationalNumerator: long.MinValue,
             surdNumerator: (BigInteger.One << 63),
             radicand: 2,
             denominator: long.MaxValue
         );
 
-        foreach (var rate in new[] { QuadraticSurd.One, QuadraticSurd.Create(denominator: 1, radicand: 2, rationalNumerator: 0, surdNumerator: 1) }) {
+        foreach (var rate in new[] { RealQuadratic.One, RealQuadratic.Create(denominator: 1, radicand: 2, rationalNumerator: 0, surdNumerator: 1) }) {
             var wideSurdMeasure = DiscreteMeasure.Create(offset: wideOffsetSurd, rate: rate);
 
             Assert.False(condition: wideSurdMeasure.TryCompileInt64(compiled: out _, failure: out var surdFailure));
@@ -240,8 +240,8 @@ internal static class CoreSurfaceClaims {
         // The irrational outcome is reserved for coefficients that do narrow and then leave the bounded floor
         // kernel's magnitude envelope: long.MaxValue·√5 per unit interval squares past the Int128 root budget.
         var oversizedIrrationalRate = DiscreteMeasure.Create(
-            rate: QuadraticSurd.Create(denominator: 1, radicand: 5, rationalNumerator: 0, surdNumerator: long.MaxValue),
-            offset: QuadraticSurd.Zero
+            rate: RealQuadratic.Create(denominator: 1, radicand: 5, rationalNumerator: 0, surdNumerator: long.MaxValue),
+            offset: RealQuadratic.Zero
         );
 
         Assert.False(condition: oversizedIrrationalRate.TryCompileInt64(compiled: out _, failure: out var rateFailure));
@@ -253,20 +253,20 @@ internal static class CoreSurfaceClaims {
     public static string? CompiledRadicalTransport() {
         var spellings = new[] {
             (
-                Rate: QuadraticSurd.Create(denominator: 1, radicand: 8, rationalNumerator: 0, surdNumerator: 1),
-                Offset: QuadraticSurd.Create(denominator: 1, radicand: 2, rationalNumerator: 0, surdNumerator: 1)
+                Rate: RealQuadratic.Create(denominator: 1, radicand: 8, rationalNumerator: 0, surdNumerator: 1),
+                Offset: RealQuadratic.Create(denominator: 1, radicand: 2, rationalNumerator: 0, surdNumerator: 1)
             ),
             (
-                Rate: QuadraticSurd.Create(denominator: 1, radicand: 12, rationalNumerator: 0, surdNumerator: 1),
-                Offset: QuadraticSurd.Create(denominator: 2, radicand: 3, rationalNumerator: 7, surdNumerator: -1)
+                Rate: RealQuadratic.Create(denominator: 1, radicand: 12, rationalNumerator: 0, surdNumerator: 1),
+                Offset: RealQuadratic.Create(denominator: 2, radicand: 3, rationalNumerator: 7, surdNumerator: -1)
             ),
             (
-                Rate: QuadraticSurd.Create(denominator: 1, radicand: 3, rationalNumerator: 0, surdNumerator: 2),
-                Offset: QuadraticSurd.Create(denominator: 1, radicand: 12, rationalNumerator: 0, surdNumerator: -1)
+                Rate: RealQuadratic.Create(denominator: 1, radicand: 3, rationalNumerator: 0, surdNumerator: 2),
+                Offset: RealQuadratic.Create(denominator: 1, radicand: 12, rationalNumerator: 0, surdNumerator: -1)
             ),
             (
-                Rate: QuadraticSurd.Create(denominator: 1, radicand: 3, rationalNumerator: 0, surdNumerator: 1),
-                Offset: QuadraticSurd.Create(denominator: 4, radicand: 12, rationalNumerator: 29, surdNumerator: -1)
+                Rate: RealQuadratic.Create(denominator: 1, radicand: 3, rationalNumerator: 0, surdNumerator: 1),
+                Offset: RealQuadratic.Create(denominator: 4, radicand: 12, rationalNumerator: 29, surdNumerator: -1)
             ),
         };
 
@@ -353,21 +353,21 @@ internal static class CoreSurfaceClaims {
 
         return null;
     }
-    public static string? QuadraticSurdSurface() {
-        var zero = QuadraticSurd.Zero;
-        var one = QuadraticSurd.One;
-        var sqrt2 = QuadraticSurd.Create(denominator: 1, radicand: 2, rationalNumerator: 0, surdNumerator: 1);
-        var sqrt8 = QuadraticSurd.Create(denominator: 1, radicand: 8, rationalNumerator: 0, surdNumerator: 1);
-        var twoSqrt2 = QuadraticSurd.Create(denominator: 1, radicand: 2, rationalNumerator: 0, surdNumerator: 2);
-        var rational = QuadraticSurd.Rational(denominator: 4, numerator: 6);
+    public static string? RealQuadraticSurface() {
+        var zero = RealQuadratic.Zero;
+        var one = RealQuadratic.One;
+        var sqrt2 = RealQuadratic.Create(denominator: 1, radicand: 2, rationalNumerator: 0, surdNumerator: 1);
+        var sqrt8 = RealQuadratic.Create(denominator: 1, radicand: 8, rationalNumerator: 0, surdNumerator: 1);
+        var twoSqrt2 = RealQuadratic.Create(denominator: 1, radicand: 2, rationalNumerator: 0, surdNumerator: 2);
+        var rational = RealQuadratic.Rational(denominator: 4, numerator: 6);
 
         Assert.True(condition: zero.IsRational);
         Assert.Equal(expected: BigInteger.Zero, actual: zero.RationalNumerator);
         Assert.Equal(expected: BigInteger.Zero, actual: zero.SurdNumerator);
         Assert.Equal(expected: BigInteger.Zero, actual: zero.Radicand);
         Assert.Equal(expected: BigInteger.One, actual: zero.Denominator);
-        Assert.Equal(expected: QuadraticSurd.Rational(value: 1), actual: one);
-        Assert.Equal(expected: QuadraticSurd.Rational(denominator: 2, numerator: 3), actual: rational);
+        Assert.Equal(expected: RealQuadratic.Rational(value: 1), actual: one);
+        Assert.Equal(expected: RealQuadratic.Rational(denominator: 2, numerator: 3), actual: rational);
         Assert.Equal(actual: sqrt8, expected: twoSqrt2);
         Assert.Equal(expected: 1, actual: sqrt2.Sign);
         Assert.Equal(expected: BigInteger.One, actual: sqrt2.Floor());
@@ -378,21 +378,21 @@ internal static class CoreSurfaceClaims {
         Assert.True(condition: (sqrt2 <= sqrt8));
         Assert.True(condition: (sqrt8 > sqrt2));
         Assert.True(condition: (sqrt8 >= twoSqrt2));
-        Assert.Equal(expected: QuadraticSurd.Rational(value: 2), actual: (sqrt2 * sqrt2));
+        Assert.Equal(expected: RealQuadratic.Rational(value: 2), actual: (sqrt2 * sqrt2));
         Assert.Equal(actual: ((sqrt2 + one) - one), expected: sqrt2);
         Assert.Equal(actual: (sqrt2 / sqrt2), expected: one);
         Assert.Equal(actual: -sqrt2, expected: -sqrt2);
 
         var scale = BigInteger.Pow(exponent: 400, value: 10);
-        var nearOne = QuadraticSurd.Rational(denominator: scale, numerator: (scale + 1)).ToDouble();
+        var nearOne = RealQuadratic.Rational(denominator: scale, numerator: (scale + 1)).ToDouble();
 
         Assert.True(condition: double.IsFinite(d: nearOne));
         Assert.Equal(actual: nearOne, expected: 1.0);
-        Assert.Equal(expected: -1.0, actual: QuadraticSurd.Rational(denominator: scale, numerator: -(scale + 1)).ToDouble());
-        Assert.Equal(expected: double.PositiveInfinity, actual: QuadraticSurd.Rational(denominator: 1, numerator: scale).ToDouble());
-        Assert.Equal(expected: 0.0, actual: QuadraticSurd.Rational(denominator: scale, numerator: 1).ToDouble());
+        Assert.Equal(expected: -1.0, actual: RealQuadratic.Rational(denominator: scale, numerator: -(scale + 1)).ToDouble());
+        Assert.Equal(expected: double.PositiveInfinity, actual: RealQuadratic.Rational(denominator: 1, numerator: scale).ToDouble());
+        Assert.Equal(expected: 0.0, actual: RealQuadratic.Rational(denominator: scale, numerator: 1).ToDouble());
 
-        var pellLike = QuadraticSurd.Create(
+        var pellLike = RealQuadratic.Create(
             denominator: 1,
             radicand: ((scale * scale) + 1),
             rationalNumerator: -((2 * scale) * scale),
@@ -403,6 +403,181 @@ internal static class CoreSurfaceClaims {
         Assert.InRange(actual: pellLike, high: 1.000000000000001, low: 0.999999999999999);
 
         return null;
+    }
+    public static string? RealQuadraticFieldSurface() {
+        // Canonicalization: every square factor below the small-prime bound leaves the radicand, a perfect square is
+        // refused as a field, and the scale reports what left.
+        var eight = RealQuadraticField.Create(radicand: 8, scale: out var eightScale);
+        var twelve = RealQuadraticField.Create(radicand: 12, scale: out var twelveScale);
+
+        Assert.Equal(expected: new BigInteger(value: 2), actual: eight.Radicand);
+        Assert.Equal(expected: new BigInteger(value: 2), actual: eightScale);
+        Assert.Equal(expected: new BigInteger(value: 3), actual: twelve.Radicand);
+        Assert.Equal(expected: new BigInteger(value: 2), actual: twelveScale);
+        Assert.Equal(expected: RealQuadraticField.Create(radicand: 2), actual: eight);
+        Assert.Throws<ArgumentException>(testCode: () => RealQuadraticField.Create(radicand: 4));
+        Assert.Throws<ArgumentException>(testCode: () => RealQuadraticField.Create(radicand: 1));
+        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => RealQuadraticField.Create(radicand: 0));
+        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => RealQuadraticField.Create(radicand: -2));
+        Assert.True(condition: RealQuadraticField.Rationals.IsRationals);
+        Assert.False(condition: eight.IsRationals);
+        Assert.Throws<InvalidOperationException>(testCode: () => RealQuadraticField.Rationals.Sqrt);
+
+        // Values of one field compare as tuples: √8 and 2·√2 are the same coordinates in the same field.
+        var sqrt8 = RealQuadratic.Create(denominator: 1, radicand: 8, rationalNumerator: 0, surdNumerator: 1);
+        var twoSqrt2 = RealQuadratic.Create(denominator: 1, radicand: 2, rationalNumerator: 0, surdNumerator: 2);
+
+        Assert.Equal(expected: twoSqrt2.Field, actual: sqrt8.Field);
+        Assert.Equal(expected: new BigInteger(value: 2), actual: sqrt8.SurdNumerator);
+        Assert.Equal(expected: twoSqrt2, actual: sqrt8);
+        Assert.Equal(expected: twoSqrt2.GetHashCode(), actual: sqrt8.GetHashCode());
+        Assert.Equal(expected: eight.Element(rationalNumerator: 0, surdNumerator: 2, denominator: 1), actual: sqrt8);
+        Assert.Equal(expected: twoSqrt2, actual: (eight.Sqrt + eight.Sqrt));
+        Assert.Equal(expected: RealQuadratic.Rational(value: 2), actual: (eight.Sqrt * eight.Sqrt));
+
+        // A square factor above the bound survives canonicalization, and equality, hashing, ordering and arithmetic
+        // still identify the two representations exactly.
+        var bigSquare = new BigInteger(value: (1031L * 1031L));
+        var hidden = RealQuadratic.Create(denominator: 1, radicand: (2 * bigSquare), rationalNumerator: 0, surdNumerator: 1);
+        var plain = RealQuadratic.Create(denominator: 1, radicand: 2, rationalNumerator: 0, surdNumerator: 1031);
+
+        Assert.NotEqual(expected: plain.Field, actual: hidden.Field);
+        Assert.Equal(expected: plain, actual: hidden);
+        Assert.Equal(expected: plain.GetHashCode(), actual: hidden.GetHashCode());
+        Assert.Equal(expected: 0, actual: hidden.CompareTo(other: plain));
+        Assert.Equal(expected: RealQuadratic.Create(denominator: 1, radicand: 2, rationalNumerator: 0, surdNumerator: 2062), actual: (hidden + plain));
+        Assert.Equal(expected: RealQuadratic.Rational(value: (2 * bigSquare)), actual: (hidden * plain));
+
+        // Conjugate, norm and trace are the field's own identities, and the rational coordinates read back.
+        var golden = RealQuadratic.Create(denominator: 2, radicand: 5, rationalNumerator: 1, surdNumerator: 1);
+        var conjugate = golden.Conjugate();
+
+        Assert.Equal(expected: RealQuadratic.Create(denominator: 2, radicand: 5, rationalNumerator: 1, surdNumerator: -1), actual: conjugate);
+        Assert.Equal(expected: RealQuadratic.FromRational(value: golden.Norm()), actual: (golden * conjugate));
+        Assert.Equal(expected: RealQuadratic.FromRational(value: golden.Trace()), actual: (golden + conjugate));
+        Assert.Equal(expected: new Rational(Numerator: -1, Denominator: 1), actual: golden.Norm());
+        Assert.Equal(expected: Rational.One, actual: golden.Trace());
+        Assert.Equal(expected: new Rational(Numerator: 1, Denominator: 2), actual: golden.RationalPart);
+        Assert.Equal(expected: new Rational(Numerator: 1, Denominator: 2), actual: golden.SurdPart);
+        Assert.Equal(expected: RealQuadraticField.Create(radicand: 5), actual: golden.Field);
+        Assert.Equal(expected: RealQuadraticField.Rationals, actual: RealQuadratic.One.Field);
+        Assert.Equal(expected: RealQuadratic.Rational(denominator: 3, numerator: 2), actual: RealQuadratic.FromRational(value: new Rational(Numerator: 4, Denominator: 6)));
+
+        // A perfect-square radicand folds into the rational part, and different fields refuse to combine.
+        Assert.Equal(expected: RealQuadratic.Rational(value: 7), actual: RealQuadratic.Create(denominator: 1, radicand: 9, rationalNumerator: 1, surdNumerator: 2));
+        Assert.Throws<ArgumentException>(testCode: () => (golden + sqrt8));
+        Assert.Throws<ArgumentException>(testCode: () => (golden * sqrt8));
+        Assert.True(condition: (golden > sqrt8.Conjugate()));
+        Assert.True(condition: (golden < sqrt8));
+
+        // The exact conversion: the returned double is at least as close to the value as either binary64 neighbour,
+        // decided by the exact ordering against the neighbours' midpoints; the platform's correctly rounded square
+        // root of a small integer agrees where it applies.
+        Assert.True(condition: IsNearestDouble(value: golden, candidate: golden.ToDouble()));
+        Assert.True(condition: IsNearestDouble(value: -golden, candidate: (-golden).ToDouble()));
+        Assert.True(condition: IsNearestDouble(value: sqrt8, candidate: sqrt8.ToDouble()));
+        Assert.True(condition: IsNearestDouble(value: golden.Conjugate(), candidate: golden.Conjugate().ToDouble()));
+        Assert.True(condition: IsNearestDouble(value: hidden, candidate: hidden.ToDouble()));
+        Assert.Equal(expected: Math.Sqrt(d: 8.0), actual: sqrt8.ToDouble());
+        Assert.Equal(expected: Math.Sqrt(d: 2.0), actual: RealQuadraticField.Create(radicand: 2).Sqrt.ToDouble());
+
+        return null;
+    }
+    public static string? BigIntegerToDoubleSurface() {
+        Assert.Equal(expected: 0.0, actual: BigIntegerFunctions.ToDouble(value: BigInteger.Zero));
+        Assert.Equal(expected: 5.0, actual: BigIntegerFunctions.ToDouble(value: 5));
+        Assert.Equal(expected: -40.0, actual: BigIntegerFunctions.ToDouble(binaryExponent: 3, value: -5));
+        Assert.Equal(expected: 0.375, actual: BigIntegerFunctions.ToDouble(binaryExponent: -3, value: 3));
+        Assert.Equal(expected: double.Epsilon, actual: BigIntegerFunctions.ToDouble(binaryExponent: -1074, value: 1));
+        Assert.Equal(expected: double.MaxValue, actual: BigIntegerFunctions.ToDouble(binaryExponent: 971, value: ((BigInteger.One << 53) - 1)));
+        Assert.Equal(expected: double.PositiveInfinity, actual: BigIntegerFunctions.ToDouble(value: (BigInteger.One << 1024)));
+        Assert.Equal(expected: double.NegativeInfinity, actual: BigIntegerFunctions.ToDouble(binaryExponent: 970, value: -((BigInteger.One << 54) - 1)));
+
+        // Every width around the mantissa boundary, every nearby offset, and exponents spanning the subnormal floor,
+        // the overflow ceiling and the ordinary range, checked against the exact neighbour oracle.
+        ReadOnlySpan<int> widths = [1, 52, 53, 54, 55, 60, 63, 64, 65, 100, 127, 128, 1000, 1023, 1024, 1025];
+        ReadOnlySpan<int> exponents = [0, -1, -52, -53, -60, -1000, -1074, -1075, -1076, -1100, -1126, -1127, -1128, -2000, 900, 970, 971, 972];
+
+        foreach (var width in widths) {
+            var power = (BigInteger.One << (width - 1));
+
+            for (var offset = -3; (offset <= 3); ++offset) {
+                var value = (power + offset);
+
+                if (value.Sign <= 0) { continue; }
+
+                foreach (var exponent in exponents) {
+                    foreach (var signed in new[] { value, -value }) {
+                        var converted = BigIntegerFunctions.ToDouble(binaryExponent: exponent, value: signed);
+                        var (numerator, denominator) = ((exponent >= 0) ? ((signed << exponent), BigInteger.One) : (signed, (BigInteger.One << -exponent)));
+
+                        Assert.True(
+                            condition: Oracles.IsNearestDouble(numerator: numerator, denominator: denominator, candidate: converted),
+                            userMessage: $"ToDouble({signed}, {exponent}) = {converted} is not the nearest double"
+                        );
+                    }
+                }
+            }
+        }
+
+        // The truncated form: a discarded remainder is the sticky bit, so an exact tie without one rounds to even and
+        // the same truncation with one rounds up; the remainder is only admitted under a magnitude wide enough to keep
+        // it below the rounding position.
+        var tie = ((BigInteger.One << 60) + 128);
+
+        Assert.Equal(expected: Math.ScaleB(n: 60, x: 1.0), actual: BigIntegerFunctions.ToDouble(binaryExponent: 0, hasRemainder: false, truncatedMagnitude: tie));
+        Assert.Equal(expected: (Math.ScaleB(n: 60, x: 1.0) + 256.0), actual: BigIntegerFunctions.ToDouble(binaryExponent: 0, hasRemainder: true, truncatedMagnitude: tie));
+        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => BigIntegerFunctions.ToDouble(binaryExponent: 0, hasRemainder: false, truncatedMagnitude: -tie));
+        Assert.Throws<ArgumentException>(testCode: () => BigIntegerFunctions.ToDouble(binaryExponent: 0, hasRemainder: true, truncatedMagnitude: ((BigInteger.One << 53) - 1)));
+        Assert.Equal(expected: 0.0, actual: BigIntegerFunctions.ToDouble(binaryExponent: 0, hasRemainder: false, truncatedMagnitude: BigInteger.Zero));
+
+        foreach (var (numerator, denominator) in new (BigInteger, BigInteger)[] { (1, 3), (2, 3), ((BigInteger.One << 100) + 7, 1000003), (5, (BigInteger.One << 1076)) }) {
+            var scale = (100 + Math.Max(val1: 0, val2: (int)((long)denominator.GetBitLength() - (long)numerator.GetBitLength())));
+            var quotient = BigInteger.DivRem(dividend: (numerator << scale), divisor: denominator, remainder: out var remainder);
+            var converted = BigIntegerFunctions.ToDouble(binaryExponent: -scale, hasRemainder: !remainder.IsZero, truncatedMagnitude: quotient);
+
+            Assert.True(
+                condition: Oracles.IsNearestDouble(numerator: numerator, denominator: denominator, candidate: converted),
+                userMessage: $"truncated ToDouble({numerator}/{denominator}) = {converted} is not the nearest double"
+            );
+        }
+
+        return null;
+    }
+    // Whether candidate is the double nearest an exact real-quadratic value: the value is ordered against the exact
+    // midpoints between the candidate and its binary64 neighbours, with a tie admitted only toward an even mantissa.
+    private static bool IsNearestDouble(RealQuadratic value, double candidate) {
+        if (double.IsNaN(d: candidate) || double.IsInfinity(d: candidate) || (candidate == 0.0)) { return false; }
+
+        var lowerMidpoint = Midpoint(left: Math.BitDecrement(x: candidate), right: candidate);
+        var upperMidpoint = Midpoint(left: candidate, right: Math.BitIncrement(x: candidate));
+        var mantissaIsOdd = ((BitConverter.DoubleToInt64Bits(value: candidate) & 1L) != 0L);
+        var aboveLower = value.CompareTo(other: lowerMidpoint);
+        var belowUpper = value.CompareTo(other: upperMidpoint);
+
+        return (mantissaIsOdd
+            ? ((aboveLower > 0) && (belowUpper < 0))
+            : ((aboveLower >= 0) && (belowUpper <= 0)));
+    }
+    // (left + right) / 2 as an exact rational value, for finite doubles.
+    private static RealQuadratic Midpoint(double left, double right) {
+        var (leftMantissa, leftExponent) = Decompose(value: left);
+        var (rightMantissa, rightExponent) = Decompose(value: right);
+        var exponent = Math.Min(val1: leftExponent, val2: rightExponent);
+        var sum = ((leftMantissa << (leftExponent - exponent)) + (rightMantissa << (rightExponent - exponent)));
+
+        return ((exponent >= 1)
+            ? RealQuadratic.Rational(value: (sum << (exponent - 1)))
+            : RealQuadratic.Rational(denominator: (BigInteger.One << (1 - exponent)), numerator: sum));
+    }
+    private static (BigInteger Mantissa, int Exponent) Decompose(double value) {
+        var bits = BitConverter.DoubleToInt64Bits(value: value);
+        var biasedExponent = (int)((bits >> 52) & 0x7FFL);
+        var fraction = (bits & 0xFFFFFFFFFFFFFL);
+        var mantissa = ((biasedExponent == 0) ? fraction : (fraction | (1L << 52)));
+        var exponent = ((biasedExponent == 0) ? -1074 : (biasedExponent - 1075));
+
+        return (((bits < 0L) ? -new BigInteger(value: mantissa) : new BigInteger(value: mantissa)), exponent);
     }
     public static string? PrimeExtensionsSurface() {
         for (uint value = 0; (value <= 2048); ++value) {
@@ -1037,6 +1212,12 @@ internal static class CoreSurfaceClaims {
                 // The loop closes bit-exactly: a whole period later is the SAME rotor, not merely a near one.
                 Assert.Equal(expected: CyclicRotation.At(plane: plane, tick: tick), actual: CyclicRotation.At(plane: plane, tick: (tick + period)));
                 Assert.Equal(expected: step, actual: CyclicRotation.Step(plane: plane, tick: (tick + period)));
+
+                // Rotor is the table read At performs once the step is known, and it reduces a negative or
+                // past-period step count the same way.
+                Assert.Equal(expected: CyclicRotation.At(plane: plane, tick: tick), actual: CyclicRotation.Rotor(step: step));
+                Assert.Equal(expected: CyclicRotation.Rotor(step: (step - period)), actual: CyclicRotation.Rotor(step: (step + (3L * period))));
+                Assert.Equal(expected: CyclicRotation.At(plane: 0, tick: tick), actual: CyclicRotation.Rotor(step: tick));
             }
 
             // Every multiple of the period is the identity, and the identity leaves a vector bit-identical.

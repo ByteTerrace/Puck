@@ -1,0 +1,82 @@
+{
+  "id": "symmetry-orbit-source",
+  "title": "A symmetryOrbit source deals a ring of the symmetry lattice as a shuffle bag and paints a lattice from a word's orbit — every draw lands on the orbit, and the discriminating flat range does not",
+  "binding": "The positive leg boots a draw site 'pick' on the declared source ringTwo (symmetryOrbit, ring 2, withoutReplacement) and a twelve-cell fixed lattice 'tiles' whose draw fill is the orbit of node 5 under the word [0,1,2,3,4,5] (twelve nodes, dealt without replacement, so the pass paints every orbit node once: eleven nonzero cells, mean 28.083 — the orbit's own average node index, stored in the fixed unit). A Level rule copies $symmetry:ring:pick into 'pickRing'. Three world.generate deals read nodes 28, 6 and 7 with the deck growing 0x40, 0x48, 0x58 (three distinct cards of thirty), and 'pickRing' reads 2 after every deal. world.symmetry.word prints the fill's order and orbit. The discriminating leg re-authors both sources as uniformRange over every node: the same three deals read 166, 2 and 205 on rings 1, 0 and 7, no deck is carried, and the field's mean is the flat range's, so 'every draw on ring 2' is the orbit source and not the seed.",
+  "bootShape": "headless",
+  "requirements": [],
+  "seconds": 5,
+  "timeoutSeconds": 20,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/symmetry-orbit-source/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "world.status", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.fields", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.generate", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.generate", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 5, "outcome": "accepted" },
+      { "verb": "world.generate", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 6, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 7, "outcome": "accepted" },
+      { "verb": "world.symmetry.word", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "orbit-fill-reads-back-as-the-fills-source", "stream": "stdout", "match": "contains", "text": "[world.state.row 'tiles' kind=fixed cells=0/128 draw source=<inline:symmetryOrbit> fill=lattice cursor=0 decks=none]", "present": true },
+      { "type": "line", "name": "orbit-fill-paints-every-orbit-node-once", "stream": "stdout", "match": "contains", "text": "tiles nonzero=11 mean=28.083", "present": true },
+      { "type": "line", "name": "first-deal-is-a-ring-two-node", "stream": "stdout", "match": "contains", "text": "[world.state.row 'pick' kind=int value=28 draw source=ringTwo timing=event cursor=1 decks=0=0x40]", "present": true },
+      { "type": "line", "name": "second-deal-grows-the-deck", "stream": "stdout", "match": "contains", "text": "[world.state.row 'pick' kind=int value=6 draw source=ringTwo timing=event cursor=2 decks=0=0x48]", "present": true },
+      { "type": "line", "name": "third-deal-grows-the-deck-again", "stream": "stdout", "match": "contains", "text": "[world.state.row 'pick' kind=int value=7 draw source=ringTwo timing=event cursor=3 decks=0=0x58]", "present": true },
+      { "type": "line", "name": "every-deal-lands-on-ring-two", "stream": "stdout", "match": "contains", "text": "[world.state.row 'pickRing' kind=int value=2]", "present": true },
+      { "type": "line", "name": "no-deal-leaves-ring-two", "stream": "stdout", "match": "contains", "text": "[world.state.row 'pickRing' kind=int value=1]", "present": false },
+      { "type": "line", "name": "no-deal-reaches-ring-zero", "stream": "stdout", "match": "contains", "text": "[world.state.row 'pickRing' kind=int value=0]", "present": false },
+      { "type": "line", "name": "word-read-back-derives-the-fills-order", "stream": "stdout", "match": "contains", "text": "[world.symmetry.word mirrors=[0,1,2,3,4,5] order=12 identity=0]", "present": true },
+      { "type": "line", "name": "word-read-back-prints-the-fills-orbit", "stream": "stdout", "match": "contains", "text": "[world.symmetry.word node=5 orbitLength=12 orbit=5,4,3,58,39,11,2,0,66,41,28,80]", "present": true },
+      { "type": "line", "name": "deals-apply", "stream": "stderr", "match": "contains", "text": "[world.mutation: Generate 'pick' applied]", "present": true },
+      { "type": "line", "name": "no-rejected-wire", "stream": "stdout", "match": "contains", "text": "[wire.errors: 0 rejected]", "present": true },
+      { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/symmetry-orbit-source/discriminating.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "world.status", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.fields", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.generate", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.generate", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 5, "outcome": "accepted" },
+      { "verb": "world.generate", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 6, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 7, "outcome": "accepted" },
+      { "verb": "world.symmetry.word", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "flat-fill-reads-back-as-a-range", "stream": "stdout", "match": "contains", "text": "[world.state.row 'tiles' kind=fixed cells=0/128 draw source=<inline:uniformRange> fill=lattice cursor=0 decks=none]", "present": true },
+      { "type": "line", "name": "flat-fill-is-not-the-orbit", "stream": "stdout", "match": "contains", "text": "tiles nonzero=11 mean=28.083", "present": false },
+      { "type": "line", "name": "first-flat-deal-is-off-the-ring", "stream": "stdout", "match": "contains", "text": "[world.state.row 'pick' kind=int value=166 draw source=ringTwo timing=event cursor=1 decks=none]", "present": true },
+      { "type": "line", "name": "flat-deals-carry-no-deck", "stream": "stdout", "match": "contains", "text": "decks=0=0x", "present": false },
+      { "type": "line", "name": "flat-deals-reach-other-rings", "stream": "stdout", "match": "contains", "text": "[world.state.row 'pickRing' kind=int value=7]", "present": true },
+      { "type": "line", "name": "the-ring-two-deals-never-appear", "stream": "stdout", "match": "contains", "text": "[world.state.row 'pick' kind=int value=28 draw", "present": false },
+      { "type": "line", "name": "word-read-back-still-answers", "stream": "stdout", "match": "contains", "text": "[world.symmetry.word mirrors=[0,1,2,3,4,5] order=12 identity=0]", "present": true },
+      { "type": "line", "name": "no-rejected-wire", "stream": "stdout", "match": "contains", "text": "[wire.errors: 0 rejected]", "present": true },
+      { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  }
+}

@@ -121,11 +121,20 @@ internal static class WorldDrawBootResolver {
                 )
                 : new WorldStateCell(
                     Key: WorldStateRow.SlotKey,
+                    // A numeric draw is already in the site's own encoding — raw FixedQ4816 bits on a fixed row — the
+                    // contract the source's range/outcome values, the validator's domain narrowing and a lattice fill
+                    // all share.
                     Value: fired.Numeric!.Value
                 )
             );
 
-            state.Add(item: (row with { Cells = [cell], DrawCursor = (row.DrawCursor + fired.Samples), DrawDecks = (fired.Decks ?? row.DrawDecks) }));
+            _ = WorldGeneratorEngine.TryResolveSource(
+                generators: definition.Generators,
+                draw: draw,
+                generator: out var generator,
+                reason: out _
+            );
+            state.Add(item: (row with { Cells = [cell], DrawCursor = (row.DrawCursor + fired.Samples), DrawDecks = WorldGeneratorEngine.DecksAfter(generator: generator, fired: fired.Decks, previous: row.DrawDecks) }));
             changed = true;
         }
 

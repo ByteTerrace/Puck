@@ -213,10 +213,16 @@ public sealed partial class WorldServer {
                 }
             }
 
+            var previousDefinition = m_definition;
+
             SwapSolids(solids: undoSolids);
             Install(
                 definition: candidate,
                 rebuildPopulation: true
+            );
+            RepaintChangedLatticeDraws(
+                previous: previousDefinition,
+                current: candidate
             );
 
             if (addonPlan is not null) {

@@ -206,6 +206,66 @@
       {
         "Type": "Puck.Maths.Rational",
         "Name": "op_Division"
+      },
+      {
+        "Type": "Puck.Maths.Rational",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.Rational",
+        "Name": "Sign"
+      },
+      {
+        "Type": "Puck.Maths.Rational",
+        "Name": "IsZero"
+      },
+      {
+        "Type": "Puck.Maths.Rational",
+        "Name": "IsInteger"
+      },
+      {
+        "Type": "Puck.Maths.Rational",
+        "Name": "Abs"
+      },
+      {
+        "Type": "Puck.Maths.Rational",
+        "Name": "Floor"
+      },
+      {
+        "Type": "Puck.Maths.Rational",
+        "Name": "Ceiling"
+      },
+      {
+        "Type": "Puck.Maths.Rational",
+        "Name": "Reciprocal"
+      },
+      {
+        "Type": "Puck.Maths.Rational",
+        "Name": "CompareTo"
+      },
+      {
+        "Type": "Puck.Maths.Rational",
+        "Name": "ToDouble"
+      },
+      {
+        "Type": "Puck.Maths.Rational",
+        "Name": "op_LessThan"
+      },
+      {
+        "Type": "Puck.Maths.Rational",
+        "Name": "op_GreaterThan"
+      },
+      {
+        "Type": "Puck.Maths.Rational",
+        "Name": "op_LessThanOrEqual"
+      },
+      {
+        "Type": "Puck.Maths.Rational",
+        "Name": "op_GreaterThanOrEqual"
+      },
+      {
+        "Type": "Puck.Maths.Rational",
+        "Name": "op_Implicit"
       }
     ],
     "Legs": [
@@ -221,7 +281,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "Rational never reduces a fraction, so its own record equality is not a valid rational-equality test; every identity below is checked by CROSS-MULTIPLICATION instead (a/b = c/d iff a·d = c·b), over eight operand rationals including a zero numerator, negative numerators and a pair wide enough (2^96 over 2^40) to exercise BigInteger growth. The ctor/Numerator/Denominator readback, Two = One + One, the additive identity and inverse (a + 0 = a, a + (-a) = 0, -(-a) = a), the multiplicative identity (a·1 = 1·a = a), and a - b = a + (-b) are asserted for every sample; commutativity of + and ·, and (a / b)·b = a for every nonzero b, over every ordered pair; associativity of + and · and distributivity of · over + over every ordered triple",
+        "Subject": "Rational reduces on construction \u2014 lowest terms, positive denominator, the zero numerator canonical over one \u2014 so the record\u0027s own equality is rational equality, and the reduction is pinned directly: six operand pairs (6/4, \u22126/4, 6/\u22124, 0/3, 2^96/2^40, 7/7) read back their reduced pairs and are fixed points of re-construction, and every operand of the eight-sample battery is in lowest terms. Every field identity below is nonetheless checked by cross-multiplication (a/b = c/d iff a\u00B7d = c\u00B7b), so the algebra statements do not lean on the reduction they sit beside, over eight operand rationals including a zero numerator, negative numerators and a pair wide enough (2^96 over 2^40) to exercise BigInteger growth.",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -232,6 +292,15 @@
         "Flavor": "None",
         "Subject": "a + b for every ordered pair of the eight samples, the exact BigInteger result reduced to double",
         "Against": "(double)a.Numerator / (double)a.Denominator, plus the same for b, summed in ordinary IEEE double arithmetic — a second numeric domain that shares neither BigInteger nor Rational's own operators",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the accessors over the eight samples \u2014 Floor and Ceiling bracket the value, Sign, IsZero and IsInteger read the reduced pair, Abs, Reciprocal multiplies back to One, CompareTo and the four ordering operators, Zero and the BigInteger widening",
+        "Against": "and ToDouble against the exact neighbour oracle \u2014 the returned double and its two binary64 neighbours decomposed into integer mantissa and exponent, the three distances to the exact quotient compared in integer arithmetic, a tie admitted only toward an even mantissa \u2014 over the eight samples and sixteen pinned edges the platform\u0027s truncating cast gets wrong or that sit on the overflow, underflow and tie boundaries",
         "Shared": "",
         "Citation": "",
         "Absolute": ""

@@ -1,0 +1,110 @@
+{
+  "schema": "puck.world.def.v1",
+  "documentId": "symmetry-channel-canary",
+  "simulation": {
+    "rateHz": 240
+  },
+  "state": {
+    "world": [
+      {
+        "name": "node",
+        "kind": "int",
+        "value": 5
+      },
+      {
+        "name": "mirror",
+        "kind": "int",
+        "value": 17
+      },
+      {
+        "name": "ringOf",
+        "kind": "int",
+        "value": -2
+      },
+      {
+        "name": "antipodeOf",
+        "kind": "int",
+        "value": -2
+      },
+      {
+        "name": "canonicalOf",
+        "kind": "int",
+        "value": -2
+      },
+      {
+        "name": "walked",
+        "kind": "int",
+        "value": -2
+      },
+      {
+        "name": "reflected",
+        "kind": "int",
+        "value": -2
+      },
+      {
+        "name": "orthogonalFlag",
+        "kind": "int",
+        "value": -2
+      },
+      {
+        "name": "pairing",
+        "kind": "int",
+        "value": -3
+      },
+      {
+        "name": "projX",
+        "kind": "fixed",
+        "value": "0"
+      }
+    ]
+  },
+  "rules": [
+    {
+      "name": "probe",
+      "mode": "Edge",
+      "gate": {
+        "$type": "compareState",
+        "state": "$tick",
+        "comparison": "GreaterOrEqual",
+        "value": 1
+      },
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "ringOf",
+          "fromState": "node"
+        },
+        {
+          "$type": "setState",
+          "state": "antipodeOf",
+          "fromState": "node"
+        },
+        {
+          "$type": "setState",
+          "state": "canonicalOf",
+          "fromState": "node"
+        },
+        {
+          "$type": "setState",
+          "state": "walked",
+          "fromState": "node"
+        },
+        {
+          "$type": "setState",
+          "state": "reflected",
+          "fromState": "node"
+        },
+        {
+          "$type": "setState",
+          "state": "orthogonalFlag",
+          "fromState": "node"
+        },
+        {
+          "$type": "setState",
+          "state": "pairing",
+          "fromState": "node"
+        }
+      ]
+    }
+  ]
+}

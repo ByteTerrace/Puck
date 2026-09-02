@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Physics.Motion;
 
 namespace Puck.World.Protocol;
 
@@ -66,6 +67,9 @@ public readonly record struct EntityContinuity(EntityContinuityKind Kind, float 
 /// way "forward" is — as distinct from <paramref name="Orientation"/>, the attitude it is drawn in (under a World-frame
 /// kit with facing snap the attitude turns to face the commanded travel while the heading holds). A seat moving in a
 /// heading-framed channel pair composes against this, never against the drawn attitude.</param>
+/// <param name="Facts">The body's authoritative per-tick fact mask — the same predicates the simulation's action
+/// gates read, published so a client can key animation (a walk, a climb reach, a swim stroke) on the authority's own
+/// answer. Derived, never authored.</param>
 public readonly record struct EntitySnapshot(
     int Index,
     Vector3 Position,
@@ -78,7 +82,8 @@ public readonly record struct EntitySnapshot(
     EntityContinuity Continuity,
     int Generation = 0,
     string? PlacementId = null,
-    float Heading = 0f
+    float Heading = 0f,
+    BodyFacts Facts = BodyFacts.None
 );
 /// <summary>The server's outbound tick image — the whole entity table's authoritative render state plus a revision the
 /// client watches to rebuild its avatar program (as the population/roster revisions drive it today). The client

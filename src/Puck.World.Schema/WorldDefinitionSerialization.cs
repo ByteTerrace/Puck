@@ -188,6 +188,7 @@ namespace Puck.World;
 // declare — read/written by WorldStateRowJsonConverter through this typed accessor, the same "hand-written row,
 // ordinary strict-parsed nested object" split the generator table above already uses, at either grain.
 [JsonSerializable(typeof(WorldStateAdvance))]
+[JsonSerializable(typeof(WorldStateCycle))]
 // The rules section rows (the world.row.set rules payload shape). Also reachable from WorldDefinition already; this entry
 // exposes the typed WorldJsonContext.Default.WorldRule accessor the verb deserializes through.
 [JsonSerializable(typeof(WorldRule))]
@@ -381,7 +382,7 @@ internal sealed class DocumentWriteMaskJsonConverter : NameListMaskJsonConverter
 /// <c>UnmappedMemberHandling.Disallow</c> policy, so this converter re-implements it by hand.</para>
 /// </summary>
 internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> {
-    private const string Shape = "{\"name\":…,\"kind\":\"int\"|\"fixed\"|\"bool\"|\"text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…}}],\"min\":…,\"max\":…,\"capacity\":…,\"nonNegative\":…,\"gatesDrive\":…,\"evicts\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"lattice\":{\"topology\":…,\"initial\":…,\"min\":…,\"max\":…,\"heightScale\":…,\"color\":…,\"paint\":[…]},\"draw\":{\"source\":… or \"generator\":{\"source\":\"markov\"|\"uniformRange\"|\"weightedNumeric\"|\"streamDraw\",…},\"timing\":\"boot\"|\"tickPeriod\"|\"event\"},\"drawCursor\":…,\"drawDecks\":[…]}";
+    private const string Shape = "{\"name\":…,\"kind\":\"int\"|\"fixed\"|\"bool\"|\"text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…,\"substepTicks\":…}}],\"min\":…,\"max\":…,\"capacity\":…,\"nonNegative\":…,\"gatesDrive\":…,\"evicts\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…,\"substepTicks\":…},\"lattice\":{\"topology\":…,\"initial\":…,\"min\":…,\"max\":…,\"heightScale\":…,\"color\":…,\"paint\":[…]},\"draw\":{\"source\":… or \"generator\":{\"source\":\"markov\"|\"uniformRange\"|\"weightedNumeric\"|\"streamDraw\"|\"symmetryOrbit\",…},\"timing\":\"boot\"|\"tickPeriod\"|\"event\"},\"drawCursor\":…,\"drawDecks\":[…]}";
 
     private static string DescribeCellKind(CellKind cellKind) => cellKind switch {
         CellKind.Int => "int",
@@ -438,22 +439,24 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
             throw new JsonException(message: $"{context} requires member 'v0'.");
         }
 
+        // y0/v0 are the follower's continuous state and ride raw FixedQ4816 bits whatever the carrying row's kind
+        // (see WorldStateDynamics), so they are authored in the fixed spelling — a decimal string — on every row.
         return new WorldStateDynamics(
             Row: row,
             Y0: RequireNumeric(
                 context: $"{context}.y0",
                 element: y0Element,
-                kind: cellKind
+                kind: CellKind.Fixed
             ),
             V0: RequireNumeric(
                 context: $"{context}.v0",
                 element: v0Element,
-                kind: cellKind
+                kind: CellKind.Fixed
             ),
             EpochTick: epochTick
         );
     }
-    private static WorldStateCell ReadCell(CellKind cellKind, WorldCellName key, JsonElement element, string context, WorldStateAdvance? advance = null, string? provenance = null, WorldStateDynamics? dynamics = null) => cellKind switch {
+    private static WorldStateCell ReadCell(CellKind cellKind, WorldCellName key, JsonElement element, string context, WorldStateAdvance? advance = null, string? provenance = null, WorldStateDynamics? dynamics = null, WorldStateCycle? cycle = null) => cellKind switch {
         CellKind.Text => new WorldStateCell(
         Key: key,
         Text: RequireString(
@@ -462,7 +465,8 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
         ),
         Advance: advance,
         Provenance: provenance,
-        Dynamics: dynamics
+        Dynamics: dynamics,
+        Cycle: cycle
     ),
         CellKind.Bool => new WorldStateCell(
         Key: key,
@@ -474,7 +478,8 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
         : 0),
         Advance: advance,
         Provenance: provenance,
-        Dynamics: dynamics
+        Dynamics: dynamics,
+        Cycle: cycle
     ),
         _ => new WorldStateCell(
         Key: key,
@@ -485,7 +490,8 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
         ),
         Advance: advance,
         Provenance: provenance,
-        Dynamics: dynamics
+        Dynamics: dynamics,
+        Cycle: cycle
     ),
     };
     private static List<WorldStateCell> ReadCells(string name, CellKind cellKind, JsonElement cellsElement) {
@@ -505,6 +511,7 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
             JsonElement? cellValue = null;
             JsonElement? cellAdvance = null;
             JsonElement? cellDynamics = null;
+            JsonElement? cellCycle = null;
             string? provenance = null;
 
             foreach (var member in entry.EnumerateObject()) {
@@ -523,6 +530,9 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
                         break;
                     case "dynamics":
                         cellDynamics = member.Value;
+                        break;
+                    case "cycle":
+                        cellCycle = member.Value;
                         break;
                     case "provenance":
                         provenance = ((member.Value.ValueKind == JsonValueKind.String)
@@ -563,6 +573,12 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
                 : null
             );
 
+            var cycle = ((cellCycle is { } cellCycleElement)
+                ? (cellCycleElement.Deserialize(jsonTypeInfo: WorldJsonContext.Default.WorldStateCycle)
+                    ?? throw new JsonException(message: $"state row '{name}'.cells[{index}].cycle must be an object."))
+                : null
+            );
+
             cells.Add(item: ReadCell(
                 cellKind: cellKind,
                 key: cellKey,
@@ -570,7 +586,8 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
                 context: $"state row '{name}'.cells[{index}].value",
                 advance: advance,
                 provenance: provenance,
-                dynamics: dynamics
+                dynamics: dynamics,
+                cycle: cycle
             ));
             index++;
         }
@@ -693,25 +710,24 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
                 break;
         }
     }
-    // y0/v0 ride the SAME per-kind spelling ReadDynamics parses — a decimal string for a fixed row, a plain number
-    // for int — never raw bits.
-    private static void WriteDynamics(Utf8JsonWriter writer, string propertyName, CellKind kind, WorldStateDynamics dynamics) {
+    private static void WriteDynamics(Utf8JsonWriter writer, string propertyName, WorldStateDynamics dynamics) {
         writer.WritePropertyName(propertyName: propertyName);
         writer.WriteStartObject();
         writer.WriteString(
             propertyName: "row",
             value: dynamics.Row
         );
+        // The follower's continuous state is fixed-native on every row kind, so it is written in the fixed spelling.
         WriteOptionalNumeric(
             writer: writer,
             propertyName: "y0",
-            kind: kind,
+            kind: CellKind.Fixed,
             raw: dynamics.Y0
         );
         WriteOptionalNumeric(
             writer: writer,
             propertyName: "v0",
-            kind: kind,
+            kind: CellKind.Fixed,
             raw: dynamics.V0
         );
         writer.WriteNumber(
@@ -720,6 +736,7 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
         );
         writer.WriteEndObject();
     }
+
     private static void WriteOptionalNumeric(Utf8JsonWriter writer, string propertyName, CellKind kind, long? raw) {
         if (raw is not { } rawValue) {
             return;
@@ -759,6 +776,7 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
         JsonElement? advance = null;
         JsonElement? dynamics = null;
         JsonElement? lattice = null;
+        JsonElement? cycle = null;
 
         while (
             reader.Read() &&
@@ -826,6 +844,9 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
                 case "lattice":
                     lattice = JsonElement.ParseValue(reader: ref reader);
                     break;
+                case "cycle":
+                    cycle = JsonElement.ParseValue(reader: ref reader);
+                    break;
                 default:
                     throw new JsonException(message: $"state row contains unmapped member '{property}' — a state row is {Shape}.");
             }
@@ -873,13 +894,15 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
         }
         if (
             (drawCursor is not null) &&
-            (draw is null)
+            (draw is null) &&
+            (lattice is null)
         ) {
             throw new JsonException(message: $"state row '{name}' declares 'drawCursor' without 'draw' — drawCursor is engine bookkeeping for a draw site alone.");
         }
         if (
             (drawDecks is not null) &&
-            (draw is null)
+            (draw is null) &&
+            (lattice is null)
         ) {
             throw new JsonException(message: $"state row '{name}' declares 'drawDecks' without 'draw' — drawDecks is engine bookkeeping for a draw site alone.");
         }
@@ -923,6 +946,44 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
             (dynamicsCells.GetArrayLength() > 0)
         ) {
             throw new JsonException(message: $"state row '{name}' declares 'dynamics' beside a non-empty 'cells' array — dynamics is a scalar (slot) row trait; author it with 'value' or leave the row empty until the first explicit set.");
+        }
+
+        if (
+            (cycle is not null) &&
+            (draw is not null)
+        ) {
+            throw new JsonException(message: $"state row '{name}' declares both 'cycle' and 'draw' — a row is an authored-randomness draw site or a tick-indexed rotation, never both.");
+        }
+        if (
+            (cycle is not null) &&
+            (advance is not null)
+        ) {
+            throw new JsonException(message: $"state row '{name}' declares both 'cycle' and 'advance' — a row is a linear accumulator or a tick-indexed rotation, never both.");
+        }
+        if (
+            (cycle is not null) &&
+            (dynamics is not null)
+        ) {
+            throw new JsonException(message: $"state row '{name}' declares both 'cycle' and 'dynamics' — a row is a second-order easing cell or a tick-indexed rotation, never both.");
+        }
+        if (
+            (cycle is not null) &&
+            (lattice is not null)
+        ) {
+            throw new JsonException(message: $"state row '{name}' declares both 'cycle' and 'lattice' — a lattice row's cells are the lattice's.");
+        }
+        if (
+            (cycle is not null) &&
+            (capacity is not null)
+        ) {
+            throw new JsonException(message: $"state row '{name}' declares 'cycle' beside 'capacity' — cycle is a scalar (slot) row trait; a keyed row's cells each declare their own 'cycle'.");
+        }
+        if (
+            (cycle is not null) &&
+            (cells is { ValueKind: JsonValueKind.Array } cycleCells) &&
+            (cycleCells.GetArrayLength() > 0)
+        ) {
+            throw new JsonException(message: $"state row '{name}' declares 'cycle' beside a non-empty 'cells' array — cycle is a scalar (slot) row trait; author it with 'value' or leave the row empty, and give a keyed row's cells their own 'cycle'.");
         }
 
         var cellKind = RequireCellKind(
@@ -1009,6 +1070,10 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
             Lattice: ((lattice is { } latticeElement)
             ? (latticeElement.Deserialize(jsonTypeInfo: WorldJsonContext.Default.WorldStateLatticeTrait)
                     ?? throw new JsonException(message: $"state row '{name}'.lattice must be an object."))
+            : null),
+            Cycle: ((cycle is { } cycleElement)
+            ? (cycleElement.Deserialize(jsonTypeInfo: WorldJsonContext.Default.WorldStateCycle)
+                    ?? throw new JsonException(message: $"state row '{name}'.cycle must be an object."))
             : null)
         );
     }
@@ -1102,9 +1167,17 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
                 if (cell.Dynamics is { } cellDynamics) {
                     WriteDynamics(
                         dynamics: cellDynamics,
-                        kind: value.Kind,
                         propertyName: "dynamics",
                         writer: writer
+                    );
+                }
+
+                if (cell.Cycle is { } cellCycle) {
+                    writer.WritePropertyName(propertyName: "cycle");
+                    JsonSerializer.Serialize(
+                        writer: writer,
+                        value: cellCycle,
+                        jsonTypeInfo: WorldJsonContext.Default.WorldStateCycle
                     );
                 }
 
@@ -1136,9 +1209,17 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
         if (value.Dynamics is { } rowDynamics) {
             WriteDynamics(
                 dynamics: rowDynamics,
-                kind: value.Kind,
                 propertyName: "dynamics",
                 writer: writer
+            );
+        }
+
+        if (value.Cycle is { } rowCycle) {
+            writer.WritePropertyName(propertyName: "cycle");
+            JsonSerializer.Serialize(
+                writer: writer,
+                value: rowCycle,
+                jsonTypeInfo: WorldJsonContext.Default.WorldStateCycle
             );
         }
 

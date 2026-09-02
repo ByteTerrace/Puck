@@ -50,6 +50,7 @@ internal static class LatticeClaims {
             Assert.Equal(expected: "node", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryLattice.Reflect(mirror: 0, node: invalidNode)).ParamName);
             Assert.Equal(expected: "mirror", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryLattice.Reflect(mirror: invalidNode, node: 0)).ParamName);
             Assert.Equal(expected: "node", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryLattice.Cycle(node: invalidNode)).ParamName);
+            Assert.Equal(expected: "node", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryLattice.Cycle(node: invalidNode, steps: 3L)).ParamName);
             Assert.Equal(expected: "node", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryLattice.Ring(node: invalidNode)).ParamName);
             Assert.Equal(expected: "node", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryLattice.Project(node: invalidNode)).ParamName);
             Assert.Equal(expected: "node", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryLattice.Antipode(node: invalidNode)).ParamName);
@@ -62,6 +63,23 @@ internal static class LatticeClaims {
 
         for (var node = 0; (node < SymmetryLattice.NodeCount); ++node) {
             Assert.Equal(expected: SymmetryLattice.Ring(node: node), actual: SymmetryLattice.Ring(node: SymmetryLattice.Cycle(node: node)));
+
+            // The counted cycle is the single-step cycle iterated: zero steps is the node, one step is Cycle, a whole
+            // ring is the node again, a negative count walks back, and every count in the ring matches the iteration.
+            Assert.Equal(expected: node, actual: SymmetryLattice.Cycle(node: node, steps: 0L));
+            Assert.Equal(expected: SymmetryLattice.Cycle(node: node), actual: SymmetryLattice.Cycle(node: node, steps: 1L));
+            Assert.Equal(expected: node, actual: SymmetryLattice.Cycle(node: node, steps: SymmetryLattice.RingSize));
+            Assert.Equal(expected: node, actual: SymmetryLattice.Cycle(node: node, steps: (-7L * SymmetryLattice.RingSize)));
+            Assert.Equal(expected: node, actual: SymmetryLattice.Cycle(node: SymmetryLattice.Cycle(node: node, steps: -4L), steps: 4L));
+
+            var iterated = node;
+
+            for (var count = 1; (count <= SymmetryLattice.RingSize); ++count) {
+                iterated = SymmetryLattice.Cycle(node: iterated);
+
+                Assert.Equal(expected: iterated, actual: SymmetryLattice.Cycle(node: node, steps: count));
+                Assert.Equal(expected: iterated, actual: SymmetryLattice.Cycle(node: node, steps: (count + (2L * SymmetryLattice.RingSize))));
+            }
 
             ringSizes[SymmetryLattice.Ring(node: node)]++;
 
@@ -243,6 +261,230 @@ internal static class LatticeClaims {
 
         return null;
     }
+    /// <summary>The word surface: a <see cref="SymmetryWord"/> is the permutation its letters induce, its counted power
+    /// is the iterated single step, its order is what iteration measures and lies in the published element-order
+    /// spectrum of W(E₈), the Coxeter word is the lattice's own cycle; <see cref="SymmetryLattice.InnerProduct"/>
+    /// carries the published root-system pairing spectrum and the reflection identities; <see cref="SymmetryLattice.RingNode"/>
+    /// walks each ring in cycle order; and <see cref="CyclicRotation.Rotor(long, int)"/> agrees bit for bit with the
+    /// baked table at every order dividing the period.</summary>
+    public static string? SymmetryWordAndPairingSurface() {
+        var nodeCount = SymmetryLattice.NodeCount;
+        var maximumLength = SymmetryWord.MaximumLength;
+
+        Assert.Equal(expected: SymmetryLattice.Dimension, actual: maximumLength);
+        Assert.Equal(expected: "mirrors", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryWord.Create(mirrors: ReadOnlySpan<int>.Empty)).ParamName);
+        Assert.Equal(expected: "mirrors", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryWord.Create(mirrors: new int[(maximumLength + 1)])).ParamName);
+        Assert.Equal(expected: "mirrors", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryWord.Create(mirrors: [0, nodeCount])).ParamName);
+        Assert.Equal(expected: "mirrors", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryWord.Create(mirrors: [-1])).ParamName);
+        Assert.Equal(expected: "order", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => CyclicRotation.Rotor(step: 0L, order: 0)).ParamName);
+        Assert.Equal(expected: "ring", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryLattice.RingNode(ring: SymmetryLattice.RingCount, position: 0L)).ParamName);
+        Assert.Equal(expected: "ring", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryLattice.RingNode(ring: -1, position: 0L)).ParamName);
+
+        foreach (var invalidNode in new[] { -1, nodeCount, 268_435_456 }) {
+            Assert.Equal(expected: "node", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryWord.Coxeter.Apply(node: invalidNode)).ParamName);
+            Assert.Equal(expected: "node", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryWord.Coxeter.Apply(node: invalidNode, steps: 2L)).ParamName);
+            Assert.Equal(expected: "node", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryWord.Coxeter.OrbitLength(node: invalidNode)).ParamName);
+            Assert.Equal(expected: "first", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryLattice.InnerProduct(first: invalidNode, second: 0)).ParamName);
+            Assert.Equal(expected: "second", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryLattice.InnerProduct(first: 0, second: invalidNode)).ParamName);
+        }
+
+        // The Coxeter word is the lattice's own cycle, letter for letter and node for node.
+        var coxeter = SymmetryWord.Coxeter;
+
+        Assert.Equal(expected: new[] { 7, 6, 5, 4, 3, 2, 1, 0 }, actual: coxeter.Mirrors.ToArray());
+        Assert.Equal(expected: maximumLength, actual: coxeter.Length);
+        Assert.Equal(expected: CyclicRotation.Period, actual: coxeter.Order);
+        Assert.False(condition: coxeter.IsIdentity);
+
+        for (var node = 0; (node < nodeCount); ++node) {
+            Assert.Equal(expected: SymmetryLattice.Cycle(node: node), actual: coxeter.Apply(node: node));
+            Assert.Equal(expected: SymmetryLattice.RingSize, actual: coxeter.OrbitLength(node: node));
+
+            for (var steps = -40L; (steps <= 70L); ++steps) {
+                Assert.Equal(expected: SymmetryLattice.Cycle(node: node, steps: steps), actual: coxeter.Apply(node: node, steps: steps));
+            }
+        }
+
+        // Words of every length up to the cap, including an identity and a word whose order is not thirty.
+        var words = new int[][] {
+            [0],
+            [3, 3],
+            [0, 1],
+            [0, 2],
+            [5, 17],
+            [0, 2, 3],
+            [12, 40, 7],
+            [0, 1, 2, 3],
+            [101, 5, 17, 239, 88],
+            [0, 1, 2, 3, 4, 5],
+            [0, 1, 2, 3, 4, 5, 6],
+            [0, 1, 2, 3, 4, 5, 6, 7],
+        };
+        var seen = new bool[nodeCount];
+
+        foreach (var letters in words) {
+            var word = SymmetryWord.Create(mirrors: letters);
+            var measuredOrder = 1;
+
+            Assert.Equal(expected: letters, actual: word.Mirrors.ToArray());
+            Assert.Equal(expected: letters.Length, actual: word.Length);
+            Array.Clear(array: seen);
+
+            for (var node = 0; (node < nodeCount); ++node) {
+                // The baked single step is the letters applied one reflection at a time.
+                var expectedImage = node;
+
+                foreach (var letter in letters) {
+                    expectedImage = SymmetryLattice.Reflect(
+                        node: expectedImage,
+                        mirror: letter
+                    );
+                }
+
+                var image = word.Apply(node: node);
+
+                Assert.Equal(expected: expectedImage, actual: image);
+                Assert.False(condition: seen[image], userMessage: $"word [{string.Join(separator: ',', values: letters)}] carries two nodes to {image}");
+                seen[image] = true;
+
+                // The orbit length is what iteration measures, and the counted power is that iteration.
+                var iterated = node;
+                var orbitLength = 0;
+
+                do {
+                    iterated = word.Apply(node: iterated);
+                    ++orbitLength;
+                } while (iterated != node);
+
+                Assert.Equal(expected: orbitLength, actual: word.OrbitLength(node: node));
+                Assert.Equal(expected: 0, actual: (word.Order % orbitLength));
+                measuredOrder = measuredOrder.LeastCommonMultiple(other: orbitLength);
+
+                var forward = node;
+
+                for (var steps = 0L; (steps <= (2L * orbitLength)); ++steps) {
+                    Assert.Equal(expected: forward, actual: word.Apply(node: node, steps: steps));
+                    Assert.Equal(expected: forward, actual: word.Apply(node: node, steps: (steps - (3L * orbitLength))));
+                    forward = word.Apply(node: forward);
+                }
+
+                Assert.Equal(expected: node, actual: word.Apply(node: node, steps: word.Order));
+                Assert.Equal(expected: node, actual: word.Apply(node: node, steps: (-7L * word.Order)));
+            }
+
+            Assert.Equal(expected: measuredOrder, actual: word.Order);
+            Assert.Equal(expected: (word.Order == 1), actual: word.IsIdentity);
+            Assert.Contains(expected: word.Order, collection: WeylE8ElementOrders);
+        }
+
+        Assert.True(condition: SymmetryWord.Create(mirrors: [3, 3]).IsIdentity);
+        Assert.Equal(expected: 2, actual: SymmetryWord.Create(mirrors: [0, 1]).Order);
+        Assert.Equal(expected: 3, actual: SymmetryWord.Create(mirrors: [0, 2]).Order);
+
+        // A two-letter word's order is the bond ReflectionSystem measures between the same two mirrors.
+        foreach (var pair in new int[][] { [0, 1], [0, 2], [5, 17], [40, 12], [101, 239] }) {
+            var system = ReflectionSystem.Create(mirrors: pair);
+
+            Assert.Equal(expected: system.BondMatrix[1], actual: SymmetryWord.Create(mirrors: pair).Order);
+        }
+
+        // The pairing: symmetric, two on the diagonal, minus two at the antipode, zero exactly at orthogonality, negated
+        // on one side of a reflection, preserved by one applied to both sides, and distributed as the E8 root system's
+        // published neighbour counts at every node.
+        for (var node = 0; (node < nodeCount); ++node) {
+            var counts = new int[5];
+
+            Assert.Equal(expected: 2, actual: SymmetryLattice.InnerProduct(first: node, second: node));
+            Assert.Equal(expected: -2, actual: SymmetryLattice.InnerProduct(first: node, second: SymmetryLattice.Antipode(node: node)));
+
+            for (var other = 0; (other < nodeCount); ++other) {
+                var product = SymmetryLattice.InnerProduct(first: node, second: other);
+
+                Assert.InRange(actual: product, low: -2, high: 2);
+                Assert.Equal(expected: product, actual: SymmetryLattice.InnerProduct(first: other, second: node));
+                Assert.Equal(expected: (product == 0), actual: SymmetryLattice.AreOrthogonal(first: node, second: other));
+                Assert.Equal(expected: -product, actual: SymmetryLattice.InnerProduct(first: SymmetryLattice.Reflect(node: node, mirror: other), second: other));
+                Assert.Equal(expected: product, actual: SymmetryLattice.InnerProduct(first: SymmetryLattice.Reflect(node: node, mirror: 0), second: SymmetryLattice.Reflect(node: other, mirror: 0)));
+                counts[(product + 2)]++;
+            }
+
+            Assert.Equal(expected: RootPairingSpectrum, actual: counts);
+        }
+
+        // Every ring reads as thirty consecutive cycle steps from its lowest node, wrapping in both directions.
+        for (var ring = 0; (ring < SymmetryLattice.RingCount); ++ring) {
+            Array.Clear(array: seen);
+
+            var lowest = -1;
+
+            for (var node = 0; (node < nodeCount); ++node) {
+                if ((lowest < 0) && (SymmetryLattice.Ring(node: node) == ring)) { lowest = node; }
+            }
+
+            Assert.Equal(expected: lowest, actual: SymmetryLattice.RingNode(ring: ring, position: 0L));
+            Assert.Equal(expected: lowest, actual: SymmetryLattice.RingNode(ring: ring, position: SymmetryLattice.RingSize));
+            Assert.Equal(expected: lowest, actual: SymmetryLattice.RingNode(ring: ring, position: (-4L * SymmetryLattice.RingSize)));
+
+            for (var position = 0; (position < SymmetryLattice.RingSize); ++position) {
+                var node = SymmetryLattice.RingNode(ring: ring, position: position);
+
+                Assert.Equal(expected: ring, actual: SymmetryLattice.Ring(node: node));
+                Assert.False(condition: seen[node]);
+                seen[node] = true;
+                Assert.Equal(expected: SymmetryLattice.Cycle(node: node), actual: SymmetryLattice.RingNode(ring: ring, position: (position + 1)));
+                Assert.Equal(expected: node, actual: SymmetryLattice.RingNode(ring: ring, position: (position - SymmetryLattice.RingSize)));
+            }
+        }
+
+        // The general-order rotor is the baked table at the period, the identity at order one, and at every divisor of
+        // the period the table entry its angle lands on.
+        var identity = CyclicRotation.Rotor(step: 0L);
+
+        for (var step = -60L; (step <= 90L); ++step) {
+            var baked = CyclicRotation.Rotor(step: step);
+
+            Assert.Equal(expected: baked.Real.Value, actual: CyclicRotation.Rotor(step: step, order: CyclicRotation.Period).Real.Value);
+            Assert.Equal(expected: baked.Imaginary.Value, actual: CyclicRotation.Rotor(step: step, order: CyclicRotation.Period).Imaginary.Value);
+            Assert.Equal(expected: identity.Real.Value, actual: CyclicRotation.Rotor(step: step, order: 1).Real.Value);
+            Assert.Equal(expected: identity.Imaginary.Value, actual: CyclicRotation.Rotor(step: step, order: 1).Imaginary.Value);
+        }
+
+        foreach (var order in new[] { 1, 2, 3, 5, 6, 10, 15, 30 }) {
+            var stride = (CyclicRotation.Period / order);
+
+            for (var step = -(2L * order); (step <= (3L * order)); ++step) {
+                var expected = CyclicRotation.Rotor(step: (step.FloorModulo(modulus: ((long)order)) * stride));
+                var actual = CyclicRotation.Rotor(step: step, order: order);
+
+                Assert.Equal(expected: expected.Real.Value, actual: actual.Real.Value);
+                Assert.Equal(expected: expected.Imaginary.Value, actual: actual.Imaginary.Value);
+            }
+        }
+
+        foreach (var order in new[] { 4, 7, 8, 9, 12, 14, 18, 20, 24 }) {
+            var first = CyclicRotation.Rotor(step: 0L, order: order);
+
+            Assert.Equal(expected: identity.Real.Value, actual: first.Real.Value);
+            Assert.Equal(expected: identity.Imaginary.Value, actual: first.Imaginary.Value);
+
+            for (var step = 0L; (step < order); ++step) {
+                var rotor = CyclicRotation.Rotor(step: step, order: order);
+                var wrapped = CyclicRotation.Rotor(step: (step + (5L * order)), order: order);
+
+                Assert.Equal(expected: rotor.Real.Value, actual: wrapped.Real.Value);
+                Assert.Equal(expected: rotor.Imaginary.Value, actual: wrapped.Imaginary.Value);
+            }
+        }
+
+        return null;
+    }
+
+    // The orders an element of W(E8) can have (Carter, "Conjugacy classes in the Weyl group", Compositio Math. 25,
+    // 1972, Table 11).
+    private static readonly int[] WeylE8ElementOrders = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 18, 20, 24, 30];
+    // How many E8 roots pair with a fixed root to -2, -1, 0, 1 and 2: 1 + 56 + 126 + 56 + 1 = 240 (Conway and Sloane,
+    // Sphere Packings, Lattices and Groups, chapter 4, section 8.1).
+    private static readonly int[] RootPairingSpectrum = [1, 56, 126, 56, 1];
 
     // ---- exact geometry helpers: shared-nothing with the subject, calling only Oracles' own public primitives.
     // SymmetryLattice touches no transcendental subject kernel, so there is no risk of checking the tree against

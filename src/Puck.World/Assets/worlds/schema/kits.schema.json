@@ -104,8 +104,19 @@
                     "description": "The inclusive bound a seated player\u0027s live profile speed (and the profileless MoveSpeed fallback) is clamped to at seat time, or null (the default) for no bound \u2014 a feel-pinned world authors this to keep a seat\u0027s speed inside its own kit\u0027s envelope regardless of what the player\u0027s identity requests. null reproduces today\u0027s unclamped behavior exactly; Min == Max pins the effective speed outright; a narrower-than-wide-open range still admits a bounded profile override. See MotionScalarEnvelope.",
                     "default": null
                   },
+                  "holds": {
+                    "description": "The ordered list of what may hold this body \u2014 see WorldHold \u2014 read by the ResolveHold/ApplyHold operations, or null (the default) for a kit whose vertical channel is ApplyVerticalGravity\u0027s alone.",
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "$ref": "./common.schema.json#/$defs/WorldHold"
+                    },
+                    "default": null
+                  },
                   "declaredSprintChannel": {
-                    "description": "The declared held-multiplier channel of whichever arm this is \u2014 SprintChannel, SprintChannel, or the vehicle arm\u0027s BoostChannel (the same held-multiplier seam under a different name) \u2014 or null for an arm (or a declaration) without one. The one sprint-resolution read Compile and the seat binding surfaces share, so a new arm extends it here instead of each caller growing its own cast chain.",
+                    "description": "The declared held-multiplier channel of whichever arm this is \u2014 SprintChannel or the vehicle arm\u0027s BoostChannel (the same held-multiplier seam under a different name) \u2014 or null for an arm (or a declaration) without one. The one sprint-resolution read Compile and the seat binding surfaces share, so a new arm extends it here instead of each caller growing its own cast chain.",
                     "type": [
                       "string",
                       "null"
@@ -123,7 +134,7 @@
                     "type": "number"
                   },
                   "declaredResponse": {
-                    "description": "The declared velocity-response table of whichever arm this is (see Response/ Response), null-coalesced to the empty table \u2014 a kit\u0027s authored null and a kit with no planar-shaping arm at all read identically here.",
+                    "description": "The declared velocity-response table of whichever arm this is (see Response), null-coalesced to the empty table \u2014 a kit\u0027s authored null and a kit with no planar-shaping arm at all read identically here.",
                     "type": [
                       "array",
                       "null"
@@ -133,11 +144,21 @@
                     }
                   },
                   "declaredDynamics": {
-                    "description": "The declared dynamics row name of whichever arm this is (see Dynamics/ Dynamics), or null for an arm shaped by DeclaredResponse instead, or with no planar-shaping arm at all.",
+                    "description": "The declared dynamics row name of whichever arm this is (see Dynamics), or null for an arm shaped by DeclaredResponse instead, or with no planar-shaping arm at all.",
                     "type": [
                       "string",
                       "null"
                     ]
+                  },
+                  "declaredHolds": {
+                    "description": "Gets the declared hold list of whichever arm this is (see Holds), null-coalesced to the empty list \u2014 an arm with no hold vocabulary reads identically to a row authoring none.",
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "$ref": "./common.schema.json#/$defs/WorldHold"
+                    }
                   }
                 },
                 "required": [
@@ -245,7 +266,7 @@
                     "default": null
                   },
                   "declaredSprintChannel": {
-                    "description": "The declared held-multiplier channel of whichever arm this is \u2014 SprintChannel, SprintChannel, or the vehicle arm\u0027s BoostChannel (the same held-multiplier seam under a different name) \u2014 or null for an arm (or a declaration) without one. The one sprint-resolution read Compile and the seat binding surfaces share, so a new arm extends it here instead of each caller growing its own cast chain.",
+                    "description": "The declared held-multiplier channel of whichever arm this is \u2014 SprintChannel or the vehicle arm\u0027s BoostChannel (the same held-multiplier seam under a different name) \u2014 or null for an arm (or a declaration) without one. The one sprint-resolution read Compile and the seat binding surfaces share, so a new arm extends it here instead of each caller growing its own cast chain.",
                     "type": [
                       "string",
                       "null"
@@ -263,7 +284,7 @@
                     "type": "number"
                   },
                   "declaredResponse": {
-                    "description": "The declared velocity-response table of whichever arm this is (see Response/ Response), null-coalesced to the empty table \u2014 a kit\u0027s authored null and a kit with no planar-shaping arm at all read identically here.",
+                    "description": "The declared velocity-response table of whichever arm this is (see Response), null-coalesced to the empty table \u2014 a kit\u0027s authored null and a kit with no planar-shaping arm at all read identically here.",
                     "type": [
                       "array",
                       "null"
@@ -273,11 +294,21 @@
                     }
                   },
                   "declaredDynamics": {
-                    "description": "The declared dynamics row name of whichever arm this is (see Dynamics/ Dynamics), or null for an arm shaped by DeclaredResponse instead, or with no planar-shaping arm at all.",
+                    "description": "The declared dynamics row name of whichever arm this is (see Dynamics), or null for an arm shaped by DeclaredResponse instead, or with no planar-shaping arm at all.",
                     "type": [
                       "string",
                       "null"
                     ]
+                  },
+                  "declaredHolds": {
+                    "description": "Gets the declared hold list of whichever arm this is (see Holds), null-coalesced to the empty list \u2014 an arm with no hold vocabulary reads identically to a row authoring none.",
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "$ref": "./common.schema.json#/$defs/WorldHold"
+                    }
                   }
                 },
                 "required": [
@@ -294,142 +325,6 @@
                   "riseGravity",
                   "fallGravity",
                   "maxFallSpeed"
-                ],
-                "additionalProperties": false
-              },
-              {
-                "description": "Submerged locomotion in the world\u0027s standing-water medium (the water section, which a kit declaring this arm requires): 3D thrust in the body\u0027s yaw frame with an explicit vertical channel, planar velocity converged through the response table (thrust against water drag \u2014 the engage rate is thrust authority, the release rate is the drag coast), and a single vertical channel owned end to end by the surface stage \u2014 the medium\u0027s own drift/settle folded into the commanded thrust target before that same response-row convergence runs, so nothing else writes vertical velocity independently. The ops family: ResolveYawAttitudeAndPlanarFrame, ComputeSwimTargetVelocity, ShapePlanarVelocity, ApplyBuoyancyAndSurface, IntegratePlanarAndVerticalVelocity. The body\u0027s attitude stays a pure yaw rotation. Aim-directed diving is the seat\u0027s composition, and only under World (MoveFrame): the rendered camera\u0027s elevation splits the commanded forward direction into planar and vertical channels client-side (the same determinism seam MoveFrame documents), never a camera pose entering the sim. The explicit MoveUp channel this splits into is orthogonal to that composition and stays live regardless of MoveFrame \u2014 a body dives on raw MoveUp input alone with no aim-composed seat at all.",
-                "properties": {
-                  "$type": {
-                    "const": "swim"
-                  },
-                  "thrustSpeed": {
-                    "description": "Peak swim speed in world units per second \u2014 the profileless fallback (a seated player reads its live profile\u0027s move speed instead, exactly as MoveSpeed does).",
-                    "type": "number"
-                  },
-                  "turnSpeed": {
-                    "description": "Turn speed in radians per second (the profileless fallback counterpart).",
-                    "type": "number"
-                  },
-                  "verticalThrustFraction": {
-                    "description": "The fraction of ThrustSpeed the vertical channel commands \u2014 swimmers climb and dive slower than they cruise. 1 is fully isotropic thrust.",
-                    "type": "number"
-                  },
-                  "buoyancy": {
-                    "description": "The medium\u0027s idle vertical drift velocity (u/s, signed) below the bob band: positive drifts the body up toward its float line, negative sinks, zero holds depth. Folded into the commanded thrust target \u2014 see FixedSwimTuning \u2014 never applied as a separate acceleration.",
-                    "type": "number"
-                  },
-                  "maxRiseSpeed": {
-                    "description": "The terminal ascent speed (u/s) the vertical channel is clamped to.",
-                    "type": "number"
-                  },
-                  "maxSinkSpeed": {
-                    "description": "The terminal descent speed (u/s) the vertical channel is clamped to.",
-                    "type": "number"
-                  },
-                  "surfaceSettleRate": {
-                    "description": "The proportional settle gain (1/s) toward the float line, applied inside the bob band and above it (breach recovery): the medium\u0027s target velocity there is the displacement from the line times this gain, so a held ascent parks where thrust and settle balance instead of breaching.",
-                    "type": "number"
-                  },
-                  "floatDepth": {
-                    "description": "How far below the medium surface (world units) the body origin rests when floating \u2014 and the bob band\u0027s half-width around that rest line (one knob deliberately: the band a body settles in is the depth scale it settles at). The validator only checks this is positive and finite \u2014 it cannot see the document\u0027s contact geometry, so it does not (and cannot) check this against the local water column\u0027s depth. A FloatDepth deeper than the floor below it parks the body on the floor instead of at the float line, with AtSurface never true there \u2014 a geometry fact deliberately outside this validator\u0027s reach.",
-                    "type": "number"
-                  },
-                  "sprintMultiplier": {
-                    "description": "The held-burst speed multiplier applied while SprintChannel reads held; 1 is a no-op. Scales the whole thrust vector, vertical included.",
-                    "type": "number"
-                  },
-                  "response": {
-                    "description": "The velocity-response table (see MotionResponse) \u2014 read for both the planar and the vertical convergence \u2014 or null (the default) when Dynamics shapes both instead; exactly one of the two is authored. The empty table snaps instantly (no drag, no coast); a water feel wants at least an always-row. DeclaredResponse is the null-coalesced read every caller uses.",
-                    "type": [
-                      "array",
-                      "null"
-                    ],
-                    "items": {
-                      "$ref": "./common.schema.json#/$defs/MotionResponse"
-                    },
-                    "default": null
-                  },
-                  "dynamics": {
-                    "description": "The dynamics row a second-order follower shapes both the planar and the vertical convergence through instead of Response \u2014 the same seam as Dynamics \u2014 or null (the default) for the response table. Exactly one of the two is authored.",
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "default": null
-                  },
-                  "sprintChannel": {
-                    "description": "The declared channel name read while held for the burst, or null (the default) for a kit with no burst \u2014 the same resolution path SprintChannel documents.",
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "default": null
-                  },
-                  "moveFrame": {
-                    "description": "Which frame MoveAdvance/MoveStrafe resolve in \u2014 the same two-frame choice, and the same client-side camera composition seam, as MoveFrame.",
-                    "enum": [
-                      "Heading",
-                      "World"
-                    ],
-                    "default": "World"
-                  },
-                  "facingSnap": {
-                    "description": "Under World only: snap facing to the commanded planar direction each tick carrying input, as FacingSnap documents.",
-                    "type": "boolean",
-                    "default": true
-                  },
-                  "thrustSpeedEnvelope": {
-                    "$ref": "./common.schema.json#/$defs/MotionScalarEnvelope",
-                    "description": "The inclusive bound a seated player\u0027s live profile speed (and the profileless ThrustSpeed fallback) is clamped to at seat time, or null (the default) for no bound \u2014 the same seam as MoveSpeedEnvelope, for this arm\u0027s own thrust speed. null reproduces unclamped behavior exactly; Min == Max pins the effective thrust speed outright regardless of what a profile requests. See MotionScalarEnvelope.",
-                    "default": null
-                  },
-                  "declaredSprintChannel": {
-                    "description": "The declared held-multiplier channel of whichever arm this is \u2014 SprintChannel, SprintChannel, or the vehicle arm\u0027s BoostChannel (the same held-multiplier seam under a different name) \u2014 or null for an arm (or a declaration) without one. The one sprint-resolution read Compile and the seat binding surfaces share, so a new arm extends it here instead of each caller growing its own cast chain.",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
-                  "declaredMoveFrame": {
-                    "description": "The declared move frame of whichever arm this is \u2014 Heading for an arm without the choice. The client\u0027s camera composition keys off this, arm-agnostically.",
-                    "enum": [
-                      "Heading",
-                      "World"
-                    ]
-                  },
-                  "declaredTurnSpeed": {
-                    "description": "The declared Turn-channel rate of whichever arm this is, in radians per second at full deflection \u2014 zero for an arm without one. The client\u0027s steer follow keys off this, arm-agnostically.",
-                    "type": "number"
-                  },
-                  "declaredResponse": {
-                    "description": "The declared velocity-response table of whichever arm this is (see Response/ Response), null-coalesced to the empty table \u2014 a kit\u0027s authored null and a kit with no planar-shaping arm at all read identically here.",
-                    "type": [
-                      "array",
-                      "null"
-                    ],
-                    "items": {
-                      "$ref": "./common.schema.json#/$defs/MotionResponse"
-                    }
-                  },
-                  "declaredDynamics": {
-                    "description": "The declared dynamics row name of whichever arm this is (see Dynamics/ Dynamics), or null for an arm shaped by DeclaredResponse instead, or with no planar-shaping arm at all.",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  }
-                },
-                "required": [
-                  "thrustSpeed",
-                  "turnSpeed",
-                  "verticalThrustFraction",
-                  "buoyancy",
-                  "maxRiseSpeed",
-                  "maxSinkSpeed",
-                  "surfaceSettleRate",
-                  "floatDepth",
-                  "sprintMultiplier"
                 ],
                 "additionalProperties": false
               }
@@ -520,7 +415,7 @@
                         }
                       },
                       "gate": {
-                        "$ref": "./common.schema.json#/$defs/ActionPredicate",
+                        "$ref": "./common.schema.json#/$defs/ActionPredicateNullable",
                         "description": "An additional predicate that must hold beside Fact, or null for none.",
                         "default": null
                       },

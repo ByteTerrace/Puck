@@ -1,0 +1,232 @@
+{
+  "id": "lattice-draw-fill",
+  "title": "A lattice row's draw paint deals one whole-field pass of a counted numeric bag across its cells, and generate redraws the next pass",
+  "binding": "The positive leg boots a four-cell lattice whose only row carries a draw paint fill from an inline weightedNumeric source in reshuffleOnExhaustion mode with three outcomes totalling four cards (0.25 counted twice, 0.5, 1.0). world.fields reads nonzero=4 mean=0.5 at boot: every cell painted and the mean exactly (0.25+0.25+0.5+1.0)/4, which only a pass dealing each card once can produce. world.state shows the row's pass at cursor=0 decks=none; each world.generate advances the pass by the cell count (cursor 4 then 8) with the four-card deck fully dealt (decks=0xF) and the field repainted to the same exact mean. The discriminating leg boots the same lattice with no draw fill: the field stays at nonzero=0 mean=0, no pass reads back, and both generates are refused by name as a lattice row with no draw paint.",
+  "bootShape": "headless",
+  "requirements": [],
+  "seconds": 5,
+  "timeoutSeconds": 20,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/lattice-draw-fill/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "world.status",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.fields",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.state",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.generate",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.fields",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.state",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.generate",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.state",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "wire.errors",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "line",
+        "name": "boot-paints-every-cell-with-exact-multiplicity",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "tiles nonzero=4 mean=0.5",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "pass-zero-reads-back",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[world.state.row 'tiles' kind=fixed cells=0/128 draw source=<inline:weightedNumeric> fill=lattice cursor=0 decks=none]",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "generate-advances-one-whole-pass",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "fill=lattice cursor=4 decks=0=0xF]",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "second-generate-advances-again",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "fill=lattice cursor=8 decks=0=0xF]",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "generate-applied",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "[world.mutation: Generate 'tiles' applied]",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "no-rejected-wire",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[wire.errors: 0 rejected]",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "no-unhandled-exception",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "Unhandled exception",
+        "present": false
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/lattice-draw-fill/discriminating.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "world.status",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.fields",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.state",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.generate",
+        "occurrence": 1,
+        "outcome": "rejected"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.fields",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.state",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.generate",
+        "occurrence": 2,
+        "outcome": "rejected"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.state",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "wire.errors",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "line",
+        "name": "no-fill-paints-nothing",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "tiles nonzero=0 mean=0",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "no-pass-to-read",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "fill=lattice cursor=",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "generate-refused-by-name",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "is a lattice row with no draw paint",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "two-generates-rejected",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[wire.errors: 2 rejected]",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "no-unhandled-exception",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "Unhandled exception",
+        "present": false
+      }
+    ]
+  }
+}

@@ -48,6 +48,17 @@ public interface IServerLink {
     /// <param name="completion">Invoked once with the composed answer.</param>
     void Query(WorldQuery query, Action<QueryAnswer> completion);
 }
+/// <summary>An <see cref="IServerLink"/> that can attribute an in-process query to an explicit
+/// <see cref="WorldPrincipal"/>. Use this boundary for embedded automation whose reads must cross the same
+/// <see cref="WorldCapability.Observe"/> gate as its writes; the ordinary <see cref="IServerLink.Query"/> remains the
+/// trusted local-console convenience surface.</summary>
+public interface IPrincipalServerLink : IServerLink {
+    /// <summary>Asks the server a read-back query as <paramref name="principal"/>.</summary>
+    /// <param name="query">The read-back query.</param>
+    /// <param name="principal">The acting identity whose Observe grant is checked.</param>
+    /// <param name="completion">Invoked once with the composed answer.</param>
+    void Query(WorldQuery query, WorldPrincipal principal, Action<QueryAnswer> completion);
+}
 /// <summary>The ten fire-and-forget <see cref="IServerLink"/> submission members — every one a thin
 /// <see cref="IServerLink.SubmitEnvelope"/> wrapper that differs from the next only in which
 /// <see cref="WorldSubmissionPayload"/> leaf it wraps its argument in and which of its parameters is the acting

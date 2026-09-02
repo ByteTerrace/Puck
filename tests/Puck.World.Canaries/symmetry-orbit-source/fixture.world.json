@@ -1,0 +1,99 @@
+{
+  "schema": "puck.world.def.v1",
+  "documentId": "symmetry-orbit-source-canary",
+  "simulation": {
+    "rateHz": 240
+  },
+  "generators": [
+    {
+      "name": "ringTwo",
+      "generator": {
+        "source": "SymmetryOrbit",
+        "mode": "WithoutReplacement",
+        "ring": 2
+      }
+    }
+  ],
+  "state": {
+    "world": [
+      {
+        "name": "pick",
+        "kind": "int",
+        "value": -1,
+        "draw": {
+          "source": "ringTwo",
+          "timing": "event"
+        }
+      },
+      {
+        "name": "pickRing",
+        "kind": "int",
+        "value": -1
+      },
+      {
+        "name": "tiles",
+        "kind": "fixed",
+        "lattice": {
+          "topology": "grid",
+          "initial": 0,
+          "min": 0,
+          "max": 239,
+          "heightScale": 0,
+          "paint": [
+            {
+              "$type": "draw",
+              "generator": {
+                "source": "SymmetryOrbit",
+                "mode": "WithoutReplacement",
+                "node": 5,
+                "word": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "lattices": [
+      {
+        "name": "grid",
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "cellSize": 1,
+        "width": 12,
+        "depth": 1,
+        "layers": 1,
+        "stepEveryTicks": 1,
+        "reactions": []
+      }
+    ]
+  },
+  "rules": [
+    {
+      "name": "ring-of-pick",
+      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "state": "pick",
+        "comparison": "GreaterOrEqual",
+        "value": 0
+      },
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "pickRing",
+          "fromState": "$symmetry:ring:pick"
+        }
+      ]
+    }
+  ]
+}

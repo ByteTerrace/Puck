@@ -44,10 +44,24 @@ public sealed class WorldSolidField : IContactField {
     private readonly IFieldEvaluator m_contactField;
     private readonly SdfFieldEvaluator m_evaluator;
     private readonly FixedFieldContactSolver m_solver;
+    // The hold policy per compiled material id — TryBuild adds exactly one material per solid screen and per solid
+    // placement, so a probe's reported material id IS the row that composed it. A material id outside these (the
+    // field lattice's own terrain, which no placement row owns) falls back to the world's collision.defaultHold.
+    // How far back along a grip ray the surface gradient is sampled. A hit point sits ON the isosurface, where the
+    // sign of the field is exactly what is in question; one contact-skin-scale step back into open space gives the
+    // gradient a side to face. Small enough that no authored surface curves meaningfully across it.
+    private static readonly FixedQ4816 GradientBackoff = FixedQ4816.FromDouble(value: 0.02);
 
-    private WorldSolidField(SdfFieldEvaluator evaluator, IFieldEvaluator contactField, int instructionCount, long placementShapeCount, WorldContactCensus census, FixedWorldCollision tuning) {
+    private readonly bool[] m_holdableMaterials;
+    private readonly bool[] m_holdableGrantedByOverride;
+    private readonly bool m_defaultGrip;
+
+    private WorldSolidField(SdfFieldEvaluator evaluator, IFieldEvaluator contactField, int instructionCount, long placementShapeCount, WorldContactCensus census, FixedWorldCollision tuning, bool[] holdableMaterials, bool[] holdableGrantedByOverride, bool defaultGrip) {
         m_evaluator = evaluator;
         m_contactField = contactField;
+        m_holdableMaterials = holdableMaterials;
+        m_holdableGrantedByOverride = holdableGrantedByOverride;
+        m_defaultGrip = defaultGrip;
         InstructionCount = instructionCount;
         PlacementShapeCount = placementShapeCount;
         Census = census;
@@ -134,12 +148,33 @@ public sealed class WorldSolidField : IContactField {
         var builder = new SdfProgramBuilder();
         var placementShapeCount = 0L;
 
+        var defaultGrip = definition.Collision.DefaultHold;
+        var holdableMaterials = new List<bool>();
+        var holdableGrantedByOverride = new List<bool>();
+
+        void RecordGrip(int material, bool holdable, bool grantedByOverride) {
+            while (holdableMaterials.Count <= material) {
+                holdableMaterials.Add(item: defaultGrip);
+                holdableGrantedByOverride.Add(item: false);
+            }
+
+            holdableMaterials[material] = holdable;
+            holdableGrantedByOverride[material] = grantedByOverride;
+        }
+
         foreach (var screen in definition.Screens) {
             if (screen.Solid is not { } solid) {
                 continue;
             }
 
             var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+            // A screen carries no grip facet of its own, so only the world-level policy can admit it.
+            RecordGrip(
+                holdable: defaultGrip,
+                grantedByOverride: false,
+                material: material
+            );
             // The same center derivation the frame source and picker bake: the geometry box sits one HalfDepth behind the
             // lit face along the face normal.
             var normal = Vector3.Normalize(value: Vector3.Cross(
@@ -174,6 +209,12 @@ public sealed class WorldSolidField : IContactField {
             }
 
             var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+            RecordGrip(
+                holdable: (placement.Grip?.Holdable ?? defaultGrip),
+                grantedByOverride: (placement.Grip is not null),
+                material: material
+            );
             // The one transform conversion boundary: the program is encoded single-precision, but every placement
             // transform reaching it is derived in fixed point first (yaw via integer SinCos, origins via the fixed
             // lattice, reflected frames via fixed quaternion composition) and rounded exactly to float, so every
@@ -249,6 +290,9 @@ public sealed class WorldSolidField : IContactField {
             instructionCount: program.Instructions.Count,
             placementShapeCount: placementShapeCount,
             census: WorldColliderSet.Measure(definition: definition),
+            holdableGrantedByOverride: [.. holdableGrantedByOverride],
+            holdableMaterials: [.. holdableMaterials],
+            defaultGrip: defaultGrip,
             tuning: tuning
         );
 
@@ -274,6 +318,98 @@ public sealed class WorldSolidField : IContactField {
             instructionCount: InstructionCount,
             placementShapeCount: PlacementShapeCount,
             census: Census,
+            holdableGrantedByOverride: m_holdableGrantedByOverride,
+            holdableMaterials: m_holdableMaterials,
+            defaultGrip: m_defaultGrip,
             tuning: tuning
         );
+    /// <inheritdoc/>
+    /// <remarks>The aim-assist cone is not honoured: a field has no candidate LIST to score bearings over, only the
+    /// one surface its own march reaches. A caller wanting assisted aim against a field has to widen its own sweep.</remarks>
+    public bool TryNearestSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 assistHalfAngle, out FixedSurfaceAttachCandidate candidate) {
+        _ = assistHalfAngle;
+
+        return TryCast(
+            candidate: out candidate,
+            direction: in direction,
+            maxDistance: maxDistance,
+            origin: in origin
+        );
+    }
+    // The one directed march both grip and anchor queries read: the first surface along the ray, with the surface
+    // orientation read from the field gradient one step back into open space (a march reports WHERE, never which
+    // way -- RayHit.Normal is documented zero).
+    private bool TryCast(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, out FixedSurfaceAttachCandidate candidate) {
+        candidate = default;
+
+        if (!m_evaluator.Raycast(
+            dir: direction,
+            hit: out var hit,
+            maxDist: maxDistance,
+            origin: FixedPosition.FromLocal(local: origin)
+        )) {
+            return false;
+        }
+
+        var point = hit.Point.Local;
+
+        if (!m_evaluator.TryFieldGradient(
+            gradient: out var gradient,
+            position: FixedPosition.FromLocal(local: (point - (direction.Normalize() * GradientBackoff)))
+        )) {
+            return false;
+        }
+        if (gradient == FixedVector3.Zero) {
+            return false;
+        }
+
+        candidate = new FixedSurfaceAttachCandidate(
+            Point: point,
+            Normal: gradient,
+            Distance: hit.Distance,
+            Source: FixedSurfaceColliderSource.Static,
+            ColliderIndex: hit.Material
+        );
+
+        return true;
+    }
+    /// <inheritdoc/>
+    /// <remarks>A ray, not a nearest-point search: the field's own deterministic march reports the FIRST surface
+    /// along the direction, which is what makes a grip immune to the nearer geometry beside it (the floor under a
+    /// wall's foot, the underside of the ledge above). A hit inside geometry cannot arise from a grip that never
+    /// lets itself embed, so no inside-out case is invented here.</remarks>
+    public bool TryHoldableSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, out FixedSurfaceAttachCandidate candidate, out bool grantedByOverride) {
+        candidate = default;
+        grantedByOverride = false;
+
+        if (!TryCast(
+            candidate: out candidate,
+            direction: in direction,
+            maxDistance: maxDistance,
+            origin: in origin
+        )) {
+            return false;
+        }
+        if (!Holdable(
+            grantedByOverride: out grantedByOverride,
+            material: candidate.ColliderIndex
+        )) {
+            candidate = default;
+            grantedByOverride = false;
+
+            return false;
+        }
+
+        return true;
+    }
+    // The compiled material id's hold verdict — one material per solid screen and per solid placement, so an id
+    // outside the recorded range is the field lattice's own terrain and falls back to the world-level policy.
+    private bool Holdable(int material, out bool grantedByOverride) {
+        grantedByOverride = ((material >= 0) && (material < m_holdableGrantedByOverride.Length) && m_holdableGrantedByOverride[material]);
+
+        return (((material >= 0) && (material < m_holdableMaterials.Length))
+            ? m_holdableMaterials[material]
+            : m_defaultGrip
+        );
+    }
 }

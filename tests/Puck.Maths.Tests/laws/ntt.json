@@ -90,8 +90,7 @@
     "Id": "ntt.convolution-vs-oracle",
     "Tier": "Default",
     "Members": [
-      { "Type": "Puck.Maths.NumberTheoreticTransform", "Name": "Convolve" },
-      { "Type": "Puck.Maths.NumberTheoreticTransform", "Name": "PointwiseMultiply" }
+      { "Type": "Puck.Maths.NumberTheoreticTransform", "Name": "Convolve" }
     ],
     "Legs": [
       {
@@ -107,6 +106,42 @@
         "Kind": "Structural",
         "Flavor": "None",
         "Subject": "the comparison is EXACT equality, not a bound: field arithmetic never rounds, so a correct convolution theorem implementation reproduces the O(N^2) sum bit-for-bit.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "ntt.pointwise-multiply-is-elementwise-product",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.NumberTheoreticTransform", "Name": "PointwiseMultiply" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "PointwiseMultiply(left, right) is EXACTLY Field.Multiply(left[i], right[i]) at every lane for lengths 1 through 1024, including when destination is the exact same span as either operand. A shifted overlap is refused before writing, by exception type and destination parameter name. This is the public member's own value and alias contract; ntt.convolution-vs-oracle does not credit it because Convolve carries a private Montgomery-form multiplication loop and never calls PointwiseMultiply.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "ntt.convolution-aliasing-contract",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.NumberTheoreticTransform", "Name": "Convolve" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Convolve(x, x, destination) with exact same-span operands is bit-identical to Convolve(copy(x), copy(x), destination) at lengths 1 through 1024. Partial operand overlap is refused naming right, and any destination overlap is refused naming destination; both refusals occur before either operand changes. This pins the dedicated one-forward self-convolution path and the zero-allocation overlap boundary.",
         "Against": "",
         "Shared": "",
         "Citation": "",

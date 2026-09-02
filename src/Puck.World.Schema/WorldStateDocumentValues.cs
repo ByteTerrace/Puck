@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Assets.Documents;
+using Puck.Maths;
 
 namespace Puck.World;
 
@@ -73,7 +74,7 @@ public static class WorldStateDocumentValues {
             return properties;
         }
     }
-    private static bool TryVisit(object? value, string path, WorldDefinition definition, Walk walk, string? soughtRow, HashSet<object> seen, out bool found, out string reason) {
+    private static bool TryVisit(object? value, string path, WorldDefinition definition, Walk walk, string? soughtRow, HashSet<object> seen, bool deferDrawSites, out bool found, out string reason) {
         found = false;
         reason = string.Empty;
 
@@ -104,20 +105,46 @@ public static class WorldStateDocumentValues {
                 return true;
             }
 
-            if (
-                !WorldStateReader.TryRead(
+            if (!WorldStateReader.TryRead(
                 definition: definition,
                 key: key,
-                rawValue: out _,
+                rawValue: out var rawValue,
                 row: out var stateRow,
                 rowName: row,
                 text: out var text,
                 tick: 0UL
-            ) ||
-                (stateRow.Kind != CellKind.Text) ||
+            )) {
+                reason = $"{path} reference '{reference}' must name a declared state cell";
+                return false;
+            }
+
+            // A numeric cell is offered as its decimal spelling — the same text the document would carry literally
+            // — so a scalar binds an int or fixed cell (a drawn or advancing one included) and a vector still
+            // refuses it by expectation.
+            // A draw site fills at boot, after this walk runs at parse: a reference to it stays attached and
+            // resolves on the post-draw pass (WorldDefinitionLoader), so an empty drawn cell is deferred, not refused.
+            if (
+                deferDrawSites &&
+                (stateRow.Draw is not null) &&
+                (rawValue is null) &&
                 (text is null)
             ) {
-                reason = $"{path} reference '{reference}' must name a declared Text state cell";
+                return true;
+            }
+            if (stateRow.Kind != CellKind.Text) {
+                if (rawValue is not { } raw) {
+                    reason = $"{path} reference '{reference}' names a cell that holds no value";
+                    return false;
+                }
+
+                text = stateRow.Kind switch {
+                    CellKind.Fixed => FixedQ4816.FromRawBits(value: raw).ToString(),
+                    CellKind.Bool => ((raw != 0L) ? "true" : "false"),
+                    _ => raw.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
+                };
+            }
+            if (text is null) {
+                reason = $"{path} reference '{reference}' names a cell that holds no value";
                 return false;
             }
 
@@ -159,6 +186,7 @@ public static class WorldStateDocumentValues {
                     path: $"{path}[{index}]",
                     reason: out reason,
                     seen: seen,
+                deferDrawSites: deferDrawSites,
                     soughtRow: soughtRow,
                     value: item,
                     walk: walk
@@ -182,6 +210,7 @@ public static class WorldStateDocumentValues {
                 definition: definition,
                 soughtRow: soughtRow,
                 seen: seen,
+                deferDrawSites: deferDrawSites,
                 found: out var propertyFound,
                 reason: out reason,
                 walk: walk
@@ -211,6 +240,7 @@ public static class WorldStateDocumentValues {
             walk: Walk.Find,
             soughtRow: null,
             seen: new HashSet<object>(comparer: ReferenceEqualityComparer.Instance),
+            deferDrawSites: false,
             found: out var found,
             reason: out _
         ) &&
@@ -242,6 +272,7 @@ public static class WorldStateDocumentValues {
             walk: Walk.Find,
             soughtRow: rowName,
             seen: new HashSet<object>(comparer: ReferenceEqualityComparer.Instance),
+            deferDrawSites: false,
             found: out var found,
             reason: out _
         ) &&
@@ -271,6 +302,7 @@ public static class WorldStateDocumentValues {
             walk: Walk.Flatten,
             soughtRow: null,
             seen: new HashSet<object>(comparer: ReferenceEqualityComparer.Instance),
+            deferDrawSites: false,
             found: out _,
             reason: out reason
         );
@@ -316,7 +348,13 @@ public static class WorldStateDocumentValues {
         return true;
     }
     /// <summary>Resolves every document-value reference in <paramref name="definition"/> in place.</summary>
-    public static bool TryResolve(WorldDefinition definition, out string reason) {
+    /// <param name="definition">The document to resolve.</param>
+    /// <param name="reason">Why a reference could not be resolved, on failure.</param>
+    /// <param name="deferDrawSites">Whether a reference into a draw site that has not filled yet is left attached
+    /// for a later pass — legitimate only on the loader's first parse, which runs the draw resolver and resolves
+    /// again; every other door refuses such a reference by name, since nothing after it would ever fill the
+    /// site.</param>
+    public static bool TryResolve(WorldDefinition definition, out string reason, bool deferDrawSites = false) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         return TryVisit(
             value: definition,
@@ -325,6 +363,7 @@ public static class WorldStateDocumentValues {
             walk: Walk.Resolve,
             soughtRow: null,
             seen: new HashSet<object>(comparer: ReferenceEqualityComparer.Instance),
+            deferDrawSites: deferDrawSites,
             found: out _,
             reason: out reason
         );

@@ -22,7 +22,7 @@
         }
       },
       "gate": {
-        "$ref": "./common.schema.json#/$defs/ActionPredicate",
+        "$ref": "./common.schema.json#/$defs/ActionPredicateNullable",
         "description": "The predicate that must hold, or null for always.",
         "default": null
       },

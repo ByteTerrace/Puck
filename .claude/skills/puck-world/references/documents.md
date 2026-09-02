@@ -242,7 +242,19 @@ another text cell. Two indirections make "the body my `target` cell names"
 addressable: a key spelled `$cell:<row>:<key>` resolves to that cell's integer
 value at every read/firing (effect `key`/`fromKey`, `compareState`
 `key`/`comparandKey`), and a body-reference token `cell:<row>:<key>` does the
-same inside `$distance:`/`$los:`/`$nearest:`. `$nearest:<bodyRef>:<row>` is the
+same inside `$distance:`/`$los:`/`$nearest:`. `$symmetry:<function>[:<argument>]:<row>`
+reads a cell holding a symmetry-lattice node (0..239) through `ring`, `antipode`,
+`canonicalRay`, `cycle:<steps>`, `reflect:<node|cell:<row>[.<key>]>`,
+`orthogonal:<node|cell:…>` (1/0), `innerProduct:<node|cell:…>` (−2..2; 1 is a
+sixty-degree neighbour) or `projectionX`/`projectionY` — the row is the
+last token, `key` addresses the cell as usual, no node reads −1 (0 for
+orthogonal/innerProduct/projections); `world.symmetry <node> [other]` echoes the
+same maps. A `cycle` trait's generator is `word` (one to eight mirror nodes) or
+the lattice's own cycle, raised to `power` per step; the period is the word's
+derived order (`world.symmetry.word <mirror>... [node:<n>]` prints it and a
+node's orbit). A `symmetryOrbit` generator source draws a node uniformly over
+`ring` or over `node`'s orbit under `word`, dealing the orbit under `mode`.
+`$nearest:<bodyRef>:<row>` is the
 nearest other active body whose cell in keyed `<row>` is nonzero (−1 for none,
 ties to the lowest index) — `puck.world.frozen.json`'s `auto-target` rule is
 `setState target.0 fromState $nearest:body:0:enemy`. `save` admits on DIFFERENT
@@ -381,6 +393,30 @@ discriminators: a row carrying both, or a `value` beside a `capacity`
 (declaring a capacity is declaring keyed-row intent), refuses by name.
 Omitting both is a declared-but-empty row.
 
+Runtime rule operands compile world-row names to catalog-bound handles. Keyed
+reductions and arg-extrema resolve the row once and evaluate each candidate once,
+so aggregate cost is linear in cell count. Rule numeric literals are exact JSON
+decimal values (not binary32); integer values beyond 2^24 retain their low bits,
+and fixed literals lower through the invariant Q48.16 parser. Contiguous state
+effects in one rule are preflighted as one candidate and apply atomically. A
+value-only `UpsertStateCell` uses targeted cell validation/install; declaration
+changes still use whole-document validation and rebuild the affected compiled
+surfaces.
+
+An advancing trait's compiled rational lives in a weak external cache, never in
+record equality. Dynamics `y0`/`v0` are always raw Q48.16 continuous-state bits,
+even for an integer target. Cycle save projections carry `substepTicks` in
+`[0,ticksPerStep)` so reload preserves the next transition, not only the value
+visible at the save tick.
+
+`world.state.hash` defaults to the historical `capture` digest and accepts an
+explicit `capture|pose|world|authoritative` scope. `capture` remains the manifest
+digest (pose plus resolved `state.world` values); `pose` is the replay pose fold;
+`world` includes stored state traits plus resolved values; `authoritative` adds
+the tick, poses, rule/interaction edge latches, per-body body/identity action
+registers, and live field-lattice cells. Use the named authoritative scope when
+future-decision state, rather than manifest compatibility, is the assertion.
+
 ```json
 "state": {
   "world": [{"name":"score","kind":"int","value":0,"min":0,"max":1000}],
@@ -440,7 +476,7 @@ constants through the SAME fixed-point derivation
 (`Puck.Maths.SecondOrderDynamics.Create`) the simulation compiles from, and a
 live reference count across cameras, looks, look parts, kits, and state.
 Consumers: a look's `motion.dynamics`/`motion.partDynamics` (root and per-part
-followers), a camera program's `dynamics` op (the boom ease), a grounded/swim
+followers), a camera program's `dynamics` op (the boom ease), a grounded
 kit's `motion.dynamics` (planar velocity shaping — exactly one of `dynamics`
 or the engage/release `response` table, never both, never neither), and a
 `state` row/cell's `dynamics` trait (the eased read, above).
@@ -552,14 +588,38 @@ field refuses BY NAME, including `bound`/`mode`, which are non-nullable and are
 refused against their declared defaults:
 
 - `markov` — `start`, `bound`, `mode`, `contexts` (weighted alternatives, each
-  naming the context it moves INTO). Writes TEXT; the only shape that DEALS. One
+  naming the context it moves INTO). Writes TEXT; deals per context. One
   emission is one walk from `start` to a TERMINAL context (one declaring no
   alternatives), refusing by name at `bound` rather than truncating. `mode` is
   `withReplacement` (default), `withoutReplacement` (dealt out → refuse by name)
   or `reshuffleOnExhaustion`.
-- `uniformRange` — `rangeMin`/`rangeMax`, both or neither. One numeric draw.
-- `weightedNumeric` — `weighted` (`{value, weight}` rows). One numeric draw.
-- `streamDraw` — no fields. One raw 32-bit draw.
+- `uniformRange` — `rangeMin`/`rangeMax`, both or neither. One numeric draw;
+  refuses a `mode`.
+- `weightedNumeric` — `weighted` (`{value, weight, count?}` rows) and `mode`. One
+  numeric draw; under a deck `mode` the outcomes are dealt through the site's
+  single `drawDecks` mask — the numeric shuffle bag. `count` (also on a Markov
+  alternative) is that many cards per pass; a set's cards total at most 64.
+- `streamDraw` — no fields. One raw 32-bit draw; refuses a `mode`.
+
+The alias table over a source's full card set is compiled once per
+`WorldGenerator` instance (`WorldGeneratorEngine`, a `ConditionalWeakTable`), so
+per-tick draws do not rebuild it; a dealt-down pool is rebuilt allocation-free
+in bounded stack storage per emission, with the identical alias mapping.
+
+A lattice row's paint may carry one `draw` fill (`WorldLatticeFill.Draw`,
+`{ "$type": "draw", "source" | "generator" }`, numeric sources only): the
+per-cell lattice draw. It is one whole-field pass of the row's stream
+(`WorldGeneratorEngine.TryFireBatch`; cell `k` = the sample at
+`drawCursor + k`, deck threaded cell to cell), painted at boot by `WorldServer`
+at the pass the row's `drawCursor`/`drawDecks` name, and advanced one pass plus
+repainted by `world.generate <row>` (`TryComposeGenerate`'s lattice arm, then
+`RepaintLatticeDrawAfterGenerate`). Draw keeps its authored position in the
+paint list: it overwrites earlier fills and later fills overwrite it. Whole-
+document rebuild/load/reset repaint every draw row; undo repaints only a row
+whose cursor/deck position rewound, preserving unrelated reaction-evolved
+fields. Read law:
+`tests/Puck.World.Schema.Tests/WorldLatticeDrawLawTests.cs`; live proof:
+`tests/Puck.World.Canaries/lattice-draw-fill`.
 
 `WorldGeneratorCapacity`: 32 contexts, 64 alternatives per context (one deck-mask
 bit each), bound ≤ 64, token ≤ 64 UTF-16 units, 64 weighted outcomes, 64 declared
@@ -751,6 +811,30 @@ it settles `advance`: `y0`/`v0` become the live eased sample at the saved
 tick and `epochTick` projects to `0`, so a reloaded session keeps easing with
 no freeze.
 
+A row or a keyed cell may instead declare `cycle` (`WorldStateCycle`,
+`{word?, power, output, ticksPerStep, epochTick, substepTicks?}`) — the
+tick-indexed rotation, mutually exclusive with `advance`/`dynamics`/`draw`/
+`lattice` and scalar-only at the row level the same way they are. The value is
+a pure function of the server tick through a generator of the lattice's
+reflection group (`Puck.Maths.SymmetryWord`: `word` is one to eight mirror
+nodes, or omitted for the lattice's own thirty-step cycle, `Puck.Maths.CyclicRotation`;
+`power` is applications per step, nonzero and inside the order — with no word
+1, 7, 11 and 13 are the four rotation planes; one step lasts `ticksPerStep`
+ticks from `epochTick`). The period is the word's derived order (`Order` on
+the record; `world.symmetry.word` prints it); an identity word or power is
+refused. `output` is `Step`/`Node`/`Ring` on an `int` row,
+`Turns`/`Cos`/`Sin`/`ProjectionX`/`ProjectionY` on a `fixed` row — the rotation
+outputs read the order's root of unity (`CyclicRotation.Rotor(step, order)`),
+the lattice outputs read `Puck.Maths.SymmetryLattice`, the stored value being
+the node (0..239) carried `power` applications along its orbit per step. The
+stored value is the phase in the row's displayed unit — nothing accumulates,
+nothing rebases (`RebaseCellTraits` leaves it alone; `UpsertStateCell`
+preserves it), a write sets the phase, `addState` turns it. `world.state`
+echoes `cycle=<coxeter|[m,…]>^<power>:<output>/<ticksPerStep>@epoch<n>[+<substepTicks>] order=<n>`;
+`world.save` settles the value to the current index/node at epoch `0`. Read
+laws: `tests/Puck.World.Schema.Tests/StateCycleReadLawTests.cs` and
+`StateCycleWordLawTests.cs`; live proof: `tests/Puck.World.Canaries/state-cycle-trait`.
+
 World/owned-world ids (`Server/WorldOwnedWorlds.cs`) and `world.instance.start`
 names are `WorldSafeName` (the same `WorldSafeName.cs`) — the reserved-character
 kernel `WorldCellName` shares, plus a bare `"."`/`".."` refusal instead of the
@@ -765,7 +849,9 @@ Worlds have no in-code definition. A boot with no `--world` override loads
 `src/Puck.World/Assets/worlds/puck.world.json` — the bare walker world, a delta over
 `standard.basis.json`. The basis carries the standards, defined AS STATE — a `transforms` text row
 (`identity`/`origin`/`unit`) and a `colors` text row that document values reference by
-`state.<row>.<key>` instead of restating literals — plus the infinite SAFETY NET and its debug
+`state.<row>.<key>` instead of restating literals — the standard `theme` section (an ABSENT theme
+resolves to `WorldThemeSection.Absent`, all zeros, which the console panel draws as a 120×16 px
+black corner: 1 px glyph cells, no chrome) — plus the infinite SAFETY NET and its debug
 texture: one SOLID Plane placement (`groundPlane`) at y = −16, catching anything that falls (never
 the level's own floor), its single shape rendered and collided from the same declaration, under the
 unbounded `groundTexture` checkerboard (one tile wallpaper-folded with a parity `materialStride`
@@ -783,13 +869,81 @@ completed-document boundary, reference preserved on canonical write-back). A `pr
 coordinates are AUTHOR-frame, not world-frame: `puck.creation.v1` authors with +Z the front a shape
 faces — a half-turn about Y from the engine's −Z-forward — and `CreationFrame.ToEngine` converts once
 at `WorldPrototype.EngineDocument` (authored `[x, y, z]` lands at world `(−x, y, −z)`; pinned by
-`CreationAuthorFrameLawTests`, documented in `Puck.World.Authoring`'s README). Everything else — the
+`CreationAuthorFrameLawTests`, documented in `Puck.World.Authoring`'s README). A creation also
+carries its own animation, in three composable parts: a creation-level `drivers` list (≤ 8 —
+`{name, signal, cadence, when}`, where `signal` is `planarTravel`/`travel`/`time` (integrating) or
+`speed`/`verticalSpeed`/`turnRate` (instantaneous) and `when` is one token or an array of ≤ 4 that
+must all hold — a `Puck.Physics.Motion.BodyFacts` name, `always`, or the client-derived `moving`/
+`still` (eased rendered speed against `WorldGaitDrivers.MovingSpeed`), so a walker gated
+`["Grounded", "moving"]` returns its limbs to rest on a stop with no sim fact involved), and
+per-shape `swings`/`slides` (≤ 4 each) naming a driver, an `axis` (plus a
+`pivot` for a swing), an `amplitude`, a `phase`, and a `wave` (`sine`/`halfSine`/`linear`/`constant` —
+`constant` is the POSE BLEND, `amplitude · w`, how a climbing posture comes in on the `Climbing` gate;
+`curve:<row>` samples the world's `curves` row by arc fraction, Z as the value), plus a per-shape
+`parent` naming an EARLIER shape whose motion carries it (pivots included — the joint chain of a
+limb). A driver's `cadence` and a facet's `amplitude`/`phase` may reference a numeric state cell
+(`DocumentScalar`, resolved by the same walk as every document reference — a numeric cell is offered
+as its decimal spelling), and a driver's `signal` may be `state.<row>[.<key>]`, read at the frame's
+tick (a `cycle` row is a shared clock). The world validator refuses an undeclared curve or a
+non-numeric signal row (`ValidateCreationBindings`). One primitive covers a walker's limbs, a climber's, a wheel, a rotor, a
+tail, and a bobbing hull. It is presentation-only: `WorldStampPool.PackTransforms` composes it onto
+the per-frame dynamic transforms and nothing else reads it, so the SDF program, the colliders, the
+solid field, and simulation state are untouched — pinned by `CreationAnimationLawTests`, with the
+grammar and the worked rigs in `Puck.World.Authoring`'s README. A fourth, composing AFTER the
+drivers and the parent chain: an `effectors` list (≤ 8 — `{name, chain, tip, target, when, weight,
+plant}`) corrects the driver-posed skeleton so a named tip reaches a target. `chain` names the bones
+root→tip, each descending from the one before through `parent` (a bone's joint is the pivot of its
+first swing, its authored `joint` when it swings nothing, else its own position); two bones close
+analytically in the plane the driver-posed limb already bends in, three to eight sweep by cyclic
+coordinate descent. `target.kind` is `surface` (march the client's ONE shared static-scene
+`SdfFieldEvaluator` — the same one the chase camera's clearance sweep reads, held on `WorldClient`
+— from the posed tip along an author-frame `direction` up to `reach`, landing `standoff` off the
+hit's own normal; a `wallpaper` domain fold anywhere in the world makes that field unbuildable, so
+every probe there misses), `body` (another entity's root plus `offset`, in that body's attitude), or
+`state` (a text cell spelling a world `[x, y, z]`). `when`/`weight` gate and ease it exactly as a
+driver's do, blending the GOAL rather than the pose. `plant` holds the world target where it was
+when the named driver's phase entered `window` — a stance foot, a hand on a hold, one mechanism.
+Presentation-only on the same terms, pinned by `CreationEffectorLawTests`. `body.rig [body]` is the read-back (Immediate, client-local — the values live only on the stamp pool): per driver its phase and eased weight, per effector its weight, whether its latch is holding, and the WORLD point its tip is being asked for (`target=(x, y, z)` or `none`), so a piped run fences twice and asserts a planted foot's target is unchanged while `body.where` moved. A body-rooted part anchor (`WorldStampPool.TryBodyPartAuthoredPose`) reports the COMPOSED pose — drivers, parent chain, effector — so an anchor consumer and the rendered geometry never disagree. Everything else — the
 census, simulation (30 Hz), host (windowed, loopback-default — `--listen` binds
 TCP), collision, gravity, channels, the `walk` body-motion program, the `walker` kit
 (`defaultSeatKit`), keyboard/gamepad bindings, the chase seat rig, the pip look, and grants — is the
 world document's own. A lattice trait's `color` speaks the same grammar (resolved live at
 emit — a state cell write recolors a height field on the next frame, no re-bake, bricks hold only
 distances; `world.fields` echoes the authored token).
+The world's one placement is the `debugRoom` prototype at origin: a 48 m platform (top at y = −0.5)
+carrying one fixture per contact contract, each with a `spawnPoints` row (engine frame) that stands
+the body in front of it — `origin`, `ramps`, `stairs`, `wall`, `pit`, `ladder`, `edge` —
+reachable by `body.pose spawn:<id> [body]` (the console mirror of a rule's `pose` effect naming a
+spawn point; seats still spawn at `origin` by the absent-`seatSpawns` derivation). Author-frame
+layout, +Z ahead of the origin spawn and +X the player's LEFT (the half-turn flips X): the scale
+ladder (0.5/1/2 m cubes) ahead-left, the slope fan (30/45/55/65/75°, bracketing
+`collision.maxSlopeDegrees` 60) ahead-right, the step stairs (rises 0.1/0.25/0.5/1 m) to the left,
+the wall with a 1.5 m-clearance and a 0.5 m-clearance overhang at the right edge (a 1 m column,
+`pillarUnderhang`, joins the floor to the low overhang's underside so a whole-sphere grip can crawl
+floor → column → ceiling without leaving contact), the pit (a `Subtraction` carve) behind, and 1 m compass posts on the platform's axis midpoints — `axisX` red,
+`axisZ` blue, a post at the ENGINE-positive end and a flat disc at the negative — with `farPillar`
+120 m ahead on the net as the fog/far-distance landmark. What it measures (`body.fly` from each
+spawn, `body.where` samples): the 30/45/55° ramps climb at walking speed, the 65/75° faces stop the
+body at their foot (`FixedContactPushMath` treats a non-walkable, non-ceiling normal as a WALL —
+penetration resolved across `up`, the approach clamp horizontal only — pinned by
+`FixedContactPushMathLawTests`); the 0.1 and 0.25 m rises are stepped by the capsule's rounded
+bottom and the 0.5 m rise blocks (there is no authored step height); a wall stops at radius + skin
+with y, pitch and roll unchanged; the high overhang is inert and the low one blocks; the pit and the
+edge both land the body upright on the net. The pit carries an SDF fact worth knowing before
+authoring any carve: `max(a, −b)` is exact only inside the subject, so inside the void the field
+reads the CARVE BOX'S OWN faces and the subject's carved-away faces as surfaces (a phantom floor the
+contact solver grounds on, a phantom lip ~radius wide at the rim) — the carve extends from below the
+net to above head height for exactly that reason, and a void that must be exact is built from union
+geometry instead. The chase rig's orbit yaw is `state.look.behind`, world-referenced, so a spawn's
+`yawDegrees` turns the body, never the camera. Three population creatures live on the platform as
+`inhabit` rows with `wander` producers (`spiderDen`, `dragonflyPerch`, `houndRun`), each a different
+hold list over the same primitives: the spider (`spiderKit`) grips any face in a `[0, 180]` cone,
+the dragonfly (`dragonflyKit`, the `fly` program) holds the air on full lift and keeps its altitude
+through the producer's `altitudeGain`, the hound (`houndKit`) walks the ground hold with a four-beat
+gait and planted paws; Wren's own hold list is `wall` (grip, `spend` against the `stamina` body slot,
+`jump` releases), `ground`, `air`, and her hands and feet are `effectors` on surface targets. Their
+homes sit away from the pit and the platform edge — a wander radius that reaches either walks the
+creature onto the safety net, which it then paces beneath the platform.
 An explicit path or the shipped default that cannot be loaded refuses the boot by name.
 `puck.world.frozen.json` ships beside them: the frozen floating-island diorama, reference-only,
 reachable via `--world`, never extended, deleted on owner order — the worked examples this file cites
@@ -849,9 +1003,9 @@ other prototype-specific sections over it.
 **Kit motion model (`WorldKit.Motion`, a `WorldMotionModel` row).** A kit
 declares WHICH motion model it advances on, alongside `BodyMotionProgram`
 (which operations run each tick) — a `$type`-discriminated union
-(`WorldDefinition.cs`, the same pattern as `WorldScreenSource`), three arms:
+(`WorldDefinition.cs`, the same pattern as `WorldScreenSource`), two arms:
 `"grounded"` (`WorldMotionModel.Grounded`, authored under `motion` —
-e.g. `jump.world.json`'s `vaulter` kit), `"vehicle"`
+e.g. `jump.world.json`'s `vaulter` kit) and `"vehicle"`
 (`WorldMotionModel.Vehicle` — anisotropic body-frame drive for the
 `ResolveVehicleFrame`/`ShapeVehicleVelocity` ops: longitudinal
 accel/brake/coast, lateral grip with a held `DriftChannel`, speed-scaled
@@ -859,35 +1013,27 @@ steering, a held `BoostChannel` riding the sprint ordinal seam, and
 `PitchRate` selecting the flying variant; `kart.world.json`'s kits are the
 worked example — its contact-pinned variants pair the arm with a program
 keeping `ApplyVerticalGravity`, its flyer with `ApplyVerticalDecay`, which
-is what decides vertical contact ownership per the seam's rule), and
-`"swim"` (`WorldMotionModel.Swim` — `dive.world.json`'s `diver` kit is the
-worked example: thrust/turn rates, buoyancy, the surface band, its own
-response table, `moveFrame: "World"` + `facingSnap: true` (camera-relative
-swim, facing snapped to the swim direction), and a pinned
-`thrustSpeedEnvelope` `{ min: 3.2, max: 3.2 }` — `ThrustSpeed`/
-`ThrustSpeedEnvelope` compile STRAIGHT into the SAME shared
-`FixedMotionTuning.MoveSpeed`/`MoveSpeedEnvelope` slots grounded's do, so the
-grounded-shaped speed resolve is arm-correct for swim with NO fork; only the
-swim-specific half — buoyancy, the rise/sink clamp, `FloatDepth`,
-`SurfaceSettleRate` — compiles into its own `FixedSwimTuning` record, read
-only by the swim-only ops). Grounded carries the jump-kit constants
+is what decides vertical contact ownership per the seam's rule). Grounded
+carries the jump-kit constants
 (rise/fall gravity, the velocity-response table); Vehicle carries its own
-drive constants above; Swim carries thrust/turn speed, buoyancy, the
-rise/sink clamp, and its own response table (gated on `AtSurface`, not
-`Grounded`). Grounded and Swim additionally shape their planar (Swim: thrust-plane)
+drive constants above. Grounded shapes its planar
 velocity through exactly ONE of two mechanisms — the engage/release
 `Response` table (`MotionResponse` rows, gated on movement regime) or a named
 `Dynamics` row (a pole-matched second-order follower — see the `dynamics`
 section above); a kit authoring both, or neither, refuses by name
-(`WorldDefinitionValidator.ValidatePlanarShaping`). `Dynamics` compiles once
+(`WorldDefinitionValidator.ValidatePlanarShaping`). A grounded row additionally
+authors `Holds` (below), the ordered list `ResolveHold`/`ApplyHold` read.
+Submerged locomotion is a grounded kit authoring a `bond: "Medium"` hold row,
+not an arm of its own.
+`Dynamics` compiles once
 per kit (`WorldKit.Compile`) against the world's own `simulation.rateHz` —
 a world authoring no simulation rate cannot compile one and refuses by name.
 The follower's state lives in `WorldBody` as ordinary sim state, included in
 whatever the body snapshot/checkpoint covers; changing which mechanism a kit
 uses, or retuning a live `dynamics` row, is expected to change replay hashes.
-All three arms share `SprintMultiplier`/`SprintChannel` — a HELD
-(not edge-triggered) channel that scales the commanded planar (or, for Swim,
-thrust) speed while it reads held, default `1`/`null` (no sprint) —
+Both arms share `SprintMultiplier`/`SprintChannel` — a HELD
+(not edge-triggered) channel that scales the commanded planar speed while it
+reads held, default `1`/`null` (no sprint) —
 Vehicle's `BoostChannel` rides the SAME held-multiplier ordinal seam under a
 different name; resolved to `FixedWorldKit.SprintChannelOrdinal` the same way
 `WanderFlavor.PressChannel` resolves its own ordinal, since a channel name
@@ -903,10 +1049,9 @@ the submitted intent BEFORE the wire — determinism: the sim never reads a
 camera pose) and, with `FacingSnap` on, snaps the body's facing to
 `Atan2` of the commanded direction every tick carrying input, no ramp — the
 camera-frame 3D-platformer feel `jump.world.json`'s `vaulter` kit authors
-(Grounded), and `dive.world.json`'s `diver` kit authors (Swim — under
-`World`, the aim's elevation also splits the commanded forward into planar
-and vertical channels client-side; the explicit `MoveUp` channel is
-orthogonal and stays live regardless of `MoveFrame`).
+(Grounded). Under `World` a seat's aim elevation also splits the commanded
+forward into planar and vertical channels client-side; the explicit `MoveUp`
+channel is orthogonal and stays live regardless of `MoveFrame`.
 
 **Response-row ORDER shadows regimes — author air rows first.** The
 velocity-response table evaluates in order, first open gate wins, and a
@@ -927,46 +1072,35 @@ read (the `free` program's facets are a strict subset), so the world's
 `free`-program kits also author a `grounded` motion row. `vehicle` supplies
 its own gravity trio (`GravityArc`/`GravityBleed`) plus `VehicleDrive`, and
 deliberately none of grounded's planar-shaping facets — a vehicle kit never
-authors a `grounded`/`free` row. `swim` supplies its own two facets
-(`SwimThrust`, `SwimBuoyancy`) and deliberately none of grounded's gravity
-facets — a swim kit never authors a `grounded` row, and a world declaring a
-`swim` model with no medium lattice row (`state.world[].lattice.medium`)
-refuses at boot (a swim kit implies a medium to swim in). A further model is
-another record arm, a new
+authors a `grounded`/`free` row. A world whose kit authors a `Medium` hold row
+with no medium lattice row (`state.world[].lattice.medium`) refuses at boot.
+A further model is another record arm, a new
 `CompiledBodyMotionProgram` capability where one is needed (see
-`CompiledBodyMotionProgram.OwnsVerticalContactState` — the swim program sets
-this `false`, so the contact resolve never writes its vertical channel), and
+`CompiledBodyMotionProgram.OwnsVerticalContactState`), and
 a new `SuppliedMotionTuningFacets`/`WorldBody.SetTuning` case — never a hunt.
 
-A seated player's live profile overrides the kit's `MoveSpeed`/`ThrustSpeed`
+A seated player's live profile overrides the kit's `MoveSpeed`
 (feel stays real-time under `profile.set`/`identity.motion`);
-`Grounded.MoveSpeedEnvelope` / `Swim.ThrustSpeedEnvelope` (owner ruling,
-2026-08-06, Swim folded in the same wave `dive.world.json`'s `diver` kit
-pins its authored `3.2` through) is the world's own counter-pin — an
+`Grounded.MoveSpeedEnvelope` is the world's own counter-pin — an
 authored `MotionScalarEnvelope { min, max }` that clamps the RESOLVED
 speed at the seat-time read (`WorldBody.ResolveMoveSpeed`, before the
 program ever sees it), regardless of whether it came from the profile or
 the profileless fallback. Absent (the default) is wide-open, today's
 behavior exactly; `min == max` pins the effective speed outright; the
-validator refuses `min > max` and refuses a kit whose OWN `MoveSpeed`/
-`ThrustSpeed` falls outside its own envelope, by name. `identity.show`'s
+validator refuses `min > max` and refuses a kit whose OWN `MoveSpeed`
+falls outside its own envelope, by name. `identity.show`'s
 `moveEffective=` echoes what the sim actually applied beside `move=` (the
 profile's raw request) — the two diverge only when an envelope is
 narrower than what the profile asked for. `MotionScalarEnvelope` is the
 reusable shape every arm's own overridable scalar adopts, never a bespoke
-bound — both arms compile into the SAME shared `FixedMotionTuning.MoveSpeedEnvelope`
-slot (`WorldMotionTuningFactory.Compile(WorldMotionModel.Swim)` passes
-`ThrustSpeedEnvelope` into it), so `WorldBody.ResolveMoveSpeed`/
-`EffectiveMoveSpeed` are arm-correct by construction with no per-arm resolve.
+bound.
 
 `ResolveMoveSpeed` is a per-arm dispatch (`WorldBody`'s private
-`CompiledMotionArm` — `Grounded`/`Vehicle`/`Swim`, set by `SetTuning` alongside
+`CompiledMotionArm` — `Grounded`/`Vehicle`, set by `SetTuning` alongside
 the compiled tuning) — one resolve shared by the sim and every read-back so
 the two can never disagree; a new arm adds a member, a `SetTuning` case, and a
-`ResolveMoveSpeed` case, never a hunt. `Swim`'s case rides `Grounded`'s
-verbatim (a shared `case` fallthrough) since its speed compiles into the SAME
-`m_tuning`/`MoveSpeedEnvelope` slots grounded reads — no separate resolve
-needed; only `Vehicle` forks, into its own `m_vehicleTuning`.
+`ResolveMoveSpeed` case, never a hunt. Only `Vehicle` forks, into its own
+`m_vehicleTuning`.
 `Vehicle.TopSpeedEnvelope`
 (owner ruling, 2026-08-06) is the vehicle arm's OWN counter-pin over the SAME
 shape, clamping `m_vehicleTuning.TopSpeed` instead of a seated profile — the
@@ -985,6 +1119,145 @@ can legitimately diverge from, but vehicle's `TopSpeed` IS the live-clamped
 read (`world.row.set kits …` retunes it in place), so requiring it to already
 conform would refuse the exact past-the-cap retune the envelope exists to
 catch.
+
+**Holds (`WorldMotionModel.Grounded.Holds`, a list of `WorldHold` rows →
+`FixedBodyHold[]`) — what may hold a body, in preference order.** A grounded
+kit authors an ordered list; the `ResolveHold` operation takes the first row
+the world offers and `ApplyHold` applies that row's vertical law. A kit
+authoring none is unchanged: its vertical channel is `ApplyVerticalGravity`'s
+alone, and the two operations are simply absent from its program.
+
+```json
+"holds": [
+  { "name": "wall", "bond": "Surface", "cone": [60, 120], "hold": "Grip", "grip": 1.0,
+    "reach": 0.8, "speed": 2.0, "upLean": 0.0, "forward": "Heading",
+    "onDrive": true, "driveAlignment": 0.5, "release": "jump",
+    "spend": { "state": "stamina", "ratePerSecond": 1.0 } },
+  { "name": "ground", "bond": "Surface", "cone": [0, 60], "hold": "Gravity", "reach": 1.2 },
+  { "name": "air", "bond": "Free", "hold": "Gravity" }
+]
+```
+
+`bond` is `Surface` (a contact-field face whose normal makes an angle inside
+`cone` degrees with GRAVITY-up — 0 a floor, 90 a wall, 180 a ceiling; the cone
+is measured against gravity-up, never the body's own leaned up), `Free` (no
+surface at all), or `Medium` (the world's own field-lattice column — the world
+either offers a medium where the body is or it does not, so the bond carries no
+cone and no reach, and takes a `medium` law instead:
+`{ buoyancy, maxRiseSpeed, maxSinkSpeed, surfaceSettleRate, floatDepth,
+thrustFraction }`. The medium's drift and the body's own MoveUp thrust are
+summed BEFORE the convergence runs, so nothing writes the vertical channel
+twice, and it publishes `Submerged`/`AtSurface`). `hold` is `Gravity` (gravity holds the body against the face —
+the walkable case, integrating exactly as `ApplyVerticalGravity` does), `Grip`
+(a pull of `grip` u/s toward the face applied as a POSITIONAL standoff, gravity
+suspended while it holds), `Lift` (a fraction `lift` of gravity cancelled — 1
+hovers, and the `MoveUp` role drives vertical through the ordinary
+`ApplyVerticalDrive` op rather than a second implementation), or `None`.
+`speed` (u/s along the row's tangent plane, absent rides the kit's own resolved
+move speed), `reach` (how far a surface row's probes search; required positive),
+`onDrive` + `driveAlignment` (take the row by driving into a face in its cone),
+`release` (a declared channel whose HELD read drops the row — no latch, so
+holding it down keeps the body off the face), and `spend` (drain a body-lane
+Counter slot at a rate; the row becomes ineligible the tick the slot cannot
+pay, and a world's own rules refill it or trade for it — the engine has no
+stamina concept of its own).
+
+Frame rules per row: `upLean` in `[0, 1]` blends the body's up axis from
+gravity-up toward the face normal (0 keeps a body upright on a wall, 1 lays it
+on the face). **Whether that lean also carries the body's CONTACT axis is
+decided by the hold's KIND, never by the lean.** A `gravity` hold is one the
+world's own gravity presses onto its face, so the face IS the ground the solver
+should stand the body on and the axis leans with it, bounded through the same
+accumulator a measured contact normal is adopted by — a kart on a loop. A `grip`
+hold holds the body instead, gravity is suspended, and leaning the contact axis
+there would tell the solver that the floor under the body is a ceiling and that
+falling is upward: the floor stops depenetrating and a released body flies off.
+So a grip's lean is the body's FRAME — the plane it travels in and the attitude
+it is drawn at (`scratch.AttitudeUp`, which every attitude writer including the
+facing snap composes about) — while the contact axis stays with the ambient
+resolve. `forward` (`Heading`/`Intent`/`Velocity`) chooses what that drawn
+attitude tracks inside the row's own frame. Movement rides the face's own tangent plane: forward is gravity-up
+projected onto the face ("up the face"), right completes it, so
+`ComputePlanarTargetVelocity` needs no new operation. A face whose normal is
+parallel to gravity-up leaves that tangent undefined, and there the ordinary
+frame stands.
+
+**Resolution order, per tick.** What the body is actively DRIVING into outranks
+what it happens to be resting on, so the `onDrive` pass runs first over the
+ordered list. Otherwise the list decides, first match wins, with the row
+already held evaluated by whether its own face is still there (the directed
+tracking probe along that face's inward normal) rather than by a fresh take —
+so a row authored EARLIER still wins from where the body stands, which is why
+a walker authors `wall` before `ground`. A held non-walkable row also ends when
+the contact resolve has stood the body on something walkable and the body has
+stopped pulling itself along the face. When a held face ENDS while the body is
+still driving forward, one further pass reaches PAST the edge — up the last
+tangent by a body span and in past the face by a body width — and the body
+arrives one body span off whatever it finds there; that is the whole of the
+ledge transition, with no mantle phase.
+
+Every probe is DIRECTED, for the same reason a grip's always was: an undirected
+nearest-surface query on a world whose floor, walls, ramps and overhangs are one
+holdable placement answers with the floor a body is standing on.
+`IContactField.TryHoldableSurfaceAlongDirection` is that query; both providers
+answer it, the field by ray march (`RayHit.Normal` is documented ZERO — the
+surface orientation is a separate `TryFieldGradient` read one step back along
+the ray). Which surfaces admit a hold at all is the collision row's
+`defaultHold` (world-level) composed with a placement's own
+`grip: { holdable: … }` override.
+
+Validation (`WorldDefinitionValidator.ValidateHolds`): unique row names; a cone
+required for a `Surface` row and refused for a `Free` one, finite, inside
+`[0, 180]`, increasing; a positive `reach` on a `Surface` row; `upLean` and
+`driveAlignment` in `[0, 1]`; a positive `grip` on a `Grip` row and `Grip`/
+`onDrive` requiring `Surface`; `lift` in `[0, 1]`; `release` naming a declared
+composition channel; `spend.state` naming a declared body/identity Counter slot
+and a positive `spend.ratePerSecond`. A kit whose program selects
+`ResolveHold`/`ApplyHold` under a model that supplies no `Holds` facet refuses
+by name through the same `MotionTuningFacet` gate every other operation walks.
+
+A `Medium` row is the ONLY spelling of the medium law — `ApplyHold` runs it
+against the row `ResolveHold` took, and `WorldMediumLawTests` pins it to a
+recorded 240-tick fixed-point trace. `puck.world.frozen.json`'s `fishKit` is
+the worked example: a `grounded` arm whose `fishMotion` program runs
+`ResolveHold`/`ApplyHold`, with one `water` row carrying the six medium facets.
+
+Read back with `body.hold` (`[body.hold: body:<n> hold=<name|none>
+normal=(x, y, z) spend=<left|n/a>]`). The current row index, its anchor and
+normal, and the spend accumulator's remainder are simulation state: captured in
+`IntegrationResidue`, carried through `WorldAuthorityCheckpointCodec`, and part
+of the replay hash.
+
+**The `attachment` section (`WorldAttachmentSection` → `FixedWorldAttachment`)
+— the world's grapple surface.** Absent resolves to `Enabled: false`: no
+attach/detach/reel channel reaches any body. A body's attachment state is a
+MODE (`WorldBodyAttachmentMode` — `None`/`Grapple`), read directly off the
+intent by `WorldBody.Attachment.cs`, never through a kit's action table, and
+echoed by `body.attachment`; the section itself is echoed by
+`world.attach-policy`. Its fields are the aim ceiling and cone
+(`grappleMaxDistance`/`grappleAssistHalfAngleDegrees`), the rope
+(`reelRate`/`reelInFloor`), the release scale (`releaseMomentumScale`), and the
+three channel names. Surface holds are not authored here.
+
+**Body facts on the wire (`BodyFacts`, `Puck.Physics.Motion`).** The engine
+publishes each body's per-tick fact set on `EntitySnapshot.Facts` — one bit
+per body-state `ActionFact` (`grounded`, `airborne`, `rising`, `falling`,
+`submerged`, `atsurface`, `climbing` — holding a surface row whose face is
+outside the world's own walkable cone — and `flying` — holding a free row with
+lift; `AffectedBy` has no bit, being a relationship rather than a state). The mask is derived through the SAME
+predicate the kit's action gates read, so the snapshot, the gates, and the
+`body.where` echo cannot disagree; a decoder refuses an undeclared bit by
+name. `WorldSessionMirror.Facts(int)` and `WorldClient.Facts(int)` front it
+for presentation, which is how animation keys on regime without the client
+deriving one. `body.where` echoes it as `facts=` (lower-case, `|`-joined in
+bit order, `none` when empty), followed by `home=(x, y, z)` — the position the
+body was ACTIVATED at (a seat's spawn point, an inhabitant's placement plus its
+own distribution sample). A producer's inward pull steers against that home
+rather than the world origin, so a population spread over several placements
+keeps to its own ground instead of congregating; a teleport moves the body,
+never its home. Facts are NOT mutually exclusive: a body can be
+grounded and rising in one tick, and a body on a wall reads `airborne|climbing`
+because contact resolution keeps running under every hold.
 
 `views.seatRig` is a `WorldCameraProgram` — an ordered op list, not a kind
 union (see views.md for the op table). Its `dynamics` op names a `dynamics`

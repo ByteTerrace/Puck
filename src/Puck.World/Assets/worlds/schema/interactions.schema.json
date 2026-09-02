@@ -34,7 +34,7 @@
             ]
           },
           "range": {
-            "description": "The distance threshold, for Distance alone \u2014 ignored (and unchecked) under Region.",
+            "description": "The distance threshold, for Distance alone \u2014 an exact JSON decimal lowered directly to deterministic fixed point, with no binary32 intermediate. Ignored (and unchecked) under Region.",
             "type": "number"
           },
           "effects": {

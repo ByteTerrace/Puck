@@ -161,6 +161,17 @@ internal sealed class RecordingSink : IClientSink {
     public void DeliverDefinition(WorldDefinition definition) { }
     public void DeliverComposition(WorldComposition composition) { }
     public void DeliverSessionLever(WorldSessionLever lever) { }
+    /// <summary>The most recently delivered snapshot's fact mask for the named entity index, or
+    /// <see langword="null"/> when no delivery has reported that index active.</summary>
+    public Puck.Physics.Motion.BodyFacts? LastFacts(int index) {
+        foreach (var entry in m_lastEntries) {
+            if (entry.Index == index) {
+                return entry.Facts;
+            }
+        }
+
+        return null;
+    }
     /// <summary>The most recently delivered snapshot's continuity hint for the named entity index, or
     /// <see langword="null"/> when no delivery has reported that index active.</summary>
     public EntityContinuity? LastContinuity(int index) {

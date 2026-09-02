@@ -414,11 +414,11 @@ public sealed partial class WorldServer {
 
         var kicked = dynamicsRow.Compiled.Retarget(
             current: sample,
-            newTarget: WorldStateReader.DynamicsRawToFixed(
+            newTarget: WorldStateReader.DynamicsRowRawToFixed(
                 raw: newTarget,
                 row: originalRow
             ),
-            oldTarget: WorldStateReader.DynamicsRawToFixed(
+            oldTarget: WorldStateReader.DynamicsRowRawToFixed(
                 row: originalRow,
                 raw: originalCell.Value
             )
@@ -426,14 +426,8 @@ public sealed partial class WorldServer {
 
         return new WorldStateDynamics(
             Row: candidateTrait.Row,
-            Y0: WorldStateReader.DynamicsFixedToRaw(
-                row: originalRow,
-                value: sample.Value
-            ),
-            V0: WorldStateReader.DynamicsFixedToRaw(
-                row: originalRow,
-                value: kicked.Velocity
-            ),
+            Y0: WorldStateReader.DynamicsFixedToTraitRaw(value: sample.Value),
+            V0: WorldStateReader.DynamicsFixedToTraitRaw(value: kicked.Velocity),
             EpochTick: epoch
         );
     }
@@ -1620,10 +1614,22 @@ public sealed partial class WorldServer {
                         rowName: m.Row,
                         key: m.Key,
                         tick: tick,
-                        row: out _,
+                        row: out var addendRow,
                         rawValue: out var addend,
                         text: out _
                     );
+
+                    // A cycling cell is the one exception: its stored value is a PHASE and its live value the rotation
+                    // the trait carried that phase to, so an add turns the phase by the operand rather than baking the
+                    // tick's rotation into it (which would double the turn on the next read).
+                    if (
+                        (addendRow is not null) &&
+                        WorldCellName.TryParse(candidate: m.Key, name: out var addendKey, reason: out _) &&
+                        (WorldDefinitionRows.FindCell(cells: addendRow.Cells, key: addendKey) is { } phaseCell) &&
+                        ((phaseCell.Cycle is not null) || ((phaseCell.Key == WorldStateRow.SlotKey) && (addendRow.Cycle is not null)))
+                    ) {
+                        addend = phaseCell.Value;
+                    }
 
                     long value;
 
@@ -1654,17 +1660,19 @@ public sealed partial class WorldServer {
                         return false;
                     }
 
-                    // UpsertStateCell carries only a scalar VALUE — a cell's own advance rate/dynamics reference are
-                    // authored only through a whole-row UpsertStateRow — so a base-value write here preserves
-                    // whatever the existing cell already declared rather than silently deleting it; RebaseCellTraits
-                    // (below TryCompose) then re-bases the preserved trait to this tick, exactly as it already does
-                    // for a row-level trait's slot cell.
+                    // UpsertStateCell carries only a scalar VALUE — a cell's own advance rate, dynamics reference or
+                    // cycle are authored only through a whole-row UpsertStateRow — so a base-value write here
+                    // preserves whatever the existing cell already declared rather than silently deleting it;
+                    // RebaseCellTraits (below TryCompose) then re-bases the preserved advance/dynamics trait to this
+                    // tick, exactly as it already does for a row-level trait's slot cell. A cycle is never rebased:
+                    // its stored value is the phase, so the write itself is the whole operation.
                     var existingCell = WorldDefinitionRows.FindCell(
                         cells: row.Cells,
                         key: cellKey
                     );
                     var existingAdvance = existingCell?.Advance;
                     var existingDynamics = existingCell?.Dynamics;
+                    var existingCycle = existingCell?.Cycle;
                     var isNewKey = !WorldStateCellWriter.ContainsKey(
                         cells: (row.Cells ?? []),
                         key: cellKey
@@ -1675,7 +1683,8 @@ public sealed partial class WorldServer {
                             Key: cellKey,
                             Value: value,
                             Advance: existingAdvance,
-                            Dynamics: existingDynamics
+                            Dynamics: existingDynamics,
+                            Cycle: existingCycle
                         ),
                         keyOf: static (WorldStateCell cell) => cell.Key
                     );
@@ -2326,98 +2335,6 @@ public sealed partial class WorldServer {
 
                 return false;
         }
-    }
-    // Composes Generate as a PURE function of (candidate document, instance identity): the site's source resolves
-    // from the document, WorldGeneratorEngine SEEKS the stream to the position the site's own DrawCursor records, and
-    // BOTH the drawn value and the advanced cursor/decks land in the SAME candidate. Nothing lives outside the
-    // document, which is what makes world.undo rewind a draw bit-identically with no bookkeeping to reconcile. The
-    // sampling itself lives in Puck.World.Schema because the BOOT resolver — which runs before this server exists —
-    // must reach the identical code.
-    private static bool TryComposeGenerate(WorldDefinition current, WorldMutation.Generate mutation, string instanceIdentity, out WorldDefinition candidate, out string reason) {
-        candidate = current;
-
-        if (WorldDefinitionRows.FindStateRow(
-            rows: current.State,
-            name: mutation.Row
-        ) is not { } siteRow) {
-            reason = $"no state row named '{mutation.Row}'";
-
-            return false;
-        }
-
-        if (siteRow.Draw is not { } draw) {
-            reason = $"state row '{mutation.Row}' declares no draw — 'generate' redraws a draw site";
-
-            return false;
-        }
-
-        if (draw.Timing == WorldDrawTiming.Boot) {
-            reason = $"state row '{mutation.Row}' declares timing=boot — it draws once at first fill and is never redrawn";
-
-            return false;
-        }
-
-        if (!WorldGeneratorEngine.TryResolveSource(
-            generators: current.Generators,
-            draw: draw,
-            generator: out var generator,
-            reason: out var resolveReason
-        )) {
-            reason = $"state row '{mutation.Row}' {resolveReason}";
-
-            return false;
-        }
-
-        var site = WorldDrawSites.StateRow(rowName: siteRow.Name);
-
-        if (!WorldGeneratorEngine.TryFire(
-            generator: generator,
-            targetKind: siteRow.Kind,
-            seedState: WorldGeneratorEngine.ComputeSeedState(
-                worldSeed: (current.Generation?.WorldSeed ?? 0UL),
-                instanceIdentity: instanceIdentity,
-                site: site
-            ),
-            stream: WorldGeneratorEngine.ComputeStreamId(site: site),
-            cursor: siteRow.DrawCursor,
-            decks: siteRow.DrawDecks,
-            result: out var fired,
-            reason: out var fireReason
-        )) {
-            reason = $"state row '{mutation.Row}' {fireReason}";
-
-            return false;
-        }
-
-        if (
-            (fired.Text is { } emission) &&
-            (emission.Length > WorldStateCapacity.MaxTextValueLength)
-        ) {
-            reason = $"state row '{mutation.Row}' emission length {emission.Length} exceeds the {WorldStateCapacity.MaxTextValueLength}-unit text bound";
-
-            return false;
-        }
-
-        var cell = ((fired.Text is { } text)
-            ? new WorldStateCell(
-                Key: WorldStateRow.SlotKey,
-                Text: text
-            )
-            : new WorldStateCell(
-                Key: WorldStateRow.SlotKey,
-                Value: fired.Numeric!.Value
-            )
-        );
-        var state = Upsert(
-            list: current.State,
-            item: (siteRow with { Cells = [cell], DrawCursor = (siteRow.DrawCursor + fired.Samples), DrawDecks = (fired.Decks ?? siteRow.DrawDecks) }),
-            keyOf: static (WorldStateRow row) => row.Name
-        );
-
-        candidate = current.WithWorldState(rows: state);
-        reason = string.Empty;
-
-        return true;
     }
     // Replace the row whose key matches the item's, or append it — the coarse whole-row upsert.
     private static IReadOnlyList<T> Upsert<T, TKey>(IReadOnlyList<T> list, T item, Func<T, TKey> keyOf) {

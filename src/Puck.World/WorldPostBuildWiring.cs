@@ -293,6 +293,21 @@ internal static class WorldPostBuildWiring {
         var pacing = services.GetRequiredService<PresentPacingControl>();
         var bindingBarVisibility = services.GetRequiredService<WorldBindingBarVisibility>();
 
+        // The authored gameplay-cue lane: emitCue publishes a deterministic token from simulation. Audio consumes
+        // that token through the same document-authored cue table as built-in events; an optional body association
+        // supplies the body's authoritative position at delivery time, otherwise listener placement applies.
+        worldServer.GameplayCueTap = cue => {
+            var site = ((cue.Body is { } index) && (worldServer.Body(index: index) is { } body)
+                ? body.FixedPosition.ToVector3()
+                : (Vector3?)null
+            );
+
+            audioDirector.SubmitCue(
+                eventToken: cue.Name,
+                site: site
+            );
+        };
+
         worldServer.SaveEffectTap = tick => {
             var target = definitionSource.SourcePath;
 

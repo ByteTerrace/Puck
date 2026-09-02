@@ -1,4 +1,6 @@
 using System.Text.Json.Nodes;
+using Puck.Assets.Documents;
+using Puck.Physics.Motion;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -50,6 +52,47 @@ public sealed class WorldRuleCompilerAdversarialLawTests {
         expected: "null predicate row"
     );
     [Fact]
+    public void EmptyAnyPredicate_RefusesRatherThanCompilingAnAlwaysFalseDeadRule() => Refuses(
+        rule: Rule(
+            effects: [new ActionEffect.Save()],
+            gate: new ActionPredicate.Any(Predicates: [])
+        ),
+        expected: "at least one predicate"
+    );
+    [Fact]
+    public void EmptyBodyAnyPredicate_RefusesBeforeItCanUnderflowTheRuntimeStack() {
+        var gate = new List<CompiledPredicate>();
+
+        var error = Assert.Throws<InvalidOperationException>(() => BodyActionSpecFactory.FlattenPredicate(
+            predicate: new ActionPredicate.Any(Predicates: []),
+            gate: gate,
+            recencyFacts: [],
+            recencyWindows: []
+        ));
+
+        Assert.Contains(expectedSubstring: "at least one predicate", actualString: error.Message, comparisonType: StringComparison.Ordinal);
+    }
+    [Fact]
+    public void NonUnitWorldImpulse_RefusesBecauseRuntimeDoesNotNormalizeIt() => Refuses(
+        rule: Rule(effects: [new ActionEffect.ApplyBodyImpulse(
+            Key: "0",
+            BodyDirection: new DocumentVector3(x: 2f, y: 0f, z: 0f),
+            Speed: 1m,
+            DurationSeconds: 0.01m
+        )]),
+        expected: "unit length"
+    );
+    [Fact]
+    public void OutOfRangeWorldBodyScalar_RefusesByNameRatherThanThrowingOverflow() => Refuses(
+        rule: Rule(effects: [new ActionEffect.SetBodyVerticalVelocity(Key: "0", Velocity: decimal.MaxValue)]),
+        expected: "outside the Q48.16 range"
+    );
+    [Fact]
+    public void TransactionRefusesNullStateStepsAtCompileTime() => Refuses(
+        rule: Rule(effects: [new ActionEffect.Transaction(Effects: [null!])]),
+        expected: "null step"
+    );
+    [Fact]
     public void NullInteractionEffectsList_RefusesByNameRatherThanThrowingNullReference() {
         const string Property = "probe";
         var definition = Fixtures.BuildDocument() with {
@@ -65,7 +108,7 @@ public sealed class WorldRuleCompilerAdversarialLawTests {
                 Left: Property,
                 Right: Property,
                 CoOccurrence: WorldInteractionCoOccurrence.Distance,
-                Range: 1f,
+                Range: 1m,
                 Effects: null!
             )]),
         };

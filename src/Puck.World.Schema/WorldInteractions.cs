@@ -44,7 +44,8 @@ public enum WorldInteractionCoOccurrence : byte {
 /// registry.</param>
 /// <param name="CoOccurrence">How the two operands' coming-together is detected.</param>
 /// <param name="Range">The distance threshold, for <see cref="WorldInteractionCoOccurrence.Distance"/> alone —
-/// ignored (and unchecked) under <see cref="WorldInteractionCoOccurrence.Region"/>.</param>
+/// an exact JSON decimal lowered directly to deterministic fixed point, with no binary32 intermediate. Ignored (and
+/// unchecked) under <see cref="WorldInteractionCoOccurrence.Region"/>.</param>
 /// <param name="Effects">The effects applied in order when the interaction fires — see this type's remarks.</param>
 /// <param name="Mode">Whether the interaction fires every tick the co-occurrence holds
 /// (<see cref="ActionTriggerMode.Level"/>) or once per crossing (<see cref="ActionTriggerMode.Edge"/>, the default —
@@ -56,7 +57,7 @@ public sealed record WorldInteraction(
     string Left,
     string Right,
     WorldInteractionCoOccurrence CoOccurrence,
-    float Range,
+    decimal Range,
     IReadOnlyList<ActionEffect> Effects,
     ActionTriggerMode Mode = ActionTriggerMode.Edge
 );

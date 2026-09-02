@@ -391,7 +391,7 @@ public sealed class WorldReplayInspector {
     }
     private static void AppendDriveVerdict(List<string> lines, WorldReplaySnapshot recording, ulong[] trace, string[]?[] poses, int divergedAt) {
         if (divergedAt < 0) {
-            lines.Add(item: $"{Prefix}re-drive MATCH over {recording.TickCount} ticks | tail 0x{recording.RecordedTailHash:X16}]");
+            lines.Add(item: $"{Prefix}pose re-drive MATCH over {recording.TickCount} ticks | tail 0x{recording.RecordedPoseTailHash:X16}]");
 
             return;
         }

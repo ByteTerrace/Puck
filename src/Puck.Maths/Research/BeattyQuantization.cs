@@ -15,7 +15,7 @@ namespace Puck.Maths;
 /// <param name="FirstDivergence">The least index <c>n ≥ 1</c> at which the quantized and exact floors disagree.</param>
 /// <param name="DivergenceWitness">The integer caught between <c>Slope·n</c> and <c>quantized·n</c> at that index.</param>
 public readonly record struct BeattyQuantizationCertificate(
-    QuadraticSurd Slope,
+    RealQuadratic Slope,
     int FractionBits,
     BigInteger QuantizedNumerator,
     int RoundingSign,
@@ -40,7 +40,7 @@ public readonly record struct BeattyQuantizationCertificate(
         ) { return false; }
 
         var gridDenominator = (BigInteger.One << FractionBits);
-        var grid = QuadraticSurd.Rational(
+        var grid = RealQuadratic.Rational(
             numerator: QuantizedNumerator,
             denominator: gridDenominator
         );
@@ -48,15 +48,15 @@ public readonly record struct BeattyQuantizationCertificate(
 
         if (difference.Sign != RoundingSign) { return false; }
 
-        var halfStep = QuadraticSurd.Rational(
+        var halfStep = RealQuadratic.Rational(
             numerator: BigInteger.One,
             denominator: (gridDenominator << 1)
         );
 
         if (difference.Abs().CompareTo(other: halfStep) >= 0) { return false; }
 
-        var index = QuadraticSurd.Rational(value: FirstDivergence);
-        var witness = QuadraticSurd.Rational(value: DivergenceWitness);
+        var index = RealQuadratic.Rational(value: FirstDivergence);
+        var witness = RealQuadratic.Rational(value: DivergenceWitness);
         var exactAtIndex = (Slope * index);
         var gridAtIndex = (grid * index);
 
@@ -75,14 +75,14 @@ public readonly record struct BeattyQuantizationCertificate(
 /// A fixed-point constant stepping an accumulator is a rational Beatty sequence standing in for an irrational one;
 /// these methods replace "enough bits, surely" with an exact certificate: the two sequences agree up to a computed
 /// first-divergence index, and the divergence there is exhibited by a witness integer. Everything is decided in
-/// exact <see cref="QuadraticSurd"/> and <see cref="BigInteger"/> arithmetic; nothing is sampled.
+/// exact <see cref="RealQuadratic"/> and <see cref="BigInteger"/> arithmetic; nothing is sampled.
 /// </remarks>
 public static class BeattyQuantization {
     /// <summary>Certifies the nearest dyadic quantization of an irrational slope: the grid value, its side, and the exact first index at which the quantized Beatty floors diverge from the true ones.</summary>
     /// <param name="slope">The exact slope; it must be positive and irrational.</param>
     /// <param name="fractionBits">The number of fraction bits in the dyadic grid; it must be non-negative.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="slope"/> is rational or not positive, or <paramref name="fractionBits"/> is negative.</exception>
-    public static BeattyQuantizationCertificate CertifySlope(QuadraticSurd slope, int fractionBits) {
+    public static BeattyQuantizationCertificate CertifySlope(RealQuadratic slope, int fractionBits) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: fractionBits);
 
         if (slope.IsRational) {
@@ -131,7 +131,7 @@ public static class BeattyQuantization {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="exact"/> is not positive, <paramref name="approximateNumerator"/> is negative, or <paramref name="approximateDenominator"/> is not positive.</exception>
     /// <exception cref="ArgumentException">The approximation equals <paramref name="exact"/>, so the floors never disagree.</exception>
     public static (BigInteger Index, BigInteger Witness) FirstFloorDisagreement(
-        QuadraticSurd exact,
+        RealQuadratic exact,
         BigInteger approximateNumerator,
         BigInteger approximateDenominator) {
         if (exact.Sign <= 0) {
@@ -153,7 +153,7 @@ public static class BeattyQuantization {
             );
         }
 
-        var approximate = QuadraticSurd.Rational(
+        var approximate = RealQuadratic.Rational(
             denominator: approximateDenominator,
             numerator: approximateNumerator
         );
@@ -190,7 +190,7 @@ public static class BeattyQuantization {
             index = high.Denominator;
         }
 
-        var witness = ((low * QuadraticSurd.Rational(value: index)).Floor() + BigInteger.One);
+        var witness = ((low * RealQuadratic.Rational(value: index)).Floor() + BigInteger.One);
 
         return (index, witness);
     }
@@ -199,13 +199,13 @@ public static class BeattyQuantization {
     /// <param name="value">The exact value to quantize.</param>
     /// <param name="fractionBits">The number of fraction bits in the dyadic grid; it must be non-negative.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="fractionBits"/> is negative.</exception>
-    public static (BigInteger Numerator, int RoundingSign) QuantizeNearest(QuadraticSurd value, int fractionBits) {
+    public static (BigInteger Numerator, int RoundingSign) QuantizeNearest(RealQuadratic value, int fractionBits) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: fractionBits);
 
-        var scaled = (value * QuadraticSurd.Rational(value: (BigInteger.One << fractionBits)));
+        var scaled = (value * RealQuadratic.Rational(value: (BigInteger.One << fractionBits)));
         var floor = scaled.Floor();
-        var remainder = (scaled - QuadraticSurd.Rational(value: floor));
-        var half = QuadraticSurd.Rational(
+        var remainder = (scaled - RealQuadratic.Rational(value: floor));
+        var half = RealQuadratic.Rational(
             numerator: BigInteger.One,
             denominator: 2
         );
