@@ -1472,6 +1472,12 @@ public static class BindingProfile {
                             paramName: nameof(document)
                         );
                     }
+                    if (sector.Label is not null) {
+                        throw new ArgumentException(
+                            message: $"{sectorPath} carries a label — a sector's display text resolves from the wheel's labelRow, keyed by the sector's id.",
+                            paramName: nameof(document)
+                        );
+                    }
 
                     if (
                         !Enum.IsDefined(value: sector.Mode) ||
@@ -1482,6 +1488,25 @@ public static class BindingProfile {
                             paramName: nameof(document)
                         );
                     }
+
+                    // A sector's text is a submitted line exactly as a page entry's is — InputRouter.Activate builds
+                    // "<command> <text>" from it — so it obeys the same bound and the same press-only rule. Without
+                    // this the one authored payload that reaches the per-tick transport unmeasured was the radial's.
+                    if (
+                        (sector.Text is not null) &&
+                        (sector.ActivateOn is not (null or CommandPhase.Started))
+                    ) {
+                        throw new ArgumentException(
+                            message: $"{sectorPath} carries text outside a command press — text is only meaningful on a sector that activates on Started.",
+                            paramName: nameof(document)
+                        );
+                    }
+
+                    ValidateTextPayload(
+                        text: sector.Text,
+                        path: sectorPath,
+                        paramName: nameof(document)
+                    );
 
                     ValidateValue(
                         value: sector.Value,

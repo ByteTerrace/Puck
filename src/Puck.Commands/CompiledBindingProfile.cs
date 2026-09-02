@@ -289,8 +289,6 @@ public sealed class CompiledBindingProfile {
                 m_pageRowByPageId[pageId] = rowIndex;
             }
         }
-
-        PageIds = [.. m_pageRowByPageId.Keys];
     }
 
     /// <summary>Gets the total number of row activators declared across every page in this profile — the size a
@@ -300,9 +298,6 @@ public sealed class CompiledBindingProfile {
     public int DefaultGroupIndex => 0;
     /// <summary>Gets the group names, in first-declared order (index 0 is the default group).</summary>
     public IReadOnlyList<string> Groups => m_groups;
-    /// <summary>Gets every declared page's profile-unique id, across every group — the identity vocabulary a
-    /// consumer validates a page reference against (see <see cref="TryGetPageView"/>).</summary>
-    public IReadOnlyCollection<string> PageIds { get; }
     /// <summary>Gets the modifier declarations, in document order (a chord references them by index).</summary>
     public IReadOnlyList<BindingModifierDefinition> Modifiers => m_modifiers;
     /// <summary>Gets the number of compiled chord rows.</summary>

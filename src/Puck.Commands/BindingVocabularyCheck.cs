@@ -405,7 +405,12 @@ public static class BindingVocabularyCheck {
                         errors: errors,
                         unknownError: $"wheel \"{wheel!.Id}\" ring \"{ring!.Id}\" commits \"{sector.Command}\", which names no registered command",
                         unbindableError: $"wheel \"{wheel!.Id}\" ring \"{ring!.Id}\" commits \"{sector.Command}\", which is not bindable",
-                        mismatchError: (actual, declared) => $"wheel \"{wheel!.Id}\" ring \"{ring!.Id}\" sends {Word(kind: actual)} to \"{sector.Command}\", which takes {Word(kind: declared)}"
+                        mismatchError: (actual, declared) => $"wheel \"{wheel!.Id}\" ring \"{ring!.Id}\" sends {Word(kind: actual)} to \"{sector.Command}\", which takes {Word(kind: declared)}",
+                        // A sector's authored text is submitted as the line "<command> <text>" exactly as a page
+                        // entry's is (InputRouter.Activate), so it needs the same wire-args destination. Omitting the
+                        // gate here let a radial commit arguments a verb parses as nothing and silently drops.
+                        requiresWireArgs: (sector.Text is not null),
+                        wireArgsError: $"wheel \"{wheel!.Id}\" ring \"{ring!.Id}\" binds text arguments to \"{sector.Command}\", which accepts no wire arguments"
                     );
                 }
             }

@@ -245,6 +245,66 @@ public sealed class BindingVocabularyCheckTests {
         Assert.Empty(collection: errors);
     }
 
+    [Fact]
+    public void AWheelSectorsTextRequiresAWireArgsCommand() {
+        // A sector commit submits "<command> <text>" through InputRouter.Activate exactly as a bound press does, so
+        // it needs the same wire-args destination — without the gate the radial was the one door authored arguments
+        // reached a verb that parses none through, silently dropped.
+        var document = new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [],
+            Chords: [new BindingChordDefinition(
+                Group: "play",
+                Chord: [],
+                Page: new BindingPageDefinition(Id: "hold", Entries: [])
+            )],
+            Wheels: [new BindingWheelDefinition(
+                Id: "wheel",
+                Group: "play",
+                HoldPages: ["hold"],
+                Rings: [new BindingPageDefinition(
+                    Id: "ring",
+                    Entries: [
+                        new BindingPageEntryDefinition(Sources: null, Command: "action", Text: "argument"),
+                        new BindingPageEntryDefinition(Sources: null, Command: "action"),
+                    ]
+                )]
+            )]
+        );
+        var errors = new List<string>();
+
+        BindingVocabularyCheck.Validate(
+            document: document,
+            command: static name => new CommandMetadata(
+                Name: name,
+                ValueKind: CommandValueKind.Digital,
+                Routing: CommandRouting.Immediate,
+                Bindability: CommandBindability.Bindable
+            ),
+            sourceKind: null,
+            errors: errors
+        );
+
+        Assert.Contains(expectedSubstring: "binds text arguments to \"action\", which accepts no wire arguments", actualString: Assert.Single(collection: errors));
+
+        errors.Clear();
+
+        BindingVocabularyCheck.Validate(
+            document: document,
+            command: static name => new CommandMetadata(
+                Name: name,
+                ValueKind: CommandValueKind.Digital,
+                Routing: CommandRouting.Immediate,
+                Bindability: CommandBindability.Bindable,
+                AcceptsWireArgs: true
+            ),
+            sourceKind: null,
+            errors: errors
+        );
+
+        Assert.Empty(collection: errors);
+    }
+
     private static BindingProfileDocument Document(BindingPageEntryDefinition entry) {
         return new BindingProfileDocument(
             Version: BindingProfileDocument.CurrentVersion,
