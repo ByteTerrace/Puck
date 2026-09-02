@@ -946,6 +946,8 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteFixedVector(value: residue.HoldAnchor);
         writer.WriteFixedVector(value: residue.HoldNormal);
         writer.WriteInt64(value: residue.HoldSpendRemainder);
+        writer.WriteFixedVector(value: residue.AttitudeUp);
+        writer.WriteInt64(value: residue.AttitudeTurnRemainder);
         writer.WriteFixedVector(value: residue.Home);
     }
     private static WorldBody.IntegrationResidue ReadResidue(ref WireReader reader) {
@@ -978,6 +980,8 @@ public static partial class WorldAuthorityCheckpointCodec {
         var holdAnchor = reader.ReadFixedVector();
         var holdNormal = reader.ReadFixedVector();
         var holdSpendRemainder = reader.ReadInt64();
+        var attitudeUp = reader.ReadFixedVector();
+        var attitudeTurnRemainder = reader.ReadInt64();
         var home = reader.ReadFixedVector();
 
         return new WorldBody.IntegrationResidue(
@@ -987,6 +991,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             HoldIndex: holdIndex,
             HoldNormal: holdNormal,
             HoldSpendRemainder: holdSpendRemainder,
+            AttitudeUp: attitudeUp,
+            AttitudeTurnRemainder: attitudeTurnRemainder,
             Home: home,
             ContactUpTurnRemainder: contactUpTurnRemainder,
             ContinuumConsumedThroughEngineTick: continuumConsumedThroughEngineTick,

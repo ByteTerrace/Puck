@@ -16,6 +16,10 @@ public sealed partial class WorldBody {
     private FixedVector3 m_holdAnchor;
     private FixedVector3 m_holdNormal;
     private FixedRateAccumulator m_holdSpendAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
+    // The axis the body is DRAWN standing on, carried across ticks so a grip's lean is reached by turning over the
+    // body's own span rather than by snapping — see SteerAttitudeToward. Zero until the first resolve seats it.
+    private FixedVector3 m_attitudeUp;
+    private FixedRateAccumulator m_attitudeTurnAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
     // The world's compiled cos(maxSlopeDegrees) — the same threshold contact resolution grounds on, so a hold and
     // the ground it ends on cannot disagree about which faces are walkable.
     private FixedQ4816 m_walkableThreshold = FixedQ4816.One;
@@ -528,6 +532,10 @@ public sealed partial class WorldBody {
 
         if (chosen != m_holdIndex) {
             m_holdSpendAccumulator.Reset();
+            CarryGripMomentum(
+                next: chosen,
+                up: in up
+            );
         }
 
         m_holdAnchor = anchor;
@@ -535,6 +543,8 @@ public sealed partial class WorldBody {
         m_holdNormal = normal;
 
         if (chosen < 0) {
+            SetFreeAttitude(scratch: ref scratch);
+
             return;
         }
 
@@ -590,6 +600,8 @@ public sealed partial class WorldBody {
     // about forward, so the ordinary frame stands and only the lean's own transport applies.
     private void SetHoldFrame(in FixedBodyHold hold, in FixedVector3 gravityUp, ref BodyMotionScratch scratch) {
         if (hold.Bond != BodyHoldBond.Surface) {
+            SetFreeAttitude(scratch: ref scratch);
+
             return;
         }
 
@@ -623,9 +635,25 @@ public sealed partial class WorldBody {
         }
 
         scratch.Up = m_up;
+
         // The drawn body stands on the leaned axis whether or not the solver does, and every later attitude writer
-        // (the facing snap) composes about this rather than flattening it back onto the contact axis.
-        scratch.AttitudeUp = leaned;
+        // (the facing snap) composes about this rather than flattening it back onto the contact axis. A grip reaches
+        // its lean by turning over the body's own span, so a face change is a turn and never a pop; a gravity hold's
+        // drawn axis stays with its lean, whose contact axis is already bounded above.
+        FixedVector3 attitude;
+
+        if (hold.Kind == BodyHoldKind.Grip) {
+            attitude = SteerAttitudeToward(
+                speed: scratch.MoveSpeed,
+                stepTicks: scratch.StepTicks,
+                target: in leaned
+            );
+        } else {
+            attitude = leaned;
+            m_attitudeUp = leaned;
+        }
+
+        scratch.AttitudeUp = attitude;
 
         var tangent = (gravityUp - (normal * FixedVector3.Dot(
             left: gravityUp,
@@ -653,9 +681,116 @@ public sealed partial class WorldBody {
 
         SetHoldAttitude(
             hold: in hold,
-            leaned: in leaned,
+            leaned: in attitude,
             scratch: ref scratch
         );
+    }
+    // Turns the carried drawn axis toward a target by at most one step's share of the rate a body turns over its own
+    // span — speed over span, radians per second: the pivot of a body that long rolling over an edge at that speed —
+    // so the rate is the hold's own travel and the collider's own size, never a knob. A body with no span, or no
+    // seated axis yet, takes the target whole; so does an antipodal target, which names no arc to turn through.
+    private FixedVector3 SteerAttitudeToward(in FixedVector3 target, FixedQ4816 speed, ulong stepTicks) {
+        var span = HoldSpan;
+
+        if (
+            (m_attitudeUp == FixedVector3.Zero) ||
+            (m_attitudeUp == target) ||
+            (span <= FixedQ4816.Zero)
+        ) {
+            m_attitudeUp = target;
+
+            return target;
+        }
+
+        // Accumulated as the HALF angle the rotor is built from, the same way the contact axis budgets its turn.
+        var budget = m_attitudeTurnAccumulator.Integrate(
+            elapsedTicks: stepTicks,
+            ratePerSecond: (speed / (span * FixedQ4816.FromInteger(value: 2L)))
+        );
+
+        if (budget <= FixedQ4816.Zero) {
+            return m_attitudeUp;
+        }
+
+        var rotation = FixedQuaternion.FromTo(
+            from: m_attitudeUp,
+            to: target
+        );
+        var (halfSin, halfCos) = FixedQ4816.SinCos(angle: budget);
+
+        if (rotation.W >= halfCos) {
+            m_attitudeUp = target;
+
+            return target;
+        }
+
+        var axis = new FixedVector3(
+            X: rotation.X,
+            Y: rotation.Y,
+            Z: rotation.Z
+        ).Normalize();
+
+        if (axis == FixedVector3.Zero) {
+            m_attitudeUp = target;
+
+            return target;
+        }
+
+        var step = new FixedQuaternion(
+            W: halfCos,
+            X: (axis.X * halfSin),
+            Y: (axis.Y * halfSin),
+            Z: (axis.Z * halfSin)
+        );
+
+        m_attitudeUp = step.Rotate(vector: m_attitudeUp).Normalize();
+
+        return m_attitudeUp;
+    }
+    // With no face to lean on, the drawn axis returns to the contact axis at the same bounded rate it left it, and
+    // the attitude is recomposed about wherever it has got to so the return is drawn rather than popped.
+    private void SetFreeAttitude(ref BodyMotionScratch scratch) {
+        var attitude = SteerAttitudeToward(
+            speed: scratch.MoveSpeed,
+            stepTicks: scratch.StepTicks,
+            target: in scratch.Up
+        );
+
+        if (attitude == scratch.AttitudeUp) {
+            return;
+        }
+
+        scratch.AttitudeUp = attitude;
+        SnapFacing(
+            scratch: ref scratch,
+            yaw: m_yaw
+        );
+    }
+    // A grip owns the whole tangent-plane velocity, its rise included, so the tick it ends that rise would be
+    // replaced by the next planar shape and lost. It is momentum the body earned: split it against gravity-up, the
+    // planar part for the shaper and the rest for the ballistic channel gravity now acts on, so a body letting go
+    // mid-climb keeps climbing for the moment its momentum buys rather than dropping from rest.
+    private void CarryGripMomentum(int next, in FixedVector3 up) {
+        if (
+            !TryCurrentHold(hold: out var previous) ||
+            (previous.Kind != BodyHoldKind.Grip) ||
+            ((next >= 0) && (m_holds[next].Kind == BodyHoldKind.Grip))
+        ) {
+            return;
+        }
+
+        var rise = FixedVector3.Dot(
+            left: m_planarVelocity,
+            right: up
+        );
+
+        if (rise == FixedQ4816.Zero) {
+            return;
+        }
+
+        m_planarVelocity -= (up * rise);
+        m_verticalVelocity += rise;
+        m_verticalVelocityAccumulator.Reset();
     }
     // The body's drawn attitude under a hold. While the lean and the contact axis agree — every unleaned hold, and
     // every hold gravity keeps — this is the heading carried into the body's own up frame, exactly as the ordinary

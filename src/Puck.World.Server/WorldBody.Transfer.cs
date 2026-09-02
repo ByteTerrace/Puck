@@ -732,6 +732,8 @@ public sealed partial class WorldBody {
     /// <param name="HoldNormal">The held surface's unit normal, on the same terms as
     /// <paramref name="HoldAnchor"/>.</param>
     /// <param name="HoldSpendRemainder">The hold spend rate accumulator's signed remainder.</param>
+    /// <param name="AttitudeUp">The axis the body is drawn standing on, carried so a grip's lean is turned into rather than snapped to.</param>
+    /// <param name="AttitudeTurnRemainder">The drawn-axis turn accumulator's signed remainder.</param>
     /// <param name="Home">The position this body was activated at — the anchor its producer steers against. Not
     /// re-derivable after the fact (a teleport never moves it), so a checkpoint carries it.</param>
     public readonly record struct IntegrationResidue(
@@ -761,6 +763,8 @@ public sealed partial class WorldBody {
         FixedVector3 HoldAnchor,
         FixedVector3 HoldNormal,
         long HoldSpendRemainder,
+        FixedVector3 AttitudeUp,
+        long AttitudeTurnRemainder,
         FixedVector3 Home
     );
     /// <summary>The checkpoint-only attachment state that remains meaningful only inside the same authoritative
@@ -817,6 +821,8 @@ public sealed partial class WorldBody {
         HoldIndex: m_holdIndex,
         HoldNormal: m_holdNormal,
         HoldSpendRemainder: m_holdSpendAccumulator.Remainder,
+        AttitudeUp: m_attitudeUp,
+        AttitudeTurnRemainder: m_attitudeTurnAccumulator.Remainder,
         Home: m_home
     );
     /// <summary>Restores a previously captured integration residue onto this body — called after
@@ -871,6 +877,11 @@ public sealed partial class WorldBody {
         m_holdNormal = residue.HoldNormal;
         m_holdSpendAccumulator = FixedRateAccumulator.FromRemainder(
             remainder: residue.HoldSpendRemainder,
+            ticksPerSecond: EngineTicksPerSecond
+        );
+        m_attitudeUp = residue.AttitudeUp;
+        m_attitudeTurnAccumulator = FixedRateAccumulator.FromRemainder(
+            remainder: residue.AttitudeTurnRemainder,
             ticksPerSecond: EngineTicksPerSecond
         );
         m_home = residue.Home;

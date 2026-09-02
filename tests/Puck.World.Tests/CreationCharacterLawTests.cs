@@ -177,4 +177,20 @@ public sealed class CreationCharacterLawTests {
         Assert.Contains(expectedSubstring: "a signal reads an int or fixed cell", actualString: Refusal(definition: World(creation: clocked, state: [textRow])));
         Assert.Contains(expectedSubstring: "names no declared state row", actualString: Refusal(definition: World(creation: clocked)));
     }
+
+    /// <summary>The world validator refuses a gate token naming no body fact, by path and token; the controls are
+    /// the same driver gated on a published fact and on the client's own <c>moving</c> token, both admitted.</summary>
+    [Fact]
+    public void TheWorldValidatorRefusesAGateTokenNamingNoBodyFact() {
+        static CreationDocument Gated(string token) => Rig(
+            drivers: [new CreationDriverDocument(Name: "stride", Signal: CreationDriverDocument.SignalPlanarTravel, Cadence: 1f, When: [token])],
+            Limb(swing: new ShapeSwingDocument(Driver: "stride", Pivot: Vector3.Zero, Axis: Vector3.UnitZ, Amplitude: 1f))
+        );
+
+        var refusal = Refusal(definition: World(creation: Gated(token: "Floating")));
+
+        Assert.Contains(expectedSubstring: "drivers[0].when[0] 'Floating' names no body fact", actualString: refusal);
+        Assert.Equal(expected: string.Empty, actual: Refusal(definition: World(creation: Gated(token: "Grounded"))));
+        Assert.Equal(expected: string.Empty, actual: Refusal(definition: World(creation: Gated(token: CreationDriverDocument.TokenMoving))));
+    }
 }

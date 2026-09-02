@@ -1162,9 +1162,19 @@ Counter slot at a rate; the row becomes ineligible the tick the slot cannot
 pay, and a world's own rules refill it or trade for it — the engine has no
 stamina concept of its own).
 
+A grip owns the whole tangent-plane velocity, rise included; the tick it ends
+(released, spent out, or its face lost) that rise is split against gravity-up
+and carried into the ballistic channel, so a body letting go mid-climb keeps
+the climb's momentum instead of dropping from rest.
+
 Frame rules per row: `upLean` in `[0, 1]` blends the body's up axis from
 gravity-up toward the face normal (0 keeps a body upright on a wall, 1 lays it
-on the face). **Whether that lean also carries the body's CONTACT axis is
+on the face). A grip's drawn axis is TURNED into its lean, never snapped, at the
+rate a body turns over its own span — the row's `speed` over the collider's
+probe height plus standoff, rad/s, derived and not authored — so a face change
+(floor to wall to ceiling) is a turn, and the axis returns to the contact axis
+the same way when the row ends; a `gravity` hold's drawn axis stays with its
+lean, whose contact axis is bounded already. **Whether that lean also carries the body's CONTACT axis is
 decided by the hold's KIND, never by the lean.** A `gravity` hold is one the
 world's own gravity presses onto its face, so the face IS the ground the solver
 should stand the body on and the axis leans with it, bounded through the same

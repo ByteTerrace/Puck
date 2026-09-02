@@ -671,18 +671,28 @@ public sealed class HoldLawTests {
     [Fact]
     public void UpLeanLeansAGrippingBodysATTITUDE_WhileItsContactAxisStaysWithGravity() {
         static (FixedVector3 Attitude, FixedVector3 Contact) OnWall(float upLean) {
-            using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Ground(), Wall(upLean: upLean), Air()]));
+            using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Wall(upLean: upLean), Ground(), Air()]));
             var body = JoinBody(fixture: fixture);
 
             Assert.NotNull(@object: DriveIntoWall(
                 body: body,
                 fixture: fixture
             ));
+            // Clear of the floor first — resting at the wall's foot is standing, which outlives the row — then rest
+            // on the row (authored ahead of the ground row, so resting keeps it) long enough for the turn to finish:
+            // the lean is reached by turning over the body span, not in the tick the row is taken. The turn's own
+            // law is below.
             Hold(
                 body: body,
                 fixture: fixture,
                 intent: Ascend(),
-                ticks: 10
+                ticks: 60
+            );
+            Hold(
+                body: body,
+                fixture: fixture,
+                intent: default,
+                ticks: 300
             );
 
             Assert.Equal(expected: "wall", actual: body.HoldName);
@@ -726,11 +736,12 @@ public sealed class HoldLawTests {
                 y: (CeilingY - 1.5f),
                 z: 10f
             );
+            // A half turn, floor-up to ceiling-down, at the rate the body turns over its own span.
             Hold(
                 body: body,
                 fixture: fixture,
                 intent: default,
-                ticks: 30
+                ticks: 600
             );
 
             Assert.Equal(expected: "wall", actual: body.HoldName);
@@ -1157,5 +1168,117 @@ public sealed class HoldLawTests {
             userMessage: "a vehicle model paired with a holds program was expected to refuse"
         );
         Assert.Contains(actualString: reason, expectedSubstring: "Holds");
+    }
+    [Fact]
+    public void AGripsLeanIsTurnedIntoOverTheBodySpan_NotSnappedTo_WhereAnUnleanedGripNeverLeavesGravityUp() {
+        // The drawn axis turns at speed over span (rad/s), so with the fixture's capsule and the wall row's 2 m/s a
+        // quarter turn takes most of a second: after sixty climbing ticks the axis is visibly short of the face, the
+        // trace never turns back, and it finishes inside 300 rested ticks (1.25 s at the engine's 240 Hz; resting
+        // needs the body clear of the floor, where standing would outlive the row). The control is the same climb
+        // with no lean, whose drawn axis never leaves gravity-up at all.
+        static List<double> AttitudeTowardFace(float upLean) {
+            using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Wall(upLean: upLean), Ground(), Air()]));
+            var body = JoinBody(fixture: fixture);
+
+            Assert.NotNull(@object: DriveIntoWall(
+                body: body,
+                fixture: fixture
+            ));
+            Hold(
+                body: body,
+                fixture: fixture,
+                intent: Ascend(),
+                ticks: 60
+            );
+
+            var trace = new List<double>();
+
+            for (var tick = 0; (tick < 300); tick++) {
+                Hold(
+                    body: body,
+                    fixture: fixture,
+                    intent: default,
+                    ticks: 1
+                );
+                trace.Add(item: ((double)body.FixedOrientation.Rotate(vector: new FixedVector3(
+                    X: FixedQ4816.Zero,
+                    Y: FixedQ4816.One,
+                    Z: FixedQ4816.Zero
+                )).Z));
+            }
+
+            Assert.Equal(expected: "wall", actual: body.HoldName);
+
+            return trace;
+        }
+
+        var leaned = AttitudeTowardFace(upLean: 1f);
+        var upright = AttitudeTowardFace(upLean: 0f);
+
+        // Still turning after the sixty climbing ticks plus one at rest — a snap would already read the face here.
+        Assert.True(condition: (leaned[0] < 0.9), userMessage: $"the drawn axis must still be turning on the first rested tick; it read {leaned[0]}");
+        Assert.True(condition: (leaned[^1] > 0.9), userMessage: $"the turn must have finished inside the rested span; it read {leaned[^1]}");
+
+        for (var tick = 1; (tick < leaned.Count); tick++) {
+            Assert.True(condition: (leaned[tick] >= (leaned[tick - 1] - 1e-4)), userMessage: $"the turn never reverses; tick {tick} read {leaned[tick]} after {leaned[tick - 1]}");
+        }
+
+        Assert.All(collection: upright, action: z => Assert.True(condition: (Math.Abs(value: z) < 1e-3), userMessage: $"an unleaned grip's drawn axis stays gravity-up; it read {z}"));
+    }
+    [Fact]
+    public void LettingGoMidClimb_CarriesTheClimbsRiseIntoTheFall_WhereLettingGoAtRestFallsFromRest() {
+        // A grip owns the whole tangent-plane velocity, rise included; the tick it ends that rise is split into the
+        // ballistic channel rather than replaced by the next planar shape. The control is the same release from
+        // the same row at rest, which has no rise to carry and falls at once.
+        static double RiseAfterRelease(bool climbing) {
+            using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Wall(), Ground(), Air()]));
+            var body = JoinBody(fixture: fixture);
+
+            Assert.NotNull(@object: DriveIntoWall(
+                body: body,
+                fixture: fixture
+            ));
+            Hold(
+                body: body,
+                fixture: fixture,
+                intent: Ascend(),
+                ticks: 15
+            );
+            Hold(
+                body: body,
+                fixture: fixture,
+                intent: (climbing
+                    ? Ascend()
+                    : default),
+                ticks: 10
+            );
+
+            Assert.Equal(expected: "wall", actual: body.HoldName);
+
+            var held = body.FixedPosition.Y;
+
+            body.SubmitIntent(intent: Channel(
+                ordinal: ReleaseOrdinal,
+                value: FixedQ4816.One
+            ));
+            fixture.Step();
+
+            Assert.NotEqual(expected: "wall", actual: body.HoldName);
+
+            Hold(
+                body: body,
+                fixture: fixture,
+                intent: default,
+                ticks: 2
+            );
+
+            return ((double)(body.FixedPosition.Y - held));
+        }
+
+        var carried = RiseAfterRelease(climbing: true);
+        var dropped = RiseAfterRelease(climbing: false);
+
+        Assert.True(condition: (carried > 0d), userMessage: $"a body letting go mid-climb keeps rising for a moment; it moved {carried}");
+        Assert.True(condition: (dropped <= 0d), userMessage: $"a body letting go at rest falls from rest; it moved {dropped}");
     }
 }

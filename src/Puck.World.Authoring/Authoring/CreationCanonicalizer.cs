@@ -760,7 +760,7 @@ public static class CreationCanonicalizer {
     }
     // The token vocabulary is split across two assemblies on purpose: the BodyFacts names belong to the simulation's
     // motion vocabulary, which this document family does not reference, so only the shape of the gate and the two
-    // presentation tokens are decidable here. An unresolvable fact name gates the driver off at the consumer.
+    // presentation tokens are decidable here. A fact name is judged by the world validator, which sees both.
     private static void ValidateGate(IReadOnlyList<string>? gate, List<DocumentValidationError> errors, string path) {
         if (gate is not { Count: > 0 } tokens) {
             return;

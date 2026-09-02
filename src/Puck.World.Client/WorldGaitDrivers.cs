@@ -437,8 +437,8 @@ public static class WorldGaitDrivers {
         return true;
     }
     /// <summary>Returns whether a driver's gate holds — every token must, and an absent or empty gate is ungated.
-    /// A token no side can resolve fails the conjunction, so an unrecognized gate holds the driver at rest rather
-    /// than running it unconditionally.</summary>
+    /// The world validator refuses a token naming no fact before a document reaches here; one that still arrives
+    /// fails the conjunction, so the driver rests rather than running unconditionally.</summary>
     /// <param name="gate">The authored gate tokens.</param>
     /// <param name="facts">The body's sim facts this frame.</param>
     /// <param name="moving">Whether the body's eased speed is above <see cref="MovingSpeed"/>.</param>

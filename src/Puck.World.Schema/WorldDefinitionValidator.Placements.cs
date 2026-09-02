@@ -324,6 +324,12 @@ public static partial class WorldDefinitionValidator {
         var drivers = (document.Drivers ?? []);
 
         for (var index = 0; (index < drivers.Count); index++) {
+            RequireGateTokens(
+                errors: errors,
+                gate: drivers[index].When,
+                path: $"{path}.drivers[{index}].when"
+            );
+
             var signal = drivers[index].Signal;
 
             if (!Puck.World.Authoring.CreationDriverDocument.IsStateSignal(signal: signal)) {
@@ -349,6 +355,12 @@ public static partial class WorldDefinitionValidator {
         var effectors = (document.Effectors ?? []);
 
         for (var index = 0; (index < effectors.Count); index++) {
+            RequireGateTokens(
+                errors: errors,
+                gate: effectors[index].When,
+                path: $"{path}.effectors[{index}].when"
+            );
+
             var target = effectors[index].Target;
 
             if (
@@ -391,6 +403,44 @@ public static partial class WorldDefinitionValidator {
             for (var i = 0; (i < slides.Count); i++) {
                 RequireCurveRow(definition: definition, errors: errors, path: $"{path}.shapes[{index}].slides[{i}].wave", wave: slides[i].Wave);
             }
+        }
+    }
+    // The gate vocabulary is split across two assemblies on purpose — the fact names are the simulation's — so the
+    // creation's own canonicalizer can only judge a gate's shape. This validator sees both, and a token naming no
+    // fact is refused here by name rather than left to gate its driver off silently at the consumer.
+    private static void RequireGateTokens(IReadOnlyList<string>? gate, List<string> errors, string path) {
+        if (gate is null) {
+            return;
+        }
+
+        for (var index = 0; (index < gate.Count); index++) {
+            var token = gate[index];
+
+            if (
+                string.Equals(
+                a: token,
+                b: CreationDriverDocument.WhenAlways,
+                comparisonType: StringComparison.Ordinal
+            ) ||
+                string.Equals(
+                a: token,
+                b: CreationDriverDocument.TokenMoving,
+                comparisonType: StringComparison.Ordinal
+            ) ||
+                string.Equals(
+                a: token,
+                b: CreationDriverDocument.TokenStill,
+                comparisonType: StringComparison.Ordinal
+            ) ||
+                BodyFactVocabulary.TryResolve(
+                gate: out _,
+                name: token
+            )
+            ) {
+                continue;
+            }
+
+            errors.Add(item: $"{path}[{index}] '{token}' names no body fact; a gate token is a BodyFacts name, \"{CreationDriverDocument.TokenMoving}\", \"{CreationDriverDocument.TokenStill}\", or \"{CreationDriverDocument.WhenAlways}\".");
         }
     }
     private static void RequireCurveRow(WorldDefinition definition, List<string> errors, string path, string? wave) {

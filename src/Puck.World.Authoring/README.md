@@ -81,7 +81,9 @@ over the same 0.15 s the weight eases over so the gate does not flicker at the
 threshold. They are why a walker gated `["Grounded", "moving"]` returns its limbs
 to vertical when the body stops without the simulation publishing anything;
 gated on `Grounded` alone it would hold its last stride pose instead.
-`moving` with `still` is refused — the gate could never hold.
+`moving` with `still` is refused — the gate could never hold. A token naming
+no fact is refused by the world validator, which alone sees both vocabularies,
+rather than gating the driver off silently.
 
 A shape's `swings` (≤ 4) and `slides` (≤ 4) name a driver and turn (φ, w) into
 motion — the **joint** — through a **waveform**:
