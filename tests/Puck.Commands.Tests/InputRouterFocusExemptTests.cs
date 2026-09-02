@@ -129,7 +129,6 @@ public sealed class InputRouterFocusExemptTests {
 
         Assert.Equal(actual: bindings.ViewFor(slot: 0).PageId, expected: "base");
     }
-
     [Fact]
     public void AHeldAnalogModifierSurvivingADeviceReleaseStillReturnsThePageToRest() {
         var bindings = AnalogPageBindings();

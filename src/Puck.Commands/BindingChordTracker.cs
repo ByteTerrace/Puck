@@ -95,8 +95,8 @@ public sealed class BindingChordTracker {
     public bool IsDown(string source) {
         return (
             m_profile.TryGetModifier(
-            source: source,
-            modifierIndex: out var modifierIndex
+            modifierIndex: out var modifierIndex,
+            source: source
         ) &&
             m_downSources[modifierIndex].Contains(item: source)
         );
