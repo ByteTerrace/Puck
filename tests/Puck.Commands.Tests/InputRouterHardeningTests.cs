@@ -351,6 +351,21 @@ public sealed class InputRouterHardeningTests {
         Assert.False(condition: bindings.HasSubscribers);
     }
     [Fact]
+    public void ADisposedRouterRefusesEveryIngressDoor() {
+        var activation = Activation();
+        var router = Router(bindings: new EmptyBindings());
+
+        router.Dispose();
+
+        _ = Assert.Throws<ObjectDisposedException>(testCode: () => router.Capture(signal: InputSignal.Press(source: "key.x")));
+        _ = Assert.Throws<ObjectDisposedException>(testCode: () => router.CaptureFocusExempt(signal: InputSignal.Press(source: "key.x")));
+        _ = Assert.Throws<ObjectDisposedException>(testCode: () => router.Activate(
+            activation: activation,
+            slot: 0
+        ));
+        _ = Assert.Throws<ObjectDisposedException>(testCode: () => router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue));
+    }
+    [Fact]
     public void HeldSeedingEmitsOneSlotsHoldsInCommandIdOrder() {
         var registry = new CommandRegistry(modules: [new ProbeModule()]);
         var router = new InputRouter(
