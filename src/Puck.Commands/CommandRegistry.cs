@@ -268,7 +268,7 @@ public sealed class CommandRegistry {
 
         // The wire's rejection readback, beside wire.ack: `wire.errors [reset]`.
         m_wireErrorsCommand = new Command(
-            description: "Reports the number of submitted lines this session REFUSED — an unknown verb, a parse error, a handler's failure result, or a refusal raised after the line was accepted: wire.errors [reset] — no argument reports the running count; `reset` reports it and zeroes the counter. It is the one number that says whether any submitted line silently no-opped.",
+            description: "Reports the number of submitted lines this session REFUSED — an unknown verb, a parse error, a handler's failure result, or a refusal raised after the line was accepted: wire.errors [reset] — no argument reports the running count; `reset` reports it and zeroes the counter. It is the one number that says whether any submitted line silently no-opped. It counts the lines YOU submitted: a verb that submits lines of its own contributes one refusal when it reports the failure back, and none when it swallows it.",
             name: WireErrorsCommandName
         ) {
             m_wireErrorsArgument,
@@ -606,7 +606,9 @@ public sealed class CommandRegistry {
 
         return CommandResult.Error(output: $"[wire.ack: unknown mode '{mode[0]}' — expected on | quiet]");
     }
-    /// <summary>Reports (and optionally clears) the refused-submission count for the built-in <c>wire.errors</c> verb.</summary>
+    /// <summary>Reports (and optionally clears) the refused-submission count for the built-in <c>wire.errors</c> verb.
+    /// The count is over the lines the CALLER submitted — see <see cref="Submit"/>'s remarks for what a macro verb's
+    /// own nested submissions do and do not contribute.</summary>
     /// <param name="mode">The parsed trailing tokens: empty reports the count; <c>reset</c> reports and zeroes it.</param>
     /// <returns>A result echoing the count, or an <see cref="CommandResult.IsError"/> result for a bad argument.</returns>
     private CommandResult ApplyWireErrors(string[] mode) {
@@ -1447,6 +1449,13 @@ public sealed class CommandRegistry {
     /// (<c>"sim.record" payload</c>) is routed AFTER that parse instead, so it costs one extra parse; what a line is
     /// never allowed to cost is running a <see cref="CommandRouting.Simulation"/> handler inline, outside the
     /// deterministic lane and outside every replay of the session.</para>
+    /// <para><c>wire.errors</c> COUNTS THE LINES ITS CALLER SUBMITTED, not the calls this method made. A handler may
+    /// submit lines of its own (a macro verb), and those nested lines reach the count only through the verdict that
+    /// handler returns: a macro that propagates a nested refusal as <see cref="CommandResult.IsError"/> contributes
+    /// exactly one refusal however deeply it nested, and a macro that swallows one and answers success contributes
+    /// nothing. That is the question the number answers — "how many of the lines I sent were refused" — so a macro
+    /// verb that must not hide a failure has to propagate it; counting every frame instead reported the nesting depth
+    /// of one console line.</para>
     /// <para>An exception a handler lets escape never leaves this method: it becomes an
     /// <see cref="CommandResult.IsError"/> result naming the exception, counted like any other refusal. The one
     /// exception is an <see cref="OperationCanceledException"/> — a handler raises that by observing the HOST's
