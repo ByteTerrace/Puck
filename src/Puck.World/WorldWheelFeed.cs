@@ -101,11 +101,6 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         // Input may logically open a gesture before the next presentation tick installs Wheel. Keeping the logical
         // identity separate prevents a one-frame flick or relative delta from being cleared at presentation open.
         public BindingWheelView? GestureWheel;
-        // The authored selection-grace window converted to engine ticks ONCE per gesture, and the tick the current
-        // dead-centre dwell started on (valid only while GraceSinceKnown — tick 0 is a real reading).
-        public ulong GraceSinceTick;
-        public bool GraceSinceKnown;
-        public ulong GraceTicks;
         public long PointerSequence;
         public BindingWheelView? RingCacheSource;
         // The sector text lives in a state row, so the cache is keyed on the definition delivery too: an applied
@@ -115,12 +110,12 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         public WorldWheelStatus Status;
         public BindingWheelView? Wheel;
 
-        // The last sector a live selection highlighted; it drops back to -1 once the dead-centre dwell outlasts the
-        // authored grace window (counted in engine ticks — see GraceSinceTick).
-        public int GraceSector = -1;
         public int AxisExcursionRing = -1;
         public int SpatialExcursionRing = -1;
         public BindingWheelGestureState Gesture { get; } = new();
+        // The last sector a live selection highlighted and the tick-counted window it survives a dead-centre dwell
+        // for. The decision itself is Puck.Commands' — this feed only supplies the readings and the engine tick.
+        public BindingWheelGrace Grace { get; } = new();
         public OverlayWheelRing[] RingCache = [];
         public string CommitLabel = string.Empty;
 
@@ -295,14 +290,11 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         state.Deflection = Vector2.Zero;
         state.DeflectionKnown = false;
         state.PointerSequence = 0L;
-        state.GraceSector = -1;
-        state.GraceSinceKnown = false;
-        state.GraceSinceTick = 0UL;
         // Converted once, here, so the authored seconds never turn into ticks inside the per-frame decision.
-        state.GraceTicks = BindingWheelGeometry.SelectionGraceTicks(
+        state.Grace.BeginGesture(graceTicks: BindingWheelGeometry.SelectionGraceTicks(
             seconds: wheel.Style.SelectionGraceSeconds,
             ticksPerSecond: EngineTicks.PerSecond
-        );
+        ));
         state.ActiveRing = wheel.Style.InitialRing;
         state.AxisExcursionRing = -1;
         state.SpatialExcursionRing = -1;
@@ -586,7 +578,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             // The same "is there a grace window at all" test the presentation path uses: an authored window shorter
             // than one engine tick is no window, and the two paths must agree on that or a commit could keep a
             // sector the frame before it refused to draw one.
-            var cancelAtNeutral = (state.Gesture.AxisNeutral && (state.GraceTicks == 0UL));
+            var cancelAtNeutral = (state.Gesture.AxisNeutral && (state.Grace.Ticks == 0UL));
 
             Arm(
                 slot: slot,
@@ -896,14 +888,9 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
                 );
 
                 if (state.Gesture.AxisNeutral) {
-                    if (
-                        (state.GraceSector < 0) &&
-                        !state.GraceSinceKnown &&
-                        (state.GraceTicks > 0UL) &&
-                        (selection.Sector >= 0)
-                    ) {
-                        state.GraceSector = selection.Sector;
-                    }
+                    // A gesture that opened on a flick already back at neutral still resolves a direction; seed the
+                    // window with it so the first frame has a sector to hold.
+                    _ = state.Grace.TrySeed(sector: selection.Sector);
 
                     hoverSector = -1;
                     hoverReason = "dead-center";
@@ -932,39 +919,30 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             // different sector replaces it only past the switch threshold.
             if (
                 (hoverSector >= 0) &&
-                (state.GraceSector >= 0) &&
-                (hoverSector != state.GraceSector) &&
+                (state.Grace.Sector >= 0) &&
+                (hoverSector != state.Grace.Sector) &&
                 state.Gesture.AxisKnown &&
                 (state.Gesture.Axis.LengthSquared() < (wheel.Style.SwitchFraction * wheel.Style.SwitchFraction))
             ) {
-                hoverSector = state.GraceSector;
+                hoverSector = state.Grace.Sector;
                 hoverReason = "sector";
             }
 
-            if (hoverSector >= 0) {
-                state.GraceSector = hoverSector;
-                state.GraceSinceKnown = false;
-            } else if (
-                (state.GraceSector >= 0) &&
-                (hoverReason == "dead-center") &&
-                (state.GraceTicks > 0UL)
+            // The window decision itself is BindingWheelGrace's, driven by the engine's monotonic tick base rather
+            // than a wall clock this host cannot substitute. Only a dead-center reading is a dwell; every other
+            // reason for no selection drops the held sector at once.
+            var granted = state.Grace.Observe(
+                deadCentre: (hoverReason == "dead-center"),
+                hoverSector: hoverSector,
+                nowTick: m_clock.NowTicks
+            );
+
+            if (
+                (hoverSector < 0) &&
+                (granted >= 0)
             ) {
-                var now = m_clock.NowTicks;
-
-                if (!state.GraceSinceKnown) {
-                    state.GraceSinceKnown = true;
-                    state.GraceSinceTick = now;
-                }
-
-                // Monotonic clock, so the difference never underflows.
-                if ((now - state.GraceSinceTick) <= state.GraceTicks) {
-                    hoverSector = state.GraceSector;
-                    hoverReason = "sector";
-                } else {
-                    state.GraceSector = -1;
-                }
-            } else {
-                state.GraceSector = -1;
+                hoverSector = granted;
+                hoverReason = "sector";
             }
 
             var ring = wheel.Rings[state.ActiveRing];
