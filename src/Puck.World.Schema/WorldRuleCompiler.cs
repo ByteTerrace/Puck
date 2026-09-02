@@ -897,6 +897,104 @@ public static class WorldRuleCompiler {
     // "fromKey"): a refusal that quoted one caller's spelling at another's author would name a field they never wrote.
     // Reserved channels ($tick/$population/$region:/$machine:) are all integer-valued; a declared row carries its own
     // kind. The $machine: channel is resolved here too, so every caller reaches a live machine byte on the same terms.
+    // $symmetry:<function>[:<argument>]:<row> — the row is the LAST token (a row name is colon-free by construction),
+    // the function the first, and whatever sits between is the argument the function takes. The source cell resolves
+    // through the ordinary row/key walk, so every key rule (a keyed row needs a key, $each/$cell: indirections, the
+    // declared-cell requirement of a read) holds for it unchanged; a cell argument resolves the same way.
+    private static ResolvedOperand ResolveSymmetryOperand(string name, string? key, string ruleName, WorldDefinition definition, string verb, string fieldLabel, string keyFieldLabel, string describe) {
+        var tokens = name[WorldRuleFacts.SymmetryPrefix.Length..].Split(separator: ':');
+
+        static WorldRuleException Malformed(string ruleName, string name, string detail) => new(
+            refusal: WorldRuleRefusal.SymmetryChannelMalformed,
+            ruleName: ruleName,
+            detail: $"'{name}' {detail} — a symmetry channel spells '{WorldRuleFacts.SymmetryPrefix}<ring|antipode|canonicalRay|cycle:<steps>|reflect:<node|cell:<row>[.<key>]>|orthogonal:<node|cell:<row>[.<key>]>|projectionX|projectionY>:<row>'"
+        );
+
+        if (tokens.Length < 2) {
+            throw Malformed(ruleName: ruleName, name: name, detail: "names no source row");
+        }
+
+        var rowName = tokens[^1];
+        var function = tokens[0] switch {
+            "ring" => WorldSymmetryFunction.Ring,
+            "antipode" => WorldSymmetryFunction.Antipode,
+            "canonicalRay" => WorldSymmetryFunction.CanonicalRay,
+            "cycle" => WorldSymmetryFunction.Cycle,
+            "reflect" => WorldSymmetryFunction.Reflect,
+            "orthogonal" => WorldSymmetryFunction.Orthogonal,
+            "projectionX" => WorldSymmetryFunction.ProjectionX,
+            "projectionY" => WorldSymmetryFunction.ProjectionY,
+            _ => throw Malformed(ruleName: ruleName, name: name, detail: $"names no symmetry function '{tokens[0]}'"),
+        };
+        var argument = string.Join(separator: ':', values: tokens[1..^1]);
+        var takesArgument = (function is WorldSymmetryFunction.Cycle or WorldSymmetryFunction.Reflect or WorldSymmetryFunction.Orthogonal);
+
+        if (takesArgument == (argument.Length == 0)) {
+            throw Malformed(ruleName: ruleName, name: name, detail: (takesArgument ? $"'{tokens[0]}' needs an argument" : $"'{tokens[0]}' takes no argument"));
+        }
+
+        var source = ResolveOperand(
+            allowText: false,
+            definition: definition,
+            fieldLabel: fieldLabel,
+            key: key,
+            keyFieldLabel: keyFieldLabel,
+            name: rowName,
+            ruleName: ruleName,
+            verb: verb
+        );
+
+        if (source.Operand.Kind != WorldRuleFactKind.StateCell) {
+            throw Malformed(ruleName: ruleName, name: name, detail: $"names '{rowName}', which is not a state row — the source of a symmetry read is a declared row's cell");
+        }
+
+        var literal = 0L;
+        CompiledCellRef? other = null;
+
+        if (takesArgument) {
+            if (function == WorldSymmetryFunction.Cycle) {
+                if (!long.TryParse(s: argument, style: System.Globalization.NumberStyles.AllowLeadingSign, provider: System.Globalization.CultureInfo.InvariantCulture, result: out literal)) {
+                    throw Malformed(ruleName: ruleName, name: name, detail: $"'cycle' needs a whole number of ring steps, not '{argument}'");
+                }
+            }
+            else if (argument.StartsWith(value: "cell:", comparisonType: StringComparison.Ordinal)) {
+                var reference = argument["cell:".Length..];
+                var dot = reference.IndexOf(value: '.');
+                var otherRow = ((dot < 0) ? reference : reference[..dot]);
+                var otherKey = ((dot < 0) ? null : reference[(dot + 1)..]);
+                var resolved = ResolveOperand(
+                    allowText: false,
+                    definition: definition,
+                    fieldLabel: fieldLabel,
+                    key: otherKey,
+                    keyFieldLabel: keyFieldLabel,
+                    name: otherRow,
+                    ruleName: ruleName,
+                    verb: verb
+                );
+
+                if ((resolved.Operand.Kind != WorldRuleFactKind.StateCell) || (resolved.Operand.KeyFrom is not null)) {
+                    throw Malformed(ruleName: ruleName, name: name, detail: $"argument '{argument}' does not name a declared row's cell by a literal key");
+                }
+
+                other = new CompiledCellRef(Row: resolved.Operand.Row!, Key: (resolved.Operand.Key ?? string.Empty));
+            }
+            else if (!long.TryParse(s: argument, style: System.Globalization.NumberStyles.None, provider: System.Globalization.CultureInfo.InvariantCulture, result: out literal) || (literal >= SymmetryLattice.NodeCount)) {
+                throw Malformed(ruleName: ruleName, name: name, detail: $"argument '{argument}' is neither a node 0..{SymmetryLattice.NodeCount - 1} nor 'cell:<row>[.<key>]'");
+            }
+        }
+
+        return new ResolvedOperand(
+            Operand: (source.Operand with {
+                Kind = WorldRuleFactKind.Symmetry,
+                Symmetry = function,
+                SymmetryArgument = literal,
+                SymmetryOtherCell = other,
+            }),
+            ValueKind: ((function is WorldSymmetryFunction.ProjectionX or WorldSymmetryFunction.ProjectionY) ? CellKind.Fixed : CellKind.Int),
+            Describe: describe
+        );
+    }
     private static ResolvedOperand ResolveOperand(string name, string? key, string ruleName, WorldDefinition definition, string verb, string fieldLabel, string keyFieldLabel, bool allowText = false) {
         var describe = $"{name}{((key is { } spelledKey)
             ? $".{spelledKey}"
@@ -1443,6 +1541,22 @@ public static class WorldRuleCompiler {
                 ),
                 ValueKind: CellKind.Int,
                 Describe: describe
+            );
+        }
+
+        if (name.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: WorldRuleFacts.SymmetryPrefix
+        )) {
+            return ResolveSymmetryOperand(
+                definition: definition,
+                describe: describe,
+                fieldLabel: fieldLabel,
+                key: key,
+                keyFieldLabel: keyFieldLabel,
+                name: name,
+                ruleName: ruleName,
+                verb: verb
             );
         }
 

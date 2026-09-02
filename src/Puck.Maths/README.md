@@ -181,7 +181,7 @@ operation I need. Pick a row, then follow its link for the detailed contract.
 | Pattern matching represented by algebra values | `TokenPattern` then `PatternMatcher.TryCompile` | [Oracle](Oracle/README.md#the-language-axis) |
 | An exact integer allocation over intervals (jobs per frame, samples per video frame) | `DiscreteMeasure`, compiled to `CompiledDiscreteMeasure64` for the hot path | [below](#root-level-types) |
 | An exact value involving a square root — no floating point, no drift | `RealQuadraticField` names the field, `RealQuadratic` carries the value | [below](#root-level-types) |
-| Proof that a quantized slope reproduces exact Beatty floors — and the exact index where it first stops | `BeattyQuantization.CertifySlope`; `ContinuedFraction.Convergents` supplies the worst-case indices | [below](#root-level-types) |
+| Proof that a quantized slope reproduces exact Beatty floors — and the exact index where it first stops | `BeattyQuantization.CertifySlope`; `ContinuedFraction.Convergents` supplies the worst-case indices | [Research](Research/README.md) |
 | The fraction with the smallest denominator inside an interval | `SimplestRational.InOpenInterval` | [below](#root-level-types) |
 | A hex grid whose 60° rotations are exact | `HexagonalCoordinate` | [Geometry](Geometry/README.md#hexagonalcoordinate) |
 | Cache-coherent tile/chunk ordering | `HilbertCurve` (locality-preserving) rather than Morton order | [Geometry](Geometry/README.md#hilbertcurve) |
@@ -329,7 +329,6 @@ surface, including parameters, return values, and exceptions.
 |------|------|
 | `Rational` / `RealQuadraticField` / `RealQuadratic` / `ContinuedFraction` | The exact rational (reduced on construction); the descriptor of a real quadratic field `ℚ(√d)`, its radicand canonicalized once; the exact value `(a + b·√d)/c` of such a field, with conjugate, norm and trace; and the repeating continued-fraction expansions of those values — including the convergents, the best rational approximations — without floating point. |
 | `SimplestRational` | Locate the minimal-denominator fraction strictly inside an exact interval, by Stern–Brocot descent. |
-| `BeattyQuantization` / `BeattyQuantizationCertificate` | Certify the nearest dyadic quantization of an exact irrational slope and the exact first index at which the quantized Beatty floors diverge from the true ones, with a verifiable witness. |
 | `DiscreteMeasure` / `CompiledDiscreteMeasure64` / `DiscreteMeasureCompilationFailure` | Allocate an exact integer amount across integer intervals, then compile supported measures into a bounded, allocation-free form for frequently run code. |
 | `NumberTheoryFunctions` / `BigIntegerFunctions` | Provide prime enumeration, modular roots and inverses, primality, and factorization when the calculation needs arbitrary-width integers. |
 | `MonotonicPartitioner` / `MonotonicPartitionerMetrics` | Route a value to one of 1–1024 buckets while minimizing movement when another bucket is added, and report when that value moves. |

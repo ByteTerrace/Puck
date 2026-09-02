@@ -270,6 +270,54 @@ public sealed partial class WorldServer {
             : FixedQ4816.FromInteger(value: raw)
         );
     }
+    // $symmetry: — the source cell read through the same resolver as an ordinary cell, its whole part taken as a
+    // lattice node, and one of SymmetryLattice's maps applied. A cell holding no node reads the neutral value: -1
+    // for the node-valued maps, 0 for orthogonal and the projections.
+    private FixedQ4816 ReadSymmetry(CompiledWorldOperand operand, ulong tick) {
+        var node = NodeOf(value: ReadStateCell(
+            row: operand.Row!,
+            key: ResolveOperandKey(
+                key: operand.Key,
+                keyFrom: operand.KeyFrom,
+                tick: tick
+            ),
+            tick: tick
+        ));
+        var other = ((operand.SymmetryOtherCell is { } otherCell)
+            ? NodeOf(value: ReadStateCell(
+                row: otherCell.Row,
+                key: ResolveOperandKey(
+                    key: ((otherCell.Key.Length == 0) ? null : otherCell.Key),
+                    keyFrom: null,
+                    tick: tick
+                ),
+                tick: tick
+            ))
+            : (int)Math.Clamp(value: operand.SymmetryArgument, min: -1L, max: (SymmetryLattice.NodeCount - 1L))
+        );
+        var neutral = ((operand.Symmetry is WorldSymmetryFunction.Orthogonal or WorldSymmetryFunction.ProjectionX or WorldSymmetryFunction.ProjectionY) ? 0L : -1L);
+
+        if ((node < 0) || ((operand.Symmetry is WorldSymmetryFunction.Reflect or WorldSymmetryFunction.Orthogonal) && (other < 0))) {
+            return FixedQ4816.FromInteger(value: neutral);
+        }
+
+        return operand.Symmetry switch {
+            WorldSymmetryFunction.Ring => FixedQ4816.FromInteger(value: SymmetryLattice.Ring(node: node)),
+            WorldSymmetryFunction.Antipode => FixedQ4816.FromInteger(value: SymmetryLattice.Antipode(node: node)),
+            WorldSymmetryFunction.CanonicalRay => FixedQ4816.FromInteger(value: SymmetryLattice.CanonicalRay(node: node)),
+            WorldSymmetryFunction.Cycle => FixedQ4816.FromInteger(value: SymmetryLattice.Cycle(node: node, steps: operand.SymmetryArgument)),
+            WorldSymmetryFunction.Reflect => FixedQ4816.FromInteger(value: SymmetryLattice.Reflect(mirror: other, node: node)),
+            WorldSymmetryFunction.Orthogonal => FixedQ4816.FromInteger(value: (SymmetryLattice.AreOrthogonal(first: node, second: other) ? 1L : 0L)),
+            WorldSymmetryFunction.ProjectionX => SymmetryLattice.Project(node: node).X,
+            _ => SymmetryLattice.Project(node: node).Y,
+        };
+    }
+    // A fact's whole part as a lattice node, or -1 when it names none.
+    private static int NodeOf(FixedQ4816 value) {
+        var whole = (value.Value >> FixedQ4816.FractionBitCount);
+
+        return (((whole < 0L) || (whole >= SymmetryLattice.NodeCount)) ? -1 : (int)whole);
+    }
     // Shared by both sides of a compareState conjunct — the primary operand and, when present, the comparand — so
     // the two reads can never diverge in how a reserved channel or a declared row resolves to a live fact.
     private WorldFact ReadWorldFact(CompiledWorldOperand operand, ulong tick) => operand.Kind switch {
@@ -333,6 +381,10 @@ public sealed partial class WorldServer {
         row: operand.Row!,
         tick: tick
     ))),
+        WorldRuleFactKind.Symmetry => Finite(value: ReadSymmetry(
+        operand: operand,
+        tick: tick
+    )),
         _ => Finite(value: ReadStateCell(
         row: operand.Row!,
         key: ResolveOperandKey(

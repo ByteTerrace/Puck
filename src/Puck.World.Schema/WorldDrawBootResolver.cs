@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.World;
 
 /// <summary>
@@ -121,7 +123,11 @@ internal static class WorldDrawBootResolver {
                 )
                 : new WorldStateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: fired.Numeric!.Value
+                    // A numeric draw is whole units; a fixed row stores Q48.16, so the integer is promoted rather than
+                    // landing as raw bits (7 would otherwise read as 7/65536).
+                    Value: ((row.Kind == CellKind.Fixed)
+                        ? FixedQ4816.FromInteger(value: fired.Numeric!.Value).Value
+                        : fired.Numeric!.Value)
                 )
             );
 

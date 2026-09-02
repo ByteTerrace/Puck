@@ -62,6 +62,18 @@ public static class WorldDefinitionLoader {
             return false;
         }
 
+        // A reference into a draw site could not fill at parse (the cell had no value yet); the drawn document
+        // is the first one that can answer it.
+        if (!WorldStateDocumentValues.TryResolve(
+            definition: drawn,
+            reason: out var referenceReason
+        )) {
+            resolved = null;
+            reason = $"{sourceName} could not resolve a state reference after its draws resolved: {referenceReason}";
+
+            return false;
+        }
+
         if (!WorldDefinitionValidator.TryValidate(
             definition: drawn,
             neighbours: neighbours,

@@ -50,6 +50,7 @@ internal static class LatticeClaims {
             Assert.Equal(expected: "node", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryLattice.Reflect(mirror: 0, node: invalidNode)).ParamName);
             Assert.Equal(expected: "mirror", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryLattice.Reflect(mirror: invalidNode, node: 0)).ParamName);
             Assert.Equal(expected: "node", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryLattice.Cycle(node: invalidNode)).ParamName);
+            Assert.Equal(expected: "node", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryLattice.Cycle(node: invalidNode, steps: 3L)).ParamName);
             Assert.Equal(expected: "node", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryLattice.Ring(node: invalidNode)).ParamName);
             Assert.Equal(expected: "node", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryLattice.Project(node: invalidNode)).ParamName);
             Assert.Equal(expected: "node", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryLattice.Antipode(node: invalidNode)).ParamName);
@@ -62,6 +63,23 @@ internal static class LatticeClaims {
 
         for (var node = 0; (node < SymmetryLattice.NodeCount); ++node) {
             Assert.Equal(expected: SymmetryLattice.Ring(node: node), actual: SymmetryLattice.Ring(node: SymmetryLattice.Cycle(node: node)));
+
+            // The counted cycle is the single-step cycle iterated: zero steps is the node, one step is Cycle, a whole
+            // ring is the node again, a negative count walks back, and every count in the ring matches the iteration.
+            Assert.Equal(expected: node, actual: SymmetryLattice.Cycle(node: node, steps: 0L));
+            Assert.Equal(expected: SymmetryLattice.Cycle(node: node), actual: SymmetryLattice.Cycle(node: node, steps: 1L));
+            Assert.Equal(expected: node, actual: SymmetryLattice.Cycle(node: node, steps: SymmetryLattice.RingSize));
+            Assert.Equal(expected: node, actual: SymmetryLattice.Cycle(node: node, steps: (-7L * SymmetryLattice.RingSize)));
+            Assert.Equal(expected: node, actual: SymmetryLattice.Cycle(node: SymmetryLattice.Cycle(node: node, steps: -4L), steps: 4L));
+
+            var iterated = node;
+
+            for (var count = 1; (count <= SymmetryLattice.RingSize); ++count) {
+                iterated = SymmetryLattice.Cycle(node: iterated);
+
+                Assert.Equal(expected: iterated, actual: SymmetryLattice.Cycle(node: node, steps: count));
+                Assert.Equal(expected: iterated, actual: SymmetryLattice.Cycle(node: node, steps: (count + (2L * SymmetryLattice.RingSize))));
+            }
 
             ringSizes[SymmetryLattice.Ring(node: node)]++;
 

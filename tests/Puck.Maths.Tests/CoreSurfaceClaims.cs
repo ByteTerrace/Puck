@@ -1212,6 +1212,12 @@ internal static class CoreSurfaceClaims {
                 // The loop closes bit-exactly: a whole period later is the SAME rotor, not merely a near one.
                 Assert.Equal(expected: CyclicRotation.At(plane: plane, tick: tick), actual: CyclicRotation.At(plane: plane, tick: (tick + period)));
                 Assert.Equal(expected: step, actual: CyclicRotation.Step(plane: plane, tick: (tick + period)));
+
+                // Rotor is the table read At performs once the step is known, and it reduces a negative or
+                // past-period step count the same way.
+                Assert.Equal(expected: CyclicRotation.At(plane: plane, tick: tick), actual: CyclicRotation.Rotor(step: step));
+                Assert.Equal(expected: CyclicRotation.Rotor(step: (step - period)), actual: CyclicRotation.Rotor(step: (step + (3L * period))));
+                Assert.Equal(expected: CyclicRotation.At(plane: 0, tick: tick), actual: CyclicRotation.Rotor(step: tick));
             }
 
             // Every multiple of the period is the identity, and the identity leaves a vector bit-identical.

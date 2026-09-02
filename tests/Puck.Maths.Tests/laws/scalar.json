@@ -10,6 +10,10 @@
       {
         "Type": "Puck.Maths.CyclicRotation",
         "Name": "Rotate"
+      },
+      {
+        "Type": "Puck.Maths.CyclicRotation",
+        "Name": "Rotor"
       }
     ],
     "Legs": [

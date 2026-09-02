@@ -273,9 +273,46 @@ public static class WorldRuleFacts {
     /// per tick to recover a number the engine already tracks for free — a real regression for the one consumer that
     /// exists today. Kept as its own case, deliberately.</remarks>
     public const string RegionPrefix = "$region:";
+    /// <summary>The prefix; <c>$symmetry:&lt;function&gt;[:&lt;argument&gt;]:&lt;row&gt;</c> reads a cell holding a
+    /// symmetry-lattice node (0..239, <c>Puck.Maths.SymmetryLattice</c>) through one of the lattice's own maps — the
+    /// row is named last and the operand's <c>key</c> addresses the cell exactly as an ordinary row read does, so a
+    /// per-body node table reads through <c>$each</c> or a <c>$cell:</c> indirection unchanged. Functions:
+    /// <c>ring</c> (the node's ring, 0..7), <c>antipode</c>, <c>canonicalRay</c> (the smaller node of the antipodal
+    /// pair), <c>cycle:&lt;steps&gt;</c> (the node carried that many positions around its ring, negative walks back),
+    /// <c>reflect:&lt;other&gt;</c> (the node reflected through the other node's hyperplane), <c>orthogonal:&lt;other&gt;</c>
+    /// (1 when the two nodes' rays are orthogonal, else 0), and <c>projectionX</c>/<c>projectionY</c> (the node's
+    /// point on the plane of eight rings, a fixed value). <c>&lt;other&gt;</c> is a node literal or
+    /// <c>cell:&lt;row&gt;[.&lt;key&gt;]</c>, a second cell read live. A source cell holding no node (outside 0..239)
+    /// reads <c>-1</c> for the node-valued functions, <c>0</c> for <c>orthogonal</c> and the projections — the
+    /// ordinary "absent reads as the neutral value" convention. A <c>fixed</c> source cell's node is the whole part of
+    /// its value, the same reading a <see cref="WorldStateCycle"/> lattice output takes. With
+    /// <see cref="WorldStateCycle"/>'s <c>Node</c> output driving a row and this channel reading it, a rule can gate
+    /// on the ring a walk has reached, reflect one player's arrangement onto another's, or test two placements for
+    /// orthogonality — the lattice's whole symmetry group, reached through <c>compareState</c>/<c>fromState</c>.</summary>
+    public const string SymmetryPrefix = "$symmetry:";
     /// <summary>Compares the server's own completed-tick counter — <c>compareState("$tick", greaterOrEqual, 600)</c>
     /// is "at 2.5 seconds", with no clock read anywhere.</summary>
     public const string Tick = "$tick";
+}
+/// <summary>Which symmetry-lattice map a <see cref="WorldRuleFacts.SymmetryPrefix"/> operand applies to its source
+/// node.</summary>
+public enum WorldSymmetryFunction : byte {
+    /// <summary>The node's ring, 0..7.</summary>
+    Ring,
+    /// <summary>The antipodal node.</summary>
+    Antipode,
+    /// <summary>The smaller node of the antipodal pair — a stable unoriented-ray key.</summary>
+    CanonicalRay,
+    /// <summary>The node carried <c>argument</c> positions around its ring.</summary>
+    Cycle,
+    /// <summary>The node reflected through the other node's hyperplane.</summary>
+    Reflect,
+    /// <summary>1 when the node's ray and the other node's ray are orthogonal, else 0.</summary>
+    Orthogonal,
+    /// <summary>The node's projected X coordinate, a fixed value.</summary>
+    ProjectionX,
+    /// <summary>The node's projected Y coordinate, a fixed value.</summary>
+    ProjectionY,
 }
 /// <summary>Which aggregate a <see cref="WorldRuleFacts.ReducePrefix"/> operand computes over a row's cells, or which
 /// extremum a <see cref="WorldRuleFacts.ArgMaxPrefix"/>/<see cref="WorldRuleFacts.ArgMinPrefix"/> operand searches
@@ -403,6 +440,9 @@ public enum WorldRuleFactKind : byte {
 
     /// <summary>The nearest tagged body's index (<see cref="WorldRuleFacts.NearestPrefix"/>).</summary>
     Nearest,
+
+    /// <summary>A <see cref="WorldRuleFacts.SymmetryPrefix"/> read: a cell's node through one symmetry-lattice map.</summary>
+    Symmetry,
 }
 /// <summary>One resolved operand of a world-rule comparison — the (<see cref="Kind"/>, <see cref="Row"/>,
 /// <see cref="Key"/>) address plus the <see cref="Screen"/>/<see cref="Address"/> machine coordinates, the live
@@ -434,6 +474,12 @@ public enum WorldRuleFactKind : byte {
 /// <c>WorldChannelTable.Compile</c> assigns) for <see cref="WorldRuleFactKind.Channel"/>; unused otherwise.</param>
 /// <param name="KeyFrom">For <see cref="WorldRuleFactKind.StateCell"/>, the cell key read by indirection
 /// (<see cref="WorldRuleFacts.CellKeyPrefix"/>) in place of <paramref name="Key"/>; <see langword="null"/> otherwise.</param>
+/// <param name="Symmetry">The lattice map a <see cref="WorldRuleFactKind.Symmetry"/> operand applies to its source node.</param>
+/// <param name="SymmetryArgument">The literal argument of that map — the step count of <see cref="WorldSymmetryFunction.Cycle"/>,
+/// or the other node of <see cref="WorldSymmetryFunction.Reflect"/>/<see cref="WorldSymmetryFunction.Orthogonal"/>
+/// when <paramref name="SymmetryOtherCell"/> is <see langword="null"/>.</param>
+/// <param name="SymmetryOtherCell">The cell the other node is read from live, or <see langword="null"/> for the literal
+/// <paramref name="SymmetryArgument"/>; an empty key addresses a slot row's own cell.</param>
 public readonly record struct CompiledWorldOperand(
     WorldRuleFactKind Kind,
     string? Row,
@@ -445,7 +491,10 @@ public readonly record struct CompiledWorldOperand(
     CompiledBodyRef? BodyB = null,
     int Seat = 0,
     int ChannelOrdinal = 0,
-    CompiledCellRef? KeyFrom = null
+    CompiledCellRef? KeyFrom = null,
+    WorldSymmetryFunction Symmetry = WorldSymmetryFunction.Ring,
+    long SymmetryArgument = 0L,
+    CompiledCellRef? SymmetryOtherCell = null
 );
 /// <summary>One compiled, flattened conjunct of a world rule's gate — <see cref="ActionPredicate.All"/> flattens away
 /// at compile time exactly as a per-body gate does, so evaluation walks one flat array with no recursion.</summary>
@@ -668,6 +717,13 @@ public enum WorldRuleRefusal : byte {
     /// names a row that is not declared or is kind=text.</summary>
     [Refusal(door: "world.rule.compile", condition: "a '$reduce:' channel does not spell '$reduce:<max|min|sum|count>:<row>' against a declared, non-text row", kind: RefusalKind.Verdict)]
     ReduceChannelMalformed,
+
+    /// <summary>A <c>$symmetry:</c> channel does not spell <c>$symmetry:&lt;function&gt;[:&lt;argument&gt;]:&lt;row&gt;</c>
+    /// — an unknown function, a function given an argument it does not take (or missing one it needs), an argument
+    /// that is neither a node literal nor <c>cell:&lt;row&gt;[.&lt;key&gt;]</c>, or a source row that is not a declared
+    /// numeric row.</summary>
+    [Refusal(door: "world.rule.compile", condition: "a '$symmetry:' channel does not spell '$symmetry:<function>[:<argument>]:<row>' with a known function, a well-formed argument and a declared numeric source row", kind: RefusalKind.Verdict)]
+    SymmetryChannelMalformed,
 
     /// <summary>An <c>$argmax:</c>/<c>$argmin:</c> channel names no row, or a row that is not declared or is
     /// kind=text.</summary>

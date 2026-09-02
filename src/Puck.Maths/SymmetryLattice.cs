@@ -243,6 +243,27 @@ public static class SymmetryLattice {
 
         return CycleMap[node];
     }
+    /// <summary>Advances a node a whole number of steps around its ring — <see cref="Cycle(int)"/> applied
+    /// <paramref name="steps"/> times, reduced modulo <see cref="RingSize"/>, so a negative count walks backwards and
+    /// every multiple of <see cref="RingSize"/> returns the node itself.</summary>
+    /// <param name="node">The node to advance, in <c>[0, <see cref="NodeCount"/>)</c>.</param>
+    /// <param name="steps">The number of ring steps; any value, positive or negative.</param>
+    /// <returns>The index of the node <paramref name="steps"/> positions along the same ring.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="node"/> is outside the node range.</exception>
+    public static int Cycle(int node, long steps) {
+        ValidateNode(
+            node: node,
+            paramName: nameof(node)
+        );
+
+        var count = ((int)steps.FloorModulo(modulus: ((long)RingSize)));
+
+        for (var index = 0; (index < count); ++index) {
+            node = CycleMap[node];
+        }
+
+        return node;
+    }
     /// <summary>Projects a node onto the plane where the 240 nodes resolve into eight concentric rings of thirty.</summary>
     /// <param name="node">The node, in <c>[0, <see cref="NodeCount"/>)</c>.</param>
     /// <returns>The projected point; its ring is <see cref="Ring(int)"/> and one <see cref="Cycle(int)"/> step turns it 12°.</returns>

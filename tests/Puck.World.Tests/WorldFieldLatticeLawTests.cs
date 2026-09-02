@@ -52,6 +52,34 @@ public sealed class WorldFieldLatticeLawTests {
         ),
         Fields: [new WorldFieldRow(Color: "#3B7BD6", HeightScale: heightScale, Initial: initial, Max: 1f, Medium: true, Min: 0f, Name: "medium")]
     );
+    private static WorldDefinition DrawLatticeDefinition(long cursor = 0L) {
+        var definition = Fixtures.BuildDocument();
+
+        return definition with {
+            StateRaw = new WorldStateSection(
+                World: [new WorldStateRow(
+                    Name: WorldCellName.Parse(candidate: "drawn"),
+                    Kind: CellKind.Fixed,
+                    DrawCursor: cursor,
+                    Lattice: new WorldStateLatticeTrait(
+                        Topology: "grid",
+                        Min: 0f,
+                        Max: 1f,
+                        Paint: [new WorldLatticeFill.Draw(Generator: new WorldGenerator(Source: WorldGeneratorSource.UniformRange, RangeMin: 0L, RangeMax: FixedQ4816.One.Value))]
+                    )
+                )],
+                Lattices: [new WorldStateLatticeTopology(
+                    Name: "grid",
+                    Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f),
+                    CellSize: 1f,
+                    Width: 2,
+                    Depth: 1,
+                    Layers: 1,
+                    StepEveryTicks: 1
+                )]
+            )
+        };
+    }
     private static long SumBits(WorldFieldLattice lattice, int cells) {
         var sum = 0L;
 
@@ -87,6 +115,76 @@ public sealed class WorldFieldLatticeLawTests {
             actual: SumBits(cells: (32 * 32), lattice: rerolled),
             expected: SumBits(cells: (32 * 32), lattice: a)
         );
+    }
+    [Fact]
+    public void DrawFill_PreservesAuthoredPaintOrder() {
+        var document = new WorldFieldsSection(
+            Lattice: new WorldFieldLatticeDefinition(
+                Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f),
+                CellSize: 1f,
+                Width: 2,
+                Depth: 1,
+                Layers: 1,
+                StepEveryTicks: 1
+            ),
+            Fields: [new WorldFieldRow(Name: "heat", Min: 0f, Max: 10f)],
+            Paint: [
+                new WorldLatticeFill.Rect(MinX: 0f, MaxX: 1f, MinZ: 0f, MaxZ: 1f, Value: 9f) { Field = "heat" },
+                new WorldLatticeFill.Draw(Generator: new WorldGenerator(Source: WorldGeneratorSource.UniformRange, RangeMin: 1L, RangeMax: 1L)) { Field = "heat" },
+                new WorldLatticeFill.Rect(MinX: 1f, MaxX: 2f, MinZ: 0f, MaxZ: 1f, Value: 7f) { Field = "heat" },
+            ]
+        );
+        var lattice = Fixtures.BuildLattice(document: document);
+        var one = FixedQ4816.FromInteger(value: 1).Value;
+
+        lattice.FillFromDraw(field: 0, raw: [one, one], worldSeed: 0UL);
+
+        Assert.Equal(expected: FixedQ4816.FromInteger(value: 1), actual: lattice.Value(field: 0, cell: 0));
+        Assert.Equal(expected: FixedQ4816.FromInteger(value: 7), actual: lattice.Value(field: 0, cell: 1));
+    }
+    [Fact]
+    public void GenerateUndoAndWholeDocumentLoad_RepaintTheCursorNamedPass() {
+        var boot = DrawLatticeDefinition();
+
+        using var fixture = Fixtures.FreshServer(definition: boot);
+
+        var lattice = Assert.IsType<WorldFieldLattice>(@object: fixture.Server.Population.Fields);
+        var bootCells = lattice.Capture().Raw[0].ToArray();
+
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.Generate(Principal: WorldPrincipal.Console, Row: "drawn"));
+        fixture.Step();
+
+        var generatedCells = lattice.Capture().Raw[0].ToArray();
+
+        Assert.NotEqual(expected: bootCells, actual: generatedCells);
+        Assert.Equal(expected: 2L, actual: WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "drawn")!.DrawCursor);
+
+        fixture.Server.EnqueueUndo(count: 1, principal: WorldPrincipal.Console);
+        fixture.Step();
+
+        Assert.Equal(expected: 0L, actual: WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "drawn")!.DrawCursor);
+        Assert.Equal(expected: bootCells, actual: lattice.Capture().Raw[0]);
+
+        var loaded = DrawLatticeDefinition(cursor: 2L);
+
+        using var expectedFixture = Fixtures.FreshServer(definition: loaded);
+
+        var expectedCells = Assert.IsType<WorldFieldLattice>(@object: expectedFixture.Server.Population.Fields).Capture().Raw[0].ToArray();
+
+        lattice.Restore(checkpoint: new WorldFieldLattice.WorldFieldCheckpoint(Raw: [[0L, 0L]]));
+        fixture.Server.EnqueueRebuild(
+            request: new WorldRebuildRequest(
+                ContentHash: WorldDefinitionFileSource.ComputeContentHash(content: WorldDefinitionSerialization.Serialize(definition: loaded)),
+                Definition: loaded,
+                Force: true,
+                Kind: WorldRebuildKind.Load,
+                PathHint: "lattice-draw-load-probe.world.json"
+            ),
+            principal: WorldPrincipal.Console
+        );
+        fixture.Step();
+
+        Assert.Equal(expected: expectedCells, actual: lattice.Capture().Raw[0]);
     }
     [Fact]
     public void AScatterFillWritesDiscsAndNothingOutsideThem() {

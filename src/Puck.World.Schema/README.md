@@ -512,10 +512,29 @@ state, never authored cells.
 **Paint** (`WorldLatticeFill`, `$type`-discriminated) seeds a row before its
 first step: `rect` (a world-space box takes one value), `noise` (fixed-point
 hash-lattice fBm over the cell index, thresholded into smooth patches),
-`scatter` (one jittered disc per `spacing`-cell block, integer-hash offset).
-Every decision is integer-hash + `FixedQ4816` arithmetic, so a fill is
-bit-identical on every machine and backend; every fill's own `Seed` folds with
-`generation.worldSeed`, so the world's one reroll lever moves the terrain.
+`scatter` (one jittered disc per `spacing`-cell block, integer-hash offset),
+and `draw` (every cell drawn from a numeric authored-randomness source — the
+per-cell lattice draw). Every hash decision is integer-hash + `FixedQ4816`
+arithmetic, so a fill is bit-identical on every machine and backend; every
+hash fill's own `Seed` folds with `generation.worldSeed`, so the world's one
+reroll lever moves the terrain.
+
+A `draw` fill (`{ "$type": "draw", "source": … | "generator": … }`, at most one
+per row, numeric sources only) is one whole-field pass of the row's own draw
+stream, seeded through the same ladder as a state-row site under the row's
+`state.<row>` descriptor: cell `k`, in cell-index order, takes the sample a site
+at `drawCursor + k` would draw, with a weighted source's deck threaded cell to
+cell — so a `weightedNumeric` bag in `reshuffleOnExhaustion` mode deals its
+cards across the field and reshuffles as it goes, and outcome `count`s make a
+field carry exactly N cells of a value per pass. The row's `drawCursor`/
+`drawDecks` name the pass currently painted; `world.generate <row>` advances
+them one whole pass (the cell count) and repaints. The draw occupies its authored
+position in `paint`: it overwrites earlier fills and later fills overwrite it.
+Boot, whole-document rebuild/load/reset, and an undo that rewinds the draw
+position repaint the pass the document names, so restored state lands on the
+field it last drew without resetting unrelated reaction-evolved rows.
+Reactions then evolve the drawn cells like any other paint. `world.state`
+echoes `draw source=… fill=lattice cursor=<n> decks=…` on the row line.
 
 **Reactions** (`WorldReaction`, `$type`-discriminated, applied in document
 order every `stepEveryTicks`): `diffuse` (each cell moves a fraction toward its
@@ -582,15 +601,26 @@ vocabulary. `source` selects the shape: `markov` walks weighted alternatives per
 context, each naming the context it moves INTO (that authored `next` is what
 makes it a Markov process rather than independent draws — the context key IS the
 process state) and is the only shape that writes TEXT and the only one that
-DEALS; `uniformRange` draws one value over `[rangeMin, rangeMax]`;
-`weightedNumeric` draws one value from an authored alias table; `streamDraw`
-yields one raw 32-bit draw. Each shape reads a disjoint field set, and a foreign
+DEALS per context; `uniformRange` draws one value over `[rangeMin, rangeMax]`;
+`weightedNumeric` draws one value from an authored alias table and DEALS over
+its outcome set under the same `mode` vocabulary (one `drawDecks` mask — the
+numeric shuffle bag); `streamDraw` yields one raw 32-bit draw. An alternative or
+outcome may declare `count`: under a deck mode it is that many cards per pass
+(an outcome that should come out twice per pass declares `2`), under
+`withReplacement` it only scales the weight; a set's cards total at most 64,
+one deck-mask bit each. Each shape reads a disjoint field set, and a foreign
 field is refused BY NAME rather than parsed and ignored — including `bound` and
 `mode`, which are non-nullable and so are refused against their declared
 defaults. A markov emission is one walk from `start` to a TERMINAL context (one
 declaring no alternatives), refusing BY NAME at `bound` rather than truncating;
 `mode` is `withReplacement`, `withoutReplacement` (dealt out → refuse by name) or
-`reshuffleOnExhaustion`. Caps live in `WorldGeneratorCapacity`.
+`reshuffleOnExhaustion`; `uniformRange` and `streamDraw` refuse a `mode`, having no
+entry set to deal from. Caps live in `WorldGeneratorCapacity`. The alias table
+over a source's full entry set is built once per source instance and held weakly
+beside it (`WorldGeneratorEngine`'s compiled cache), so a site drawn every tick
+pays the build once; a dealt-down pool mid-pass is rebuilt in bounded stack
+storage per emission, with no heap table allocation and the same exact alias
+mapping.
 
 **A source holds no position.** It may be declared once in the optional
 `generators` section (`WorldGeneratorRow`: `name` + `generator`) and referenced
@@ -757,8 +787,8 @@ a per-cell `UpsertStateCell` (which re-bases only the ONE cell it names) —
 both for a live apply and for `world.undo`'s per-entry replay, exactly as it
 already did for the scalar case. `world.state`'s cell line echoes a cell's
 own trait the same way the row line echoes the row's:
-`advance=<num>/<den>@epoch<n>`. There is no WRAP/modulo mode — an open
-question, not built.
+`advance=<num>/<den>@epoch<n>`. A value that must wrap is a `cycle` row
+(below), never an advance.
 
 **A row or keyed cell may instead declare `dynamics`** (`WorldStateDynamics`
 — `row`, `y0`, `v0`, `epochTick`), `advance`'s closed-form sibling: mutually
@@ -770,6 +800,33 @@ stored cell value stays the TRUTH the target; a write rebases the trait
 — the live eased sample and a `Retarget` velocity kick become the new
 `(y0, v0)` at the writing tick. `world.state` echoes
 `dynamics=<row> y0=<v> v0=<v>@epoch<n> eased=<v>` beside `value=`.
+
+**A row or keyed cell may instead declare `cycle`** (`WorldStateCycle` —
+`plane`, `output`, `ticksPerStep`, `epochTick`): the tick-indexed rotation,
+mutually exclusive with `advance`/`dynamics`/`draw`/`lattice` and scalar-only
+at the row level the same way those are. The value is a pure function of the
+server tick through `Puck.Maths.CyclicRotation` — `plane` 0..3 selects one of
+the four rotation planes whose step counts per tick are 1, 7, 11 and 13
+twelfths of a turn, all closing together every thirty steps — with one step
+lasting `ticksPerStep` ticks from `epochTick`. `output` names what the cell
+reads: `Step` (0..29), `Node` or `Ring` (the node's ring, 0..7) on an `int` row;
+`Turns` (`⌊step·2^16/30⌋` raw, so it wraps once per loop the way `render.cycle`
+keys read a row), `Cos`, `Sin`, `ProjectionX` or `ProjectionY` on a `fixed` row. The lattice
+outputs read through `Puck.Maths.SymmetryLattice`: the stored value is the
+node (0..239) the ring walk starts from, carried one ring position per
+rotation step, and the projection outputs are that node's point on the plane
+of eight concentric rings of thirty. The stored cell value is the PHASE, in the
+row's displayed unit (whole steps or a node index; a `fixed` row's phase is the
+whole part of its value): nothing accumulates and nothing rebases, an explicit
+write or a rule's `setState` sets the phase and `addState` turns it by whole
+steps, and a declared envelope clamps the computed value on every read as it
+does an advancing row's. A cycling row is refused as a `state:<row>` control
+context the same way an advancing one is. `world.state` echoes
+`cycle=plane<p>:<output>/<ticksPerStep>@epoch<n>` beside the live `value=`.
+`world.save` settles a cycling cell in the serialized projection only: the
+stored value becomes the current rotation index (or node) and `epochTick`
+projects to `0`, so a reload reads the same value at its first tick; a partial
+step under `ticksPerStep` is not carried.
 
 **A keyed `text`-kind row IS the text-table primitive** — an authored, named
 collection of strings (flavor lines, names, phrases) a HUD `Binding` or
@@ -875,6 +932,14 @@ channel — `$tick` (the completed-tick counter), `$population` (the live
 active-entry count), `$region:<placementId>` (that region's live occupant count),
 `$machine:<screen>:<address>` (one live byte off a screen's booted machine),
 `$reduce:<max|min|sum|count>:<row>` (an aggregate over a keyed row's cells),
+`$symmetry:<function>[:<argument>]:<row>` (a cell holding a symmetry-lattice
+node 0..239 read through `ring`, `antipode`, `canonicalRay`, `cycle:<steps>`,
+`reflect:<node|cell:<row>[.<key>]>`, `orthogonal:<node|cell:…>` (1/0), or
+`projectionX`/`projectionY`; the row is the last token and the operand's `key`
+addresses the cell as usual; a cell holding no node reads −1, or 0 for
+`orthogonal` and the projections — the door through which a rule reaches the
+lattice's whole symmetry group; `world.symmetry <node> [other]` reads the same
+maps back),
 `$argmax:<row>`/`$argmin:<row>` (the body naming a keyed row's extremal cell — a
 0-based entity index, or -1 for none — the entity-addressable primitive),
 `$distance:<bodyRefA>:<bodyRefB>`/`$los:<bodyRefA>:<bodyRefB>` (live distance, or

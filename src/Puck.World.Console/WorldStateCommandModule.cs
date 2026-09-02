@@ -30,7 +30,7 @@ namespace Puck.World;
 /// writes while denying the whole-row pair — the difference between bumping a row and redefining it. Revoking either
 /// grant, or narrowing its mask, refuses that principal's writes here, whichever verb produced them.</remarks>
 public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IServerLink link) : ICommandModule {
-    private static string DescribeCell(WorldServer server, WorldStateRow row, string key, long raw, string? text, WorldStateAdvance? advance, WorldStateDynamics? dynamics) =>
+    private static string DescribeCell(WorldServer server, WorldStateRow row, string key, long raw, string? text, WorldStateAdvance? advance, WorldStateDynamics? dynamics, WorldStateCycle? cycle) =>
         $"[world.state.cell '{row.Name}'.'{key}' value={DescribeValue(
             raw: raw,
             row: row,
@@ -40,7 +40,14 @@ public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IS
             key: key,
             row: row,
             server: server
-        )}]";
+        )}{DescribeCycle(cycle: cycle)}]";
+    // A cycle trait — what it is (plane and output), how fast it turns (ticks per step) and where its clock sits
+    // (epoch); the value on the same line is the live rotation the stored phase has been carried to.
+    private static string DescribeCycle(WorldStateCycle? cycle) =>
+        ((cycle is { } c)
+            ? $" cycle=plane{c.Plane}:{c.Output}/{c.TicksPerStep}@epoch{c.EpochTick}"
+            : string.Empty
+        );
     // Formats an Advance trait — shared by DescribeRow's row line (against row.Advance) and DescribeCell's cell
     // line (against a keyed cell's own Advance): what the trait IS (rate) and where its clock sits (epoch), the
     // same "what it is, then where it is" precedent DescribeRow already follows for a generator's cursor.
@@ -115,6 +122,17 @@ public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IS
     // the document), so this line is what a save/reload proof reads.
     private static string DescribeDraw(WorldStateRow row) {
         if (row.Draw is not { } draw) {
+            // A lattice row's draw fill reads back the same way a site does — its source and its pass position —
+            // minus a timing, since a whole-field pass is redrawn only by an explicit generate.
+            if (WorldLatticeFill.FindDraw(trait: row.Lattice) is { } fill) {
+                var fillSource = ((fill.Source is { } namedFill)
+                    ? $"source={namedFill}"
+                    : $"source=<inline:{DescribeSourceShape(generator: fill.Generator)}>"
+                );
+
+                return $" draw {fillSource} fill=lattice cursor={row.DrawCursor} decks={DescribeDecks(row: row)}";
+            }
+
             return string.Empty;
         }
 
@@ -169,7 +187,8 @@ public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IS
             raw: raw,
             text: text,
             advance: cell?.Advance,
-            dynamics: cell?.Dynamics
+            dynamics: cell?.Dynamics,
+            cycle: cell?.Cycle
         ));
     }
     // One row's own line PLUS every cell it holds — the verb's one-argument form, because there is one substrate and
@@ -210,7 +229,8 @@ public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IS
                 raw: (raw ?? 0L),
                 text: text,
                 advance: cell.Advance,
-                dynamics: cell.Dynamics
+                dynamics: cell.Dynamics,
+                cycle: cell.Cycle
             ));
         }
 
@@ -248,7 +268,7 @@ public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IS
             key: WorldStateRow.SlotKey.Value,
             row: row,
             server: server
-        )}{DescribeDraw(row: row)}]";
+        )}{DescribeCycle(cycle: row.Cycle)}{DescribeDraw(row: row)}]";
 
         if (!row.IsSlot) {
             var capacity = Math.Clamp(
@@ -447,6 +467,61 @@ public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IS
                 ));
             },
             routing: CommandRouting.Simulation
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.symmetry",
+            description: "Reads the symmetry lattice back for one node (Immediate): world.symmetry <node> [other]. Prints the node's ring, antipode, canonical ray, projected point and its thirty-step ring walk — the values a '$symmetry:' rule operand or a cycle trait's Node/ProjectionX/ProjectionY output would read — and, with a second node, the reflection through it and whether the two rays are orthogonal.",
+            handler: (context, args) => {
+                if (
+                    ((args.Count != 1) && (args.Count != 2)) ||
+                    !args.TryInt(
+                    index: 0,
+                    value: out var node
+                ) ||
+                    (node < 0) ||
+                    (node >= SymmetryLattice.NodeCount)
+                ) {
+                    return CommandResult.Usage(
+                        form: $"<node 0..{SymmetryLattice.NodeCount - 1}> [other 0..{SymmetryLattice.NodeCount - 1}]",
+                        verb: "world.symmetry"
+                    );
+                }
+
+                var projected = SymmetryLattice.Project(node: node);
+                var walk = new System.Text.StringBuilder();
+                var cursor = node;
+
+                for (var step = 0; (step < SymmetryLattice.RingSize); step++) {
+                    if (step > 0) { walk.Append(value: ','); }
+
+                    walk.Append(value: cursor);
+                    cursor = SymmetryLattice.Cycle(node: cursor);
+                }
+
+                var line = $"[world.symmetry node={node} ring={SymmetryLattice.Ring(node: node)} antipode={SymmetryLattice.Antipode(node: node)} canonicalRay={SymmetryLattice.CanonicalRay(node: node)} projection=({projected.X},{projected.Y}) walk={walk}]";
+
+                if (args.Count == 2) {
+                    if (
+                        !args.TryInt(
+                        index: 1,
+                        value: out var other
+                    ) ||
+                        (other < 0) ||
+                        (other >= SymmetryLattice.NodeCount)
+                    ) {
+                        return CommandResult.Usage(
+                            form: $"<node 0..{SymmetryLattice.NodeCount - 1}> [other 0..{SymmetryLattice.NodeCount - 1}]",
+                            verb: "world.symmetry"
+                        );
+                    }
+
+                    line += $"{Environment.NewLine}[world.symmetry node={node} other={other} reflect={SymmetryLattice.Reflect(mirror: other, node: node)} orthogonal={(SymmetryLattice.AreOrthogonal(first: node, second: other) ? 1 : 0)}]";
+                }
+
+                return new CommandResult(Output: line);
+            },
+            routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,

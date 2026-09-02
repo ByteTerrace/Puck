@@ -75,6 +75,95 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
     }
+    /// <summary>Validates a row's authored <see cref="WorldStateCycle"/> rotation trait: the plane and step length the
+    /// read side can compute over, an output the row's kind can carry, and the same scalar-row exclusivity the other
+    /// traits hold.</summary>
+    private static void ValidateCycle(WorldStateRow row, bool numeric, string path, List<string> errors) {
+        if (row.Cycle is not { } cycle) {
+            return;
+        }
+
+        if (row.Draw is not null) {
+            errors.Add(item: $"{path} ('{row.Name}') declares both draw and cycle — a row is an authored-randomness draw site or a tick-indexed rotation, never both.");
+        }
+
+        if (row.Advance is not null) {
+            errors.Add(item: $"{path} ('{row.Name}') declares both advance and cycle — a row is a linear accumulator or a tick-indexed rotation, never both.");
+        }
+
+        if (row.Dynamics is not null) {
+            errors.Add(item: $"{path} ('{row.Name}') declares both dynamics and cycle — a row is a second-order easing cell or a tick-indexed rotation, never both.");
+        }
+
+        ValidateCycleShape(
+            cycle: cycle,
+            errors: errors,
+            kind: row.Kind,
+            numeric: numeric,
+            path: $"{path}.cycle",
+            subject: $"{path} ('{row.Name}')"
+        );
+
+        var cells = (row.Cells ?? []);
+        var slotEligible = ((row.Capacity is null) && ((cells.Count == 0) || ((cells.Count == 1) && (cells[0].Key == WorldStateRow.SlotKey))));
+
+        if (!slotEligible) {
+            errors.Add(item: $"{path} ('{row.Name}') declares cycle on a keyed row — cycle is legitimate only on a scalar (slot) row, authored with 'value' or left empty; a keyed row's cells each declare their own 'cycle'.");
+        }
+
+        if (WorldStateCycle.IsLatticeOutput(output: cycle.Output) && (cells.Count == 1) && (WorldStateCycle.Phase(baseValue: cells[0].Value, kind: row.Kind) is < 0 or >= SymmetryLattice.NodeCount)) {
+            errors.Add(item: $"{path} ('{row.Name}') value {DescribeValue(kind: row.Kind, raw: cells[0].Value)} is not a symmetry-lattice node — a {WorldRefusalSpelling.CycleOutput(output: cycle.Output)} cycle stores the node its ring walk starts from, 0..{SymmetryLattice.NodeCount - 1}.");
+        }
+    }
+    /// <summary>Validates one cell's own <see cref="WorldStateCycle"/> — the keyed counterpart of
+    /// <see cref="ValidateCycle"/>, refusing the slot key so a cell's cycle and its row's cycle can never both claim
+    /// the same cell.</summary>
+    private static void ValidateCellCycle(WorldStateRow row, WorldStateCell cell, WorldStateCycle cycle, bool numeric, string cellPath, List<string> errors) {
+        if (cell.Key == WorldStateRow.SlotKey) {
+            errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares its own cycle on the reserved slot key — a scalar row's rotation is authored at the ROW level ('cycle' beside 'value').");
+        }
+
+        ValidateCycleShape(
+            cycle: cycle,
+            errors: errors,
+            kind: row.Kind,
+            numeric: numeric,
+            path: $"{cellPath}.cycle",
+            subject: $"{cellPath} ('{row.Name}'.'{cell.Key}')"
+        );
+
+        if (WorldStateCycle.IsLatticeOutput(output: cycle.Output) && (WorldStateCycle.Phase(baseValue: cell.Value, kind: row.Kind) is < 0 or >= SymmetryLattice.NodeCount)) {
+            errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') value {DescribeValue(kind: row.Kind, raw: cell.Value)} is not a symmetry-lattice node — a {WorldRefusalSpelling.CycleOutput(output: cycle.Output)} cycle stores the node its ring walk starts from, 0..{SymmetryLattice.NodeCount - 1}.");
+        }
+    }
+    // The field checks a row-level and a cell-level cycle share: plane range, step length, epoch, and an output the
+    // carrying kind can read (step/node on int, the fixed outputs on fixed, nothing on bool/text).
+    private static void ValidateCycleShape(WorldStateCycle cycle, CellKind kind, bool numeric, string path, string subject, List<string> errors) {
+        if (!Enum.IsDefined(value: cycle.Output)) {
+            errors.Add(item: $"{path}.output '{cycle.Output}' is not a defined WorldCycleOutput.");
+        }
+
+        if (!numeric) {
+            errors.Add(item: $"{subject} declares cycle on a {WorldRefusalSpelling.Kind(kind: kind)} row — only int/fixed cells turn.");
+        }
+        else if (WorldStateCycle.IsIntegerOutput(output: cycle.Output) != (kind == CellKind.Int)) {
+            errors.Add(item: $"{path}.output '{WorldRefusalSpelling.CycleOutput(output: cycle.Output)}' does not suit a {WorldRefusalSpelling.Kind(kind: kind)} cell — Step, Node and Ring are read by int cells, Turns/Cos/Sin/ProjectionX/ProjectionY by fixed cells.");
+        }
+
+        if ((cycle.Plane < 0) || (cycle.Plane >= CyclicRotation.PlaneCount)) {
+            errors.Add(item: $"{path}.plane {cycle.Plane} must be 0..{CyclicRotation.PlaneCount - 1}.");
+        }
+
+        if (cycle.TicksPerStep <= 0) {
+            errors.Add(item: $"{path}.ticksPerStep {cycle.TicksPerStep} must be positive.");
+        }
+
+        RequireNonNegativeEpoch(
+            value: cycle.EpochTick,
+            name: $"{path}.epochTick",
+            errors: errors
+        );
+    }
     /// <summary>Validates a row's authored <see cref="WorldStateDynamics"/> easing trait — the closed-form
     /// counterpart to <see cref="ValidateAdvance"/>, so shares its scalar-row/exclusivity shape.</summary>
     private static void ValidateDynamicsTrait(WorldStateRow row, bool numeric, ISet<string> dynamicsNames, string path, List<string> errors) {
@@ -148,12 +237,20 @@ public static partial class WorldDefinitionValidator {
     /// site rule with the row's own envelope as the admissible domain.</summary>
     private static void ValidateDraw(WorldStateRow row, IReadOnlyList<WorldGeneratorRow>? generators, string path, List<string> errors) {
         if (row.Draw is not { } draw) {
-            if (row.DrawCursor != 0L) {
+            // A lattice row painted by a draw fill carries the same cursor/decks bookkeeping for its whole-field
+            // passes (see WorldLatticeFill.Draw), so only a row with neither facet is refused here.
+            var latticeDraws = (WorldLatticeFill.FindDraw(trait: row.Lattice) is not null);
+
+            if ((row.DrawCursor != 0L) && !latticeDraws) {
                 errors.Add(item: $"{path} ('{row.Name}') declares drawCursor without draw — drawCursor is engine bookkeeping for a draw site alone.");
             }
 
-            if (row.DrawDecks is { Count: > 0 }) {
+            if ((row.DrawDecks is { Count: > 0 }) && !latticeDraws) {
                 errors.Add(item: $"{path} ('{row.Name}') declares drawDecks without draw — drawDecks is engine bookkeeping for a draw site alone.");
+            }
+
+            if (latticeDraws && (row.DrawCursor < 0L)) {
+                errors.Add(item: $"{path} ('{row.Name}') drawCursor {row.DrawCursor} is negative.");
             }
 
             return;
@@ -354,10 +451,6 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.bound {generator.Bound} must be between 1 and {WorldGeneratorCapacity.MaxEmissionBound}.");
         }
 
-        if (!Enum.IsDefined(value: generator.Mode)) {
-            errors.Add(item: $"{path}.mode '{generator.Mode}' is not a defined WorldGeneratorMode.");
-        }
-
         var keys = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         for (var index = 0; (index < contexts.Count); index++) {
@@ -388,6 +481,7 @@ public static partial class WorldDefinitionValidator {
             }
 
             var anyWeight = false;
+            var cards = 0L;
 
             for (var alternative = 0; (alternative < alternatives.Count); alternative++) {
                 var entry = alternatives[alternative];
@@ -405,7 +499,16 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{entryPath}.token length {entry.Token.Length} exceeds the maximum of {WorldGeneratorCapacity.MaxTokenLength}.");
                 }
 
+                if (entry.Count is { } count && (count < 1)) {
+                    errors.Add(item: $"{entryPath}.count {count} must be at least 1 — the cards one deck pass holds of this alternative.");
+                }
+
+                cards += Math.Max(val1: 1, val2: (entry.Count ?? 1));
                 anyWeight |= (entry.Weight != 0UL);
+            }
+
+            if (cards > WorldGeneratorCapacity.MaxCardsPerSet) {
+                errors.Add(item: $"{contextPath}.alternatives hold {cards} cards counting each alternative's count, exceeding the {WorldGeneratorCapacity.MaxCardsPerSet} a deck mask can deal.");
             }
 
             if (
@@ -445,6 +548,10 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
+        if (!Enum.IsDefined(value: generator.Mode)) {
+            errors.Add(item: $"{path}.mode '{generator.Mode}' is not a defined WorldGeneratorMode.");
+        }
+
         // Each source's fields are BOTH-OR-NEITHER against the fields the others own — a foreign field present is
         // refused by name rather than silently ignored, the same "no dual discriminator" discipline WorldStateRow
         // itself already follows for value/cells.
@@ -452,18 +559,22 @@ public static partial class WorldDefinitionValidator {
         var declaresRangeFields = ((generator.RangeMin is not null) || (generator.RangeMax is not null));
         var declaresWeighted = (generator.Weighted is not null);
 
-        // Bound and Mode are Markov-only too, but they are NON-NULLABLE, so the both-or-neither sweep above cannot
-        // see them and a numeric source carrying either would parse, validate, and then be silently ignored at fire
-        // time. Refused against the DECLARED DEFAULT — the most a non-nullable field can distinguish, and exactly the
-        // set of values that could mislead.
+        // Bound is Markov-only and Mode belongs to the two dealing shapes, but both are NON-NULLABLE, so the
+        // both-or-neither sweep above cannot see them and a source carrying one it does not read would parse,
+        // validate, and then be silently ignored at fire time. Refused against the DECLARED DEFAULT — the most a
+        // non-nullable field can distinguish, and exactly the set of values that could mislead.
+        if (
+            !WorldGeneratorEngine.Deals(source: generator.Source) &&
+            (generator.Mode != WorldGeneratorMode.WithReplacement)
+        ) {
+            errors.Add(item: $"{path}.source={WorldRefusalSpelling.GeneratorSource(source: generator.Source)} declares mode={generator.Mode.ToString().ToLowerInvariant()} — only markov and weightedNumeric deal; uniformRange and streamDraw have no entry set to deal from.");
+        }
+
         if (generator.Source != WorldGeneratorSource.Markov) {
             if (generator.Bound != WorldGenerator.DefaultBound) {
                 errors.Add(item: $"{path}.source={WorldRefusalSpelling.GeneratorSource(source: generator.Source)} declares bound {generator.Bound} — a numeric source is always exactly ONE draw, and 'bound' belongs to source=markov.");
             }
 
-            if (generator.Mode != WorldGeneratorMode.WithReplacement) {
-                errors.Add(item: $"{path}.source={WorldRefusalSpelling.GeneratorSource(source: generator.Source)} declares mode={generator.Mode.ToString().ToLowerInvariant()} — a numeric source never deals, and 'mode' belongs to source=markov.");
-            }
         }
 
         switch (generator.Source) {
@@ -540,6 +651,7 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 var anyOutcomeWeight = false;
+                var outcomeCards = 0L;
 
                 for (var index = 0; (index < outcomes.Count); index++) {
                     if (outcomes[index] is null) {
@@ -548,7 +660,16 @@ public static partial class WorldDefinitionValidator {
                         continue;
                     }
 
+                    if (outcomes[index].Count is { } outcomeCount && (outcomeCount < 1)) {
+                        errors.Add(item: $"{path}.weighted[{index}].count {outcomeCount} must be at least 1 — the cards one deck pass holds of this outcome.");
+                    }
+
+                    outcomeCards += Math.Max(val1: 1, val2: (outcomes[index].Count ?? 1));
                     anyOutcomeWeight |= (outcomes[index].Weight != 0UL);
+                }
+
+                if (outcomeCards > WorldGeneratorCapacity.MaxCardsPerSet) {
+                    errors.Add(item: $"{path}.weighted holds {outcomeCards} cards counting each outcome's count, exceeding the {WorldGeneratorCapacity.MaxCardsPerSet} a deck mask can deal.");
                 }
 
                 if (!anyOutcomeWeight) {
@@ -665,8 +786,11 @@ public static partial class WorldDefinitionValidator {
                 if (row.Dynamics is not null) {
                     errors.Add(item: $"{path} ('{row.Name}') declares both a lattice trait and dynamics.");
                 }
+                if (row.Cycle is not null) {
+                    errors.Add(item: $"{path} ('{row.Name}') declares both a lattice trait and cycle.");
+                }
                 if (row.Draw is not null) {
-                    errors.Add(item: $"{path} ('{row.Name}') declares both a lattice trait and a draw — per-cell lattice draws are not yet admitted.");
+                    errors.Add(item: $"{path} ('{row.Name}') declares both a lattice trait and a draw facet — a lattice row draws per cell through a 'draw' entry in its paint, never through the slot-row facet.");
                 }
             }
 
@@ -775,6 +899,12 @@ public static partial class WorldDefinitionValidator {
                 path: path,
                 row: row
             );
+            ValidateCycle(
+                errors: errors,
+                numeric: numeric,
+                path: path,
+                row: row
+            );
             var effectiveCapacity = Math.Clamp(
                 value: (row.Capacity ?? WorldStateCapacity.MaxCellsPerRow),
                 min: 1,
@@ -831,6 +961,21 @@ public static partial class WorldDefinitionValidator {
                     (cell.Dynamics is not null)
                 ) {
                     errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares both advance and dynamics — a cell is a linear accumulator or a second-order easing cell, never both.");
+                }
+
+                if ((cell.Cycle is not null) && ((cell.Advance is not null) || (cell.Dynamics is not null))) {
+                    errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares cycle beside advance or dynamics — a cell is a linear accumulator, a second-order easing cell or a tick-indexed rotation, never two of them.");
+                }
+
+                if (cell.Cycle is { } cellCycle) {
+                    ValidateCellCycle(
+                        cell: cell,
+                        cellPath: cellPath,
+                        cycle: cellCycle,
+                        errors: errors,
+                        numeric: numeric,
+                        row: row
+                    );
                 }
 
                 if (cell.Advance is { } cellAdvance) {

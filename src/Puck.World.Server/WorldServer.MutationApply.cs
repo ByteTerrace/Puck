@@ -611,6 +611,7 @@ public sealed partial class WorldServer {
                 definition: candidate,
                 rebuildPopulation: true
             );
+            PaintLatticeDraws(definition: candidate);
 
             if (rebuildAddonPlan is not null) {
                 m_addons!.Commit(plan: rebuildAddonPlan);
@@ -768,7 +769,8 @@ public sealed partial class WorldServer {
                 : body.PeekContinuity()),
                 Generation: m_population.Generation(index: index),
                 PlacementId: m_population.InhabitantPlacementId(index: index),
-                Heading: body.Yaw
+                Heading: body.Yaw,
+                Facts: body.Facts
             );
         }
 
@@ -1223,6 +1225,13 @@ public sealed partial class WorldServer {
                 mutation: mutation
             ) || (solidAffecting && WorldContactSelection.RequiresField(collision: candidate.Collision)))
             );
+
+            if (mutation is WorldMutation.Generate generated) {
+                RepaintLatticeDrawAfterGenerate(
+                    definition: candidate,
+                    rowName: generated.Row
+                );
+            }
 
             if (addonPlan is not null) {
                 m_addons!.Commit(plan: addonPlan);

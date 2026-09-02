@@ -349,6 +349,17 @@ internal static class WorldSessionCapture {
             });
         }
 
+        // A cycling slot settles to its current rotation index (or node) at epoch zero, so a boot from the projection
+        // reads the same value at its first tick; a partial step under ticksPerStep is not carried.
+        if (row.Cycle is { } rowCycle) {
+            var slot = row.Cells![0];
+
+            return (row with {
+                Cycle = (rowCycle with { EpochTick = 0 }),
+                Cells = [(slot with { Value = rowCycle.SettledPhase(baseValue: slot.Value, currentTick: tick, row: row) })],
+            });
+        }
+
         if (row.Cells is not { Count: > 0 } cells) {
             return row;
         }
@@ -367,6 +378,16 @@ internal static class WorldSessionCapture {
                     currentTick: tick
                 ),
                     Advance = (cellAdvance with { EpochTick = 0 }),
+                });
+
+                continue;
+            }
+
+            if (cell.Cycle is { } cellCycle) {
+                settledCells ??= new List<WorldStateCell>(collection: cells);
+                settledCells[index] = (cell with {
+                    Value = cellCycle.SettledPhase(baseValue: cell.Value, currentTick: tick, row: row),
+                    Cycle = (cellCycle with { EpochTick = 0 }),
                 });
 
                 continue;

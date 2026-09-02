@@ -344,14 +344,26 @@ public static class WorldStateReader {
                 baseValue: cell.Value,
                 currentTick: tick
             )
-            : ((cell.Advance is { } cellAdvance)
-                ? cellAdvance.ComputeCurrentValue(
+            : (((row.Cycle is { } cycle) && (cell.Key == WorldStateRow.SlotKey))
+                ? cycle.ComputeCurrentValue(
                     row: row,
                     baseValue: cell.Value,
                     currentTick: tick
                 )
-                : cell.Value
-        ));
+                : ((cell.Advance is { } cellAdvance)
+                    ? cellAdvance.ComputeCurrentValue(
+                        row: row,
+                        baseValue: cell.Value,
+                        currentTick: tick
+                    )
+                    : ((cell.Cycle is { } cellCycle)
+                        ? cellCycle.ComputeCurrentValue(
+                            row: row,
+                            baseValue: cell.Value,
+                            currentTick: tick
+                        )
+                        : cell.Value
+        ))));
         text = cell.Text;
     }
 

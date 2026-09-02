@@ -1,0 +1,41 @@
+{
+  "schema": "puck.world.def.v1",
+  "documentId": "state-cycle-trait-canary",
+  "simulation": {
+    "rateHz": 240
+  },
+  "state": {
+    "world": [
+      {
+        "name": "spin",
+        "kind": "int",
+        "value": 0
+      },
+      {
+        "name": "spinPhased",
+        "kind": "int",
+        "value": 7
+      },
+      {
+        "name": "spinTurns",
+        "kind": "fixed",
+        "value": "0"
+      },
+      {
+        "name": "spinCos",
+        "kind": "fixed",
+        "value": "0"
+      },
+      {
+        "name": "orbit",
+        "kind": "int",
+        "value": 5
+      },
+      {
+        "name": "orbitX",
+        "kind": "fixed",
+        "value": "5"
+      }
+    ]
+  }
+}

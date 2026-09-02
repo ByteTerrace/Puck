@@ -415,7 +415,7 @@ public sealed partial class WorldServer {
                 continue;
             }
 
-            var nonzero = ((cell.Advance is null)
+            var nonzero = (((cell.Advance is null) && (cell.Cycle is null))
                 ? (cell.Value != 0L)
                 : (ReadStateCell(
                     row: row,

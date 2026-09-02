@@ -242,7 +242,13 @@ another text cell. Two indirections make "the body my `target` cell names"
 addressable: a key spelled `$cell:<row>:<key>` resolves to that cell's integer
 value at every read/firing (effect `key`/`fromKey`, `compareState`
 `key`/`comparandKey`), and a body-reference token `cell:<row>:<key>` does the
-same inside `$distance:`/`$los:`/`$nearest:`. `$nearest:<bodyRef>:<row>` is the
+same inside `$distance:`/`$los:`/`$nearest:`. `$symmetry:<function>[:<argument>]:<row>`
+reads a cell holding a symmetry-lattice node (0..239) through `ring`, `antipode`,
+`canonicalRay`, `cycle:<steps>`, `reflect:<node|cell:<row>[.<key>]>`,
+`orthogonal:<node|cell:…>` (1/0) or `projectionX`/`projectionY` — the row is the
+last token, `key` addresses the cell as usual, no node reads −1 (0 for
+orthogonal/projections); `world.symmetry <node> [other]` echoes the same maps.
+`$nearest:<bodyRef>:<row>` is the
 nearest other active body whose cell in keyed `<row>` is nonzero (−1 for none,
 ties to the lowest index) — `puck.world.frozen.json`'s `auto-target` rule is
 `setState target.0 fromState $nearest:body:0:enemy`. `save` admits on DIFFERENT
@@ -552,14 +558,38 @@ field refuses BY NAME, including `bound`/`mode`, which are non-nullable and are
 refused against their declared defaults:
 
 - `markov` — `start`, `bound`, `mode`, `contexts` (weighted alternatives, each
-  naming the context it moves INTO). Writes TEXT; the only shape that DEALS. One
+  naming the context it moves INTO). Writes TEXT; deals per context. One
   emission is one walk from `start` to a TERMINAL context (one declaring no
   alternatives), refusing by name at `bound` rather than truncating. `mode` is
   `withReplacement` (default), `withoutReplacement` (dealt out → refuse by name)
   or `reshuffleOnExhaustion`.
-- `uniformRange` — `rangeMin`/`rangeMax`, both or neither. One numeric draw.
-- `weightedNumeric` — `weighted` (`{value, weight}` rows). One numeric draw.
-- `streamDraw` — no fields. One raw 32-bit draw.
+- `uniformRange` — `rangeMin`/`rangeMax`, both or neither. One numeric draw;
+  refuses a `mode`.
+- `weightedNumeric` — `weighted` (`{value, weight, count?}` rows) and `mode`. One
+  numeric draw; under a deck `mode` the outcomes are dealt through the site's
+  single `drawDecks` mask — the numeric shuffle bag. `count` (also on a Markov
+  alternative) is that many cards per pass; a set's cards total at most 64.
+- `streamDraw` — no fields. One raw 32-bit draw; refuses a `mode`.
+
+The alias table over a source's full card set is compiled once per
+`WorldGenerator` instance (`WorldGeneratorEngine`, a `ConditionalWeakTable`), so
+per-tick draws do not rebuild it; a dealt-down pool is rebuilt allocation-free
+in bounded stack storage per emission, with the identical alias mapping.
+
+A lattice row's paint may carry one `draw` fill (`WorldLatticeFill.Draw`,
+`{ "$type": "draw", "source" | "generator" }`, numeric sources only): the
+per-cell lattice draw. It is one whole-field pass of the row's stream
+(`WorldGeneratorEngine.TryFireBatch`; cell `k` = the sample at
+`drawCursor + k`, deck threaded cell to cell), painted at boot by `WorldServer`
+at the pass the row's `drawCursor`/`drawDecks` name, and advanced one pass plus
+repainted by `world.generate <row>` (`TryComposeGenerate`'s lattice arm, then
+`RepaintLatticeDrawAfterGenerate`). Draw keeps its authored position in the
+paint list: it overwrites earlier fills and later fills overwrite it. Whole-
+document rebuild/load/reset repaint every draw row; undo repaints only a row
+whose cursor/deck position rewound, preserving unrelated reaction-evolved
+fields. Read law:
+`tests/Puck.World.Schema.Tests/WorldLatticeDrawLawTests.cs`; live proof:
+`tests/Puck.World.Canaries/lattice-draw-fill`.
 
 `WorldGeneratorCapacity`: 32 contexts, 64 alternatives per context (one deck-mask
 bit each), bound ≤ 64, token ≤ 64 UTF-16 units, 64 weighted outcomes, 64 declared
@@ -751,6 +781,24 @@ it settles `advance`: `y0`/`v0` become the live eased sample at the saved
 tick and `epochTick` projects to `0`, so a reloaded session keeps easing with
 no freeze.
 
+A row or a keyed cell may instead declare `cycle` (`WorldStateCycle`,
+`{plane, output, ticksPerStep, epochTick}`) — the tick-indexed rotation,
+mutually exclusive with `advance`/`dynamics`/`draw`/`lattice` and scalar-only
+at the row level the same way they are. The value is a pure function of the
+server tick through `Puck.Maths.CyclicRotation` (`plane` 0..3 picks the plane
+whose steps per tick are 1, 7, 11 or 13 twelfths of a turn; one step lasts
+`ticksPerStep` ticks from `epochTick`; every plane closes at step 30). `output`
+is `Step`/`Node`/`Ring` on an `int` row, `Turns`/`Cos`/`Sin`/`ProjectionX`/`ProjectionY`
+on a `fixed` row; the lattice outputs read `Puck.Maths.SymmetryLattice`, the
+stored value being the node (0..239) carried one ring position per step. The
+stored value is the PHASE in the row's displayed unit — nothing accumulates,
+nothing rebases (`RebaseCellTraits` leaves it alone; `UpsertStateCell`
+preserves it), a write sets the phase, `addState` turns it. `world.state`
+echoes `cycle=plane<p>:<output>/<ticksPerStep>@epoch<n>`; `world.save`
+settles the value to the current index/node at epoch `0`. Read law:
+`tests/Puck.World.Schema.Tests/StateCycleReadLawTests.cs`; live proof:
+`tests/Puck.World.Canaries/state-cycle-trait`.
+
 World/owned-world ids (`Server/WorldOwnedWorlds.cs`) and `world.instance.start`
 names are `WorldSafeName` (the same `WorldSafeName.cs`) — the reserved-character
 kernel `WorldCellName` shares, plus a bare `"."`/`".."` refusal instead of the
@@ -765,7 +813,9 @@ Worlds have no in-code definition. A boot with no `--world` override loads
 `src/Puck.World/Assets/worlds/puck.world.json` — the bare walker world, a delta over
 `standard.basis.json`. The basis carries the standards, defined AS STATE — a `transforms` text row
 (`identity`/`origin`/`unit`) and a `colors` text row that document values reference by
-`state.<row>.<key>` instead of restating literals — plus the infinite SAFETY NET and its debug
+`state.<row>.<key>` instead of restating literals — the standard `theme` section (an ABSENT theme
+resolves to `WorldThemeSection.Absent`, all zeros, which the console panel draws as a 120×16 px
+black corner: 1 px glyph cells, no chrome) — plus the infinite SAFETY NET and its debug
 texture: one SOLID Plane placement (`groundPlane`) at y = −16, catching anything that falls (never
 the level's own floor), its single shape rendered and collided from the same declaration, under the
 unbounded `groundTexture` checkerboard (one tile wallpaper-folded with a parity `materialStride`

@@ -79,7 +79,7 @@ home is `WorldStateRow.Draw`; `bodies.capacityRow`/`host.backendRow` are boot-ti
 already-resolved row rather than sites of their own, and nothing settles-and-clears any more — a
 boot-drawn row is the persisted evidence, re-read on every fresh load, never a value that becomes
 indistinguishable from an authored literal. A `state.lattices` topology plus a `lattice` trait on
-ordinary `fixed` rows is the field/terrain primitive, not a sibling section: `rect`/`noise`/`scatter`
+ordinary `fixed` rows is the field/terrain primitive, not a sibling section: `rect`/`noise`/`scatter`/`draw`
 paint seeds a row deterministically (integer-hash + Q48.16, seeded from `generation.worldSeed`), and
 `diffuse`/`decay`/`transform`/`emit`/`expose`/`flow` reactions evolve it each `stepEveryTicks`, every
 reaction scalar a literal or a `{"row": "name"}` read fresh per step — a season or weather-intensity row
@@ -104,7 +104,7 @@ dissolved into placements' own policy block); `prototypes` (`prototypeId` refere
 `playerDefaults`/`seatLook`. `puck.world.frozen.json` (the frozen diorama — see
 the 2026-08-31 reset below) is the worked example: the island lattice burns,
 freezes, melts, and evaporates on the folded spelling, and its bodies carry the
-hp/targeting/attack, elemental-status, and state-driven-look suites.
+hp/targeting/attack, elemental-status, and state-driven-look suites. A value that turns with the tick is a `cycle` trait on a state row (`WorldStateCycle`, beside `advance` and `dynamics`), reading `Puck.Maths.CyclicRotation` and, for its lattice outputs, `Puck.Maths.SymmetryLattice` — a looping animation, a phase or a ring-slot address enters the game as a row every draw, rule, binding and HUD element already reads, never as a shader-side clock.
 
 **Gravity authoring names acceleration independently of geometry.** A world may
 author a uniform acceleration directly, retain explicit placement-plus-mass
@@ -169,7 +169,9 @@ and the old basis froze with it as `puck.basis.frozen.json` — only the frozen 
 The new `puck.world.json` is a delta over the new `standard.basis.json`, which carries the standards,
 defined AS STATE (owner ruling, same day) — a `transforms` text row (`identity`/`origin`/`unit`) and
 a `colors` text row that document values reference by `state.<row>.<key>` instead of restating
-literals, so no shipped document carries a literal `[0, 0, 0, 1]` again — plus the INFINITE SAFETY
+literals, so no shipped document carries a literal `[0, 0, 0, 1]` again — the standard `theme`
+(without it the overlay resolves to the zeroed absent theme and the console panel is a 1 px-cell
+black corner) — plus the INFINITE SAFETY
 NET and its debug texture (owner rulings, same day): one solid Plane placement (`groundPlane`, the
 `groundContact` precedent) at y = −16, a reasonable distance below origin, catching anything that
 falls, never the level's own floor — its single shape both rendered and collided, one declaration,

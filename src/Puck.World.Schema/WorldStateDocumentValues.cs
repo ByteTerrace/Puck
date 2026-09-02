@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Assets.Documents;
+using Puck.Maths;
 
 namespace Puck.World;
 
@@ -104,20 +105,45 @@ public static class WorldStateDocumentValues {
                 return true;
             }
 
-            if (
-                !WorldStateReader.TryRead(
+            if (!WorldStateReader.TryRead(
                 definition: definition,
                 key: key,
-                rawValue: out _,
+                rawValue: out var rawValue,
                 row: out var stateRow,
                 rowName: row,
                 text: out var text,
                 tick: 0UL
-            ) ||
-                (stateRow.Kind != CellKind.Text) ||
+            )) {
+                reason = $"{path} reference '{reference}' must name a declared state cell";
+                return false;
+            }
+
+            // A numeric cell is offered as its decimal spelling — the same text the document would carry literally
+            // — so a scalar binds an int or fixed cell (a drawn or advancing one included) and a vector still
+            // refuses it by expectation.
+            // A draw site fills at boot, after this walk runs at parse: a reference to it stays attached and
+            // resolves on the post-draw pass (WorldDefinitionLoader), so an empty drawn cell is deferred, not refused.
+            if (
+                (stateRow.Draw is not null) &&
+                (rawValue is null) &&
                 (text is null)
             ) {
-                reason = $"{path} reference '{reference}' must name a declared Text state cell";
+                return true;
+            }
+            if (stateRow.Kind != CellKind.Text) {
+                if (rawValue is not { } raw) {
+                    reason = $"{path} reference '{reference}' names a cell that holds no value";
+                    return false;
+                }
+
+                text = stateRow.Kind switch {
+                    CellKind.Fixed => FixedQ4816.FromRawBits(value: raw).ToString(),
+                    CellKind.Bool => ((raw != 0L) ? "true" : "false"),
+                    _ => raw.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
+                };
+            }
+            if (text is null) {
+                reason = $"{path} reference '{reference}' names a cell that holds no value";
                 return false;
             }
 

@@ -1,0 +1,8 @@
+# boot, read the cycling rows at three live ticks, then confirm nothing was refused on the wire
+world.status
+world.state
+world.wait 30
+world.state
+world.wait 40
+world.state
+wire.errors

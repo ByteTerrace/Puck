@@ -1165,6 +1165,8 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"fields.paint declares {paint.Count} rows, exceeding the {WorldFieldCapacity.MaxPaint}-row ceiling.");
         }
 
+        var drawnFields = new HashSet<string>(comparer: StringComparer.Ordinal);
+
         for (var index = 0; (index < paint.Count); index++) {
             var path = $"fields.paint[{index}]";
             var row = paint[index];
@@ -1209,6 +1211,57 @@ public static partial class WorldDefinitionValidator {
                     }
                     if ((noise.Octaves < 1) || (noise.Octaves > 4)) {
                         errors.Add(item: $"{path}.octaves must be in 1..4 (was {noise.Octaves}).");
+                    }
+
+                    break;
+                case WorldLatticeFill.Draw draw:
+                    if (!drawnFields.Add(item: row.Field)) {
+                        errors.Add(item: $"{path} is a second draw fill on field '{row.Field}' — a lattice row deals one whole-field pass at a time through its own cursor and decks, so it carries at most one draw fill.");
+                    }
+
+                    if (!WorldGeneratorEngine.TryResolveSource(
+                        generators: definition.Generators,
+                        draw: new WorldDraw(Source: draw.Source, Generator: draw.Generator),
+                        generator: out var drawSource,
+                        reason: out var drawReason
+                    )) {
+                        errors.Add(item: $"{path} {drawReason}.");
+
+                        break;
+                    }
+
+                    if (draw.Generator is { } inlineSource) {
+                        ValidateSource(
+                            errors: errors,
+                            generator: inlineSource,
+                            path: $"{path}.generator"
+                        );
+                    }
+
+                    if (!WorldGeneratorEngine.TryCheckTargetKind(
+                        source: drawSource.Source,
+                        targetKind: CellKind.Fixed,
+                        reason: out var kindReason
+                    )) {
+                        errors.Add(item: $"{path} {kindReason} — a lattice cell is a fixed value.");
+                    }
+
+                    var latticeSamples = ((((long)lattice.Width) * lattice.Depth) * lattice.Layers);
+                    var drawDecks = WorldDefinitionRows.FindStateRow(
+                        rows: definition.State,
+                        name: row.Field
+                    )?.DrawDecks;
+
+                    if (
+                        (latticeSamples > 0L) &&
+                        !WorldGeneratorEngine.TryCheckBatchCapacity(
+                            generator: drawSource,
+                            decks: drawDecks,
+                            sampleCount: latticeSamples,
+                            reason: out var batchReason
+                        )
+                    ) {
+                        errors.Add(item: $"{path} {batchReason}.");
                     }
 
                     break;

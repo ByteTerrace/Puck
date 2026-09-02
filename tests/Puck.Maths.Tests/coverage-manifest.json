@@ -3681,6 +3681,13 @@
       ]
     },
     {
+      "Id": "Puck.Maths.CyclicRotation.Rotor(System.Int64)",
+      "State": "covered",
+      "CoveredBy": [
+        "scalar.cyclic-rotation-closes-its-loop"
+      ]
+    },
+    {
       "Id": "Puck.Maths.CyclicRotation.Step(System.Int32,System.Int64)",
       "State": "covered",
       "CoveredBy": [
@@ -20806,6 +20813,14 @@
     },
     {
       "Id": "Puck.Maths.SymmetryLattice.Cycle(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.symmetry-lattice-exact-structure",
+        "presented.reflection-action-lattice"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SymmetryLattice.Cycle(System.Int32,System.Int64)",
       "State": "covered",
       "CoveredBy": [
         "integer.symmetry-lattice-exact-structure",
