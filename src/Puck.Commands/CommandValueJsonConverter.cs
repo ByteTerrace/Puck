@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -28,6 +29,17 @@ namespace Puck.Commands;
 /// </para>
 /// </remarks>
 public sealed class CommandValueJsonConverter : JsonConverter<CommandValue> {
+    // The exact declared member names, ordinal. Enum.TryParse is NOT the rule this converter documents: even with
+    // ignoreCase false it accepts a numeric string ("2"), a comma-separated member list ("Digital, Axis1D") and
+    // whitespace-padded names — all of which Write would then hand back as a DIFFERENT token, silently rewriting an
+    // authored document on the next save. A name table refuses everything that is not a member name, spelled the
+    // way the enum spells it.
+    private static readonly FrozenDictionary<string, CommandValueKind> s_kindsByName = Enum.GetValues<CommandValueKind>().ToFrozenDictionary(
+        comparer: StringComparer.Ordinal,
+        elementSelector: static kind => kind,
+        keySelector: static kind => kind.ToString()
+    );
+
     private static Vector4 ReadRaw(ref Utf8JsonReader reader) {
         if (reader.TokenType != JsonTokenType.StartArray) {
             throw new JsonException(message: "CommandValue raw must be a four-element array.");
@@ -87,12 +99,10 @@ public sealed class CommandValueJsonConverter : JsonConverter<CommandValue> {
 
                     if (
                         (token is null) ||
-                        !Enum.TryParse<CommandValueKind>(
-                        ignoreCase: false,
-                        result: out var parsed,
-                        value: token
-                    ) ||
-                        !Enum.IsDefined(value: parsed)
+                        !s_kindsByName.TryGetValue(
+                        key: token,
+                        value: out var parsed
+                    )
                     ) {
                         throw new JsonException(message: $"CommandValue kind '{token}' is not declared.");
                     }
