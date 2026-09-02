@@ -46,9 +46,11 @@ Both documents ride inside the package.
 binding noncommercial license;
 [`LICENSING.md`](https://github.com/ByteTerrace/Puck/blob/main/LICENSING.md) is
 the plain-language summary of who needs which, and how to ask for commercial
-terms. PolyForm Noncommercial is not on NuGet.org's license-expression
-allowlist, so the package page shows no license expression at all; read those
-two files rather than that blank.
+terms. PolyForm Noncommercial is not on NuGet.org's allowlist of license
+expressions, which admits only OSI- and FSF-approved licenses, so the package
+declares its license as the packed `LICENSE.md` file instead. The gallery page
+therefore links that file rather than naming a license in its own vocabulary,
+and the two documents above are the terms themselves.
 
 ## ✨ Key features
 
@@ -88,7 +90,9 @@ seat's own text session, instead reaches `CommandRegistry.Submit`: an
 `Immediate` command parses and runs there as the stamped principal, while a
 `Simulation` command is resolved to the command it names and queued through that
 principal's sink into the router, so it dispatches on a tick exactly as a bound
-press does.
+press does. That queueing is what wiring a sink buys: a host that never calls
+`RouteSimulationTo` and hands its seats no session sink has no lane to queue
+into, and its `Simulation` lines run inline like immediate ones.
 
 *(The two diagrams below draw that flow. They render on GitHub; NuGet.org's
 markdown shows them as their source text.)*
@@ -100,12 +104,13 @@ graph LR
     Console(["⌨️ Administrative stdin"]) --> Submit
     SeatText(["⌨️ Seat text session"]) --> Submit
     Submit(["submitted line"]) -->|"Immediate: parse + run as stamped principal"| Handler
-    Submit -->|"Simulation: resolve the command it names,<br/>queue through that principal's sink<br/>(parsed at apply time; a quoted verb<br/>also parses at submit)"| Router
+    Submit -->|"Simulation, sink wired: resolve the command it names,<br/>queue through that principal's sink<br/>(parsed at apply time; a quoted verb<br/>also parses at submit)"| Router
+    Submit -->|"Simulation, no sink wired: run inline"| Handler
     Router(["🎚️ InputRouter<br/>orders commands per slot and<br/>stamps the host-resolved principal"]) --> Snapshot(["📋 CommandSnapshot"])
     Snapshot --> Pump(["⏱️ Host fixed-step pump"])
     Pump -->|"ApplySnapshot"| Apply(["🗄️ CommandRegistry<br/>map-gated dispatch"])
     Apply --> Handler(["🎯 handler(CommandContext)"])
-    Pump -->|"Step(tick, snapshot)"| Simulation(["🌍 Simulation"])
+    Pump -->|"Step(in FixedStepContext, in CommandSnapshot)"| Simulation(["🌍 Simulation"])
 ```
 
 For a simulation that owns the final state, the loop is fixed-step: producers
@@ -123,10 +128,10 @@ sequenceDiagram
     participant S as Simulation
     loop every fixed tick
         P->>R: Capture(signal…)
-        H->>R: SnapshotForTick(tick)
+        H->>R: SnapshotForTick(tick, windowEndTick)
         R-->>H: ordered per-slot snapshot
         H->>G: ApplySnapshot — map-gated dispatch
-        H->>S: Step(tick, snapshot)
+        H->>S: Step(in FixedStepContext, in CommandSnapshot)
     end
 ```
 
@@ -210,6 +215,7 @@ a simulation implements, so a host that owns its own accumulator can drive the
 loop above without taking anything else from this repository:
 
 ```csharp
+using Puck.Commands;
 using Puck.Hosting;
 
 sealed class GameSimulation : IFixedStepSimulation {
@@ -340,6 +346,15 @@ constant when a digital key should drive a fixed `move` axis. Channel
 destinations use the separate `ChannelScale` path described in the generated
 API reference.
 
+A command that stays on while its input is down declares itself HELD, through
+the `held:` parameter on `CommandDefinition.Verb` and `WithWireArgs`, and a
+handler for one reads `context.Phase` to tell the two edges apart: it is active
+on `Started` and `Active`, and released on `Completed` and `Canceled`. What that
+declaration buys an author is that a plain binding entry, one carrying no
+`activateOn`, delivers BOTH edges, exactly as a channel destination does. So a
+crouch or an aim is bound once, and nobody authors a release twin beside it;
+only an explicit `activateOn` narrows the entry back to a single edge.
+
 One physical input may bind to commands in several maps; only commands active
 for the source's resolved slot enter its snapshot, so mode changes do not
 rewrite the binding table or affect another player.
@@ -431,13 +446,22 @@ Two public paths reach a handler:
    belongs to a local seat.
 2. **Submitted text.** `CommandRegistry.Submit` runs an immediate command as
    `CommandPrincipal.Console`. A command declared `CommandRouting.Simulation`
-   instead enters the router through `ConsoleTextSink` and runs when the host
-   applies its fixed-step snapshot. For a line whose verb token stands on its
-   own, `Submit` resolves it by that leading verb alone and the line's own parse
-   happens once, when its tick applies. A line the parser must unquote to name
-   its verb (`"sim.record" payload`) is routed after that parse instead, so it
-   costs one extra parse; what a line is never allowed to cost is running a
-   `Simulation` handler inline, outside the deterministic lane.
+   defers instead, but only once a sink is wired for it: either the registry's
+   own through `RouteSimulationTo`, or the one a `TextCommandSession` carries. A
+   wired line enters the router through that sink and runs when the host applies
+   its fixed-step snapshot. With no sink, there is nowhere to defer to and the
+   line dispatches inline like an immediate one, so a host that wants the
+   deferral must wire the sink; the quick start's
+   `registry.RouteSimulationTo(sink: router.ConsoleTextSink)` is that call. For
+   a deferred line whose verb token stands on its own, `Submit` resolves it by
+   that leading verb alone and the line's own parse happens once, when its tick
+   applies. A line the parser must unquote to name its verb
+   (`"sim.record" payload`) is routed after that parse instead, so it costs one
+   extra parse; what a line is never allowed to cost is running a `Simulation`
+   handler inline once its lane exists. Resolving that leading verb reads the
+   line through an allocation-free tokenizer bounded at 64 whitespace tokens; a
+   longer line falls through to the full parse and reaches the same handler by
+   the slower road.
 
 Five properties of the submitted line are worth stating outright, because a
 scripted driver depends on them:
@@ -452,8 +476,13 @@ scripted driver depends on them:
   case-sensitively, so the full parse substitutes the canonical spelling for the
   leading verb rather than the registry narrowing to match the parser.
 - **A handler that throws never propagates out of `Submit` or `ApplySnapshot`.**
-  The escaped exception becomes an `IsError` result naming it, visible to
-  observers and counted by `wire.errors`. The boundary is the ENTRY rather than
+  The escaped exception becomes an `IsError` result naming it, counted by
+  `wire.errors`. Where that result goes differs by path: on `ApplySnapshot` it
+  reaches every registered `ICommandObserver`, which is the only report a pushed
+  activation has, while `Submit` returns it to the caller who submitted the line
+  and notifies no observer. A host cannot watch `Submit` faults through an
+  observer; it reads them from the returned `CommandResult`.
+  The boundary is the ENTRY rather than
   the handler, so it also contains what an observer throws and what the
   registry's own decoding of a submitted line raises; the rest of the tick's
   entries still run, and each entry's read-after-write barrier releases whether
@@ -474,12 +503,26 @@ scripted driver depends on them:
   propagates a nested refusal as an error contributes exactly one refusal
   however deeply it nested, and a macro that swallows one and answers success
   contributes nothing. That is the question the number answers, so a macro verb
-  that must not hide a failure has to propagate it.
+  that must not hide a failure has to propagate it. The nesting itself is
+  bounded at eight: a chain that submits deeper is refused with
+  `[wire.reject: command submission nested more than 8 deep — '<line>' refused]`,
+  so an accidental cycle answers as an ordinary error rather than overflowing
+  the stack and taking the session with it.
 
 Read-after-write ordering across submitted lines is a `TextCommandSession`
 guarantee rather than a `Submit` one: `TextCommandSource.Collect` holds that
 session's following non-Simulation line until its pending Simulation submission
 has applied, and each session's hold is independent of every other session's.
+
+That drain does two more things a piped script depends on. It skips a blank line
+and a line whose first non-whitespace character is `#`, so a driving script can
+carry its own commentary (a header saying what the run proves, a note beside
+each step) and only the real verbs run. And `TextCommandSource.HoldGate` is an
+optional predicate the drain consults before each line: while it answers true
+nothing dequeues, so a verb that arms it (a `step <n>` or `settle`) stops the
+rest of the frame's drain and the queued lines behind it wait, in order, for a
+later frame to let them go. Left `null`, the gate never holds and every queued
+line drains each frame.
 
 The addon pump (`Puck.World.Addons`' `AddonSimulationPump`) is not a third
 `Puck.Commands` path. `Puck.World.Addons` reads its typed submissions and turns
@@ -494,7 +537,10 @@ returns an `ImmutableArray<string>` for the same reason).
 `ApplySnapshot` remains public because the host loop lives in another assembly,
 but `CommandEntry`, `CommandLane`, and `CommandSnapshot` are internal to
 construct and public only to read. The only snapshot a caller can create
-directly is an empty one, which dispatches nothing. `ApiSurfaceTests` fails the
+directly is an empty one, which dispatches nothing. A snapshot another
+registry's router built is refused with `ArgumentException` before any entry is
+examined, so a host that mixed two registries learns it at the call site rather
+than through a half-applied tick. `ApiSurfaceTests` fails the
 suite if a public constructor appears on any of the four, so this is enforced
 rather than merely asserted.
 
@@ -513,7 +559,7 @@ member-by-member surface.
 | `CommandPrincipal` / `CommandPrincipalKind` | The acting identity a dispatch carries: `Console`, `Seat`, `Addon`, or `Peer`. |
 | `ICommandPrincipalResolver` | The host's answer to *who is acting through slot N*, which the router stamps onto that slot's commands. |
 | `CommandBindability` | Whether a binding document may name a command. Required at every registration; `Unspecified` is refused by name. |
-| `CommandMetadata` | The public read-only face of a registration (name, value kind, routing, bindability, input scope, map) — what `Definitions` returns. |
+| `CommandMetadata` | The public read-only face of a registration — what `Definitions` returns. Its eight members are the name, value kind, routing, bindability, input scope, map, whether the command is a held verb, and whether it accepts wire arguments; the vocabulary gate reads that last one to decide whether a binding row may carry authored text. |
 | `CommandResult` | What a handler returns for the transcript (output text + optional clear). |
 | `CommandValue` / `CommandValueKind` | The per-frame value, tagged with its shape, packed into a `Vector4`. |
 | `CommandPhase` | Transition the activation represents: `Started`, `Active`, `Completed`, `Canceled`. |
@@ -546,6 +592,16 @@ member-by-member surface.
   whose map is inactive, is ignored without error.
 - **`help` is built in.** The registry auto-registers a `help` command listing
   every command and description.
+- **`wire.ack` sets how loud an accepted line is.** `wire.ack on`, the default,
+  echoes every accepted command; `wire.ack quiet` drops the bare success
+  acknowledgements, and only those. A verb opts into being droppable by
+  declaring `CommandDefinition.AcknowledgementOnly`, which says its success
+  output acknowledges a side effect rather than answering a question. An error
+  is never suppressed, and neither is the output of a verb that answers with
+  data, so a scripted driver quiets the noise without losing a refusal or a
+  read-back. Given no argument the verb reports the current mode. A wire-native
+  handler can read `WireArgs.Echo` and skip building a string the registry would
+  drop anyway.
 - **Thread-safety.** `InputRouter.Capture` accepts signals from device I/O
   threads while the fixed-step thread builds snapshots; it refuses a signal that
   names no source, and past `InputRouter.MaxCapturedSignals` (4096) it drops the
