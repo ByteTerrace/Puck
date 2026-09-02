@@ -118,6 +118,79 @@ public sealed class BindingWheelGeometryTests {
             Assert.Equal(actual: transitions, expected: sectorCount);
         }
     }
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    [InlineData(6)]
+    [InlineData(7)]
+    [InlineData(8)]
+    [Theory]
+    public void EverySeamLandsInTheSectorItOpensInEveryQuadrant(int sectorCount) {
+        // The documented rule is half-open: sector k sweeps from half a sector BEFORE its centre, so a direction
+        // sitting exactly on a seam belongs to the sector clockwise of it. That has to hold in all four quadrants,
+        // and it did not: the fixed-point reading rounds a magnitude away from zero, which is forward on the
+        // positive half-plane and BACKWARD once the negative reading is wrapped by adding a turn.
+        var span = (Math.Tau / sectorCount);
+
+        foreach (var style in Styles()) {
+            for (var sector = 0; (sector < sectorCount); sector++) {
+                var seam = ((style.SectorOffset * span) + ((sector - 0.5d) * span));
+
+                foreach (var magnitude in new[] { 0.03125d, 0.5d, 1d, 64d, 4096d, }) {
+                    var selection = BindingWheelGeometry.SelectDirection(
+                        sectorCount: sectorCount,
+                        style: style,
+                        vector: VectorAt(
+                            clockwise: seam,
+                            magnitude: magnitude
+                        )
+                    );
+
+                    Assert.Equal(expected: BindingWheelSelectionOutcome.Sector, actual: selection.Outcome);
+                    Assert.Equal(
+                        actual: selection.Sector,
+                        expected: sector
+                    );
+                }
+            }
+        }
+    }
+    [Fact]
+    public void ASeamTieIsDecidedByTheFixedPointReadingNotAFloatOne() {
+        // Literal expectations on the four quadrant seams of a quarter radial, each backed off by a QUARTER of one
+        // Q16 quantisation step — inside the reading's own resolution, so the two implementations provably disagree.
+        // Reverting the trig to MathF.Atan2 fails every line here.
+        const double Step = (1d / 65_536d);
+
+        var style = new BindingWheelStyleDefinition();
+
+        foreach (var (degrees, expected) in new[] { (45d, 1), (135d, 2), (225d, 3), (315d, 0), }) {
+            var vector = VectorAt(
+                clockwise: (((degrees * Math.Tau) / 360d) - (0.25d * Step)),
+                magnitude: 1d
+            );
+
+            Assert.Equal(
+                actual: BindingWheelGeometry.SelectDirection(
+                    sectorCount: 4,
+                    style: style,
+                    vector: vector
+                ).Sector,
+                expected: expected
+            );
+            // The control: the float reading this replaced answers the sector BEFORE the seam for the same vector,
+            // so the assertion above cannot pass by accident on a reverted implementation.
+            Assert.Equal(
+                actual: ReferenceSector(
+                    sectorCount: 4,
+                    style: style,
+                    vector: vector
+                ),
+                expected: ((expected + 3) % 4)
+            );
+        }
+    }
     [Fact]
     public void SelectionAgreesWithTheFloatAtan2ReadingAwayFromBoundaries() {
         // The reproducible implementation is not a behavior change away from the ties it exists to pin down: the
@@ -320,6 +393,13 @@ public sealed class BindingWheelGeometryTests {
             new BindingWheelStyleDefinition(SectorOffset: 0.75f),
             new BindingWheelStyleDefinition(SectorOffset: 0.9f),
         ];
+    }
+    // The screen-space vector at an ABSOLUTE clockwise angle from twelve o'clock (0, -1), at a chosen magnitude.
+    private static Vector2 VectorAt(double clockwise, double magnitude) {
+        return new Vector2(
+            x: ((float)(Math.Sin(a: clockwise) * magnitude)),
+            y: ((float)(-Math.Cos(d: clockwise) * magnitude))
+        );
     }
     // The screen-space vector whose OFFSET-RELATIVE clockwise angle is `relative`: sector zero's centre sits
     // `SectorOffset` sectors clockwise of twelve o'clock (0, -1), and the angle advances clockwise from there.
