@@ -311,7 +311,11 @@ public sealed partial class InputRouter {
     /// <see cref="IAlwaysActiveInputBindings"/> plane answers, so a typed key cannot press a gameplay page's
     /// binding. A RELEASE still reaches the page resolver — its answer discarded — because the resolver holds the
     /// chord tracker, the press latches, and the armed command rows, and a release those never observe strands a
-    /// flipped page or an armed row for as long as the seat console stays open.</summary>
+    /// flipped page or an armed row for as long as the seat console stays open. It is forwarded with
+    /// <c>pressesWithheld</c> set (see <see cref="IInputBindings.Resolve(int, in InputSignal, bool)"/>), so the
+    /// resolver delivers what the release owes and arms nothing new. An inactive CONTINUOUS sample is forwarded only
+    /// when <see cref="IInputBindings.HoldsSource"/> says the resolver is holding that source down: a stick sitting
+    /// at centre reports every frame and is the device reporting, not a release.</summary>
     /// <param name="signal">The raw signal to capture.</param>
     /// <exception cref="ArgumentException"><paramref name="signal"/> carries no <see cref="InputSignal.Source"/>.</exception>
     /// <exception cref="ObjectDisposedException">This router has been disposed.</exception>
