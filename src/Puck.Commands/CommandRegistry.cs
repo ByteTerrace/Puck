@@ -1,6 +1,7 @@
 using System.Collections.Frozen;
 using System.Collections.Immutable;
 using System.CommandLine;
+using System.CommandLine.Parsing;
 using System.Numerics;
 
 namespace Puck.Commands;
@@ -497,9 +498,18 @@ public sealed class CommandRegistry {
         )
         ) {
             // A snapshot-routed line that does not parse to the command it was injected as never reaches its
-            // handler. Submit returned None for it, so this is the only place it can be counted — without it a
-            // Simulation-routed rejection stays invisible to wire.errors.
+            // handler. Submit returned None for it, so this is the only place it can be counted OR reported —
+            // without this a Simulation-routed rejection would leave the operator nothing but a wire.errors bump
+            // to notice, on a line whose refusal arrives a tick after the prompt accepted it.
             NoteRejection();
+            NotifyRefusal(
+                errors: parseResult.Errors,
+                expectedCommandId: expectedCommandId,
+                line: line,
+                phase: phase,
+                principal: principal,
+                slot: slot
+            );
 
             return;
         }
@@ -879,11 +889,7 @@ public sealed class CommandRegistry {
             m_rejections++;
         }
     }
-    // Notifies every observer of one dispatch. An observer is an I/O SINK (a launcher writing the verdict to stdout, a
-    // host publishing a console frame), so a throw from one is a fault in a reporting surface, never in the tick: each
-    // call gets its own boundary so one broken sink cannot silence the sinks after it, abandon the rest of the tick's
-    // entries, or strand a later submitted line's read-after-write barrier. A swallowed notification is counted as a
-    // refusal, because the verdict it carried never reached the operator.
+    // Reports one DISPATCHED command's verdict to every observer (see PublishActivation for the per-observer boundary).
     private void NotifyObservers(in CommandContext context, CommandDefinition definition, CommandResult result) {
         if (m_observers.Length == 0) {
             return;
@@ -898,6 +904,51 @@ public sealed class CommandRegistry {
             Slot: context.Slot
         );
 
+        PublishActivation(activation: in activation);
+    }
+    // Reports a DEFERRED refusal — a submitted Simulation line that reached its tick and then failed to decode as the
+    // command it was injected as — through the same observer surface a dispatched line's verdict travels.
+    //
+    // Deferring a line defers its parse, so Submit answered CommandResult.None a tick earlier and has no verdict left
+    // to return; every sink that shows an operator what a submitted line did (a launcher's stdout split, a host's
+    // console tape) keys on the activation's Text, so without this the refusal is invisible on every surface but the
+    // wire.errors counter nobody polls. The alternative — a synchronous shape check at submit — would re-parse the
+    // line at both ends, which is exactly the double parse the deferred route exists to avoid.
+    private void NotifyRefusal(string line, ushort expectedCommandId, IReadOnlyList<ParseError> errors, CommandPhase phase, CommandPrincipal principal, int slot) {
+        if (m_observers.Length == 0) {
+            return;
+        }
+
+        // Named for the command the line was INJECTED as, which is what the operator asked for; the line's own text
+        // rides Text, so a sink can show both when they disagree.
+        var name = ((((int)expectedCommandId) < m_nameById.Length)
+            ? m_nameById[expectedCommandId]
+            : LeadingVerb(line: line).ToString()
+        );
+        var reason = ((errors.Count != 0)
+            ? string.Join(
+                separator: " | ",
+                values: errors.Select(selector: static error => error.Message)
+            )
+            : $"'{line}' no longer names '{name}'"
+        );
+        var activation = new CommandActivation(
+            Name: name,
+            Phase: phase,
+            Result: CommandResult.Error(output: $"[wire.reject: {reason}]"),
+            Text: line,
+            Principal: principal,
+            Slot: slot
+        );
+
+        PublishActivation(activation: in activation);
+    }
+    // Hands one activation to every observer, each behind its own boundary. An observer is an I/O SINK (a launcher
+    // writing the verdict to stdout, a host publishing a console frame), so a throw from one is a fault in a reporting
+    // surface, never in the tick: one broken sink must not silence the sinks after it, abandon the rest of the tick's
+    // entries, or strand a later submitted line's read-after-write barrier. A swallowed notification is counted as a
+    // refusal, because the verdict it carried never reached the operator.
+    private void PublishActivation(in CommandActivation activation) {
         for (var index = 0; (index < m_observers.Length); index++) {
             try {
                 m_observers[index].OnCommand(activation: in activation);

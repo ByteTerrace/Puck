@@ -357,6 +357,37 @@ public sealed class CommandRegistryTests {
         Assert.Equal(expected: "[wire.errors: 1 rejected]", actual: registry.Submit(line: "wire.errors").Output);
     }
     [Fact]
+    public void AMalformedDeferredLineIsReportedToObserversWithItsOwnText() {
+        var seen = new List<CommandActivation>();
+        var registry = new CommandRegistry(
+            modules: [new BareSimulationModule()],
+            observers: [new RecordingObserver(seen: seen)]
+        );
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new EmptyBindings(),
+            principalResolver: new ConsolePrincipal()
+        );
+
+        registry.RouteSimulationTo(sink: router.ConsoleTextSink);
+
+        _ = registry.Submit(line: "sim.bare extra");
+
+        var snapshot = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
+        registry.ApplySnapshot(snapshot: in snapshot);
+
+        // The refusal arrives a tick after the prompt accepted the line, so the ONLY surface that can carry it is the
+        // observer stream every deferred-verdict sink already keys on by Text. Without this the operator saw nothing
+        // at submit, nothing at apply, and had to poll wire.errors to learn the line silently no-opped.
+        var activation = Assert.Single(collection: seen);
+
+        Assert.True(condition: activation.Result.IsError);
+        Assert.Equal(expected: "sim.bare extra", actual: activation.Text);
+        Assert.Equal(expected: "sim.bare", actual: activation.Name);
+        Assert.Contains(actualString: activation.Result.Output, expectedSubstring: "wire.reject");
+    }
+    [Fact]
     public void BuiltInModeTokensAreReadCaseInsensitively() {
         var registry = new CommandRegistry(modules: [new CoreModule()]);
 
@@ -604,6 +635,9 @@ public sealed class CommandRegistryTests {
     }
     private sealed class ConsolePrincipal : ICommandPrincipalResolver {
         public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Console;
+    }
+    private sealed class RecordingObserver(List<CommandActivation> seen) : ICommandObserver {
+        public void OnCommand(in CommandActivation activation) => seen.Add(item: activation);
     }
     private sealed class EchoModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
