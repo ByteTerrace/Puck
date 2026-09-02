@@ -89,9 +89,10 @@ internal static class FormatCommand {
         applies. Phase 0 (`dotnet format whitespace`) runs first over the projects
         that own corpus files and needs them restored; in WRITE mode it rewrites any
         whitespace drift in that root — run -WhatIf first on a root you have not
-        swept. The semantic named-args pass needs the projects built. A pass whose
-        input with syntax errors, or output that would add them, is always dropped
-        and reported, never written.
+        swept. The semantic named-args pass needs the projects built: an unbuilt
+        project's files are SKIPPED and named, in every mode, rather than named
+        from a framework-only closure. A pass whose input with syntax errors, or
+        output that would add them, is always dropped and reported, never written.
         Exit codes: 0 clean, 1 drift in a dry mode or a skipped rewrite, 2 usage
         error, missing root, or a tool failure in write mode.
         """;

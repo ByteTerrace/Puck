@@ -45,6 +45,7 @@ internal static class NamedArgsPhase {
         var drifted = new List<string>();
         var corrupted = new List<string>();
         var degradedProjects = new List<string>();
+        var notBuilt = new List<string>();
         var ungrouped = 0;
         var unresolved = 0;
 
@@ -65,7 +66,8 @@ internal static class NamedArgsPhase {
                 verify: verify,
                 drifted: drifted,
                 corrupted: corrupted,
-                degradedProjects: degradedProjects);
+                degradedProjects: degradedProjects,
+                notBuilt: notBuilt);
         }
 
         // A file with no owning project was silently dropped before, so the run reported a clean bill of
@@ -76,11 +78,13 @@ internal static class NamedArgsPhase {
 
         if (degradedProjects.Count > 0) {
             Console.Error.WriteLine(
-                value: $"named-args: {degradedProjects.Count} project(s) not built ({string.Join(separator: ", ", values: degradedProjects)}) — resolved against the framework only; some calls stay positional. Build for full coverage.");
+                value: $"named-args: {degradedProjects.Count} project(s) not built ({string.Join(separator: ", ", values: degradedProjects)}) — only the framework resolves there, so their files were left alone. Build them and run again.");
         }
 
+        // Only files that WERE fully analysed reach this count now, so it can no longer point at the not-built
+        // note for its explanation: a call left positional in a built project is a reference the closure missed.
         if (unresolved > 0) {
-            Console.Error.WriteLine(value: $"named-args: {unresolved} call(s) could not be resolved and were left positional (see the not-built note above, or check references).");
+            Console.Error.WriteLine(value: $"named-args: {unresolved} call(s) could not be resolved and were left positional (check the owning project's references).");
         }
 
         return RewriteIo.Report(
@@ -88,7 +92,10 @@ internal static class NamedArgsPhase {
             fileCount: targetFiles.Length,
             drifted: drifted,
             whatIf: (whatIf || verify),
-            problems: [("have syntax errors before or after rewriting — SKIPPED", corrupted)]);
+            problems: [
+                ("have syntax errors before or after rewriting — SKIPPED", corrupted),
+                ("belong to a project that is not built — SKIPPED", notBuilt),
+            ]);
     }
 
     // Names the target files of ONE project against a compilation of that project's trees and its real
@@ -103,7 +110,8 @@ internal static class NamedArgsPhase {
         bool verify,
         List<string> drifted,
         List<string> corrupted,
-        List<string> degradedProjects
+        List<string> degradedProjects,
+        List<string> notBuilt
     ) {
         var treesByPath = new Dictionary<string, SyntaxTree>(comparer: StringComparer.OrdinalIgnoreCase);
 
@@ -113,8 +121,20 @@ internal static class NamedArgsPhase {
 
         var compilation = BuildProjectCompilation(projectRoot: projectRoot, trees: treesByPath.Values, parseOptions: parseOptions, degraded: out var degraded);
 
+        // A project with no build closure resolves almost nothing, and this pass acts on what it resolves: it
+        // would name whatever the framework alone happens to bind and leave the rest positional — a partial
+        // answer indistinguishable, in the report, from a swept file. Worse, a call that binds to the WRONG
+        // overload because the right one's assembly is absent gets named against the wrong signature, and the
+        // write guard only counts parse errors, so the guess would be written. Decline the whole project, in
+        // every mode, so -WhatIf never reports a drift the run could not honestly apply either.
         if (degraded) {
             degradedProjects.Add(item: Path.GetFileName(path: projectRoot));
+
+            foreach (var file in targets) {
+                notBuilt.Add(item: CliPaths.ToDisplay(fullPath: file));
+            }
+
+            return 0;
         }
 
         var unresolved = 0;
@@ -161,7 +181,7 @@ internal static class NamedArgsPhase {
     // project's true implicit + explicit global usings) and every dependency assembly in the built output
     // (bin/**/*.dll, minus the project's own output and native DLLs), unioned with the shared framework
     // assemblies. Both need a prior build; without one, `degraded` is set and only the framework set plus
-    // a default usings list are used, so coverage is reduced.
+    // a default usings list are used — a closure named-args declines to act on at all.
     internal static CSharpCompilation BuildProjectCompilation(string projectRoot, IEnumerable<SyntaxTree> trees, CSharpParseOptions parseOptions, out bool degraded) {
         var objDirectory = Path.Combine(path1: projectRoot, path2: "obj");
         var globalUsingsFile = (Directory.Exists(path: objDirectory)
@@ -201,7 +221,12 @@ internal static class NamedArgsPhase {
             .Where(predicate: static reference => (reference is not null))
             .Select(selector: static reference => reference!);
 
-        degraded = ((globalUsingsFile is null) || !Directory.Exists(path: binDirectory));
+        // The existence of `bin` (or of a generated global-usings file) is NOT evidence of a build: phase 0's own
+        // `dotnet format whitespace` run, earlier in the same invocation, loads the project through MSBuild and
+        // leaves both behind — an EMPTY bin and a GlobalUsings.g.cs — so a directory probe called every unbuilt
+        // project built and the not-built note could never fire from inside `puck format`. The project's own
+        // output assembly is the evidence; nothing but a real build writes it.
+        degraded = ((globalUsingsFile is null) || !HasOwnOutput(binDirectory: binDirectory, projectName: projectName));
 
         return CSharpCompilation.Create(
             assemblyName: "named-args",
@@ -210,6 +235,13 @@ internal static class NamedArgsPhase {
             options: new CSharpCompilationOptions(outputKind: OutputKind.DynamicallyLinkedLibrary, allowUnsafe: true));
     }
 
+    // True when the project's OWN output assembly sits somewhere under bin — the one artifact only a real build
+    // produces, and therefore the honest answer to "has this been built?". A project with no .csproj name to look
+    // for answers false, which is the safe direction: the closure it could assemble is not one to trust.
+    private static bool HasOwnOutput(string binDirectory, string projectName) =>
+        ((projectName.Length > 0)
+        && Directory.Exists(path: binDirectory)
+        && Directory.EnumerateFiles(path: binDirectory, searchOption: SearchOption.AllDirectories, searchPattern: $"{projectName}.dll").Any());
     // The project's package compile assemblies, read from the restore output (obj/project.assets.json).
     // A LIBRARY project's transitive package DLLs are not copied to its own bin (they land in the
     // consuming app's output), so bin alone misses them; the assets file lists every package's compile

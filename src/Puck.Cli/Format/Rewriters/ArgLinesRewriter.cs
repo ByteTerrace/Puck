@@ -42,7 +42,7 @@ internal sealed class ArgLinesRewriter : CSharpSyntaxRewriter {
         }
 
         var lineIndent = WrappedIndent(node: node);
-        var argumentTrivia = SyntaxFactory.TriviaList(SyntaxFactory.CarriageReturnLineFeed, SyntaxFactory.Whitespace(text: new string(c: ' ', count: (lineIndent + 4))));
+        var argumentTrivia = SyntaxFactory.TriviaList(RewriteShaping.EndOfLine, SyntaxFactory.Whitespace(text: new string(c: ' ', count: (lineIndent + 4))));
         var separators = visited.Arguments.GetSeparators().ToArray();
         var nodesAndTokens = new List<SyntaxNodeOrToken>(capacity: (visited.Arguments.Count * 2));
 
@@ -63,7 +63,7 @@ internal sealed class ArgLinesRewriter : CSharpSyntaxRewriter {
             .WithOpenParenToken(openParenToken: visited.OpenParenToken.WithTrailingTrivia())
             .WithArguments(arguments: SyntaxFactory.SeparatedList<ArgumentSyntax>(nodesAndTokens: nodesAndTokens))
             .WithCloseParenToken(
-                closeParenToken: visited.CloseParenToken.WithLeadingTrivia(SyntaxFactory.CarriageReturnLineFeed, SyntaxFactory.Whitespace(text: new string(c: ' ', count: lineIndent))));
+                closeParenToken: visited.CloseParenToken.WithLeadingTrivia(RewriteShaping.EndOfLine, SyntaxFactory.Whitespace(text: new string(c: ' ', count: lineIndent))));
     }
 
     // True when any trivia slot this pass rewrites carries prose or a directive.
