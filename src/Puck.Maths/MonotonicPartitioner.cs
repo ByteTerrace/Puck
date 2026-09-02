@@ -452,8 +452,10 @@ public static class MonotonicPartitioner {
             remainingRank: unchecked((ushort)(rank + checkpointRankOffset))
         ));
     }
-    // The Guid's trailing 4 bytes, read explicitly little-endian, widened to a bias-free rank in [1, 65534] — the
-    // declared endianness makes the route machine-independent by definition.
+    // The Guid's trailing 4 bytes, read explicitly little-endian, widened onto the rank band [1, 65534] — the two extreme
+    // ranks stay reserved for the ushort route's own extremes. The widening is within 1.5e-5 of uniform (2^32 / 65534
+    // is not integral, so preimage counts alternate between 65537 and 65538), not exactly uniform. The declared
+    // endianness makes the route machine-independent by definition.
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     private static ushort GetGuidHash(Guid value) {
         var entropy = BinaryPrimitives.ReadUInt32LittleEndian(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Guid>(reference: in value))[12..]);

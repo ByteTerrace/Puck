@@ -1,3665 +1,685 @@
 {
-  "basis": "puck.basis.json",
+  "basis": "standard.basis.json",
+  "bindingOverlays": [
+    {
+      "document": {
+        "chords": [
+          {
+            "chord": [],
+            "group": "play",
+            "page": {
+              "entries": [
+                {
+                  "channel": "forward",
+                  "scale": 1,
+                  "sources": [
+                    "keyboard.w",
+                    "keyboard.arrowUp"
+                  ]
+                },
+                {
+                  "channel": "forward",
+                  "scale": -1,
+                  "sources": [
+                    "keyboard.s",
+                    "keyboard.arrowDown"
+                  ]
+                },
+                {
+                  "channel": "strafe",
+                  "scale": -1,
+                  "sources": [
+                    "keyboard.a"
+                  ]
+                },
+                {
+                  "channel": "strafe",
+                  "scale": 1,
+                  "sources": [
+                    "keyboard.d"
+                  ]
+                },
+                {
+                  "channel": "turn",
+                  "scale": 1,
+                  "sources": [
+                    "keyboard.arrowLeft"
+                  ]
+                },
+                {
+                  "channel": "turn",
+                  "scale": -1,
+                  "sources": [
+                    "keyboard.arrowRight"
+                  ]
+                },
+                {
+                  "command": "player.move.strafe",
+                  "sources": [
+                    "gamepad.leftStick"
+                  ]
+                },
+                {
+                  "command": "player.look.steer",
+                  "sources": [
+                    "gamepad.rightStick"
+                  ]
+                },
+                {
+                  "command": "player.orbit",
+                  "sources": [
+                    "mouse.button1"
+                  ]
+                },
+                {
+                  "command": "player.steer",
+                  "label": "Steer",
+                  "sources": [
+                    "mouse.button2"
+                  ]
+                }
+              ],
+              "id": "base"
+            }
+          }
+        ],
+        "modifiers": [],
+        "version": "puck.bindings.v1"
+      },
+      "id": "bare"
+    }
+  ],
+  "bodies": {
+    "capacity": 4,
+    "localSeats": 2
+  },
+  "bodyMotionPrograms": [
+    {
+      "kind": "Motion",
+      "name": "walk",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ComputePlanarTargetVelocity",
+        "ShapePlanarVelocity",
+        "SnapYawToPlanarIntent",
+        "RunActionTriggers",
+        "ApplyVerticalGravity",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ],
+      "version": "puck.body-motion.v1"
+    }
+  ],
+  "channels": [
+    {
+      "frame": "Heading",
+      "name": "forward",
+      "role": "MoveAdvance",
+      "shape": "Bipolar"
+    },
+    {
+      "frame": "Heading",
+      "name": "strafe",
+      "role": "MoveStrafe",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "turn",
+      "role": "Turn",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "faceX",
+      "role": "FaceX",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "faceZ",
+      "role": "FaceZ",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "faceY",
+      "role": "FaceY",
+      "shape": "Bipolar"
+    }
+  ],
+  "collision": {
+    "contactSkin": 0.02,
+    "gradientProbe": 0.0,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60.0,
+    "requirements": [
+      "SmoothUnionContact",
+      "GradientDerivedUp"
+    ]
+  },
+  "defaultSeatKit": "walker",
   "documentId": "puck",
+  "dynamics": [
+    {
+      "f": 0.9549,
+      "name": "chase",
+      "r": 1,
+      "zeta": 1
+    }
+  ],
+  "grants": [
+    {
+      "capability": "Mutate",
+      "principal": "seat1",
+      "subject": "all"
+    }
+  ],
+  "gravity": {
+    "attractors": [],
+    "gravitationalConstant": 0.0,
+    "softeningLength": 0.5,
+    "solver": "Pairwise",
+    "uniform": [
+      0,
+      -46,
+      0
+    ]
+  },
+  "host": {
+    "backend": "auto",
+    "exitAfterSeconds": 0,
+    "fullscreen": false,
+    "genlock": null,
+    "height": 800,
+    "listen": null,
+    "presentMode": "Immediate",
+    "presentation": "Windowed",
+    "rayQuery": true,
+    "surfaceFormat": "r8g8b8a8",
+    "targetHertz": 60,
+    "timing": false,
+    "width": 1280
+  },
+  "kits": {
+    "rows": [
+      {
+        "bodyContact": "Solid",
+        "bodyMotionProgram": "walk",
+        "collider": {
+          "$type": "capsule",
+          "endpoint": [
+            0,
+            1,
+            0
+          ],
+          "radius": 0.35
+        },
+        "motion": {
+          "$type": "grounded",
+          "facingSnap": false,
+          "fallGravity": 46,
+          "maxFallSpeed": 40,
+          "moveSpeed": 4,
+          "response": [],
+          "riseGravity": 28,
+          "sprintMultiplier": 1.0,
+          "turnSpeed": 2.5
+        },
+        "name": "walker"
+      }
+    ]
+  },
+  "looks": {
+    "assignment": {
+      "rows": [
+        "pip"
+      ],
+      "sequence": {
+        "name": "r1",
+        "offset": 0,
+        "step": 0
+      }
+    },
+    "rows": [
+      {
+        "motion": {
+          "cues": [
+            {
+              "frame": "blink",
+              "holdSeconds": 0.12,
+              "maxSeconds": 6.0,
+              "minSeconds": 2.0
+            }
+          ],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "pip",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "pip"
+        }
+      }
+    ]
+  },
   "placements": {
     "rows": [
       {
-        "id": "groundNorthEast",
+        "id": "debugRoom",
         "position": [
           0,
           0,
           0
         ],
-        "prototypeId": "groundNorthEast",
-        "scale": 1,
-        "yawDegrees": 0
-      },
-      {
-        "id": "groundSouthEast",
-        "position": [
-          0,
-          0,
-          0
-        ],
-        "prototypeId": "groundSouthEast",
-        "scale": 1,
-        "yawDegrees": 0
-      },
-      {
-        "id": "groundSouthWest",
-        "position": [
-          0,
-          0,
-          0
-        ],
-        "prototypeId": "groundSouthWest",
-        "scale": 1,
-        "yawDegrees": 0
-      },
-      {
-        "id": "groundNorthWest",
-        "position": [
-          0,
-          0,
-          0
-        ],
-        "prototypeId": "groundNorthWest",
-        "scale": 1,
-        "yawDegrees": 0
-      },
-      {
-        "id": "groundContact",
-        "position": [
-          0,
-          0,
-          0
-        ],
-        "prototypeId": "groundContact",
+        "prototypeId": "debugRoom",
         "scale": 1,
         "solid": {
           "margin": 0
         },
         "yawDegrees": 0
-      },
-      {
-        "id": "isle-crown",
-        "position": [
-          0,
-          34,
-          0
-        ],
-        "prototypeId": "isle-crown",
-        "scale": 1,
-        "solid": {
-          "margin": 0
-        },
-        "yawDegrees": 0
-      },
-      {
-        "id": "isle-root",
-        "position": [
-          0,
-          34,
-          0
-        ],
-        "prototypeId": "isle-root",
-        "scale": 1,
-        "solid": {
-          "margin": 0
-        },
-        "yawDegrees": 0
-      },
-      {
-        "id": "isle-falls",
-        "position": [
-          0,
-          34,
-          0
-        ],
-        "prototypeId": "isle-falls",
-        "scale": 1,
-        "yawDegrees": 0
-      },
-      {
-        "id": "shard-east",
-        "position": [
-          31,
-          29,
-          7
-        ],
-        "prototypeId": "isle-shard",
-        "scale": 1.15,
-        "yawDegrees": 40
-      },
-      {
-        "id": "shard-sw",
-        "position": [
-          -27,
-          31,
-          -14
-        ],
-        "prototypeId": "isle-shard",
-        "scale": 0.85,
-        "yawDegrees": 160
-      },
-      {
-        "id": "shard-north",
-        "position": [
-          8,
-          26,
-          -30
-        ],
-        "prototypeId": "isle-shard",
-        "scale": 1.3,
-        "yawDegrees": 250
-      },
-      {
-        "distribution": {
-          "fill": {
-            "name": "none",
-            "offset": 0,
-            "step": 0
-          },
-          "region": {
-            "$type": "scatter",
-            "cellSize": 1,
-            "depth": 32,
-            "radius": 2,
-            "seed": 11,
-            "spacing": 11,
-            "width": 32
-          }
-        },
-        "id": "isle-oaks",
-        "position": [
-          0,
-          34,
-          0
-        ],
-        "prototypeId": "oak",
-        "scale": 1.3,
-        "yawDegrees": 0
-      },
-      {
-        "distribution": {
-          "fill": {
-            "name": "none",
-            "offset": 0,
-            "step": 0
-          },
-          "region": {
-            "$type": "scatter",
-            "cellSize": 1,
-            "depth": 32,
-            "radius": 3,
-            "seed": 23,
-            "spacing": 16,
-            "width": 32
-          }
-        },
-        "id": "isle-pines",
-        "position": [
-          0,
-          34,
-          0
-        ],
-        "prototypeId": "pine",
-        "scale": 1.2,
-        "yawDegrees": 0
-      },
-      {
-        "distribution": {
-          "fill": {
-            "name": "none",
-            "offset": 0,
-            "step": 0
-          },
-          "region": {
-            "$type": "scatter",
-            "cellSize": 1,
-            "depth": 34,
-            "radius": 2,
-            "seed": 37,
-            "spacing": 7,
-            "width": 34
-          }
-        },
-        "id": "isle-bushes",
-        "position": [
-          0,
-          34,
-          0
-        ],
-        "prototypeId": "meadow-bush",
-        "scale": 1,
-        "yawDegrees": 0
-      },
-      {
-        "distribution": {
-          "fill": {
-            "name": "none",
-            "offset": 0,
-            "step": 0
-          },
-          "region": {
-            "$type": "scatter",
-            "cellSize": 1,
-            "depth": 30,
-            "radius": 3,
-            "seed": 67,
-            "spacing": 10,
-            "width": 30
-          }
-        },
-        "id": "isle-boulders",
-        "position": [
-          0,
-          34,
-          0
-        ],
-        "prototypeId": "meadow-boulder",
-        "scale": 1,
-        "yawDegrees": 0
-      },
-      {
-        "id": "isle-grass-0",
-        "prototypeId": "grass-patch",
-        "position": [
-          0,
-          34,
-          0
-        ],
-        "yawDegrees": 0,
-        "scale": 1,
-        "distribution": {
-          "region": {
-            "$type": "scatter",
-            "cellSize": 1,
-            "width": 30,
-            "depth": 30,
-            "spacing": 8,
-            "radius": 2,
-            "seed": 51
-          },
-          "fill": {
-            "name": "none",
-            "offset": 0,
-            "step": 0
-          }
-        }
-      },
-      {
-        "id": "critter-1",
-        "prototypeId": "critter",
-        "position": [
-          6,
-          34,
-          4
-        ],
-        "yawDegrees": 0,
-        "scale": 1,
-        "inhabit": {
-          "kit": "critterKit",
-          "look": null,
-          "source": {
-            "$type": "producer",
-            "name": "wander"
-          },
-          "count": 1,
-          "distribution": {
-            "region": {
-              "$type": "disc",
-              "radius": 0.01
-            },
-            "fill": {
-              "name": "additive",
-              "offset": 0,
-              "step": 0.618034
-            }
-          }
-        }
-      },
-      {
-        "id": "pond-fish",
-        "prototypeId": "fish",
-        "position": [
-          2,
-          34.5,
-          1
-        ],
-        "yawDegrees": 0,
-        "scale": 1,
-        "inhabit": {
-          "kit": "fishKit",
-          "look": null,
-          "source": {
-            "$type": "producer",
-            "name": "wander"
-          },
-          "count": 1,
-          "distribution": {
-            "region": {
-              "$type": "disc",
-              "radius": 0.01
-            },
-            "fill": {
-              "name": "additive",
-              "offset": 0,
-              "step": 0.618034
-            }
-          }
-        }
       }
     ]
   },
   "prototypes": [
     {
       "document": {
-        "name": "groundNorthEast",
-        "palette": [
+        "frames": [
           {
-            "color": "state.colors.unitPale"
-          },
-          {
-            "color": "state.colors.unitDark"
-          }
-        ],
-        "schema": "puck.creation.v1",
-        "shapes": [
-          {
-            "id": 0,
-            "name": "near",
-            "type": "Box",
-            "position": [
-              30,
-              -0.28,
-              -30
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              30,
-              0.3,
-              30
-            ],
-            "material": 0,
-            "blend": "Union",
-            "smooth": 0,
-            "domain": [
+            "name": "blink",
+            "transforms": [
               {
-                "$type": "wallpaper",
-                "cell": [
-                  1,
-                  1
-                ],
-                "group": "P1",
-                "materialStride": 1
-              }
-            ]
-          },
-          {
-            "id": 1,
-            "name": "east-band",
-            "type": "Box",
-            "position": [
-              110,
-              -0.28,
-              -30
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              50,
-              0.3,
-              30
-            ],
-            "material": 0,
-            "blend": "Union",
-            "smooth": 0,
-            "domain": [
-              {
-                "$type": "wallpaper",
-                "cell": [
-                  1,
-                  1
-                ],
-                "group": "P1",
-                "materialStride": 1
-              }
-            ]
-          },
-          {
-            "id": 2,
-            "name": "far-band",
-            "type": "Box",
-            "position": [
-              80,
-              -0.28,
-              -110
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              80,
-              0.3,
-              50
-            ],
-            "material": 0,
-            "blend": "Union",
-            "smooth": 0,
-            "domain": [
-              {
-                "$type": "wallpaper",
-                "cell": [
-                  1,
-                  1
-                ],
-                "group": "P1",
-                "materialStride": 1
-              }
-            ]
-          }
-        ]
-      },
-      "id": "groundNorthEast"
-    },
-    {
-      "document": {
-        "name": "groundSouthEast",
-        "palette": [
-          {
-            "color": "state.colors.lanePale"
-          },
-          {
-            "color": "state.colors.laneDark"
-          }
-        ],
-        "schema": "puck.creation.v1",
-        "shapes": [
-          {
-            "id": 0,
-            "name": "near",
-            "type": "Box",
-            "position": [
-              30,
-              -0.28,
-              30
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              30,
-              0.3,
-              30
-            ],
-            "material": 0,
-            "blend": "Union",
-            "smooth": 0,
-            "domain": [
-              {
-                "$type": "wallpaper",
-                "cell": [
-                  1,
-                  4096
-                ],
-                "group": "P1",
-                "materialStride": 1
-              }
-            ]
-          },
-          {
-            "id": 1,
-            "name": "east-band",
-            "type": "Box",
-            "position": [
-              110,
-              -0.28,
-              30
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              50,
-              0.3,
-              30
-            ],
-            "material": 0,
-            "blend": "Union",
-            "smooth": 0,
-            "domain": [
-              {
-                "$type": "wallpaper",
-                "cell": [
-                  1,
-                  4096
-                ],
-                "group": "P1",
-                "materialStride": 1
-              }
-            ]
-          },
-          {
-            "id": 2,
-            "name": "far-band",
-            "type": "Box",
-            "position": [
-              80,
-              -0.28,
-              110
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              80,
-              0.3,
-              50
-            ],
-            "material": 0,
-            "blend": "Union",
-            "smooth": 0,
-            "domain": [
-              {
-                "$type": "wallpaper",
-                "cell": [
-                  1,
-                  4096
-                ],
-                "group": "P1",
-                "materialStride": 1
-              }
-            ]
-          }
-        ]
-      },
-      "id": "groundSouthEast"
-    },
-    {
-      "document": {
-        "name": "groundSouthWest",
-        "palette": [
-          {
-            "color": "state.colors.hexNear"
-          },
-          {
-            "color": "state.colors.hexMid"
-          },
-          {
-            "color": "state.colors.hexFar"
-          }
-        ],
-        "schema": "puck.creation.v1",
-        "shapes": [
-          {
-            "id": 0,
-            "name": "near",
-            "type": "Box",
-            "position": [
-              -30,
-              -0.28,
-              30
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              30,
-              0.3,
-              30
-            ],
-            "material": 0,
-            "blend": "Union",
-            "smooth": 0,
-            "domain": [
-              {
-                "$type": "wallpaper",
-                "cell": [
-                  2,
-                  2
-                ],
-                "group": "P6M",
-                "materialStride": 1
-              }
-            ]
-          },
-          {
-            "id": 1,
-            "name": "east-band",
-            "type": "Box",
-            "position": [
-              -110,
-              -0.28,
-              30
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              50,
-              0.3,
-              30
-            ],
-            "material": 0,
-            "blend": "Union",
-            "smooth": 0,
-            "domain": [
-              {
-                "$type": "wallpaper",
-                "cell": [
-                  2,
-                  2
-                ],
-                "group": "P6M",
-                "materialStride": 1
-              }
-            ]
-          },
-          {
-            "id": 2,
-            "name": "far-band",
-            "type": "Box",
-            "position": [
-              -80,
-              -0.28,
-              110
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              80,
-              0.3,
-              50
-            ],
-            "material": 0,
-            "blend": "Union",
-            "smooth": 0,
-            "domain": [
-              {
-                "$type": "wallpaper",
-                "cell": [
-                  2,
-                  2
-                ],
-                "group": "P6M",
-                "materialStride": 1
-              }
-            ]
-          }
-        ]
-      },
-      "id": "groundSouthWest"
-    },
-    {
-      "document": {
-        "name": "groundNorthWest",
-        "palette": [
-          {
-            "color": "state.colors.bearingPale"
-          },
-          {
-            "color": "state.colors.bearingDark"
-          },
-          {
-            "color": "state.colors.bearingPale"
-          },
-          {
-            "color": "state.colors.bearingDark"
-          },
-          {
-            "color": "state.colors.bearingPale"
-          },
-          {
-            "color": "state.colors.bearingDark"
-          },
-          {
-            "color": "state.colors.bearingPale"
-          },
-          {
-            "color": "state.colors.bearingDark"
-          },
-          {
-            "color": "state.colors.bearingPale"
-          },
-          {
-            "color": "state.colors.bearingDark"
-          },
-          {
-            "color": "state.colors.bearingPale"
-          },
-          {
-            "color": "state.colors.bearingDark"
-          }
-        ],
-        "schema": "puck.creation.v1",
-        "shapes": [
-          {
-            "id": 0,
-            "name": "near",
-            "type": "Box",
-            "position": [
-              -30,
-              -0.28,
-              -30
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              30,
-              0.3,
-              30
-            ],
-            "material": 0,
-            "blend": "Union",
-            "smooth": 0,
-            "domain": [
-              {
-                "$type": "polar",
-                "axis": "Y",
-                "count": 12,
-                "materialStride": 1
-              }
-            ]
-          },
-          {
-            "id": 1,
-            "name": "east-band",
-            "type": "Box",
-            "position": [
-              -110,
-              -0.28,
-              -30
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              50,
-              0.3,
-              30
-            ],
-            "material": 0,
-            "blend": "Union",
-            "smooth": 0,
-            "domain": [
-              {
-                "$type": "polar",
-                "axis": "Y",
-                "count": 12,
-                "materialStride": 1
-              }
-            ]
-          },
-          {
-            "id": 2,
-            "name": "far-band",
-            "type": "Box",
-            "position": [
-              -80,
-              -0.28,
-              -110
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              80,
-              0.3,
-              50
-            ],
-            "material": 0,
-            "blend": "Union",
-            "smooth": 0,
-            "domain": [
-              {
-                "$type": "polar",
-                "axis": "Y",
-                "count": 12,
-                "materialStride": 1
-              }
-            ]
-          }
-        ]
-      },
-      "id": "groundNorthWest"
-    },
-    {
-      "document": {
-        "name": "groundContact",
-        "palette": [
-          {
-            "color": "state.colors.substrate"
-          }
-        ],
-        "schema": "puck.creation.v1",
-        "shapes": [
-          {
-            "blend": "Union",
-            "id": 0,
-            "material": 0,
-            "name": "surface",
-            "position": [
-              0,
-              0,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              1,
-              1,
-              1
-            ],
-            "smooth": 0,
-            "type": "Plane"
-          }
-        ]
-      },
-      "id": "groundContact"
-    },
-    {
-      "document": {
-        "name": "isle-crown",
-        "palette": [
-          {
-            "color": "#5FA04A",
-            "shininess": 8,
-            "specular": 0.04
-          },
-          {
-            "color": "#74B356",
-            "shininess": 8,
-            "specular": 0.04
-          },
-          {
-            "color": "#7A5A3C",
-            "shininess": 6,
-            "specular": 0.03
-          }
-        ],
-        "schema": "puck.creation.v1",
-        "shapes": [
-          {
-            "id": 0,
-            "name": "meadow-core",
-            "type": "Cylinder",
-            "position": [
-              0,
-              -2.2,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              24.5,
-              2,
-              24.5
-            ],
-            "material": 0,
-            "blend": "Union",
-            "smooth": 0
-          },
-          {
-            "id": 1,
-            "name": "lobe-east",
-            "type": "Cylinder",
-            "position": [
-              10,
-              -2.5,
-              4
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              12,
-              2,
-              12
-            ],
-            "material": 0,
-            "blend": "SmoothUnion",
-            "smooth": 0.5
-          },
-          {
-            "id": 2,
-            "name": "lobe-west",
-            "type": "Cylinder",
-            "position": [
-              -10,
-              -2.7,
-              -5
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              13,
-              2,
-              13
-            ],
-            "material": 0,
-            "blend": "SmoothUnion",
-            "smooth": 0.5
-          },
-          {
-            "id": 3,
-            "name": "lobe-ne",
-            "type": "Cylinder",
-            "position": [
-              17,
-              -2.6,
-              -9
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              8,
-              1.9,
-              8
-            ],
-            "material": 0,
-            "blend": "SmoothUnion",
-            "smooth": 0.5
-          },
-          {
-            "id": 4,
-            "name": "lobe-south",
-            "type": "Cylinder",
-            "position": [
-              -4,
-              -2.8,
-              16
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              9,
-              1.9,
-              9
-            ],
-            "material": 0,
-            "blend": "SmoothUnion",
-            "smooth": 0.5
-          },
-          {
-            "id": 5,
-            "name": "hill-ne",
-            "type": "Sphere",
-            "position": [
-              9,
-              -4.6,
-              -8
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              6,
-              6,
-              6
-            ],
-            "material": 1,
-            "blend": "SmoothUnion",
-            "smooth": 0.5
-          },
-          {
-            "id": 6,
-            "name": "hill-sw",
-            "type": "Sphere",
-            "position": [
-              -8,
-              -5.4,
-              8.5
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              7.2,
-              7.2,
-              7.2
-            ],
-            "material": 1,
-            "blend": "SmoothUnion",
-            "smooth": 0.5
-          },
-          {
-            "id": 7,
-            "name": "bump-n",
-            "type": "Sphere",
-            "position": [
-              2,
-              -2.5,
-              -13
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              3,
-              3,
-              3
-            ],
-            "material": 1,
-            "blend": "SmoothUnion",
-            "smooth": 0.5
-          },
-          {
-            "id": 8,
-            "name": "bump-e",
-            "type": "Sphere",
-            "position": [
-              15,
-              -2.3,
-              9
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              3,
-              3,
-              3
-            ],
-            "material": 0,
-            "blend": "SmoothUnion",
-            "smooth": 0.5
-          },
-          {
-            "id": 9,
-            "name": "bump-w",
-            "type": "Sphere",
-            "position": [
-              -14,
-              -2.8000000000000003,
-              -2
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              3,
-              3,
-              3
-            ],
-            "material": 1,
-            "blend": "SmoothUnion",
-            "smooth": 0.5
-          },
-          {
-            "id": 10,
-            "name": "soil-skirt",
-            "type": "Cylinder",
-            "position": [
-              0,
-              -3.4,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              25,
-              1.4,
-              25
-            ],
-            "material": 2,
-            "blend": "SmoothUnion",
-            "smooth": 0.4
-          }
-        ]
-      },
-      "id": "isle-crown"
-    },
-    {
-      "document": {
-        "name": "isle-root",
-        "palette": [
-          {
-            "color": "#8A8072",
-            "shininess": 10,
-            "specular": 0.05
-          },
-          {
-            "color": "#6E6455",
-            "shininess": 10,
-            "specular": 0.05
-          }
-        ],
-        "schema": "puck.creation.v1",
-        "shapes": [
-          {
-            "id": 0,
-            "name": "belly-core",
-            "type": "Sphere",
-            "position": [
-              0,
-              -13.5,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              12,
-              12,
-              12
-            ],
-            "material": 0,
-            "blend": "Union",
-            "smooth": 0
-          },
-          {
-            "id": 1,
-            "name": "lump-e",
-            "type": "Sphere",
-            "position": [
-              10,
-              -12,
-              4
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              9.5,
-              9.5,
-              9.5
-            ],
-            "material": 0,
-            "blend": "SmoothUnion",
-            "smooth": 0.6
-          },
-          {
-            "id": 2,
-            "name": "lump-w",
-            "type": "Sphere",
-            "position": [
-              -9.5,
-              -11.5,
-              -4
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              9,
-              9,
-              9
-            ],
-            "material": 0,
-            "blend": "SmoothUnion",
-            "smooth": 0.6
-          },
-          {
-            "id": 3,
-            "name": "lump-s",
-            "type": "Sphere",
-            "position": [
-              3,
-              -10,
-              11
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              8,
-              8,
-              8
-            ],
-            "material": 0,
-            "blend": "SmoothUnion",
-            "smooth": 0.6
-          },
-          {
-            "id": 4,
-            "name": "lump-n",
-            "type": "Sphere",
-            "position": [
-              -2,
-              -9.5,
-              -10
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              8.5,
-              8.5,
-              8.5
-            ],
-            "material": 0,
-            "blend": "SmoothUnion",
-            "smooth": 0.6
-          },
-          {
-            "id": 5,
-            "name": "lump-deep",
-            "type": "Sphere",
-            "position": [
-              2.5,
-              -16,
-              1
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              8,
-              8,
-              8
-            ],
-            "material": 1,
-            "blend": "SmoothUnion",
-            "smooth": 0.6
-          },
-          {
-            "id": 6,
-            "name": "lump-deep-w",
-            "type": "Sphere",
-            "position": [
-              -6,
-              -14.5,
-              3
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              6.5,
-              6.5,
-              6.5
-            ],
-            "material": 1,
-            "blend": "SmoothUnion",
-            "smooth": 0.6
-          },
-          {
-            "id": 7,
-            "name": "root-main",
-            "type": "Cone",
-            "position": [
-              0.5,
-              -21,
-              0.5
-            ],
-            "rotation": [
-              1,
-              0,
-              0,
-              0
-            ],
-            "scale": [
-              6.5,
-              5.5,
-              6.5
-            ],
-            "material": 1,
-            "blend": "SmoothUnion",
-            "smooth": 0.6
-          },
-          {
-            "id": 8,
-            "name": "root-east",
-            "type": "Cone",
-            "position": [
-              8.5,
-              -17.5,
-              4
-            ],
-            "rotation": [
-              1,
-              0,
-              0,
-              0
-            ],
-            "scale": [
-              3.6,
-              4,
-              3.6
-            ],
-            "material": 1,
-            "blend": "SmoothUnion",
-            "smooth": 0.6
-          },
-          {
-            "id": 9,
-            "name": "root-west",
-            "type": "Cone",
-            "position": [
-              -8,
-              -16,
-              -5
-            ],
-            "rotation": [
-              1,
-              0,
-              0,
-              0
-            ],
-            "scale": [
-              2.6,
-              3.2,
-              2.6
-            ],
-            "material": 1,
-            "blend": "SmoothUnion",
-            "smooth": 0.6
-          }
-        ]
-      },
-      "id": "isle-root"
-    },
-    {
-      "document": {
-        "name": "isle-shard",
-        "palette": [
-          {
-            "color": "#857C6E",
-            "shininess": 10,
-            "specular": 0.05
-          },
-          {
-            "color": "#66A64F",
-            "shininess": 8,
-            "specular": 0.04
-          }
-        ],
-        "schema": "puck.creation.v1",
-        "shapes": [
-          {
-            "id": 0,
-            "name": "rock",
-            "type": "Sphere",
-            "position": [
-              0,
-              0,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              2,
-              2,
-              2
-            ],
-            "material": 0,
-            "blend": "Union",
-            "smooth": 0
-          },
-          {
-            "id": 1,
-            "name": "rock-b",
-            "type": "Sphere",
-            "position": [
-              1.1,
-              -0.4,
-              0.6
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              1.3,
-              1.3,
-              1.3
-            ],
-            "material": 0,
-            "blend": "SmoothUnion",
-            "smooth": 0.45
-          },
-          {
-            "id": 2,
-            "name": "cap",
-            "type": "Sphere",
-            "position": [
-              0,
-              1.35,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              1.6,
-              1.6,
-              1.6
-            ],
-            "material": 1,
-            "blend": "SmoothUnion",
-            "smooth": 0.4
-          },
-          {
-            "id": 3,
-            "name": "root",
-            "type": "Cone",
-            "position": [
-              0,
-              -1.9,
-              0
-            ],
-            "rotation": [
-              1,
-              0,
-              0,
-              0
-            ],
-            "scale": [
-              1.1,
-              1.4,
-              1.1
-            ],
-            "material": 0,
-            "blend": "SmoothUnion",
-            "smooth": 0.5
-          }
-        ]
-      },
-      "id": "isle-shard"
-    },
-    {
-      "document": {
-        "name": "oak",
-        "palette": [
-          {
-            "color": "#6B4A2E",
-            "shininess": 6,
-            "specular": 0.03
-          },
-          {
-            "color": "#4C8C3C",
-            "shininess": 10,
-            "specular": 0.05
-          },
-          {
-            "color": "#61A34C",
-            "shininess": 10,
-            "specular": 0.05
-          }
-        ],
-        "schema": "puck.creation.v1",
-        "shapes": [
-          {
-            "blend": "Union",
-            "id": 0,
-            "material": 0,
-            "name": "trunk",
-            "position": [
-              0,
-              -1.6,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.42,
-              4.4,
-              0.42
-            ],
-            "smooth": 0,
-            "type": "RoundCone"
-          },
-          {
-            "blend": "SmoothUnion",
-            "id": 1,
-            "material": 1,
-            "name": "canopy-a",
-            "position": [
-              0,
-              4.1,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              2.15,
-              2.15,
-              2.15
-            ],
-            "smooth": 0.45,
-            "type": "Sphere"
-          },
-          {
-            "blend": "SmoothUnion",
-            "id": 2,
-            "material": 2,
-            "name": "canopy-b",
-            "position": [
-              1,
-              5.1,
-              0.5
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              1.5,
-              1.5,
-              1.5
-            ],
-            "smooth": 0.5,
-            "type": "Sphere"
-          },
-          {
-            "blend": "SmoothUnion",
-            "id": 3,
-            "material": 1,
-            "name": "canopy-c",
-            "position": [
-              -0.9,
-              4.9,
-              -0.6
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              1.3,
-              1.3,
-              1.3
-            ],
-            "smooth": 0.5,
-            "type": "Sphere"
-          }
-        ]
-      },
-      "id": "oak"
-    },
-    {
-      "document": {
-        "name": "pine",
-        "palette": [
-          {
-            "color": "#5C4030",
-            "shininess": 6,
-            "specular": 0.03
-          },
-          {
-            "color": "#2E6B3E",
-            "shininess": 10,
-            "specular": 0.05
-          },
-          {
-            "color": "#3B7A49",
-            "shininess": 10,
-            "specular": 0.05
-          }
-        ],
-        "schema": "puck.creation.v1",
-        "shapes": [
-          {
-            "blend": "Union",
-            "id": 0,
-            "material": 0,
-            "name": "trunk",
-            "position": [
-              0,
-              1,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.24,
-              2.6,
-              0.24
-            ],
-            "smooth": 0,
-            "type": "Cylinder"
-          },
-          {
-            "blend": "SmoothUnion",
-            "id": 1,
-            "material": 1,
-            "name": "tier-low",
-            "position": [
-              0,
-              3.9,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              1.8,
-              1.7,
-              1.8
-            ],
-            "smooth": 0.3,
-            "type": "Cone"
-          },
-          {
-            "blend": "SmoothUnion",
-            "id": 2,
-            "material": 2,
-            "name": "tier-mid",
-            "position": [
-              0,
-              5.2,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              1.3,
-              1.4,
-              1.3
-            ],
-            "smooth": 0.3,
-            "type": "Cone"
-          },
-          {
-            "blend": "SmoothUnion",
-            "id": 3,
-            "material": 1,
-            "name": "tier-top",
-            "position": [
-              0,
-              6.4,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.9,
-              1.2,
-              0.9
-            ],
-            "smooth": 0.3,
-            "type": "Cone"
-          }
-        ]
-      },
-      "id": "pine"
-    },
-    {
-      "document": {
-        "name": "meadow-bush",
-        "palette": [
-          {
-            "color": "#549643",
-            "shininess": 8,
-            "specular": 0.04
-          },
-          {
-            "color": "#68AA52",
-            "shininess": 8,
-            "specular": 0.04
-          }
-        ],
-        "schema": "puck.creation.v1",
-        "shapes": [
-          {
-            "blend": "Union",
-            "id": 0,
-            "material": 0,
-            "name": "mound",
-            "position": [
-              0,
-              -0.15,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.88,
-              0.88,
-              0.88
-            ],
-            "smooth": 0,
-            "type": "Sphere"
-          },
-          {
-            "blend": "SmoothUnion",
-            "id": 1,
-            "material": 1,
-            "name": "lobe",
-            "position": [
-              0.6,
-              0.1,
-              0.35
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.65,
-              0.65,
-              0.65
-            ],
-            "smooth": 0.4,
-            "type": "Sphere"
-          }
-        ]
-      },
-      "id": "meadow-bush"
-    },
-    {
-      "document": {
-        "name": "meadow-boulder",
-        "palette": [
-          {
-            "color": "#8D8878",
-            "shininess": 12,
-            "specular": 0.06
-          },
-          {
-            "color": "#79746A",
-            "shininess": 12,
-            "specular": 0.06
-          }
-        ],
-        "schema": "puck.creation.v1",
-        "shapes": [
-          {
-            "blend": "Union",
-            "id": 0,
-            "material": 0,
-            "name": "mass",
-            "position": [
-              0,
-              -0.25,
-              0
-            ],
-            "rotation": [
-              0,
-              0.19,
-              0,
-              0.9817815
-            ],
-            "scale": [
-              1.1,
-              1.1,
-              1.1
-            ],
-            "smooth": 0,
-            "type": "Sphere"
-          },
-          {
-            "blend": "SmoothUnion",
-            "id": 1,
-            "material": 1,
-            "name": "chip",
-            "position": [
-              0.95,
-              -0.4,
-              0.25
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.62,
-              0.62,
-              0.62
-            ],
-            "smooth": 0.35,
-            "type": "Sphere"
-          }
-        ]
-      },
-      "id": "meadow-boulder"
-    },
-    {
-      "id": "grass-patch",
-      "document": {
-        "schema": "puck.creation.v1",
-        "name": "grass-patch",
-        "palette": [
-          {
-            "color": "#7DBA57",
-            "shininess": 8,
-            "specular": 0.04
-          },
-          {
-            "color": "#8FC968",
-            "shininess": 8,
-            "specular": 0.04
-          },
-          {
-            "color": "#6FAF4E",
-            "shininess": 8,
-            "specular": 0.04
-          },
-          {
-            "color": "#86C25F",
-            "shininess": 8,
-            "specular": 0.04
-          },
-          {
-            "color": "#79B851",
-            "shininess": 8,
-            "specular": 0.04
-          }
-        ],
-        "shapes": [
-          {
-            "id": 0,
-            "name": "blades-a",
-            "type": "Cone",
-            "position": [
-              0.16,
-              -0.1,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0.1218693,
-              0.9925462
-            ],
-            "scale": [
-              0.14,
-              1.05,
-              0.14
-            ],
-            "material": 0,
-            "blend": "Union",
-            "smooth": 0,
-            "domain": [
-              {
-                "$type": "repeat",
-                "spacing": [
-                  2.7,
-                  60,
-                  2.7
-                ],
-                "limit": [
-                  1,
+                "id": 0,
+                "position": [
                   0,
-                  1
+                  0.5,
+                  0
+                ],
+                "rotation": "state.transforms.identity",
+                "scale": [
+                  0.35,
+                  1.75,
+                  0.35
                 ]
               },
               {
-                "$type": "polar",
-                "count": 4,
-                "materialStride": 1
+                "id": 1,
+                "position": [
+                  0.2,
+                  1.1,
+                  0.0
+                ],
+                "rotation": "state.transforms.identity",
+                "scale": [
+                  0.14,
+                  0.14,
+                  0.14
+                ]
+              },
+              {
+                "id": 2,
+                "position": [
+                  0.2,
+                  1.1,
+                  0.0
+                ],
+                "rotation": "state.transforms.identity",
+                "scale": [
+                  0.055,
+                  0.055,
+                  0.055
+                ]
+              },
+              {
+                "id": 3,
+                "position": [
+                  -0.2,
+                  1.1,
+                  0.0
+                ],
+                "rotation": "state.transforms.identity",
+                "scale": [
+                  0.14,
+                  0.14,
+                  0.14
+                ]
+              },
+              {
+                "id": 4,
+                "position": [
+                  -0.2,
+                  1.1,
+                  0.0
+                ],
+                "rotation": "state.transforms.identity",
+                "scale": [
+                  0.055,
+                  0.055,
+                  0.055
+                ]
               }
             ]
-          },
-          {
-            "id": 1,
-            "name": "clip",
-            "type": "Box",
-            "position": [
-              0,
-              -0.1,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              2.9,
-              1.3,
-              2.9
-            ],
-            "material": 0,
-            "blend": "Intersection",
-            "smooth": 0
           }
-        ]
-      }
-    },
-    {
-      "document": {
-        "name": "isle-falls",
+        ],
+        "name": "pip",
         "palette": [
           {
-            "color": "#3E8FD0",
-            "emissive": 0.06,
-            "shininess": 56,
-            "specular": 0.55
+            "color": "state.colors.avatarBody"
           },
           {
-            "color": "#6FB6E8",
-            "emissive": 0.1,
-            "shininess": 48,
-            "specular": 0.5
+            "color": "state.colors.avatarMark"
           },
           {
-            "color": "#D8F0FA",
-            "emissive": 0.16,
-            "shininess": 24,
-            "specular": 0.35
+            "color": "state.colors.avatarEye"
           },
           {
-            "color": "#F2FAFD",
-            "emissive": 0.22,
-            "shininess": 4,
-            "specular": 0.05
-          },
-          {
-            "color": "#9A937F",
-            "shininess": 6,
-            "specular": 0.03
+            "color": "state.colors.avatarPupil"
           }
         ],
         "schema": "puck.creation.v1",
         "shapes": [
           {
+            "blend": "Union",
+            "group": 0,
             "id": 0,
-            "name": "stream-east",
-            "type": "Box",
-            "position": [
-              15.84,
-              -0.28,
-              1.386
-            ],
-            "rotation": [
-              0,
-              -0.0436,
-              0,
-              0.999
-            ],
-            "scale": [
-              9.5,
-              0.16,
-              0.85
-            ],
-            "material": 1,
-            "blend": "Union",
-            "smooth": 0
-          },
-          {
-            "id": 1,
-            "name": "stream-south",
-            "type": "Box",
-            "position": [
-              0.0,
-              -0.28,
-              15.9
-            ],
-            "rotation": [
-              0,
-              -0.7071,
-              0,
-              0.7071
-            ],
-            "scale": [
-              9.5,
-              0.16,
-              0.85
-            ],
-            "material": 1,
-            "blend": "Union",
-            "smooth": 0
-          },
-          {
-            "id": 2,
-            "name": "stream-nw",
-            "type": "Box",
-            "position": [
-              -11.243,
-              -0.28,
-              -11.243
-            ],
-            "rotation": [
-              0,
-              0.9239,
-              0,
-              0.3827
-            ],
-            "scale": [
-              9.5,
-              0.16,
-              0.85
-            ],
-            "material": 1,
-            "blend": "Union",
-            "smooth": 0
-          },
-          {
-            "id": 3,
-            "name": "lip-east",
-            "type": "Box",
-            "position": [
-              25.303,
-              -0.3,
-              2.215
-            ],
-            "rotation": [
-              0,
-              -0.0436,
-              0,
-              0.999
-            ],
-            "scale": [
-              1.15,
-              0.28,
-              1.15
-            ],
-            "material": 1,
-            "blend": "Union",
-            "smooth": 0
-          },
-          {
-            "id": 4,
-            "name": "fall-east",
-            "type": "Capsule",
-            "position": [
-              25.802,
-              -7.7,
-              2.258
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.8,
-              13,
-              0.8
-            ],
-            "material": 1,
-            "blend": "Union",
-            "smooth": 0
-          },
-          {
-            "id": 5,
-            "name": "foam-east",
-            "type": "Capsule",
-            "position": [
-              25.714,
-              -6.3,
-              3.255
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.45,
-              10.5,
-              0.45
-            ],
-            "material": 2,
-            "blend": "Union",
-            "smooth": 0
-          },
-          {
-            "id": 6,
-            "name": "mist-east-a",
-            "type": "Sphere",
-            "position": [
-              25.732,
-              -15.4,
-              3.055
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              2.3,
-              2.3,
-              2.3
-            ],
-            "material": 3,
-            "blend": "SmoothUnion",
-            "smooth": 0.5
-          },
-          {
-            "id": 7,
-            "name": "mist-east-b",
-            "type": "Sphere",
-            "position": [
-              25.616,
-              -14.6,
-              0.937
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              1.7,
-              1.7,
-              1.7
-            ],
-            "material": 3,
-            "blend": "SmoothUnion",
-            "smooth": 0.5
-          },
-          {
-            "id": 8,
-            "name": "mist-east-c",
-            "type": "Sphere",
-            "position": [
-              26.499,
-              -16.2,
-              2.32
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              1.3,
-              1.3,
-              1.3
-            ],
-            "material": 3,
-            "blend": "SmoothUnion",
-            "smooth": 0.5
-          },
-          {
-            "id": 9,
-            "name": "lip-south",
-            "type": "Box",
-            "position": [
-              0.0,
-              -0.3,
-              25.4
-            ],
-            "rotation": [
-              0,
-              -0.7071,
-              0,
-              0.7071
-            ],
-            "scale": [
-              1.15,
-              0.28,
-              1.15
-            ],
-            "material": 1,
-            "blend": "Union",
-            "smooth": 0
-          },
-          {
-            "id": 10,
-            "name": "fall-south",
-            "type": "Capsule",
-            "position": [
-              0.0,
-              -7.7,
-              25.9
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.8,
-              13,
-              0.8
-            ],
-            "material": 1,
-            "blend": "Union",
-            "smooth": 0
-          },
-          {
-            "id": 11,
-            "name": "foam-south",
-            "type": "Capsule",
-            "position": [
-              -1.0,
-              -6.3,
-              25.9
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.45,
-              10.5,
-              0.45
-            ],
-            "material": 2,
-            "blend": "Union",
-            "smooth": 0
-          },
-          {
-            "id": 12,
-            "name": "mist-south-a",
-            "type": "Sphere",
-            "position": [
-              -0.8,
-              -15.4,
-              25.9
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              2.3,
-              2.3,
-              2.3
-            ],
-            "material": 3,
-            "blend": "SmoothUnion",
-            "smooth": 0.5
-          },
-          {
-            "id": 13,
-            "name": "mist-south-b",
-            "type": "Sphere",
-            "position": [
-              1.3,
-              -14.6,
-              25.6
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              1.7,
-              1.7,
-              1.7
-            ],
-            "material": 3,
-            "blend": "SmoothUnion",
-            "smooth": 0.5
-          },
-          {
-            "id": 14,
-            "name": "mist-south-c",
-            "type": "Sphere",
-            "position": [
-              0.0,
-              -16.2,
-              26.6
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              1.3,
-              1.3,
-              1.3
-            ],
-            "material": 3,
-            "blend": "SmoothUnion",
-            "smooth": 0.5
-          },
-          {
-            "id": 15,
-            "name": "lip-nw",
-            "type": "Box",
-            "position": [
-              -17.96,
-              -0.3,
-              -17.96
-            ],
-            "rotation": [
-              0,
-              0.9239,
-              0,
-              0.3827
-            ],
-            "scale": [
-              1.15,
-              0.28,
-              1.15
-            ],
-            "material": 1,
-            "blend": "Union",
-            "smooth": 0
-          },
-          {
-            "id": 16,
-            "name": "fall-nw",
-            "type": "Capsule",
-            "position": [
-              -18.314,
-              -7.7,
-              -18.314
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.8,
-              13,
-              0.8
-            ],
-            "material": 1,
-            "blend": "Union",
-            "smooth": 0
-          },
-          {
-            "id": 17,
-            "name": "foam-nw",
-            "type": "Capsule",
-            "position": [
-              -17.607,
-              -6.3,
-              -19.021
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.45,
-              10.5,
-              0.45
-            ],
-            "material": 2,
-            "blend": "Union",
-            "smooth": 0
-          },
-          {
-            "id": 18,
-            "name": "mist-nw-a",
-            "type": "Sphere",
-            "position": [
-              -17.748,
-              -15.4,
-              -18.88
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              2.3,
-              2.3,
-              2.3
-            ],
-            "material": 3,
-            "blend": "SmoothUnion",
-            "smooth": 0.5
-          },
-          {
-            "id": 19,
-            "name": "mist-nw-b",
-            "type": "Sphere",
-            "position": [
-              -19.021,
-              -14.6,
-              -17.183
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              1.7,
-              1.7,
-              1.7
-            ],
-            "material": 3,
-            "blend": "SmoothUnion",
-            "smooth": 0.5
-          },
-          {
-            "id": 20,
-            "name": "mist-nw-c",
-            "type": "Sphere",
-            "position": [
-              -18.809,
-              -16.2,
-              -18.809
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              1.3,
-              1.3,
-              1.3
-            ],
-            "material": 3,
-            "blend": "SmoothUnion",
-            "smooth": 0.5
-          },
-          {
-            "id": 21,
-            "name": "pool-rim",
-            "type": "Cylinder",
-            "position": [
-              0,
-              1.5,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              7.0,
-              1.7,
-              7.0
-            ],
-            "material": 4,
-            "blend": "Union",
-            "smooth": 0
-          },
-          {
-            "id": 22,
-            "name": "pool-water",
-            "type": "Cylinder",
-            "position": [
-              0,
-              1.3,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              6.2,
-              1.5,
-              6.2
-            ],
             "material": 0,
+            "name": "pip",
+            "position": [
+              0,
+              0.5,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.35,
+              1.75,
+              0.35
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
             "blend": "Union",
-            "smooth": 0
+            "group": 0,
+            "id": 1,
+            "material": 2,
+            "name": "eyeLeft",
+            "position": [
+              0.2,
+              1.1,
+              0.42
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.14,
+              0.14,
+              0.14
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 2,
+            "material": 3,
+            "name": "pupilLeft",
+            "position": [
+              0.2,
+              1.1,
+              0.54
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.055,
+              0.055,
+              0.055
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 3,
+            "material": 2,
+            "name": "eyeRight",
+            "position": [
+              -0.2,
+              1.1,
+              0.42
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.14,
+              0.14,
+              0.14
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 4,
+            "material": 3,
+            "name": "pupilRight",
+            "position": [
+              -0.2,
+              1.1,
+              0.54
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.055,
+              0.055,
+              0.055
+            ],
+            "smooth": 0,
+            "type": "Sphere"
           }
         ]
       },
-      "id": "isle-falls"
+      "id": "pip"
     },
     {
-      "id": "critter",
       "document": {
-        "schema": "puck.creation.v1",
-        "name": "critter",
+        "name": "debugRoom",
         "palette": [
           {
-            "color": "#C97A4A",
-            "shininess": 10,
-            "specular": 0.05
+            "color": "state.colors.groundTertiary"
           },
           {
-            "color": "#3A3230",
-            "shininess": 4,
-            "specular": 0.02
+            "color": "state.colors.groundPrimary"
           }
         ],
+        "schema": "puck.creation.v1",
         "shapes": [
           {
+            "blend": "Union",
             "id": 0,
-            "name": "body",
-            "type": "Sphere",
+            "material": 0,
+            "name": "platform",
             "position": [
               0,
-              0.22,
+              -1.0,
               0
             ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
+            "rotation": "state.transforms.identity",
             "scale": [
-              0.22,
-              0.2,
-              0.28
+              10,
+              0.5,
+              10
             ],
-            "material": 0,
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
             "blend": "Union",
-            "smooth": 0
-          },
-          {
             "id": 1,
-            "name": "ear-left",
-            "type": "Cone",
-            "position": [
-              -0.1,
-              0.42,
-              -0.05
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.05,
-              0.1,
-              0.05
-            ],
             "material": 1,
-            "blend": "SmoothUnion",
-            "smooth": 0.05
+            "name": "ladderHalf",
+            "position": [
+              4,
+              -0.25,
+              6
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.25,
+              0.25,
+              0.25
+            ],
+            "smooth": 0,
+            "type": "Box"
           },
           {
+            "blend": "Union",
             "id": 2,
-            "name": "ear-right",
-            "type": "Cone",
-            "position": [
-              0.1,
-              0.42,
-              -0.05
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.05,
-              0.1,
-              0.05
-            ],
             "material": 1,
-            "blend": "SmoothUnion",
-            "smooth": 0.05
+            "name": "ladderOne",
+            "position": [
+              5.5,
+              0,
+              6
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.5,
+              0.5,
+              0.5
+            ],
+            "smooth": 0,
+            "type": "Box"
           },
           {
-            "id": 3,
-            "name": "snout",
-            "type": "Sphere",
-            "position": [
-              0,
-              0.18,
-              0.26
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ],
-            "scale": [
-              0.09,
-              0.08,
-              0.1
-            ],
-            "material": 1,
-            "blend": "SmoothUnion",
-            "smooth": 0.05
-          }
-        ]
-      }
-    },
-    {
-      "id": "fish",
-      "document": {
-        "schema": "puck.creation.v1",
-        "name": "fish",
-        "palette": [
-          {
-            "color": "#E8A93F",
-            "shininess": 40,
-            "specular": 0.3
-          },
-          {
-            "color": "#F2D98A",
-            "shininess": 40,
-            "specular": 0.3
-          }
-        ],
-        "shapes": [
-          {
-            "id": 0,
-            "name": "body",
-            "type": "Capsule",
-            "position": [
-              0,
-              0,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0.7071,
-              0.7071
-            ],
-            "scale": [
-              0.09,
-              0.16,
-              0.09
-            ],
-            "material": 0,
             "blend": "Union",
-            "smooth": 0
-          },
-          {
-            "id": 1,
-            "name": "tail",
-            "type": "Cone",
-            "position": [
-              0,
-              0,
-              -0.22
-            ],
-            "rotation": [
-              0.7071,
-              0,
-              0,
-              0.7071
-            ],
-            "scale": [
-              0.1,
-              0.08,
-              0.1
-            ],
+            "id": 3,
             "material": 1,
-            "blend": "SmoothUnion",
-            "smooth": 0.04
+            "name": "ladderTwo",
+            "position": [
+              7.5,
+              0.5,
+              6
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              1,
+              1,
+              1
+            ],
+            "smooth": 0,
+            "type": "Box"
           }
         ]
-      }
+      },
+      "id": "debugRoom"
     }
   ],
-  "schema": "puck.world.def.v1",
   "render": {
-    "renderScale": "quarter",
-    "upscaleSharpness": 1
+    "farDistance": 400
+  },
+  "schema": "puck.world.def.v1",
+  "seatDefaults": {
+    "seatCameraFeel": {
+      "gyro": {
+        "deadZone": [
+          0.02,
+          0.02,
+          0.02
+        ],
+        "invertX": false,
+        "invertY": false,
+        "invertZ": false,
+        "pitch": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "scale": 1.0,
+        "yaw": [
+          0.0,
+          -1.0,
+          -1.0
+        ]
+      },
+      "invertPitch": false,
+      "invertYaw": false,
+      "pitchSensitivity": 0.001,
+      "stickLookRate": 2.6,
+      "yawSensitivity": 0.001
+    }
+  },
+  "simulation": {
+    "rateHz": 30
   },
   "state": {
-    "lattices": [
-      {
-        "name": "island",
-        "origin": [
-          -26,
-          33.8,
-          -26
-        ],
-        "cellSize": 0.5,
-        "width": 104,
-        "depth": 104,
-        "layers": 1,
-        "stepEveryTicks": 4,
-        "reactions": [
-          {
-            "$type": "diffuse",
-            "field": "heat",
-            "rate": 0.4
-          },
-          {
-            "$type": "decay",
-            "field": "heat",
-            "rate": 0.05
-          },
-          {
-            "$type": "emit",
-            "tag": "spark",
-            "field": "heat",
-            "amount": 10
-          },
-          {
-            "$type": "transform",
-            "when": [
-              {
-                "field": "heat",
-                "comparison": "GreaterOrEqual",
-                "value": 1.2
-              },
-              {
-                "field": "grass",
-                "comparison": "Greater",
-                "value": 0.1
-              },
-              {
-                "field": "fire",
-                "comparison": "LessOrEqual",
-                "value": 0
-              }
-            ],
-            "then": [
-              {
-                "field": "fire",
-                "op": "Set",
-                "value": 1
-              }
-            ]
-          },
-          {
-            "$type": "transform",
-            "when": [
-              {
-                "field": "fire",
-                "comparison": "Greater",
-                "value": 0
-              }
-            ],
-            "then": [
-              {
-                "field": "heat",
-                "op": "Add",
-                "value": 2.5
-              },
-              {
-                "field": "grass",
-                "op": "Add",
-                "value": -0.03
-              },
-              {
-                "field": "char",
-                "op": "Add",
-                "value": 0.02
-              }
-            ]
-          },
-          {
-            "$type": "transform",
-            "when": [
-              {
-                "field": "fire",
-                "comparison": "Greater",
-                "value": 0
-              },
-              {
-                "field": "grass",
-                "comparison": "LessOrEqual",
-                "value": 0.05
-              }
-            ],
-            "then": [
-              {
-                "field": "fire",
-                "op": "Set",
-                "value": 0
-              },
-              {
-                "field": "grass",
-                "op": "Set",
-                "value": 0
-              }
-            ]
-          },
-          {
-            "$type": "transform",
-            "when": [
-              {
-                "field": "water",
-                "comparison": "Greater",
-                "value": 0.25
-              },
-              {
-                "field": "fire",
-                "comparison": "Greater",
-                "value": 0
-              }
-            ],
-            "then": [
-              {
-                "field": "fire",
-                "op": "Set",
-                "value": 0
-              },
-              {
-                "field": "heat",
-                "op": "Add",
-                "value": -1.0
-              }
-            ]
-          },
-          {
-            "$type": "transform",
-            "when": [
-              {
-                "field": "water",
-                "comparison": "Greater",
-                "value": 0.3
-              },
-              {
-                "field": "grass",
-                "comparison": "Less",
-                "value": 0.9
-              },
-              {
-                "field": "fire",
-                "comparison": "LessOrEqual",
-                "value": 0
-              }
-            ],
-            "then": [
-              {
-                "field": "grass",
-                "op": "Add",
-                "value": {
-                  "row": "season"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "transform",
-            "when": [
-              {
-                "field": "dirt",
-                "comparison": "LessOrEqual",
-                "value": 0.12
-              }
-            ],
-            "then": [
-              {
-                "field": "water",
-                "op": "Add",
-                "value": 2.0
-              }
-            ]
-          },
-          {
-            "$type": "expose",
-            "field": "fire",
-            "comparison": "Greater",
-            "value": 0,
-            "row": "inFire"
-          },
-          {
-            "$type": "expose",
-            "field": "water",
-            "comparison": "GreaterOrEqual",
-            "value": 0.2,
-            "row": "inWater"
-          },
-          {
-            "$type": "flow",
-            "field": "water",
-            "rate": 0.8,
-            "over": [
-              "dirt"
-            ],
-            "spillRow": "falls-flux"
-          }
-        ]
-      }
-    ],
     "world": [
       {
-        "name": "dirt",
-        "kind": "fixed",
-        "lattice": {
-          "topology": "island",
-          "initial": 0.35,
-          "min": 0,
-          "max": 2,
-          "heightScale": 0.6,
-          "color": "#6B4A34",
-          "paint": [
-            {
-              "$type": "rect",
-              "value": 0.55,
-              "minX": -12,
-              "minZ": -12,
-              "maxX": 12,
-              "maxZ": 12
-            },
-            {
-              "$type": "rect",
-              "value": 0.1,
-              "minX": -7,
-              "minZ": -7,
-              "maxX": 7,
-              "maxZ": 7
-            },
-            {
-              "$type": "rect",
-              "value": 0.3,
-              "minX": 7,
-              "minZ": -3,
-              "maxX": 19,
-              "maxZ": 3
-            },
-            {
-              "$type": "rect",
-              "value": 0.15,
-              "minX": 19,
-              "minZ": -2,
-              "maxX": 26,
-              "maxZ": 2
-            },
-            {
-              "$type": "rect",
-              "value": 0.3,
-              "minX": -3,
-              "minZ": 7,
-              "maxX": 3,
-              "maxZ": 19
-            },
-            {
-              "$type": "rect",
-              "value": 0.15,
-              "minX": -2,
-              "minZ": 19,
-              "maxX": 2,
-              "maxZ": 26
-            },
-            {
-              "$type": "rect",
-              "value": 0.3,
-              "minX": -19,
-              "minZ": -19,
-              "maxX": -9,
-              "maxZ": -9
-            },
-            {
-              "$type": "rect",
-              "value": 0.15,
-              "minX": -26,
-              "minZ": -26,
-              "maxX": -19,
-              "maxZ": -19
-            }
-          ]
-        }
-      },
-      {
-        "name": "water",
-        "kind": "fixed",
-        "lattice": {
-          "topology": "island",
-          "initial": 0,
-          "min": 0,
-          "max": 4,
-          "heightScale": 1,
-          "color": "#3E8FD0",
-          "medium": {},
-          "paint": [
-            {
-              "$type": "rect",
-              "value": 3.0,
-              "minX": -7,
-              "minZ": -7,
-              "maxX": 7,
-              "maxZ": 7
-            }
-          ]
-        }
-      },
-      {
-        "name": "grass",
-        "kind": "fixed",
-        "lattice": {
-          "topology": "island",
-          "initial": 0,
-          "min": 0,
-          "max": 1,
-          "heightScale": 0.35,
-          "color": "#5FA04A",
-          "paint": [
-            {
-              "$type": "noise",
-              "value": 0.55,
-              "frequency": 5,
-              "threshold": 0.5,
-              "octaves": 2,
-              "seed": 301
-            },
-            {
-              "$type": "rect",
-              "value": 0.8,
-              "minX": 8,
-              "minZ": -12,
-              "maxX": 12,
-              "maxZ": -8
-            }
-          ]
-        }
-      },
-      {
-        "name": "heat",
-        "kind": "fixed",
-        "lattice": {
-          "topology": "island",
-          "initial": 0,
-          "min": -5,
-          "max": 15
-        }
-      },
-      {
-        "name": "fire",
-        "kind": "fixed",
-        "lattice": {
-          "topology": "island",
-          "initial": 0,
-          "min": 0,
-          "max": 1,
-          "heightScale": 0.22,
-          "color": "#FF5A1F"
-        }
-      },
-      {
-        "name": "char",
-        "kind": "fixed",
-        "lattice": {
-          "topology": "island",
-          "initial": 0,
-          "min": 0,
-          "max": 1,
-          "heightScale": 0.15,
-          "color": "#2A2320"
-        }
-      },
-      {
-        "name": "season",
-        "kind": "fixed",
-        "value": "0.02",
-        "min": "0",
-        "max": "0.05"
-      },
-      {
-        "name": "falls-flux",
-        "kind": "fixed",
-        "value": "0",
-        "min": "0",
-        "max": "100000"
-      },
-      {
-        "name": "falls-mist",
-        "kind": "int",
-        "value": 0,
-        "min": 0,
-        "max": 1
-      },
-      {
-        "name": "spark",
-        "kind": "int",
-        "min": 0,
-        "max": 1,
-        "capacity": 8
-      },
-      {
-        "name": "hot",
-        "kind": "int",
-        "capacity": 8
-      },
-      {
-        "name": "flammable",
-        "kind": "int",
-        "capacity": 8,
         "cells": [
           {
-            "key": "2",
-            "value": 1
+            "key": "behind",
+            "value": "0"
           }
-        ]
-      },
-      {
-        "name": "burning",
-        "kind": "int",
-        "nonNegative": true,
-        "min": 0,
-        "max": 201600,
-        "capacity": 8
-      },
-      {
-        "name": "inFire",
-        "kind": "int",
-        "capacity": 8
-      },
-      {
-        "name": "inWater",
-        "kind": "int",
-        "capacity": 8
+        ],
+        "kind": "fixed",
+        "name": "look"
       }
     ]
   },
-  "properties": {
-    "names": [
-      "flammable",
-      "hot"
-    ]
-  },
-  "interactions": {
-    "interactions": [
-      {
-        "name": "heat-ignites",
-        "left": "hot",
-        "right": "flammable",
-        "coOccurrence": "Distance",
-        "range": 2.0,
-        "mode": "Edge",
-        "effects": [
-          {
-            "$type": "setState",
-            "state": "burning",
-            "key": "$right",
-            "valueSeconds": 3.0
-          }
-        ]
-      }
-    ]
-  },
-  "rules": [
-    {
-      "name": "critter-burns",
-      "forEach": "burning",
-      "mode": "Level",
-      "effects": [
-        {
-          "$type": "setState",
-          "state": "hot",
-          "key": "$each",
-          "value": 1
-        },
-        {
-          "$type": "countdownState",
-          "state": "burning",
-          "key": "$each"
-        }
-      ]
-    },
-    {
-      "name": "field-ignites",
-      "forEach": "inFire",
-      "mode": "Level",
-      "effects": [
-        {
-          "$type": "setState",
-          "state": "burning",
-          "key": "$each",
-          "valueSeconds": 3.0
-        }
-      ]
-    },
-    {
-      "name": "water-douses",
-      "forEach": "inWater",
-      "mode": "Level",
-      "effects": [
-        {
-          "$type": "setState",
-          "state": "burning",
-          "key": "$each",
-          "value": 0
-        }
-      ]
-    },
-    {
-      "name": "falls-mist-rises",
-      "gate": {
-        "$type": "compareState",
-        "state": "falls-flux",
-        "comparison": "Greater",
-        "value": 3.0
-      },
-      "mode": "Level",
-      "effects": [
-        {
-          "$type": "setState",
-          "state": "falls-mist",
-          "value": 1
-        }
-      ]
-    }
-  ],
-  "bodyMotionPrograms": [
-    {
-      "name": "wander",
-      "version": "puck.body-motion.v1",
-      "kind": "Producer",
-      "operations": [
-        "ProduceWanderIntent"
-      ]
-    },
-    {
-      "name": "fishMotion",
-      "version": "puck.body-motion.v1",
-      "kind": "Motion",
-      "operations": [
-        "ResolveYawAttitudeAndPlanarFrame",
-        "ComputeSwimTargetVelocity",
-        "ShapePlanarVelocity",
-        "SnapYawToPlanarIntent",
-        "RunActionTriggers",
-        "ApplyBuoyancyAndSurface",
-        "ApplyVerticalDrive",
-        "IntegratePlanarAndVerticalVelocity",
-        "CommitPose"
-      ]
-    }
-  ],
-  "kits": {
-    "rows": [
-      {
-        "name": "critterKit",
-        "bodyMotionProgram": "defaultMotionProgram",
-        "motion": {
-          "$type": "grounded",
-          "moveSpeed": 1.4,
-          "turnSpeed": 2.0,
-          "riseGravity": 28,
-          "fallGravity": 46,
-          "maxFallSpeed": 40,
-          "sprintMultiplier": 1,
-          "facingSnap": true,
-          "response": []
-        },
-        "collider": {
-          "$type": "capsule",
-          "endpoint": [
-            0,
-            0.4,
-            0
-          ],
-          "radius": 0.22
-        },
-        "bodyContact": "Overlap",
-        "producers": {
-          "wander": {
-            "scalars": {
-              "weaveAmplitude": 0.4,
-              "softRadius": 6.0,
-              "inwardGain": 0.8,
-              "turnScale": 3.0,
-              "altitudeGain": 0.5,
-              "forward": 1.0,
-              "strafeWave": 0.0,
-              "upWave": 0.0,
-              "pitchWave": 0.0,
-              "rollTurn": 0.0,
-              "turnWave": 0.0,
-              "pressThreshold": 0.0,
-              "weaveFrequencyBase": 0.6,
-              "weaveFrequencyRange": 0.2,
-              "activityRateBase": 1.0,
-              "activityRateRange": 0.3,
-              "altitudeBase": 0.0,
-              "altitudeRange": 0.0
-            },
-            "channels": {}
-          }
-        }
-      },
-      {
-        "name": "fishKit",
-        "bodyMotionProgram": "fishMotion",
-        "motion": {
-          "$type": "swim",
-          "thrustSpeed": 1.0,
-          "turnSpeed": 1.5,
-          "verticalThrustFraction": 0.4,
-          "buoyancy": 0.6,
-          "maxRiseSpeed": 1.0,
-          "maxSinkSpeed": 1.0,
-          "surfaceSettleRate": 0.8,
-          "floatDepth": 0.6,
-          "sprintMultiplier": 1,
-          "facingSnap": true,
-          "response": []
-        },
-        "collider": {
-          "$type": "sphere",
-          "radius": 0.2
-        },
-        "bodyContact": "Overlap",
-        "producers": {
-          "wander": {
-            "scalars": {
-              "weaveAmplitude": 0.3,
-              "softRadius": 5.0,
-              "inwardGain": 0.8,
-              "turnScale": 3.0,
-              "altitudeGain": 0.5,
-              "forward": 0.6,
-              "strafeWave": 0.0,
-              "upWave": 0.0,
-              "pitchWave": 0.0,
-              "rollTurn": 0.0,
-              "turnWave": 0.0,
-              "pressThreshold": 0.0,
-              "weaveFrequencyBase": 0.6,
-              "weaveFrequencyRange": 0.2,
-              "activityRateBase": 1.0,
-              "activityRateRange": 0.3,
-              "altitudeBase": 0.0,
-              "altitudeRange": 0.0
-            },
-            "channels": {}
-          }
-        }
-      }
-    ]
-  },
-  "bodies": {
-    "capacity": 3
-  },
-  "defaultSeatKit": "defaultKit",
-  "markers": [
-    {
-      "id": "pond-spring-marker",
-      "source": {
-        "$type": "point",
-        "position": [
-          0,
-          36.8,
-          0
-        ]
-      },
-      "icon": "edit.place",
-      "style": {
-        "chipAlpha": 1.0,
-        "size": 10
-      }
-    }
-  ],
-  "speakers": [
-    {
-      "$type": "bed",
-      "name": "south-fall-ambience",
-      "center": [
-        0,
-        18,
-        27
-      ],
-      "radius": 14,
-      "innerRadius": 4,
-      "feed": {
-        "source": {
-          "$type": "none"
-        },
-        "channel": "mix",
-        "gain": 1.0
-      }
-    }
-  ],
-  "cameras": [
-    {
-      "name": "pond-cam",
-      "anchor": null,
-      "renderWidth": 640,
-      "renderHeight": 480,
-      "rig": {
-        "name": "pond-cam",
-        "version": "puck.camera.v1",
-        "operations": [
-          {
-            "$type": "anchor",
-            "subject": {
-              "$type": "worldPoint",
-              "point": [
-                0,
-                50,
-                18
-              ]
-            }
-          },
-          {
-            "$type": "lookAt",
-            "subject": {
-              "$type": "worldPoint",
-              "point": [
-                0,
-                35,
-                0
-              ]
-            }
-          },
-          {
-            "$type": "fov",
-            "fieldOfViewRadians": 0.7
-          }
-        ]
-      }
-    },
-    {
-      "name": "south-fall-cam",
-      "anchor": null,
-      "renderWidth": 640,
-      "renderHeight": 480,
-      "rig": {
-        "name": "south-fall-cam",
-        "version": "puck.camera.v1",
-        "operations": [
-          {
-            "$type": "anchor",
-            "subject": {
-              "$type": "worldPoint",
-              "point": [
-                35,
-                45,
-                45
-              ]
-            }
-          },
-          {
-            "$type": "lookAt",
-            "subject": {
-              "$type": "worldPoint",
-              "point": [
-                0,
-                15,
-                26
-              ]
-            }
-          },
-          {
-            "$type": "fov",
-            "fieldOfViewRadians": 0.7
-          }
-        ]
-      }
-    }
-  ],
   "views": {
     "layouts": [
       {
-        "name": "pond-view",
+        "name": "action",
         "seatCount": 0,
         "slots": [
           {
-            "camera": "pond-cam",
-            "x": 0,
-            "y": 0,
+            "camera": null,
+            "height": 1,
             "width": 1,
-            "height": 1
+            "x": 0,
+            "y": 0
           }
         ],
-        "transitionSeconds": 0.4,
-        "transitionRenderScale": 0.5
-      },
-      {
-        "name": "south-fall-view",
-        "seatCount": 0,
-        "slots": [
-          {
-            "camera": "south-fall-cam",
-            "x": 0,
-            "y": 0,
-            "width": 1,
-            "height": 1
-          }
-        ],
-        "transitionSeconds": 0.4,
-        "transitionRenderScale": 0.5
+        "transitionRenderScale": 0.5,
+        "transitionSeconds": 0.4
       }
-    ]
-  },
-  "hud": {
-    "panels": [
-      {
-        "id": "ecosystem",
-        "rect": {
-          "x": 0.01,
-          "y": 0.01,
-          "width": 0.5,
-          "height": 0.07
+    ],
+    "seatControl": {
+      "maxPitch": 1.2,
+      "minPitch": -0.35,
+      "yawReference": "World"
+    },
+    "seatRig": {
+      "name": "seatChase",
+      "operations": [
+        {
+          "$type": "orbit",
+          "distance": 5.4626001,
+          "pitch": 0.4145069,
+          "pivotOffset": "state.transforms.origin",
+          "yaw": "state.look.behind"
         },
-        "layer": "Under",
-        "style": "Strip",
-        "elements": [
-          {
-            "id": "readout",
-            "kind": "Text",
-            "rect": {
-              "x": 0,
-              "y": 0,
-              "width": 1,
-              "height": 1
-            },
-            "style": "Primary",
-            "template": "flux {state.falls-flux} grow {state.season} mist {state.falls-mist}"
-          }
-        ]
-      }
-    ]
+        {
+          "$type": "lookAt",
+          "subject": {
+            "$type": "reference"
+          },
+          "targetOffset": [
+            0,
+            1,
+            0
+          ],
+          "worldAxes": false
+        },
+        {
+          "$type": "fov",
+          "fieldOfViewRadians": 0.9599311
+        },
+        {
+          "$type": "dynamics",
+          "row": "chase"
+        }
+      ],
+      "version": "puck.camera.v1"
+    }
   }
 }

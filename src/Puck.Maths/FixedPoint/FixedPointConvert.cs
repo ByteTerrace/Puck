@@ -169,6 +169,14 @@ internal static class FixedPointConvert {
             return true;
         }
 
+        if (TryFromIntegerChecked(
+            fractionBitCount: fractionBitCount,
+            result: out result,
+            value: value
+        )) {
+            return true;
+        }
+
         if (!IsKnownBclNumeric<TOther>()) {
             result = default;
 
@@ -212,6 +220,14 @@ internal static class FixedPointConvert {
         )) {
             result = FromDouble<TSelf>(value: floating);
 
+            return true;
+        }
+
+        if (TryFromIntegerSaturating(
+            fractionBitCount: fractionBitCount,
+            result: out result,
+            value: value
+        )) {
             return true;
         }
 
@@ -487,7 +503,23 @@ internal static class FixedPointConvert {
 
     private static TSelf FromDecimalChecked<TSelf>(decimal value, int fractionBitCount)
         where TSelf : struct {
-        var scaled = ScaleDecimalForSignedCarrier(
+        if (fractionBitCount <= 31) {
+            var narrow = ScaleDecimal(
+                fractionBitCount: fractionBitCount,
+                value: value
+            );
+
+            if (
+                (narrow < long.MinValue) ||
+                (narrow > long.MaxValue)
+            ) {
+                throw new OverflowException(message: $"Value is outside the representable {typeof(TSelf).Name} range.");
+            }
+
+            return FromRaw<TSelf>(raw: ((long)narrow));
+        }
+
+        var scaled = ScaleDecimalWide(
             fractionBitCount: fractionBitCount,
             value: value
         );
@@ -503,7 +535,19 @@ internal static class FixedPointConvert {
     }
     private static TSelf FromDecimalSaturating<TSelf>(decimal value, int fractionBitCount)
         where TSelf : struct {
-        var scaled = ScaleDecimalForSignedCarrier(
+        if (fractionBitCount <= 31) {
+            var narrow = ScaleDecimal(
+                fractionBitCount: fractionBitCount,
+                value: value
+            );
+
+            if (narrow < long.MinValue) { return FromRaw<TSelf>(raw: long.MinValue); }
+            if (narrow > long.MaxValue) { return FromRaw<TSelf>(raw: long.MaxValue); }
+
+            return FromRaw<TSelf>(raw: ((long)narrow));
+        }
+
+        var scaled = ScaleDecimalWide(
             fractionBitCount: fractionBitCount,
             value: value
         );
@@ -515,13 +559,72 @@ internal static class FixedPointConvert {
     }
     private static TSelf FromDecimalTruncating<TSelf>(decimal value, int fractionBitCount)
         where TSelf : struct {
-        var scaled = ScaleDecimalForSignedCarrier(
+        if (fractionBitCount <= 31) {
+            return FromRaw<TSelf>(raw: unchecked((long)ScaleDecimal(
+                fractionBitCount: fractionBitCount,
+                value: value
+            )));
+        }
+
+        var scaled = ScaleDecimalWide(
             fractionBitCount: fractionBitCount,
             value: value
         );
         var wrapped = scaled & ulong.MaxValue;
 
         return FromRaw<TSelf>(raw: unchecked((long)((ulong)wrapped)));
+    }
+    // The integer lanes of the checked and saturating faces: a known BCL integer reaches the raw by one Int128 widening
+    // and one shift, never through decimal. The shift is exact whenever the source fits below the raw's integer bits,
+    // which is exactly the range test performed here.
+    private static bool TryFromIntegerChecked<TSelf, TOther>(TOther value, int fractionBitCount, out TSelf result)
+        where TSelf : struct
+        where TOther : INumberBase<TOther> {
+        if (!IsKnownBclInteger<TOther>()) {
+            result = default;
+
+            return false;
+        }
+
+        var widened = Int128.CreateChecked(value: value);
+
+        if (
+            (widened < (((Int128)long.MinValue) >> fractionBitCount)) ||
+            (widened > (((Int128)long.MaxValue) >> fractionBitCount))
+        ) {
+            throw new OverflowException(message: $"Value is outside the representable {typeof(TSelf).Name} range.");
+        }
+
+        result = FromRaw<TSelf>(raw: ((long)(widened << fractionBitCount)));
+
+        return true;
+    }
+    private static bool TryFromIntegerSaturating<TSelf, TOther>(TOther value, int fractionBitCount, out TSelf result)
+        where TSelf : struct
+        where TOther : INumberBase<TOther> {
+        if (!IsKnownBclInteger<TOther>()) {
+            result = default;
+
+            return false;
+        }
+
+        var widened = Int128.CreateSaturating(value: value);
+
+        if (widened < (((Int128)long.MinValue) >> fractionBitCount)) {
+            result = FromRaw<TSelf>(raw: long.MinValue);
+
+            return true;
+        }
+
+        if (widened > (((Int128)long.MaxValue) >> fractionBitCount)) {
+            result = FromRaw<TSelf>(raw: long.MaxValue);
+
+            return true;
+        }
+
+        result = FromRaw<TSelf>(raw: ((long)(widened << fractionBitCount)));
+
+        return true;
     }
     private static TSelf FromDouble<TSelf>(double value)
         where TSelf : struct {
@@ -566,17 +669,6 @@ internal static class FixedPointConvert {
     private static long Raw<TSelf>(TSelf value)
         where TSelf : struct =>
         Unsafe.As<TSelf, long>(source: ref value);
-    private static BigInteger ScaleDecimalForSignedCarrier(decimal value, int fractionBitCount) =>
-        ((fractionBitCount <= 31)
-            ? ScaleDecimal(
-                fractionBitCount: fractionBitCount,
-                value: value
-            )
-            : ScaleDecimalWide(
-                fractionBitCount: fractionBitCount,
-                value: value
-            )
-        );
     private static decimal ToDecimal<TSelf>(TSelf value, int fractionBitCount)
         where TSelf : struct =>
         (Raw(value: value) / ((decimal)(1L << fractionBitCount)));

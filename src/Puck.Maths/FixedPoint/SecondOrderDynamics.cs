@@ -12,6 +12,7 @@ public enum SecondOrderDynamicsBranch : byte {
     /// <summary>Damping ratio above one — a slower approach that never overshoots.</summary>
     Overdamped = 2,
 }
+
 /// <summary>
 /// The derived constants of a t3ssel8r-style second-order follower: <c>y'' + 2ζω·y' + ω²·y = ω²·x + rζω·x'</c>, with
 /// <c>ω = 2π·f</c>. Authors declare the natural frequency <c>f</c> (Hz), damping ratio <c>ζ</c> and initial response
@@ -80,9 +81,9 @@ public readonly record struct SecondOrderDynamics {
         var (omegaNumerator, omegaDenominator) = FixedQ4816.AngularFrequency(frequencyHz: frequencyHz);
 
         if (!FixedPointRounding.TryRoundRational(
+            numerator: (omegaNumerator * omegaNumerator),
             denominator: (omegaDenominator * omegaDenominator),
             fractionBitCount: CoefficientFractionBitCount,
-            numerator: (omegaNumerator * omegaNumerator),
             result: out var stiffnessRaw
         )) {
             throw new ArgumentOutOfRangeException(
@@ -95,9 +96,9 @@ public readonly record struct SecondOrderDynamics {
         var oneQ16 = ((BigInteger)(1L << FixedQ4816.FractionBitCount));
 
         if (!FixedPointRounding.TryRoundRational(
+            numerator: (zetaRaw * omegaNumerator),
             denominator: (oneQ16 * omegaDenominator),
             fractionBitCount: CoefficientFractionBitCount,
-            numerator: (zetaRaw * omegaNumerator),
             result: out var decayRateRaw
         )) {
             throw new ArgumentOutOfRangeException(
@@ -122,7 +123,7 @@ public readonly record struct SecondOrderDynamics {
             // discriminant = |1 − ζ²|·2^32 (exact, since ζ is Q16). rootRaw = round(√|1 − ζ²| · 2^Guard) — the
             // 2·Guard − 2·16 shift accounts for discriminant already carrying ζ's own 2^32, so the square root
             // divides that exponent by two before rootRaw's target scale is added back.
-            var discriminant = BigInteger.Abs(value: ((oneQ16 * oneQ16) - (zetaRaw * zetaRaw)));
+            var discriminant = BigInteger.Abs((oneQ16 * oneQ16) - (zetaRaw * zetaRaw));
             var discriminantScaled = (discriminant << ((2 * SecondOrderExactMath.GuardFractionBitCount) - (2 * FixedQ4816.FractionBitCount)));
             var rootRaw = ((BigIntegerFunctions.SquareRoot(value: (4 * discriminantScaled)) + 1) / 2);
 
@@ -149,9 +150,9 @@ public readonly record struct SecondOrderDynamics {
             }
 
             if (!FixedPointRounding.TryRoundRational(
+                numerator: decayRateRaw,
                 denominator: oscillationRateRaw,
                 fractionBitCount: CoefficientFractionBitCount,
-                numerator: decayRateRaw,
                 result: out dampingOverOscillationRaw
             )) {
                 throw new ArgumentOutOfRangeException(
@@ -165,9 +166,9 @@ public readonly record struct SecondOrderDynamics {
         var responseZeta = (responseRaw * zetaRaw); // r·ζ, Q32 exact
 
         if (!FixedPointRounding.TryRoundRational(
+            numerator: (responseZeta * omegaDenominator),
             denominator: ((oneQ16 * oneQ16) * omegaNumerator),
             fractionBitCount: CoefficientFractionBitCount,
-            numerator: (responseZeta * omegaDenominator),
             result: out var targetVelocityGainRaw
         )) {
             throw new ArgumentOutOfRangeException(
@@ -177,9 +178,9 @@ public readonly record struct SecondOrderDynamics {
         }
 
         if (!FixedPointRounding.TryRoundRational(
+            numerator: (responseZeta * omegaNumerator),
             denominator: ((oneQ16 * oneQ16) * omegaDenominator),
             fractionBitCount: CoefficientFractionBitCount,
-            numerator: (responseZeta * omegaNumerator),
             result: out var retargetGainRaw
         )) {
             throw new ArgumentOutOfRangeException(
@@ -201,6 +202,7 @@ public readonly record struct SecondOrderDynamics {
             TargetVelocityGainRaw = targetVelocityGainRaw,
         };
     }
+
     /// <summary>Compiles the exact pole-matched (matched Z-transform) state-transition matrix for one fixed step
     /// width.</summary>
     /// <param name="stepTicks">The step width, in simulation ticks; must be strictly positive.</param>
@@ -245,6 +247,7 @@ public readonly record struct SecondOrderDynamics {
             TicksPerSecond: ticksPerSecond
         );
     }
+
     /// <summary>Evaluates the closed-form response at an elapsed duration from stated initial conditions — the
     /// no-per-tick-work form <c>WorldStateAdvance</c>-style epoch reads use.</summary>
     /// <param name="initialValue">The value at the epoch.</param>
@@ -293,67 +296,100 @@ public readonly record struct SecondOrderDynamics {
 
         switch (Branch) {
             case SecondOrderDynamicsBranch.CriticallyDamped: {
-                    if (!TryDecayFactor(decayNumeratorRaw: DecayRateRaw, t: t, log2e: log2e, factor: out var e, timeProduct: out var decayTime)) {
-                        return new(Value: target, Velocity: FixedQ4816.Zero);
-                    }
-
-                    var onePlus = (FixedQ4816.One + decayTime);
-                    var oneMinus = (FixedQ4816.One - decayTime);
-
-                    valueOffset = (e * ((e0 * onePlus) + (v0 * t)));
-                    velocity = (e * ((v0 * oneMinus) - ((FixedQ4816.FromRawBits(value: (StiffnessRaw >> 16)) * e0) * t)));
-                    break;
+                if (!TryDecayFactor(decayNumeratorRaw: DecayRateRaw, t: t, log2e: log2e, factor: out var e, timeProduct: out var decayTime)) {
+                    return new(Value: target, Velocity: FixedQ4816.Zero);
                 }
+
+                var onePlus = (FixedQ4816.One + decayTime);
+                var oneMinus = (FixedQ4816.One - decayTime);
+
+                valueOffset = (e * ((e0 * onePlus) + (v0 * t)));
+                velocity = (e * ((v0 * oneMinus) - (NarrowQ32(raw: StiffnessRaw) * e0 * t)));
+                break;
+            }
             case SecondOrderDynamicsBranch.Underdamped: {
-                    if (!TryDecayFactor(decayNumeratorRaw: DecayRateRaw, t: t, log2e: log2e, factor: out var e, timeProduct: out _)) {
-                        return new(Value: target, Velocity: FixedQ4816.Zero);
-                    }
-                    if (!FusedArithmetic.TryMixedScaleProduct(
-                        a: OscillationRateRaw,
-                        b: t.Value,
-                        fractionBitsA: CoefficientFractionBitCount,
-                        fractionBitsB: FixedQ4816.FractionBitCount,
-                        fractionBitsOut: FixedQ4816.FractionBitCount,
-                        result: out var angleRaw
-                    )) {
-                        return new(Value: target, Velocity: FixedQ4816.Zero);
-                    }
-
-                    var (sin, cos) = FixedQ4816.SinCos(angle: FixedQ4816.FromRawBits(value: angleRaw));
-                    var ratio = FixedQ4816.FromRawBits(value: unchecked((long)ScaleQ32ToQ16(value: DampingOverOscillationRaw)));
-
-                    valueOffset = (e * ((e0 * (cos + (ratio * sin))) + (v0 * (sin / OscillationRateRawAsQ16()))));
-                    velocity = (e * ((v0 * (cos - (ratio * sin))) - (((FixedQ4816.FromRawBits(value: (StiffnessRaw >> 16)) * e0) * sin) / OscillationRateRawAsQ16())));
-                    break;
+                if (!TryDecayFactor(decayNumeratorRaw: DecayRateRaw, t: t, log2e: log2e, factor: out var e, timeProduct: out _)) {
+                    return new(Value: target, Velocity: FixedQ4816.Zero);
                 }
+                if (!FusedArithmetic.TryMixedScaleProduct(
+                    a: OscillationRateRaw,
+                    b: t.Value,
+                    fractionBitsA: CoefficientFractionBitCount,
+                    fractionBitsB: FixedQ4816.FractionBitCount,
+                    fractionBitsOut: FixedQ4816.FractionBitCount,
+                    result: out var angleRaw
+                )) {
+                    return new(Value: target, Velocity: FixedQ4816.Zero);
+                }
+
+                var (sin, cos) = FixedQ4816.SinCos(angle: FixedQ4816.FromRawBits(value: angleRaw));
+                var ratio = NarrowQ32(raw: DampingOverOscillationRaw);
+                // The two divisions by ω_d take the Q32 rate as their divisor directly — v0·sin/ω_d and k·e0·sin/ω_d each
+                // one rounding — instead of dividing by a Q16 narrowing of a rate that can sit within a few units of it.
+                var velocityTerm = FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(
+                    denominator: ((UInt128)((ulong)OscillationRateRaw)),
+                    numerator: FusedArithmetic.Product(
+                        left: v0.Value,
+                        right: sin.Value
+                    )
+                ));
+                var stiffnessTerm = FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(
+                    denominator: (((UInt128)((ulong)OscillationRateRaw)) << (2 * FixedQ4816.FractionBitCount)),
+                    numerator: ScaleSignedProduct(
+                        product: FusedArithmetic.Product(
+                            left: e0.Value,
+                            right: sin.Value
+                        ),
+                        scale: StiffnessRaw
+                    )
+                ));
+
+                valueOffset = (e * ((e0 * (cos + (ratio * sin))) + velocityTerm));
+                velocity = (e * ((v0 * (cos - (ratio * sin))) - stiffnessTerm));
+                break;
+            }
             default: { // Overdamped — settling tracks the SLOWER pole p1 = ζω−σ, never the bare ζω.
-                    var sigma = OscillationRateRawAsQ16();
+                var sigma = NarrowQ32(raw: OscillationRateRaw);
 
-                    if (!TryDecayFactor(decayNumeratorRaw: (DecayRateRaw - OscillationRateRaw), t: t, log2e: log2e, factor: out var lambda1, timeProduct: out _)) {
-                        return new(Value: target, Velocity: FixedQ4816.Zero);
-                    }
-                    if (!FusedArithmetic.TryMixedScaleProduct(
-                        a: (DecayRateRaw + OscillationRateRaw),
-                        b: t.Value,
-                        fractionBitsA: CoefficientFractionBitCount,
-                        fractionBitsB: FixedQ4816.FractionBitCount,
-                        fractionBitsOut: FixedQ4816.FractionBitCount,
-                        result: out var p2TimeRaw
-                    )) {
-                        return new(Value: target, Velocity: FixedQ4816.Zero);
-                    }
-
-                    // lambda1/lambda2 decay at the positive rates p1 = ζω−σ, p2 = ζω+σ (the poles are −p1, −p2); p1·p2 =
-                    // ω² exactly, which is how the velocity term below reaches ω² without a separate stiffness read.
-                    var lambda2 = FixedQ4816.Exp2(value: -(FixedQ4816.FromRawBits(value: p2TimeRaw) * log2e));
-                    var p1 = (FixedQ4816.FromRawBits(value: (DecayRateRaw >> 16)) - sigma);
-                    var p2 = (FixedQ4816.FromRawBits(value: (DecayRateRaw >> 16)) + sigma);
-                    var twoSigma = (sigma + sigma);
-
-                    valueOffset = (((e0 * ((p2 * lambda1) - (p1 * lambda2))) + (v0 * (lambda1 - lambda2))) / twoSigma);
-                    velocity = (((((e0 * p1) * p2) * (lambda2 - lambda1)) + (v0 * ((p2 * lambda2) - (p1 * lambda1)))) / twoSigma);
-                    break;
+                if (!TryDecayFactor(decayNumeratorRaw: (DecayRateRaw - OscillationRateRaw), t: t, log2e: log2e, factor: out var lambda1, timeProduct: out _)) {
+                    return new(Value: target, Velocity: FixedQ4816.Zero);
                 }
+                if (!FusedArithmetic.TryMixedScaleProduct(
+                    a: (DecayRateRaw + OscillationRateRaw),
+                    b: t.Value,
+                    fractionBitsA: CoefficientFractionBitCount,
+                    fractionBitsB: FixedQ4816.FractionBitCount,
+                    fractionBitsOut: FixedQ4816.FractionBitCount,
+                    result: out var p2TimeRaw
+                )) {
+                    return new(Value: target, Velocity: FixedQ4816.Zero);
+                }
+
+                // lambda1/lambda2 decay at the positive rates p1 = ζω−σ, p2 = ζω+σ (the poles are −p1, −p2); p1·p2 =
+                // ω² exactly, which is how the velocity term below reaches ω² without a separate stiffness read.
+                var lambda2 = FixedQ4816.Exp2(value: -(FixedQ4816.FromRawBits(value: p2TimeRaw) * log2e));
+                // The poles are narrowed from their exact Q32 difference and sum, not as differences of two narrowings.
+                var p1 = NarrowQ32(raw: (DecayRateRaw - OscillationRateRaw));
+                var p2 = NarrowQ32(raw: (DecayRateRaw + OscillationRateRaw));
+                // The closing divisions by 2σ take the Q32 rate directly, each one rounding.
+                var twoSigmaQ32 = (((UInt128)((ulong)OscillationRateRaw)) << 1);
+
+                valueOffset = FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(
+                    denominator: twoSigmaQ32,
+                    numerator: FusedArithmetic.Product(
+                        left: ((e0 * ((p2 * lambda1) - (p1 * lambda2))) + (v0 * (lambda1 - lambda2))).Value,
+                        right: FixedQ4816.One.Value
+                    )
+                ));
+                velocity = FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(
+                    denominator: twoSigmaQ32,
+                    numerator: FusedArithmetic.Product(
+                        left: ((e0 * p1 * p2 * (lambda2 - lambda1)) + (v0 * ((p2 * lambda2) - (p1 * lambda1)))).Value,
+                        right: FixedQ4816.One.Value
+                    )
+                ));
+                break;
+            }
         }
 
         return new(Value: (target + valueOffset), Velocity: velocity);
@@ -410,16 +446,24 @@ public readonly record struct SecondOrderDynamics {
         return new(Value: current.Value, Velocity: (current.Velocity + FixedQ4816.FromRawBits(value: kickRaw)));
     }
 
-    private FixedQ4816 OscillationRateRawAsQ16() =>
-        FixedQ4816.FromRawBits(value: (OscillationRateRaw >> 16));
-    private static ulong ScaleQ32ToQ16(long value) =>
-        unchecked((ulong)(value >> 16));
+    // Q32 → Q16 to nearest, ties to even — the same narrowing SecondOrderState's accessors use, never a truncating
+    // shift, whose downward bias reaches a whole Q16 unit on a rate that then serves as a divisor.
+    private static FixedQ4816 NarrowQ32(long raw) =>
+        FixedQ4816.FromRawBits(value: FixedQ4816.RoundProduct(
+            fractionBitCount: FixedQ4816.FractionBitCount,
+            product: raw
+        ));
+    // Multiplies a sign-magnitude Q32 product by a non-negative Q32 raw, exactly, for a divisor lifted by the same width.
+    private static (bool Negative, UInt128 Magnitude) ScaleSignedProduct((bool Negative, UInt128 Magnitude) product, long scale) =>
+        (product.Negative, (product.Magnitude * ((UInt128)((ulong)scale))));
+
     private void ThrowIfUnbound() {
         if (Frequency.Value <= 0L) {
             throw new InvalidOperationException(message: "The dynamics are default-initialized; construct them with Create before evaluating them.");
         }
     }
 }
+
 /// <summary>The exact pole-matched propagator for one fixed step width, produced by
 /// <see cref="SecondOrderDynamics.Compile"/>.</summary>
 /// <param name="A11Raw">Row 1, column 1 of the state-transition matrix, Q32 (dimensionless).</param>
@@ -468,7 +512,7 @@ public readonly record struct SecondOrderStep(
             throw new OverflowException(message: "The target-velocity gain term overflowed while forming x*.");
         }
 
-        var xStar = checked((xShift + gainRaw));
+        var xStar = checked(xShift + gainRaw);
         var e = (state.PositionRaw - xStar);
         var v = state.VelocityRaw;
 
@@ -495,8 +539,8 @@ public readonly record struct SecondOrderStep(
         );
 
         if (
-            !FusedArithmetic.TryNarrowSignedMagnitude(magnitude: eScaled.Magnitude, negative: eSum.Negative, result: out var eNext) ||
-            !FusedArithmetic.TryNarrowSignedMagnitude(magnitude: vScaled.Magnitude, negative: vSum.Negative, result: out var vNext)
+            !FusedArithmetic.TryNarrowSignedMagnitude(negative: eSum.Negative, magnitude: eScaled.Magnitude, result: out var eNext) ||
+            !FusedArithmetic.TryNarrowSignedMagnitude(negative: vSum.Negative, magnitude: vScaled.Magnitude, result: out var vNext)
         ) {
             throw new OverflowException(message: "The propagator step overflowed the Q32 raw carrier.");
         }
@@ -508,8 +552,9 @@ public readonly record struct SecondOrderStep(
             return new(PositionRaw: xStar, VelocityRaw: 0L);
         }
 
-        return new(PositionRaw: checked((xStar + eNext)), VelocityRaw: vNext);
+        return new(PositionRaw: checked(xStar + eNext), VelocityRaw: vNext);
     }
+
     /// <summary>Advances a three-lane planar follower by one step — three independent scalar
     /// <see cref="Step(SecondOrderState,FixedQ4816,FixedQ4816)"/> calls, X then Y then Z.</summary>
     /// <param name="state">The follower's state before the step.</param>
@@ -534,6 +579,7 @@ public readonly record struct SecondOrderStep(
         )
     );
 }
+
 /// <summary>One scalar follower lane's authoritative Q32 state.</summary>
 /// <param name="PositionRaw">The position, Q32.</param>
 /// <param name="VelocityRaw">The velocity, Q32.</param>
@@ -576,6 +622,7 @@ public readonly record struct SecondOrderState(long PositionRaw, long VelocityRa
     public static SecondOrderState FromRawBits(long positionRaw, long velocityRaw) =>
         new(PositionRaw: positionRaw, VelocityRaw: velocityRaw);
 }
+
 /// <summary>Three independent <see cref="SecondOrderState"/> lanes — a planar (X, Y, Z) follower's authoritative
 /// state.</summary>
 /// <param name="X">The first lane.</param>
@@ -602,6 +649,7 @@ public readonly record struct SecondOrderState3(SecondOrderState X, SecondOrderS
     public static SecondOrderState3 AtRest(FixedVector3 position) =>
         FromValue(position: position, velocity: FixedVector3.Zero);
 }
+
 /// <summary>One evaluated sample of a <see cref="SecondOrderDynamics"/> follower.</summary>
 /// <param name="Value">The value at the sampled instant.</param>
 /// <param name="Velocity">The velocity at the sampled instant.</param>

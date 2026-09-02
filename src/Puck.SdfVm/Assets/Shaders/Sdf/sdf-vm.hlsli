@@ -438,8 +438,9 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 #define SDF_INV_2POW32 (1.0 / 4294967296.0)
 
 // The "nothing nearer yet" sentinel every accumulator and every unknown shape id starts at. It is deliberately far
-// beyond MaxDistance (60) so it always loses a min() against real geometry, yet small enough that `a + (b - a)`
-// still resolves; see blendSmoothUnion, which must NOT be handed this value through a saturating lerp.
+// beyond any authored far distance (render.farDistance is capped at 8192 world units by the world validator) so it
+// always loses a min() against real geometry, yet small enough that `a + (b - a)` still resolves; see
+// blendSmoothUnion, which must NOT be handed this value through a saturating lerp.
 #define SDF_FAR_DISTANCE 1.0e9
 
 // Degenerate-input floors. The Scale / Repeat / RepeatLimited floors are HOST-BAKED (SdfProgramBuilder) — these

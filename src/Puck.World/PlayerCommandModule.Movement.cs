@@ -203,6 +203,10 @@ internal sealed partial class PlayerCommandModule {
             return pendingError;
         }
 
+        if (ReplayDriveError(verb: "body.fly") is { } driveError) {
+            return driveError;
+        }
+
         // The fly channel order (forward, strafe, up, yaw, pitch, roll) maps onto PlayerIntent (MoveAdvance, MoveStrafe,
         // Turn, MoveUp, Pitch, Roll) — the "yaw" channel is the Turn rate.
         m_link.SubmitCommand(command: new WorldCommand.EnqueueSegment(
@@ -246,6 +250,10 @@ internal sealed partial class PlayerCommandModule {
         }
 
         if (hasMode) {
+            if (ReplayDriveError(verb: "body.motion") is { } driveError) {
+                return driveError;
+            }
+
             m_link.SubmitCommand(command: new WorldCommand.SetBodyMotion(
                 Principal: context.ActingPrincipal(),
                 EntityIndex: index,
@@ -430,6 +438,10 @@ internal sealed partial class PlayerCommandModule {
         }
 
         const float ToRadians = (MathF.PI / 180f);
+
+        if (ReplayDriveError(verb: "body.pose") is { } driveError) {
+            return driveError;
+        }
 
         m_link.SubmitCommand(command: new WorldCommand.SnapPose(
             Principal: context.ActingPrincipal(),
@@ -617,6 +629,10 @@ internal sealed partial class PlayerCommandModule {
 
         if (player is null) {
             return CommandResult.Error(output: error!);
+        }
+
+        if (ReplayDriveError(verb: "body.stop") is { } driveError) {
+            return driveError;
         }
 
         m_link.SubmitCommand(command: new WorldCommand.Stop(

@@ -103,9 +103,45 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
     /// <exception cref="InvalidOperationException">The field is default-initialized and names no field. The descriptor is read before the span is, so an EMPTY batch is refused too.</exception>
     public void BatchInverse(Span<ulong> values) {
         ThrowIfUninitialized();
+
+        // The kernel's ~3n products run in Montgomery form: one encode and one decode per element replace a hardware
+        // division per product, and the one inversion the kernel makes is the ring's own ladder.
+        var ring = new MontgomeryBatchRing(ring: new(modulus: Modulus));
+
+        // Refused before anything is written, so a region holding a zero is handed back untouched.
+        if (values.Contains(value: 0UL)) { throw new DivideByZeroException(message: "Zero has no multiplicative inverse."); }
+
+        for (var i = 0; (i < values.Length); ++i) {
+            values[i] = ring.Encode(value: values[i]);
+        }
+
         BatchInverseKernel.Invert(
-            ring: this,
+            ring: ring,
             values: values
+        );
+
+        for (var i = 0; (i < values.Length); ++i) {
+            values[i] = ring.Decode(value: values[i]);
+        }
+    }
+    private readonly struct MontgomeryBatchRing(ScaledResidueRing64 ring) : IBatchInvertible<ulong> {
+        private readonly ScaledResidueRing64 m_ring = ring;
+
+        public ulong One => m_ring.One;
+
+        public ulong Decode(ulong value) => m_ring.Decode(value: value);
+        public ulong Encode(ulong value) => m_ring.Encode(value: value);
+        public ulong Inverse(ulong value) {
+            if (0UL == value) { throw new DivideByZeroException(message: "Zero has no multiplicative inverse."); }
+
+            return m_ring.Power(
+                exponent: (m_ring.Modulus - 2UL),
+                value: value
+            );
+        }
+        public ulong Multiply(ulong left, ulong right) => m_ring.Multiply(
+            left: left,
+            right: right
         );
     }
     /// <summary>Creates the prime field <c>F_<paramref name="modulus"/></c>.</summary>
@@ -494,7 +530,9 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
     public int LegendreCharacter(ulong value) {
         ThrowIfUninitialized();
 
-        if (0UL == value) { return 0; }
+        // Tested after reduction, so an unreduced multiple of the modulus reads as the zero it is rather than as a
+        // non-square through the exponentiation path.
+        if (0UL == Reduce(value: value)) { return 0; }
 
         var power = Pow(
             value: value,

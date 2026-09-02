@@ -15,13 +15,13 @@ public class NttConvolveVsNaive {
     private ulong[] m_scratchLeft = [];
     private ulong[] m_scratchRight = [];
     private ulong[] m_destination = [];
-    private NttPlan m_plan = null!;
+    private NumberTheoreticTransformPlan m_plan = null!;
 
     [GlobalSetup]
     public void Setup() {
         var rng = new Random(Seed: Operands.Seed);
 
-        m_plan = NttPlan.Create(length: Length);
+        m_plan = NumberTheoreticTransformPlan.Create(length: Length);
         m_left = new ulong[Length];
         m_right = new ulong[Length];
         m_scratchLeft = new ulong[Length];
@@ -67,15 +67,15 @@ public class NttConvolveVsNaive {
 public class NttForwardInverse {
     private ulong[] m_smallValues = [];
     private ulong[] m_largeValues = [];
-    private NttPlan m_smallPlan = null!;
-    private NttPlan m_largePlan = null!;
+    private NumberTheoreticTransformPlan m_smallPlan = null!;
+    private NumberTheoreticTransformPlan m_largePlan = null!;
 
     [GlobalSetup]
     public void Setup() {
         var rng = new Random(Seed: Operands.Seed);
 
-        m_smallPlan = NttPlan.Create(length: 256);
-        m_largePlan = NttPlan.Create(length: 16384);
+        m_smallPlan = NumberTheoreticTransformPlan.Create(length: 256);
+        m_largePlan = NumberTheoreticTransformPlan.Create(length: 16384);
         m_smallValues = new ulong[256];
         m_largeValues = new ulong[16384];
 

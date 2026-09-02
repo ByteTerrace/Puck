@@ -336,6 +336,46 @@ public readonly struct QuadraticSurd : IComparable<QuadraticSurd>, IEquatable<Qu
             radicand = BigInteger.Zero;
         }
 
+        return Normalize(
+            denominator: denominator,
+            radicand: radicand,
+            rationalNumerator: rationalNumerator,
+            surdNumerator: surdNumerator
+        );
+    }
+    // The constructor the operators use: the radicand is one an already-normalized operand carries (or the common
+    // radicand two such operands share), which is square-free of perfect squares by that operand's own construction,
+    // so the perfect-square test Create pays is skipped and only the sign and common-factor reduction runs.
+    private static QuadraticSurd CreateFromNormalizedRadicand(
+        BigInteger rationalNumerator,
+        BigInteger surdNumerator,
+        BigInteger radicand,
+        BigInteger denominator) {
+        if (denominator.IsZero) { throw new DivideByZeroException(); }
+
+        if (denominator.Sign < 0) {
+            rationalNumerator = -rationalNumerator;
+            surdNumerator = -surdNumerator;
+            denominator = -denominator;
+        }
+
+        if (surdNumerator.IsZero) {
+            radicand = BigInteger.Zero;
+        }
+
+        return Normalize(
+            denominator: denominator,
+            radicand: radicand,
+            rationalNumerator: rationalNumerator,
+            surdNumerator: surdNumerator
+        );
+    }
+    private static QuadraticSurd Normalize(
+        BigInteger rationalNumerator,
+        BigInteger surdNumerator,
+        BigInteger radicand,
+        BigInteger denominator) {
+
         var divisor = BigInteger.GreatestCommonDivisor(
             left: BigInteger.GreatestCommonDivisor(
                 left: BigInteger.Abs(value: rationalNumerator),
@@ -541,7 +581,7 @@ public readonly struct QuadraticSurd : IComparable<QuadraticSurd>, IEquatable<Qu
             right: right
         );
 
-        return Create(
+        return CreateFromNormalizedRadicand(
             rationalNumerator: ((left.RationalNumerator * right.Denominator) + (right.RationalNumerator * left.Denominator)),
             surdNumerator: ((common.LeftSurdNumerator * right.Denominator) +
                 (common.RightSurdNumerator * left.Denominator)),
@@ -553,7 +593,7 @@ public readonly struct QuadraticSurd : IComparable<QuadraticSurd>, IEquatable<Qu
     public static QuadraticSurd operator -(QuadraticSurd left, QuadraticSurd right) => (left + -right);
     /// <summary>Negates a value.</summary>
     public static QuadraticSurd operator -(QuadraticSurd value) =>
-        Create(
+        CreateFromNormalizedRadicand(
             denominator: value.Denominator,
             radicand: value.Radicand,
             rationalNumerator: -value.RationalNumerator,
@@ -566,7 +606,7 @@ public readonly struct QuadraticSurd : IComparable<QuadraticSurd>, IEquatable<Qu
             right: right
         );
 
-        return Create(
+        return CreateFromNormalizedRadicand(
             rationalNumerator: ((left.RationalNumerator * right.RationalNumerator) +
                 ((common.LeftSurdNumerator * common.RightSurdNumerator) * common.Radicand)),
             surdNumerator: ((left.RationalNumerator * common.RightSurdNumerator) +
@@ -586,7 +626,7 @@ public readonly struct QuadraticSurd : IComparable<QuadraticSurd>, IEquatable<Qu
         var norm = ((right.RationalNumerator * right.RationalNumerator) -
             ((common.RightSurdNumerator * common.RightSurdNumerator) * common.Radicand));
 
-        return Create(
+        return CreateFromNormalizedRadicand(
             rationalNumerator: (right.Denominator * ((left.RationalNumerator * right.RationalNumerator) -
                 ((common.LeftSurdNumerator * common.RightSurdNumerator) * common.Radicand))),
             surdNumerator: (right.Denominator * ((common.LeftSurdNumerator * right.RationalNumerator) -

@@ -44,6 +44,23 @@ public static class Pcg3dLatticeNoise {
         return (t3 * (((t * ((t * FixedQ4816.FromInteger(value: 6)) - FixedQ4816.FromInteger(value: 15)))) + FixedQ4816.FromInteger(value: 10)));
     }
     private static FixedQ4816 Lerp(FixedQ4816 a, FixedQ4816 b, FixedQ4816 t) => (a + ((b - a) * t));
+    // remainder / noiseCells in Q48.16, rounded to nearest with ties to even — the same bits FixedQ4816's division
+    // returns for the two integers, reached by one machine-word division on the non-negative operands.
+    private static FixedQ4816 FractionOfCell(int remainder, int noiseCells) {
+        var numerator = (((long)remainder) << FixedQ4816.FractionBitCount);
+        var quotient = (numerator / noiseCells);
+        var residue = (numerator - (quotient * noiseCells));
+        var twiceResidue = (residue << 1);
+
+        if (
+            (twiceResidue > noiseCells) ||
+            ((twiceResidue == noiseCells) && (0L != (quotient & 1L)))
+        ) {
+            ++quotient;
+        }
+
+        return FixedQ4816.FromRawBits(value: quotient);
+    }
     // Floored quotient and non-negative remainder for a positive divisor: the remainder always lies in [0, divisor).
     private static (int Quotient, int Remainder) FloorDivRem(int value, int divisor) {
         var quotient = (value / divisor);
@@ -64,6 +81,11 @@ public static class Pcg3dLatticeNoise {
     /// <param name="seed">The hash seed for this octave.</param>
     /// <returns>A quintic-smoothed value in <c>[0, 1)</c>.</returns>
     public static FixedQ4816 ValueNoise01(int cellX, int cellZ, int noiseCells, uint seed) {
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            other: 1,
+            value: noiseCells
+        );
+
         // Floored division, so a negative cell index still yields a fractional offset in [0, 1) — truncating
         // division would hand the quintic a negative fade and extrapolate outside the corner band. Identical to
         // truncating division for non-negative indices.
@@ -75,8 +97,14 @@ public static class Pcg3dLatticeNoise {
             divisor: noiseCells,
             value: cellZ
         );
-        var fx = (FixedQ4816.FromInteger(value: rx) / FixedQ4816.FromInteger(value: noiseCells));
-        var fz = (FixedQ4816.FromInteger(value: rz) / FixedQ4816.FromInteger(value: noiseCells));
+        var fx = FractionOfCell(
+            noiseCells: noiseCells,
+            remainder: rx
+        );
+        var fz = FractionOfCell(
+            noiseCells: noiseCells,
+            remainder: rz
+        );
         var ux = Quintic(t: fx);
         var uz = Quintic(t: fz);
         var c00 = Corner01(cellX: ((uint)nx), cellZ: ((uint)nz), seed: seed);

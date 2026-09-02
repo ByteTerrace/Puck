@@ -49,7 +49,7 @@
       "type": "object",
       "properties": {
         "moveSpeed": {
-          "description": "Locomotion speed in world units per second \u2014 the profileless fallback a stand-in advances on (a seated player reads its live profile\u0027s speed instead, so identity.motion stays real-time).",
+          "description": "Locomotion speed in world units per second \u2014 the profileless fallback a stand-in advances on (a seated player whose identity CLAIMS a rate reads that claim instead, live, so identity.motion stays real-time; an identity claiming none rides the kit\u0027s own rate).",
           "type": "number"
         },
         "turnSpeed": {
@@ -798,6 +798,14 @@
             "keys"
           ],
           "additionalProperties": false,
+          "default": null
+        },
+        "farDistance": {
+          "description": "The far distance in world units: the depth at which every camera march ends \u2014 the far plane the renderer\u0027s fine march exits at, the reach of the beam\u0027s cone proofs, and the depth the fog and depth ramps are measured against. Geometry beyond it is never marched, so an infinite plane ends on a visible horizon curve at this depth unless the sky fog has absorbed it (render.sky.fogDensity). Optional; absent resolves to the engine\u0027s pinned 40 \u2014 exactly the value every world marched to before this field existed. Must lie within [MinFarDistance, MaxFarDistance]. Re-read on every definition revision (a world.row.set render lands on the next frame); world.budget echoes it with its derived costs.",
+          "type": [
+            "number",
+            "null"
+          ],
           "default": null
         }
       },
@@ -9774,7 +9782,7 @@
                 "default": 0
               },
               "color": {
-                "description": "The #RRGGBB the field\u0027s surface shades with; required when HeightScale is nonzero.",
+                "description": "The color the field\u0027s surface shades with \u2014 a #RRGGBB literal or a state.\u003Crow\u003E[.\u003Ckey\u003E] Text-cell binding; required when HeightScale is nonzero.",
                 "type": [
                   "string",
                   "null"

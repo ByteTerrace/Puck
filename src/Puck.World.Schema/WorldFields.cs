@@ -332,8 +332,9 @@ public sealed record WorldStateLatticeTopology(
 /// <param name="Max">The greatest value a cell holds.</param>
 /// <param name="HeightScale">World units of solid surface per unit of value above the lattice origin -- 0 for a row
 /// that is not geometry.</param>
-/// <param name="Color">The <c>#RRGGBB</c> the row's surface shades with; required when <paramref name="HeightScale"/>
-/// is nonzero.</param>
+/// <param name="Color">The color the row's surface shades with — a <c>#RRGGBB</c> literal or a
+/// <c>state.&lt;row&gt;[.&lt;key&gt;]</c> Text-cell binding (<see cref="WorldColor"/>'s shared grammar, resolved live
+/// at emit); required when <paramref name="HeightScale"/> is nonzero.</param>
 /// <param name="Paint">The initial fills, applied in order over <paramref name="Initial"/>.</param>
 /// <param name="Medium">Marks this field a fluid MEDIUM, or <see langword="null"/> for an ordinary field. A medium
 /// field's value times <paramref name="HeightScale"/> over the lattice origin is a free surface every active body
@@ -381,7 +382,8 @@ public sealed record WorldFieldLatticeDefinition(
 /// <param name="Max">The greatest value a cell holds.</param>
 /// <param name="HeightScale">World units of solid surface per unit of value above the lattice origin — 0 for a
 /// field that is not geometry.</param>
-/// <param name="Color">The <c>#RRGGBB</c> the field's surface shades with; required when <paramref name="HeightScale"/>
+/// <param name="Color">The color the field's surface shades with — a <c>#RRGGBB</c> literal or a
+/// <c>state.&lt;row&gt;[.&lt;key&gt;]</c> Text-cell binding; required when <paramref name="HeightScale"/>
 /// is nonzero.</param>
 /// <param name="Medium">Whether this field is a fluid medium (see <see cref="WorldStateLatticeTrait.Medium"/>).</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]

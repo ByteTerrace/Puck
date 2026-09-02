@@ -101,8 +101,10 @@ decision's price stays legible instead of a silent frame tax. The document vocab
 `kits`/`looks`/`placements` are dealt-row sections (`{rows, assignment}`/`{rows, policy}`, authoring
 dissolved into placements' own policy block); `prototypes` (`prototypeId` references) replaces
 `creations`; `bodies` replaces `population`; `seatDefaults`/`seatCameraFeel` replace
-`playerDefaults`/`seatLook`. `elements.world.json` is the worked example: a `rect`-painted fuel forest
-beside an ice glacier, burning and melting on the folded spelling.
+`playerDefaults`/`seatLook`. `puck.world.frozen.json` (the frozen diorama — see
+the 2026-08-31 reset below) is the worked example: the island lattice burns,
+freezes, melts, and evaporates on the folded spelling, and its bodies carry the
+hp/targeting/attack, elemental-status, and state-driven-look suites.
 
 **Gravity authoring names acceleration independently of geometry.** A world may
 author a uniform acceleration directly, retain explicit placement-plus-mass
@@ -129,7 +131,10 @@ produced it, because a status sentence with no check behind it is how a reader e
 capability exists. This is the whole reason the old per-capability register was deleted and must not
 come back.
 
-**Verified 2026-08-15, on the branch that split the projects:**
+**Verified 2026-08-15, on the branch that split the projects** (rows citing
+`Assets/worlds/prototypes/*.world.json` describe documents retired in the world
+fold — git history only — and rows citing `puck.world.json` describe what is now
+`puck.world.frozen.json`; see the 2026-08-31 reset below):
 
 | Claim | The check |
 |---|---|
@@ -141,7 +146,7 @@ come back.
 | Similar worlds compose instead of redefining everything — the five quilts are `basis` deltas over the `quilt-base` template | read any `quilt-*.world.json`'s `basis` member; `world.status` echoes `basis <path>`; `tests/Puck.World.Tests/DocumentBasisLawTests.cs` |
 | A camera reading reaches per-tick input and a presentation parameter — the `ir-blob` probe's `x` lands as seat 1's `turn` channel and its `luminance` drives `sdf-film-grain.intensity` | windowed on the BRIO: `(sleep 8; echo probe.status; echo 'body.channels 0'; echo wire.errors; sleep 3) \| dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/brio-probe.world.json --exit-after-seconds 16` — `probe.status` echoes `state=running tier=gpu`, its `axis head-x … captured=<v>` equals `body.channels`' `turn … h=<v>`, `parameter … writes=` is positive, `wire.errors: 0`; hardware-free: the same verbs against `brio-probe-track.world.json --headless` (the recorded `Assets/probes/tracks/brio-head.probe-track.json` drives the axis; parameter writes stay 0 headless by design); `tests/Puck.Platform.Windows.Tests/ProbeKernelTests.cs` proves the kernel's numbers on a synthetic frame |
 
-**Verified 2026-08-25 (the medium/flow/ecosystem wave):** `puck.world.json`'s island carries a lattice
+**Verified 2026-08-25 (the medium/flow/ecosystem wave):** `puck.world.frozen.json`'s island carries a lattice
 `water` field marked `medium` (a 5-unit pool) beside the existing fire/char chemistry, transported by a
 `flow` reaction that spills its edge share into `falls-flux`, which gates a `falls-mist` rule — plus
 `fish`/`critter` placements and `pond-cam`/`south-fall-cam` view layouts. `puck canary medium-submersion`
@@ -149,6 +154,48 @@ proves a swim kit's `Submerged` fact flips both ways off `WorldPopulation.Sample
 canary flow-conservation-live` proves a spill row climbs strictly, live, only while a reaction keeps
 feeding its source. `puck parity` (both backends) holds unchanged — the parity world authors neither
 facet.
+
+**Reset 2026-08-31 (owner decision): the shipped world restarts from a bare minimum.** The
+floating-island diorama was ruled unplayable as a game: the island existed as four unrelated
+descriptions — hand-placed `puck.creation.v1` SDF piles, rect-painted lattice heights, flat-Y prop
+scatter, and detached ground quads — that agreed only by eyeball, so the surface seen and the surface
+collided with could never be the same thing. That document is frozen verbatim as
+`puck.world.frozen.json` (reachable via `--world`; deleted when the owner says so, never extended),
+and the old basis froze with it as `puck.basis.frozen.json` — only the frozen world references it.
+The new `puck.world.json` is a delta over the new `standard.basis.json`, which carries the standards,
+defined AS STATE (owner ruling, same day) — a `transforms` text row (`identity`/`origin`/`unit`) and
+a `colors` text row that document values reference by `state.<row>.<key>` instead of restating
+literals, so no shipped document carries a literal `[0, 0, 0, 1]` again — plus the INFINITE SAFETY
+NET and its debug texture (owner rulings, same day): one solid Plane placement (`groundPlane`, the
+`groundContact` precedent) at y = −16, a reasonable distance below origin, catching anything that
+falls, never the level's own floor — its single shape both rendered and collided, one declaration,
+no second description to drift — under the unbounded `groundTexture` checkerboard (one tile
+wallpaper-folded, `P4M`, cell 1×1, `materialStride` 1 over
+`state.colors.groundPrimary`/`groundSecondary`, a NON-SOLID placement: presentation-only by the
+render-only-fold contract, so the plane stays the sole collision truth; landing it exposed that
+`RenderReach` never charged a domain fold's lattice span, culling folded tiles down to the bare
+shape's bound — `ShapeDomainOps.Reach` now charges it). `placements.policy` went OPTIONAL in the
+same arc: unauthored derives to no-live-authoring and a scale envelope spanning the rows' own
+authored scales, so static worlds author no policy block. The world document itself authors
+everything else it runs: its census, its grants, simulation, host, collision, gravity, channels,
+the `walker` kit, bindings, the chase rig, and the pip look. A lattice trait's `color` speaks the same
+grammar (resolved live at emit — a state cell write recolors a height field on the next frame with no
+re-bake, since bricks hold only distances; `world.fields` echoes each height field's authored color
+token; the check: author a lattice row's color as a state reference and boot).
+Everything else returns as deliberate evolution steps on this foundation. The checks: boot headless,
+`body.where 0` spawns at origin, falls ~1 s, and settles at y=-15.98 (the net's surface -16 plus
+`contactSkin` 0.02); `body.press forward 1 2 0` then `body.where 0` shows 8 m in 2 s (the authored
+4 m/s); windowed `world.screenshot` shows the body standing on the same checkered net it collides
+with. Found in passing,
+world-independent (reproduced on the frozen document), all three now closed: an in-session created
+identity was invisible to `player.identity` until the next boot (`PlayerRoster.FindProfile` re-fetches
+the catalog on a miss); `identity.create` minted a 0.01 move rate that silently overrode the kit's
+speed (identity rates are now nullable claims — a fresh identity claims none and the kit's authored
+rate drives until `identity.motion` mints an override; `identity.show` reads `move=kit`); and a live
+`identity.motion` write never reached the running body (the verb now writes the catalog identity the
+body reads live, and refuses by name for an identity not owned here). An identity document from
+before the reshape still carries its seeded 0.01 rows and reads as an explicit 0.01 claim — cure it
+with `identity.motion`, or delete the state dir.
 
 **The foundation is complete and overshot.** Three motion arms (grounded, vehicle, swim); the portal
 lane end to end — step into a frame and the whole party transfers, all-or-nothing across capacity

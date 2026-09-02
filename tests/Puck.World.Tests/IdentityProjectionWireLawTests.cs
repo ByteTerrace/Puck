@@ -72,6 +72,53 @@ public sealed class IdentityProjectionWireLawTests {
         Assert.False(condition: arrived.TryReadState(name: PrivateStateRow, row: out _));
     }
 
+    [Fact]
+    public void ReservationWire_CarriesAbsentRatesAsAbsent_KitDrivesTheArrival() {
+        var defaults = Fixtures.BuildDocument().PlayerDefaults;
+        var owned = OwnedIdentityDocument();
+        // An identity claiming no rates: the named slots exist, their rows do not.
+        var rateless = owned with {
+            StateRaw = new WorldStateSection(World: [
+                new WorldStateRow(Name: WorldCellName.Parse(candidate: PrivateStateRow), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: WorldStateRow.SlotKey), Value: 91L)]),
+            ]),
+        };
+        var identity = new WorldIdentity(document: rateless, defaults: defaults);
+
+        Assert.Null(identity.FixedMoveSpeed);
+        Assert.Null(identity.FixedTurnSpeed);
+
+        var request = new WorldTransferReservationRequest(
+            TransferId: 6UL,
+            SourceAuthority: "machine-a/boot",
+            SourceRateHz: 240,
+            SourceTick: 0UL,
+            DeadlineSourceTick: 60UL,
+            Border: "east",
+            BorderCapacity: null,
+            PartyAllOrNothing: true,
+            PeerAdmission: true,
+            Members: [
+                new WorldTransferReservationMember(
+                    Principal: WorldPrincipal.Console,
+                    PreferredSlot: 0,
+                    Identity: identity,
+                    Source: default,
+                    BodyColor: new Vector3(x: 0.1f, y: 0.2f, z: 0.3f),
+                    CatalogRig: 3,
+                    Mobility: new WorldMobilityIdentity(Incarnation: new WorldEntityAddress(Authority: "machine-a/boot", Index: 0, Generation: 1), Epoch: 0UL)),
+            ]);
+
+        var encoded = WorldFederationCodec.EncodeReservation(request: request);
+
+        Assert.True(WorldFederationCodec.TryDecodeReservation(body: encoded, defaults: defaults, request: out var decoded, failure: out var failure), failure.ToString());
+
+        var arrived = decoded!.Members[0].Identity;
+
+        Assert.NotNull(arrived);
+        Assert.Null(arrived!.FixedMoveSpeed);
+        Assert.Null(arrived.FixedTurnSpeed);
+    }
+
     private static WorldDefinition OwnedIdentityDocument() {
         var document = Fixtures.BuildDocument();
 

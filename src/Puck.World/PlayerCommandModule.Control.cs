@@ -182,6 +182,10 @@ internal sealed partial class PlayerCommandModule {
                 return CommandResult.Error(output: $"[body.control: {refusal}]");
             }
 
+            if (ReplayDriveError(verb: "body.control") is { } driveError) {
+                return driveError;
+            }
+
             m_link.SubmitCommand(command: new WorldCommand.SetControl(
                 Principal: context.ActingPrincipal(),
                 EntityIndex: index,
@@ -400,6 +404,10 @@ internal sealed partial class PlayerCommandModule {
                 args: in args,
                 handler: $"[body.press: {channelName}={((double)value):0.###} body:{index} via '{route.Endpoint.Identity}' body={route.EntityIndex}{routedDuration}]"
             );
+        }
+
+        if (ReplayDriveError(verb: "body.press") is { } driveError) {
+            return driveError;
         }
 
         m_link.SubmitCommand(command: new WorldCommand.PressChannel(

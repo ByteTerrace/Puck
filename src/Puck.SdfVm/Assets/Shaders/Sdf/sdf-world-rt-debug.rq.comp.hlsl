@@ -17,9 +17,12 @@
 [[vk::binding(0, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> outputImage : register(u0);
 [[vk::binding(2, 0)]] RaytracingAccelerationStructure worldTlas : register(t1);
 
+// No live host packs this block (its only driver is quarantined under experimental/); a host that revives this kernel
+// packs every lane below, farDistance included — there is no default it falls back to.
 struct RtParams {
     uint2 imageExtent;      // output image size in pixels
-    uint2 reserved;         // padding to align the camera vectors to 16 bytes
+    float farDistance;      // the march's far plane — this kernel's twin of SdfFrame.FarDistance (world data, never a constant)
+    uint reserved;          // padding to align the camera vectors to 16 bytes
     float4 cameraPosition;  // xyz = world eye position
     float4 cameraRight;     // xyz = right basis,   w = tan(fov / 2)
     float4 cameraUp;        // xyz = up basis,      w = aspect ratio
@@ -29,12 +32,13 @@ struct RtParams {
 [[vk::push_constant]] ConstantBuffer<RtParams> params;
 
 static const int MaxSteps = 160;
-static const float MaxDistance = 60.0;
 static const float SurfaceEpsilon = 0.001;
 static const float CullSkin = 0.5;          // pull the march start back by the max smooth-blend bulge, for safety
-// The "this ray hit nothing" sentinel traceInstanceEntry / traceGroundPlane return. It MUST exceed MaxDistance: every
-// caller decides "culled" by testing the returned entry against MaxDistance (or ShadowMaxDistance, which is smaller).
-static const float NoRayHit = (MaxDistance * 2.0);
+// The "this ray hit nothing" sentinel traceInstanceEntry / traceGroundPlane return. It MUST exceed the far distance:
+// every caller decides "culled" by testing the returned entry against params.farDistance (or ShadowMaxDistance, which
+// is smaller). The far distance is world data capped at 8192 units by the world validator, so the VM's own
+// "nothing nearer" sentinel (1e9) is beyond every admissible value.
+static const float NoRayHit = SDF_FAR_DISTANCE;
 // Degenerate-ground-plane guards. The scene declares "no floor" as an all-zero plane normal, so dot(n, n) below this
 // floor means no plane at all; and a ray whose dot(direction, n) is not at least this far NEGATIVE is parallel to, or
 // receding from, the plane's front face and never crosses it.
@@ -199,13 +203,14 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     // Ray-traced cull: the nearest of the candidate primitive bound and the analytic floor crossing sets the march
     // start; if neither is within range the pixel is sky and the march is skipped entirely.
-    float instanceEntry = traceInstanceEntry(rayOrigin, rayDirection, SurfaceEpsilon, MaxDistance);
+    float farDistance = params.farDistance;
+    float instanceEntry = traceInstanceEntry(rayOrigin, rayDirection, SurfaceEpsilon, farDistance);
     float floorEntry = traceGroundPlane(rayOrigin, rayDirection);
     float candidate = min(instanceEntry, floorEntry);
 
     float3 color;
 
-    if (candidate > MaxDistance) {
+    if (candidate > farDistance) {
         color = skyColor(rayDirection); // culled: provably hits nothing in range
     } else {
         float traveled = max(SurfaceEpsilon, (candidate - CullSkin));
@@ -227,7 +232,8 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
             traveled += hit.distance;
 
-            if (traveled > MaxDistance) {
+            // A plain (omega = 1) step is provably clear, so crossing the far plane here is a validated escape.
+            if (traveled > farDistance) {
                 break;
             }
         }

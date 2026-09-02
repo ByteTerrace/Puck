@@ -24,7 +24,6 @@ internal static class CurvatureSplineExactMath {
     // Bisection/root-isolation working precision (fraction bits past the decimal point); far past the Q32 the caller
     // rounds to, so which endpoint of a fully isolated bracket is read makes no difference to the final rounding.
     private const int GuardBits = 96;
-
     // Below this width an isolating bracket is certified to contain exactly one root and refinement stops.
     private static readonly Rational GuardWidth = new(BigInteger.One, (BigInteger.One << GuardBits));
     // The nudge applied to a bisection query point that lands exactly on a root, so root isolation never has to
@@ -54,7 +53,7 @@ internal static class CurvatureSplineExactMath {
         var chordLengthSquared = ((chordX * chordX) + (chordZ * chordZ));
 
         if (SignOf(value: (chordLengthSquared - Square(value: ExactQ16(value: CurvatureSpline.MinChordLength)))) < 0) {
-            throw new CurvatureSplineException(detail: $"the planar chord is shorter than {CurvatureSpline.MinChordLength}.", refusal: CurvatureSplineRefusal.ZeroLengthChord, segmentIndex: segmentIndex);
+            throw new CurvatureSplineException(refusal: CurvatureSplineRefusal.ZeroLengthChord, segmentIndex: segmentIndex, detail: $"the planar chord is shorter than {CurvatureSpline.MinChordLength}.");
         }
 
         var (sin0, cos0) = SecondOrderExactMath.SinCosExact(numerator: start.TangentYaw.Value, denominator: (1L << FixedQ4816.FractionBitCount));
@@ -70,7 +69,7 @@ internal static class CurvatureSplineExactMath {
         var kappa0 = ExactQ16(value: start.Curvature);
         var kappa1 = ExactQ16(value: end.Curvature);
         var chordLengthSquaredReal = (chordLengthSquared); // real units squared (Cx, Cz already real-valued rationals)
-        var searchHigh = (((Abs(value: chordX) + Abs(value: chordZ)) * new Rational(((BigInteger)CurvatureSpline.MaxTangentChordRatio), BigInteger.One)) + Rational.One);
+        var searchHigh = (((Abs(value: chordX) + Abs(value: chordZ)) * new Rational((BigInteger)CurvatureSpline.MaxTangentChordRatio, BigInteger.One)) + Rational.One);
 
         var (tangent0, tangent1) = SolveTangentLengths(
             chordLengthSquared: chordLengthSquaredReal,
@@ -78,8 +77,8 @@ internal static class CurvatureSplineExactMath {
             kappa1: kappa1,
             s0: s0,
             s1: s1,
-            searchHigh: searchHigh,
             segmentIndex: segmentIndex,
+            searchHigh: searchHigh,
             w: w
         );
 
@@ -108,35 +107,35 @@ internal static class CurvatureSplineExactMath {
         var y0Raw = (start.Elevation.Value << (CurvatureSpline.CoefficientFractionBitCount - FixedQ4816.FractionBitCount));
         var y1Raw = (end.Elevation.Value << (CurvatureSpline.CoefficientFractionBitCount - FixedQ4816.FractionBitCount));
 
-        if (!FixedPointRounding.TryRoundRational(denominator: lengthRaw, fractionBitCount: CurvatureSpline.CoefficientFractionBitCount, numerator: (y1Raw - y0Raw), result: out var gradeRaw)) {
-            throw new CurvatureSplineException(detail: "the elevation grade does not fit the Q32 coefficient carrier.", refusal: CurvatureSplineRefusal.CarrierOverflow, segmentIndex: segmentIndex);
+        if (!FixedPointRounding.TryRoundRational(numerator: (y1Raw - y0Raw), denominator: lengthRaw, fractionBitCount: CurvatureSpline.CoefficientFractionBitCount, result: out var gradeRaw)) {
+            throw new CurvatureSplineException(refusal: CurvatureSplineRefusal.CarrierOverflow, segmentIndex: segmentIndex, detail: "the elevation grade does not fit the Q32 coefficient carrier.");
         }
 
         return new() {
-            D0X = RoundQ32(detail: "the derivative control point D0.x", segmentIndex: segmentIndex, value: d0X),
-            D0Z = RoundQ32(detail: "the derivative control point D0.z", segmentIndex: segmentIndex, value: d0Z),
-            D1X = RoundQ32(detail: "the derivative control point D1.x", segmentIndex: segmentIndex, value: d1X),
-            D1Z = RoundQ32(detail: "the derivative control point D1.z", segmentIndex: segmentIndex, value: d1Z),
-            D2X = RoundQ32(detail: "the derivative control point D2.x", segmentIndex: segmentIndex, value: d2X),
-            D2Z = RoundQ32(detail: "the derivative control point D2.z", segmentIndex: segmentIndex, value: d2Z),
-            E0X = RoundQ32(detail: "the second-derivative control point E0.x", segmentIndex: segmentIndex, value: e0X),
-            E0Z = RoundQ32(detail: "the second-derivative control point E0.z", segmentIndex: segmentIndex, value: e0Z),
-            E1X = RoundQ32(detail: "the second-derivative control point E1.x", segmentIndex: segmentIndex, value: e1X),
-            E1Z = RoundQ32(detail: "the second-derivative control point E1.z", segmentIndex: segmentIndex, value: e1Z),
+            D0X = RoundQ32(value: d0X, segmentIndex: segmentIndex, detail: "the derivative control point D0.x"),
+            D0Z = RoundQ32(value: d0Z, segmentIndex: segmentIndex, detail: "the derivative control point D0.z"),
+            D1X = RoundQ32(value: d1X, segmentIndex: segmentIndex, detail: "the derivative control point D1.x"),
+            D1Z = RoundQ32(value: d1Z, segmentIndex: segmentIndex, detail: "the derivative control point D1.z"),
+            D2X = RoundQ32(value: d2X, segmentIndex: segmentIndex, detail: "the derivative control point D2.x"),
+            D2Z = RoundQ32(value: d2Z, segmentIndex: segmentIndex, detail: "the derivative control point D2.z"),
+            E0X = RoundQ32(value: e0X, segmentIndex: segmentIndex, detail: "the second-derivative control point E0.x"),
+            E0Z = RoundQ32(value: e0Z, segmentIndex: segmentIndex, detail: "the second-derivative control point E0.z"),
+            E1X = RoundQ32(value: e1X, segmentIndex: segmentIndex, detail: "the second-derivative control point E1.x"),
+            E1Z = RoundQ32(value: e1Z, segmentIndex: segmentIndex, detail: "the second-derivative control point E1.z"),
             ArcTable = table,
             GradeRaw = gradeRaw,
             LengthRaw = lengthRaw,
-            P0X = RoundQ32(detail: "the shared knot P0.x", segmentIndex: segmentIndex, value: p0X),
-            P0Z = RoundQ32(detail: "the shared knot P0.z", segmentIndex: segmentIndex, value: p0Z),
-            P1X = RoundQ32(detail: "the derived control point P1.x", segmentIndex: segmentIndex, value: p1X),
-            P1Z = RoundQ32(detail: "the derived control point P1.z", segmentIndex: segmentIndex, value: p1Z),
-            P2X = RoundQ32(detail: "the derived control point P2.x", segmentIndex: segmentIndex, value: p2X),
-            P2Z = RoundQ32(detail: "the derived control point P2.z", segmentIndex: segmentIndex, value: p2Z),
-            P3X = RoundQ32(detail: "the shared knot P3.x", segmentIndex: segmentIndex, value: p3X),
-            P3Z = RoundQ32(detail: "the shared knot P3.z", segmentIndex: segmentIndex, value: p3Z),
+            P0X = RoundQ32(value: p0X, segmentIndex: segmentIndex, detail: "the shared knot P0.x"),
+            P0Z = RoundQ32(value: p0Z, segmentIndex: segmentIndex, detail: "the shared knot P0.z"),
+            P1X = RoundQ32(value: p1X, segmentIndex: segmentIndex, detail: "the derived control point P1.x"),
+            P1Z = RoundQ32(value: p1Z, segmentIndex: segmentIndex, detail: "the derived control point P1.z"),
+            P2X = RoundQ32(value: p2X, segmentIndex: segmentIndex, detail: "the derived control point P2.x"),
+            P2Z = RoundQ32(value: p2Z, segmentIndex: segmentIndex, detail: "the derived control point P2.z"),
+            P3X = RoundQ32(value: p3X, segmentIndex: segmentIndex, detail: "the shared knot P3.x"),
+            P3Z = RoundQ32(value: p3Z, segmentIndex: segmentIndex, detail: "the shared knot P3.z"),
             StationRaw = 0L, // filled in by the caller once every segment's LengthRaw is known.
-            Tangent0LengthRaw = RoundQ32(detail: "the derived tangent length l0", segmentIndex: segmentIndex, value: tangent0),
-            Tangent1LengthRaw = RoundQ32(detail: "the derived tangent length l1", segmentIndex: segmentIndex, value: tangent1),
+            Tangent0LengthRaw = RoundQ32(value: tangent0, segmentIndex: segmentIndex, detail: "the derived tangent length l0"),
+            Tangent1LengthRaw = RoundQ32(value: tangent1, segmentIndex: segmentIndex, detail: "the derived tangent length l1"),
             Y0Raw = y0Raw,
             Y1Raw = y1Raw,
         };
@@ -162,32 +161,32 @@ internal static class CurvatureSplineExactMath {
 
         if (!wZero) {
             if (!kappa0Zero && !kappa1Zero) {
-                var c0 = ((((ThreeHalves * kappa1) * s0) * s0) + ((s1 * w) * w));
-                var c1 = ((w * w) * w);
-                var c2 = -(((NineHalves * kappa0) * kappa1) * s0);
-                var c4 = (((TwentySevenEighths * kappa0) * kappa0) * kappa1);
+                var c0 = ((ThreeHalves * kappa1 * s0 * s0) + (s1 * w * w));
+                var c1 = (w * w * w);
+                var c2 = -(NineHalves * kappa0 * kappa1 * s0);
+                var c4 = (TwentySevenEighths * kappa0 * kappa0 * kappa1);
                 var quartic = new[] { c0, c1, c2, RationalZero, c4 };
                 var brackets = IsolateRoots(polynomial: quartic, lo: ExactQ16(value: CurvatureSpline.MinTangentLength), hi: searchHigh);
                 var best = default((Rational Lo, Rational Hi, Rational FLo, Rational FHi)?);
 
                 // Recomputes an (Lo, Hi, FLo, FHi) tuple's l0²+l1² objective interval after RefineBracket narrows it.
                 (Rational Lo, Rational Hi, Rational FLo, Rational FHi) Recompute(Rational lo, Rational hi) {
-                    var (l1Lo, l1Hi) = L1Range(hi: hi, kappa0: kappa0, lo: lo, s0: s0, w: w);
-                    var (l0SqLo, l0SqHi) = SquareRange(hi: hi, lo: lo);
-                    var (l1SqLo, l1SqHi) = SquareRange(hi: l1Hi, lo: l1Lo);
+                    var (l1Lo, l1Hi) = L1Range(lo: lo, hi: hi, s0: s0, kappa0: kappa0, w: w);
+                    var (l0SqLo, l0SqHi) = SquareRange(lo: lo, hi: hi);
+                    var (l1SqLo, l1SqHi) = SquareRange(lo: l1Lo, hi: l1Hi);
 
                     return (lo, hi, (l0SqLo + l1SqLo), (l0SqHi + l1SqHi));
                 }
 
                 foreach (var (isolatedLo, isolatedHi) in brackets) {
-                    var (verdict, lo, hi) = CertifyAdmissibility(chordLengthSquared: chordLengthSquared, hi: isolatedHi, kappa0: kappa0, lo: isolatedLo, quartic: quartic, s0: s0, w: w);
+                    var (verdict, lo, hi) = CertifyAdmissibility(quartic: quartic, lo: isolatedLo, hi: isolatedHi, s0: s0, kappa0: kappa0, w: w, chordLengthSquared: chordLengthSquared);
 
                     if (verdict == AdmissibilityVerdict.Inadmissible) { continue; }
                     if (verdict == AdmissibilityVerdict.Uncertain) {
-                        throw new CurvatureSplineException(detail: $"a tangent-length root lies within {CertificationRefinementBudget} extra bisections of an authoring bound; refusing rather than choosing across the boundary.", refusal: CurvatureSplineRefusal.CurvatureUnreachable, segmentIndex: segmentIndex);
+                        throw new CurvatureSplineException(refusal: CurvatureSplineRefusal.CurvatureUnreachable, segmentIndex: segmentIndex, detail: $"a tangent-length root lies within {CertificationRefinementBudget} extra bisections of an authoring bound; refusing rather than choosing across the boundary.");
                     }
 
-                    var candidate = Recompute(hi: hi, lo: lo);
+                    var candidate = Recompute(lo: lo, hi: hi);
 
                     if (best is null) {
                         best = candidate;
@@ -215,17 +214,17 @@ internal static class CurvatureSplineExactMath {
                         if (SignOf(value: (bestWidth - candidateWidth)) >= 0) {
                             var (refinedLo, refinedHi) = RefineBracket(polynomial: quartic, lo: best.Value.Lo, hi: best.Value.Hi);
 
-                            best = Recompute(hi: refinedHi, lo: refinedLo);
+                            best = Recompute(lo: refinedLo, hi: refinedHi);
                         } else {
-                            var (refinedLo, refinedHi) = RefineBracket(hi: candidate.Hi, lo: candidate.Lo, polynomial: quartic);
+                            var (refinedLo, refinedHi) = RefineBracket(polynomial: quartic, lo: candidate.Lo, hi: candidate.Hi);
 
-                            candidate = Recompute(hi: refinedHi, lo: refinedLo);
+                            candidate = Recompute(lo: refinedLo, hi: refinedHi);
                         }
                     }
                 }
 
                 if (best is null) {
-                    throw new CurvatureSplineException(detail: "no admissible tangent-length pair solves the curvature system within the authoring bounds.", refusal: CurvatureSplineRefusal.CurvatureUnreachable, segmentIndex: segmentIndex);
+                    throw new CurvatureSplineException(refusal: CurvatureSplineRefusal.CurvatureUnreachable, segmentIndex: segmentIndex, detail: "no admissible tangent-length pair solves the curvature system within the authoring bounds.");
                 }
 
                 // The certified bracket is always far narrower than one Q32 raw (CertificationRefinementBudget's own
@@ -234,24 +233,24 @@ internal static class CurvatureSplineExactMath {
                 // bracket's representative point — rounds identically. That margin is what makes representing the
                 // certified root by its midpoint safe, not a claim that the midpoint IS the algebraic root.
                 var winningL0 = ((best.Value.Lo + best.Value.Hi) * OneHalf);
-                var winningL1 = ((s0 - (((ThreeHalves * kappa0) * winningL0) * winningL0)) / w);
+                var winningL1 = ((s0 - (ThreeHalves * kappa0 * winningL0 * winningL0)) / w);
 
                 return (winningL0, winningL1);
             }
             if (kappa0Zero && kappa1Zero) {
-                return AdmitOrRefuse(chordLengthSquared: chordLengthSquared, l0: -(s1 / w), l1: (s0 / w), segmentIndex: segmentIndex);
+                return AdmitOrRefuse(l0: -(s1 / w), l1: (s0 / w), chordLengthSquared: chordLengthSquared, segmentIndex: segmentIndex);
             }
             if (kappa0Zero) { // kappa1 != 0
                 var l1 = (s0 / w);
-                var l0 = ((-s1 - (((ThreeHalves * kappa1) * l1) * l1)) / w);
+                var l0 = ((-s1 - (ThreeHalves * kappa1 * l1 * l1)) / w);
 
-                return AdmitOrRefuse(chordLengthSquared: chordLengthSquared, l0: l0, l1: l1, segmentIndex: segmentIndex);
+                return AdmitOrRefuse(l0: l0, l1: l1, chordLengthSquared: chordLengthSquared, segmentIndex: segmentIndex);
             }
             { // kappa1Zero, kappa0 != 0
                 var l0 = -(s1 / w);
-                var l1 = ((s0 - (((ThreeHalves * kappa0) * l0) * l0)) / w);
+                var l1 = ((s0 - (ThreeHalves * kappa0 * l0 * l0)) / w);
 
-                return AdmitOrRefuse(chordLengthSquared: chordLengthSquared, l0: l0, l1: l1, segmentIndex: segmentIndex);
+                return AdmitOrRefuse(l0: l0, l1: l1, chordLengthSquared: chordLengthSquared, segmentIndex: segmentIndex);
             }
         }
 
@@ -265,12 +264,12 @@ internal static class CurvatureSplineExactMath {
             var product = (s0 * kappa0);
 
             if (SignOf(value: product) <= 0) {
-                throw new CurvatureSplineException(detail: "w = 0 and κ0 ≠ 0, but s0·κ0 is not strictly positive, so no real tangent length solves the start curvature.", refusal: CurvatureSplineRefusal.TangentCurvatureInconsistent, segmentIndex: segmentIndex);
+                throw new CurvatureSplineException(refusal: CurvatureSplineRefusal.TangentCurvatureInconsistent, segmentIndex: segmentIndex, detail: "w = 0 and κ0 ≠ 0, but s0·κ0 is not strictly positive, so no real tangent length solves the start curvature.");
             }
 
             tangent0 = ExactSqrt(value: (TwoThirds * (s0 / kappa0)));
         } else if (!RationalIsZero(value: s0)) {
-            throw new CurvatureSplineException(detail: "w = 0 and κ0 = 0, but s0 ≠ 0 — the start tangent and chord geometry cannot meet at zero curvature.", refusal: CurvatureSplineRefusal.TangentCurvatureInconsistent, segmentIndex: segmentIndex);
+            throw new CurvatureSplineException(refusal: CurvatureSplineRefusal.TangentCurvatureInconsistent, segmentIndex: segmentIndex, detail: "w = 0 and κ0 = 0, but s0 ≠ 0 — the start tangent and chord geometry cannot meet at zero curvature.");
         } else {
             tangent0 = (chordLength * OneThird);
         }
@@ -281,28 +280,30 @@ internal static class CurvatureSplineExactMath {
             var product = (s1 * kappa1);
 
             if (SignOf(value: product) >= 0) {
-                throw new CurvatureSplineException(detail: "w = 0 and κ1 ≠ 0, but s1·κ1 is not strictly negative, so no real tangent length solves the end curvature.", refusal: CurvatureSplineRefusal.TangentCurvatureInconsistent, segmentIndex: segmentIndex);
+                throw new CurvatureSplineException(refusal: CurvatureSplineRefusal.TangentCurvatureInconsistent, segmentIndex: segmentIndex, detail: "w = 0 and κ1 ≠ 0, but s1·κ1 is not strictly negative, so no real tangent length solves the end curvature.");
             }
 
             tangent1 = ExactSqrt(value: -(TwoThirds * (s1 / kappa1)));
         } else if (!RationalIsZero(value: s1)) {
-            throw new CurvatureSplineException(detail: "w = 0 and κ1 = 0, but s1 ≠ 0 — the end tangent and chord geometry cannot meet at zero curvature.", refusal: CurvatureSplineRefusal.TangentCurvatureInconsistent, segmentIndex: segmentIndex);
+            throw new CurvatureSplineException(refusal: CurvatureSplineRefusal.TangentCurvatureInconsistent, segmentIndex: segmentIndex, detail: "w = 0 and κ1 = 0, but s1 ≠ 0 — the end tangent and chord geometry cannot meet at zero curvature.");
         } else {
             tangent1 = (chordLength * OneThird);
         }
 
-        return AdmitOrRefuse(chordLengthSquared: chordLengthSquared, l0: tangent0, l1: tangent1, segmentIndex: segmentIndex);
+        return AdmitOrRefuse(l0: tangent0, l1: tangent1, chordLengthSquared: chordLengthSquared, segmentIndex: segmentIndex);
     }
+
     private static (Rational L0, Rational L1) AdmitOrRefuse(Rational l0, Rational l1, Rational chordLengthSquared, int segmentIndex) {
-        if (!IsAdmissible(chordLengthSquared: chordLengthSquared, l0: l0, l1: l1)) {
-            throw new CurvatureSplineException(detail: "the unique tangent-length solution falls outside the authoring bounds.", refusal: CurvatureSplineRefusal.CurvatureUnreachable, segmentIndex: segmentIndex);
+        if (!IsAdmissible(l0: l0, l1: l1, chordLengthSquared: chordLengthSquared)) {
+            throw new CurvatureSplineException(refusal: CurvatureSplineRefusal.CurvatureUnreachable, segmentIndex: segmentIndex, detail: "the unique tangent-length solution falls outside the authoring bounds.");
         }
 
         return (l0, l1);
     }
+
     private static bool IsAdmissible(Rational l0, Rational l1, Rational chordLengthSquared) {
         var min = ExactQ16(value: CurvatureSpline.MinTangentLength);
-        var capSquared = (chordLengthSquared * new Rational((((BigInteger)CurvatureSpline.MaxTangentChordRatio) * CurvatureSpline.MaxTangentChordRatio), BigInteger.One));
+        var capSquared = (chordLengthSquared * new Rational(((BigInteger)CurvatureSpline.MaxTangentChordRatio) * CurvatureSpline.MaxTangentChordRatio, BigInteger.One));
 
         return (
             (SignOf(value: (l0 - min)) >= 0) &&
@@ -311,16 +312,18 @@ internal static class CurvatureSplineExactMath {
             (SignOf(value: ((l1 * l1) - capSquared)) <= 0)
         );
     }
+
     // l1 as a function of l0 (E0 solved for l1) is monotonic over l0 > 0: its derivative −3·κ0·l0/w has a fixed
     // sign, since κ0 and w are both nonzero constants for one segment's solve. So l1's exact range over [lo, hi] is
     // achieved AT the two endpoints — no interior extremum to miss — and evaluating both and sorting is a tight
     // enclosure, not merely a valid one.
     private static (Rational Lo, Rational Hi) L1Range(Rational lo, Rational hi, Rational s0, Rational kappa0, Rational w) {
-        var atLo = ((s0 - (((ThreeHalves * kappa0) * lo) * lo)) / w);
-        var atHi = ((s0 - (((ThreeHalves * kappa0) * hi) * hi)) / w);
+        var atLo = ((s0 - (ThreeHalves * kappa0 * lo * lo)) / w);
+        var atHi = ((s0 - (ThreeHalves * kappa0 * hi * hi)) / w);
 
         return ((SignOf(value: (atHi - atLo)) < 0) ? (atHi, atLo) : (atLo, atHi));
     }
+
     // The exact range of x² over x ∈ [lo, hi]: monotonic on either side of zero, so the extrema sit at the
     // endpoints; when the interval straddles zero the minimum is the exact zero itself.
     private static (Rational Lo, Rational Hi) SquareRange(Rational lo, Rational hi) {
@@ -332,6 +335,7 @@ internal static class CurvatureSplineExactMath {
 
         return (RationalZero, ((SignOf(value: (loSquared - hiSquared)) > 0) ? loSquared : hiSquared));
     }
+
     // Classifies the FOUR admissibility inequalities (l0 ≥ min, l1 ≥ min, l0² ≤ cap², l1² ≤ cap²) against the
     // interval [l0Lo, l0Hi] × [l1Lo, l1Hi]: Inadmissible when the interval's OWN best case already fails one
     // inequality (so the true root fails it too, wherever inside the interval it sits), Admissible when the
@@ -339,10 +343,9 @@ internal static class CurvatureSplineExactMath {
     // bound — otherwise.
     private static AdmissibilityVerdict ClassifyAdmissibility(Rational l0Lo, Rational l0Hi, Rational l1Lo, Rational l1Hi, Rational chordLengthSquared) {
         var min = ExactQ16(value: CurvatureSpline.MinTangentLength);
-        var capSquared = (chordLengthSquared * new Rational((((BigInteger)CurvatureSpline.MaxTangentChordRatio) * CurvatureSpline.MaxTangentChordRatio), BigInteger.One));
-
-        var (l0SqLo, l0SqHi) = SquareRange(hi: l0Hi, lo: l0Lo);
-        var (l1SqLo, l1SqHi) = SquareRange(hi: l1Hi, lo: l1Lo);
+        var capSquared = (chordLengthSquared * new Rational(((BigInteger)CurvatureSpline.MaxTangentChordRatio) * CurvatureSpline.MaxTangentChordRatio, BigInteger.One));
+        var (l0SqLo, l0SqHi) = SquareRange(lo: l0Lo, hi: l0Hi);
+        var (l1SqLo, l1SqHi) = SquareRange(lo: l1Lo, hi: l1Hi);
 
         if (
             (SignOf(value: (l0Hi - min)) < 0) ||
@@ -364,32 +367,35 @@ internal static class CurvatureSplineExactMath {
             : AdmissibilityVerdict.Uncertain
         );
     }
+
     // Refines an isolated bracket — known, by construction, to contain exactly one root of `polynomial` — by direct
     // bisection on the polynomial's own sign, halving the width each call. Never used to FIND a root; only to narrow
     // where inside an already-certain one an admissibility bound or an objective tie sits.
     private static (Rational Lo, Rational Hi) RefineBracket(Rational[] polynomial, Rational lo, Rational hi) {
         var signAtLo = SignOf(value: Evaluate(coefficients: polynomial, x: lo));
-        var mid = NudgeAwayFromRoot(leading: polynomial, negative: false, x: ((lo + hi) * OneHalf));
+        var mid = NudgeAwayFromRoot(leading: polynomial, x: ((lo + hi) * OneHalf), negative: false);
         var signAtMid = SignOf(value: Evaluate(coefficients: polynomial, x: mid));
 
         return ((signAtMid == signAtLo) ? (mid, hi) : (lo, mid));
     }
+
     // Certifies whether the root isolated inside [lo, hi] is admissible, refining the bracket up to
     // CertificationRefinementBudget extra bisections when the interval straddles a bound. Returns Uncertain, with
     // the bracket at whatever width the budget reached, when a bound cannot be decided within it — the caller
     // refuses rather than picking a side.
     private static (AdmissibilityVerdict Verdict, Rational Lo, Rational Hi) CertifyAdmissibility(Rational[] quartic, Rational lo, Rational hi, Rational s0, Rational kappa0, Rational w, Rational chordLengthSquared) {
         for (var attempt = 0; ; ++attempt) {
-            var (l1Lo, l1Hi) = L1Range(hi: hi, kappa0: kappa0, lo: lo, s0: s0, w: w);
-            var verdict = ClassifyAdmissibility(chordLengthSquared: chordLengthSquared, l0Hi: hi, l0Lo: lo, l1Hi: l1Hi, l1Lo: l1Lo);
+            var (l1Lo, l1Hi) = L1Range(lo: lo, hi: hi, s0: s0, kappa0: kappa0, w: w);
+            var verdict = ClassifyAdmissibility(l0Lo: lo, l0Hi: hi, l1Lo: l1Lo, l1Hi: l1Hi, chordLengthSquared: chordLengthSquared);
 
             if ((verdict != AdmissibilityVerdict.Uncertain) || (attempt >= CertificationRefinementBudget)) {
                 return (verdict, lo, hi);
             }
 
-            (lo, hi) = RefineBracket(hi: hi, lo: lo, polynomial: quartic);
+            (lo, hi) = RefineBracket(polynomial: quartic, lo: lo, hi: hi);
         }
     }
+
     // Bounds the minimum of |B'(t)|² over t ∈ [0, 1] (a degree-4 polynomial in t, built from the quadratic
     // derivative control points): the endpoints, plus, at every critical point the tangent-length solve's own Sturm
     // isolation finds exactly (applied here to the cubic derivative — no float, no iteration-order dependence), the
@@ -413,7 +419,7 @@ internal static class CurvatureSplineExactMath {
         // |B'|²(t) = (a0X + bx1·t + bx2·t²)² + (a0Z + bz1·t + bz2·t²)², expanded to a degree-4 polynomial in t.
         var c0 = ((a0X * a0X) + (a0Z * a0Z));
         var c1 = (RationalTwo * ((a0X * bx1) + (a0Z * bz1)));
-        var c2 = ((((bx1 * bx1) + ((RationalTwo * a0X) * bx2)) + (bz1 * bz1)) + ((RationalTwo * a0Z) * bz2));
+        var c2 = ((bx1 * bx1) + (RationalTwo * a0X * bx2) + (bz1 * bz1) + (RationalTwo * a0Z * bz2));
         var c3 = (RationalTwo * ((bx1 * bx2) + (bz1 * bz2)));
         var c4 = ((bx2 * bx2) + (bz2 * bz2));
         var speedSquared = new[] { c0, c1, c2, c3, c4 };
@@ -440,7 +446,7 @@ internal static class CurvatureSplineExactMath {
         var floorSquared = Square(value: ExactQ16(value: CurvatureSpline.MinSpeedFloor));
 
         if (SignOf(value: (minimum - floorSquared)) < 0) {
-            throw new CurvatureSplineException(detail: "the segment's speed |B'(t)| dips below the speed floor somewhere on [0, 1].", refusal: CurvatureSplineRefusal.InteriorCusp, segmentIndex: segmentIndex);
+            throw new CurvatureSplineException(refusal: CurvatureSplineRefusal.InteriorCusp, segmentIndex: segmentIndex, detail: "the segment's speed |B'(t)| dips below the speed floor somewhere on [0, 1].");
         }
     }
 
@@ -459,17 +465,16 @@ internal static class CurvatureSplineExactMath {
 
     private static long[] BuildArcTable(Rational d0X, Rational d0Z, Rational d1X, Rational d1Z, Rational d2X, Rational d2Z, int segmentIndex) {
         var subintervalCount = MinSubintervalCount;
-
-        var (table, _) = BuildArcTableAt(d0X: d0X, d0Z: d0Z, d1X: d1X, d1Z: d1Z, d2X: d2X, d2Z: d2Z, segmentIndex: segmentIndex, subintervalCount: subintervalCount);
+        var (table, speeds) = BuildArcTableAt(subintervalCount: subintervalCount, coarseSpeeds: null, d0X: d0X, d0Z: d0Z, d1X: d1X, d1Z: d1Z, d2X: d2X, d2Z: d2Z, segmentIndex: segmentIndex);
 
         while (true) {
             var refinedCount = (subintervalCount * 2);
 
             if (refinedCount > MaxSubintervalCount) {
-                throw new CurvatureSplineException(detail: $"the arc-length table's estimated error did not fall under its scaled bound within {MaxSubintervalCount} panels.", refusal: CurvatureSplineRefusal.ArcLengthErrorUnbounded, segmentIndex: segmentIndex);
+                throw new CurvatureSplineException(refusal: CurvatureSplineRefusal.ArcLengthErrorUnbounded, segmentIndex: segmentIndex, detail: $"the arc-length table's estimated error did not fall under its scaled bound within {MaxSubintervalCount} panels.");
             }
 
-            var (refinedTable, refinedSpeeds) = BuildArcTableAt(d0X: d0X, d0Z: d0Z, d1X: d1X, d1Z: d1Z, d2X: d2X, d2Z: d2Z, segmentIndex: segmentIndex, subintervalCount: refinedCount);
+            var (refinedTable, refinedSpeeds) = BuildArcTableAt(subintervalCount: refinedCount, coarseSpeeds: speeds, d0X: d0X, d0Z: d0Z, d1X: d1X, d1Z: d1Z, d2X: d2X, d2Z: d2Z, segmentIndex: segmentIndex);
             var quadratureError = MaxQuadratureError(coarse: table, fine: refinedTable);
             var linearError = MaxLinearizationError(speeds: refinedSpeeds, subintervalCount: refinedCount);
             var boundRaw = ScaledErrorBoundRaw(lengthRaw: refinedTable[^1]);
@@ -480,46 +485,59 @@ internal static class CurvatureSplineExactMath {
             }
 
             table = refinedTable;
+            speeds = refinedSpeeds;
             subintervalCount = refinedCount;
         }
     }
+
     // Composite Simpson over `subintervalCount` subintervals of |B'(t)|, evaluated exactly at t = j/(2·count) from
     // the pre-rounding derivative control points, cumulative sums formed exactly and rounded ONCE each to Q32.
     // Returns the speed samples alongside the table — BuildArcTable's own Richardson/linearization checks read them
     // without re-evaluating |B'(t)|.
-    private static (long[] Table, Rational[] Speeds) BuildArcTableAt(int subintervalCount, Rational d0X, Rational d0Z, Rational d1X, Rational d1Z, Rational d2X, Rational d2Z, int segmentIndex) {
+    private static (long[] Table, Rational[] Speeds) BuildArcTableAt(int subintervalCount, Rational[]? coarseSpeeds, Rational d0X, Rational d0Z, Rational d1X, Rational d1Z, Rational d2X, Rational d2Z, int segmentIndex) {
         var speeds = new Rational[((2 * subintervalCount) + 1)];
 
         for (var j = 0; (j <= (2 * subintervalCount)); ++j) {
-            var t = new Rational((BigInteger.One * j), (BigInteger.One * (2 * subintervalCount)));
+            // A doubling's even-indexed samples sit exactly on the coarse grid, so the coarse speeds carry over and
+            // only the odd half is rooted afresh.
+            if ((coarseSpeeds is not null) && (0 == (j & 1))) {
+                speeds[j] = coarseSpeeds[(j >> 1)];
+
+                continue;
+            }
+
+            var t = new Rational(BigInteger.One * j, BigInteger.One * (2 * subintervalCount));
             var oneMinusT = (Rational.One - t);
-            var bx = ((((oneMinusT * oneMinusT) * d0X) + (((RationalTwo * oneMinusT) * t) * d1X)) + ((t * t) * d2X));
-            var bz = ((((oneMinusT * oneMinusT) * d0Z) + (((RationalTwo * oneMinusT) * t) * d1Z)) + ((t * t) * d2Z));
+            var bx = ((oneMinusT * oneMinusT * d0X) + (RationalTwo * oneMinusT * t * d1X) + (t * t * d2X));
+            var bz = ((oneMinusT * oneMinusT * d0Z) + (RationalTwo * oneMinusT * t * d1Z) + (t * t * d2Z));
 
             speeds[j] = ExactSqrt(value: ((bx * bx) + (bz * bz)));
         }
 
         var table = new long[(subintervalCount + 1)];
         var cumulative = RationalZero;
-        var panelTimesSix = new Rational(((subintervalCount * 6) * BigInteger.One), BigInteger.One);
+        var panelTimesSix = new Rational((subintervalCount * 6) * BigInteger.One, BigInteger.One);
 
         table[0] = 0L;
 
         for (var j = 0; (j < subintervalCount); ++j) {
-            var increment = (((speeds[(2 * j)] + (RationalFour * speeds[((2 * j) + 1)])) + speeds[((2 * j) + 2)]) / panelTimesSix);
+            var increment = ((speeds[(2 * j)] + (RationalFour * speeds[((2 * j) + 1)]) + speeds[((2 * j) + 2)]) / panelTimesSix);
 
-            cumulative += increment;
-            table[(j + 1)] = RoundQ32(detail: $"the arc-length table entry at t = {(j + 1)}/{subintervalCount}", segmentIndex: segmentIndex, value: cumulative);
+            // Reduced every step: Rational's operators never divide out a common factor, and an unreduced running sum
+            // of guard-scale roots grows its denominator multiplicatively with the panel index.
+            cumulative = Reduce(value: (cumulative + increment));
+            table[(j + 1)] = RoundQ32(value: cumulative, segmentIndex: segmentIndex, detail: $"the arc-length table entry at t = {(j + 1)}/{subintervalCount}");
         }
 
         for (var j = 1; (j < table.Length); ++j) {
             if (table[j] <= table[(j - 1)]) {
-                throw new CurvatureSplineException(detail: "the arc-length table failed to advance strictly — the segment's speed underflowed the Q32 raw carrier.", refusal: CurvatureSplineRefusal.InteriorCusp, segmentIndex: segmentIndex);
+                throw new CurvatureSplineException(refusal: CurvatureSplineRefusal.InteriorCusp, segmentIndex: segmentIndex, detail: "the arc-length table failed to advance strictly — the segment's speed underflowed the Q32 raw carrier.");
             }
         }
 
         return (table, speeds);
     }
+
     // The error bound BuildArcTable's Richardson/linearization checks compare against, Q32 raw: relative to the
     // segment's own (already computed) arc length, floored at ArcLengthMinimumErrorBoundRaw so a very short segment
     // is never asked for an unreachable absolute precision.
@@ -528,6 +546,7 @@ internal static class CurvatureSplineExactMath {
 
         return ((scaled > CurvatureSpline.ArcLengthMinimumErrorBoundRaw) ? scaled : CurvatureSpline.ArcLengthMinimumErrorBoundRaw);
     }
+
     // The largest disagreement between a coarser table's own station and the finer table's matching station (every
     // other entry, since the finer table has exactly double the panels) — a Richardson estimate of the Simpson
     // quadrature error the coarser table carries at every cumulative station, not merely its final total.
@@ -542,6 +561,7 @@ internal static class CurvatureSplineExactMath {
 
         return max;
     }
+
     // A per-panel proxy for how far CompiledCurvatureSpline.InvertArcTable's own linear-in-t interpolation can drift
     // from the true arc-length parameterization within one panel: the gap between the panel's midpoint speed and
     // the average of its endpoint speeds, scaled by the panel's own t-width — zero for a panel with genuinely
@@ -558,30 +578,37 @@ internal static class CurvatureSplineExactMath {
             var left = speeds[(2 * j)];
             var mid = speeds[((2 * j) + 1)];
             var right = speeds[((2 * j) + 2)];
-            var estimate = Abs(value: (((((RationalTwo * mid) - left) - right) * deltaT) * OneThird));
+            var estimate = Abs(value: (((RationalTwo * mid) - left - right) * deltaT * OneThird));
 
             if (SignOf(value: (estimate - max)) > 0) { max = estimate; }
         }
 
         return max;
     }
+
     private static long RoundQ32(Rational value, int segmentIndex, string detail) {
         if (!FixedPointRounding.TryRoundRational(numerator: value.Numerator, denominator: value.Denominator, fractionBitCount: CurvatureSpline.CoefficientFractionBitCount, result: out var raw)) {
-            throw new CurvatureSplineException(detail: $"{detail} does not fit the Q32 coefficient carrier.", refusal: CurvatureSplineRefusal.CarrierOverflow, segmentIndex: segmentIndex);
+            throw new CurvatureSplineException(refusal: CurvatureSplineRefusal.CarrierOverflow, segmentIndex: segmentIndex, detail: $"{detail} does not fit the Q32 coefficient carrier.");
         }
 
         return raw;
     }
+
     private static Rational ExactQ16(FixedQ4816 value) =>
         new(value.Value, (BigInteger.One << FixedQ4816.FractionBitCount));
+
     private static Rational Cross2(Rational ax, Rational az, Rational bx, Rational bz) =>
         ((ax * bz) - (az * bx));
+
     private static Rational Square(Rational value) =>
         (value * value);
+
     private static Rational Abs(Rational value) =>
         ((SignOf(value: value) < 0) ? -value : value);
+
     private static int SignOf(Rational value) =>
         (value.Numerator.Sign * value.Denominator.Sign);
+
     private static bool RationalIsZero(Rational value) =>
         value.Numerator.IsZero;
 
@@ -598,6 +625,7 @@ internal static class CurvatureSplineExactMath {
 
         return Reduce(value: new Rational(root, (BigInteger.One << GuardBits)));
     }
+
     private static Rational Reduce(Rational value) {
         var numerator = value.Numerator;
         var denominator = value.Denominator;
@@ -606,8 +634,9 @@ internal static class CurvatureSplineExactMath {
 
         var gcd = BigInteger.GreatestCommonDivisor(left: BigInteger.Abs(value: numerator), right: BigInteger.Abs(value: denominator));
 
-        return ((gcd.IsOne) ? value : new Rational(Denominator: (denominator / gcd), Numerator: (numerator / gcd)));
+        return ((gcd.IsOne) ? value : new Rational((numerator / gcd), (denominator / gcd)));
     }
+
     // --- Exact rational polynomial arithmetic and Sturm-sequence real-root isolation, shared by the tangent-length
     // quartic and the interior-cusp cubic. Coefficients are ascending by degree; DegreeOf reports −1 for the zero
     // polynomial so callers never confuse it with a nonzero constant. ---
@@ -621,6 +650,7 @@ internal static class CurvatureSplineExactMath {
 
         return result;
     }
+
     private static int DegreeOf(Rational[] coefficients) {
         for (var i = (coefficients.Length - 1); (i >= 0); --i) {
             if (!coefficients[i].Numerator.IsZero) { return i; }
@@ -628,8 +658,10 @@ internal static class CurvatureSplineExactMath {
 
         return -1;
     }
+
     private static bool IsZeroPolynomial(Rational[] coefficients) =>
         (DegreeOf(coefficients: coefficients) < 0);
+
     private static Rational[] DerivativeOf(Rational[] coefficients) {
         var degree = DegreeOf(coefficients: coefficients);
 
@@ -643,10 +675,11 @@ internal static class CurvatureSplineExactMath {
 
         return result;
     }
+
     private static Rational[] RemainderOf(Rational[] dividend, Rational[] divisor) {
         var divisorDegree = DegreeOf(coefficients: divisor);
         var leadDivisor = divisor[divisorDegree];
-        var remainder = ((Rational[])dividend.Clone());
+        var remainder = (Rational[])dividend.Clone();
 
         while (true) {
             var remainderDegree = DegreeOf(coefficients: remainder);
@@ -663,6 +696,7 @@ internal static class CurvatureSplineExactMath {
 
         return remainder;
     }
+
     private static List<Rational[]> BuildSturmSequence(Rational[] polynomial) {
         var sequence = new List<Rational[]> { polynomial, DerivativeOf(coefficients: polynomial) };
 
@@ -672,11 +706,12 @@ internal static class CurvatureSplineExactMath {
 
             for (var i = 0; (i < remainder.Length); ++i) { negated[i] = -remainder[i]; }
 
-            sequence.Add(item: negated);
+            sequence.Add(negated);
         }
 
         return sequence;
     }
+
     private static int SignVariationsAt(List<Rational[]> sequence, Rational x) {
         var variations = 0;
         var previousSign = 0;
@@ -692,6 +727,7 @@ internal static class CurvatureSplineExactMath {
 
         return variations;
     }
+
     // Reduced on entry and after every step: the bisection loop below feeds this its own running midpoint on every
     // iteration, and an unreduced Rational's numerator/denominator bit length compounds with every `+`/`*` (neither
     // operator divides out a common factor), which would blow the guard-precision bisection up to astronomical
@@ -710,8 +746,10 @@ internal static class CurvatureSplineExactMath {
 
         return x;
     }
+
     private static bool IntervalNarrowerThanGuard(Rational lo, Rational hi) =>
         (SignOf(value: ((hi - lo) - GuardWidth)) < 0);
+
     // Isolates every real root of `polynomial` within (lo, hi] to width < 2^-GuardBits, as disjoint ascending
     // brackets each certified (by the Sturm sign-variation count) to contain exactly one root. Deterministic: query
     // points that land exactly on a root are nudged by a fixed, tiny epsilon rather than special-cased, so the same
@@ -726,7 +764,7 @@ internal static class CurvatureSplineExactMath {
         var boundedHi = NudgeAwayFromRoot(leading: sequence[0], x: hi, negative: false);
         var stack = new Stack<(Rational Lo, Rational Hi)>();
 
-        stack.Push(item: (boundedLo, boundedHi));
+        stack.Push((boundedLo, boundedHi));
 
         while (stack.Count > 0) {
             var (a, b) = stack.Pop();
@@ -738,21 +776,21 @@ internal static class CurvatureSplineExactMath {
                 var narrowLo = a;
                 var narrowHi = b;
 
-                while (!IntervalNarrowerThanGuard(hi: narrowHi, lo: narrowLo)) {
+                while (!IntervalNarrowerThanGuard(lo: narrowLo, hi: narrowHi)) {
                     var mid = NudgeAwayFromRoot(leading: sequence[0], x: ((narrowLo + narrowHi) * OneHalf), negative: false);
                     var leftCount = (SignVariationsAt(sequence: sequence, x: narrowLo) - SignVariationsAt(sequence: sequence, x: mid));
 
                     if (leftCount >= 1) { narrowHi = mid; } else { narrowLo = mid; }
                 }
 
-                results.Add(item: (narrowLo, narrowHi));
+                results.Add((narrowLo, narrowHi));
                 continue;
             }
 
             var split = NudgeAwayFromRoot(leading: sequence[0], x: ((a + b) * OneHalf), negative: false);
 
-            stack.Push(item: (split, b));
-            stack.Push(item: (a, split));
+            stack.Push((split, b));
+            stack.Push((a, split));
         }
 
         return results;

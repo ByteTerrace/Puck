@@ -909,6 +909,11 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
+        ValidateRenderFarDistance(
+            farDistance: definition.Render.FarDistance,
+            errors: errors
+        );
+
         ValidateRenderLighting(
             definition: definition,
             lighting: definition.Render.Lighting,
@@ -1357,8 +1362,9 @@ public static partial class WorldDefinitionValidator {
 
         var authoring = definition.Authoring;
 
-        // Only an AUTHORED section validates — absence reads the inert WorldPlacementPolicyDefaults.Absent (zero headroom,
-        // zero-width scale envelope), whose zeros are "no authoring capacity", not authored values to range-check.
+        // Only an AUTHORED section validates — absence reads the derived WorldPlacementPolicyDefaults.DeriveFrom
+        // policy (zero headroom, the scale envelope the placement rows themselves span), whose values are derived
+        // facts, not authored values to range-check.
         if (definition.PlacementsRaw?.Policy is { } authoredAuthoring) {
             ValidateAuthoring(
                 authoring: authoredAuthoring,

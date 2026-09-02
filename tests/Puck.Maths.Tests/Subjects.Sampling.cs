@@ -1114,7 +1114,10 @@ internal static partial class Subjects {
             if (Math.Abs(value: gradient.Y.Value) > 245760L) { return $"the Y slope at draw {index} is {gradient.Y.Value}, past the documented 3.75"; }
             if (Math.Abs(value: gradient.Z.Value) > 245760L) { return $"the Z slope at draw {index} is {gradient.Z.Value}, past the documented 3.75"; }
 
-            // The octave overload at one layer is the lattice sample halved, exactly; every layer count stays bounded.
+            // The octave overload at one layer is the lattice sample halved to nearest on its magnitude (half away
+            // from zero), exactly; every layer count stays bounded.
+            var halved = ((value.Value < 0L) ? -((-value.Value + 1L) >> 1) : ((value.Value + 1L) >> 1));
+
             for (var octaves = 1; (octaves <= 16); ++octaves) {
                 var layered = FieldNoise.Sample(
                     octaves: octaves,
@@ -1125,8 +1128,8 @@ internal static partial class Subjects {
                 if (Math.Abs(value: layered.Value) > NoiseUnit) { return $"the {octaves}-octave sample at draw {index} is {layered.Value}, outside [-1, 1]"; }
                 if (
                     (octaves == 1) &&
-                    (layered.Value != (value.Value >> 1))
-                ) { return $"the one-octave sample at draw {index} is {layered.Value}, not the halved lattice sample {(value.Value >> 1)}"; }
+                    (layered.Value != halved)
+                ) { return $"the one-octave sample at draw {index} is {layered.Value}, not the halved lattice sample {halved}"; }
             }
         }
 

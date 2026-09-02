@@ -27,6 +27,7 @@ public enum CurvatureSplineRefusal : byte {
     /// <summary>A compiled raw's exact rational value does not fit the Q32 coefficient carrier.</summary>
     CarrierOverflow,
 }
+
 /// <summary>Reports a <see cref="CurvatureSpline.Compile"/>-time refusal.</summary>
 public sealed class CurvatureSplineException : ArgumentException {
     internal CurvatureSplineException(CurvatureSplineRefusal refusal, int segmentIndex, string detail)
@@ -43,6 +44,7 @@ public sealed class CurvatureSplineException : ArgumentException {
     /// (<see cref="CurvatureSplineRefusal.TooFewKnots"/>).</summary>
     public int SegmentIndex { get; }
 }
+
 /// <summary>One authored knot of a curvature-first spline: a planar position and elevation, a tangent direction, and
 /// the signed curvature the compiled segments on either side must reach there.</summary>
 /// <param name="X">The planar X position.</param>
@@ -60,6 +62,7 @@ public readonly record struct CurvatureSplineKnot(
     FixedQ4816 TangentYaw,
     FixedQ4816 Curvature
 );
+
 /// <summary>One evaluated sample of a <see cref="CompiledCurvatureSpline"/>.</summary>
 /// <param name="Position">The world position (X, Elevation, Z).</param>
 /// <param name="Tangent">The unit planar tangent (Y is always zero).</param>
@@ -67,6 +70,7 @@ public readonly record struct CurvatureSplineKnot(
 /// <param name="Curvature">The signed planar curvature at the sampled arc length, under
 /// <see cref="CurvatureSplineKnot.Curvature"/>'s convention.</param>
 public readonly record struct CurvatureSplineSample(FixedVector3 Position, FixedVector3 Tangent, FixedQ4816 Grade, FixedQ4816 Curvature);
+
 /// <summary>One compiled cubic-Bézier segment: every raw at <see cref="CurvatureSpline.CoefficientFractionBitCount"/>
 /// (Q32), rounded once from the exact solve — the seam a presentation float twin converts from, and the shape the
 /// law suite reads back to check continuity and the deterministic branch pick.</summary>
@@ -128,6 +132,7 @@ public readonly record struct CurvatureSplineSegment {
     /// (<see cref="CurvatureSpline.ArcLengthRelativeErrorShift"/>); it is not a fixed 64 for every segment.</summary>
     public required long[] ArcTable { get; init; }
 }
+
 /// <summary>
 /// The curvature-first spline primitive: authors declare knot positions, tangent directions and signed endpoint
 /// curvatures; <see cref="Compile"/> derives the tangent lengths that reproduce them exactly (Steven Wittens'
@@ -162,7 +167,6 @@ public static class CurvatureSpline {
     /// <summary>The smallest speed <c>|B'(t)|</c> a compiled segment may reach anywhere on <c>[0, 1]</c> — conditions
     /// the arc-length integrand and the runtime tangent normalization away from the origin.</summary>
     public static readonly FixedQ4816 MinSpeedFloor = FixedQ4816.FromRawBits(value: 1024L); // 1/64
-
     /// <summary>The relative error a segment's <see cref="CurvatureSplineSegment.ArcTable"/>'s Richardson-estimated
     /// Simpson-quadrature or linear-interpolation error must fall under before <see cref="Compile"/> accepts its
     /// panel count, expressed as a right shift applied to the segment's own (estimated) arc length — scale-aware,
@@ -186,7 +190,7 @@ public static class CurvatureSpline {
         var knotCount = knots.Length;
 
         if ((closed && (knotCount < 3)) || (!closed && (knotCount < 2))) {
-            throw new CurvatureSplineException(detail: $"a {(closed ? "closed" : "open")} curve needs at least {(closed ? 3 : 2)} knots; {knotCount} were declared.", refusal: CurvatureSplineRefusal.TooFewKnots, segmentIndex: -1);
+            throw new CurvatureSplineException(refusal: CurvatureSplineRefusal.TooFewKnots, segmentIndex: -1, detail: $"a {(closed ? "closed" : "open")} curve needs at least {(closed ? 3 : 2)} knots; {knotCount} were declared.");
         }
 
         for (var i = 0; (i < knotCount); ++i) {
@@ -200,21 +204,21 @@ public static class CurvatureSpline {
         for (var segment = 0; (segment < segmentCount); ++segment) {
             var start = knots[segment];
             var end = knots[(closed ? ((segment + 1) % knotCount) : (segment + 1))];
-            var compiled = CurvatureSplineExactMath.CompileSegment(end: end, segmentIndex: segment, start: start);
+            var compiled = CurvatureSplineExactMath.CompileSegment(start: start, end: end, segmentIndex: segment);
 
             compiled = (compiled with { StationRaw = station });
 
-            var nextStation = unchecked((station + compiled.LengthRaw));
+            var nextStation = unchecked(station + compiled.LengthRaw);
 
             if (nextStation < station) {
-                throw new CurvatureSplineException(detail: "the cumulative arc-length station overflowed the Q32 raw carrier.", refusal: CurvatureSplineRefusal.CarrierOverflow, segmentIndex: segment);
+                throw new CurvatureSplineException(refusal: CurvatureSplineRefusal.CarrierOverflow, segmentIndex: segment, detail: "the cumulative arc-length station overflowed the Q32 raw carrier.");
             }
 
             station = nextStation;
             segments[segment] = compiled;
         }
 
-        return new CompiledCurvatureSpline(closed: closed, segments: segments, totalLengthRaw: station);
+        return new CompiledCurvatureSpline(segments: segments, closed: closed, totalLengthRaw: station);
     }
 
     private static void ValidateKnotRange(CurvatureSplineKnot knot, int knotIndex) {
@@ -223,13 +227,14 @@ public static class CurvatureSpline {
             (knot.Z.Value > MaxCoordinate.Value) || (knot.Z.Value < -MaxCoordinate.Value) ||
             (knot.Elevation.Value > MaxCoordinate.Value) || (knot.Elevation.Value < -MaxCoordinate.Value)
         ) {
-            throw new CurvatureSplineException(detail: $"a coordinate leaves ±{MaxCoordinate}.", refusal: CurvatureSplineRefusal.KnotOutOfRange, segmentIndex: knotIndex);
+            throw new CurvatureSplineException(refusal: CurvatureSplineRefusal.KnotOutOfRange, segmentIndex: knotIndex, detail: $"a coordinate leaves ±{MaxCoordinate}.");
         }
         if ((knot.Curvature.Value > MaxCurvature.Value) || (knot.Curvature.Value < -MaxCurvature.Value)) {
-            throw new CurvatureSplineException(detail: $"the curvature leaves ±{MaxCurvature}.", refusal: CurvatureSplineRefusal.KnotOutOfRange, segmentIndex: knotIndex);
+            throw new CurvatureSplineException(refusal: CurvatureSplineRefusal.KnotOutOfRange, segmentIndex: knotIndex, detail: $"the curvature leaves ±{MaxCurvature}.");
         }
     }
 }
+
 /// <summary>The compiled, curvature-continuous form of an authored curve — zero-allocation, exception-free evaluation
 /// over its whole arc-length domain.</summary>
 public sealed class CompiledCurvatureSpline {
@@ -257,6 +262,7 @@ public sealed class CompiledCurvatureSpline {
     /// <summary>Gets one compiled segment's raw data — the twin-sync and law seam.</summary>
     /// <param name="index">The segment index, from zero to <see cref="SegmentCount"/> minus one.</param>
     public CurvatureSplineSegment GetSegment(int index) => _segments[index];
+
     /// <summary>Gets the arc station of a knot.</summary>
     /// <param name="index">The knot index. Ranges to <see cref="SegmentCount"/> inclusive: for an open curve that is
     /// the last authored knot; for a closed curve it is the wraparound back to knot zero, at
@@ -267,6 +273,7 @@ public sealed class CompiledCurvatureSpline {
 
         return NarrowToQ16(raw: ((index == SegmentCount) ? TotalLengthRaw : _segments[index].StationRaw));
     }
+
     /// <summary>Evaluates the curve at an arc length expressed at the compiled solve's own Q32 station scale — the
     /// station <see cref="CurvatureSplineSegment.StationRaw"/>/<see cref="TotalLengthRaw"/> and every
     /// <see cref="CurvatureSplineSegment.ArcTable"/> entry already carry. This is the seam a per-tick raw accumulator
@@ -287,6 +294,7 @@ public sealed class CompiledCurvatureSpline {
 
         return LookupAndSample(local: local);
     }
+
     /// <summary>Evaluates the curve at an arc length. Promotes <paramref name="arcLength"/> to the compiled solve's
     /// own Q32 station scale EXACTLY (a left shift; no rounding) and delegates to <see cref="EvaluateRaw"/>, which
     /// owns wrap/clamp/lookup. A caller already holding a Q32 raw — a curve-follow producer's per-tick accumulator —
@@ -323,25 +331,32 @@ public sealed class CompiledCurvatureSpline {
 
         return ((long)((argument < Int128.Zero) ? Int128.Zero : ((argument > TotalLengthRaw) ? ((Int128)TotalLengthRaw) : argument)));
     }
-    private CurvatureSplineSample LookupAndSample(long local) {
-        var segmentIndex = 0;
 
-        for (var i = (_segments.Length - 1); (i >= 0); --i) {
-            if (local >= _segments[i].StationRaw) { segmentIndex = i; break; }
+    private CurvatureSplineSample LookupAndSample(long local) {
+        // Stations ascend strictly, so the last segment whose station is at or below the local arc length is found by
+        // bisection over the same ascending table Compile wrote.
+        var lo = 0;
+        var hi = (_segments.Length - 1);
+
+        while (lo < hi) {
+            var mid = (lo + (((hi - lo) + 1) >> 1));
+
+            if (local >= _segments[mid].StationRaw) { lo = mid; } else { hi = (mid - 1); }
         }
 
-        var segment = _segments[segmentIndex];
+        var segment = _segments[lo];
         var withinSegment = (local - segment.StationRaw);
         var t = InvertArcTable(table: segment.ArcTable, withinSegment: withinSegment);
 
         return SampleAt(segment: segment, tRaw: t, withinSegmentRaw: withinSegment);
     }
+
     private static long InvertArcTable(long[] table, long withinSegment) {
         var lo = 0;
         var hi = (table.Length - 1);
 
         while (lo < hi) {
-            var mid = (((lo + hi) + 1) / 2);
+            var mid = ((lo + hi + 1) / 2);
 
             if (table[mid] <= withinSegment) { lo = mid; } else { hi = (mid - 1); }
         }
@@ -368,13 +383,14 @@ public sealed class CompiledCurvatureSpline {
         var numerator = ((((long)lo) << 32) + ((long)fraction));
         var quotientPart = (numerator >> panelShift);
         var mask = ((1L << panelShift) - 1L);
-        var remainder = numerator & mask;
+        var remainder = (numerator & mask);
         var half = (1L << (panelShift - 1));
 
         if ((remainder > half) || ((remainder == half) && ((quotientPart & 1L) != 0L))) { ++quotientPart; }
 
         return quotientPart;
     }
+
     private CurvatureSplineSample SampleAt(CurvatureSplineSegment segment, long tRaw, long withinSegmentRaw) {
         var positionX = DeCasteljau(p0: segment.P0X, p1: segment.P1X, p2: segment.P2X, p3: segment.P3X, tRaw: tRaw);
         var positionZ = DeCasteljau(p0: segment.P0Z, p1: segment.P1Z, p2: segment.P2Z, p3: segment.P3Z, tRaw: tRaw);
@@ -383,24 +399,12 @@ public sealed class CompiledCurvatureSpline {
         var accelerationX = LinearAt(a0: segment.E0X, a1: segment.E1X, tRaw: tRaw);
         var accelerationZ = LinearAt(a0: segment.E0Z, a1: segment.E1Z, tRaw: tRaw);
 
-        var tangentX = NarrowToQ16(raw: velocityX);
-        var tangentZ = NarrowToQ16(raw: velocityZ);
-        var speed = FixedQ4816.Sqrt(value: ((tangentX * tangentX) + (tangentZ * tangentZ)));
-        FixedQ4816 unitTangentX, unitTangentZ;
-
-        if (speed.Value == 0L) {
-            unitTangentX = FixedQ4816.Zero;
-            unitTangentZ = FixedQ4816.Zero;
-        } else {
-            unitTangentX = (tangentX / speed);
-            unitTangentZ = (tangentZ / speed);
-        }
-
-        var accelX = NarrowToQ16(raw: accelerationX);
-        var accelZ = NarrowToQ16(raw: accelerationZ);
-        var cross = ((tangentX * accelZ) - (tangentZ * accelX));
-        var speedCubed = ((speed * speed) * speed);
-        var curvature = ((speedCubed.Value == 0L) ? FixedQ4816.Zero : (cross / speedCubed));
+        var (unitTangentX, unitTangentZ, curvature) = TangentAndCurvature(
+            accelerationX: accelerationX,
+            accelerationZ: accelerationZ,
+            velocityX: velocityX,
+            velocityZ: velocityZ
+        );
 
         var yRaw = (segment.Y0Raw + FixedQ4816.RoundProduct(product: (((Int128)segment.GradeRaw) * withinSegmentRaw), fractionBitCount: 32));
 
@@ -409,6 +413,68 @@ public sealed class CompiledCurvatureSpline {
             Grade: NarrowToQ16(raw: segment.GradeRaw),
             Position: new(X: NarrowToQ16(raw: positionX), Y: NarrowToQ16(raw: yRaw), Z: NarrowToQ16(raw: positionZ)),
             Tangent: new(X: unitTangentX, Y: FixedQ4816.Zero, Z: unitTangentZ)
+        );
+    }
+
+    // The unit tangent and the signed curvature κ = (v × a) / |v|³ from the Q32 velocity and acceleration, each output
+    // rounded once. The tangent is the shared scale-free normalizer on the Q32 raws. The curvature is formed as
+    // (û × a) / |v|² with û carried at Q30 — the velocity landed in [2^45, 2^46) and divided by its own norm — so the
+    // numerator is exact in Int128 and the single rounding is the closing division: at the speed floor (1/64) the
+    // Q16 route this replaces rounded |v|³ to zero and reported no curvature at all.
+    private static (FixedQ4816 UnitTangentX, FixedQ4816 UnitTangentZ, FixedQ4816 Curvature) TangentAndCurvature(long velocityX, long velocityZ, long accelerationX, long accelerationZ) {
+        if ((velocityX | velocityZ) == 0L) {
+            return (FixedQ4816.Zero, FixedQ4816.Zero, FixedQ4816.Zero);
+        }
+
+        var (tangentX, tangentZ) = FixedVectorMath.Normalize(
+            x: velocityX,
+            y: velocityZ
+        );
+        var maximum = Math.Max(
+            val1: FusedArithmetic.RawMagnitude(value: velocityX),
+            val2: FusedArithmetic.RawMagnitude(value: velocityZ)
+        );
+        var shift = FixedVectorMath.DirectionShift(rawMagnitude: maximum);
+        var landedX = FixedVectorMath.ScaleRaw(
+            shift: shift,
+            value: velocityX
+        );
+        var landedZ = FixedVectorMath.ScaleRaw(
+            shift: shift,
+            value: velocityZ
+        );
+        var landedNorm = (FusedArithmetic.SquareMagnitude(value: landedX) + FusedArithmetic.SquareMagnitude(value: landedZ)).SquareRoot();
+        // û at Q30: each component's raw times 2^30 over the landed norm, rounded once; below 2^31 in magnitude.
+        var unitX30 = FixedVectorMath.DivideRounded(
+            denominator: ((UInt128)landedNorm),
+            shift: 30,
+            value: landedX
+        );
+        var unitZ30 = FixedVectorMath.DivideRounded(
+            denominator: ((UInt128)landedNorm),
+            shift: 30,
+            value: landedZ
+        );
+        // (û × a) at Q62 — Q30 times Q32 — exact; |v|² at Q64 exact; κ at Q16 is their ratio times 2^18.
+        var cross = ((((Int128)unitX30) * accelerationZ) - (((Int128)unitZ30) * accelerationX));
+        var speedSquared = (FusedArithmetic.SquareMagnitude(value: velocityX) + FusedArithmetic.SquareMagnitude(value: velocityZ));
+        var negative = (cross < Int128.Zero);
+
+        if (!FusedArithmetic.TryDivideMagnitudeRounded(
+            denominatorMagnitude: speedSquared,
+            fractionBitCount: 18,
+            numeratorMagnitude: ((UInt128)(negative ? -cross : cross)),
+            quotient: out var curvatureMagnitude
+        ) || (curvatureMagnitude > ((UInt128)long.MaxValue))) {
+            curvatureMagnitude = UInt128.Zero; // unreachable inside the compiled speed floor; a total, finite fallback.
+        }
+
+        var curvatureRaw = ((long)curvatureMagnitude);
+
+        return (
+            FixedQ4816.FromRawBits(value: tangentX),
+            FixedQ4816.FromRawBits(value: tangentZ),
+            FixedQ4816.FromRawBits(value: (negative ? -curvatureRaw : curvatureRaw))
         );
     }
     // Cubic de Casteljau at a Q32 fraction `tRaw` (0 = t0, 2^32 = t1) — one rounding per lerp, through the shared
@@ -422,16 +488,20 @@ public sealed class CompiledCurvatureSpline {
 
         return Lerp(a: r0, b: r1, tRaw: tRaw);
     }
+
     private static long QuadraticAt(long a0, long a1, long a2, long tRaw) {
         var q0 = Lerp(a: a0, b: a1, tRaw: tRaw);
         var q1 = Lerp(a: a1, b: a2, tRaw: tRaw);
 
         return Lerp(a: q0, b: q1, tRaw: tRaw);
     }
+
     private static long LinearAt(long a0, long a1, long tRaw) =>
         Lerp(a: a0, b: a1, tRaw: tRaw);
+
     private static long Lerp(long a, long b, long tRaw) =>
-        (a + FixedQ4816.RoundProduct(fractionBitCount: 32, product: (((Int128)(b - a)) * tRaw)));
+        (a + FixedQ4816.RoundProduct(product: (((Int128)(b - a)) * tRaw), fractionBitCount: 32));
+
     private static FixedQ4816 NarrowToQ16(long raw) =>
-        FixedQ4816.FromRawBits(value: FixedQ4816.RoundProduct(fractionBitCount: NarrowingShift, product: ((Int128)raw)));
+        FixedQ4816.FromRawBits(value: FixedQ4816.RoundProduct(product: ((Int128)raw), fractionBitCount: NarrowingShift));
 }

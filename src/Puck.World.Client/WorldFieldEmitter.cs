@@ -12,7 +12,6 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
     private const int Reach = 2;
 
     private readonly WorldClient m_client;
-
     private int m_cursor;
     private int m_pendingField = -1;
     private int m_pendingRevision;
@@ -38,27 +37,12 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
         var tallest = 0f;
 
         foreach (var row in document.Fields) {
-            tallest = MathF.Max(x: tallest, y: ((row.Max * row.HeightScale) * document.Lattice.Layers));
+            tallest = MathF.Max(tallest, ((row.Max * row.HeightScale) * document.Lattice.Layers));
         }
 
         return Math.Min(
             val1: SdfBrickPoolLayout.BrickDim,
-            val2: (((int)MathF.Ceiling(x: (tallest / document.Lattice.CellSize))) + 3)
-        );
-    }
-    private static Vector3 ParseColor(string? hex) {
-        if (
-            (hex is null) ||
-            (hex.Length != 7) ||
-            (hex[0] != '#')
-        ) {
-            return Vector3.One;
-        }
-
-        return new Vector3(
-            x: (Convert.ToInt32(value: hex.Substring(length: 2, startIndex: 1), fromBase: 16) / 255f),
-            y: (Convert.ToInt32(value: hex.Substring(length: 2, startIndex: 3), fromBase: 16) / 255f),
-            z: (Convert.ToInt32(value: hex.Substring(length: 2, startIndex: 5), fromBase: 16) / 255f)
+            val2: ((int)MathF.Ceiling(tallest / document.Lattice.CellSize) + 3)
         );
     }
     // A sampled brick needs the pool dimension on every axis; a lattice wider than the brick edge renders its first
@@ -103,7 +87,6 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
 
     /// <inheritdoc/>
     public int RevisionComponentCount => 1;
-
     /// <inheritdoc/>
     public void WriteRevision(Span<int> destination) => destination[0] = m_programRevision;
     /// <inheritdoc/>
@@ -141,7 +124,14 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
                 continue;
             }
 
-            var material = builder.AddMaterial(material: new SdfMaterial(Albedo: ParseColor(hex: row.Color)));
+            // The colour resolves here, at emit time, against the live delivered definition — the brick holds only
+            // distances, so a state-bound colour follows a state cell write on the next definition revision with no
+            // re-bake.
+            var material = builder.AddMaterial(material: new SdfMaterial(Albedo: WorldColor.Resolve(
+                definition: m_client.Definition,
+                fallback: Vector3.One,
+                value: row.Color
+            )));
 
             _ = builder.ResetPoint().SampledRegion(
                 boxMin: boxMin,
@@ -161,7 +151,7 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
     public void AdvanceBricks(ISdfBrickBakeService bakes) {
         ArgumentNullException.ThrowIfNull(argument: bakes);
 
-        if (!ReferenceEquals(objA: bakes, objB: m_uploadService)) {
+        if (!ReferenceEquals(bakes, m_uploadService)) {
             m_uploadService = bakes;
             m_uploadedLattice = null;
             m_ready = [];
@@ -177,7 +167,7 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
             return;
         }
 
-        if (!ReferenceEquals(objA: lattice, objB: m_uploadedLattice)) {
+        if (!ReferenceEquals(lattice, m_uploadedLattice)) {
             m_uploadedLattice = lattice;
             m_uploadedRevisions = new int[lattice.FieldCount];
             Array.Fill(array: m_uploadedRevisions, value: int.MinValue);
@@ -222,7 +212,6 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
 
         for (var offset = 0; (offset < heightFieldCount); offset++) {
             var candidate = ((m_cursor + offset) % heightFieldCount);
-
             var (field, row, slot) = HeightField(document: document, ordinal: candidate);
             var revision = lattice.FieldRevision(field: field);
 
@@ -249,7 +238,7 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
                         ) * row.HeightScale);
                     }
 
-                    m_heights[((z * lattice.Width) + x)] = raised;
+                    m_heights[(z * lattice.Width) + x] = raised;
                 }
             }
 
@@ -283,7 +272,6 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
             return;
         }
     }
-
     // Each voxel holds the distance to the union of the nearby raised columns (boxes from one cell below the origin
     // to the column top), exact within Reach cells and a conservative lower bound beyond, scaled by 1/√3 as the
     // pool stores it. Voxel (0,0,0) is centred half a cell above boxMin on every axis.
@@ -300,21 +288,21 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
                     var px = (((vx + 0.5f) * cell) - cell);
                     var best = far;
 
-                    for (var z = Math.Max(val1: 0, val2: ((vz - 1) - Reach)); (z <= Math.Min(val1: (lattice.Depth - 1), val2: ((vz - 1) + Reach))); z++) {
-                        for (var x = Math.Max(val1: 0, val2: ((vx - 1) - Reach)); (x <= Math.Min(val1: (lattice.Width - 1), val2: ((vx - 1) + Reach))); x++) {
-                            var top = heights[((z * lattice.Width) + x)];
+                    for (var z = Math.Max(0, (vz - 1 - Reach)); (z <= Math.Min((lattice.Depth - 1), (vz - 1 + Reach))); z++) {
+                        for (var x = Math.Max(0, (vx - 1 - Reach)); (x <= Math.Min((lattice.Width - 1), (vx - 1 + Reach))); x++) {
+                            var top = heights[(z * lattice.Width) + x];
 
                             if (top <= 0f) {
                                 continue;
                             }
 
-                            var dx = MathF.Max(x: ((x * cell) - px), y: (px - ((x + 1) * cell)));
-                            var dy = MathF.Max(x: (-cell - py), y: (py - top));
-                            var dz = MathF.Max(x: ((z * cell) - pz), y: (pz - ((z + 1) * cell)));
-                            var ox = MathF.Max(x: dx, y: 0f);
-                            var oy = MathF.Max(x: dy, y: 0f);
-                            var oz = MathF.Max(x: dz, y: 0f);
-                            var distance = (MathF.Sqrt(x: (((ox * ox) + (oy * oy)) + (oz * oz))) + MathF.Min(x: MathF.Max(x: dx, y: MathF.Max(x: dy, y: dz)), y: 0f));
+                            var dx = MathF.Max(((x * cell) - px), (px - ((x + 1) * cell)));
+                            var dy = MathF.Max((-cell - py), (py - top));
+                            var dz = MathF.Max(((z * cell) - pz), (pz - ((z + 1) * cell)));
+                            var ox = MathF.Max(dx, 0f);
+                            var oy = MathF.Max(dy, 0f);
+                            var oz = MathF.Max(dz, 0f);
+                            var distance = (MathF.Sqrt(((ox * ox) + (oy * oy)) + (oz * oz)) + MathF.Min(MathF.Max(dx, MathF.Max(dy, dz)), 0f));
 
                             if (distance < best) {
                                 best = distance;
@@ -322,7 +310,7 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
                         }
                     }
 
-                    m_voxels[((((vz * dimY) + vy) * dimX) + vx)] = (best * InverseLambda);
+                    m_voxels[(((vz * dimY) + vy) * dimX) + vx] = (best * InverseLambda);
                 }
             }
         }

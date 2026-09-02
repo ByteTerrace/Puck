@@ -1066,15 +1066,18 @@ public static partial class WorldDefinitionValidator {
 
             if (!float.IsFinite(f: placement.Scale) || (placement.Scale <= 0f)) {
                 // Refused before the envelope: a zero (or negative) scale is invisible content with degenerate
-                // colliders, and the Absent policy's zero-width envelope would otherwise ACCEPT exactly 0 — a
-                // placement that boots green and renders nothing.
+                // colliders, and a zero-width envelope (a rowless derived policy, a degenerate authored one) would
+                // otherwise ACCEPT exactly 0 — a placement that boots green and renders nothing. A finite positive
+                // scale never contributes an envelope refusal under an unauthored policy: the derived envelope
+                // spans exactly the rows' own scales (WorldPlacementPolicyDefaults.DeriveFrom), so only a DECLARED
+                // policy can put an authored row outside it.
                 errors.Add(item: $"{path}.scale {placement.Scale} must be a finite positive value.");
             } else if (
                 (placement.Scale < authoring.MinPlacementScale) ||
                 (placement.Scale > authoring.MaxPlacementScale)
             ) {
                 errors.Add(item: ((authoring.MaxPlacementScale <= 0f)
-                    ? $"{path}.scale {placement.Scale}: this world's placements.policy declares no scale envelope (0..0) — author minPlacementScale/maxPlacementScale, or ride a basis whose policy does."
+                    ? $"{path}.scale {placement.Scale}: this world's declared placements.policy has no scale envelope (0..0) — author positive minPlacementScale/maxPlacementScale, or delete the policy block to derive the envelope from the rows' own scales."
                     : $"{path}.scale {placement.Scale} is outside {authoring.MinPlacementScale}..{authoring.MaxPlacementScale}."));
             }
 

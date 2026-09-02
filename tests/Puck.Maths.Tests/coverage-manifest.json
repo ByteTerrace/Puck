@@ -2581,6 +2581,7 @@
       "CoveredBy": [
         "curvature-spline.arc-station-oracle",
         "curvature-spline.evaluate-continuity-and-totality",
+        "curvature-spline.evaluate-curvature",
         "curvature-spline.evaluate-raw-station-boundaries",
         "curvature-spline.g2-joint"
       ]
@@ -3414,6 +3415,7 @@
       "Id": "Puck.Maths.CurvatureSplineSample.Curvature",
       "State": "covered",
       "CoveredBy": [
+        "curvature-spline.evaluate-curvature",
         "curvature-spline.evaluate-raw-station-boundaries",
         "curvature-spline.g2-joint"
       ]
@@ -4499,10 +4501,54 @@
       ]
     },
     {
+      "Id": "Puck.Maths.FieldNoise.Hash(Puck.Maths.FieldNoiseSeed&,System.Int64,System.Int64,System.Int64)",
+      "State": "covered",
+      "CoveredBy": [
+        "sampling.field-noise-bounds-and-gradient"
+      ]
+    },
+    {
       "Id": "Puck.Maths.FieldNoise.Hash(System.UInt64,System.Int64,System.Int64,System.Int64)",
       "State": "covered",
       "CoveredBy": [
         "sampling.field-noise-bounds-and-gradient"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FieldNoise.Prepare(System.UInt64)",
+      "State": "covered",
+      "CoveredBy": [
+        "sampling.field-noise-sample-vs-exact-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FieldNoise.Sample(Puck.Maths.FieldNoiseSeed&,Puck.Maths.FixedPosition)",
+      "State": "covered",
+      "CoveredBy": [
+        "sampling.field-noise-bounds-and-gradient",
+        "sampling.field-noise-periodicity-canary-and-distribution",
+        "sampling.field-noise-sample-vs-exact-oracle",
+        "sampling.field-noise-wide-position-alias-and-rebase"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FieldNoise.Sample(Puck.Maths.FieldNoiseSeed&,Puck.Maths.FixedVector3)",
+      "State": "covered",
+      "CoveredBy": [
+        "sampling.field-noise-bounds-and-gradient",
+        "sampling.field-noise-periodicity-canary-and-distribution",
+        "sampling.field-noise-sample-vs-exact-oracle",
+        "sampling.field-noise-wide-position-alias-and-rebase"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FieldNoise.Sample(Puck.Maths.FieldNoiseSeed&,Puck.Maths.FixedVector3,System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "sampling.field-noise-bounds-and-gradient",
+        "sampling.field-noise-periodicity-canary-and-distribution",
+        "sampling.field-noise-sample-vs-exact-oracle",
+        "sampling.field-noise-wide-position-alias-and-rebase"
       ]
     },
     {
@@ -4536,10 +4582,24 @@
       ]
     },
     {
+      "Id": "Puck.Maths.FieldNoise.SampleGradient(Puck.Maths.FieldNoiseSeed&,Puck.Maths.FixedVector3,Puck.Maths.FixedVector3&)",
+      "State": "covered",
+      "CoveredBy": [
+        "sampling.field-noise-bounds-and-gradient"
+      ]
+    },
+    {
       "Id": "Puck.Maths.FieldNoise.SampleGradient(System.UInt64,Puck.Maths.FixedVector3,Puck.Maths.FixedVector3&)",
       "State": "covered",
       "CoveredBy": [
         "sampling.field-noise-bounds-and-gradient"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FieldNoiseSeed.Seed",
+      "State": "covered",
+      "CoveredBy": [
+        "sampling.field-noise-sample-vs-exact-oracle"
       ]
     },
     {
@@ -4923,6 +4983,42 @@
       ]
     },
     {
+      "Id": "Puck.Maths.FixedCosineTransform.Forward(Puck.Maths.FixedCosineTransformPlan,System.Span<Puck.Maths.FixedQ4816>,System.Span<Puck.Maths.FixedComplex>)",
+      "State": "covered",
+      "CoveredBy": [
+        "dct.constant-and-impulse-exact",
+        "dct.forward-vs-direct-sum",
+        "dct.length-refusals",
+        "dct.linearity-bound",
+        "dct.parseval-bound",
+        "dct.round-trip-bound"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedCosineTransform.Inverse(Puck.Maths.FixedCosineTransformPlan,System.Span<Puck.Maths.FixedQ4816>,System.Span<Puck.Maths.FixedComplex>)",
+      "State": "covered",
+      "CoveredBy": [
+        "dct.constant-and-impulse-exact",
+        "dct.length-refusals",
+        "dct.round-trip-bound"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedCosineTransformPlan.Create(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "dct.constant-and-impulse-exact",
+        "dct.length-refusals"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedCosineTransformPlan.Length",
+      "State": "covered",
+      "CoveredBy": [
+        "dct.constant-and-impulse-exact"
+      ]
+    },
+    {
       "Id": "Puck.Maths.FixedDirectedRounding.TryCeilingMagnitude(System.Int64,System.Int64,System.Int64&)",
       "State": "covered",
       "CoveredBy": [
@@ -5103,22 +5199,15 @@
       ]
     },
     {
-      "Id": "Puck.Maths.FixedFourierPlan.Create(System.Int32)",
+      "Id": "Puck.Maths.FixedFourierTransform.Convolve(Puck.Maths.FixedFourierTransformPlan,System.Span<Puck.Maths.FixedComplex>,System.Span<Puck.Maths.FixedComplex>,System.Span<Puck.Maths.FixedComplex>)",
       "State": "covered",
       "CoveredBy": [
-        "fft.impulse-dc-nyquist-exact",
+        "fft.convolution-vs-oracle-bound",
         "fft.length-refusals"
       ]
     },
     {
-      "Id": "Puck.Maths.FixedFourierPlan.Length",
-      "State": "covered",
-      "CoveredBy": [
-        "fft.impulse-dc-nyquist-exact"
-      ]
-    },
-    {
-      "Id": "Puck.Maths.FixedFourierTransform.Forward(Puck.Maths.FixedFourierPlan,System.Span<Puck.Maths.FixedComplex>)",
+      "Id": "Puck.Maths.FixedFourierTransform.Forward(Puck.Maths.FixedFourierTransformPlan,System.Span<Puck.Maths.FixedComplex>)",
       "State": "covered",
       "CoveredBy": [
         "fft.impulse-dc-nyquist-exact",
@@ -5131,7 +5220,7 @@
       ]
     },
     {
-      "Id": "Puck.Maths.FixedFourierTransform.ForwardReal(Puck.Maths.FixedFourierPlan,System.ReadOnlySpan<Puck.Maths.FixedQ4816>,System.Span<Puck.Maths.FixedComplex>)",
+      "Id": "Puck.Maths.FixedFourierTransform.ForwardReal(Puck.Maths.FixedFourierTransformPlan,System.ReadOnlySpan<Puck.Maths.FixedQ4816>,System.Span<Puck.Maths.FixedComplex>)",
       "State": "covered",
       "CoveredBy": [
         "fft.length-refusals",
@@ -5139,7 +5228,7 @@
       ]
     },
     {
-      "Id": "Puck.Maths.FixedFourierTransform.Inverse(Puck.Maths.FixedFourierPlan,System.Span<Puck.Maths.FixedComplex>)",
+      "Id": "Puck.Maths.FixedFourierTransform.Inverse(Puck.Maths.FixedFourierTransformPlan,System.Span<Puck.Maths.FixedComplex>)",
       "State": "covered",
       "CoveredBy": [
         "fft.length-refusals",
@@ -5148,11 +5237,34 @@
       ]
     },
     {
-      "Id": "Puck.Maths.FixedFourierTransform.InverseReal(Puck.Maths.FixedFourierPlan,System.Span<Puck.Maths.FixedComplex>,System.Span<Puck.Maths.FixedQ4816>)",
+      "Id": "Puck.Maths.FixedFourierTransform.InverseReal(Puck.Maths.FixedFourierTransformPlan,System.Span<Puck.Maths.FixedComplex>,System.Span<Puck.Maths.FixedQ4816>)",
       "State": "covered",
       "CoveredBy": [
         "fft.length-refusals",
         "fft.real-wrappers-are-faithful-embeddings"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedFourierTransform.PointwiseMultiply(System.ReadOnlySpan<Puck.Maths.FixedComplex>,System.ReadOnlySpan<Puck.Maths.FixedComplex>,System.Span<Puck.Maths.FixedComplex>)",
+      "State": "covered",
+      "CoveredBy": [
+        "fft.length-refusals",
+        "fft.pointwise-multiply-is-elementwise-product"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedFourierTransformPlan.Create(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "fft.impulse-dc-nyquist-exact",
+        "fft.length-refusals"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedFourierTransformPlan.Length",
+      "State": "covered",
+      "CoveredBy": [
+        "fft.impulse-dc-nyquist-exact"
       ]
     },
     {
@@ -12224,22 +12336,7 @@
       ]
     },
     {
-      "Id": "Puck.Maths.NttPlan.Create(System.Int32)",
-      "State": "covered",
-      "CoveredBy": [
-        "ntt.length-refusals",
-        "ntt.round-trip-exact"
-      ]
-    },
-    {
-      "Id": "Puck.Maths.NttPlan.Length",
-      "State": "covered",
-      "CoveredBy": [
-        "ntt.round-trip-exact"
-      ]
-    },
-    {
-      "Id": "Puck.Maths.NumberTheoreticTransform.Convolve(Puck.Maths.NttPlan,System.Span<System.UInt64>,System.Span<System.UInt64>,System.Span<System.UInt64>)",
+      "Id": "Puck.Maths.NumberTheoreticTransform.Convolve(Puck.Maths.NumberTheoreticTransformPlan,System.Span<System.UInt64>,System.Span<System.UInt64>,System.Span<System.UInt64>)",
       "State": "covered",
       "CoveredBy": [
         "ntt.convolution-vs-oracle",
@@ -12254,7 +12351,7 @@
       ]
     },
     {
-      "Id": "Puck.Maths.NumberTheoreticTransform.Forward(Puck.Maths.NttPlan,System.Span<System.UInt64>)",
+      "Id": "Puck.Maths.NumberTheoreticTransform.Forward(Puck.Maths.NumberTheoreticTransformPlan,System.Span<System.UInt64>)",
       "State": "covered",
       "CoveredBy": [
         "ntt.length-refusals",
@@ -12263,7 +12360,7 @@
       ]
     },
     {
-      "Id": "Puck.Maths.NumberTheoreticTransform.Inverse(Puck.Maths.NttPlan,System.Span<System.UInt64>)",
+      "Id": "Puck.Maths.NumberTheoreticTransform.Inverse(Puck.Maths.NumberTheoreticTransformPlan,System.Span<System.UInt64>)",
       "State": "covered",
       "CoveredBy": [
         "ntt.length-refusals",
@@ -12297,6 +12394,21 @@
       "State": "covered",
       "CoveredBy": [
         "ntt.prime-and-primitive-root"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.NumberTheoreticTransformPlan.Create(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "ntt.length-refusals",
+        "ntt.round-trip-exact"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.NumberTheoreticTransformPlan.Length",
+      "State": "covered",
+      "CoveredBy": [
+        "ntt.round-trip-exact"
       ]
     },
     {
@@ -22757,6 +22869,25 @@
       "State": "covered",
       "CoveredBy": [
         "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.WalshHadamardTransform.Forward(System.Span<T>)",
+      "State": "covered",
+      "CoveredBy": [
+        "wht.forward-vs-oracle",
+        "wht.length-refusals",
+        "wht.linearity-exact",
+        "wht.parseval-exact",
+        "wht.round-trip-exact"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.WalshHadamardTransform.Inverse(System.Span<T>)",
+      "State": "covered",
+      "CoveredBy": [
+        "wht.length-refusals",
+        "wht.round-trip-exact"
       ]
     },
     {

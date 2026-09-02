@@ -267,8 +267,23 @@ public static class NumberTheoryFunctions {
                     low: windowLow
                 );
 
-                for (var bit = 0UL; (bit < bits); ++bit) {
-                    if (0UL == (bitmap[((int)(bit >> 6))] & (1UL << ((int)(bit & 63UL))))) { onPrime((windowLow + (bit << 1))); }
+                // Report by walking the clear bits of each word rather than testing every bit: the cost is
+                // proportional to the primes found, not to the window.
+                var words = ((int)((bits + 63UL) >> 6));
+
+                for (var word = 0; (word < words); ++word) {
+                    var candidates = (~bitmap[word]);
+
+                    if ((word == (words - 1)) && (0UL != (bits & 63UL))) {
+                        candidates &= ((1UL << ((int)(bits & 63UL))) - 1UL);
+                    }
+
+                    while (0UL != candidates) {
+                        var bit = ((((ulong)word) << 6) + ((ulong)BitOperations.TrailingZeroCount(value: candidates)));
+
+                        onPrime((windowLow + (bit << 1)));
+                        candidates &= (candidates - 1UL);
+                    }
                 }
 
                 if (windowHigh == high) { break; }

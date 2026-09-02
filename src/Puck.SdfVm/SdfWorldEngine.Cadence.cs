@@ -203,8 +203,8 @@ public sealed partial class SdfWorldEngine {
     //                          screen-surface table, invariant instance grid) — bumped by UploadProgram.
     //   - m_pushConstant     : Stage 0/1 push — width/height/tileGrid (constant), viewportCount, childMask,
     //                          screenSourceMask (bound-slot bitmask), liveInstanceMaskWordCount.
-    //   - m_viewportScratch  : per-view camera basis + fov/aspect, region, debug view mode, and the quantized
-    //                          render-scale numerator — excluding each row's presentation-time lane (PackViewports'
+    //   - m_viewportScratch  : per-view camera basis + fov/aspect, region, debug view mode, the quantized
+    //                          render-scale numerator, and the frame's far distance — excluding each row's presentation-time lane (PackViewports'
     //                          position.w; byte offset 12 of each 96-byte ViewportData row). Time free-runs every
     //                          frame (it feeds the animated test-card in screenContent, sdf-world.hlsli), so hashing
     //                          it would make the signature never repeat and the gate permanently inert. Any camera

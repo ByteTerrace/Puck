@@ -134,10 +134,11 @@ public sealed record WorldDefinition(
     /// (silent); the standard values are authored in <c>standard.world.json</c>.</summary>
     [JsonIgnore]
     public WorldAudioDefaults Audio => (AudioRaw ?? WorldAudioDefaults.Absent);
-    /// <summary>Gets the editor/authoring policy row — ABSENT resolves to <see cref="WorldPlacementPolicyDefaults.Absent"/>
-    /// (no headroom, no editing); the standard policy is authored in <c>standard.world.json</c>.</summary>
+    /// <summary>Gets the editor/authoring policy row — ABSENT derives from the placement rows
+    /// (<see cref="WorldPlacementPolicyDefaults.DeriveFrom"/>: no live placement authoring, the scale envelope the
+    /// authored rows span); a world wanting live placement authoring declares the block deliberately.</summary>
     [JsonIgnore]
-    public WorldPlacementPolicyDefaults Authoring => (PlacementsRaw?.Policy ?? WorldPlacementPolicyDefaults.Absent);
+    public WorldPlacementPolicyDefaults Authoring => (PlacementsRaw?.Policy ?? WorldPlacementPolicyDefaults.DeriveFrom(placements: Placements));
     /// <summary>Gets the basis document this file layers over, as a file path resolved against this document's own
     /// directory — the document-composition member (see <c>WorldDocumentBasis</c>). A file naming a basis is a
     /// delta: it authors only what differs, inheriting every omitted member from the (recursively composed) basis

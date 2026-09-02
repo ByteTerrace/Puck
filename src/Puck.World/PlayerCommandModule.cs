@@ -36,7 +36,7 @@ namespace Puck.World;
 /// entry, and never defaulted — a bare <c>instance:&lt;name&gt;</c> with no slot is refused), and <c>join</c>'s
 /// "next free slot"/either-order profile-then-slot convenience does not apply there.</para>
 /// </remarks>
-internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopulation population, WorldScreenBinder screens, WorldDefinition definition, IServerLink link, WorldServer server, WorldPerceptionAnchor anchor, WorldClient client, Func<InputRouter> router, WorldInstanceHost instances, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter) : ICommandModule {
+internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopulation population, WorldScreenBinder screens, WorldDefinition definition, IServerLink link, WorldServer server, WorldPerceptionAnchor anchor, WorldClient client, Func<InputRouter> router, WorldInstanceHost instances, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter, WorldReplayTape tape) : ICommandModule {
     public const string AssignCommand = Puck.World.Client.PlayerCommandNames.AssignCommand;
     /// <summary>The keyboard-claim command (Keyboard F1..F4, press edge). The target slot rides the binding's Axis1D
     /// value as a 1-based player number, the clean scalar constant a binding carries.</summary>
@@ -83,6 +83,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     private readonly WorldServer m_server = server;
     private readonly WorldPerceptionAnchor m_anchor = anchor;
     private readonly WorldInstanceHost m_instances = instances;
+    private readonly WorldReplayTape m_tape = tape;
     // The BOOT world's compiled channel table — name→ordinal resolution for body.press and PickerDirection's
     // pre-join Turn-role check. Validation has already run by the time a WorldDefinition reaches here, so every
     // declared name resolves. NEVER the source a bound channel verb dispatches against — see m_seatBindings.
@@ -233,6 +234,16 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     // enqueued now would sit dormant and burst the instant the seat confirms. The tape verbs (run/fly) refuse it; the
     // teleport verbs (warp/face/pose/where/stop) stay allowed. Population entries (4..127) are never pending. Returns
     // the error result, or null when the target may accept a tape.
+    // The named refusal for a body verb typed while a replay drive holds the seats: the loopback already drops the
+    // command structurally (LoopbackTransport.InputMasked), so this says so instead of echoing a press that went
+    // nowhere.
+    private CommandResult? ReplayDriveError(string verb) {
+        if (m_tape.Mode != WorldReplayMode.Replaying) {
+            return null;
+        }
+
+        return CommandResult.Error(output: $"[{verb}: refused — replay drive of '{m_tape.DriveProgress?.SourceName}' is in progress and local seat input is masked until it ends (replay.cancel ends it now)]");
+    }
     private CommandResult? PendingTapeError(int index, string verb) {
         if (
             IsSeat(index: index) &&

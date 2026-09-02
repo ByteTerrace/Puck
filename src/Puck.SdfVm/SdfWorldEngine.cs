@@ -90,12 +90,17 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // output; the ONLY plane cull-args + the compositor read, so their indexing is unchanged), plane 1 =
     // firstExit, plane 2 = secondEntry — the four-bound teleport's proven-empty gap [firstExit, secondEntry]
     // (Larsson "The Gunk") — and plane 3 = the F1 far bound (the depth past which the tile's cone cannot produce
-    // any footprint-accepted hit through MaxDistance). The extra planes are written by sdf-beam and read by
-    // sdf-world-views only; a tile with no proven gap/far bound packs MaxDistance (teleport/far-exit disabled),
-    // so every plane is a total function.
+    // any footprint-accepted hit through the frame's far distance). The extra planes are written by sdf-beam and
+    // read by sdf-world-views only; a tile with no proven gap/far bound packs the far distance (teleport/far-exit
+    // disabled), so every plane is a total function.
     // KEEP IN SYNC with WorldTilePlaneCount + worldTilePlaneStride in sdf-world.hlsli / sdf-tile.hlsli.
     private const uint TilePlaneCount = 4;
     private const uint TileSize = 16; // KEEP IN SYNC with WorldTileSize in sdf-world.hlsli
+    /// <summary>The primary (camera) march's per-pixel step budget. KEEP IN SYNC with <c>MaxSteps</c> in
+    /// sdf-world.hlsli. Exposed so a host's cost sheet can quote an authored <see cref="SdfFrame.FarDistance"/>
+    /// against the budget that has to reach it (a ray skimming open ground at height <c>h</c> takes roughly one step
+    /// per <c>h</c> units of depth, so the far distance is that ray's step count per unit of height).</summary>
+    public const int PrimaryMarchSteps = 128;
     private const uint TimingCapacity = 8; // timestamp slots per pool (headroom over the marks; must stay >= TimingMarkCount)
     // One timing pool more than the ring depth, so the pool read back by TryReadPassTimings (frame N−2's — the
     // newest frame the slot fence PROVES complete) is never the one the current frame is about to reset.

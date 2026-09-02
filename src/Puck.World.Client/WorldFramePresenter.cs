@@ -1472,6 +1472,9 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             // stipple on its own. The flag is the negated "disable" side, exactly like the far-field isolators.
             DisableShadowAccumulation = !m_settings.ShadowAccumulation,
             DynamicTransforms = transforms,
+            // The far plane every march ends at: render.farDistance off the LIVE definition (a world.row.set render
+            // lands on the next frame, like the lighting below), or the engine's pinned default when unauthored.
+            FarDistance = WorldRenderFarDistance.Resolve(defaults: m_client.Definition.Render),
             // Lighting/sky: the static render.lighting/render.sky values (WorldRenderSettings resolves every absent
             // field to SdfFrame's own pinned default, so an unauthored world uploads exactly what the frame already
             // defaulted to), or this frame's point along render.cycle when the world authors one.

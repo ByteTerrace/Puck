@@ -637,9 +637,54 @@ public readonly partial record struct FixedQ4816(long Value)
 
         // 2^(k + f) = 2^k · 2^(i/128) · 2^r with f's top seven bits selecting the interval and r < 2^-7 residual.
         var k = (value.Value >> FractionBitCount);
+        // The shift compares in LONG before narrowing: a deeply negative exponent's shift wraps an int cast back
+        // into shifting range and would return ~1 instead of 0. Decided before the mantissa is built, so an
+        // underflowing exponent costs one compare.
+        var shift = (46L - k);
+
+        if (shift >= 64L) {
+            return Zero;
+        }
+
         var f = value.Value & ((long)FractionBitMask);
-        var index = ((int)(f >> 9));
-        var r = ((f & 0x1FFL) << 46);
+
+        return Exp2Mantissa(
+            index: ((int)(f >> 9)),
+            residualQ62: ((f & 0x1FFL) << 46),
+            shift: shift
+        );
+    }
+    /// <summary>Returns <c>2^value</c> for an exponent carried at Q32 rather than Q16 — the same table and polynomial
+    /// as <see cref="Exp2"/> fed twenty-five residual bits instead of nine, so a caller that formed its exponent at
+    /// full width (<see cref="Pow"/>, <see cref="CoshSinh"/>) does not quantize it to the Q16 grid first.</summary>
+    /// <param name="exponentQ32">The exponent, at thirty-two fraction bits.</param>
+    /// <returns><c>2^exponent</c> under <see cref="Exp2"/>'s saturation and underflow rules.</returns>
+    internal static FixedQ4816 Exp2Q32(long exponentQ32) {
+        const int ExponentFractionBitCount = 32;
+
+        if (exponentQ32 >= (47L << ExponentFractionBitCount)) {
+            return MaxValue;
+        }
+
+        var k = (exponentQ32 >> ExponentFractionBitCount);
+        var shift = (46L - k);
+
+        if (shift >= 64L) {
+            return Zero;
+        }
+
+        var f = exponentQ32 & ((1L << ExponentFractionBitCount) - 1L);
+
+        return Exp2Mantissa(
+            index: ((int)(f >> (ExponentFractionBitCount - 7))),
+            residualQ62: ((f & ((1L << (ExponentFractionBitCount - 7)) - 1L)) << (62 - ExponentFractionBitCount)),
+            shift: shift
+        );
+    }
+    // The shared tail of Exp2 and Exp2Q32: the interval mantissa times the quartic of the Q62 residual, then the
+    // round-half-up narrowing by shift (46 − k), already known to be below 64.
+    private static FixedQ4816 Exp2Mantissa(int index, long residualQ62, long shift) {
+        var r = residualQ62;
         var acc = Exp2PolyC4Q62;
 
         acc = (Exp2PolyC3Q62 + BigMulShift62(
@@ -662,13 +707,6 @@ public readonly partial record struct FixedQ4816(long Value)
                 y: acc
             ))
         );
-        // The shift compares in LONG before narrowing: a deeply negative exponent's shift wraps an int cast back
-        // into shifting range and would return ~1 instead of 0.
-        var shift = (46L - k);
-
-        if (shift >= 64L) {
-            return Zero;
-        }
 
         // The round-shift runs unsigned: the mantissa sits just below 2^63, so adding the rounding half would
         // overflow a signed sum for large shifts.
@@ -692,18 +730,18 @@ public readonly partial record struct FixedQ4816(long Value)
     /// exponential's relative error grows with the magnitude of <paramref name="argument"/>.
     /// </remarks>
     internal static (FixedQ4816 Cosh, FixedQ4816 Sinh) CoshSinh(FixedQ4816 argument) {
+        // The product of two Q16 raws is the exponent at Q32 exactly; it feeds Exp2Q32 unrounded, with the −1 of the
+        // halving applied on the same grid.
+        const long OneQ32 = (1L << (2 * FractionBitCount));
         var product = (((Int128)argument.Value) * RawLog2E);
         var limit = (((Int128)RawCoshSinhExponentLimit) << FractionBitCount);
-        var scaled = RoundProduct(
-            product: Int128.Clamp(
-                max: limit,
-                min: -limit,
-                value: product
-            ),
-            fractionBitCount: FractionBitCount
-        );
-        var forward = Exp2(value: new(Value: (scaled - RawOne)));
-        var backward = Exp2(value: new(Value: (-scaled - RawOne)));
+        var scaled = ((long)Int128.Clamp(
+            max: limit,
+            min: -limit,
+            value: product
+        ));
+        var forward = Exp2Q32(exponentQ32: (scaled - OneQ32));
+        var backward = Exp2Q32(exponentQ32: (-scaled - OneQ32));
 
         return (
             Cosh: (forward + backward),
@@ -725,7 +763,16 @@ public readonly partial record struct FixedQ4816(long Value)
         var integerPart = BitOperations.Log2(value: raw);
         var fraction = Log2FractionQ61(mantissaQ62: (raw << (62 - integerPart)));
 
-        return new(Value: ((((long)(integerPart - FractionBitCount)) << 16) + ((fraction + (1L << 44)) >> 45)));
+        return new(Value: ((((long)(integerPart - FractionBitCount)) << FractionBitCount) + ((fraction + (1L << 44)) >> 45)));
+    }
+    // The base-2 logarithm of a positive raw at Q46 — the same interval table and polynomial as Log2, its Q61 fraction
+    // rounded by fifteen bits instead of forty-five — for callers that multiply the logarithm before rounding.
+    private static long Log2Q46(FixedQ4816 value) {
+        var raw = ((ulong)value.Value);
+        var integerPart = BitOperations.Log2(value: raw);
+        var fraction = Log2FractionQ61(mantissaQ62: (raw << (62 - integerPart)));
+
+        return ((((long)(integerPart - FractionBitCount)) << 46) + ((fraction + (1L << 14)) >> 15));
     }
     /// <summary>Returns <paramref name="x"/> raised to the power <paramref name="y"/>.</summary>
     /// <param name="x">The base. A negative base is supported at every whole exponent, where the parity of the
@@ -897,40 +944,26 @@ public readonly partial record struct FixedQ4816(long Value)
             );
         }
 
-        // Form and round y·log2(x) at full width before applying Exp2's saturation gates. Using the public
-        // wrapping multiplication here can turn an exponent outside the Q48.16 range into an arbitrary value.
-        var exponentProduct = (((Int128)y.Value) * log.Value);
-        var exponentNegative = (exponentProduct < Int128.Zero);
-        var exponentMagnitude = ((UInt128)(exponentNegative
-            ? -exponentProduct
-            : exponentProduct));
-        var roundedExponentMagnitude = (exponentMagnitude >> FractionBitCount);
-        var exponentRemainder = ((ulong)exponentMagnitude) & FractionBitMask;
+        // Form y·log2(x) at full width — the logarithm carried at Q46 rather than the public Q16 — apply Exp2's
+        // saturation gates on the exact Q62 product, then round it once to the Q32 exponent Exp2Q32 consumes. Using
+        // the public wrapping multiplication here can turn an exponent outside the Q48.16 range into an arbitrary value.
+        var exponentQ62 = (((Int128)y.Value) * Log2Q46(value: x));
 
-        if (
-            (exponentRemainder > RawHalf) ||
-            ((exponentRemainder == RawHalf) && ((roundedExponentMagnitude & UInt128.One) != UInt128.Zero))
-        ) {
-            ++roundedExponentMagnitude;
-        }
-
-        var exponentRaw = (exponentNegative
-            ? -((Int128)roundedExponentMagnitude)
-            : (Int128)roundedExponentMagnitude
-        );
-
-        if (exponentRaw >= (47L << FractionBitCount)) {
+        if (exponentQ62 >= (((Int128)47L) << 62)) {
             return (negativeResult
                 ? MinValue
                 : MaxValue
             );
         }
 
-        if (exponentRaw <= (-18L << FractionBitCount)) {
+        if (exponentQ62 <= -(((Int128)18L) << 62)) {
             return Zero;
         }
 
-        var scaled = Exp2(value: new(Value: ((long)exponentRaw)));
+        var scaled = Exp2Q32(exponentQ32: RoundProduct(
+            fractionBitCount: 30,
+            product: exponentQ62
+        ));
 
         return (negativeResult
             ? new(Value: -scaled.Value)
@@ -1072,10 +1105,12 @@ public readonly partial record struct FixedQ4816(long Value)
         Math.Sign(value: value.Value);
     /// <summary>Returns the non-negative square root of <paramref name="value"/>.</summary>
     /// <param name="value">The value whose square root is returned; non-positive inputs yield zero.</param>
-    /// <returns>The floor of the square root of <paramref name="value"/>, in fixed point.</returns>
-    /// <remarks>The result is exactly <c>⌊√(raw · 2¹⁶)⌋</c>. Hardware square roots only seed the estimate; an
-    /// integer settle pins the exact floor, so results are bit-identical across machines and to the pure-integer
-    /// fallback.</remarks>
+    /// <returns>The square root of <paramref name="value"/> rounded to the nearest representable value.</returns>
+    /// <remarks>The result is exactly the integer nearest <c>√(raw · 2¹⁶)</c>: consecutive squares differ by
+    /// <c>2r + 1</c>, so an integer radicand is nearer <c>(r + 1)²</c> than <c>r²</c> exactly when its remainder above
+    /// <c>r²</c> exceeds <c>r</c>, and no integral halfway case exists. Hardware square roots only seed the estimate;
+    /// an integer settle pins the exact floor and the remainder test lifts it, so results are bit-identical across
+    /// machines and to the pure-integer fallback.</remarks>
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public static FixedQ4816 Sqrt(FixedQ4816 value) {
         if (value.Value <= 0L) {
@@ -1085,12 +1120,20 @@ public readonly partial record struct FixedQ4816(long Value)
         // √(raw/2^16)·2^16 = √(raw·2^16). Below 2^48 the scaled value fits 64 bits; wider inputs take the 128-bit
         // width. Both widths are the same shared floor square root, whose cost is fixed by the width alone.
         if (value.Value < (1L << IntegerBitCount)) {
-            return new(Value: unchecked((long)(((ulong)value.Value) << FractionBitCount).SquareRoot()));
+            var radicand = (((ulong)value.Value) << FractionBitCount);
+            var root = radicand.SquareRoot();
+
+            if ((radicand - (root * root)) > root) { ++root; }
+
+            return new(Value: unchecked((long)root));
         }
 
         var scaled = (((UInt128)((ulong)value.Value)) << FractionBitCount);
+        var wideRoot = scaled.SquareRoot();
 
-        return new(Value: unchecked((long)scaled.SquareRoot()));
+        if ((scaled - (wideRoot * wideRoot)) > wideRoot) { ++wideRoot; }
+
+        return new(Value: unchecked((long)wideRoot));
     }
     /// <summary>Computes the angle, in radians, from the positive X axis to the point <c>(<paramref name="x"/>, <paramref name="y"/>)</c>.</summary>
     /// <param name="y">The ordinate (the Y component).</param>
@@ -1190,16 +1233,34 @@ public readonly partial record struct FixedQ4816(long Value)
     /// <remarks>Pure integer arithmetic (turn-domain reduction, then odd/even polynomials at Q60); bit-identical
     /// across machines. <c>SinCos(Atan2(y, x))</c> recovers the unit direction. Maximum observed error is 0.51 ULP
     /// within a few turns of zero and ~2 ULP at extreme magnitudes.</remarks>
-    public static (FixedQ4816 Sin, FixedQ4816 Cos) SinCos(FixedQ4816 angle) {
-        // Reduce in turns: raw · round(2^64/2π) = turns · 2^80; the two's-complement wrap of the 128-bit product is
-        // the exact mod-one-turn reduction.
-        var high = Math.BigMul(
-            a: angle.Value,
-            b: SinCosInvTwoPiQ64,
-            low: out var low
+    public static (FixedQ4816 Sin, FixedQ4816 Cos) SinCos(FixedQ4816 angle) =>
+        SinCosScaled(
+            angle: angle.Value,
+            fractionBitCount: FractionBitCount
         );
+    /// <summary>Returns the sine and cosine of half of <paramref name="angle"/> — the half angle taken exactly in the
+    /// turn domain, one bit further down, so an odd raw angle loses nothing to a prior Q16 halving.</summary>
+    internal static (FixedQ4816 Sin, FixedQ4816 Cos) SinCosHalfAngle(FixedQ4816 angle) =>
+        SinCosScaled(
+            angle: angle.Value,
+            fractionBitCount: (FractionBitCount + 1)
+        );
+    /// <summary>Returns the sine and cosine of an angle carried at Q32 (the exact product of two Q16 raws), reduced to
+    /// turns from that width directly rather than through a Q16 rounding.</summary>
+    internal static (FixedQ4816 Sin, FixedQ4816 Cos) SinCosQ32(long angleQ32) =>
+        SinCosScaled(
+            angle: angleQ32,
+            fractionBitCount: (2 * FractionBitCount)
+        );
+    // Reduce in turns: raw · round(2^64/2π) = turns · 2^(64 + fractionBitCount); the two's-complement wrap of the
+    // 128-bit product is the exact mod-one-turn reduction. Reduced on the magnitude and re-signed, so the turn of −θ
+    // is exactly the negation of the turn of θ and the pair comes out odd in the sine and even in the cosine.
+    private static (FixedQ4816 Sin, FixedQ4816 Cos) SinCosScaled(long angle, int fractionBitCount) {
+        var negative = (angle < 0L);
+        var magnitude = unchecked((ulong)(negative ? -angle : angle));
+        var turns = unchecked((long)((ulong)(((((UInt128)magnitude) * ((ulong)SinCosInvTwoPiQ64)) >> fractionBitCount))));
 
-        return SinCosFromTurns(fractionalTurns: unchecked((long)((((ulong)low) >> FractionBitCount) | (((ulong)high) << IntegerBitCount))));
+        return SinCosFromTurns(fractionalTurns: (negative ? -turns : turns));
     }
 
     // Full-range norm overload: phases a non-negative raw Q16 magnitude that may exceed the signed carrier (a
@@ -1213,17 +1274,16 @@ public readonly partial record struct FixedQ4816(long Value)
     private static (FixedQ4816 Sin, FixedQ4816 Cos) SinCosFromTurns(long fractionalTurns) {
         var (cosQ60, sinQ60, folded) = SinCosCore(fractionalTurns: fractionalTurns);
 
-        // Q60 → Q16: round to nearest (ties toward +∞), clamp to ±1.
-        const int NarrowingShift = (SinCosFractionBitCount - FractionBitCount);
+        // Q60 → Q16: round to nearest, ties to even on the magnitude (so the narrowing is odd), clamp to ±1.
         var sinRaw = Math.Clamp(
             max: RawOne,
             min: -RawOne,
-            value: ((sinQ60 + (1L << (NarrowingShift - 1))) >> NarrowingShift)
+            value: NarrowSinCosQ60(value: sinQ60)
         );
         var cosRaw = Math.Clamp(
             max: RawOne,
             min: -RawOne,
-            value: ((cosQ60 + (1L << (NarrowingShift - 1))) >> NarrowingShift)
+            value: NarrowSinCosQ60(value: cosQ60)
         );
 
         return (new(Value: sinRaw), new(Value: (folded
@@ -1231,6 +1291,28 @@ public readonly partial record struct FixedQ4816(long Value)
             : cosRaw)));
     }
 
+    // Q60 → Q16 for the circular pair: round to nearest with ties to even on the magnitude, then re-sign, so the
+    // narrowing commutes with negation.
+    private static long NarrowSinCosQ60(long value) {
+        const int NarrowingShift = (SinCosFractionBitCount - FractionBitCount);
+        const ulong NarrowingMask = ((1UL << NarrowingShift) - 1UL);
+        const ulong NarrowingHalf = (1UL << (NarrowingShift - 1));
+        var sign = (value >> 63);
+        var magnitude = unchecked((ulong)((value ^ sign) - sign));
+        var truncated = (magnitude >> NarrowingShift);
+        var remainder = (magnitude & NarrowingMask);
+
+        if (
+            (remainder > NarrowingHalf) ||
+            ((remainder == NarrowingHalf) && (0UL != (truncated & 1UL)))
+        ) {
+            ++truncated;
+        }
+
+        var result = unchecked((long)truncated);
+
+        return unchecked(((result ^ sign) - sign));
+    }
     // Rounds a wide product (a raw Q16 factor times a 2^fractionBitCount-scaled ratio) to raw Q16, ties to even.
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     internal static long RoundProduct(Int128 product, int fractionBitCount) {
@@ -1347,11 +1429,11 @@ public readonly partial record struct FixedQ4816(long Value)
         }
 
         // Radians at Q60 (the fold bounds |θ| ≤ π/2), then Horner on u = θ².
-        var x = Math.BigMul(
-            a: fractionalTurns,
-            b: SinCosTwoPiQ60,
-            low: out _
-        );
+        // The radian magnitude is formed on |turns| and re-signed only where the sine reads it, so the odd sine and the
+        // even cosine come out exactly symmetric in the angle.
+        var negative = (fractionalTurns < 0L);
+        var turnMagnitude = unchecked((ulong)(negative ? -fractionalTurns : fractionalTurns));
+        var x = ((long)((((UInt128)turnMagnitude) * ((ulong)SinCosTwoPiQ60)) >> 64));
         var u = BigMulShift60(
             x: x,
             y: x
@@ -1414,10 +1496,12 @@ public readonly partial record struct FixedQ4816(long Value)
             y: cosAcc
         ));
 
-        return (cosAcc, BigMulShift60(
+        var sinMagnitude = BigMulShift60(
             x: x,
             y: sinAcc
-        ), folded);
+        );
+
+        return (cosAcc, (negative ? -sinMagnitude : sinMagnitude), folded);
     }
 
     /// <summary>Returns the integral part of <paramref name="value"/>, discarding the fraction (rounding toward zero).</summary>

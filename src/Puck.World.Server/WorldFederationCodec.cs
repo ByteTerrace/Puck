@@ -381,8 +381,8 @@ public static class WorldFederationCodec {
                 Id: reader.ReadRequiredString(field: $"traveler {(ordinal + 1)} identity id"),
                 Name: reader.ReadString(field: $"traveler {(ordinal + 1)} identity name"),
                 ColorHex: reader.ReadString(field: $"traveler {(ordinal + 1)} identity color"),
-                MoveSpeed: reader.ReadFixed(),
-                TurnSpeed: reader.ReadFixed()
+                MoveSpeed: reader.ReadNullableFixed(),
+                TurnSpeed: reader.ReadNullableFixed()
             );
 
             if (!reader.Failed) {
@@ -624,8 +624,8 @@ public static class WorldFederationCodec {
                 writer.WriteString(value: projected.Id);
                 writer.WriteString(value: projected.Name);
                 writer.WriteString(value: projected.ColorHex);
-                writer.WriteFixed(value: projected.MoveSpeed);
-                writer.WriteFixed(value: projected.TurnSpeed);
+                writer.WriteNullableFixed(value: projected.MoveSpeed);
+                writer.WriteNullableFixed(value: projected.TurnSpeed);
             }
         }
 

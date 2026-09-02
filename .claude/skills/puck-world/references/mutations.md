@@ -53,13 +53,15 @@ The exact per-tick order, transcribed from `Step`:
 14. `EmitSnapshot`: deliver the tick's `WorldSnapshot`.
 
 The shared shell is `src/Puck.World.Server/WorldServerStepShell.cs`: drain pending
-TCP work → `WorldServer.Step` → `WorldConsoleWaitGate.PublishTick` (the
-`world.wait` clock counts completed simulation ticks) → replay `NoteTick`
-when armed. `WorldSimulation` wraps it with seat-intent submission before the
+TCP work → replay `InjectDriveTick` (a no-op unless a live drive is in
+progress — see [replay.md](replay.md)) → `WorldServer.Step` →
+`WorldConsoleWaitGate.PublishTick` (the `world.wait` clock counts completed
+simulation ticks) → replay `NoteTick` when armed, looping for a
+fast-forwarding drive's burst. `WorldSimulation` wraps it with seat-intent submission before the
 shell and seat-context sync plus the per-tick analog clear after it. The launcher
 owns time, pacing off `IFixedStepSimulation.RatePerSecond` (authored per world
-via the document's `simulation.rateHz` field — the standard 240 Hz lives in
-`standard.world.json`, and a world authoring no section is rate-0 resident; see
+via the document's `simulation.rateHz` field — the shipped worlds author 30 Hz
+themselves, and a world authoring no section is rate-0 resident; see
 [documents.md](documents.md)). A `.puckreplay` tape carries its OWN
 `SimulationRate`, stamped at record time from the live world's own rate, and
 `Drive` refuses a disagreement with the embedded definition's own

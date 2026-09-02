@@ -88,17 +88,19 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     // Tiles past the viewport's pixel extent hold no rays — leave them empty. `bounds` carries the classic march-start
     // (bounds.entry, plane 0) plus the four-bound teleport's proven-empty gap (firstExit/secondEntry, planes 1/2);
-    // MaxDistance defaults mean "no gap — teleport disabled" for the outside-viewport tiles (whose planes Stage 1
-    // never reads anyway, since it skips a tile with marchStart < 0).
+    // far-distance defaults (the view's authored far plane, sdf-world.hlsli's worldFarDistance) mean "no gap —
+    // teleport disabled" for the outside-viewport tiles (whose planes Stage 1 never reads anyway, since it skips a
+    // tile with marchStart < 0).
     bool insideViewport = (
         (tileMinPx.x < regionSizePx.x) &&
         (tileMinPx.y < regionSizePx.y)
     );
+    float farDistance = worldFarDistance(view);
     TileBounds bounds;
     bounds.entry = TileEmpty;
-    bounds.firstExit = MaxDistance;
-    bounds.secondEntry = MaxDistance;
-    bounds.farBound = MaxDistance;
+    bounds.firstExit = farDistance;
+    bounds.secondEntry = farDistance;
+    bounds.farBound = farDistance;
 
     if (insideViewport) {
         float2 tileMaxPx = min((tileMinPx + float(WorldTileSize)), regionSizePx);

@@ -44,7 +44,7 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
         );
         _ = builder.Append(
             provider: CultureInfo.InvariantCulture,
-            handler: $" yaw={((state?.Yaw ?? 0f) * RadiansToDegrees):0.##} pitch={((state?.Pitch ?? 0f) * RadiansToDegrees):0.##} freeLook={(seat?.FreeLooking ?? false).ToString().ToLowerInvariant()} motionControls={(seat?.MotionControlsActive ?? false).ToString().ToLowerInvariant()} angularVelocity=({angularVelocity.X:0.####},{angularVelocity.Y:0.####},{angularVelocity.Z:0.####})"
+            handler: $" yaw={((state?.Yaw ?? 0f) * RadiansToDegrees):0.##} pitch={((state?.Pitch ?? 0f) * RadiansToDegrees):0.##} freeLook={(seat?.FreeLooking ?? false).ToString().ToLowerInvariant()} orbit={(seat?.Orbiting ?? false).ToString().ToLowerInvariant()} steer={(seat?.PointerSteering ?? false).ToString().ToLowerInvariant()} motionControls={(seat?.MotionControlsActive ?? false).ToString().ToLowerInvariant()} angularVelocity=({angularVelocity.X:0.####},{angularVelocity.Y:0.####},{angularVelocity.Z:0.####})"
         );
 
         if (seatBindings.IsCameraModeActive(slot: slot)) {

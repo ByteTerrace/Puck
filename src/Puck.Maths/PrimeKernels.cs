@@ -236,9 +236,11 @@ internal static class PrimeKernels {
                 start = (quotient * prime);
             }
 
-            for (var m = start; (m <= high); m += (prime << 1)) {
-                var bit = ((m - low) >> 1);
+            // Stride the bit index by the prime directly: consecutive odd multiples sit 2·prime apart in value, one
+            // prime apart in the odd-only bitmap.
+            var lastBit = ((high - low) >> 1);
 
+            for (var bit = ((start - low) >> 1); (bit <= lastBit); bit += prime) {
                 bitmap[((int)(bit >> 6))] |= (1UL << ((int)(bit & 63UL)));
             }
         }

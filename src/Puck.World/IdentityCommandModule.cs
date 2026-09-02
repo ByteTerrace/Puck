@@ -1,5 +1,6 @@
 using System.Globalization;
 using Puck.Commands;
+using Puck.Maths;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -293,6 +294,13 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         }
         var key = args[0].ToString();
 
+        // The write lands on the CATALOG's identity — the object the seated body reads its rates off live — and is
+        // mirrored onto the roster's rehydrated copy so client read-backs agree. A seat driving under an identity
+        // this catalog does not own (a visiting traveler's) has no document here to persist into, so it refuses.
+        if (m_worlds.FindById(id: identity!.Id) is not { } owned) {
+            return CommandResult.Error(output: $"[identity.motion: p{player} world:{identity.Id} is not an owned world here]");
+        }
+
         if (
             !args.TryFloat(
             index: 1,
@@ -307,18 +315,20 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             b: "speed",
             comparisonType: StringComparison.OrdinalIgnoreCase
         )) {
-            identity!.MoveSpeed = value;
+            owned.SetMoveSpeed(value: value);
+            identity.SetMoveSpeed(value: value);
         } else if (string.Equals(
             a: key,
             b: "turn-speed",
             comparisonType: StringComparison.OrdinalIgnoreCase
         )) {
-            identity!.TurnSpeed = value;
+            owned.SetTurnSpeed(value: value);
+            identity.SetTurnSpeed(value: value);
         } else {
             return CommandResult.Error(output: $"[identity.motion: unknown key '{key}']");
         }
         m_worlds.Save();
-        return new CommandResult(Output: $"[identity.motion: p{player} {key} updated in world:{identity!.Id}]");
+        return new CommandResult(Output: $"[identity.motion: p{player} {key} updated in world:{identity.Id}]");
     }
     private CommandResult Show(CommandContext context, WireArgs args) {
         if (!TryPlayer(
@@ -336,17 +346,26 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         // moveEffective is WorldBody's OWN read-back (EffectiveMoveSpeed), never a re-derivation here, so this line
         // can never disagree with what the body is really doing — grounded, swim, or vehicle, WorldBody's per-arm
         // resolve decides which envelope (if any) clamps which base rate. No live body (not yet seated) reports the
-        // requested rate unchanged — the same answer an absent/wide-open envelope gives.
+        // claimed rate, or "kit" for an identity claiming none.
         var effectiveMoveSpeed = ((m_server.Body(index: PlayerRoster.SlotFromDisplay(number: player)) is { } body)
-            ? (float)((double)body.EffectiveMoveSpeed)
-            : identity!.MoveSpeed
+            ? DescribeRate(rate: body.EffectiveMoveSpeed)
+            : DescribeRate(rate: identity!.FixedMoveSpeed)
         );
 
         return new CommandResult(Output: string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[identity.show: p{player} world={identity!.Id} name={identity.Name} color={identity.ColorHex} move={identity.MoveSpeed:0.####} moveEffective={effectiveMoveSpeed:0.####} turn={identity.TurnSpeed:0.####} hud={hud} path={m_worlds.FilePath}]"
+            handler: $"[identity.show: p{player} world={identity!.Id} name={identity.Name} color={identity.ColorHex} move={DescribeRate(rate: identity.FixedMoveSpeed)} moveEffective={effectiveMoveSpeed} turn={DescribeRate(rate: identity.FixedTurnSpeed)} hud={hud} path={m_worlds.FilePath}]"
         ));
     }
+    // An identity claiming no rate reads "kit": the seat integrates under the kit's own authored rate.
+    private static string DescribeRate(FixedQ4816? rate) =>
+        ((rate is { } value)
+            ? ((double)value).ToString(
+                format: "0.####",
+                provider: CultureInfo.InvariantCulture
+            )
+            : "kit"
+        );
     private static bool TryBool(ReadOnlySpan<char> token, out bool value) {
         value = (token.Equals(
             comparisonType: StringComparison.OrdinalIgnoreCase,
@@ -415,7 +434,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "identity.show",
-            description: "Shows the identity driving a seat, including its private HUD panel (id/layer/style/rect/element count, or 'none') and its move rate BOTH as requested and as actually applied: identity.show [player]. move= is the profile's own requested rate; moveEffective= is what the sim integrates under, arm-aware — under a grounded OR SWIM kit, the profile's rate after the kit's own speed envelope (grounded's moveSpeedEnvelope, or swim's thrustSpeedEnvelope, which compiles into the SAME shared slot) clamps it, equal unless the kit pins/bounds that rate narrower than the profile's request; under a VEHICLE kit, the kit's OWN topSpeed after its topSpeedEnvelope (if authored) clamps it — move= never applies to a vehicle seat, since a kart's speed is the kit's, not the profile's.",
+            description: "Shows the identity driving a seat, including its private HUD panel (id/layer/style/rect/element count, or 'none') and its move rate BOTH as claimed and as actually applied: identity.show [player]. move= is the profile's own claimed rate, or 'kit' for an identity claiming none (the kit's authored rate then drives, until identity.motion mints a claim); moveEffective= is what the sim integrates under, arm-aware — under a grounded OR SWIM kit, the claimed-or-kit rate after the kit's own speed envelope (grounded's moveSpeedEnvelope, or swim's thrustSpeedEnvelope, which compiles into the SAME shared slot) clamps it; under a VEHICLE kit, the kit's OWN topSpeed after its topSpeedEnvelope (if authored) clamps it — move= never applies to a vehicle seat, since a kart's speed is the kit's, not the profile's.",
             handler: Show
         );
         yield return CommandDefinition.WithWireArgs(

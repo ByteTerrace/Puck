@@ -27,8 +27,9 @@ public sealed record WorldLooksSection(
 /// grow and move live (the budget the render envelope reserves, the scale envelope, candidate picking, preview
 /// deadline, and the derived face-screen reservation).</summary>
 /// <param name="Rows">The placements, in order.</param>
-/// <param name="Policy">The live-placement policy — ABSENT resolves to
-/// <see cref="WorldPlacementPolicyDefaults.Absent"/>.</param>
+/// <param name="Policy">The live-placement policy — ABSENT derives from <paramref name="Rows"/>
+/// (<see cref="WorldPlacementPolicyDefaults.DeriveFrom"/>: no live authoring, the scale envelope the rows
+/// span).</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldPlacementsSection(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPlacement>? Rows = null,

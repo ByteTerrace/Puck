@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.Intrinsics.Arm;
 using System.Runtime.Intrinsics.X86;
 
 namespace Puck.Maths;
@@ -657,17 +658,25 @@ public static class BinaryIntegerFunctions {
     /// <param name="value">The value to measure; its sign is ignored.</param>
     /// <returns>The decimal digit count of <paramref name="value"/>. For a non-zero magnitude this equals <c>⌊log₁₀(|value|)⌋ + 1</c>; the magnitude zero yields <c>1</c>.</returns>
     public static T LogarithmBase10<T>(this T value) where T : IBinaryInteger<T> {
-        // Count divisions of the SIGNED value toward zero — the digit count of the magnitude, without the unrepresentable
-        // T.Abs(T.MinValue). Truncating division reaches zero from either sign, so the loop terminates all the same.
-        var quotient = value;
-        var result = T.Zero;
+        if (T.IsZero(value: value)) { return T.One; }
 
-        do {
-            quotient /= BinaryIntegerConstants<T>.Ten;
-            ++result;
-        } while (T.Zero != quotient);
+        // From the bit length: 1233/4096 sits just below log₁₀ 2, so estimate = ⌊(bitLength − 1)·1233/4096⌋ never exceeds
+        // ⌊log₁₀|value|⌋ and falls short of it by at most one. 10^estimate is therefore at most |value| and always
+        // representable; whether |value| also reaches 10^(estimate + 1) is read off the truncating quotient by
+        // 10^estimate, which keeps both the SIGNED value (T.MinValue has no T.Abs) and the carrier's own ceiling
+        // (10^(estimate + 1) may not fit) out of the decision.
+        var bitLength = int.CreateChecked(value: (value < T.Zero)
+            ? (~value).MostSignificantBit()
+            : value.MostSignificantBit());
+        var estimate = T.CreateChecked(value: (((bitLength - 1) * 1233) >> 12));
+        // The quotient's magnitude is below one hundred, so negating it is always representable — unlike a negated ten
+        // on an unsigned carrier, which would wrap to the carrier's top and admit every quotient.
+        var quotient = (value / BinaryIntegerConstants<T>.Ten.Exponentiate(exponent: estimate));
+        var magnitude = (T.IsNegative(value: quotient) ? -quotient : quotient);
 
-        return result;
+        return ((magnitude >= BinaryIntegerConstants<T>.Ten)
+            ? (estimate + (T.One + T.One))
+            : (estimate + T.One));
     }
     /// <summary>Returns the one-based position of the highest set bit of <paramref name="value"/>, equivalently its bit length.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
@@ -795,6 +804,18 @@ public static class BinaryIntegerFunctions {
     /// <exception cref="NotSupportedException"><typeparamref name="T"/> is <see cref="BigInteger"/>. Bit reversal requires a fixed carrier width to define which bit is "first".</exception>
     public static T ReverseBits<T>(this T value) where T : IBinaryInteger<T> {
         BinaryIntegerConstants<T>.ThrowIfUnbounded(operationName: nameof(ReverseBits));
+
+        // One RBIT instruction on Arm64 for the two machine widths; the reversal is exact, so it returns the same bits
+        // the SWAR butterfly below does.
+        if (ArmBase.Arm64.IsSupported) {
+            if ((typeof(T) == typeof(ulong)) || (typeof(T) == typeof(long))) {
+                return T.CreateTruncating(value: ArmBase.Arm64.ReverseElementBits(value: ulong.CreateTruncating(value: value)));
+            }
+
+            if ((typeof(T) == typeof(uint)) || (typeof(T) == typeof(int))) {
+                return T.CreateTruncating(value: ArmBase.ReverseElementBits(value: uint.CreateTruncating(value: value)));
+            }
+        }
 
         const int LoopOffset = 7;
 

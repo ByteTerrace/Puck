@@ -79,5 +79,12 @@ internal static partial class LawRegistry {
                 lawId: "curvature-spline.carrier-extremes"
             )
         ),
+        Case(
+            id: "curvature-spline.evaluate-curvature",
+            run: () => Laws.Claim(
+                claim: Subjects.CurvatureSplineEvaluateCurvature,
+                lawId: "curvature-spline.evaluate-curvature"
+            )
+        ),
     ];
 }

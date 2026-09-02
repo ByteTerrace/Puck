@@ -1,0 +1,6856 @@
+{
+  "basis": "puck.basis.frozen.json",
+  "bindingOverlays": [
+    {
+      "document": {
+        "chords": [
+          {
+            "chord": [],
+            "group": "state.bindingGroups.defaultActionGroup",
+            "page": {
+              "entries": [
+                {
+                  "channel": "forward",
+                  "scale": 1,
+                  "sources": [
+                    "keyboard.w",
+                    "keyboard.arrowUp"
+                  ]
+                },
+                {
+                  "channel": "forward",
+                  "scale": -1,
+                  "sources": [
+                    "keyboard.s",
+                    "keyboard.arrowDown"
+                  ]
+                },
+                {
+                  "channel": "strafe",
+                  "scale": -1,
+                  "sources": [
+                    "keyboard.a"
+                  ]
+                },
+                {
+                  "channel": "strafe",
+                  "scale": 1,
+                  "sources": [
+                    "keyboard.d"
+                  ]
+                },
+                {
+                  "command": "player.move.strafe",
+                  "sources": [
+                    "gamepad.leftStick"
+                  ]
+                },
+                {
+                  "command": "player.look.steer",
+                  "sources": [
+                    "gamepad.rightStick"
+                  ]
+                },
+                {
+                  "command": "player.motion.angular",
+                  "label": "Motion look",
+                  "sources": [
+                    "gamepad.gyro"
+                  ]
+                },
+                {
+                  "channel": "jump",
+                  "sources": [
+                    "gamepad.buttonSouth",
+                    "keyboard.space"
+                  ]
+                },
+                {
+                  "channel": "run",
+                  "label": "Sprint",
+                  "sources": [
+                    "gamepad.buttonWest",
+                    "keyboard.shiftLeft"
+                  ]
+                },
+                {
+                  "channel": "run",
+                  "label": "Run",
+                  "mode": "Toggle",
+                  "sources": [
+                    "gamepad.leftStickPress"
+                  ]
+                },
+                {
+                  "channel": "up",
+                  "label": "Jetpack",
+                  "scale": 1,
+                  "sources": [
+                    "gamepad.rightStickPress",
+                    "keyboard.controlLeft"
+                  ]
+                },
+                {
+                  "command": "player.orbit",
+                  "label": "Orbit",
+                  "sources": [
+                    "mouse.button1"
+                  ]
+                },
+                {
+                  "command": "player.steer",
+                  "label": "Steer",
+                  "sources": [
+                    "mouse.button2"
+                  ]
+                },
+                {
+                  "channel": "turn",
+                  "scale": 1,
+                  "sources": [
+                    "keyboard.arrowLeft"
+                  ]
+                },
+                {
+                  "channel": "turn",
+                  "scale": -1,
+                  "sources": [
+                    "keyboard.arrowRight"
+                  ]
+                },
+                {
+                  "channel": "attack",
+                  "label": "Attack",
+                  "sources": [
+                    "gamepad.rightShoulder",
+                    "keyboard.f"
+                  ]
+                },
+                {
+                  "channel": "target",
+                  "label": "Target nearest",
+                  "sources": [
+                    "gamepad.leftShoulder",
+                    "keyboard.tab"
+                  ]
+                },
+                {
+                  "channel": "autoAttack",
+                  "label": "Auto-attack",
+                  "sources": [
+                    "gamepad.dpadUp",
+                    "keyboard.r"
+                  ]
+                },
+                {
+                  "channel": "element",
+                  "label": "Cycle element",
+                  "sources": [
+                    "gamepad.buttonEast",
+                    "keyboard.e"
+                  ]
+                }
+              ],
+              "id": "base"
+            }
+          },
+          {
+            "chord": [
+              "look",
+              "actionWheel"
+            ],
+            "command": {
+              "command": "player.state.cell.toggle",
+              "label": "Look behind",
+              "text": "look behind 0 3.14159265"
+            },
+            "group": "state.bindingGroups.defaultActionGroup"
+          },
+          {
+            "chord": [
+              "look",
+              "gamepad.rightShoulder"
+            ],
+            "command": {
+              "command": "player.look.free",
+              "holdRelease": true,
+              "label": "Free look"
+            },
+            "group": "state.bindingGroups.defaultActionGroup"
+          },
+          {
+            "chord": [
+              "look",
+              "keyboard.controlLeft"
+            ],
+            "command": {
+              "command": "player.look.recenter",
+              "holdRelease": true,
+              "label": "Recenter"
+            },
+            "group": "state.bindingGroups.defaultActionGroup"
+          },
+          {
+            "chord": [
+              "look",
+              "gamepad.buttonNorth"
+            ],
+            "command": {
+              "command": "player.motion.controls",
+              "label": "Toggle motion controls"
+            },
+            "group": "state.bindingGroups.defaultActionGroup"
+          },
+          {
+            "chord": [
+              "look",
+              "gamepad.rightShoulder",
+              "actionWheel"
+            ],
+            "command": {
+              "command": "player.state.cell.toggle",
+              "label": "Look behind",
+              "text": "look behind 0 3.14159265"
+            },
+            "group": "state.bindingGroups.defaultActionGroup"
+          },
+          {
+            "chord": [
+              "actionWheel"
+            ],
+            "group": "state.bindingGroups.defaultActionGroup",
+            "page": {
+              "entries": [
+                {
+                  "command": "player.move.strafe",
+                  "sources": [
+                    "gamepad.leftStick"
+                  ]
+                },
+                {
+                  "command": "player.motion.angular",
+                  "sources": [
+                    "gamepad.gyro"
+                  ]
+                },
+                {
+                  "command": "player.wheel.select",
+                  "sources": [
+                    "gamepad.rightStick",
+                    "mouse.motion"
+                  ]
+                },
+                {
+                  "activateOn": "Completed",
+                  "command": "player.wheel.commit",
+                  "sources": [
+                    "gamepad.leftShoulder",
+                    "keyboard.tab"
+                  ]
+                }
+              ],
+              "id": "actionWheel",
+              "inherits": "base"
+            }
+          },
+          {
+            "command": {
+              "channel": "forward",
+              "holdRelease": true,
+              "label": "Run"
+            },
+            "group": "state.bindingGroups.defaultActionGroup",
+            "held": [
+              "mouse.button1",
+              "mouse.button2"
+            ]
+          },
+          {
+            "chord": [
+              "look"
+            ],
+            "group": "state.bindingGroups.defaultActionGroup",
+            "page": {
+              "entries": [
+                {
+                  "command": "player.move.strafe",
+                  "sources": [
+                    "gamepad.leftStick"
+                  ]
+                },
+                {
+                  "command": "player.look.steer",
+                  "sources": [
+                    "gamepad.rightStick"
+                  ]
+                },
+                {
+                  "command": "player.motion.angular",
+                  "sources": [
+                    "gamepad.gyro"
+                  ]
+                },
+                {
+                  "command": "console",
+                  "id": "console",
+                  "sources": [
+                    "gamepad.buttonNorth"
+                  ]
+                },
+                {
+                  "command": "view.override",
+                  "id": "cameraOverhead",
+                  "sources": [
+                    "gamepad.buttonWest"
+                  ],
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      2.0,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "command": "view.override",
+                  "id": "cameraAction",
+                  "sources": [
+                    "gamepad.buttonEast"
+                  ],
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      1.0,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "channel": "forward",
+                  "id": "autorun",
+                  "label": "Autorun",
+                  "mode": "Toggle",
+                  "scale": 1,
+                  "sources": [
+                    "gamepad.leftStickPress"
+                  ]
+                },
+                {
+                  "channel": "up",
+                  "id": "autoJetpack",
+                  "label": "Auto-jetpack",
+                  "mode": "Toggle",
+                  "scale": 1,
+                  "sources": [
+                    "gamepad.rightStickPress"
+                  ]
+                }
+              ],
+              "id": "pageLt"
+            }
+          },
+          {
+            "chord": [
+              "rt"
+            ],
+            "group": "state.bindingGroups.defaultActionGroup",
+            "page": {
+              "entries": [
+                {
+                  "command": "player.move.strafe",
+                  "sources": [
+                    "gamepad.leftStick"
+                  ]
+                },
+                {
+                  "command": "player.look.steer",
+                  "sources": [
+                    "gamepad.rightStick"
+                  ]
+                },
+                {
+                  "command": "player.motion.angular",
+                  "sources": [
+                    "gamepad.gyro"
+                  ]
+                },
+                {
+                  "command": "player.camera",
+                  "id": "freeCam",
+                  "sources": [
+                    "gamepad.buttonNorth"
+                  ]
+                },
+                {
+                  "command": "body.where",
+                  "id": "where",
+                  "sources": [
+                    "gamepad.buttonWest"
+                  ]
+                },
+                {
+                  "command": "quit",
+                  "id": "quit",
+                  "sources": [
+                    "gamepad.buttonEast"
+                  ]
+                }
+              ],
+              "id": "pageRt"
+            }
+          },
+          {
+            "chord": [
+              "look",
+              "rt"
+            ],
+            "group": "state.bindingGroups.defaultActionGroup",
+            "page": {
+              "entries": [
+                {
+                  "command": "player.move.strafe",
+                  "sources": [
+                    "gamepad.leftStick"
+                  ]
+                },
+                {
+                  "command": "player.look.steer",
+                  "sources": [
+                    "gamepad.rightStick"
+                  ]
+                },
+                {
+                  "command": "player.motion.angular",
+                  "sources": [
+                    "gamepad.gyro"
+                  ]
+                }
+              ],
+              "id": "pageLtRt"
+            }
+          },
+          {
+            "chord": [
+              "rt",
+              "look"
+            ],
+            "group": "state.bindingGroups.defaultActionGroup",
+            "page": {
+              "entries": [
+                {
+                  "command": "player.move.strafe",
+                  "sources": [
+                    "gamepad.leftStick"
+                  ]
+                },
+                {
+                  "command": "player.look.steer",
+                  "sources": [
+                    "gamepad.rightStick"
+                  ]
+                },
+                {
+                  "command": "player.motion.angular",
+                  "sources": [
+                    "gamepad.gyro"
+                  ]
+                }
+              ],
+              "id": "pageRtLt"
+            }
+          }
+        ]
+      },
+      "id": "null-play"
+    }
+  ],
+  "bodies": {
+    "capacity": 3
+  },
+  "bodyMotionPrograms": [
+    {
+      "kind": "Producer",
+      "name": "wander",
+      "operations": [
+        "ProduceWanderIntent"
+      ],
+      "version": "puck.body-motion.v1"
+    },
+    {
+      "kind": "Motion",
+      "name": "fishMotion",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ComputeSwimTargetVelocity",
+        "ShapePlanarVelocity",
+        "SnapYawToPlanarIntent",
+        "RunActionTriggers",
+        "ApplyBuoyancyAndSurface",
+        "ApplyVerticalDrive",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ],
+      "version": "puck.body-motion.v1"
+    }
+  ],
+  "cameras": [
+    {
+      "anchor": null,
+      "name": "pond-cam",
+      "renderHeight": 480,
+      "renderWidth": 640,
+      "rig": {
+        "name": "pond-cam",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                50,
+                18
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                35,
+                0
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.7
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
+    },
+    {
+      "anchor": null,
+      "name": "south-fall-cam",
+      "renderHeight": 480,
+      "renderWidth": 640,
+      "rig": {
+        "name": "south-fall-cam",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                35,
+                45,
+                45
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                15,
+                26
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.7
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
+    }
+  ],
+  "channels": [
+    {
+      "composition": true,
+      "name": "attack",
+      "shape": "Binary"
+    },
+    {
+      "composition": true,
+      "name": "target",
+      "shape": "Binary"
+    },
+    {
+      "composition": true,
+      "name": "autoAttack",
+      "shape": "Binary"
+    },
+    {
+      "composition": true,
+      "name": "element",
+      "shape": "Binary"
+    },
+    {
+      "$drop": true,
+      "name": "leap"
+    },
+    {
+      "$drop": true,
+      "name": "airLeap"
+    },
+    {
+      "$drop": true,
+      "name": "dash"
+    }
+  ],
+  "defaultSeatKit": "defaultKit",
+  "documentId": "puck",
+  "dynamics": [
+    {
+      "f": 1.5,
+      "name": "gauge",
+      "r": 0,
+      "zeta": 0.6
+    }
+  ],
+  "hud": {
+    "panels": [
+      {
+        "elements": [
+          {
+            "id": "readout",
+            "kind": "Text",
+            "rect": {
+              "height": 1,
+              "width": 1,
+              "x": 0,
+              "y": 0
+            },
+            "style": "Primary",
+            "template": "flux {state.falls-flux} grow {state.season} mist {state.falls-mist}"
+          }
+        ],
+        "id": "ecosystem",
+        "layer": "Under",
+        "rect": {
+          "height": 0.07,
+          "width": 0.5,
+          "x": 0.01,
+          "y": 0.01
+        },
+        "style": "Strip"
+      },
+      {
+        "elements": [
+          {
+            "id": "hpLabel",
+            "kind": "Text",
+            "rect": {
+              "height": 0.18,
+              "width": 0.92,
+              "x": 0.04,
+              "y": 0.06
+            },
+            "style": "Primary",
+            "template": "HP {state.hp.0} / {state.hp.0.$target}"
+          },
+          {
+            "binding": "state.hp.0",
+            "id": "hpGauge",
+            "kind": "Gauge",
+            "rect": {
+              "height": 0.14,
+              "width": 0.92,
+              "x": 0.04,
+              "y": 0.26
+            },
+            "style": "Positive"
+          },
+          {
+            "binding": "state.burning.0",
+            "id": "burnGauge",
+            "kind": "Gauge",
+            "rect": {
+              "height": 0.14,
+              "width": 0.92,
+              "x": 0.04,
+              "y": 0.46
+            },
+            "style": "Danger"
+          },
+          {
+            "binding": "state.frozen.0",
+            "id": "frozenGauge",
+            "kind": "Gauge",
+            "rect": {
+              "height": 0.14,
+              "width": 0.92,
+              "x": 0.04,
+              "y": 0.66
+            },
+            "style": "Accent"
+          },
+          {
+            "id": "status",
+            "kind": "Text",
+            "rect": {
+              "height": 0.16,
+              "width": 0.92,
+              "x": 0.04,
+              "y": 0.82
+            },
+            "style": "Dim",
+            "template": "burn {state.burning.0}  frozen {state.frozen.0}  dead {state.dead.0}  respawn {state.respawnIn.0}"
+          }
+        ],
+        "id": "vitals",
+        "layer": "Over",
+        "rect": {
+          "height": 0.2,
+          "width": 0.42,
+          "x": 0.02,
+          "y": 0.09
+        },
+        "style": "Panel"
+      },
+      {
+        "elements": [
+          {
+            "id": "target",
+            "kind": "Text",
+            "rect": {
+              "height": 0.26,
+              "width": 0.92,
+              "x": 0.04,
+              "y": 0.08
+            },
+            "style": "Accent",
+            "template": "target  {state.targetName.0}"
+          },
+          {
+            "id": "tot",
+            "kind": "Text",
+            "rect": {
+              "height": 0.26,
+              "width": 0.92,
+              "x": 0.04,
+              "y": 0.38
+            },
+            "style": "Dim",
+            "template": "their target  {state.targetOfTargetName.0}"
+          },
+          {
+            "id": "modes",
+            "kind": "Text",
+            "rect": {
+              "height": 0.26,
+              "width": 0.92,
+              "x": 0.04,
+              "y": 0.68
+            },
+            "style": "Dim",
+            "template": "auto tgt {state.autoTarget.0} atk {state.autoAttack.0}  element {state.elementLabel.0}"
+          }
+        ],
+        "id": "targeting",
+        "layer": "Over",
+        "rect": {
+          "height": 0.14,
+          "width": 0.42,
+          "x": 0.02,
+          "y": 0.3
+        },
+        "style": "Panel"
+      }
+    ]
+  },
+  "interactions": {
+    "interactions": [
+      {
+        "coOccurrence": "Distance",
+        "effects": [
+          {
+            "$type": "setState",
+            "key": "$right",
+            "state": "burning",
+            "valueSeconds": 3.0
+          }
+        ],
+        "left": "hot",
+        "mode": "Edge",
+        "name": "heat-ignites",
+        "range": 2.0,
+        "right": "flammable"
+      },
+      {
+        "coOccurrence": "Distance",
+        "effects": [
+          {
+            "$type": "setState",
+            "key": "$right",
+            "state": "frozen",
+            "valueSeconds": 3.0
+          }
+        ],
+        "left": "cold",
+        "mode": "Edge",
+        "name": "cold-spreads",
+        "range": 2.0,
+        "right": "freezable"
+      },
+      {
+        "coOccurrence": "Region",
+        "effects": [
+          {
+            "$type": "setState",
+            "key": "$left",
+            "state": "burning",
+            "valueSeconds": 3.0
+          }
+        ],
+        "left": "flammable",
+        "mode": "Edge",
+        "name": "pit-ignites",
+        "range": 0,
+        "right": "firePit"
+      },
+      {
+        "coOccurrence": "Region",
+        "effects": [
+          {
+            "$type": "setState",
+            "key": "$left",
+            "state": "frozen",
+            "valueSeconds": 3.0
+          }
+        ],
+        "left": "freezable",
+        "mode": "Edge",
+        "name": "pool-chills",
+        "range": 0,
+        "right": "icePool"
+      }
+    ]
+  },
+  "kits": {
+    "rows": [
+      {
+        "actions": {
+          "airLeap": null,
+          "dash": null,
+          "leap": null
+        },
+        "name": "defaultKit"
+      },
+      {
+        "bodyContact": "Overlap",
+        "bodyMotionProgram": "defaultMotionProgram",
+        "collider": {
+          "$type": "capsule",
+          "endpoint": [
+            0,
+            0.4,
+            0
+          ],
+          "radius": 0.22
+        },
+        "motion": {
+          "$type": "grounded",
+          "facingSnap": true,
+          "fallGravity": 46,
+          "maxFallSpeed": 40,
+          "moveSpeed": 1.4,
+          "response": [],
+          "riseGravity": 28,
+          "sprintMultiplier": 1,
+          "turnSpeed": 2.0
+        },
+        "name": "critterKit",
+        "producers": {
+          "wander": {
+            "channels": {},
+            "scalars": {
+              "activityRateBase": 1.0,
+              "activityRateRange": 0.3,
+              "altitudeBase": 0.0,
+              "altitudeGain": 0.5,
+              "altitudeRange": 0.0,
+              "forward": 1.0,
+              "inwardGain": 0.8,
+              "pitchWave": 0.0,
+              "pressThreshold": 0.0,
+              "rollTurn": 0.0,
+              "softRadius": 6.0,
+              "strafeWave": 0.0,
+              "turnScale": 3.0,
+              "turnWave": 0.0,
+              "upWave": 0.0,
+              "weaveAmplitude": 0.4,
+              "weaveFrequencyBase": 0.6,
+              "weaveFrequencyRange": 0.2
+            }
+          }
+        }
+      },
+      {
+        "bodyContact": "Overlap",
+        "bodyMotionProgram": "fishMotion",
+        "collider": {
+          "$type": "sphere",
+          "radius": 0.2
+        },
+        "motion": {
+          "$type": "swim",
+          "buoyancy": 0.6,
+          "facingSnap": true,
+          "floatDepth": 0.6,
+          "maxRiseSpeed": 1.0,
+          "maxSinkSpeed": 1.0,
+          "response": [],
+          "sprintMultiplier": 1,
+          "surfaceSettleRate": 0.8,
+          "thrustSpeed": 1.0,
+          "turnSpeed": 1.5,
+          "verticalThrustFraction": 0.4
+        },
+        "name": "fishKit",
+        "producers": {
+          "wander": {
+            "channels": {},
+            "scalars": {
+              "activityRateBase": 1.0,
+              "activityRateRange": 0.3,
+              "altitudeBase": 0.0,
+              "altitudeGain": 0.5,
+              "altitudeRange": 0.0,
+              "forward": 0.6,
+              "inwardGain": 0.8,
+              "pitchWave": 0.0,
+              "pressThreshold": 0.0,
+              "rollTurn": 0.0,
+              "softRadius": 5.0,
+              "strafeWave": 0.0,
+              "turnScale": 3.0,
+              "turnWave": 0.0,
+              "upWave": 0.0,
+              "weaveAmplitude": 0.3,
+              "weaveFrequencyBase": 0.6,
+              "weaveFrequencyRange": 0.2
+            }
+          }
+        }
+      }
+    ]
+  },
+  "looks": {
+    "assignment": {
+      "rows": [
+        "state.lookOf.0",
+        "state.lookOf.1",
+        "state.lookOf.2"
+      ],
+      "sequence": {
+        "name": "index",
+        "offset": 0,
+        "step": 0
+      }
+    },
+    "rows": [
+      {
+        "motion": {
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "pip-fire",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "pip-fire"
+        }
+      },
+      {
+        "motion": {
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "pip-ice",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "pip-ice"
+        }
+      },
+      {
+        "motion": {
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "pip-dead",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "pip-dead"
+        }
+      },
+      {
+        "motion": {
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "critter",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "critter"
+        }
+      },
+      {
+        "motion": {
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "fish",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "fish"
+        }
+      }
+    ]
+  },
+  "markers": [
+    {
+      "icon": "edit.place",
+      "id": "pond-spring-marker",
+      "source": {
+        "$type": "point",
+        "position": [
+          0,
+          36.8,
+          0
+        ]
+      },
+      "style": {
+        "chipAlpha": 1.0,
+        "size": 10
+      }
+    }
+  ],
+  "placements": {
+    "rows": [
+      {
+        "id": "groundNorthEast",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "prototypeId": "groundNorthEast",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "groundSouthEast",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "prototypeId": "groundSouthEast",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "groundSouthWest",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "prototypeId": "groundSouthWest",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "groundNorthWest",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "prototypeId": "groundNorthWest",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "groundContact",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "prototypeId": "groundContact",
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0
+      },
+      {
+        "id": "isle-crown",
+        "position": [
+          0,
+          34,
+          0
+        ],
+        "prototypeId": "isle-crown",
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0
+      },
+      {
+        "id": "isle-root",
+        "position": [
+          0,
+          34,
+          0
+        ],
+        "prototypeId": "isle-root",
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0
+      },
+      {
+        "id": "isle-falls",
+        "position": [
+          0,
+          34,
+          0
+        ],
+        "prototypeId": "isle-falls",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "shard-east",
+        "position": [
+          31,
+          29,
+          7
+        ],
+        "prototypeId": "isle-shard",
+        "scale": 1.15,
+        "yawDegrees": 40
+      },
+      {
+        "id": "shard-sw",
+        "position": [
+          -27,
+          31,
+          -14
+        ],
+        "prototypeId": "isle-shard",
+        "scale": 0.85,
+        "yawDegrees": 160
+      },
+      {
+        "id": "shard-north",
+        "position": [
+          8,
+          26,
+          -30
+        ],
+        "prototypeId": "isle-shard",
+        "scale": 1.3,
+        "yawDegrees": 250
+      },
+      {
+        "distribution": {
+          "fill": {
+            "name": "none",
+            "offset": 0,
+            "step": 0
+          },
+          "region": {
+            "$type": "scatter",
+            "cellSize": 1,
+            "depth": 32,
+            "radius": 2,
+            "seed": 11,
+            "spacing": 11,
+            "width": 32
+          }
+        },
+        "id": "isle-oaks",
+        "position": [
+          0,
+          34,
+          0
+        ],
+        "prototypeId": "oak",
+        "scale": 1.3,
+        "yawDegrees": 0
+      },
+      {
+        "distribution": {
+          "fill": {
+            "name": "none",
+            "offset": 0,
+            "step": 0
+          },
+          "region": {
+            "$type": "scatter",
+            "cellSize": 1,
+            "depth": 32,
+            "radius": 3,
+            "seed": 23,
+            "spacing": 16,
+            "width": 32
+          }
+        },
+        "id": "isle-pines",
+        "position": [
+          0,
+          34,
+          0
+        ],
+        "prototypeId": "pine",
+        "scale": 1.2,
+        "yawDegrees": 0
+      },
+      {
+        "distribution": {
+          "fill": {
+            "name": "none",
+            "offset": 0,
+            "step": 0
+          },
+          "region": {
+            "$type": "scatter",
+            "cellSize": 1,
+            "depth": 34,
+            "radius": 2,
+            "seed": 37,
+            "spacing": 7,
+            "width": 34
+          }
+        },
+        "id": "isle-bushes",
+        "position": [
+          0,
+          34,
+          0
+        ],
+        "prototypeId": "meadow-bush",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "distribution": {
+          "fill": {
+            "name": "none",
+            "offset": 0,
+            "step": 0
+          },
+          "region": {
+            "$type": "scatter",
+            "cellSize": 1,
+            "depth": 30,
+            "radius": 3,
+            "seed": 67,
+            "spacing": 10,
+            "width": 30
+          }
+        },
+        "id": "isle-boulders",
+        "position": [
+          0,
+          34,
+          0
+        ],
+        "prototypeId": "meadow-boulder",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "distribution": {
+          "fill": {
+            "name": "none",
+            "offset": 0,
+            "step": 0
+          },
+          "region": {
+            "$type": "scatter",
+            "cellSize": 1,
+            "depth": 30,
+            "radius": 2,
+            "seed": 51,
+            "spacing": 8,
+            "width": 30
+          }
+        },
+        "id": "isle-grass-0",
+        "position": [
+          0,
+          34,
+          0
+        ],
+        "prototypeId": "grass-patch",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "critter-1",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.618034
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "critterKit",
+          "look": "critter",
+          "source": {
+            "$type": "producer",
+            "name": "wander"
+          }
+        },
+        "position": [
+          6,
+          34,
+          4
+        ],
+        "prototypeId": "critter",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "pond-fish",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.618034
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "fishKit",
+          "look": "fish",
+          "source": {
+            "$type": "producer",
+            "name": "wander"
+          }
+        },
+        "position": [
+          2,
+          34.5,
+          1
+        ],
+        "prototypeId": "fish",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "firePit",
+        "position": [
+          10,
+          34,
+          -10
+        ],
+        "prototypeId": "firePit",
+        "region": {
+          "radius": 1.5
+        },
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "icePool",
+        "position": [
+          -9,
+          34,
+          0
+        ],
+        "prototypeId": "icePool",
+        "region": {
+          "radius": 1.5
+        },
+        "scale": 1,
+        "yawDegrees": 0
+      }
+    ]
+  },
+  "properties": {
+    "names": [
+      "flammable",
+      "freezable",
+      "burning",
+      "frozen",
+      "hot",
+      "cold"
+    ]
+  },
+  "prototypes": [
+    {
+      "document": {
+        "name": "groundNorthEast",
+        "palette": [
+          {
+            "color": "state.colors.unitPale"
+          },
+          {
+            "color": "state.colors.unitDark"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "wallpaper",
+                "cell": [
+                  1,
+                  1
+                ],
+                "group": "P1",
+                "materialStride": 1
+              }
+            ],
+            "id": 0,
+            "material": 0,
+            "name": "near",
+            "position": [
+              30,
+              -0.28,
+              -30
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              30,
+              0.3,
+              30
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "wallpaper",
+                "cell": [
+                  1,
+                  1
+                ],
+                "group": "P1",
+                "materialStride": 1
+              }
+            ],
+            "id": 1,
+            "material": 0,
+            "name": "east-band",
+            "position": [
+              110,
+              -0.28,
+              -30
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              50,
+              0.3,
+              30
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "wallpaper",
+                "cell": [
+                  1,
+                  1
+                ],
+                "group": "P1",
+                "materialStride": 1
+              }
+            ],
+            "id": 2,
+            "material": 0,
+            "name": "far-band",
+            "position": [
+              80,
+              -0.28,
+              -110
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              80,
+              0.3,
+              50
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "groundNorthEast"
+    },
+    {
+      "document": {
+        "name": "groundSouthEast",
+        "palette": [
+          {
+            "color": "state.colors.lanePale"
+          },
+          {
+            "color": "state.colors.laneDark"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "wallpaper",
+                "cell": [
+                  1,
+                  4096
+                ],
+                "group": "P1",
+                "materialStride": 1
+              }
+            ],
+            "id": 0,
+            "material": 0,
+            "name": "near",
+            "position": [
+              30,
+              -0.28,
+              30
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              30,
+              0.3,
+              30
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "wallpaper",
+                "cell": [
+                  1,
+                  4096
+                ],
+                "group": "P1",
+                "materialStride": 1
+              }
+            ],
+            "id": 1,
+            "material": 0,
+            "name": "east-band",
+            "position": [
+              110,
+              -0.28,
+              30
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              50,
+              0.3,
+              30
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "wallpaper",
+                "cell": [
+                  1,
+                  4096
+                ],
+                "group": "P1",
+                "materialStride": 1
+              }
+            ],
+            "id": 2,
+            "material": 0,
+            "name": "far-band",
+            "position": [
+              80,
+              -0.28,
+              110
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              80,
+              0.3,
+              50
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "groundSouthEast"
+    },
+    {
+      "document": {
+        "name": "groundSouthWest",
+        "palette": [
+          {
+            "color": "state.colors.hexNear"
+          },
+          {
+            "color": "state.colors.hexMid"
+          },
+          {
+            "color": "state.colors.hexFar"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "wallpaper",
+                "cell": [
+                  2,
+                  2
+                ],
+                "group": "P6M",
+                "materialStride": 1
+              }
+            ],
+            "id": 0,
+            "material": 0,
+            "name": "near",
+            "position": [
+              -30,
+              -0.28,
+              30
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              30,
+              0.3,
+              30
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "wallpaper",
+                "cell": [
+                  2,
+                  2
+                ],
+                "group": "P6M",
+                "materialStride": 1
+              }
+            ],
+            "id": 1,
+            "material": 0,
+            "name": "east-band",
+            "position": [
+              -110,
+              -0.28,
+              30
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              50,
+              0.3,
+              30
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "wallpaper",
+                "cell": [
+                  2,
+                  2
+                ],
+                "group": "P6M",
+                "materialStride": 1
+              }
+            ],
+            "id": 2,
+            "material": 0,
+            "name": "far-band",
+            "position": [
+              -80,
+              -0.28,
+              110
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              80,
+              0.3,
+              50
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "groundSouthWest"
+    },
+    {
+      "document": {
+        "name": "groundNorthWest",
+        "palette": [
+          {
+            "color": "state.colors.bearingPale"
+          },
+          {
+            "color": "state.colors.bearingDark"
+          },
+          {
+            "color": "state.colors.bearingPale"
+          },
+          {
+            "color": "state.colors.bearingDark"
+          },
+          {
+            "color": "state.colors.bearingPale"
+          },
+          {
+            "color": "state.colors.bearingDark"
+          },
+          {
+            "color": "state.colors.bearingPale"
+          },
+          {
+            "color": "state.colors.bearingDark"
+          },
+          {
+            "color": "state.colors.bearingPale"
+          },
+          {
+            "color": "state.colors.bearingDark"
+          },
+          {
+            "color": "state.colors.bearingPale"
+          },
+          {
+            "color": "state.colors.bearingDark"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "polar",
+                "axis": "Y",
+                "count": 12,
+                "materialStride": 1
+              }
+            ],
+            "id": 0,
+            "material": 0,
+            "name": "near",
+            "position": [
+              -30,
+              -0.28,
+              -30
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              30,
+              0.3,
+              30
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "polar",
+                "axis": "Y",
+                "count": 12,
+                "materialStride": 1
+              }
+            ],
+            "id": 1,
+            "material": 0,
+            "name": "east-band",
+            "position": [
+              -110,
+              -0.28,
+              -30
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              50,
+              0.3,
+              30
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "polar",
+                "axis": "Y",
+                "count": 12,
+                "materialStride": 1
+              }
+            ],
+            "id": 2,
+            "material": 0,
+            "name": "far-band",
+            "position": [
+              -80,
+              -0.28,
+              -110
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              80,
+              0.3,
+              50
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "groundNorthWest"
+    },
+    {
+      "document": {
+        "name": "groundContact",
+        "palette": [
+          {
+            "color": "state.colors.substrate"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "surface",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ],
+            "smooth": 0,
+            "type": "Plane"
+          }
+        ]
+      },
+      "id": "groundContact"
+    },
+    {
+      "document": {
+        "name": "isle-crown",
+        "palette": [
+          {
+            "color": "#5FA04A",
+            "shininess": 8,
+            "specular": 0.04
+          },
+          {
+            "color": "#74B356",
+            "shininess": 8,
+            "specular": 0.04
+          },
+          {
+            "color": "#7A5A3C",
+            "shininess": 6,
+            "specular": 0.03
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "meadow-core",
+            "position": [
+              0,
+              -2.2,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              24.5,
+              2,
+              24.5
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 1,
+            "material": 0,
+            "name": "lobe-east",
+            "position": [
+              10,
+              -2.5,
+              4
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              12,
+              2,
+              12
+            ],
+            "smooth": 0.5,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 2,
+            "material": 0,
+            "name": "lobe-west",
+            "position": [
+              -10,
+              -2.7,
+              -5
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              13,
+              2,
+              13
+            ],
+            "smooth": 0.5,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 3,
+            "material": 0,
+            "name": "lobe-ne",
+            "position": [
+              17,
+              -2.6,
+              -9
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              8,
+              1.9,
+              8
+            ],
+            "smooth": 0.5,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 4,
+            "material": 0,
+            "name": "lobe-south",
+            "position": [
+              -4,
+              -2.8,
+              16
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              9,
+              1.9,
+              9
+            ],
+            "smooth": 0.5,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 5,
+            "material": 1,
+            "name": "hill-ne",
+            "position": [
+              9,
+              -4.6,
+              -8
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              6,
+              6,
+              6
+            ],
+            "smooth": 0.5,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 6,
+            "material": 1,
+            "name": "hill-sw",
+            "position": [
+              -8,
+              -5.4,
+              8.5
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              7.2,
+              7.2,
+              7.2
+            ],
+            "smooth": 0.5,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 7,
+            "material": 1,
+            "name": "bump-n",
+            "position": [
+              2,
+              -2.5,
+              -13
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              3,
+              3,
+              3
+            ],
+            "smooth": 0.5,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 8,
+            "material": 0,
+            "name": "bump-e",
+            "position": [
+              15,
+              -2.3,
+              9
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              3,
+              3,
+              3
+            ],
+            "smooth": 0.5,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 9,
+            "material": 1,
+            "name": "bump-w",
+            "position": [
+              -14,
+              -2.8000000000000003,
+              -2
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              3,
+              3,
+              3
+            ],
+            "smooth": 0.5,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 10,
+            "material": 2,
+            "name": "soil-skirt",
+            "position": [
+              0,
+              -3.4,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              25,
+              1.4,
+              25
+            ],
+            "smooth": 0.4,
+            "type": "Cylinder"
+          }
+        ]
+      },
+      "id": "isle-crown"
+    },
+    {
+      "document": {
+        "name": "isle-root",
+        "palette": [
+          {
+            "color": "#8A8072",
+            "shininess": 10,
+            "specular": 0.05
+          },
+          {
+            "color": "#6E6455",
+            "shininess": 10,
+            "specular": 0.05
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "belly-core",
+            "position": [
+              0,
+              -13.5,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              12,
+              12,
+              12
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 1,
+            "material": 0,
+            "name": "lump-e",
+            "position": [
+              10,
+              -12,
+              4
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              9.5,
+              9.5,
+              9.5
+            ],
+            "smooth": 0.6,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 2,
+            "material": 0,
+            "name": "lump-w",
+            "position": [
+              -9.5,
+              -11.5,
+              -4
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              9,
+              9,
+              9
+            ],
+            "smooth": 0.6,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 3,
+            "material": 0,
+            "name": "lump-s",
+            "position": [
+              3,
+              -10,
+              11
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              8,
+              8,
+              8
+            ],
+            "smooth": 0.6,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 4,
+            "material": 0,
+            "name": "lump-n",
+            "position": [
+              -2,
+              -9.5,
+              -10
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              8.5,
+              8.5,
+              8.5
+            ],
+            "smooth": 0.6,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 5,
+            "material": 1,
+            "name": "lump-deep",
+            "position": [
+              2.5,
+              -16,
+              1
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              8,
+              8,
+              8
+            ],
+            "smooth": 0.6,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 6,
+            "material": 1,
+            "name": "lump-deep-w",
+            "position": [
+              -6,
+              -14.5,
+              3
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              6.5,
+              6.5,
+              6.5
+            ],
+            "smooth": 0.6,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 7,
+            "material": 1,
+            "name": "root-main",
+            "position": [
+              0.5,
+              -21,
+              0.5
+            ],
+            "rotation": [
+              1,
+              0,
+              0,
+              0
+            ],
+            "scale": [
+              6.5,
+              5.5,
+              6.5
+            ],
+            "smooth": 0.6,
+            "type": "Cone"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 8,
+            "material": 1,
+            "name": "root-east",
+            "position": [
+              8.5,
+              -17.5,
+              4
+            ],
+            "rotation": [
+              1,
+              0,
+              0,
+              0
+            ],
+            "scale": [
+              3.6,
+              4,
+              3.6
+            ],
+            "smooth": 0.6,
+            "type": "Cone"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 9,
+            "material": 1,
+            "name": "root-west",
+            "position": [
+              -8,
+              -16,
+              -5
+            ],
+            "rotation": [
+              1,
+              0,
+              0,
+              0
+            ],
+            "scale": [
+              2.6,
+              3.2,
+              2.6
+            ],
+            "smooth": 0.6,
+            "type": "Cone"
+          }
+        ]
+      },
+      "id": "isle-root"
+    },
+    {
+      "document": {
+        "name": "isle-shard",
+        "palette": [
+          {
+            "color": "#857C6E",
+            "shininess": 10,
+            "specular": 0.05
+          },
+          {
+            "color": "#66A64F",
+            "shininess": 8,
+            "specular": 0.04
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "rock",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              2,
+              2,
+              2
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 1,
+            "material": 0,
+            "name": "rock-b",
+            "position": [
+              1.1,
+              -0.4,
+              0.6
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.3,
+              1.3,
+              1.3
+            ],
+            "smooth": 0.45,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 2,
+            "material": 1,
+            "name": "cap",
+            "position": [
+              0,
+              1.35,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.6,
+              1.6,
+              1.6
+            ],
+            "smooth": 0.4,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 3,
+            "material": 0,
+            "name": "root",
+            "position": [
+              0,
+              -1.9,
+              0
+            ],
+            "rotation": [
+              1,
+              0,
+              0,
+              0
+            ],
+            "scale": [
+              1.1,
+              1.4,
+              1.1
+            ],
+            "smooth": 0.5,
+            "type": "Cone"
+          }
+        ]
+      },
+      "id": "isle-shard"
+    },
+    {
+      "document": {
+        "name": "oak",
+        "palette": [
+          {
+            "color": "#6B4A2E",
+            "shininess": 6,
+            "specular": 0.03
+          },
+          {
+            "color": "#4C8C3C",
+            "shininess": 10,
+            "specular": 0.05
+          },
+          {
+            "color": "#61A34C",
+            "shininess": 10,
+            "specular": 0.05
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "trunk",
+            "position": [
+              0,
+              -1.6,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.42,
+              4.4,
+              0.42
+            ],
+            "smooth": 0,
+            "type": "RoundCone"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 1,
+            "material": 1,
+            "name": "canopy-a",
+            "position": [
+              0,
+              4.1,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              2.15,
+              2.15,
+              2.15
+            ],
+            "smooth": 0.45,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 2,
+            "material": 2,
+            "name": "canopy-b",
+            "position": [
+              1,
+              5.1,
+              0.5
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.5,
+              1.5,
+              1.5
+            ],
+            "smooth": 0.5,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 3,
+            "material": 1,
+            "name": "canopy-c",
+            "position": [
+              -0.9,
+              4.9,
+              -0.6
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.3,
+              1.3,
+              1.3
+            ],
+            "smooth": 0.5,
+            "type": "Sphere"
+          }
+        ]
+      },
+      "id": "oak"
+    },
+    {
+      "document": {
+        "name": "pine",
+        "palette": [
+          {
+            "color": "#5C4030",
+            "shininess": 6,
+            "specular": 0.03
+          },
+          {
+            "color": "#2E6B3E",
+            "shininess": 10,
+            "specular": 0.05
+          },
+          {
+            "color": "#3B7A49",
+            "shininess": 10,
+            "specular": 0.05
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "trunk",
+            "position": [
+              0,
+              1,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.24,
+              2.6,
+              0.24
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 1,
+            "material": 1,
+            "name": "tier-low",
+            "position": [
+              0,
+              3.9,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.8,
+              1.7,
+              1.8
+            ],
+            "smooth": 0.3,
+            "type": "Cone"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 2,
+            "material": 2,
+            "name": "tier-mid",
+            "position": [
+              0,
+              5.2,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.3,
+              1.4,
+              1.3
+            ],
+            "smooth": 0.3,
+            "type": "Cone"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 3,
+            "material": 1,
+            "name": "tier-top",
+            "position": [
+              0,
+              6.4,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.9,
+              1.2,
+              0.9
+            ],
+            "smooth": 0.3,
+            "type": "Cone"
+          }
+        ]
+      },
+      "id": "pine"
+    },
+    {
+      "document": {
+        "name": "meadow-bush",
+        "palette": [
+          {
+            "color": "#549643",
+            "shininess": 8,
+            "specular": 0.04
+          },
+          {
+            "color": "#68AA52",
+            "shininess": 8,
+            "specular": 0.04
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "mound",
+            "position": [
+              0,
+              -0.15,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.88,
+              0.88,
+              0.88
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 1,
+            "material": 1,
+            "name": "lobe",
+            "position": [
+              0.6,
+              0.1,
+              0.35
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.65,
+              0.65,
+              0.65
+            ],
+            "smooth": 0.4,
+            "type": "Sphere"
+          }
+        ]
+      },
+      "id": "meadow-bush"
+    },
+    {
+      "document": {
+        "name": "meadow-boulder",
+        "palette": [
+          {
+            "color": "#8D8878",
+            "shininess": 12,
+            "specular": 0.06
+          },
+          {
+            "color": "#79746A",
+            "shininess": 12,
+            "specular": 0.06
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "mass",
+            "position": [
+              0,
+              -0.25,
+              0
+            ],
+            "rotation": [
+              0,
+              0.19,
+              0,
+              0.9817815
+            ],
+            "scale": [
+              1.1,
+              1.1,
+              1.1
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 1,
+            "material": 1,
+            "name": "chip",
+            "position": [
+              0.95,
+              -0.4,
+              0.25
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.62,
+              0.62,
+              0.62
+            ],
+            "smooth": 0.35,
+            "type": "Sphere"
+          }
+        ]
+      },
+      "id": "meadow-boulder"
+    },
+    {
+      "document": {
+        "name": "grass-patch",
+        "palette": [
+          {
+            "color": "#7DBA57",
+            "shininess": 8,
+            "specular": 0.04
+          },
+          {
+            "color": "#8FC968",
+            "shininess": 8,
+            "specular": 0.04
+          },
+          {
+            "color": "#6FAF4E",
+            "shininess": 8,
+            "specular": 0.04
+          },
+          {
+            "color": "#86C25F",
+            "shininess": 8,
+            "specular": 0.04
+          },
+          {
+            "color": "#79B851",
+            "shininess": 8,
+            "specular": 0.04
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "repeat",
+                "limit": [
+                  1,
+                  0,
+                  1
+                ],
+                "spacing": [
+                  2.7,
+                  60,
+                  2.7
+                ]
+              },
+              {
+                "$type": "polar",
+                "count": 4,
+                "materialStride": 1
+              }
+            ],
+            "id": 0,
+            "material": 0,
+            "name": "blades-a",
+            "position": [
+              0.16,
+              -0.1,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.1218693,
+              0.9925462
+            ],
+            "scale": [
+              0.14,
+              1.05,
+              0.14
+            ],
+            "smooth": 0,
+            "type": "Cone"
+          },
+          {
+            "blend": "Intersection",
+            "id": 1,
+            "material": 0,
+            "name": "clip",
+            "position": [
+              0,
+              -0.1,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              2.9,
+              1.3,
+              2.9
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "grass-patch"
+    },
+    {
+      "document": {
+        "name": "isle-falls",
+        "palette": [
+          {
+            "color": "#3E8FD0",
+            "emissive": 0.06,
+            "shininess": 56,
+            "specular": 0.55
+          },
+          {
+            "color": "#6FB6E8",
+            "emissive": 0.1,
+            "shininess": 48,
+            "specular": 0.5
+          },
+          {
+            "color": "#D8F0FA",
+            "emissive": 0.16,
+            "shininess": 24,
+            "specular": 0.35
+          },
+          {
+            "color": "#F2FAFD",
+            "emissive": 0.22,
+            "shininess": 4,
+            "specular": 0.05
+          },
+          {
+            "color": "#9A937F",
+            "shininess": 6,
+            "specular": 0.03
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 1,
+            "name": "stream-east",
+            "position": [
+              15.84,
+              -0.28,
+              1.386
+            ],
+            "rotation": [
+              0,
+              -0.0436,
+              0,
+              0.999
+            ],
+            "scale": [
+              9.5,
+              0.16,
+              0.85
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 1,
+            "name": "stream-south",
+            "position": [
+              0.0,
+              -0.28,
+              15.9
+            ],
+            "rotation": [
+              0,
+              -0.7071,
+              0,
+              0.7071
+            ],
+            "scale": [
+              9.5,
+              0.16,
+              0.85
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 2,
+            "material": 1,
+            "name": "stream-nw",
+            "position": [
+              -11.243,
+              -0.28,
+              -11.243
+            ],
+            "rotation": [
+              0,
+              0.9239,
+              0,
+              0.3827
+            ],
+            "scale": [
+              9.5,
+              0.16,
+              0.85
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 3,
+            "material": 1,
+            "name": "lip-east",
+            "position": [
+              25.303,
+              -0.3,
+              2.215
+            ],
+            "rotation": [
+              0,
+              -0.0436,
+              0,
+              0.999
+            ],
+            "scale": [
+              1.15,
+              0.28,
+              1.15
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 4,
+            "material": 1,
+            "name": "fall-east",
+            "position": [
+              25.802,
+              -7.7,
+              2.258
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.8,
+              13,
+              0.8
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "id": 5,
+            "material": 2,
+            "name": "foam-east",
+            "position": [
+              25.714,
+              -6.3,
+              3.255
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.45,
+              10.5,
+              0.45
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 6,
+            "material": 3,
+            "name": "mist-east-a",
+            "position": [
+              25.732,
+              -15.4,
+              3.055
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              2.3,
+              2.3,
+              2.3
+            ],
+            "smooth": 0.5,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 7,
+            "material": 3,
+            "name": "mist-east-b",
+            "position": [
+              25.616,
+              -14.6,
+              0.937
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.7,
+              1.7,
+              1.7
+            ],
+            "smooth": 0.5,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 8,
+            "material": 3,
+            "name": "mist-east-c",
+            "position": [
+              26.499,
+              -16.2,
+              2.32
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.3,
+              1.3,
+              1.3
+            ],
+            "smooth": 0.5,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "id": 9,
+            "material": 1,
+            "name": "lip-south",
+            "position": [
+              0.0,
+              -0.3,
+              25.4
+            ],
+            "rotation": [
+              0,
+              -0.7071,
+              0,
+              0.7071
+            ],
+            "scale": [
+              1.15,
+              0.28,
+              1.15
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 10,
+            "material": 1,
+            "name": "fall-south",
+            "position": [
+              0.0,
+              -7.7,
+              25.9
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.8,
+              13,
+              0.8
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "id": 11,
+            "material": 2,
+            "name": "foam-south",
+            "position": [
+              -1.0,
+              -6.3,
+              25.9
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.45,
+              10.5,
+              0.45
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 12,
+            "material": 3,
+            "name": "mist-south-a",
+            "position": [
+              -0.8,
+              -15.4,
+              25.9
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              2.3,
+              2.3,
+              2.3
+            ],
+            "smooth": 0.5,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 13,
+            "material": 3,
+            "name": "mist-south-b",
+            "position": [
+              1.3,
+              -14.6,
+              25.6
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.7,
+              1.7,
+              1.7
+            ],
+            "smooth": 0.5,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 14,
+            "material": 3,
+            "name": "mist-south-c",
+            "position": [
+              0.0,
+              -16.2,
+              26.6
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.3,
+              1.3,
+              1.3
+            ],
+            "smooth": 0.5,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "id": 15,
+            "material": 1,
+            "name": "lip-nw",
+            "position": [
+              -17.96,
+              -0.3,
+              -17.96
+            ],
+            "rotation": [
+              0,
+              0.9239,
+              0,
+              0.3827
+            ],
+            "scale": [
+              1.15,
+              0.28,
+              1.15
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 16,
+            "material": 1,
+            "name": "fall-nw",
+            "position": [
+              -18.314,
+              -7.7,
+              -18.314
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.8,
+              13,
+              0.8
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "id": 17,
+            "material": 2,
+            "name": "foam-nw",
+            "position": [
+              -17.607,
+              -6.3,
+              -19.021
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.45,
+              10.5,
+              0.45
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 18,
+            "material": 3,
+            "name": "mist-nw-a",
+            "position": [
+              -17.748,
+              -15.4,
+              -18.88
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              2.3,
+              2.3,
+              2.3
+            ],
+            "smooth": 0.5,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 19,
+            "material": 3,
+            "name": "mist-nw-b",
+            "position": [
+              -19.021,
+              -14.6,
+              -17.183
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.7,
+              1.7,
+              1.7
+            ],
+            "smooth": 0.5,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 20,
+            "material": 3,
+            "name": "mist-nw-c",
+            "position": [
+              -18.809,
+              -16.2,
+              -18.809
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.3,
+              1.3,
+              1.3
+            ],
+            "smooth": 0.5,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "id": 21,
+            "material": 4,
+            "name": "pool-rim",
+            "position": [
+              0,
+              1.5,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              7.0,
+              1.7,
+              7.0
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "Union",
+            "id": 22,
+            "material": 0,
+            "name": "pool-water",
+            "position": [
+              0,
+              1.3,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              6.2,
+              1.5,
+              6.2
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          }
+        ]
+      },
+      "id": "isle-falls"
+    },
+    {
+      "document": {
+        "name": "critter",
+        "palette": [
+          {
+            "color": "#C97A4A",
+            "shininess": 10,
+            "specular": 0.05
+          },
+          {
+            "color": "#3A3230",
+            "shininess": 4,
+            "specular": 0.02
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0.22,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.22,
+              0.2,
+              0.28
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 1,
+            "material": 1,
+            "name": "ear-left",
+            "position": [
+              -0.1,
+              0.42,
+              -0.05
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.05,
+              0.1,
+              0.05
+            ],
+            "smooth": 0.05,
+            "type": "Cone"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 2,
+            "material": 1,
+            "name": "ear-right",
+            "position": [
+              0.1,
+              0.42,
+              -0.05
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.05,
+              0.1,
+              0.05
+            ],
+            "smooth": 0.05,
+            "type": "Cone"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 3,
+            "material": 1,
+            "name": "snout",
+            "position": [
+              0,
+              0.18,
+              0.26
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.09,
+              0.08,
+              0.1
+            ],
+            "smooth": 0.05,
+            "type": "Sphere"
+          }
+        ]
+      },
+      "id": "critter"
+    },
+    {
+      "document": {
+        "name": "fish",
+        "palette": [
+          {
+            "color": "#E8A93F",
+            "shininess": 40,
+            "specular": 0.3
+          },
+          {
+            "color": "#F2D98A",
+            "shininess": 40,
+            "specular": 0.3
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.7071,
+              0.7071
+            ],
+            "scale": [
+              0.09,
+              0.16,
+              0.09
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 1,
+            "material": 1,
+            "name": "tail",
+            "position": [
+              0,
+              0,
+              -0.22
+            ],
+            "rotation": [
+              0.7071,
+              0,
+              0,
+              0.7071
+            ],
+            "scale": [
+              0.1,
+              0.08,
+              0.1
+            ],
+            "smooth": 0.04,
+            "type": "Cone"
+          }
+        ]
+      },
+      "id": "fish"
+    },
+    {
+      "document": {
+        "name": "pip-fire",
+        "palette": [
+          {
+            "color": "#FF5A1F"
+          },
+          {
+            "color": "#FFE08A"
+          },
+          {
+            "color": "#FFFFFF"
+          },
+          {
+            "color": "#0D0D0D"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 0,
+            "material": 0,
+            "name": "pip",
+            "position": [
+              0,
+              0.5,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.35,
+              1.75,
+              0.35
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "symmetry",
+                "normal": [
+                  1,
+                  0,
+                  0
+                ]
+              }
+            ],
+            "group": 0,
+            "id": 1,
+            "material": 2,
+            "name": "eye",
+            "position": [
+              0.2,
+              1.1,
+              0.42
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.14,
+              0.14,
+              0.14
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "symmetry",
+                "normal": [
+                  1,
+                  0,
+                  0
+                ]
+              }
+            ],
+            "group": 0,
+            "id": 2,
+            "material": 3,
+            "name": "pupil",
+            "position": [
+              0.2,
+              1.1,
+              0.54
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.055,
+              0.055,
+              0.055
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          }
+        ],
+        "textRuns": [
+          {
+            "align": "center",
+            "depth": 0.05,
+            "emHeight": 0.35,
+            "material": 1,
+            "mode": "emboss",
+            "position": [
+              0,
+              0.25,
+              -1
+            ],
+            "rotation": [
+              0,
+              1,
+              0,
+              0
+            ],
+            "shapeId": 0,
+            "text": "K"
+          }
+        ]
+      },
+      "id": "pip-fire"
+    },
+    {
+      "document": {
+        "name": "pip-ice",
+        "palette": [
+          {
+            "color": "#5AC8FA"
+          },
+          {
+            "color": "#FFFFFF"
+          },
+          {
+            "color": "#FFFFFF"
+          },
+          {
+            "color": "#0D0D0D"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 0,
+            "material": 0,
+            "name": "pip",
+            "position": [
+              0,
+              0.5,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.35,
+              1.75,
+              0.35
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "symmetry",
+                "normal": [
+                  1,
+                  0,
+                  0
+                ]
+              }
+            ],
+            "group": 0,
+            "id": 1,
+            "material": 2,
+            "name": "eye",
+            "position": [
+              0.2,
+              1.1,
+              0.42
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.14,
+              0.14,
+              0.14
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "symmetry",
+                "normal": [
+                  1,
+                  0,
+                  0
+                ]
+              }
+            ],
+            "group": 0,
+            "id": 2,
+            "material": 3,
+            "name": "pupil",
+            "position": [
+              0.2,
+              1.1,
+              0.54
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.055,
+              0.055,
+              0.055
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          }
+        ],
+        "textRuns": [
+          {
+            "align": "center",
+            "depth": 0.05,
+            "emHeight": 0.35,
+            "material": 1,
+            "mode": "emboss",
+            "position": [
+              0,
+              0.25,
+              -1
+            ],
+            "rotation": [
+              0,
+              1,
+              0,
+              0
+            ],
+            "shapeId": 0,
+            "text": "K"
+          }
+        ]
+      },
+      "id": "pip-ice"
+    },
+    {
+      "document": {
+        "name": "pip-dead",
+        "palette": [
+          {
+            "color": "#9AA3AC"
+          },
+          {
+            "color": "#6E7681"
+          },
+          {
+            "color": "#FFFFFF"
+          },
+          {
+            "color": "#0D0D0D"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 0,
+            "material": 0,
+            "name": "pip",
+            "position": [
+              0,
+              0.35,
+              -0.5
+            ],
+            "rotation": [
+              -0.70710678,
+              0,
+              0,
+              0.70710678
+            ],
+            "scale": [
+              0.35,
+              1.75,
+              0.35
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "symmetry",
+                "normal": [
+                  1,
+                  0,
+                  0
+                ]
+              }
+            ],
+            "group": 0,
+            "id": 1,
+            "material": 2,
+            "name": "eye",
+            "position": [
+              0.2,
+              0.77,
+              -1.1
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.14,
+              0.14,
+              0.14
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "symmetry",
+                "normal": [
+                  1,
+                  0,
+                  0
+                ]
+              }
+            ],
+            "group": 0,
+            "id": 2,
+            "material": 3,
+            "name": "cross-a",
+            "position": [
+              0.2,
+              0.9,
+              -1.1
+            ],
+            "rotation": [
+              0,
+              0.38268343,
+              0,
+              0.92387953
+            ],
+            "scale": [
+              0.11,
+              0.02,
+              0.02
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "symmetry",
+                "normal": [
+                  1,
+                  0,
+                  0
+                ]
+              }
+            ],
+            "group": 0,
+            "id": 3,
+            "material": 3,
+            "name": "cross-b",
+            "position": [
+              0.2,
+              0.9,
+              -1.1
+            ],
+            "rotation": [
+              0,
+              -0.38268343,
+              0,
+              0.92387953
+            ],
+            "scale": [
+              0.11,
+              0.02,
+              0.02
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "pip-dead"
+    },
+    {
+      "document": {
+        "name": "firePit",
+        "palette": [
+          {
+            "color": "state.colors.fire"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "disc",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.5,
+              0.08,
+              1.5
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          }
+        ]
+      },
+      "id": "firePit"
+    },
+    {
+      "document": {
+        "name": "icePool",
+        "palette": [
+          {
+            "color": "state.colors.ice"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "disc",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.5,
+              0.08,
+              1.5
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          }
+        ]
+      },
+      "id": "icePool"
+    }
+  ],
+  "render": {
+    "renderScale": "quarter",
+    "upscaleSharpness": 1
+  },
+  "rules": [
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromState": "$nearest:body:0:enemy",
+          "key": "0",
+          "state": "target"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "key": "0",
+        "state": "autoTarget",
+        "value": 1
+      },
+      "mode": "Level",
+      "name": "auto-target"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromState": "$nearest:body:0:enemy",
+          "key": "0",
+          "state": "target"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "state": "$channel:1:target",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "target-nearest"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "autoAttackToggle",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "state": "$channel:1:autoAttack",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "auto-attack-request"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "autoAttack",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "autoAttackToggle",
+          "value": 0
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "0",
+            "state": "autoAttackToggle",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "0",
+            "state": "autoAttackPrev",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "auto-attack-on"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "autoAttack",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "autoAttackToggle",
+          "value": 0
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "0",
+            "state": "autoAttackToggle",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "0",
+            "state": "autoAttackPrev",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "auto-attack-off"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "0",
+          "fromState": "autoAttack",
+          "key": "0",
+          "state": "autoAttackPrev"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparandKey": "0",
+        "comparandState": "autoAttack",
+        "comparison": "NotEqual",
+        "key": "0",
+        "state": "autoAttackPrev"
+      },
+      "mode": "Level",
+      "name": "auto-attack-mirror"
+    },
+    {
+      "effects": [
+        {
+          "$type": "countdownState",
+          "key": "0",
+          "state": "attackCooldown"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Greater",
+        "key": "0",
+        "state": "attackCooldown",
+        "value": 0
+      },
+      "mode": "Level",
+      "name": "attack-cooldown"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "$cell:target:0",
+          "fromState": "target",
+          "key": "0",
+          "state": "targetOfTarget"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "key": "0",
+        "state": "target",
+        "value": 0
+      },
+      "mode": "Level",
+      "name": "target-of-target"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "targetOfTarget",
+          "value": -1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Less",
+        "key": "0",
+        "state": "target",
+        "value": 0
+      },
+      "mode": "Level",
+      "name": "target-of-target-none"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "$cell:target:0",
+          "fromState": "bodyName",
+          "key": "0",
+          "state": "targetName"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "key": "0",
+        "state": "target",
+        "value": 0
+      },
+      "mode": "Level",
+      "name": "target-name"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "targetName",
+          "text": "none"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Less",
+        "key": "0",
+        "state": "target",
+        "value": 0
+      },
+      "mode": "Level",
+      "name": "target-name-none"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "$cell:targetOfTarget:0",
+          "fromState": "bodyName",
+          "key": "0",
+          "state": "targetOfTargetName"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "key": "0",
+        "state": "targetOfTarget",
+        "value": 0
+      },
+      "mode": "Level",
+      "name": "target-of-target-name"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "targetOfTargetName",
+          "text": "none"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Less",
+        "key": "0",
+        "state": "targetOfTarget",
+        "value": 0
+      },
+      "mode": "Level",
+      "name": "target-of-target-name-none"
+    },
+    {
+      "effects": [
+        {
+          "$type": "addState",
+          "key": "0",
+          "state": "element",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "state": "$channel:1:element",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "element-cycle"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "element",
+          "value": 0
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Greater",
+        "key": "0",
+        "state": "element",
+        "value": 2
+      },
+      "mode": "Level",
+      "name": "element-wrap"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "$cell:element:0",
+          "fromState": "elementName",
+          "key": "0",
+          "state": "elementLabel"
+        }
+      ],
+      "mode": "Level",
+      "name": "element-label"
+    },
+    {
+      "effects": [
+        {
+          "$type": "addState",
+          "key": "$cell:target:0",
+          "state": "hp",
+          "value": -25
+        },
+        {
+          "$type": "setState",
+          "key": "$cell:target:0",
+          "state": "hitRecently",
+          "valueSeconds": 4.0
+        },
+        {
+          "$type": "setState",
+          "key": "$cell:target:0",
+          "state": "target",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "attackCooldown",
+          "valueSeconds": 1.0
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "state": "$channel:1:attack",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "key": "0",
+            "state": "target",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "state": "$distance:body:0:cell:target:0",
+            "value": 2.5
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "0",
+            "state": "attackCooldown",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "0",
+            "state": "dead",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "attack"
+    },
+    {
+      "effects": [
+        {
+          "$type": "addState",
+          "key": "$cell:target:0",
+          "state": "hp",
+          "value": -25
+        },
+        {
+          "$type": "setState",
+          "key": "$cell:target:0",
+          "state": "hitRecently",
+          "valueSeconds": 4.0
+        },
+        {
+          "$type": "setState",
+          "key": "$cell:target:0",
+          "state": "target",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "attackCooldown",
+          "valueSeconds": 1.0
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "0",
+            "state": "autoAttack",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "key": "0",
+            "state": "target",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "state": "$distance:body:0:cell:target:0",
+            "value": 2.5
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "0",
+            "state": "attackCooldown",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "0",
+            "state": "dead",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "auto-attack"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:target:0",
+          "state": "burning",
+          "valueSeconds": 4.0
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "state": "$channel:1:attack",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "0",
+            "state": "element",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "key": "0",
+            "state": "target",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "state": "$distance:body:0:cell:target:0",
+            "value": 2.5
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "0",
+            "state": "dead",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "fire-strike"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:target:0",
+          "state": "frozen",
+          "valueSeconds": 4.0
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "state": "$channel:1:attack",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "0",
+            "state": "element",
+            "value": 2
+          },
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "key": "0",
+            "state": "target",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "state": "$distance:body:0:cell:target:0",
+            "value": 2.5
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "0",
+            "state": "dead",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "frost-strike"
+    },
+    {
+      "effects": [
+        {
+          "$type": "addState",
+          "key": "$each",
+          "state": "hp",
+          "value": -3
+        },
+        {
+          "$type": "countdownState",
+          "key": "$each",
+          "state": "burning"
+        },
+        {
+          "$type": "setState",
+          "key": "$each",
+          "state": "hot",
+          "value": 1
+        }
+      ],
+      "forEach": "burning",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Greater",
+            "key": "$each",
+            "state": "burning",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "$each",
+            "state": "dead",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "burn"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$each",
+          "state": "hot",
+          "value": 0
+        }
+      ],
+      "forEach": "burning",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "$each",
+            "state": "burning",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "$each",
+            "state": "hot",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "burn-out"
+    },
+    {
+      "effects": [
+        {
+          "$type": "countdownState",
+          "key": "$each",
+          "state": "frozen"
+        },
+        {
+          "$type": "setState",
+          "key": "$each",
+          "state": "cold",
+          "value": 1
+        }
+      ],
+      "forEach": "frozen",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Greater",
+        "key": "$each",
+        "state": "frozen",
+        "value": 0
+      },
+      "mode": "Level",
+      "name": "thaw"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$each",
+          "state": "cold",
+          "value": 0
+        }
+      ],
+      "forEach": "frozen",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "$each",
+            "state": "frozen",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "$each",
+            "state": "cold",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "thawed"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$each",
+          "state": "burning",
+          "value": 0
+        }
+      ],
+      "forEach": "frozen",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Greater",
+            "key": "$each",
+            "state": "frozen",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Greater",
+            "key": "$each",
+            "state": "burning",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "frost-quenches-fire"
+    },
+    {
+      "effects": [
+        {
+          "$type": "countdownState",
+          "key": "$each",
+          "state": "hitRecently"
+        }
+      ],
+      "forEach": "hitRecently",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Greater",
+        "key": "$each",
+        "state": "hitRecently",
+        "value": 0
+      },
+      "mode": "Level",
+      "name": "hit-memory"
+    },
+    {
+      "effects": [
+        {
+          "$type": "addState",
+          "key": "$each",
+          "state": "hp",
+          "value": 5
+        }
+      ],
+      "forEach": "regenerates",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "$each",
+            "state": "hitRecently",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "$each",
+            "state": "burning",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "$each",
+            "state": "hp",
+            "value": 995
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "regen"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$each",
+          "state": "dead",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "key": "$each",
+          "state": "burning",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "$each",
+          "state": "frozen",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "$each",
+          "state": "respawnIn",
+          "valueSeconds": 3.0
+        }
+      ],
+      "forEach": "mortal",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "LessOrEqual",
+        "key": "$each",
+        "state": "hp",
+        "value": 0
+      },
+      "mode": "Edge",
+      "name": "death"
+    },
+    {
+      "effects": [
+        {
+          "$type": "countdownState",
+          "key": "$each",
+          "state": "respawnIn"
+        }
+      ],
+      "forEach": "respawnIn",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Greater",
+        "key": "$each",
+        "state": "respawnIn",
+        "value": 0
+      },
+      "mode": "Level",
+      "name": "respawn-countdown"
+    },
+    {
+      "effects": [
+        {
+          "$type": "pose",
+          "key": "$each",
+          "spawnPoint": "origin"
+        },
+        {
+          "$type": "setState",
+          "key": "$each",
+          "state": "hp",
+          "value": 300
+        },
+        {
+          "$type": "setState",
+          "key": "$each",
+          "state": "dead",
+          "value": 0
+        }
+      ],
+      "forEach": "mortal",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "$each",
+            "state": "dead",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "$each",
+            "state": "respawnIn",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "respawn"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "$each",
+          "fromState": "deadLook",
+          "key": "$each",
+          "state": "lookOf"
+        }
+      ],
+      "forEach": "dead",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "key": "$each",
+        "state": "dead",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "look-dead"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "$each",
+          "fromState": "iceLook",
+          "key": "$each",
+          "state": "lookOf"
+        }
+      ],
+      "forEach": "frozen",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Greater",
+            "key": "$each",
+            "state": "frozen",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "$each",
+            "state": "dead",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "look-ice"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "$each",
+          "fromState": "fireLook",
+          "key": "$each",
+          "state": "lookOf"
+        }
+      ],
+      "forEach": "burning",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Greater",
+            "key": "$each",
+            "state": "burning",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "$each",
+            "state": "frozen",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "$each",
+            "state": "dead",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "look-fire"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "$each",
+          "fromState": "normalLook",
+          "key": "$each",
+          "state": "lookOf"
+        }
+      ],
+      "forEach": "dead",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "$each",
+            "state": "burning",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "$each",
+            "state": "frozen",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "$each",
+            "state": "dead",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "look-normal"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$each",
+          "state": "burning",
+          "valueSeconds": 4.0
+        }
+      ],
+      "forEach": "inFire",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "$each",
+            "state": "inFire",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "$each",
+            "state": "burning",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "$each",
+            "state": "frozen",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "$each",
+            "state": "dead",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "field-ignites"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$each",
+          "state": "burning",
+          "value": 0
+        }
+      ],
+      "forEach": "inWater",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "$each",
+            "state": "inWater",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Greater",
+            "key": "$each",
+            "state": "burning",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "water-douses"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "falls-mist",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Greater",
+        "state": "falls-flux",
+        "value": 3.0
+      },
+      "mode": "Level",
+      "name": "falls-mist-rises"
+    }
+  ],
+  "schema": "puck.world.def.v1",
+  "speakers": [
+    {
+      "$type": "bed",
+      "center": [
+        0,
+        18,
+        27
+      ],
+      "feed": {
+        "channel": "mix",
+        "gain": 1.0,
+        "source": {
+          "$type": "none"
+        }
+      },
+      "innerRadius": 4,
+      "name": "south-fall-ambience",
+      "radius": 14
+    }
+  ],
+  "state": {
+    "lattices": [
+      {
+        "cellSize": 0.5,
+        "depth": 104,
+        "layers": 1,
+        "name": "island",
+        "origin": [
+          -26,
+          33.8,
+          -26
+        ],
+        "reactions": [
+          {
+            "$type": "diffuse",
+            "field": "heat",
+            "rate": 0.4
+          },
+          {
+            "$type": "decay",
+            "field": "heat",
+            "rate": 0.05
+          },
+          {
+            "$type": "emit",
+            "amount": 10,
+            "field": "heat",
+            "tag": "spark"
+          },
+          {
+            "$type": "emit",
+            "amount": 4,
+            "field": "heat",
+            "tag": "hot"
+          },
+          {
+            "$type": "emit",
+            "amount": -4,
+            "field": "heat",
+            "tag": "cold"
+          },
+          {
+            "$type": "transform",
+            "then": [
+              {
+                "field": "fire",
+                "op": "Set",
+                "value": 1
+              }
+            ],
+            "when": [
+              {
+                "comparison": "GreaterOrEqual",
+                "field": "heat",
+                "value": 1.2
+              },
+              {
+                "comparison": "Greater",
+                "field": "grass",
+                "value": 0.1
+              },
+              {
+                "comparison": "LessOrEqual",
+                "field": "fire",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "$type": "transform",
+            "then": [
+              {
+                "field": "heat",
+                "op": "Add",
+                "value": 2.5
+              },
+              {
+                "field": "grass",
+                "op": "Add",
+                "value": -0.03
+              },
+              {
+                "field": "char",
+                "op": "Add",
+                "value": 0.02
+              }
+            ],
+            "when": [
+              {
+                "comparison": "Greater",
+                "field": "fire",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "$type": "transform",
+            "then": [
+              {
+                "field": "fire",
+                "op": "Set",
+                "value": 0
+              },
+              {
+                "field": "grass",
+                "op": "Set",
+                "value": 0
+              }
+            ],
+            "when": [
+              {
+                "comparison": "Greater",
+                "field": "fire",
+                "value": 0
+              },
+              {
+                "comparison": "LessOrEqual",
+                "field": "grass",
+                "value": 0.05
+              }
+            ]
+          },
+          {
+            "$type": "transform",
+            "then": [
+              {
+                "field": "fire",
+                "op": "Set",
+                "value": 0
+              },
+              {
+                "field": "heat",
+                "op": "Add",
+                "value": -1.0
+              }
+            ],
+            "when": [
+              {
+                "comparison": "Greater",
+                "field": "water",
+                "value": 0.25
+              },
+              {
+                "comparison": "Greater",
+                "field": "fire",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "$type": "transform",
+            "then": [
+              {
+                "field": "ice",
+                "op": "Add",
+                "value": -0.05
+              },
+              {
+                "field": "water",
+                "op": "Add",
+                "value": 0.05
+              },
+              {
+                "field": "heat",
+                "op": "Add",
+                "value": -0.5
+              }
+            ],
+            "when": [
+              {
+                "comparison": "Greater",
+                "field": "ice",
+                "value": 0
+              },
+              {
+                "comparison": "Greater",
+                "field": "heat",
+                "value": 0.5
+              }
+            ]
+          },
+          {
+            "$type": "transform",
+            "then": [
+              {
+                "field": "water",
+                "op": "Add",
+                "value": -0.03
+              },
+              {
+                "field": "heat",
+                "op": "Add",
+                "value": -0.3
+              }
+            ],
+            "when": [
+              {
+                "comparison": "Greater",
+                "field": "water",
+                "value": 0
+              },
+              {
+                "comparison": "Greater",
+                "field": "heat",
+                "value": 4
+              }
+            ]
+          },
+          {
+            "$type": "transform",
+            "then": [
+              {
+                "field": "water",
+                "op": "Add",
+                "value": -0.05
+              },
+              {
+                "field": "ice",
+                "op": "Add",
+                "value": 0.05
+              }
+            ],
+            "when": [
+              {
+                "comparison": "Greater",
+                "field": "water",
+                "value": 0.1
+              },
+              {
+                "comparison": "Less",
+                "field": "heat",
+                "value": -1
+              }
+            ]
+          },
+          {
+            "$type": "transform",
+            "then": [
+              {
+                "field": "grass",
+                "op": "Add",
+                "value": {
+                  "row": "season"
+                }
+              }
+            ],
+            "when": [
+              {
+                "comparison": "Greater",
+                "field": "water",
+                "value": 0.3
+              },
+              {
+                "comparison": "Less",
+                "field": "grass",
+                "value": 0.9
+              },
+              {
+                "comparison": "LessOrEqual",
+                "field": "fire",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "$type": "transform",
+            "then": [
+              {
+                "field": "water",
+                "op": "Add",
+                "value": 2.0
+              }
+            ],
+            "when": [
+              {
+                "comparison": "LessOrEqual",
+                "field": "dirt",
+                "value": 0.12
+              }
+            ]
+          },
+          {
+            "$type": "expose",
+            "comparison": "Greater",
+            "field": "fire",
+            "row": "inFire",
+            "value": 0
+          },
+          {
+            "$type": "expose",
+            "comparison": "GreaterOrEqual",
+            "field": "water",
+            "row": "inWater",
+            "value": 0.2
+          },
+          {
+            "$type": "flow",
+            "field": "water",
+            "over": [
+              "dirt"
+            ],
+            "rate": 0.8,
+            "spillRow": "falls-flux"
+          }
+        ],
+        "stepEveryTicks": 4,
+        "width": 104
+      }
+    ],
+    "world": [
+      {
+        "cells": [
+          {
+            "key": "avatarBody",
+            "value": "#FF73BF"
+          },
+          {
+            "key": "avatarMark",
+            "value": "#1ABFB2"
+          },
+          {
+            "key": "avatarEye",
+            "value": "#FFFFFF"
+          },
+          {
+            "key": "avatarPupil",
+            "value": "#0D0D0D"
+          },
+          {
+            "key": "unitPale",
+            "value": "#E4E7EB"
+          },
+          {
+            "key": "unitDark",
+            "value": "#AEB6BF"
+          },
+          {
+            "key": "hexNear",
+            "value": "#48566F"
+          },
+          {
+            "key": "hexMid",
+            "value": "#5C6C88"
+          },
+          {
+            "key": "hexFar",
+            "value": "#7285A3"
+          },
+          {
+            "key": "substrate",
+            "value": "#9AA3AC"
+          },
+          {
+            "key": "bearingPale",
+            "value": "#D8C9A8"
+          },
+          {
+            "key": "bearingDark",
+            "value": "#B3A180"
+          },
+          {
+            "key": "lanePale",
+            "value": "#90A992"
+          },
+          {
+            "key": "laneDark",
+            "value": "#6E8A72"
+          },
+          {
+            "key": "baseAmbient",
+            "value": "#4C5C8C"
+          },
+          {
+            "key": "baseCloud",
+            "value": "#C9BFC4"
+          },
+          {
+            "key": "baseSun",
+            "value": "#FFD9A6"
+          },
+          {
+            "key": "dawnAmbient",
+            "value": "#6E5A80"
+          },
+          {
+            "key": "dawnCloud",
+            "value": "#F0B9A0"
+          },
+          {
+            "key": "dawnGround",
+            "value": "#1A1418"
+          },
+          {
+            "key": "dawnHorizon",
+            "value": "#E89A6C"
+          },
+          {
+            "key": "dawnSun",
+            "value": "#FFB07A"
+          },
+          {
+            "key": "dawnZenith",
+            "value": "#2E3F7A"
+          },
+          {
+            "key": "dayAmbient",
+            "value": "#9DB4E0"
+          },
+          {
+            "key": "dayGround",
+            "value": "#6E7A88"
+          },
+          {
+            "key": "dayHorizon",
+            "value": "#BFD8F5"
+          },
+          {
+            "key": "daySun",
+            "value": "#FFF6E8"
+          },
+          {
+            "key": "dayZenith",
+            "value": "#3F7FDF"
+          },
+          {
+            "key": "duskAmbient",
+            "value": "#7A4C5C"
+          },
+          {
+            "key": "duskCloud",
+            "value": "#E8A07A"
+          },
+          {
+            "key": "duskGround",
+            "value": "#0B0D14"
+          },
+          {
+            "key": "duskHorizon",
+            "value": "#E08F6B"
+          },
+          {
+            "key": "duskSun",
+            "value": "#FF9A66"
+          },
+          {
+            "key": "duskZenith",
+            "value": "#1B2350"
+          },
+          {
+            "key": "nightAmbient",
+            "value": "#2A3560"
+          },
+          {
+            "key": "nightCloud",
+            "value": "#1A1E33"
+          },
+          {
+            "key": "nightGround",
+            "value": "#020308"
+          },
+          {
+            "key": "nightHorizon",
+            "value": "#0E1430"
+          },
+          {
+            "key": "nightSun",
+            "value": "#8090C0"
+          },
+          {
+            "key": "nightZenith",
+            "value": "#04050C"
+          },
+          {
+            "key": "paper",
+            "value": "#FFFFFF"
+          },
+          {
+            "key": "fire",
+            "value": "#E8502A"
+          },
+          {
+            "key": "ice",
+            "value": "#5AC8FA"
+          }
+        ],
+        "kind": "text",
+        "name": "colors"
+      },
+      {
+        "kind": "fixed",
+        "lattice": {
+          "color": "#6B4A34",
+          "heightScale": 0.6,
+          "initial": 0.35,
+          "max": 2,
+          "min": 0,
+          "paint": [
+            {
+              "$type": "rect",
+              "maxX": 12,
+              "maxZ": 12,
+              "minX": -12,
+              "minZ": -12,
+              "value": 0.55
+            },
+            {
+              "$type": "rect",
+              "maxX": 7,
+              "maxZ": 7,
+              "minX": -7,
+              "minZ": -7,
+              "value": 0.1
+            },
+            {
+              "$type": "rect",
+              "maxX": 19,
+              "maxZ": 3,
+              "minX": 7,
+              "minZ": -3,
+              "value": 0.3
+            },
+            {
+              "$type": "rect",
+              "maxX": 26,
+              "maxZ": 2,
+              "minX": 19,
+              "minZ": -2,
+              "value": 0.15
+            },
+            {
+              "$type": "rect",
+              "maxX": 3,
+              "maxZ": 19,
+              "minX": -3,
+              "minZ": 7,
+              "value": 0.3
+            },
+            {
+              "$type": "rect",
+              "maxX": 2,
+              "maxZ": 26,
+              "minX": -2,
+              "minZ": 19,
+              "value": 0.15
+            },
+            {
+              "$type": "rect",
+              "maxX": -9,
+              "maxZ": -9,
+              "minX": -19,
+              "minZ": -19,
+              "value": 0.3
+            },
+            {
+              "$type": "rect",
+              "maxX": -19,
+              "maxZ": -19,
+              "minX": -26,
+              "minZ": -26,
+              "value": 0.15
+            }
+          ],
+          "topology": "island"
+        },
+        "name": "dirt"
+      },
+      {
+        "kind": "fixed",
+        "lattice": {
+          "color": "#3E8FD0",
+          "heightScale": 1,
+          "initial": 0,
+          "max": 4,
+          "medium": {},
+          "min": 0,
+          "paint": [
+            {
+              "$type": "rect",
+              "maxX": 7,
+              "maxZ": 7,
+              "minX": -7,
+              "minZ": -7,
+              "value": 3.0
+            }
+          ],
+          "topology": "island"
+        },
+        "name": "water"
+      },
+      {
+        "kind": "fixed",
+        "lattice": {
+          "color": "#5FA04A",
+          "heightScale": 0.35,
+          "initial": 0,
+          "max": 1,
+          "min": 0,
+          "paint": [
+            {
+              "$type": "noise",
+              "frequency": 5,
+              "octaves": 2,
+              "seed": 301,
+              "threshold": 0.5,
+              "value": 0.55
+            },
+            {
+              "$type": "rect",
+              "maxX": 12,
+              "maxZ": -8,
+              "minX": 8,
+              "minZ": -12,
+              "value": 0.8
+            }
+          ],
+          "topology": "island"
+        },
+        "name": "grass"
+      },
+      {
+        "kind": "fixed",
+        "lattice": {
+          "initial": 0,
+          "max": 15,
+          "min": -5,
+          "topology": "island"
+        },
+        "name": "heat"
+      },
+      {
+        "kind": "fixed",
+        "lattice": {
+          "color": "#FF5A1F",
+          "heightScale": 0.22,
+          "initial": 0,
+          "max": 1,
+          "min": 0,
+          "topology": "island"
+        },
+        "name": "fire"
+      },
+      {
+        "kind": "fixed",
+        "lattice": {
+          "color": "#2A2320",
+          "heightScale": 0.15,
+          "initial": 0,
+          "max": 1,
+          "min": 0,
+          "topology": "island"
+        },
+        "name": "char"
+      },
+      {
+        "kind": "fixed",
+        "lattice": {
+          "color": "#D8F1FF",
+          "heightScale": 1.5,
+          "initial": 0,
+          "max": 1,
+          "min": 0,
+          "paint": [
+            {
+              "$type": "rect",
+              "maxX": 15,
+              "maxZ": 11,
+              "minX": 9,
+              "minZ": 5,
+              "value": 1
+            }
+          ],
+          "topology": "island"
+        },
+        "name": "ice"
+      },
+      {
+        "kind": "fixed",
+        "max": "0.05",
+        "min": "0",
+        "name": "season",
+        "value": "0.02"
+      },
+      {
+        "kind": "fixed",
+        "max": "100000",
+        "min": "0",
+        "name": "falls-flux",
+        "value": "0"
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "falls-mist",
+        "value": 0
+      },
+      {
+        "capacity": 8,
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "spark"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          }
+        ],
+        "kind": "int",
+        "name": "hot"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "2",
+            "value": 1
+          },
+          {
+            "key": "0",
+            "value": 1
+          },
+          {
+            "key": "1",
+            "value": 1
+          }
+        ],
+        "kind": "int",
+        "name": "flammable"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          }
+        ],
+        "kind": "int",
+        "max": 201600,
+        "min": 0,
+        "name": "burning",
+        "nonNegative": true
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          }
+        ],
+        "kind": "int",
+        "name": "inFire"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          }
+        ],
+        "kind": "int",
+        "name": "inWater"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": 1
+          },
+          {
+            "key": "1",
+            "value": 1
+          },
+          {
+            "key": "2",
+            "value": 1
+          }
+        ],
+        "kind": "int",
+        "name": "freezable"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          }
+        ],
+        "gatesDrive": true,
+        "kind": "int",
+        "max": 201600,
+        "min": 0,
+        "name": "frozen",
+        "nonNegative": true
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          }
+        ],
+        "kind": "int",
+        "name": "cold"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "dynamics": {
+              "row": "gauge",
+              "v0": 0,
+              "y0": 0
+            },
+            "key": "0",
+            "value": 300
+          },
+          {
+            "key": "1",
+            "value": 1000
+          },
+          {
+            "key": "2",
+            "value": 1000
+          }
+        ],
+        "kind": "int",
+        "max": 1000,
+        "min": 0,
+        "name": "hp"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": 1
+          }
+        ],
+        "kind": "int",
+        "name": "mortal"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "1",
+            "value": 1
+          },
+          {
+            "key": "2",
+            "value": 1
+          }
+        ],
+        "kind": "int",
+        "name": "regenerates"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          }
+        ],
+        "kind": "int",
+        "max": 201600,
+        "min": 0,
+        "name": "hitRecently",
+        "nonNegative": true
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          }
+        ],
+        "gatesDrive": true,
+        "kind": "int",
+        "name": "dead"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          }
+        ],
+        "kind": "int",
+        "max": 151200,
+        "min": 0,
+        "name": "respawnIn",
+        "nonNegative": true
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "1",
+            "value": 1
+          },
+          {
+            "key": "2",
+            "value": 1
+          },
+          {
+            "key": "0",
+            "value": 0
+          }
+        ],
+        "kind": "int",
+        "name": "enemy"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": -1
+          },
+          {
+            "key": "1",
+            "value": -1
+          },
+          {
+            "key": "2",
+            "value": -1
+          }
+        ],
+        "kind": "int",
+        "max": 7,
+        "min": -1,
+        "name": "target"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": -1
+          }
+        ],
+        "kind": "int",
+        "max": 7,
+        "min": -1,
+        "name": "targetOfTarget"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": 1
+          }
+        ],
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "autoTarget"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          }
+        ],
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "autoAttack"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          }
+        ],
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "autoAttackPrev"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          }
+        ],
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "autoAttackToggle"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          }
+        ],
+        "kind": "int",
+        "max": 50400,
+        "min": 0,
+        "name": "attackCooldown",
+        "nonNegative": true
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          }
+        ],
+        "kind": "int",
+        "max": 2,
+        "min": 0,
+        "name": "element"
+      },
+      {
+        "cells": [
+          {
+            "key": "0",
+            "value": "plain"
+          },
+          {
+            "key": "1",
+            "value": "fire"
+          },
+          {
+            "key": "2",
+            "value": "frost"
+          }
+        ],
+        "kind": "text",
+        "name": "elementName"
+      },
+      {
+        "cells": [
+          {
+            "key": "0",
+            "value": "plain"
+          }
+        ],
+        "kind": "text",
+        "name": "elementLabel"
+      },
+      {
+        "cells": [
+          {
+            "key": "0",
+            "value": "you"
+          },
+          {
+            "key": "1",
+            "value": "critter"
+          },
+          {
+            "key": "2",
+            "value": "fish"
+          }
+        ],
+        "kind": "text",
+        "name": "bodyName"
+      },
+      {
+        "cells": [
+          {
+            "key": "0",
+            "value": "none"
+          }
+        ],
+        "kind": "text",
+        "name": "targetName"
+      },
+      {
+        "cells": [
+          {
+            "key": "0",
+            "value": "none"
+          }
+        ],
+        "kind": "text",
+        "name": "targetOfTargetName"
+      },
+      {
+        "cells": [
+          {
+            "key": "0",
+            "value": "pip"
+          },
+          {
+            "key": "1",
+            "value": "critter"
+          },
+          {
+            "key": "2",
+            "value": "fish"
+          }
+        ],
+        "kind": "text",
+        "name": "lookOf"
+      },
+      {
+        "cells": [
+          {
+            "key": "0",
+            "value": "pip"
+          },
+          {
+            "key": "1",
+            "value": "critter"
+          },
+          {
+            "key": "2",
+            "value": "fish"
+          }
+        ],
+        "kind": "text",
+        "name": "normalLook"
+      },
+      {
+        "cells": [
+          {
+            "key": "0",
+            "value": "pip-fire"
+          },
+          {
+            "key": "1",
+            "value": "critter"
+          },
+          {
+            "key": "2",
+            "value": "fish"
+          }
+        ],
+        "kind": "text",
+        "name": "fireLook"
+      },
+      {
+        "cells": [
+          {
+            "key": "0",
+            "value": "pip-ice"
+          },
+          {
+            "key": "1",
+            "value": "critter"
+          },
+          {
+            "key": "2",
+            "value": "fish"
+          }
+        ],
+        "kind": "text",
+        "name": "iceLook"
+      },
+      {
+        "cells": [
+          {
+            "key": "0",
+            "value": "pip-dead"
+          },
+          {
+            "key": "1",
+            "value": "critter"
+          },
+          {
+            "key": "2",
+            "value": "fish"
+          }
+        ],
+        "kind": "text",
+        "name": "deadLook"
+      }
+    ]
+  },
+  "views": {
+    "layouts": [
+      {
+        "name": "pond-view",
+        "seatCount": 0,
+        "slots": [
+          {
+            "camera": "pond-cam",
+            "height": 1,
+            "width": 1,
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "transitionRenderScale": 0.5,
+        "transitionSeconds": 0.4
+      },
+      {
+        "name": "south-fall-view",
+        "seatCount": 0,
+        "slots": [
+          {
+            "camera": "south-fall-cam",
+            "height": 1,
+            "width": 1,
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "transitionRenderScale": 0.5,
+        "transitionSeconds": 0.4
+      }
+    ]
+  }
+}

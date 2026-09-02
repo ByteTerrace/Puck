@@ -216,29 +216,34 @@ internal static class BinaryFieldKernels {
     /// <exception cref="NotSupportedException"><typeparamref name="T"/> is not one of the supported element carriers. A binary field requires a fixed carrier width.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static (T Low, T High) CarrylessMultiplyWide<T>(T left, T right) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
-        switch (left) {
-            case byte:
-            case ushort:
-            case uint: {
-                    var narrow = CarrylessMultiply64(
-                        left: ulong.CreateTruncating(value: left),
-                        right: ulong.CreateTruncating(value: right)
-                    ).Low;
+        // typeof(T) tests fold to a constant per instantiation, so each carrier keeps exactly its own arm; a switch on
+        // the value would box the operand and test it at run time.
+        if (
+            (typeof(T) == typeof(byte)) ||
+            (typeof(T) == typeof(ushort)) ||
+            (typeof(T) == typeof(uint))
+        ) {
+            var narrow = CarrylessMultiply64(
+                left: ulong.CreateTruncating(value: left),
+                right: ulong.CreateTruncating(value: right)
+            ).Low;
 
-                    return (
-                        Low: T.CreateTruncating(value: narrow),
-                        High: T.CreateTruncating(value: (narrow >>> CarrierBitCount<T>()))
-                    );
-                }
-            case ulong: {
-                    var wide = CarrylessMultiply64(
-                        left: ulong.CreateTruncating(value: left),
-                        right: ulong.CreateTruncating(value: right)
-                    );
+            return (
+                Low: T.CreateTruncating(value: narrow),
+                High: T.CreateTruncating(value: (narrow >>> CarrierBitCount<T>()))
+            );
+        }
 
-                    return (Low: T.CreateTruncating(value: wide.Low), High: T.CreateTruncating(value: wide.High));
-                }
-            case UInt128: {
+        if (typeof(T) == typeof(ulong)) {
+            var wide = CarrylessMultiply64(
+                left: ulong.CreateTruncating(value: left),
+                right: ulong.CreateTruncating(value: right)
+            );
+
+            return (Low: T.CreateTruncating(value: wide.Low), High: T.CreateTruncating(value: wide.High));
+        }
+
+        if (typeof(T) == typeof(UInt128)) {
                     var leftBits = UInt128.CreateTruncating(value: left);
                     var rightBits = UInt128.CreateTruncating(value: right);
                     var a0 = ((ulong)leftBits);
@@ -268,9 +273,6 @@ internal static class BinaryFieldKernels {
                         Low: T.CreateTruncating(value: (((UInt128)(lower.High ^ middleLow)) << 64) | lower.Low),
                         High: T.CreateTruncating(value: (((UInt128)upper.High) << 64) | (upper.Low ^ middleHigh))
                     );
-                }
-            default:
-                break;
         }
 
         return ThrowUnsupportedCarrier<T>();
@@ -470,31 +472,24 @@ internal static class BinaryFieldKernels {
     /// element-at-a-time loop.
     /// </remarks>
     internal static void MultiplyAccumulateRegion<T>(Span<T> destination, ReadOnlySpan<T> source, T scalar, bool accumulate, int degree, T tail) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
-        switch (scalar) {
-            case byte:
-                if (TryMultiplyAccumulateRegionByte(
-                    accumulate: accumulate,
-                    degree: degree,
-                    destination: destination,
-                    scalar: scalar,
-                    source: source,
-                    tail: tail
-                )) { return; }
-
-                break;
-            case ushort:
-                if (TryMultiplyAccumulateRegionWide(
-                    accumulate: accumulate,
-                    degree: degree,
-                    destination: destination,
-                    scalar: scalar,
-                    source: source,
-                    tail: tail
-                )) { return; }
-
-                break;
-            default:
-                break;
+        if (typeof(T) == typeof(byte)) {
+            if (TryMultiplyAccumulateRegionByte(
+                accumulate: accumulate,
+                degree: degree,
+                destination: destination,
+                scalar: scalar,
+                source: source,
+                tail: tail
+            )) { return; }
+        } else if (typeof(T) == typeof(ushort)) {
+            if (TryMultiplyAccumulateRegionWide(
+                accumulate: accumulate,
+                degree: degree,
+                destination: destination,
+                scalar: scalar,
+                source: source,
+                tail: tail
+            )) { return; }
         }
 
         MultiplyAccumulateRegionScalar(

@@ -8,11 +8,17 @@ namespace Puck.World;
 
 /// <summary>The tape's live state — what <see cref="WorldReplayTape"/> is doing with the running session.</summary>
 public enum WorldReplayMode {
-    /// <summary>Neither recording; the loopback taps are detached and the session runs untouched.</summary>
+    /// <summary>Neither recording nor replaying; the loopback taps are detached and the session runs untouched.</summary>
     Idle,
 
     /// <summary>The live session's per-tick server-input stream is being captured into the in-flight recording.</summary>
     Recording,
+
+    /// <summary>A saved tape is being driven into the live session: the world was reset to the tape's boot image,
+    /// each recorded tick's input is fed through the server's own doors ahead of its step, and the local seats'
+    /// driving input is masked at the loopback until the drive ends (its <c>to</c> tick, the tape's end, or
+    /// <c>replay.cancel</c>). A fork hands over to <see cref="Recording"/> at its target tick.</summary>
+    Replaying,
 }
 /// <summary>The outcome of <see cref="WorldReplayTape.StopRecording"/>. The tape file at <see cref="Path"/> is always
 /// persisted before this is returned (or before <see cref="WorldReplayTape.StopRecording"/> throws, for any reason but
@@ -36,10 +42,12 @@ public readonly record struct WorldReplayStopResult(string Path, WorldReplayVerd
 /// genuine live-vs-replay fidelity proof rather than a re-drive compared against another re-drive of the same stream.
 /// </summary>
 /// <remarks>
-/// <para>This replaces the earlier live input re-injection lever. There is no live-playback mode: a replay is an offline
-/// recomputation over an isolated shadow world (<see cref="WorldReplaySnapshot.Drive"/>) that never touches the running
-/// session, so live seat input is structurally excluded from a playback rather than merely advised against, and the
-/// verdict is readable synchronously over the pipe the instant it completes (no per-tick drain to wait out).</para>
+/// <para>Verification is an offline recomputation over an isolated shadow world (<see cref="WorldReplaySnapshot.Drive"/>)
+/// that never touches the running session, so its verdict is readable synchronously over the pipe the instant it
+/// completes. The live drive (<see cref="TryBeginDrive"/>, the <c>replay.drive</c>/<c>replay.fork</c> verbs) is the
+/// one path that does touch the session: it resets the running server to a tape's boot image through the server's
+/// own rebuild door and feeds the recorded ticks through the same doors the offline drive uses, one per live step,
+/// with the local seats' driving input masked at the loopback for the drive's whole span.</para>
 /// <para>The scope is honest but narrow. The captured starting state is the server simulation only — definition + active seats + the
 /// per-tick authority/intent stream. The rehydrated starting body state is the deterministic boot image of the captured
 /// definition (a fresh world reconstructs it exactly), not a per-body pose snapshot, and its starting grant table is
@@ -64,7 +72,7 @@ public readonly record struct WorldReplayStopResult(string Path, WorldReplayVerd
 /// verbs themselves; physical device input, the <c>world.grant</c>/<c>world.revoke</c> verbs, and Simulation-routed
 /// world verbs do reach the loopback and are captured.</para>
 /// </remarks>
-public sealed class WorldReplayTape {
+public sealed partial class WorldReplayTape {
     private const string Extension = ".puckreplay";
 
     private readonly Func<WorldDefinition, WorldServer, IWorldAddonHost> m_addonHostFactory;
@@ -74,6 +82,9 @@ public sealed class WorldReplayTape {
     private readonly LoopbackTransport m_transport;
 
     private byte[]? m_definitionJson;
+    // Set only by a fork's handover: the parent tape and how many of its leading tick groups this recording began
+    // with. Persisted as the child's header provenance; null for a recording armed from boot.
+    private WorldReplayForkProvenance? m_forkedFrom;
     private WorldReplayMode m_mode;
     // The guests MOUNTED at record-start, copied out of the live server's runtime. Read once here rather than at stop:
     // the pin must describe the world that produced the recorded stream, and mounting is a boot-time act that a later
@@ -219,6 +230,7 @@ public sealed class WorldReplayTape {
         m_mode = WorldReplayMode.Idle;
         m_recordName = null;
         m_definitionJson = null;
+        m_forkedFrom = null;
         m_recordRateHz = 0U;
         m_mountedAddons = null;
         m_seats = null;
@@ -303,6 +315,12 @@ public sealed class WorldReplayTape {
     /// <c>Puck.World.WorldSimulation.Step</c> after the server step, when the tick's whole stream has been submitted. A
     /// no-op while idle.</summary>
     public void NoteTick() {
+        if (m_mode == WorldReplayMode.Replaying) {
+            NoteDriveTick();
+
+            return;
+        }
+
         if (
             (m_mode != WorldReplayMode.Recording) ||
             (m_ticks is not { } ticks)
@@ -471,6 +489,7 @@ public sealed class WorldReplayTape {
         // fidelity proof, not a fresh-drive compared against another fresh drive of the same stream.
         var recording = new WorldReplaySnapshot {
             DefinitionJson = definitionJson,
+            ForkedFrom = m_forkedFrom,
             MountedAddons = mountedAddons,
             RecordedHashes = [.. m_liveHashes],
             Seats = seats,
@@ -571,6 +590,14 @@ public sealed class WorldReplayTape {
     /// <param name="refusal">The refusal reason, on failure; empty on success.</param>
     /// <returns><see langword="true"/> when recording armed.</returns>
     public bool TryBeginRecording(string name, out string refusal) {
+        if (m_mode != WorldReplayMode.Idle) {
+            refusal = ((m_mode == WorldReplayMode.Replaying)
+                ? $"a replay drive of '{m_drive?.SourceName}' is in progress — replay.cancel ends it, or replay.fork records from a drive"
+                : $"already recording '{m_recordName}'"
+            );
+            return false;
+        }
+
         if (m_liveServer.AnyAddonEverPumped) {
             refusal = "an addon has already had an admitted execution attempted this session — offline replay creates FRESH guests at sim-counter zero, so a guest's accumulated memory/tick state from before recording began can never be re-established; record from a fresh boot, before any addon's first tick";
             return false;
@@ -597,8 +624,17 @@ public sealed class WorldReplayTape {
         m_seats = CaptureActiveSeats();
         m_ticks = new List<WorldReplayTickInput>();
         m_liveHashes.Clear();
+        AttachTaps();
+        m_mode = WorldReplayMode.Recording;
+
+        return true;
+    }
+    // Attaches every capture tap over fresh per-tick accumulators — the record half of arming, shared by
+    // TryBeginRecording and a fork's handover (which arrives with its prefix already in m_ticks/m_liveHashes).
+    private void AttachTaps() {
         m_currentAuthority = new List<WorldReplayEntry>();
         m_currentIntents = new List<IntentSubmission>();
+        m_openMutationEntryIndices.Clear();
         m_transport.IntentTap = submission => m_currentIntents.Add(item: submission);
         m_transport.CommandTap = command => m_currentAuthority.Add(item: new WorldReplayEntry.Command(Value: command));
         m_transport.DesignationTap = (designation, actor) => m_currentAuthority.Add(item: new WorldReplayEntry.Designation(
@@ -675,9 +711,6 @@ public sealed class WorldReplayTape {
                     break;
             }
         };
-        m_mode = WorldReplayMode.Recording;
-
-        return true;
     }
     /// <summary>Loads a saved recording, rehydrates a fresh world from it, re-drives the recorded server-input stream,
     /// and compares the replayed tail hash against the recorded one — the offline verification, run synchronously so the

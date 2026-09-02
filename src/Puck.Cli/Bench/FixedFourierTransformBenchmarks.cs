@@ -14,13 +14,13 @@ public class FftForwardVsDirectSum {
 
     private FixedComplex[] m_input = [];
     private FixedComplex[] m_scratch = [];
-    private FixedFourierPlan m_plan = null!;
+    private FixedFourierTransformPlan m_plan = null!;
 
     [GlobalSetup]
     public void Setup() {
         var rng = new Random(Seed: Operands.Seed);
 
-        m_plan = FixedFourierPlan.Create(length: Length);
+        m_plan = FixedFourierTransformPlan.Create(length: Length);
         m_input = new FixedComplex[Length];
         m_scratch = new FixedComplex[Length];
 
@@ -62,15 +62,15 @@ public class FftForwardVsDirectSum {
 public class FftForwardInverse {
     private FixedComplex[] m_smallValues = [];
     private FixedComplex[] m_largeValues = [];
-    private FixedFourierPlan m_smallPlan = null!;
-    private FixedFourierPlan m_largePlan = null!;
+    private FixedFourierTransformPlan m_smallPlan = null!;
+    private FixedFourierTransformPlan m_largePlan = null!;
 
     [GlobalSetup]
     public void Setup() {
         var rng = new Random(Seed: Operands.Seed);
 
-        m_smallPlan = FixedFourierPlan.Create(length: 256);
-        m_largePlan = FixedFourierPlan.Create(length: 16384);
+        m_smallPlan = FixedFourierTransformPlan.Create(length: 256);
+        m_largePlan = FixedFourierTransformPlan.Create(length: 16384);
         m_smallValues = new FixedComplex[256];
         m_largeValues = new FixedComplex[16384];
 
@@ -100,5 +100,63 @@ public class FftForwardInverse {
         FixedFourierTransform.Inverse(plan: m_largePlan, values: m_largeValues);
 
         return m_largeValues[0].Real;
+    }
+}
+// FixedFourierTransform.Convolve (forward-forward-pointwise-inverse, O(N log N)) against the O(N^2) definition
+// computed directly with the same one-rounding FixedComplex multiply, at a length large enough for the asymptotic
+// gap to show.
+[MemoryDiagnoser]
+[DisassemblyDiagnoser(maxDepth: 3)]
+public class FftConvolveVsNaive {
+    private const int Length = 1024;
+
+    private FixedComplex[] m_left = [];
+    private FixedComplex[] m_right = [];
+    private FixedComplex[] m_scratchLeft = [];
+    private FixedComplex[] m_scratchRight = [];
+    private FixedComplex[] m_destination = [];
+    private FixedFourierTransformPlan m_plan = null!;
+
+    [GlobalSetup]
+    public void Setup() {
+        var rng = new Random(Seed: Operands.Seed);
+
+        m_plan = FixedFourierTransformPlan.Create(length: Length);
+        m_left = new FixedComplex[Length];
+        m_right = new FixedComplex[Length];
+        m_scratchLeft = new FixedComplex[Length];
+        m_scratchRight = new FixedComplex[Length];
+        m_destination = new FixedComplex[Length];
+
+        for (var i = 0; (i < Length); ++i) {
+            m_left[i] = new(Real: FixedQ4816.FromRawBits(value: Operands.NarrowRaw(rng: rng)), Imaginary: FixedQ4816.FromRawBits(value: Operands.NarrowRaw(rng: rng)));
+            m_right[i] = new(Real: FixedQ4816.FromRawBits(value: Operands.NarrowRaw(rng: rng)), Imaginary: FixedQ4816.FromRawBits(value: Operands.NarrowRaw(rng: rng)));
+        }
+    }
+    [Benchmark(Baseline = true)]
+    public long Naive() {
+        var sink = 0L;
+
+        for (var k = 0; (k < Length); ++k) {
+            var sum = FixedComplex.AdditiveIdentity;
+
+            for (var i = 0; (i < Length); ++i) {
+                var j = ((((k - i) % Length) + Length) % Length);
+
+                sum += (m_left[i] * m_right[j]);
+            }
+
+            sink ^= sum.Real.Value;
+        }
+
+        return sink;
+    }
+    [Benchmark]
+    public FixedQ4816 Fft() {
+        m_left.CopyTo(array: m_scratchLeft, index: 0);
+        m_right.CopyTo(array: m_scratchRight, index: 0);
+        FixedFourierTransform.Convolve(destination: m_destination, left: m_scratchLeft, plan: m_plan, right: m_scratchRight);
+
+        return m_destination[0].Real;
     }
 }

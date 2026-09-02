@@ -15,16 +15,18 @@ namespace Puck.World;
 /// <param name="Id">The stable identity id.</param>
 /// <param name="Name">The display name.</param>
 /// <param name="ColorHex">The authored body color.</param>
-/// <param name="MoveSpeed">The claimed locomotion rate; the destination clamps it against its own kit envelope.</param>
-/// <param name="TurnSpeed">The claimed turn rate, clamped the same way.</param>
-public readonly record struct WorldIdentityProjection(string Id, string Name, string ColorHex, FixedQ4816 MoveSpeed, FixedQ4816 TurnSpeed);
+/// <param name="MoveSpeed">The claimed locomotion rate, or <see langword="null"/> when the identity claims none —
+/// the seat then moves at the kit's own authored rate. A claimed rate is clamped against the destination's kit
+/// envelope.</param>
+/// <param name="TurnSpeed">The claimed turn rate, or <see langword="null"/>, clamped the same way.</param>
+public readonly record struct WorldIdentityProjection(string Id, string Name, string ColorHex, FixedQ4816? MoveSpeed, FixedQ4816? TurnSpeed);
 /// <summary>A live identity backed by one owned <see cref="WorldDefinition"/>.</summary>
 public sealed class WorldIdentity {
     private readonly string m_neutralColor;
     private readonly float m_noseFactor;
 
-    private FixedQ4816 m_moveSpeed;
-    private FixedQ4816 m_turnSpeed;
+    private FixedQ4816? m_moveSpeed;
+    private FixedQ4816? m_turnSpeed;
 
     /// <summary>Builds an identity from an owned world.</summary>
     /// <param name="document">The owned world.</param>
@@ -46,13 +48,11 @@ public sealed class WorldIdentity {
         );
         m_moveSpeed = ReadFixed(
             document.State,
-            identity.MoveSpeedState,
-            document.Motion.MoveSpeed
+            identity.MoveSpeedState
         );
         m_turnSpeed = ReadFixed(
             document.State,
-            identity.TurnSpeedState,
-            document.Motion.TurnSpeed
+            identity.TurnSpeedState
         );
         Bindings = document.BindingOverlays.FirstOrDefault()?.Document;
         Hud = document.Hud.Panels.FirstOrDefault();
@@ -63,7 +63,7 @@ public sealed class WorldIdentity {
         m_neutralColor = defaults.NeutralColor;
     }
 
-    private WorldIdentity(string name, FixedQ4816 moveSpeed, FixedQ4816 turnSpeed, WorldPlayerDefaults defaults, string? id = null, string? colorHex = null) {
+    private WorldIdentity(string name, FixedQ4816? moveSpeed, FixedQ4816? turnSpeed, WorldPlayerDefaults defaults, string? id = null, string? colorHex = null) {
         Id = (id ?? name);
         Name = name;
         ColorHex = (string.IsNullOrWhiteSpace(value: colorHex)
@@ -88,26 +88,31 @@ public sealed class WorldIdentity {
     public string ColorHex { get; private set; }
     /// <summary>Gets the owned world, or <see langword="null"/> for a replay-pinned identity.</summary>
     public WorldDefinition? Document { get; private set; }
-    /// <summary>Gets the deterministic locomotion speed.</summary>
-    public FixedQ4816 FixedMoveSpeed => m_moveSpeed;
-    /// <summary>Gets the deterministic turn speed.</summary>
-    public FixedQ4816 FixedTurnSpeed => m_turnSpeed;
+    /// <summary>Gets the claimed deterministic locomotion speed, or <see langword="null"/> when this identity
+    /// claims none — the seat then moves at the kit's own authored rate.</summary>
+    public FixedQ4816? FixedMoveSpeed => m_moveSpeed;
+    /// <summary>Gets the claimed deterministic turn speed, or <see langword="null"/> when this identity claims
+    /// none.</summary>
+    public FixedQ4816? FixedTurnSpeed => m_turnSpeed;
     /// <summary>Gets the identity-owned private HUD panel.</summary>
     public WorldHudPanel? Hud { get; set; }
     /// <summary>Gets the stable identity/world id.</summary>
     public string Id { get; }
-    /// <summary>Gets the locomotion speed.</summary>
-    /// <exception cref="ArgumentOutOfRangeException">The assigned value is not finite and positive.</exception>
-    public float MoveSpeed {
-        get => ((float)((double)m_moveSpeed)); set {
-            m_moveSpeed = RequirePositiveRate(
-                value: value,
-                name: nameof(MoveSpeed)
-            ); WriteFixed(
-                slot: Document?.Identity?.MoveSpeedState,
-                value: m_moveSpeed
-            );
-        }
+    /// <summary>Sets the claimed locomotion speed — the deliberate override door <c>identity.motion</c> walks;
+    /// mints the identity document's rate row on first write.</summary>
+    /// <param name="value">The rate to claim.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is not finite and positive.</exception>
+    public void SetMoveSpeed(float value) {
+        var rate = RequirePositiveRate(
+            value: value,
+            name: nameof(value)
+        );
+
+        m_moveSpeed = rate;
+        WriteFixed(
+            slot: Document?.Identity?.MoveSpeedState,
+            value: rate
+        );
     }
     /// <summary>Gets the display name.</summary>
     public string Name { get; private set; }
@@ -124,27 +129,30 @@ public sealed class WorldIdentity {
     /// answer whether the profile is about to arrive in-process or across a link: nothing here assumes an identity
     /// document can only be built locally.</remarks>
     public WorldSeatCameraFeel? SeatLook { get; set; }
-    /// <summary>Gets the turn speed.</summary>
-    /// <exception cref="ArgumentOutOfRangeException">The assigned value is not finite and positive.</exception>
-    public float TurnSpeed {
-        get => ((float)((double)m_turnSpeed)); set {
-            m_turnSpeed = RequirePositiveRate(
-                value: value,
-                name: nameof(TurnSpeed)
-            ); WriteFixed(
-                slot: Document?.Identity?.TurnSpeedState,
-                value: m_turnSpeed
-            );
-        }
+    /// <summary>Sets the claimed turn speed — the same deliberate override door as <see cref="SetMoveSpeed"/>.</summary>
+    /// <param name="value">The rate to claim.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is not finite and positive.</exception>
+    public void SetTurnSpeed(float value) {
+        var rate = RequirePositiveRate(
+            value: value,
+            name: nameof(value)
+        );
+
+        m_turnSpeed = rate;
+        WriteFixed(
+            slot: Document?.Identity?.TurnSpeedState,
+            value: rate
+        );
     }
 
-    private static FixedQ4816 ReadFixed(IReadOnlyList<WorldStateRow> rows, string name, float fallback) =>
+    // An absent rate row is an identity that claims no rate — the kit's authored rate applies at the seat.
+    private static FixedQ4816? ReadFixed(IReadOnlyList<WorldStateRow> rows, string name) =>
         ((WorldDefinitionRows.FindStateRow(
             name: name,
             rows: rows
         ) is { Kind: CellKind.Fixed, IsSlot: true } row)
             ? FixedQ4816.FromRawBits(value: row.Cells![0].Value)
-            : FixedQ4816.FromDouble(value: fallback)
+            : null
         );
     // The type-level wall for a live locomotion rate: the verb door (identity.motion) refuses this range with a
     // named console error before any assignment, so reaching this throw means a NEW caller wrote the property
@@ -247,11 +255,11 @@ public sealed class WorldIdentity {
         );
     /// <summary>Mints a detached replay identity with bit-exact rates.</summary>
     /// <param name="name">The display name.</param>
-    /// <param name="moveSpeed">The deterministic locomotion speed.</param>
-    /// <param name="turnSpeed">The deterministic turn speed.</param>
+    /// <param name="moveSpeed">The deterministic locomotion speed, or <see langword="null"/> as recorded.</param>
+    /// <param name="turnSpeed">The deterministic turn speed, or <see langword="null"/> as recorded.</param>
     /// <param name="defaults">The player defaults.</param>
     /// <returns>The detached identity.</returns>
-    public static WorldIdentity Pinned(string name, FixedQ4816 moveSpeed, FixedQ4816 turnSpeed, WorldPlayerDefaults defaults) =>
+    public static WorldIdentity Pinned(string name, FixedQ4816? moveSpeed, FixedQ4816? turnSpeed, WorldPlayerDefaults defaults) =>
         new(
             name: name,
             moveSpeed: moveSpeed,

@@ -840,24 +840,49 @@ public readonly record struct CompiledDiscreteMeasure64 {
                 return Low.SquareRoot();
             }
 
-            var remainder = default(UInt256);
-            var root = UInt128.Zero;
-            var pairIndex = ((127 + BitLength(value: High)) >> 1);
+            // With a = ⌊√High⌋ the root is a·2⁶⁴ + b for some b below 2⁶⁴: a²·2¹²⁸ ≤ value < (a+1)²·2¹²⁸. A double
+            // square root seeds b, a geometric widening brackets the floor in at most sixty-four squarings however
+            // far the seed sits, and an exact bisection settles it — the seed decides only how much of the range the
+            // bisection covers, never a bit of the answer.
+            const double TwoToTheSixtyFour = 18446744073709551616.0;
+            var high = High.SquareRoot();
+            var lower = (high << 64);
+            var rootEstimate = Math.Sqrt(d: ((((double)High) * TwoToTheSixtyFour * TwoToTheSixtyFour) + ((double)Low)));
+            var offsetEstimate = (rootEstimate - (((double)high) * TwoToTheSixtyFour));
+            var center = ((offsetEstimate >= 18446744073709551615.0)
+                ? ulong.MaxValue
+                : ((offsetEstimate <= 0.0)
+                    ? 0UL
+                    : ((ulong)offsetEstimate)));
+            var low = center;
+            var top = center;
+            var step = 1UL;
 
-            for (; (pairIndex >= 0); --pairIndex) {
-                remainder = remainder.ShiftLeftTwoBits().WithLowBits(bits: TwoBits(pairIndex: pairIndex));
-                root <<= 1;
-                var trial = new UInt256(
-                    High: (root >> 127),
-                    Low: (root << 1) | UInt128.One
-                );
+            while ((low > 0UL) && (Multiply(left: (lower + low), right: (lower + low)) > this)) {
+                low = ((low > step) ? (low - step) : 0UL);
+                step = ((step < (1UL << 62)) ? (step << 1) : step);
+            }
 
-                if (remainder >= trial) {
-                    remainder -= trial;
-                    root += UInt128.One;
+            step = 1UL;
+
+            while ((top < ulong.MaxValue) && (Multiply(left: (lower + top), right: (lower + top)) <= this)) {
+                top = ((top < (ulong.MaxValue - step)) ? (top + step) : ulong.MaxValue);
+                step = ((step < (1UL << 62)) ? (step << 1) : step);
+            }
+
+            // Invariant: (lower + low)² ≤ value (or low is zero) and (lower + top)² > value (or top is the ceiling
+            // itself, which the bracket above has already tested); bisect to the last offset whose square fits.
+            while (low < top) {
+                var middle = ((low + ((top - low) >> 1)) + 1UL);
+
+                if (Multiply(left: (lower + middle), right: (lower + middle)) <= this) {
+                    low = middle;
+                } else {
+                    top = (middle - 1UL);
                 }
             }
-            return root;
+
+            return (lower + low);
         }
         public bool TryMultiply(ulong factor, out UInt256 result) {
             var lowProduct = Multiply(

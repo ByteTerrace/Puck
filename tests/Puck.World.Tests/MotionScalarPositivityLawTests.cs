@@ -9,8 +9,9 @@ namespace Puck.World.Tests;
 /// magnitude under a bound that reads as 10. <see cref="WorldDefinitionValidator"/> refuses that BY NAME at load.
 /// The identity-side door is the same invariant one document over: an owned world's named speed-state rows feed
 /// <see cref="WorldIdentity"/>'s live rates RAW at construction (no verb door runs on a load), so the validator
-/// refuses a non-positive persisted value, and the property setters themselves throw — the type-level wall no
+/// refuses a non-positive persisted value, and the rate setters themselves throw — the type-level wall no
 /// future caller can skip (the <c>identity.motion</c> verb door refuses the same range with a console error first).
+/// An ABSENT rate row is legal and different: the identity claims no rate, and the kit's own drives the seat.
 /// </summary>
 public sealed class MotionScalarPositivityLawTests {
     [Fact]
@@ -42,16 +43,17 @@ public sealed class MotionScalarPositivityLawTests {
     public void IdentityMoveSpeedSetterThrowsOnNonPositive() {
         var identity = WorldIdentity.Pinned(name: "law", moveSpeed: Puck.Maths.FixedQ4816.FromDouble(value: 6.0), turnSpeed: Puck.Maths.FixedQ4816.FromDouble(value: 3.0), defaults: Fixtures.BuildDocument().PlayerDefaults);
 
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => identity.MoveSpeed = -5f);
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => identity.MoveSpeed = 0f);
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => identity.TurnSpeed = float.NaN);
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => identity.SetMoveSpeed(value: -5f));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => identity.SetMoveSpeed(value: 0f));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => identity.SetTurnSpeed(value: float.NaN));
     }
     [Fact]
     public void IdentityMoveSpeedSetterAcceptsPositive() {
         var identity = WorldIdentity.Pinned(name: "law", moveSpeed: Puck.Maths.FixedQ4816.FromDouble(value: 6.0), turnSpeed: Puck.Maths.FixedQ4816.FromDouble(value: 3.0), defaults: Fixtures.BuildDocument().PlayerDefaults);
 
-        identity.MoveSpeed = 4.5f;
+        identity.SetMoveSpeed(value: 4.5f);
 
-        Assert.Equal(expected: 4.5f, actual: identity.MoveSpeed, precision: 3);
+        Assert.NotNull(@object: identity.FixedMoveSpeed);
+        Assert.Equal(expected: 4.5f, actual: ((float)((double)identity.FixedMoveSpeed!.Value)), precision: 3);
     }
 }

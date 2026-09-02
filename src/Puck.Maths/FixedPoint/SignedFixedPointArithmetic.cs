@@ -53,9 +53,31 @@ internal static class SignedFixedPointArithmetic {
         var signY = (y >> 63);
         var xMagnitude = unchecked((ulong)((x ^ signX) - signX));
         var yMagnitude = unchecked((ulong)((y ^ signY) - signY));
-        var dividend = (((UInt128)xMagnitude) << fractionBitCount);
-        var quotient = (dividend / yMagnitude);
-        var remainder = ((ulong)(dividend - (quotient * yMagnitude)));
+        var high = (xMagnitude >> (64 - fractionBitCount));
+        UInt128 quotient;
+        ulong remainder;
+
+        // The same hardware lane Divide takes: whenever the 128-bit dividend's high word is below the divisor the
+        // quotient fits 64 bits, which covers every quotient this method can return without throwing.
+        if (
+            X86Base.X64.IsSupported &&
+            (high < yMagnitude)
+        ) {
+#pragma warning disable SYSLIB5004
+            var (narrowQuotient, narrowRemainder) = X86Base.X64.DivRem(
+                divisor: yMagnitude,
+                lower: unchecked((xMagnitude << fractionBitCount)),
+                upper: high
+            );
+#pragma warning restore SYSLIB5004
+            quotient = narrowQuotient;
+            remainder = narrowRemainder;
+        } else {
+            var dividend = (((UInt128)xMagnitude) << fractionBitCount);
+
+            quotient = (dividend / yMagnitude);
+            remainder = ((ulong)(dividend - (quotient * yMagnitude)));
+        }
 
         if (
             (remainder > (yMagnitude - remainder)) ||
@@ -141,14 +163,46 @@ internal static class SignedFixedPointArithmetic {
     }
     /// <summary>Multiplies two signed raws at the supplied fixed-point split, rounding to nearest with ties to even
     /// and wrapping the rounded product to the signed carrier.</summary>
-    internal static long Multiply(long x, long y, int fractionBitCount) =>
-        FusedArithmetic.ScaleProductSum(
+    internal static long Multiply(long x, long y, int fractionBitCount) {
+        // Narrow lane: both magnitudes below 2^31 keep the exact product below 2^62, inside a signed long, so the
+        // rounding runs on machine words. Bit-identical to the wide lane — same exact product, same ties-to-even shift.
+        const ulong NarrowLimit = (1UL << 31);
+
+        if ((FusedArithmetic.RawMagnitude(value: x) | FusedArithmetic.RawMagnitude(value: y)) < NarrowLimit) {
+            return RoundProductNarrow(
+                fractionBitCount: fractionBitCount,
+                product: unchecked((x * y))
+            );
+        }
+
+        return FusedArithmetic.ScaleProductSum(
             value: FusedArithmetic.Product(
                 left: x,
                 right: y
             ),
             shift: -fractionBitCount
         );
+    }
+    // Rounds an exact signed product that fits a long to the supplied split, to nearest with ties to even, on the
+    // magnitude; the sign is reapplied afterwards, so the discipline matches ScaleProductSum's sign-magnitude form.
+    private static long RoundProductNarrow(long product, int fractionBitCount) {
+        var sign = (product >> 63);
+        var magnitude = unchecked((ulong)((product ^ sign) - sign));
+        var truncated = (magnitude >> fractionBitCount);
+        var remainder = (magnitude & ((1UL << fractionBitCount) - 1UL));
+        var half = (1UL << (fractionBitCount - 1));
+
+        if (
+            (remainder > half) ||
+            ((remainder == half) && (0UL != (truncated & 1UL)))
+        ) {
+            ++truncated;
+        }
+
+        var result = unchecked((long)truncated);
+
+        return unchecked(((result ^ sign) - sign));
+    }
     /// <summary>Multiplies two signed raws at the supplied fixed-point split, rounding to nearest with ties to even
     /// and throwing when the rounded product leaves the signed carrier.</summary>
     internal static long MultiplyChecked(long x, long y, int fractionBitCount) {

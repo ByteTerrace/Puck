@@ -135,6 +135,24 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
         );
     }
 
+    private static long LandRotorLane(Int128 value, int shift) {
+        var negative = (value < Int128.Zero);
+
+        return FusedArithmetic.ScaleProductSum(
+            shift: shift,
+            value: (negative, ((UInt128)(negative ? -value : value)))
+        );
+    }
+    private static UInt128 MagnitudeOf(Int128 value) =>
+        ((UInt128)((value < Int128.Zero) ? -value : value));
+    private static ulong MaximumRawMagnitude(FixedVector3 vector) =>
+        Math.Max(
+            val1: Math.Max(
+                val1: FusedArithmetic.RawMagnitude(value: vector.X.Value),
+                val2: FusedArithmetic.RawMagnitude(value: vector.Y.Value)
+            ),
+            val2: FusedArithmetic.RawMagnitude(value: vector.Z.Value)
+        );
     // Norm of a vector part at full precision, saturating only when the scalar carrier cannot represent it.
     internal static FixedQ4816 VectorNorm(long x, long y, long z) =>
         (FixedVectorMath.TryMagnitude(
@@ -218,7 +236,8 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
     /// <param name="angle">The rotation angle in radians; positive angles rotate counterclockwise about the axis.</param>
     /// <returns>The unit rotation quaternion.</returns>
     public static FixedQuaternion FromAxisAngle(FixedVector3 axis, FixedQ4816 angle) {
-        var (sin, cos) = FixedQ4816.SinCos(angle: (angle * FixedQ4816.OneHalf));
+        // The half angle is exact in the turn domain — one more bit of shift — so an odd raw angle loses nothing.
+        var (sin, cos) = FixedQ4816.SinCosHalfAngle(angle: angle);
 
         return new(
             X: (axis.X * sin),
@@ -255,34 +274,71 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
     /// about a deterministic axis perpendicular to <paramref name="from"/>. A common full-range preconditioner keeps
     /// directional precision independent of the inputs' absolute scale.</remarks>
     public static FixedQuaternion FromTo(FixedVector3 from, FixedVector3 to) {
-        var fromDirection = from.Normalize();
-        var toDirection = to.Normalize();
-
         if (
-            (fromDirection == FixedVector3.Zero) ||
-            (toDirection == FixedVector3.Zero)
+            ((from.X.Value | from.Y.Value | from.Z.Value) == 0L) ||
+            ((to.X.Value | to.Y.Value | to.Z.Value) == 0L)
         ) {
             return Identity;
         }
 
-        var (fx, fy, fz) = (fromDirection.X, fromDirection.Y, fromDirection.Z);
-        var (tx, ty, tz) = (toDirection.X, toDirection.Y, toDirection.Z);
-        // The full-angle rotor (f̂ × t̂, 1 + f̂·t̂), raw. Near antiparallel both parts vanish together, so normalize
-        // through the exact 4-component norm — a rounded Q16 length-squared would erase the tiny candidate and
-        // leave a non-unit result. Normalize bounds every raw component by 65,537: a cross sum is at most
-        // 2·65,537² and the dot sum at most 3·65,537², both below 2³⁴, so these exact Q32 sums stay in long.
-        // The rounded dot is below 2¹⁸ raw; adding raw One still leaves cw below 2¹⁹.
-        var cx = FixedQ4816.RoundProductSum(productSum: unchecked(((fy.Value * tz.Value) - (fz.Value * ty.Value))));
-        var cy = FixedQ4816.RoundProductSum(productSum: unchecked(((fz.Value * tx.Value) - (fx.Value * tz.Value))));
-        var cz = FixedQ4816.RoundProductSum(productSum: unchecked(((fx.Value * ty.Value) - (fy.Value * tx.Value))));
-        var cw = unchecked((FixedQ4816.One.Value + FixedQ4816.RoundProductSum(productSum: unchecked(
-            (((fx.Value * tx.Value) + (fy.Value * ty.Value)) + (fz.Value * tz.Value))))));
-        var norm = FixedVectorMath.RootOfSquaredSum(squaredSum: unchecked((ulong)(((((cx * cx) + (cy * cy)) + (cz * cz)) + (cw * cw)))));
+        // Scale-free, as the planar FixedComplex.FromTo: each input is landed in [2^45, 2^46) by an exact (or
+        // thirty-bits-below-the-grid rounded) shift rather than normalized to Q16, the rotor (f × t, |f||t| + f·t) is
+        // formed from those raws at full width, landed once more into the same window, and normalized once. Rounding
+        // the inputs to unit Q16 first would quantize a 179° rotor's axis to about a tenth of a degree.
+        var fromShift = FixedVectorMath.DirectionShift(rawMagnitude: MaximumRawMagnitude(vector: from));
+        var toShift = FixedVectorMath.DirectionShift(rawMagnitude: MaximumRawMagnitude(vector: to));
+        var fx = FixedVectorMath.ScaleRaw(shift: fromShift, value: from.X.Value);
+        var fy = FixedVectorMath.ScaleRaw(shift: fromShift, value: from.Y.Value);
+        var fz = FixedVectorMath.ScaleRaw(shift: fromShift, value: from.Z.Value);
+        var tx = FixedVectorMath.ScaleRaw(shift: toShift, value: to.X.Value);
+        var ty = FixedVectorMath.ScaleRaw(shift: toShift, value: to.Y.Value);
+        var tz = FixedVectorMath.ScaleRaw(shift: toShift, value: to.Z.Value);
+        // Every landed raw is below 2^46, so each product is below 2^92 and each sum of three below 2^94.
+        var crossX = ((((Int128)fy) * tz) - (((Int128)fz) * ty));
+        var crossY = ((((Int128)fz) * tx) - (((Int128)fx) * tz));
+        var crossZ = ((((Int128)fx) * ty) - (((Int128)fy) * tx));
+        var dot = (((((Int128)fx) * tx) + (((Int128)fy) * ty)) + (((Int128)fz) * tz));
+        var fromNorm = ((FusedArithmetic.SquareMagnitude(value: fx) + FusedArithmetic.SquareMagnitude(value: fy)) + FusedArithmetic.SquareMagnitude(value: fz)).SquareRoot();
+        var toNorm = ((FusedArithmetic.SquareMagnitude(value: tx) + FusedArithmetic.SquareMagnitude(value: ty)) + FusedArithmetic.SquareMagnitude(value: tz)).SquareRoot();
+        var normProduct = (((UInt128)fromNorm) * toNorm);
+        var scalar = (((Int128)normProduct) + dot);
+        var rotorMagnitude = UInt128.Max(
+            x: UInt128.Max(
+                x: MagnitudeOf(value: crossX),
+                y: MagnitudeOf(value: crossY)
+            ),
+            y: UInt128.Max(
+                x: MagnitudeOf(value: crossZ),
+                y: MagnitudeOf(value: scalar)
+            )
+        );
+        // Land the rotor's largest component in [2^45, 2^46), carrying |f||t| through the same shift so the
+        // antiparallel test below compares like with like.
+        var rotorShift = (46 - FusedArithmetic.BitLength(value: rotorMagnitude));
+        var cx = LandRotorLane(shift: rotorShift, value: crossX);
+        var cy = LandRotorLane(shift: rotorShift, value: crossY);
+        var cz = LandRotorLane(shift: rotorShift, value: crossZ);
+        var cw = LandRotorLane(shift: rotorShift, value: scalar);
 
-        if (norm < AntiparallelThreshold) {
+        // The rotor's norm is 2·|f||t|·cos(θ/2); it counts as antiparallel below AntiparallelThreshold/One of |f||t|.
+        // Carried through the rotor's own shift, |f||t| either fits a machine word — then the squared comparison runs
+        // exactly — or exceeds 2^63 against a landed rotor below 2^47, which is antiparallel by a wide margin.
+        var antiparallel = ((FusedArithmetic.BitLength(value: normProduct) + rotorShift) > 63);
+
+        if (!antiparallel) {
+            var landedNormProduct = ((ulong)FusedArithmetic.ScaleProductSum(
+                shift: rotorShift,
+                value: (false, normProduct)
+            ));
+            var rotorNormSquared = (((FusedArithmetic.SquareMagnitude(value: cx) + FusedArithmetic.SquareMagnitude(value: cy)) + FusedArithmetic.SquareMagnitude(value: cz)) + FusedArithmetic.SquareMagnitude(value: cw));
+
+            antiparallel = ((rotorNormSquared * ((UInt128)((ulong)(FixedQ4816.One.Value * FixedQ4816.One.Value)))) < ((((UInt128)landedNormProduct) * landedNormProduct) * ((UInt128)((ulong)(AntiparallelThreshold.Value * AntiparallelThreshold.Value)))));
+        }
+
+        if (antiparallel) {
             // Antiparallel: π about f̂ × ê for the basis vector ê least aligned with f̂.
             FixedVector3.OrthonormalBasis(
-                normal: fromDirection,
+                normal: from.Normalize(),
                 tangent1: out var axis,
                 tangent2: out _
             );
@@ -369,15 +425,36 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
             return FixedVector3.Zero;
         }
 
-        var scale = (FixedQ4816.Atan2(
+        // Each lane is one ties-to-even rounding of X·θ/|v|: the Q32 product over the Q16 norm lifted by K, so
+        // DivideProductSum's own ·2¹⁶ cancels — the same folded-fraction form FixedRigidTransform's logarithm uses.
+        var angle = FixedQ4816.Atan2(
             y: vectorLength,
             x: W
-        ) / vectorLength);
+        );
+        var denominator = (((UInt128)((ulong)vectorLength.Value)) << FixedQ4816.FractionBitCount);
 
         return new(
-            X: (X * scale),
-            Y: (Y * scale),
-            Z: (Z * scale)
+            X: FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(
+                denominator: denominator,
+                numerator: FusedArithmetic.Product(
+                    left: X.Value,
+                    right: angle.Value
+                )
+            )),
+            Y: FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(
+                denominator: denominator,
+                numerator: FusedArithmetic.Product(
+                    left: Y.Value,
+                    right: angle.Value
+                )
+            )),
+            Z: FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(
+                denominator: denominator,
+                numerator: FusedArithmetic.Product(
+                    left: Z.Value,
+                    right: angle.Value
+                )
+            ))
         );
     }
     /// <summary>Returns a Q16-accurate unit quaternion along the same direction at any representable input scale; a zero
@@ -488,13 +565,15 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
         }
 
         // One SinCos serves both weights: sin((1−t)θ)/sin θ = cos(tθ) − cos θ·sin(tθ)/sin θ, with cos θ = dot.
-        var sinTheta = FixedQ4816.Sqrt(value: (FixedQ4816.One - (dot * dot)));
+        // sin θ = √(1 − dot²) from the exact Q32 radicand 2³² − dot², rounded once by the tie-free nearest root; the
+        // angle t·θ reaches SinCos as the exact Q32 product, never rounded to the Q16 grid first.
+        var sinTheta = FixedVectorMath.RootOfSquaredSum(squaredSum: ((ulong)((1L << (2 * FixedQ4816.FractionBitCount)) - (dot.Value * dot.Value))));
         var theta = FixedQ4816.Atan2(
             x: dot,
             y: sinTheta
         );
 
-        var (sinScaled, cosScaled) = FixedQ4816.SinCos(angle: (amount * theta));
+        var (sinScaled, cosScaled) = FixedQ4816.SinCosQ32(angleQ32: (amount.Value * theta.Value));
         var toWeight = (sinScaled / sinTheta);
         var fromWeight = (cosScaled - (dot * toWeight));
 

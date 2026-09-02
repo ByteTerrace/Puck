@@ -15,8 +15,9 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// A non-zero value shears the frustum so a fixed rectangular aperture (a border-window face) maps 1:1 to the
     /// render regardless of where the camera's own eye sits relative to that aperture — see
     /// <see cref="Puck.SdfVm.Views.SdfAsymmetricFrustum"/>, the one producer of a non-zero offset. Rides the packed
-    /// render-scale row's two always-zero spare lanes (KEEP IN SYNC with <c>SdfWorldEngine.PackViewports</c> and
-    /// sdf-world.hlsli's <c>ViewportData.renderScale</c>) — no row growth.</summary>
+    /// render-scale row's <c>yz</c> lanes (KEEP IN SYNC with <c>SdfWorldEngine.PackViewports</c> and sdf-world.hlsli's
+    /// <c>ViewportData.renderScale</c>; the row's <c>w</c> lane carries <see cref="SdfFrame.FarDistance"/>) — no row
+    /// growth.</summary>
     public Vector2 AsymmetricFrustumOffset { get; init; }
     /// <summary>The view's internal render scale in (0, 1]: Stage 1 renders the view at this fraction of its output
     /// region (an integer-derived extent — see the shader's <c>worldRenderDims</c>) and Stage 2 upsamples it back.
@@ -97,12 +98,22 @@ public sealed record SdfFrame(
     /// <summary>A/B lever for the beam-published per-tile far bound. Default
     /// <see langword="false"/> keeps the far bound active — the shipped behavior: the fine march exits at
     /// <c>traveled &gt;= farBound</c> (plane 3), where the tile's cone provably cannot produce any footprint-accepted hit
-    /// through MaxDistance, so the pixel is output-identical to a full march but pays fewer steps. Set
-    /// <see langword="true"/> to push the far bound out of reach so the march runs to MaxDistance exactly as without
-    /// it — the paired-run "off" side. Rides a dedicated far-field screen-light row's <c>.x</c> lane (KEEP IN SYNC with
-    /// <c>SdfWorldEngine.PackScreenLights</c> and sdf-world.hlsli's <c>worldFarBoundDisabled</c> / <c>SdfFarFieldParams</c>);
-    /// an unset frame uploads 0 and the far bound stays on.</summary>
+    /// through <see cref="FarDistance"/>, so the pixel is output-identical to a full march but pays fewer steps. Set
+    /// <see langword="true"/> to push the far bound out of reach so the march runs to <see cref="FarDistance"/>
+    /// exactly as without it — the paired-run "off" side. Rides a dedicated far-field screen-light row's <c>.x</c> lane
+    /// (KEEP IN SYNC with <c>SdfWorldEngine.PackScreenLights</c> and sdf-world.hlsli's <c>worldFarBoundDisabled</c> /
+    /// <c>SdfFarFieldParams</c>); an unset frame uploads 0 and the far bound stays on.</summary>
     public bool DisableFarBound { get; init; }
+    /// <summary>The far distance, in world units: the depth at which every camera march ends — the fine march's far
+    /// exit, the beam's cone proofs (tile entry, the four-bound gap search, the F1 far bound) and every "nothing proven"
+    /// tile-plane sentinel, and the depth/overshoot debug ramps. Authored as world data (<c>render.farDistance</c>);
+    /// the default is the exact value the shaders pinned as <c>MaxDistance</c> before it became per-frame data, so a
+    /// frame that never sets it renders bit-identically. Must be finite and positive — the render frame throws
+    /// otherwise (a document validator already refuses it by name upstream). Packed into every viewport row's
+    /// <c>renderScale.w</c> lane (KEEP IN SYNC with <c>SdfWorldEngine.PackViewports</c> and sdf-world.hlsli's
+    /// <c>worldFarDistance</c>) — the one buffer every marching kernel already binds — and folded into the cadence
+    /// signature through that row, so a change re-renders.</summary>
+    public float FarDistance { get; init; } = DefaultFarDistance;
     /// <summary>Engine-bench lever: skips the per-screen area-light loop (the diegetic CRTs stop spilling colored light
     /// into the room). Default <see langword="false"/> = screen lights on. Directly measures the lit CRTs' cost for the
     /// <c>sdf.screen-lights</c> bench toggle. Rides the bench-params screen-light row's <c>.w</c> lane (KEEP IN SYNC with
@@ -305,6 +316,9 @@ public sealed record SdfFrame(
     /// <see cref="SampleIndex"/> by the host. Read only while <see cref="SkyEnabled"/>.</summary>
     public Vector2 SkyCloudShear { get; init; }
 
+    /// <summary>The pinned default far distance — the shaders' retired <c>MaxDistance</c> constant (40 world
+    /// units). An unauthored <c>render.farDistance</c> resolves to exactly this, so such a world renders unchanged.</summary>
+    public const float DefaultFarDistance = 40f;
     /// <summary>The default fundamental scintillation rate: 1 Hz.</summary>
     public const float DefaultSkyStarTwinkleRate = 1f;
     /// <summary>The default cloud edge width: 0.25.</summary>

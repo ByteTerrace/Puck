@@ -3,7 +3,7 @@ using System.Numerics;
 namespace Puck.Maths.Tests;
 
 /// <summary>
-/// Claims for <see cref="NumberTheoreticTransform"/> and <see cref="NttPlan"/>. Every statement is either an EXACT
+/// Claims for <see cref="NumberTheoreticTransform"/> and <see cref="NumberTheoreticTransformPlan"/>. Every statement is either an EXACT
 /// field-arithmetic identity or agreement with <see cref="Oracles"/>' shared-nothing <see cref="BigInteger"/>
 /// arithmetic — nothing here is a bound, because nothing in the subject rounds. <see cref="LawRegistry"/> invokes
 /// each claim below as a Default-tier law.
@@ -109,7 +109,7 @@ internal static class NttClaims {
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? RoundTripExact() {
         foreach (var length in Lengths) {
-            var plan = NttPlan.Create(length: length);
+            var plan = NumberTheoreticTransformPlan.Create(length: length);
             var original = Sequence(length: length, stream: ((ulong)length));
             var working = ((ulong[])original.Clone());
 
@@ -132,7 +132,7 @@ internal static class NttClaims {
         var field = NumberTheoreticTransform.Field;
 
         foreach (var length in Lengths) {
-            var plan = NttPlan.Create(length: length);
+            var plan = NumberTheoreticTransformPlan.Create(length: length);
             var a = Sequence(length: length, stream: (100UL + ((ulong)length)));
             var b = Sequence(length: length, stream: (200UL + ((ulong)length)));
             var sum = new ulong[length];
@@ -164,7 +164,7 @@ internal static class NttClaims {
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? ConvolutionVsOracle() {
         foreach (var length in Lengths) {
-            var plan = NttPlan.Create(length: length);
+            var plan = NumberTheoreticTransformPlan.Create(length: length);
             var a = Sequence(length: length, stream: (300UL + ((ulong)length)));
             var b = Sequence(length: length, stream: (400UL + ((ulong)length)));
 
@@ -195,20 +195,20 @@ internal static class NttClaims {
         return null;
     }
     /// <summary>Proves every documented refusal: a non-power-of-two, zero or negative
-    /// <see cref="NttPlan.Create"/> length; and a <see cref="NumberTheoreticTransform.Forward"/>,
+    /// <see cref="NumberTheoreticTransformPlan.Create"/> length; and a <see cref="NumberTheoreticTransform.Forward"/>,
     /// <see cref="NumberTheoreticTransform.Inverse"/>, <see cref="NumberTheoreticTransform.Convolve"/> or
     /// <see cref="NumberTheoreticTransform.PointwiseMultiply"/> span whose length does not match the plan (or, for
     /// <c>PointwiseMultiply</c>, does not match its sibling spans).</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? LengthRefusals() {
-        return (Refuses(action: () => NttPlan.Create(length: 0), type: typeof(ArgumentOutOfRangeException), parameterName: "length", what: "NttPlan.Create(0)") ??
-               (Refuses(action: () => NttPlan.Create(length: -4), type: typeof(ArgumentOutOfRangeException), parameterName: "length", what: "NttPlan.Create(-4)") ??
-               (Refuses(action: () => NttPlan.Create(length: 3), type: typeof(ArgumentOutOfRangeException), parameterName: "length", what: "NttPlan.Create(3) (not a power of two)") ??
-               (Refuses(action: () => NttPlan.Create(length: 6), type: typeof(ArgumentOutOfRangeException), parameterName: "length", what: "NttPlan.Create(6) (not a power of two)") ??
-               (Refuses(action: () => NumberTheoreticTransform.Forward(plan: NttPlan.Create(length: 8), values: new ulong[4]), type: typeof(ArgumentException), parameterName: "values", what: "Forward with a mis-sized span") ??
-               (Refuses(action: () => NumberTheoreticTransform.Inverse(plan: NttPlan.Create(length: 8), values: new ulong[16]), type: typeof(ArgumentException), parameterName: "values", what: "Inverse with a mis-sized span") ??
-               (Refuses(action: () => NumberTheoreticTransform.Convolve(plan: NttPlan.Create(length: 8), left: new ulong[8], right: new ulong[4], destination: new ulong[8]), type: typeof(ArgumentException), parameterName: "right", what: "Convolve with a mis-sized right span") ??
-               (Refuses(action: () => NumberTheoreticTransform.Convolve(plan: NttPlan.Create(length: 8), left: new ulong[8], right: new ulong[8], destination: new ulong[4]), type: typeof(ArgumentException), parameterName: "destination", what: "Convolve with a mis-sized destination span") ??
+        return (Refuses(action: () => NumberTheoreticTransformPlan.Create(length: 0), type: typeof(ArgumentOutOfRangeException), parameterName: "length", what: "NumberTheoreticTransformPlan.Create(0)") ??
+               (Refuses(action: () => NumberTheoreticTransformPlan.Create(length: -4), type: typeof(ArgumentOutOfRangeException), parameterName: "length", what: "NumberTheoreticTransformPlan.Create(-4)") ??
+               (Refuses(action: () => NumberTheoreticTransformPlan.Create(length: 3), type: typeof(ArgumentOutOfRangeException), parameterName: "length", what: "NumberTheoreticTransformPlan.Create(3) (not a power of two)") ??
+               (Refuses(action: () => NumberTheoreticTransformPlan.Create(length: 6), type: typeof(ArgumentOutOfRangeException), parameterName: "length", what: "NumberTheoreticTransformPlan.Create(6) (not a power of two)") ??
+               (Refuses(action: () => NumberTheoreticTransform.Forward(plan: NumberTheoreticTransformPlan.Create(length: 8), values: new ulong[4]), type: typeof(ArgumentException), parameterName: "values", what: "Forward with a mis-sized span") ??
+               (Refuses(action: () => NumberTheoreticTransform.Inverse(plan: NumberTheoreticTransformPlan.Create(length: 8), values: new ulong[16]), type: typeof(ArgumentException), parameterName: "values", what: "Inverse with a mis-sized span") ??
+               (Refuses(action: () => NumberTheoreticTransform.Convolve(plan: NumberTheoreticTransformPlan.Create(length: 8), left: new ulong[8], right: new ulong[4], destination: new ulong[8]), type: typeof(ArgumentException), parameterName: "right", what: "Convolve with a mis-sized right span") ??
+               (Refuses(action: () => NumberTheoreticTransform.Convolve(plan: NumberTheoreticTransformPlan.Create(length: 8), left: new ulong[8], right: new ulong[8], destination: new ulong[4]), type: typeof(ArgumentException), parameterName: "destination", what: "Convolve with a mis-sized destination span") ??
                Refuses(action: () => NumberTheoreticTransform.PointwiseMultiply(destination: new ulong[8], left: new ulong[8], right: new ulong[4]), type: typeof(ArgumentException), parameterName: "right", what: "PointwiseMultiply with mismatched spans")))))))));
     }
 }

@@ -287,7 +287,8 @@ public abstract record WorldMotionModel {
 /// </summary>
 /// <remarks>Unmapped members are rejected by name rather than accepting a value nothing reads.</remarks>
 /// <param name="MoveSpeed">Locomotion speed in world units per second — the profileless fallback a stand-in advances on
-/// (a seated player reads its live profile's speed instead, so <c>identity.motion</c> stays real-time).</param>
+/// (a seated player whose identity CLAIMS a rate reads that claim instead, live, so <c>identity.motion</c> stays
+/// real-time; an identity claiming none rides the kit's own rate).</param>
 /// <param name="TurnSpeed">Turn speed in radians per second (the profileless fallback counterpart to <paramref name="MoveSpeed"/>).</param>
 /// <param name="MaxSmoothError">The largest server-correction position error, in world units, that presentation may
 /// ease instead of snapping.</param>

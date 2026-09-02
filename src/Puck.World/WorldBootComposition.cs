@@ -102,6 +102,10 @@ internal static class WorldBootComposition {
         // The registry reaches this module the same lazy way, for the same cycle: world.affordances reads the built
         // registry at dispatch to emit the manifest the binding vocabulary checks validate against.
         services.AddSingleton<Func<CommandRegistry>>(implementationFactory: static sp => (() => sp.GetRequiredService<CommandRegistry>()));
+        // The raw window-input fan-out a synthesized mouse control takes ahead of the router — lazy for the same
+        // cycle (its console sink reaches the registry) and optional: it is a presentation registration, absent on
+        // a headless boot, where player.signal's mouse twin falls back to the router alone.
+        services.AddSingleton<Func<WorldWindowInputObservers?>>(implementationFactory: static sp => (() => sp.GetService<WorldWindowInputObservers>()));
         services.AddSingleton<ICommandModule, WorldBindingCommandModule>();
 
         // The stamp pool (dynamic-creation/placement animation accounting) — plain data, no render dependency.
@@ -384,15 +388,25 @@ internal static class WorldBootComposition {
         // starting state off the loopback, and rehydrates a fresh world to verify a recorded-vs-replayed hash match
         // offline. WorldServerStepShell closes each captured tick inside Step (shared by both boot shapes); the
         // replay.* verb surface arms and verifies it.
+        // ONE shadow addon-host factory for both the tape's post-persist verify and replay.inspect --poses, so the
+        // two re-drives can never mount different guest sets under the same tape.
+        services.AddSingleton<Func<WorldDefinition, WorldServer, IWorldAddonHost>>(implementationInstance: static (definition, server) => WorldAddonRuntime.Create(
+            definition: definition,
+            server: server
+        ));
         services.AddSingleton(implementationFactory: static sp => new WorldReplayTape(
             liveServer: sp.GetRequiredService<WorldServer>(),
             profiles: sp.GetRequiredService<WorldOwnedWorlds>(),
             transport: sp.GetRequiredService<LoopbackTransport>(),
             engines: sp.GetServices<IScreenMachineEngine>(),
-            addonHostFactory: static (definition, server) => WorldAddonRuntime.Create(
-                definition: definition,
-                server: server
-            )
+            addonHostFactory: sp.GetRequiredService<Func<WorldDefinition, WorldServer, IWorldAddonHost>>()
+        ));
+        // The tape's read-back (replay.inspect) — walks a saved tape and, with --poses, re-drives it through the
+        // same shadow drive the tape's verify uses.
+        services.AddSingleton(implementationFactory: static sp => new WorldReplayInspector(
+            profiles: sp.GetRequiredService<WorldOwnedWorlds>(),
+            engines: sp.GetServices<IScreenMachineEngine>(),
+            addonHostFactory: sp.GetRequiredService<Func<WorldDefinition, WorldServer, IWorldAddonHost>>()
         ));
         services.AddSingleton<ICommandModule, WorldReplayCommandModule>();
 

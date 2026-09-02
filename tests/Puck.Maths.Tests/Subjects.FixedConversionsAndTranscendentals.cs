@@ -980,12 +980,17 @@ internal static partial class Subjects {
         }
 
         var radicand = (new BigInteger(value: raw) << FixedQ4816.FractionBitCount);
-        var expected = Oracles.IntegerSquareRoot(value: radicand);
+        var floor = Oracles.IntegerSquareRoot(value: radicand);
+        // Nearest from the floor: consecutive squares differ by 2r + 1, so the radicand is nearer (r + 1)² exactly when
+        // its remainder above r² exceeds r, and an integer radicand can never sit halfway.
+        var expected = (((radicand - (floor * floor)) > floor)
+            ? (floor + BigInteger.One)
+            : floor);
         var exact = new BigInteger(value: actual);
+        var offset = (radicand - (exact * exact));
 
         if (exact != expected) { return $"the square root of {raw} is {actual}, expected {expected}"; }
-        if ((exact * exact) > radicand) { return $"the square root of {raw} squares above the radicand"; }
-        if (((exact + BigInteger.One) * (exact + BigInteger.One)) <= radicand) { return $"the square root of {raw} is not the greatest integer whose square fits"; }
+        if ((offset <= -exact) || (offset > exact)) { return $"the square root of {raw} is not the integer nearest the radicand's root: radicand - result² = {offset} lies outside (-result, result]"; }
 
         return null;
     }
@@ -1127,6 +1132,15 @@ internal static partial class Subjects {
         var residual = BigInteger.Abs(value: (((((BigInteger)sin.Value) * sin.Value) + (((BigInteger)cos.Value) * cos.Value)) - (BigInteger.One << 32)));
 
         if (residual > (((4 * one) * ulp) + ((4 * ulp) * ulp))) { return $"the Pythagorean identity fails at raw {raw} by {residual}"; }
+
+        // Odd sine, even cosine, bit for bit: the turn reduction, the radian product and the narrowing all run on the
+        // magnitude and re-sign, so negating the angle negates exactly the sine and leaves exactly the cosine.
+        if (raw != long.MinValue) {
+            var (mirrorSin, mirrorCos) = FixedQ4816.SinCos(angle: Raw(value: -raw));
+
+            if (mirrorSin.Value != -sin.Value) { return $"the sine is not odd at raw {raw}: Sin(-θ) = {mirrorSin.Value}, -Sin(θ) = {-sin.Value}"; }
+            if (mirrorCos != cos) { return $"the cosine is not even at raw {raw}: Cos(-θ) = {mirrorCos.Value}, Cos(θ) = {cos.Value}"; }
+        }
 
         var (originSin, originCos) = FixedQ4816.SinCos(angle: FixedQ4816.Zero);
 
@@ -1392,11 +1406,10 @@ internal static partial class Subjects {
         ("MinValue^−1", long.MinValue, -65536L, 0L),
     ];
 
-    /// <summary>Proves the power's FRACTIONAL path — the exponential of the Q16-rounded product of the exponent and the
-    /// subject's own logarithm — lies inside the enclosure of the true value widened by the DERIVED envelope: the
-    /// exponent carries at most (3·|yRaw| + 2¹⁷)/2³⁴ of error from the logarithm's 0.75 ULP and the Q16 quantization,
-    /// which scales the result by at most that factor, and the exponential contributes its own documented
-    /// envelope.</summary>
+    /// <summary>Proves the power's FRACTIONAL path — the exponential of the once-rounded Q32 product of the exponent and
+    /// the subject's own Q46 logarithm — lies inside the enclosure of the true value widened by the DERIVED envelope: the
+    /// exponent carries at most (8·|yRaw| + 2¹⁸)/2⁵¹ of error from the Q46 logarithm and the single Q32 rounding, which
+    /// scales the result by at most that factor, and the exponential contributes its own documented envelope.</summary>
     /// <param name="left">The first sampled operand lane.</param>
     /// <param name="right">The second sampled operand lane.</param>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
@@ -1441,7 +1454,10 @@ internal static partial class Subjects {
             exponentBitCount: 32,
             guardBitCount: Oracles.GuardBitCount
         ).High;
-        var quantization = ((high * ((3 * BigInteger.Abs(value: new BigInteger(value: exponentRaw))) + (BigInteger.One << 17))) >> 34);
+        // The logarithm reaches the product at Q46 and the product is rounded once to Q32, so the exponent error is
+        // below |yRaw|·2⁻⁴⁸ (the Q46 logarithm's error, far under one Q46 unit per unit of y, stated at 2⁻³² for slack)
+        // plus 2⁻³³: in units of 2⁻⁵¹, 8·|yRaw| + 2¹⁸.
+        var quantization = ((high * ((8 * BigInteger.Abs(value: new BigInteger(value: exponentRaw))) + (BigInteger.One << 18))) >> 51);
 
         return WithinEnvelope(
             name: $"Pow({baseRaw}, {exponentRaw})",

@@ -61,6 +61,12 @@ public sealed class LoopbackTransport : IServerLink {
     /// grant change moves, so a replay that skipped it would exercise a different admission history.
     /// <see langword="null"/> (the default) is a free pass-through.</summary>
     public Action<WorldQuery, WorldPrincipal>? QueryTap { get; set; }
+    /// <summary>Gets or sets a value indicating whether the local connection's driving input — every
+    /// <see cref="SubmitIntent"/> and every <see cref="WorldSubmissionPayload.Command"/> — is dropped before it
+    /// reaches a tap or the server. A replay drive holds this while it feeds a tape's recorded intents and commands
+    /// through the server's own doors, so a device stick or a <c>body.*</c> verb cannot fold into the re-driven
+    /// tick; every other payload kind (grant, session, mutation, …) still crosses.</summary>
+    public bool InputMasked { get; set; }
     /// <summary>Gets an optional record tap invoked with every submitted intent before it reaches the server — the seam the
     /// replay tape captures the live per-tick intent stream through. <see langword="null"/> (the default) is a free
     /// pass-through; set only while a recording is armed.</summary>
@@ -197,6 +203,10 @@ public sealed class LoopbackTransport : IServerLink {
             // CommandTap is single-arg (Action<WorldCommand>, no principal), unlike the two-arg taps below —
             // inlined rather than forced through SubmitTapped's Action<TValue, WorldPrincipal> shape.
             case WorldSubmissionPayload.Command command:
+                if (InputMasked) {
+                    return 0;
+                }
+
                 if (
                     TryNextEnvelope(
                     envelope: out var commandEnvelope,
@@ -260,6 +270,10 @@ public sealed class LoopbackTransport : IServerLink {
     }
     /// <inheritdoc/>
     public void SubmitIntent(in IntentSubmission submission) {
+        if (InputMasked) {
+            return;
+        }
+
         IntentTap?.Invoke(obj: submission);
         m_server.EnqueueIntent(submission: in submission);
     }

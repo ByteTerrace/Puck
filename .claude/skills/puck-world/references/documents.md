@@ -236,7 +236,7 @@ journal, and deliberately outside the `gatesDrive` check, which is what lets a
 `valueSeconds`/`fromState`/`text`); because `lookAssignment.rows` and creation
 palettes bind to text cells, and a state write re-resolves every bound value
 (re-running the look resolve when `lookAssignment` is touched), this is how a
-rule restyles a body — `elements.world.json`'s `look-*` rules drive one
+rule restyles a body — `puck.world.frozen.json`'s `look-*` rules drive one
 `lookOf.<body>` cell per body. A text row also takes a `fromState` copy from
 another text cell. Two indirections make "the body my `target` cell names"
 addressable: a key spelled `$cell:<row>:<key>` resolves to that cell's integer
@@ -244,7 +244,7 @@ value at every read/firing (effect `key`/`fromKey`, `compareState`
 `key`/`comparandKey`), and a body-reference token `cell:<row>:<key>` does the
 same inside `$distance:`/`$los:`/`$nearest:`. `$nearest:<bodyRef>:<row>` is the
 nearest other active body whose cell in keyed `<row>` is nonzero (−1 for none,
-ties to the lowest index) — `elements.world.json`'s `auto-target` rule is
+ties to the lowest index) — `puck.world.frozen.json`'s `auto-target` rule is
 `setState target.0 fromState $nearest:body:0:enemy`. `save` admits on DIFFERENT
 terms again: like `pose`, it has no `WorldMutation` ordinal — it writes a
 session snapshot to the world's own loaded file
@@ -345,9 +345,9 @@ rule (including the one being fired) still names it — retire the referencing
 rule first, in an earlier mutation of the same or a prior tick, then remove the
 placement. Sense a PERMANENT placement (boot-declared, never removed) rather
 than a token placement a rule itself spawns/removes, for exactly this reason.
-`src/Puck.World/Assets/worlds/elements.world.json` is the worked example: two
-boot-declared region placements, `Region` interactions that set countdown
-cells, and `Level` rules that drain/countdown them.
+`src/Puck.World/Assets/worlds/puck.world.frozen.json` is the worked example: two
+boot-declared region placements (`firePit`/`icePool`), `Region` interactions
+that set countdown cells, and `Level` rules that drain/countdown them.
 
 `state` (`WorldStateSection`, `Puck.World.Schema/WorldState.cs`) is the
 document's abstract state inventory. It has three ownership lanes:
@@ -389,6 +389,32 @@ Omitting both is a declared-but-empty row.
     "envelope":{"$type":"set","values":[0,1,2]}}]
 }
 ```
+
+### `render` — the render defaults
+
+`WorldRenderDefaults` (`WorldRenderDefaults.cs`), optional; `Absent` is the
+inert section. The boot levers (`shadows`, `shadowCrowdRadius`,
+`ambientOcclusion`, `renderScale`, `upscaleSharpness`, the `low`/`medium`/
+`high` presets) seed `WorldRenderSettings` once at boot and move only through
+their verbs afterwards; `world.save` folds the live levers back into the
+section. Three members are read off the LIVE definition every frame instead,
+so `world.row.set render {…}` lands on the next frame with no rebuild:
+`lighting`/`sky`/`cycle` (`WorldRenderCycleTrack`) and `farDistance`
+(`WorldRenderFarDistance.Resolve`). `farDistance` is the depth every camera
+march ends at (the fine march's far exit, the beam's cone proofs, the fog and
+depth ramps' reach): nullable, absent resolves to the engine's pinned 40
+(`SdfFrame.DefaultFarDistance`) so an unauthored world marches exactly as
+before the field existed; an authored value must lie in
+[`WorldRenderDefaults.MinFarDistance` 1, `MaxFarDistance` 8192], refused by
+`ValidateRenderFarDistance` as `render.farDistance <v> must be finite and
+within [1, 8192].` Geometry past it is never marched, so an infinite plane
+ends on a horizon curve at that depth unless `sky.fogDensity` has absorbed it
+first. Read back with `world.row.set render` (the section's read arm) and
+`world.budget`, which quotes the far distance with its derived costs: the
+reach multiplier over the default, the horizon-ray step count per unit of
+camera height against the primary march's 128-step budget, and the fog
+remnant `exp(−fogDensity·far)` at the far plane. Renderer contract:
+`sdf-world` skill, the FAR DISTANCE row.
 
 ### `dynamics` — the personality table
 
@@ -510,9 +536,9 @@ at most 126 cells, fitting the padded 128³ render brick without truncation.
 Cell values are sim state beside the population — stepped
 after the rules, checkpointed (`Fields` block), delivered as `FieldCells`
 deltas on the snapshot (`FieldsFull` on a primer) — never document rows, so
-nothing journals them. Read back with `world.fields`. `elements.world.json`
-paints a fuel forest beside an ice glacier; a burning body emits heat, heat
-ignites fuel, fire emits heat and consumes fuel, heat melts ice into water,
+nothing journals them. Read back with `world.fields`. `puck.world.frozen.json`'s
+island paints grass beside an ice glacier; a burning body emits heat, heat
+ignites grass, fire emits heat and consumes grass, heat melts ice into water,
 water quenches fire — no interaction names the boundary.
 
 ### Authored randomness — SOURCE x SITE x MOMENT
@@ -736,18 +762,39 @@ case-insensitively. One id names one location only under the separate
 validator and `WorldOwnedWorlds`).
 
 Worlds have no in-code definition. A boot with no `--world` override loads
-`src/Puck.World/Assets/worlds/nexus.world.json`; an explicit path or the shipped default that cannot be loaded
-refuses the boot by name. Four shipped GAME worlds — the charter's whole roster: `nexus` (the hub — a floating
-island above a field of planetoids, and the boot default; carries the `references` section naming the other three
-plus `studio` by document path, and one `portal-arch` placement per named world), `dive` (the underwater
-arena scaffold — still authors the retired top-level `water` section and does not currently parse; migrating it to
-a medium lattice row is unclaimed work), `kart` (the racing arena), `jump` (the platformer arena). A
-fifth document, `studio`, ships beside them as a non-game DEV CANVAS for character/creation work — neutral floor,
-no scenery or crowd, four anchored camera eyes and a `sheet` layout composing four angles at once — reached with
-`--world` or through the nexus's mapped archway. Five quilt documents (`quilt-nw`, `quilt-ne`, `quilt-se`,
-`quilt-sw`, `quilt-island`) ship beside them as non-game adjacency/federation stress content — each a `basis`
-delta over the `quilt-base` template (see "Document composition" below). Every shipped document layers over
-`standard.world.json`, so a change that adds a required top-level section is authored once, there. The loader is
+`src/Puck.World/Assets/worlds/puck.world.json` — the bare walker world, a delta over
+`standard.basis.json`. The basis carries the standards, defined AS STATE — a `transforms` text row
+(`identity`/`origin`/`unit`) and a `colors` text row that document values reference by
+`state.<row>.<key>` instead of restating literals — plus the infinite SAFETY NET and its debug
+texture: one SOLID Plane placement (`groundPlane`) at y = −16, catching anything that falls (never
+the level's own floor), its single shape rendered and collided from the same declaration, under the
+unbounded `groundTexture` checkerboard (one tile wallpaper-folded with a parity `materialStride`
+over `state.colors.groundPrimary`/`groundSecondary`, a NON-SOLID placement — a solid placement
+carrying a wallpaper fold refuses by name, so the plane stays the sole collision truth). `placements.policy` is OPTIONAL —
+authored only by a world that wants live placement authoring, and then whole (a partial block
+refuses at parse naming the missing member); unauthored it derives (`WorldPlacementPolicyDefaults.DeriveFrom`):
+no live authoring (zero headroom, no derived faces, no candidate ring, no preview deadline) and a
+scale envelope spanning exactly the rows' authored scales, so the basis's static rows need no
+policy at all. The pip prototype's shape rotations are
+`state.transforms.identity`, its palette is `state.colors.*`, the seat rig's pivot is
+`state.transforms.origin` (the `IDocumentSpatialValue` machinery: `DocumentVector2`/`DocumentVector3`/
+`DocumentQuaternion` fields accept a literal array OR a text-cell reference, resolved at the
+completed-document boundary, reference preserved on canonical write-back). A `prototypes[].document`'s
+coordinates are AUTHOR-frame, not world-frame: `puck.creation.v1` authors with +Z the front a shape
+faces — a half-turn about Y from the engine's −Z-forward — and `CreationFrame.ToEngine` converts once
+at `WorldPrototype.EngineDocument` (authored `[x, y, z]` lands at world `(−x, y, −z)`; pinned by
+`CreationAuthorFrameLawTests`, documented in `Puck.World.Authoring`'s README). Everything else — the
+census, simulation (30 Hz), host (windowed, loopback-default — `--listen` binds
+TCP), collision, gravity, channels, the `walk` body-motion program, the `walker` kit
+(`defaultSeatKit`), keyboard/gamepad bindings, the chase seat rig, the pip look, and grants — is the
+world document's own. A lattice trait's `color` speaks the same grammar (resolved live at
+emit — a state cell write recolors a height field on the next frame, no re-bake, bricks hold only
+distances; `world.fields` echoes the authored token).
+An explicit path or the shipped default that cannot be loaded refuses the boot by name.
+`puck.world.frozen.json` ships beside them: the frozen floating-island diorama, reference-only,
+reachable via `--world`, never extended, deleted on owner order — the worked examples this file cites
+from it (rules, lattice chemistry, regions) live there, and it is the ONLY document layering over the
+likewise-frozen `puck.basis.frozen.json`. The loader is
 `src/Puck.World/WorldDefinitionLoader.cs`.
 
 ## Document composition (`basis`)
@@ -763,7 +810,9 @@ egress (replica, replay embed) is self-contained by construction. Merge rules: o
 (recursive), omitted inherits, authored `null` clears, a `$type`-changed union object replaces wholesale, and a
 row list whose rows all carry the settled identity vocabulary (first of `id`/`name`/`index` on every row of BOTH
 sides) merges BY KEY in basis order — new keys append, `{"<key>": …, "$drop": true}` tombstones remove (a stale
-tombstone refuses by name), a leading `{"$replace": true}` row replaces wholesale. `$drop`/`$replace` are
+tombstone refuses by name), a leading `{"$replace": true}` row replaces wholesale. Any other list replaces
+wholesale too — notably a state row's `cells` (keyed by `key`, outside the vocabulary) and an overlay's `chords`
+(unkeyed rows): adding one cell or one chord means restating that row's whole list. `$drop`/`$replace` are
 compose-time vocabulary only; chains are depth-capped (`WorldDocumentBasis.MaxChainDepth`, 8) and cycles refuse by
 name. The content pin folds the WHOLE chain's raw bytes (`ComputeChainContentHash`, length-delimited,
 derived-first), so editing a template moves every derived document's pin — flat documents keep the undelimited

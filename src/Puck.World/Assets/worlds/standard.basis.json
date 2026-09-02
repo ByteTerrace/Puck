@@ -1,0 +1,170 @@
+{
+  "placements": {
+    "rows": [
+      {
+        "id": "groundPlane",
+        "position": [
+          0,
+          -16,
+          0
+        ],
+        "prototypeId": "groundPlane",
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0
+      },
+      {
+        "id": "groundTexture",
+        "position": [
+          0,
+          -16.24,
+          0
+        ],
+        "prototypeId": "groundTexture",
+        "scale": 1,
+        "yawDegrees": 0
+      }
+    ]
+  },
+  "prototypes": [
+    {
+      "document": {
+        "name": "groundPlane",
+        "palette": [
+          {
+            "color": "state.colors.groundTertiary"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "surface",
+            "position": "state.transforms.origin",
+            "rotation": "state.transforms.identity",
+            "scale": "state.transforms.unit",
+            "smooth": 0,
+            "type": "Plane"
+          }
+        ]
+      },
+      "id": "groundPlane"
+    },
+    {
+      "document": {
+        "name": "groundTexture",
+        "palette": [
+          {
+            "color": "state.colors.groundPrimary"
+          },
+          {
+            "color": "state.colors.groundSecondary"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "wallpaper",
+                "cell": [
+                  1,
+                  1
+                ],
+                "group": "P4M",
+                "materialStride": 1
+              }
+            ],
+            "id": 0,
+            "material": 0,
+            "name": "tile",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.45,
+              0.25,
+              0.45
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "groundTexture"
+    }
+  ],
+  "schema": "puck.world.def.v1",
+  "state": {
+    "world": [
+      {
+        "cells": [
+          {
+            "key": "identity",
+            "value": "[0, 0, 0, 1]"
+          },
+          {
+            "key": "origin",
+            "value": "[0, 0, 0]"
+          },
+          {
+            "key": "unit",
+            "value": "[1, 1, 1]"
+          }
+        ],
+        "kind": "text",
+        "name": "transforms"
+      },
+      {
+        "cells": [
+          {
+            "key": "avatarBody",
+            "value": "#FF73BF"
+          },
+          {
+            "key": "avatarMark",
+            "value": "#1ABFB2"
+          },
+          {
+            "key": "avatarEye",
+            "value": "#FFFFFF"
+          },
+          {
+            "key": "avatarPupil",
+            "value": "#0D0D0D"
+          },
+          {
+            "key": "defaultAvatarPrimary",
+            "value": "#FF2D95"
+          },
+          {
+            "key": "defaultAvatarSecondary",
+            "value": "#2DFF97"
+          },
+          {
+            "key": "groundPrimary",
+            "value": "#FFFFFF"
+          },
+          {
+            "key": "groundSecondary",
+            "value": "#000000"
+          },
+          {
+            "key": "groundTertiary",
+            "value": "#808080"
+          }
+        ],
+        "kind": "text",
+        "name": "colors"
+      }
+    ]
+  }
+}
