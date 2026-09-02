@@ -13,6 +13,11 @@ public enum BodyHoldBond : byte {
 
     /// <summary>No surface at all — the body holds itself where it is.</summary>
     Free,
+
+    /// <summary>The medium the body is standing in — the world's own field lattice column. The medium holds the body
+    /// by displacement rather than by contact, so this bond has no cone and no reach: the world either offers a
+    /// medium where the body is or it does not.</summary>
+    Medium,
 }
 /// <summary>What holds the body once a hold is taken — the vertical law the hold's own
 /// <see cref="BodyMotionOp.ApplyHold"/> applies.</summary>
@@ -46,6 +51,26 @@ public enum BodyHoldForward : byte {
     /// <summary>The direction the body is travelling.</summary>
     Velocity,
 }
+/// <summary>The compiled displacement law of a <see cref="BodyHoldBond.Medium"/> hold — what the medium does to a
+/// body that is in it, independent of what the body itself thrusts. Meaningless, and left zeroed, on every other
+/// bond.</summary>
+/// <param name="Buoyancy">The medium's idle vertical drift velocity below the bob band, signed (u/s): positive
+/// drifts the body up toward its float line, negative sinks it, zero holds depth.</param>
+/// <param name="MaxRiseSpeed">The terminal ascent speed (u/s) the vertical channel is clamped to.</param>
+/// <param name="MaxSinkSpeed">The terminal descent speed (u/s) the vertical channel is clamped to.</param>
+/// <param name="SurfaceSettleRate">The proportional settle gain toward the float line (1/s), applied inside the bob
+/// band and above it.</param>
+/// <param name="FloatDepth">How far below the medium surface the body rests when floating, and the bob band's
+/// half-width around that line (u).</param>
+/// <param name="ThrustFraction">The fraction of the hold's travel speed the MoveUp role commands vertically.</param>
+public readonly record struct FixedBodyMedium(
+    FixedQ4816 Buoyancy,
+    FixedQ4816 MaxRiseSpeed,
+    FixedQ4816 MaxSinkSpeed,
+    FixedQ4816 SurfaceSettleRate,
+    FixedQ4816 FloatDepth,
+    FixedQ4816 ThrustFraction
+);
 /// <summary>
 /// One compiled hold: the fixed-point form of an authored hold row, in the ordered list a kit's motion model
 /// declares. <see cref="BodyMotionOp.ResolveHold"/> walks the list in order and takes the first hold the world
@@ -78,6 +103,8 @@ public enum BodyHoldForward : byte {
 /// <param name="SpendState">The body-lane state slot name the hold drains while held, or <see langword="null"/> for
 /// a hold that spends nothing.</param>
 /// <param name="SpendPerSecond">The rate that slot drains at, per second.</param>
+/// <param name="Medium">The displacement law of a <see cref="BodyHoldBond.Medium"/> bond; zeroed on every
+/// other.</param>
 public readonly record struct FixedBodyHold(
     string Name,
     BodyHoldBond Bond,
@@ -97,7 +124,8 @@ public readonly record struct FixedBodyHold(
     int ReleaseOrdinal,
     FixedQ4816 ReleaseThreshold,
     string? SpendState,
-    FixedQ4816 SpendPerSecond
+    FixedQ4816 SpendPerSecond,
+    FixedBodyMedium Medium
 ) {
     /// <summary>Reports whether a candidate face's alignment with gravity-up falls inside this hold's cone.</summary>
     /// <param name="alignment">The dot product of the candidate's unit normal with gravity-up. Clamped to

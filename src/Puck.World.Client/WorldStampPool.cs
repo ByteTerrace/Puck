@@ -172,6 +172,10 @@ public sealed partial class WorldStampPool {
         public readonly float[] EffectorWeight = new float[CreationDocument.MaxEffectors];
         public readonly bool[] EffectorPlanted = new bool[CreationDocument.MaxEffectors];
         public readonly Vector3[] EffectorPlantTarget = new Vector3[CreationDocument.MaxEffectors];
+        // The world point each effector resolved this frame, latched purely so `body.rig` can echo the decision the
+        // solve acted on; a frame that resolved nothing leaves EffectorHasTarget false.
+        public readonly Vector3[] EffectorTarget = new Vector3[CreationDocument.MaxEffectors];
+        public readonly bool[] EffectorHasTarget = new bool[CreationDocument.MaxEffectors];
         public readonly int[] EffectorBoneSlot = new int[CreationDocument.MaxEffectors * CreationEffectorDocument.MaxChainBones];
         public readonly int[] EffectorBoneCount = new int[CreationDocument.MaxEffectors];
         public readonly int[] EffectorTipSlot = new int[CreationDocument.MaxEffectors];
@@ -1403,12 +1407,16 @@ public sealed partial class WorldStampPool {
             }
         }
     }
-    /// <summary>Resolves a body-rooted creation look's current authored part pose without a packed buffer.</summary>
+    /// <summary>Resolves a body-rooted creation look's current part pose without a packed buffer.</summary>
     /// <param name="bodyIndex">The population entity index.</param>
     /// <param name="partId">The ordinal, case-sensitive authored part identifier.</param>
     /// <param name="client">The client supplying the entity root pose.</param>
     /// <param name="pose">The current part pose, or default when unresolved.</param>
     /// <returns><see langword="true"/> when the live creation look publishes the part.</returns>
+    /// <remarks>The pose carries the shape's COMPOSED delta — its own swings and slides, the parent chain, and any
+    /// effector correction — read off the latch the last <see cref="PackTransforms"/> left, so an anchor consumer
+    /// and the rendered geometry answer with the same pose. A shape with no animation has an identity delta, so its
+    /// anchor is the authored pose exactly as before.</remarks>
     public bool TryBodyPartAuthoredPose(int bodyIndex, string partId, WorldClient client, out SdfAnchor pose) {
         if (
             !TryFindBody(
@@ -1434,13 +1442,23 @@ public sealed partial class WorldStampPool {
             live: live
         );
 
-        var (localPosition, localRotation) = (((poses is not null) && poses.TryGetValue(
-            key: shape.Id,
-            value: out var framePose
-        ))
-            ? (framePose.Position, framePose.Rotation)
-            : (shape.Position, shape.Rotation)
+        var (localPosition, localRotation) = BasePose(
+            poses: poses,
+            shape: shape
         );
+
+        // The same composed delta the write pass applies, read off the last pack's latch rather than recomputed: the
+        // drivers advance once a frame, so recomputing here would either double-advance them or answer at a phase
+        // nothing was drawn at.
+        if (shapeSlot < WorldPlacementPolicy.MaxAnimatedStampShapes) {
+            WorldGaitDrivers.Apply(
+                deltaRotation: live.PartDeltaRotation[shapeSlot],
+                deltaTranslation: live.PartDeltaTranslation[shapeSlot],
+                position: ref localPosition,
+                rotation: ref localRotation
+            );
+        }
+
         var (rootPosition, rootRotation, scale) = FollowedRootPose(
             client: client,
             live: live

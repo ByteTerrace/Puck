@@ -330,9 +330,14 @@ public readonly record struct FixedWorldKit(
             RoleOrdinals: roleOrdinals,
             RoleMask: roleMask,
             ActionState: actionState,
-            Holds: WorldHoldFactory.Compile(
-                channels: channels,
-                holds: kit.Motion.DeclaredHolds
+            // The swim arm is an authoring spelling of one medium hold, so it compiles into the same list a kit
+            // authoring that row reaches — the medium law exists once, whichever spelling names it.
+            Holds: ((kit.Motion is WorldMotionModel.Swim swim)
+                ? WorldHoldFactory.Compile(swim: swim)
+                : WorldHoldFactory.Compile(
+                    channels: channels,
+                    holds: kit.Motion.DeclaredHolds
+                )
             ),
             PlanarDynamics: planarDynamics
         );

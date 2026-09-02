@@ -347,7 +347,7 @@
                     "type": "number"
                   },
                   "buoyancy": {
-                    "description": "The medium\u0027s idle vertical drift velocity (u/s, signed) below the bob band: positive drifts the body up toward its float line, negative sinks, zero holds depth. Folded into the commanded thrust target \u2014 see FixedSwimTuning \u2014 never applied as a separate acceleration.",
+                    "description": "The medium\u0027s idle vertical drift velocity (u/s, signed) below the bob band: positive drifts the body up toward its float line, negative sinks, zero holds depth. Folded into the commanded thrust target \u2014 see FixedBodyMedium, the one compiled form of a medium\u0027s displacement law \u2014 never applied as a separate acceleration.",
                     "type": "number"
                   },
                   "maxRiseSpeed": {

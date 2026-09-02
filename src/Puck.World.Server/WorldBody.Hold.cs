@@ -442,6 +442,17 @@ public sealed partial class WorldBody {
 
                     break;
                 }
+                if (hold.Bond == BodyHoldBond.Medium) {
+                    // The world either offers a medium where the body is or it does not — the lattice column is the
+                    // whole test, and there is no face to probe for or to keep tracking.
+                    if (m_mediumSurface is not null) {
+                        chosen = index;
+
+                        break;
+                    }
+
+                    continue;
+                }
                 if (index != previousIndex) {
                     if (TryTakeHold(
                         candidate: out var taken,
@@ -589,6 +600,33 @@ public sealed partial class WorldBody {
             return;
         }
 
+        // Whether the lean also carries the body's CONTACT axis is decided by what is holding the body, never by the
+        // lean itself. A hold gravity keeps presses the body onto its face, so that face is the ground the solver
+        // should stand it on and the axis leans with it — a kart on a loop. A grip holds the body instead, gravity is
+        // suspended, and leaning the contact axis onto the face would tell the solver that the floor under the body
+        // is a ceiling and that falling is upward: the floor stops depenetrating and a released body flies off. So a
+        // grip's lean is the body's FRAME — the plane it travels in and the attitude it is drawn at — and the contact
+        // axis stays with the ambient resolve.
+        //
+        // The adoption is BOUNDED, through the same accumulator a measured contact normal is adopted by and for the
+        // same reason: a face change is a discontinuity in the axis, and rotating the carried velocity through it
+        // whole throws the body off. It is also why nothing here ever asks FromTo for an antipodal arc.
+        var rotation = FixedQuaternion.Identity;
+
+        if (hold.Kind == BodyHoldKind.Gravity) {
+            rotation = SteerUpToward(
+                accumulator: ref m_contactUpTurnAccumulator,
+                halfRate: ContactUpTurnHalfRate,
+                stepTicks: scratch.StepTicks,
+                target: leaned
+            );
+        }
+
+        scratch.Up = m_up;
+        // The drawn body stands on the leaned axis whether or not the solver does, and every later attitude writer
+        // (the facing snap) composes about this rather than flattening it back onto the contact axis.
+        scratch.AttitudeUp = leaned;
+
         var tangent = (gravityUp - (normal * FixedVector3.Dot(
             left: gravityUp,
             right: normal
@@ -598,12 +636,6 @@ public sealed partial class WorldBody {
             return;
         }
 
-        var previousUp = m_up;
-
-        SetUp(next: leaned);
-
-        scratch.Up = m_up;
-
         if (length > FixedQ4816.Zero) {
             var forward = (tangent / length);
 
@@ -612,26 +644,25 @@ public sealed partial class WorldBody {
                 left: forward,
                 right: normal
             );
-        } else if (previousUp != m_up) {
-            var transport = FixedQuaternion.FromTo(
-                from: previousUp,
-                to: m_up
-            );
-
-            scratch.Facing = transport.Rotate(vector: scratch.Facing);
-            scratch.Right = transport.Rotate(vector: scratch.Right);
+        } else if (rotation != FixedQuaternion.Identity) {
+            // A face whose normal is parallel to gravity-up says nothing about forward, so the ordinary frame stands
+            // — carried by whatever arc the axis actually turned through.
+            scratch.Facing = rotation.Rotate(vector: scratch.Facing);
+            scratch.Right = rotation.Rotate(vector: scratch.Right);
         }
 
         SetHoldAttitude(
             hold: in hold,
+            leaned: in leaned,
             scratch: ref scratch
         );
     }
-    // The body's drawn attitude under a hold: the heading carried into the hold's own up frame, with the row's
-    // forward rule choosing what that heading tracks. Heading keeps the integrated yaw; intent and velocity re-derive
-    // it from the commanded and travelled directions expressed in that same frame, so a body that leans onto a face
-    // still faces where it is going rather than where the world's +Y frame says.
-    private void SetHoldAttitude(in FixedBodyHold hold, ref BodyMotionScratch scratch) {
+    // The body's drawn attitude under a hold. While the lean and the contact axis agree — every unleaned hold, and
+    // every hold gravity keeps — this is the heading carried into the body's own up frame, exactly as the ordinary
+    // frame operation builds it, so an unleaned world is unchanged. Where they disagree (a grip's lean) the attitude
+    // is built from the leaned axis directly, which is what puts a gripping body's up on the face it holds while the
+    // solver keeps measuring against gravity.
+    private void SetHoldAttitude(in FixedBodyHold hold, in FixedVector3 leaned, ref BodyMotionScratch scratch) {
         var source = (hold.Forward switch {
             BodyHoldForward.Intent => (TryCommandedDirection(
                 direction: out var commanded,
@@ -643,6 +674,35 @@ public sealed partial class WorldBody {
             _ => FixedVector3.Zero,
         });
 
+        if (leaned != m_up) {
+            var forward = ((source != FixedVector3.Zero)
+                ? source
+                : scratch.Facing
+            );
+
+            if (!TryPerpendicular(
+                axis: in leaned,
+                unit: out var aligned,
+                vector: in forward
+            ) && !TryPerpendicular(
+                axis: in leaned,
+                unit: out aligned,
+                vector: scratch.Orientation.Rotate(vector: -UnitZ)
+            ) && !TryPerpendicular(
+                axis: in leaned,
+                unit: out aligned,
+                vector: in scratch.Right
+            )) {
+                return;
+            }
+
+            scratch.Orientation = AttitudeFrom(
+                forward: in aligned,
+                up: in leaned
+            );
+
+            return;
+        }
         if (source != FixedVector3.Zero) {
             var local = m_frame.Inverse().Rotate(vector: source);
             var planar = new FixedVector3(
@@ -668,6 +728,54 @@ public sealed partial class WorldBody {
             ? attitude
             : (m_frame * attitude)
         );
+    }
+    // The component of a vector perpendicular to an axis, unit length, or false when the two are parallel.
+    private static bool TryPerpendicular(in FixedVector3 vector, in FixedVector3 axis, out FixedVector3 unit) {
+        unit = FixedVector3.Zero;
+
+        var perpendicular = (vector - (axis * FixedVector3.Dot(
+            left: vector,
+            right: axis
+        )));
+
+        if (
+            !perpendicular.TryLength(length: out var length) ||
+            (length <= FixedQ4816.Zero)
+        ) {
+            return false;
+        }
+
+        unit = (perpendicular / length);
+
+        return true;
+    }
+    // The attitude carrying world +Y onto an up axis and world -Z onto a forward already perpendicular to it. The
+    // shortest arc from +Y is undefined at the antipode, but the twist that follows aligns forward exactly, so the
+    // composed rotation is the same whichever axis that arc picked.
+    private static FixedQuaternion AttitudeFrom(in FixedVector3 forward, in FixedVector3 up) {
+        var arc = FixedQuaternion.FromTo(
+            from: UnitY,
+            to: up
+        );
+        var arcForward = arc.Rotate(vector: -UnitZ);
+        var twist = FixedQuaternion.FromAxisAngle(
+            angle: FixedQ4816.Atan2(
+                x: FixedVector3.Dot(
+                    left: arcForward,
+                    right: forward
+                ),
+                y: FixedVector3.Dot(
+                    left: FixedVector3.Cross(
+                        left: arcForward,
+                        right: forward
+                    ),
+                    right: up
+                )
+            ),
+            axis: up
+        );
+
+        return (twist * arc).Normalize();
     }
     // The ApplyHold operation: the current row's vertical law. Nothing holding the body is gravity — the same law an
     // unheld body falls under.
@@ -708,6 +816,156 @@ public sealed partial class WorldBody {
             default:
                 break;
         }
+        if (hold.Bond == BodyHoldBond.Medium) {
+            // A medium holds by displacement whatever its kind says about gravity, so its law runs alongside rather
+            // than instead of the kind switch above (a medium row ordinarily authors kind None).
+            ApplyMedium(
+                medium: hold.Medium,
+                scratch: ref scratch
+            );
+        }
+    }
+    /// <summary>The medium a body of this kit stands in, or <see langword="null"/> when its kit authors none. Found
+    /// by walking the kit's own rows rather than by requiring <see cref="BodyMotionOp.ResolveHold"/> to have picked
+    /// one, so a program that names the medium operations directly reads the same law.</summary>
+    private FixedBodyMedium? KitMedium {
+        get {
+            for (var index = 0; (index < m_holds.Length); index++) {
+                if (m_holds[index].Bond == BodyHoldBond.Medium) {
+                    return m_holds[index].Medium;
+                }
+            }
+
+            return null;
+        }
+    }
+    // The one medium law. The body's own commanded thrust is folded into the medium's drift BEFORE the convergence
+    // runs, so nothing writes the vertical channel twice: below the bob band the medium drifts the body at its
+    // buoyancy, inside the band (and above it, recovering a breach) it settles proportionally toward the float line,
+    // and the sum is clamped to the medium's own terminal speeds.
+    private void ApplyMedium(in FixedBodyMedium medium, ref BodyMotionScratch scratch) {
+        if (m_mediumSurface is not { } mediumSurface) {
+            return;
+        }
+
+        var surfaceRest = (mediumSurface - medium.FloatDepth);
+        var error = (surfaceRest - m_position.Y);
+        FixedQ4816 drift;
+
+        if (m_position.Y < (surfaceRest - medium.FloatDepth)) {
+            drift = FixedQ4816.Clamp(
+                value: medium.Buoyancy,
+                minimum: -medium.MaxSinkSpeed,
+                maximum: medium.MaxRiseSpeed
+            );
+        } else {
+            var upwardCap = ((medium.Buoyancy > FixedQ4816.Zero)
+                ? medium.Buoyancy
+                : FixedQ4816.Zero
+            );
+
+            drift = FixedQ4816.Clamp(
+                value: (error * medium.SurfaceSettleRate),
+                minimum: -medium.MaxSinkSpeed,
+                maximum: upwardCap
+            );
+        }
+
+        var target = FixedQ4816.Clamp(
+            value: (MediumThrust(
+                medium: in medium,
+                scratch: ref scratch
+            ) + drift),
+            minimum: -medium.MaxSinkSpeed,
+            maximum: medium.MaxRiseSpeed
+        );
+
+        if (m_tuning.PlanarDynamics is { Planar: { } planar }) {
+            // scratch.StepTicks can differ from planar.StepTicks for exactly one tick — a world-load/reload swap
+            // recompiles the propagator at the NEW rate but the batch already in flight still advances at its OLD
+            // width. The follower steps through the mismatched width rather than fault on it.
+            StepVerticalFollower(
+                step: in planar,
+                target: target,
+                minimum: -medium.MaxSinkSpeed,
+                maximum: medium.MaxRiseSpeed
+            );
+            WriteMediumFacts(
+                error: error,
+                medium: in medium,
+                surface: mediumSurface
+            );
+
+            return;
+        }
+
+        var response = m_tuning.Response;
+
+        if (response.Length == 0) {
+            m_verticalVelocity = target;
+        } else {
+            var matched = false;
+
+            // ShapePlanarVelocity already ticked the recency clocks this step (phase 2 precedes 4); this scan only
+            // SELECTS (first open row wins, same rule the planar half follows).
+            foreach (var row in response) {
+                if (!MotionGateOpen(gate: row.Gate)) {
+                    continue;
+                }
+
+                var hasVerticalInput = (Role(
+                    intent: in scratch.Intent,
+                    role: ChannelRole.MoveUp
+                ) != FixedQ4816.Zero);
+                var rate = (hasVerticalInput
+                    ? row.EngageRate
+                    : row.ReleaseRate
+                );
+                var maxDelta = m_swimThrustRampAccumulator.Integrate(
+                    elapsedTicks: scratch.StepTicks,
+                    ratePerSecond: rate
+                );
+
+                m_verticalVelocity = FixedQ4816.MoveToward(
+                    current: m_verticalVelocity,
+                    maxDelta: maxDelta,
+                    target: target
+                );
+                matched = true;
+
+                break;
+            }
+
+            if (!matched) {
+                m_verticalVelocity = target;
+            }
+        }
+
+        WriteMediumFacts(
+            error: error,
+            medium: in medium,
+            surface: mediumSurface
+        );
+    }
+    // The vertical half of the commanded thrust: the MoveUp role scaled by the hold's travel speed and the medium's
+    // own thrust fraction, with the same held-sprint multiplier the planar half applies.
+    private FixedQ4816 MediumThrust(in FixedBodyMedium medium, ref BodyMotionScratch scratch) {
+        var speed = (((m_sprintChannelOrdinal >= 0) && (scratch.Intent[m_sprintChannelOrdinal] >= m_channelThresholds[m_sprintChannelOrdinal]))
+            ? (scratch.MoveSpeed * m_tuning.SprintMultiplier)
+            : scratch.MoveSpeed
+        );
+
+        return ((Role(
+            intent: in scratch.Intent,
+            role: ChannelRole.MoveUp
+        ) * speed) * medium.ThrustFraction);
+    }
+    // The two medium facts, on the same one-tick-behind terms every other body fact is published under.
+    private void WriteMediumFacts(FixedQ4816 surface, FixedQ4816 error, in FixedBodyMedium medium) {
+        m_submerged = (m_position.Y < surface);
+        m_atSurface = (m_submerged && (((error < FixedQ4816.Zero)
+            ? -error
+            : error) <= medium.FloatDepth));
     }
     /// <summary>Gets a value indicating whether the current hold owns the body's vertical channel outright, so
     /// contact resolution must not fold its resolved velocity back into it.</summary>

@@ -47,8 +47,14 @@ public sealed class WorldFrameProducerLawTests {
             fixture.Step();
         }
 
-        Assert.True(condition: (body.FixedPosition.X < (start.X - FixedQ4816.FromDouble(value: 0.5))),
+        // The claim is that world-frame wander steers in TWO axes at all: a producer whose steering decision never
+        // reached the body could only march along -Z, leaving X exactly where it started. The direction it turns is
+        // not the claim — the inward pull now measures against the body's own home (its spawn point), not the world
+        // origin, so which way it arcs off is a function of that home rather than of the origin's bearing.
+        Assert.True(condition: (FixedQ4816.Abs(value: (body.FixedPosition.X - start.X)) > FixedQ4816.FromDouble(value: 0.5)),
             userMessage: $"world-frame wander never acquired lateral steering: start={start}, end={body.FixedPosition}");
         Assert.NotEqual(expected: FixedQ4816.Zero, actual: body.FixedYaw);
+        // And the home it steers against is its own spawn, never the origin.
+        Assert.Equal(expected: start, actual: body.FixedHome);
     }
 }

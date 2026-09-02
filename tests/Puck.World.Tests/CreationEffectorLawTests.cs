@@ -507,6 +507,156 @@ public sealed class CreationEffectorLawTests {
         static string Refuse(CreationEffectorDocument effector) => Refusal(document: Rig(effectors: [effector]));
     }
 
+    /// <summary>The rig read-back reports each driver's live phase and weight and each effector's weight, latch, and
+    /// world target, and a planted effector's target is unchanged across two packs while the body travels. The
+    /// control is the identical rig without <c>plant</c>, whose target follows the body.</summary>
+    [Fact]
+    public void TheRigReadBackReportsAPlantedTargetThatDoesNotMoveWithTheBody() {
+        var planted = Rigged(effectors: [Leg(plant: new CreationPlantDocument(
+            Driver: "clock",
+            Window: new Vector2(x: 0f, y: MathF.PI)
+        ))]);
+        var free = Rigged(effectors: [Leg(plant: null)]);
+
+        Assert.True(condition: (planted.Travel > 0.1f), userMessage: $"the body did not travel far enough to discriminate; travel={planted.Travel}");
+
+        var driver = Assert.Single(collection: planted.After!.Drivers);
+
+        Assert.Equal(expected: "clock", actual: driver.Name);
+        Assert.True(condition: (driver.Phase > 0f), userMessage: $"the driver's phase was not reported advancing; phase={driver.Phase}");
+        // A driver's weight snaps only at the release end of its exponential approach, so an ungated one settles a
+        // float tick under 1; an effector's snaps at both ends, which is why the one below is exact.
+        Assert.True(condition: (driver.Weight > 0.99f), userMessage: $"the ungated driver's weight was not reported settled; weight={driver.Weight}");
+        Assert.True(condition: (planted.After.Speed > WorldGaitDrivers.MovingSpeed), userMessage: $"the eased speed the moving gate reads was not reported; speed={planted.After.Speed}");
+
+        var before = Assert.Single(collection: planted.Before!.Effectors);
+        var after = Assert.Single(collection: planted.After.Effectors);
+
+        Assert.Equal(expected: "footLeft", actual: after.Name);
+        Assert.True(condition: after.Planted, userMessage: "the effector inside its plant window did not report planted");
+        Assert.Equal(expected: 1f, actual: after.Weight);
+        Assert.Equal(expected: CreationEffectorDocument.MinChainBones, actual: after.Bones);
+        Assert.True(
+            condition: (Vector3.Distance(value1: before.Target!.Value, value2: after.Target!.Value) < Tolerance),
+            userMessage: $"a planted target moved: {before.Target} then {after.Target} over {planted.Travel} of travel"
+        );
+
+        // The control: no plant, so the target is re-probed under the travelling body every pack and moves with it.
+        var freeBefore = Assert.Single(collection: free.Before!.Effectors);
+        var freeAfter = Assert.Single(collection: free.After!.Effectors);
+
+        Assert.False(condition: freeAfter.Planted, userMessage: "an effector with no plant reported planted");
+        Assert.True(
+            condition: (Vector3.Distance(value1: freeBefore.Target!.Value, value2: freeAfter.Target!.Value) > (0.5f * free.Travel)),
+            userMessage: $"the unplanted control's target did not follow the body: {freeBefore.Target} then {freeAfter.Target} over {free.Travel} of travel"
+        );
+
+        static (WorldRigState? Before, WorldRigState? After, float Travel) Rigged(IReadOnlyList<CreationEffectorDocument> effectors) {
+            var pool = new WorldStampPool();
+            var creation = Prototype(effectors: effectors);
+            var client = Client(definition: Definition(creation: creation));
+            var transforms = new DynamicTransform[WorldStampPool.DynamicSlotCount];
+
+            pool.Reconcile(
+                bodyStamps: [new WorldStampPool.BodyStamp(BodyIndex: 0, Creation: creation, Scale: 1f, Motion: WorldLookMotion.Default)],
+                creations: [creation],
+                dynamics: [],
+                placements: []
+            );
+
+            for (var frame = 0; (frame < 120); frame++) {
+                Advance(
+                    client: client,
+                    pool: pool,
+                    position: Vector3.Zero,
+                    tick: ((ulong)frame),
+                    transforms: transforms
+                );
+            }
+
+            _ = pool.TryBodyRig(
+                bodyIndex: 0,
+                state: out var before
+            );
+
+            var travelled = Vector3.Zero;
+
+            for (var frame = 0; (frame < 20); frame++) {
+                travelled += new Vector3(x: 0f, y: 0f, z: 0.01f);
+
+                Advance(
+                    client: client,
+                    pool: pool,
+                    position: travelled,
+                    tick: ((ulong)(120 + frame)),
+                    transforms: transforms
+                );
+            }
+
+            _ = pool.TryBodyRig(
+                bodyIndex: 0,
+                state: out var after
+            );
+
+            return (before, after, travelled.Length());
+        }
+    }
+    /// <summary>The buffer-free part anchor answers the composed pose — drivers, parent chain, and effector — so it
+    /// agrees with the packed transform the same part renders through. The control is a part on a shape with no
+    /// parent, no swing, and no effector, whose anchor is its authored pose and agreed already.</summary>
+    [Fact]
+    public void AnAuthoredPartAnchorAgreesWithThePackedPose() {
+        var pool = new WorldStampPool();
+        var creation = Prototype(effectors: [Leg(plant: null)]);
+        var client = Client(definition: Definition(creation: creation));
+        var transforms = new DynamicTransform[WorldStampPool.DynamicSlotCount];
+
+        pool.Reconcile(
+            bodyStamps: [new WorldStampPool.BodyStamp(BodyIndex: 0, Creation: creation, Scale: 1f, Motion: WorldLookMotion.Default)],
+            creations: [creation],
+            dynamics: [],
+            placements: []
+        );
+
+        for (var frame = 0; (frame < 120); frame++) {
+            Advance(
+                client: client,
+                pool: pool,
+                position: Vector3.Zero,
+                tick: ((ulong)frame),
+                transforms: transforms
+            );
+        }
+
+        Assert.True(condition: pool.TryBodyPartAuthoredPose(bodyIndex: 0, client: client, partId: "foot", pose: out var authored));
+        Assert.True(condition: pool.TryBodyPartPose(bodyIndex: 0, partId: "foot", pose: out var packed, transforms: transforms));
+        AssertNear(
+            actual: authored.Position,
+            expected: packed.Position,
+            what: "the animated part's anchor disagreed with the pose it renders through"
+        );
+
+        // The control carries no animation at all, so its anchor is its authored position and the two doors agreed
+        // even before the anchor read the composed delta.
+        Assert.True(condition: pool.TryBodyPartAuthoredPose(bodyIndex: 0, client: client, partId: "spare", pose: out var inertAuthored));
+        Assert.True(condition: pool.TryBodyPartPose(bodyIndex: 0, partId: "spare", pose: out var inertPacked, transforms: transforms));
+        AssertNear(
+            actual: inertAuthored.Position,
+            expected: inertPacked.Position,
+            what: "the un-animated control part disagreed"
+        );
+        AssertNear(
+            actual: inertAuthored.Position,
+            expected: new Vector3(x: 0f, y: 0.5f, z: 0f),
+            what: "the un-animated control part did not sit at its authored position"
+        );
+        // The animated part is somewhere its authored position is not, so the first pair is a moved anchor rather
+        // than two identities.
+        Assert.True(
+            condition: (Vector3.Distance(value1: authored.Position, value2: new Vector3(x: 0f, y: -0.02f, z: 0.02f)) > 0.01f),
+            userMessage: $"the effector never moved the part off its authored position; anchor={authored.Position}"
+        );
+    }
     // The one two-bone leg every pipeline law drives: a hip-knee-boot chain whose boot probes for whatever is below
     // the body within half a metre and stands 0.03 off it.
     private static CreationEffectorDocument Leg(CreationPlantDocument? plant) => new(
@@ -570,7 +720,10 @@ public sealed class CreationEffectorLawTests {
             Signal: CreationDriverDocument.SignalTime,
             When: [CreationDriverDocument.WhenAlways]
         )],
-        Effectors: effectors
+        Effectors: effectors,
+        // Two published part identities: one on the solved tip, one on the shape hanging off the creation root with
+        // no parent, no swing, and no effector — the anchor law's subject and its control.
+        Parts: [new CreationPartDocument(Id: "foot", ShapeId: 2), new CreationPartDocument(Id: "spare", ShapeId: 3)]
     );
     private static WorldPrototype Prototype(CreationDocument document) {
         var canonical = CreationCanonicalizer.Canonicalize(

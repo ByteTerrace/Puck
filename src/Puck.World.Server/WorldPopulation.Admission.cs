@@ -52,6 +52,9 @@ public sealed partial class WorldPopulation {
             pitchRadians: FixedQ4816.Zero,
             rollRadians: FixedQ4816.Zero
         );
+        // An inhabitant's home is the ground its row activated it on — the placement's position plus its own
+        // distribution sample — so its producer wanders THERE rather than at the world origin.
+        body.SetHome(home: (spawn with { Y = altitude }));
 
         body.SetIntentSource(source: inhabit.Source);
         entry.Body = body;
@@ -108,6 +111,7 @@ public sealed partial class WorldPopulation {
             pitchRadians: FixedQ4816.Zero,
             rollRadians: FixedQ4816.Zero
         );
+        player.SetHome(home: entry.SpawnPosition);
 
         player.SetIntentSource(source: (source ?? m_defaultPeerSource));
         entry.Body = player;
@@ -280,6 +284,7 @@ public sealed partial class WorldPopulation {
             pitchRadians: FixedQ4816.Zero,
             rollRadians: FixedQ4816.Zero
         );
+        body.SetHome(home: spawnPoint.Position);
         // Seats default Live and are never touched by population operations; producer state is seeded so a later
         // body.control producer:<name> uses the same deterministic path as a peer.
         ClearDesignations(entry: entry);

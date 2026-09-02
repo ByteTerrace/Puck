@@ -165,6 +165,10 @@ public sealed partial class WorldBody {
     private SecondOrderState m_verticalFollower;
     private FixedQ4816 m_verticalPreviousTarget;
     private bool m_verticalFollowerSeeded;
+    // Where this body belongs — the position its activation placed it at. Producers measure their own steering
+    // against it (see ProduceWanderIntent), so it is simulation state: it decides trajectories. A teleport never
+    // moves it, which is what separates "where the body is" from "where the body is from".
+    private FixedVector3 m_home;
     // The avatar's simulation position. See Position.
     private FixedVector3 m_position;
     // The position captured at the top of the most recent Advance — the swept portal-crossing scan's segment start
@@ -186,7 +190,6 @@ public sealed partial class WorldBody {
     // separate accumulator per stage. The medium surface arrives fresh every tick from the population's field lattice
     // (SetMediumSurface, sampled before this body's own Advance runs); the two swim facts are written by the surface
     // stage and read one tick behind, the same discipline m_grounded follows.
-    private FixedSwimTuning? m_swimTuning;
     private int m_tapeCount;
     private int m_tapeHead;
     // A committed authority handoff can precede the new input stream's first publication by one or more destination

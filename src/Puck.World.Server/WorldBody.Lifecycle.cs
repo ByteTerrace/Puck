@@ -147,7 +147,6 @@ public sealed partial class WorldBody {
                 m_motionArm = CompiledMotionArm.Grounded;
                 m_tuning = WorldMotionTuningFactory.Compile(dynamics: planarDynamics, tuning: grounded);
                 m_vehicleTuning = default;
-                m_swimTuning = null;
                 break;
             case WorldMotionModel.Vehicle vehicle:
                 m_motionArm = CompiledMotionArm.Vehicle;
@@ -160,13 +159,11 @@ public sealed partial class WorldBody {
                     MaxFallSpeed: vehicle.MaxFallSpeed,
                     SprintMultiplier: 1f
                 ));
-                m_swimTuning = null;
                 break;
             case WorldMotionModel.Swim swim:
                 m_motionArm = CompiledMotionArm.Swim;
                 m_tuning = WorldMotionTuningFactory.Compile(dynamics: planarDynamics, tuning: swim);
                 m_vehicleTuning = default;
-                m_swimTuning = WorldMotionTuningFactory.CompileSwim(tuning: swim);
                 break;
             default:
                 throw new NotSupportedException(message: $"Motion model '{motion.GetType().Name}' has no compiled WorldBody integrator.");
@@ -202,11 +199,12 @@ public sealed partial class WorldBody {
     /// <returns>The full bracketed <c>body.where</c> echo line.</returns>
     public string DescribeWhere(int index) {
         var (yaw, pitch, roll) = EulerRadians();
+        var home = m_home.ToVector3();
         var position = m_position.ToVector3();
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[body.where: body:{index} pos=({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: yaw):0}° pitch={CompassDegrees(radians: pitch):0}° roll={CompassDegrees(radians: roll):0}° facts={BodyFactVocabulary.Describe(facts: Facts)}]"
+            handler: $"[body.where: body:{index} pos=({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: yaw):0}° pitch={CompassDegrees(radians: pitch):0}° roll={CompassDegrees(radians: roll):0}° facts={BodyFactVocabulary.Describe(facts: Facts)} home=({home.X:0.00}, {home.Y:0.00}, {home.Z:0.00})]"
         );
     }
     /// <summary>Enqueues a timed scripted segment onto the tape: while it is live it drives the avatar with
@@ -544,6 +542,12 @@ public sealed partial class WorldBody {
         SetBodyMotionProgram(program: program);
         return true;
     }
+    /// <summary>Sets the body's home — the position it was activated at. Written once per activation, beside the
+    /// pose that put the body there; nothing on the step path moves it.</summary>
+    /// <param name="home">The activation position.</param>
+    public void SetHome(FixedVector3 home) {
+        m_home = home;
+    }
     /// <summary>Sets (or clears) the world contact field this body's grounded integrator solves its swept position
     /// against — the population hands it the live field on activation and every rebuild.</summary>
     /// <param name="field">The world contact field.</param>
@@ -770,6 +774,12 @@ public sealed partial class WorldBody {
     public FixedQuaternion FixedOrientation => m_orientation;
     /// <summary>Gets the authoritative deterministic position.</summary>
     public FixedVector3 FixedPosition => m_position;
+    /// <summary>Gets the body's home — the position it was activated at (a seat's spawn point, an inhabitant's
+    /// placement plus its own distribution sample). Producers steer relative to this, so a population spread over
+    /// several placements keeps to its own ground instead of converging on the world origin. A teleport does not
+    /// move it: <see cref="Pose(FixedVector3, FixedQ4816, FixedQ4816, FixedQ4816)"/> puts a body somewhere,
+    /// <see cref="SetHome"/> says where it belongs.</summary>
+    public FixedVector3 FixedHome => m_home;
     /// <summary>Gets the body's up axis — the direction its gravity opposes, its planar move plane is perpendicular
     /// to, and its contact walkable test measures a surface normal against.</summary>
     public FixedVector3 FixedUp => m_up;

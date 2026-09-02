@@ -485,6 +485,22 @@
             {
               "bond": "Surface",
               "cone": [
+                100,
+                180
+              ],
+              "driveAlignment": 0.3,
+              "forward": "Heading",
+              "grip": 1.0,
+              "hold": "Grip",
+              "name": "ceiling",
+              "onDrive": true,
+              "reach": 0.5,
+              "speed": 1.6,
+              "upLean": 1.0
+            },
+            {
+              "bond": "Surface",
+              "cone": [
                 0,
                 180
               ],
@@ -496,7 +512,7 @@
               "onDrive": true,
               "reach": 0.5,
               "speed": 1.6,
-              "upLean": 0.0
+              "upLean": 1.0
             },
             {
               "bond": "Surface",
@@ -925,9 +941,9 @@
             ],
             "rotation": "state.transforms.identity",
             "scale": [
-              12,
+              24,
               0.5,
-              12
+              24
             ],
             "smooth": 0,
             "type": "Box"
@@ -1243,6 +1259,25 @@
             "type": "Box"
           },
           {
+            "blend": "Union",
+            "id": 21,
+            "material": 1,
+            "name": "pillarUnderhang",
+            "position": [
+              -7.25,
+              0.0,
+              -5.5
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.5,
+              0.5,
+              0.5
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
             "blend": "Subtraction",
             "id": 16,
             "material": 0,
@@ -1267,7 +1302,7 @@
             "material": 2,
             "name": "axisXPositive",
             "position": [
-              -11,
+              -23,
               0.0,
               0
             ],
@@ -1286,7 +1321,7 @@
             "material": 2,
             "name": "axisXNegative",
             "position": [
-              11,
+              23,
               -0.45,
               0
             ],
@@ -1307,7 +1342,7 @@
             "position": [
               0,
               0.0,
-              -11
+              -23
             ],
             "rotation": "state.transforms.identity",
             "scale": [
@@ -1326,7 +1361,7 @@
             "position": [
               0,
               -0.45,
-              11
+              23
             ],
             "rotation": "state.transforms.identity",
             "scale": [
@@ -5856,8 +5891,8 @@
       {
         "draw": {
           "generator": {
-            "rangeMax": 8,
-            "rangeMin": 5,
+            "rangeMax": 524288,
+            "rangeMin": 327680,
             "source": "uniformRange"
           },
           "timing": "boot"
@@ -5868,8 +5903,8 @@
       {
         "draw": {
           "generator": {
-            "rangeMax": 6,
-            "rangeMin": 3,
+            "rangeMax": 393216,
+            "rangeMin": 196608,
             "source": "uniformRange"
           },
           "timing": "boot"

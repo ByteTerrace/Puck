@@ -495,7 +495,33 @@ public sealed partial class WorldBody {
         return -1;
     }
     private bool GateOpen(CompiledPredicate[] gate, in LaneActionRuntime state) {
+        if (gate.Length == 0) {
+            return true;
+        }
+
+        Span<bool> stack = stackalloc bool[CompiledPredicateCapacity.MaxTokens];
+        var top = 0;
+
         foreach (var predicate in gate) {
+            if (predicate.Kind == CompiledPredicateKind.Not) {
+                stack[top - 1] = !stack[top - 1];
+                continue;
+            }
+            if (predicate.Kind is CompiledPredicateKind.All or CompiledPredicateKind.Any) {
+                var start = (top - predicate.Arity);
+                var holdsGroup = (predicate.Kind == CompiledPredicateKind.All);
+
+                for (var index = start; index < top; index++) {
+                    holdsGroup = ((predicate.Kind == CompiledPredicateKind.All)
+                        ? (holdsGroup && stack[index])
+                        : (holdsGroup || stack[index]));
+                }
+
+                top = start;
+                stack[top++] = holdsGroup;
+                continue;
+            }
+
             var holds = predicate.Kind switch {
                 CompiledPredicateKind.Now => FactHolds(fact: predicate.Fact),
                 CompiledPredicateKind.Recently => (state.Recency![predicate.RecencySlot] > 0),
@@ -506,12 +532,10 @@ public sealed partial class WorldBody {
                 _ => (m_actionStateTimers[predicate.StateSlot] == 0),
             };
 
-            if (!holds) {
-                return false;
-            }
+            stack[top++] = holds;
         }
 
-        return true;
+        return ((top == 1) && stack[0]);
     }
     private static long InitialRaw(in CompiledActionStateSlot definition) => ((definition.Kind == ActionStateKind.Counter)
         ? definition.InitialValue.Value
@@ -573,22 +597,46 @@ public sealed partial class WorldBody {
             m_laneTimers[ordinal] = holdTicks;
         }
     }
-    // A motion-response gate: a flattened conjunction of BODY-FACT predicates only (Now/Recently — the validator rejects
-    // action-state predicates on a response gate). Every element must hold.
+    // A motion-response gate: a postfix Boolean program of BODY-FACT predicates only (Now/Recently — the validator
+    // rejects action-state predicates on a response gate).
     private bool MotionGateOpen(CompiledPredicate[] gate) {
+        if (gate.Length == 0) {
+            return true;
+        }
+
+        Span<bool> stack = stackalloc bool[CompiledPredicateCapacity.MaxTokens];
+        var top = 0;
+
         foreach (var predicate in gate) {
+            if (predicate.Kind == CompiledPredicateKind.Not) {
+                stack[top - 1] = !stack[top - 1];
+                continue;
+            }
+            if (predicate.Kind is CompiledPredicateKind.All or CompiledPredicateKind.Any) {
+                var start = (top - predicate.Arity);
+                var holdsGroup = (predicate.Kind == CompiledPredicateKind.All);
+
+                for (var index = start; index < top; index++) {
+                    holdsGroup = ((predicate.Kind == CompiledPredicateKind.All)
+                        ? (holdsGroup && stack[index])
+                        : (holdsGroup || stack[index]));
+                }
+
+                top = start;
+                stack[top++] = holdsGroup;
+                continue;
+            }
+
             var holds = predicate.Kind switch {
                 CompiledPredicateKind.Now => FactHolds(fact: predicate.Fact),
                 CompiledPredicateKind.Recently => (m_motionRecency[predicate.RecencySlot] > 0),
                 _ => false,
             };
 
-            if (!holds) {
-                return false;
-            }
+            stack[top++] = holds;
         }
 
-        return true;
+        return ((top == 1) && stack[0]);
     }
     // The per-tick action machinery: for each ordinal carrying a compiled binding, derive its edge (the folded value
     // crossing the channel's threshold against the previous sub-step — never carried), refresh the recency clocks (a

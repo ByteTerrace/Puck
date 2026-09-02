@@ -36,7 +36,7 @@ namespace Puck.World;
 /// entry, and never defaulted — a bare <c>instance:&lt;name&gt;</c> with no slot is refused), and <c>join</c>'s
 /// "next free slot"/either-order profile-then-slot convenience does not apply there.</para>
 /// </remarks>
-internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopulation population, WorldScreenBinder screens, WorldDefinition definition, IServerLink link, WorldServer server, WorldPerceptionAnchor anchor, WorldClient client, Func<InputRouter> router, WorldInstanceHost instances, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter, WorldReplayTape tape) : ICommandModule {
+internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopulation population, WorldScreenBinder screens, WorldDefinition definition, IServerLink link, WorldServer server, WorldPerceptionAnchor anchor, WorldClient client, Func<InputRouter> router, WorldInstanceHost instances, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter, WorldReplayTape tape, WorldStampPool stamps) : ICommandModule {
     public const string AssignCommand = Puck.World.Client.PlayerCommandNames.AssignCommand;
     /// <summary>The keyboard-claim command (Keyboard F1..F4, press edge). The target slot rides the binding's Axis1D
     /// value as a 1-based player number, the clean scalar constant a binding carries.</summary>
@@ -84,6 +84,9 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     private readonly WorldPerceptionAnchor m_anchor = anchor;
     private readonly WorldInstanceHost m_instances = instances;
     private readonly WorldReplayTape m_tape = tape;
+    // The creation-stamp pool, read (never stepped) by body.rig: the driver/effector state is presentation-side and
+    // exists nowhere else, so this is the one door onto it.
+    private readonly WorldStampPool m_stamps = stamps;
     // The BOOT world's compiled channel table — name→ordinal resolution for body.press and PickerDirection's
     // pre-join Turn-role check. Validation has already run by the time a WorldDefinition reaches here, so every
     // declared name resolves. NEVER the source a bound channel verb dispatches against — see m_seatBindings.
@@ -110,6 +113,12 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             name: "body.where",
             description: "Echoes a body's FULL 6DOF pose and its authoritative fact mask — [body.where: body:<n> pos=(x.xx, y.yy, z.zz) yaw=ddd° pitch=ddd° roll=ddd° facts=grounded|climbing] — so a piped run can assert it moved or changed regime: facts= is the lower-case, |-joined set of the body facts the simulation's own action gates read (grounded, airborne, rising, falling, submerged, atsurface, climbing), or none. body.where [body] (optional body index 0..127, default 0 — 0..3 local seats, 4..127 simulated entries). Grounded entities print y=0.00 pitch=0 roll=0. A LOCAL seat's echo also carries anchor=body:<n> — the 0-based body index that seat's presentation (camera eye, audio listener, seat.<n>.position.* HUD bindings) derives from: the seat's bound body, or the routed body while possessing (a Control route targeting a body with capture on). A trailing instance:<name> token reads OUT OF a NAMED running instance's OWN tick snapshot instead — body.where <slot> instance:<name> (slot REQUIRED, 1..WorldBodiesLimits.LocalSeatCount, the instance form's own 1-based seat convention); no anchor rides that form (a spawned instance's seat has no client perceiving from it).",
             handler: WhereHandler
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
+            name: "body.rig",
+            description: "Echoes a body's live creation-look rig state — the presentation-side animation decisions nothing else can read: [body.rig: body:<n> creation=<id> speed=s.ss drivers=<count> effectors=<count> driver:<name> phase=p.pp weight=w.ww … effector:<name> weight=w.ww planted=yes|no target=(x.xx, y.yy, z.zz)|none …]. speed= is the eased rendered speed the moving/still gate tokens test; a driver's phase= is radians in [0, 2pi) and weight= its eased gate value; an effector's target= is the WORLD point its tip is being asked for this frame, so a scripted run can fence twice and assert a planted foot's target is unchanged while body.where moved. An effector whose chain resolved to too few bones prints bones=<count> and is inert. body.rig [body] (optional body index 0..127, default 0 — 0..3 local seats, 4..127 simulated entries). A body that renders through the procedural catalog rig rather than a creation look says so plainly.",
+            handler: RigHandler
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
@@ -344,7 +353,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     // Text mutations enter the same tick snapshots as physical input. Read-only inspection stays immediate so an
     // operator can inspect the last completed tick even while no simulation step is currently due.
     private static CommandDefinition Route(CommandDefinition command) =>
-        ((command.Name is "body.where" or "player.sticks" or "body.channels" or "body.state" or "body.attachment")
+        ((command.Name is "body.where" or "body.rig" or "player.sticks" or "body.channels" or "body.state" or "body.attachment")
             ? command
             : command with { Routing = CommandRouting.Simulation }
         );

@@ -198,11 +198,18 @@ shape's `joint` across the author frame; the reach, standoff, weight, and window
 frame-invariant. A bone carrying `domain` operators is refused, on the same grounds a
 swing on one is.
 
-A `surface` target answers only where the composed program admits a fixed-point query.
-`SdfFieldEvaluator` rejects a `wallpaper` domain fold, and one such placement makes the
-WHOLE static field unbuildable — every probe in that world then misses and every
-effector over one eases out (the chase camera's clearance sweep goes inert with it,
-since both read the one evaluator).
+A `surface` target probes the field built from the world's SOLID placements only — the
+same evaluator the chase camera's clearance sweep reads. A presentation-only placement
+(a wallpaper-folded ground texture) is not in it, and neither is any body: a limb probes
+what a body could stand on, never its own geometry or the decoration over it. A world
+whose solid placements carry render-only warps admits no fixed-point query at all; every
+probe there misses and every effector over one eases out.
+
+`body.rig [body]` is the read-back: per driver its phase and eased weight, per effector
+its weight, whether its latch is holding, and the world point its tip is being asked for
+(`target=(x, y, z)`, or `none` when nothing resolved). It reads the pool's latched
+values, never a fresh advance, so a piped run can fence twice and assert a planted
+target is unchanged while `body.where` moved.
 
 ## Shape domain operators
 

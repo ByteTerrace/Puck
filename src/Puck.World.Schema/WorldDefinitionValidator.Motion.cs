@@ -53,8 +53,8 @@ public static partial class WorldDefinitionValidator {
                 // grounded uses; thrust additionally reads the sprint pair. The vertical channel has no op-specific
                 // facet of its own here — ApplyBuoyancyAndSurface below is the ONE vertical owner and already
                 // requires SwimBuoyancy, which subsumes it.
-                BodyMotionOp.ComputeSwimTargetVelocity => (MotionTuningFacet.Sprint | MotionTuningFacet.SwimThrust),
-                BodyMotionOp.ApplyBuoyancyAndSurface => MotionTuningFacet.SwimBuoyancy,
+                BodyMotionOp.ComputeSwimTargetVelocity => MotionTuningFacet.Sprint,
+                BodyMotionOp.ApplyBuoyancyAndSurface => MotionTuningFacet.Holds,
                 BodyMotionOp.ResolveHold or BodyMotionOp.ApplyHold => (MotionTuningFacet.GravityArc | MotionTuningFacet.Holds),
                 _ => MotionTuningFacet.None,
             };
@@ -77,8 +77,10 @@ public static partial class WorldDefinitionValidator {
             | MotionTuningFacet.VehicleDrive),
         // No gravity facets: a swim kit selecting ApplyVerticalGravity/ApplyVerticalDecay refuses here BY NAME —
         // the medium owns the vertical channel, and the missing-facet line is the door that says so.
+        // The swim arm is an authoring spelling of one medium hold, so what it supplies is the hold vocabulary
+        // itself — the medium operations read that row, not an arm-shaped tuning of their own.
         WorldMotionModel.Swim => (MotionTuningFacet.Speed | MotionTuningFacet.PlanarResponse | MotionTuningFacet.Sprint
-            | MotionTuningFacet.WorldFrame | MotionTuningFacet.SwimThrust | MotionTuningFacet.SwimBuoyancy),
+            | MotionTuningFacet.WorldFrame | MotionTuningFacet.Holds),
         _ => MotionTuningFacet.None,
     };
     private static bool TryScalar(BodyProgramParameters parameters, string name, out float value) => parameters.Scalars.TryGetValue(
@@ -238,7 +240,7 @@ public static partial class WorldDefinitionValidator {
     }
     // A kit's full grounded locomotion tuning: speeds, gravity, and the velocity-response table every body
     // integrates under.
-    private static void ValidateGroundedMotion(WorldMotionModel.Grounded tuning, string path, ISet<string> channelNames, ISet<string> dynamicsNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, int simulationRateHz, List<string> errors) {
+    private static void ValidateGroundedMotion(WorldMotionModel.Grounded tuning, string path, ISet<string> channelNames, ISet<string> dynamicsNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, int simulationRateHz, List<string> errors) {
         RequirePositive(
             value: tuning.MoveSpeed,
             name: $"{path}.moveSpeed",
@@ -306,6 +308,7 @@ public static partial class WorldDefinitionValidator {
         ValidateHolds(
             channelNames: channelNames,
             errors: errors,
+            hasMedium: hasMedium,
             holds: tuning.Holds,
             path: $"{path}.holds",
             stateSlots: stateSlots
@@ -314,7 +317,7 @@ public static partial class WorldDefinitionValidator {
     // The ordered hold list: a unique name per row, a cone inside [0, 180] with min < max for a surface row (and no
     // cone at all for a free one), the kind's own operands, and every named channel/state slot resolvable. Absent (a
     // kit authoring none) validates nothing: the vertical channel is ApplyVerticalGravity's alone there.
-    private static void ValidateHolds(IReadOnlyList<WorldHold>? holds, string path, ISet<string> channelNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, List<string> errors) {
+    private static void ValidateHolds(IReadOnlyList<WorldHold>? holds, string path, ISet<string> channelNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, List<string> errors) {
         if (holds is not { Count: > 0 }) {
             return;
         }
@@ -390,7 +393,48 @@ public static partial class WorldDefinitionValidator {
                     value: hold.Reach
                 );
             } else if (hold.Cone is not null) {
-                errors.Add(item: $"{rowPath}.cone is refused for a free hold — a free hold bonds to no surface for a cone to admit.");
+                errors.Add(item: $"{rowPath}.cone is refused for a {hold.Bond} hold — only a surface hold has a face for a cone to admit.");
+            }
+            if (hold.Bond == BodyHoldBond.Medium) {
+                if (!hasMedium) {
+                    errors.Add(item: $"{rowPath}.bond 'Medium' requires a medium lattice row (state.world[].lattice.medium) — a medium hold implies a medium to stand in.");
+                }
+                if (hold.Medium is not { } medium) {
+                    errors.Add(item: $"{rowPath}.medium is required for a medium hold — buoyancy, the terminal speeds, the settle rate, the float depth and the thrust fraction are its whole law.");
+                } else {
+                    RequirePositive(
+                        errors: errors,
+                        name: $"{rowPath}.medium.maxRiseSpeed",
+                        value: medium.MaxRiseSpeed
+                    );
+                    RequirePositive(
+                        errors: errors,
+                        name: $"{rowPath}.medium.maxSinkSpeed",
+                        value: medium.MaxSinkSpeed
+                    );
+                    RequirePositive(
+                        errors: errors,
+                        name: $"{rowPath}.medium.surfaceSettleRate",
+                        value: medium.SurfaceSettleRate
+                    );
+                    RequirePositive(
+                        errors: errors,
+                        name: $"{rowPath}.medium.floatDepth",
+                        value: medium.FloatDepth
+                    );
+                    RequirePositive(
+                        errors: errors,
+                        name: $"{rowPath}.medium.thrustFraction",
+                        value: medium.ThrustFraction
+                    );
+                    RequireFinite(
+                        errors: errors,
+                        name: $"{rowPath}.medium.buoyancy",
+                        value: medium.Buoyancy
+                    );
+                }
+            } else if (hold.Medium is not null) {
+                errors.Add(item: $"{rowPath}.medium is refused for a {hold.Bond} hold — only a medium hold has a medium to be displaced by.");
             }
             if (hold.Hold == BodyHoldKind.Grip) {
                 RequirePositive(
@@ -491,6 +535,7 @@ public static partial class WorldDefinitionValidator {
                     dynamicsNames: dynamicsNames,
                     errors: errors,
                     path: path,
+                    hasMedium: hasMedium,
                     simulationRateHz: simulationRateHz,
                     stateSlots: stateSlots,
                     tuning: grounded
@@ -1072,13 +1117,6 @@ public static partial class WorldDefinitionValidator {
         /// speed-scaled steering (<see cref="BodyMotionOp.ResolveVehicleFrame"/>/
         /// <see cref="BodyMotionOp.ShapeVehicleVelocity"/>).</summary>
         VehicleDrive = 64,
-
-        /// <summary>VerticalThrustFraction (<see cref="BodyMotionOp.ComputeSwimTargetVelocity"/>).</summary>
-        SwimThrust = 128,
-
-        /// <summary>Buoyancy/MaxRiseSpeed/MaxSinkSpeed/SurfaceSettleRate/FloatDepth — the medium dynamics
-        /// (<see cref="BodyMotionOp.ApplyBuoyancyAndSurface"/>).</summary>
-        SwimBuoyancy = 256,
 
         /// <summary>The ordered hold list (<see cref="BodyMotionOp.ResolveHold"/>/
         /// <see cref="BodyMotionOp.ApplyHold"/>), plus the gravity arc a hold's own gravity and lift laws

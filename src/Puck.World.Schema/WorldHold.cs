@@ -13,6 +13,23 @@ public sealed record WorldHoldSpend(
     string State,
     float RatePerSecond
 );
+/// <summary>What the medium does to a body standing in it — the authored half of a <see cref="BodyHoldBond.Medium"/>
+/// hold, and the one place buoyancy is described. Required for that bond and refused on every other.</summary>
+/// <param name="Buoyancy">The idle vertical drift velocity below the bob band, signed (u/s).</param>
+/// <param name="MaxRiseSpeed">The terminal ascent speed (u/s).</param>
+/// <param name="MaxSinkSpeed">The terminal descent speed (u/s).</param>
+/// <param name="SurfaceSettleRate">The proportional settle gain toward the float line (1/s).</param>
+/// <param name="FloatDepth">The float line's depth below the medium surface, and the bob band's half-width (u).</param>
+/// <param name="ThrustFraction">The fraction of the hold's travel speed the MoveUp role commands vertically —
+/// a body climbs and dives slower than it cruises. <c>1</c> is fully isotropic thrust.</param>
+public sealed record WorldHoldMedium(
+    float Buoyancy,
+    float MaxRiseSpeed,
+    float MaxSinkSpeed,
+    float SurfaceSettleRate,
+    float FloatDepth,
+    float ThrustFraction
+);
 /// <summary>
 /// One authored hold row of a grounded kit's ordered <see cref="WorldMotionModel.Grounded.Holds"/> list — what may
 /// hold this body, in preference order. <c>ResolveHold</c> keeps the hold it has while its surface is still there
@@ -44,6 +61,8 @@ public sealed record WorldHoldSpend(
 /// row no channel can drop.</param>
 /// <param name="Spend">What the row spends while held, or <see langword="null"/> for a row that spends
 /// nothing.</param>
+/// <param name="Medium">The medium's own displacement law. Required for <see cref="BodyHoldBond.Medium"/> and
+/// refused on every other bond.</param>
 public sealed record WorldHold(
     string Name,
     BodyHoldBond Bond,
@@ -58,7 +77,8 @@ public sealed record WorldHold(
     bool OnDrive = false,
     float DriveAlignment = 0f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Release = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHoldSpend? Spend = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHoldSpend? Spend = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHoldMedium? Medium = null
 );
 /// <summary>The one-time compilation of an authored hold list into the fixed-point form simulation reads. Channel
 /// names resolve through the world's compiled channel table here, the same resolved-outside/consumed-as-ordinal
@@ -66,6 +86,56 @@ public sealed record WorldHold(
 public static class WorldHoldFactory {
     private const double DegreesToRadians = (Math.PI / 180.0);
 
+    /// <summary>Compiles a medium's displacement law, or the inert zeroed law for a row that carries none.</summary>
+    /// <param name="medium">The authored law, or <see langword="null"/>.</param>
+    /// <returns>The compiled law.</returns>
+    public static FixedBodyMedium CompileMedium(WorldHoldMedium? medium) => ((medium is { } law)
+        ? new FixedBodyMedium(
+            Buoyancy: FixedQ4816.FromDouble(value: law.Buoyancy),
+            FloatDepth: FixedQ4816.FromDouble(value: law.FloatDepth),
+            MaxRiseSpeed: FixedQ4816.FromDouble(value: law.MaxRiseSpeed),
+            MaxSinkSpeed: FixedQ4816.FromDouble(value: law.MaxSinkSpeed),
+            SurfaceSettleRate: FixedQ4816.FromDouble(value: law.SurfaceSettleRate),
+            ThrustFraction: FixedQ4816.FromDouble(value: law.ThrustFraction)
+        )
+        : default
+    );
+    /// <summary>The medium hold a <see cref="WorldMotionModel.Swim"/> row spells — the swim arm is an authoring
+    /// spelling of exactly one medium row, compiled here so the law itself exists once. A kit authoring the arm and a
+    /// kit authoring the row reach the same <see cref="FixedBodyHold"/>.</summary>
+    /// <param name="swim">The authored swim arm.</param>
+    /// <returns>The single-row hold list that arm denotes.</returns>
+    public static FixedBodyHold[] Compile(WorldMotionModel.Swim swim) => [
+        new FixedBodyHold(
+            Bond: BodyHoldBond.Medium,
+            ConeAdmitsAbove: false,
+            ConeAdmitsBelow: false,
+            ConeCosFar: FixedQ4816.Zero,
+            ConeCosNear: FixedQ4816.Zero,
+            DriveAlignment: FixedQ4816.Zero,
+            Forward: BodyHoldForward.Heading,
+            Grip: FixedQ4816.Zero,
+            Kind: BodyHoldKind.None,
+            Lift: FixedQ4816.Zero,
+            Medium: CompileMedium(medium: new WorldHoldMedium(
+                Buoyancy: swim.Buoyancy,
+                FloatDepth: swim.FloatDepth,
+                MaxRiseSpeed: swim.MaxRiseSpeed,
+                MaxSinkSpeed: swim.MaxSinkSpeed,
+                SurfaceSettleRate: swim.SurfaceSettleRate,
+                ThrustFraction: swim.VerticalThrustFraction
+            )),
+            Name: "medium",
+            OnDrive: false,
+            Reach: FixedQ4816.Zero,
+            ReleaseOrdinal: -1,
+            ReleaseThreshold: FixedQ4816.Zero,
+            Speed: FixedQ4816.Zero,
+            SpendPerSecond: FixedQ4816.Zero,
+            SpendState: null,
+            UpLean: FixedQ4816.Zero
+        ),
+    ];
     /// <summary>Compiles one authored hold list against a world's channel table.</summary>
     /// <param name="holds">The authored rows in preference order, or <see langword="null"/> for a kit authoring
     /// none.</param>
@@ -111,6 +181,7 @@ public static class WorldHoldFactory {
                     ? channels.Threshold(ordinal: releaseOrdinal)
                     : FixedQ4816.Zero
                 ),
+                Medium: CompileMedium(medium: hold.Medium),
                 Speed: FixedQ4816.FromDouble(value: (hold.Speed ?? 0f)),
                 SpendPerSecond: FixedQ4816.FromDouble(value: (hold.Spend?.RatePerSecond ?? 0f)),
                 SpendState: hold.Spend?.State,

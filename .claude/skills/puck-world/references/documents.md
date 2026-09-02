@@ -891,14 +891,14 @@ every probe there misses), `body` (another entity's root plus `offset`, in that 
 `state` (a text cell spelling a world `[x, y, z]`). `when`/`weight` gate and ease it exactly as a
 driver's do, blending the GOAL rather than the pose. `plant` holds the world target where it was
 when the named driver's phase entered `window` — a stance foot, a hand on a hold, one mechanism.
-Presentation-only on the same terms, pinned by `CreationEffectorLawTests`. Everything else — the
+Presentation-only on the same terms, pinned by `CreationEffectorLawTests`. `body.rig [body]` is the read-back (Immediate, client-local — the values live only on the stamp pool): per driver its phase and eased weight, per effector its weight, whether its latch is holding, and the WORLD point its tip is being asked for (`target=(x, y, z)` or `none`), so a piped run fences twice and asserts a planted foot's target is unchanged while `body.where` moved. A body-rooted part anchor (`WorldStampPool.TryBodyPartAuthoredPose`) reports the COMPOSED pose — drivers, parent chain, effector — so an anchor consumer and the rendered geometry never disagree. Everything else — the
 census, simulation (30 Hz), host (windowed, loopback-default — `--listen` binds
 TCP), collision, gravity, channels, the `walk` body-motion program, the `walker` kit
 (`defaultSeatKit`), keyboard/gamepad bindings, the chase seat rig, the pip look, and grants — is the
 world document's own. A lattice trait's `color` speaks the same grammar (resolved live at
 emit — a state cell write recolors a height field on the next frame, no re-bake, bricks hold only
 distances; `world.fields` echoes the authored token).
-The world's one placement is the `debugRoom` prototype at origin: a 24 m platform (top at y = −0.5)
+The world's one placement is the `debugRoom` prototype at origin: a 48 m platform (top at y = −0.5)
 carrying one fixture per contact contract, each with a `spawnPoints` row (engine frame) that stands
 the body in front of it — `origin`, `ramps`, `stairs`, `wall`, `pit`, `ladder`, `edge` —
 reachable by `body.pose spawn:<id> [body]` (the console mirror of a rule's `pose` effect naming a
@@ -906,8 +906,9 @@ spawn point; seats still spawn at `origin` by the absent-`seatSpawns` derivation
 layout, +Z ahead of the origin spawn and +X the player's LEFT (the half-turn flips X): the scale
 ladder (0.5/1/2 m cubes) ahead-left, the slope fan (30/45/55/65/75°, bracketing
 `collision.maxSlopeDegrees` 60) ahead-right, the step stairs (rises 0.1/0.25/0.5/1 m) to the left,
-the wall with a 1.5 m-clearance and a 0.5 m-clearance overhang at the right edge, the pit (a
-`Subtraction` carve) behind, and 1 m compass posts on the platform's axis midpoints — `axisX` red,
+the wall with a 1.5 m-clearance and a 0.5 m-clearance overhang at the right edge (a 1 m column,
+`pillarUnderhang`, joins the floor to the low overhang's underside so a whole-sphere grip can crawl
+floor → column → ceiling without leaving contact), the pit (a `Subtraction` carve) behind, and 1 m compass posts on the platform's axis midpoints — `axisX` red,
 `axisZ` blue, a post at the ENGINE-positive end and a flat disc at the negative — with `farPillar`
 120 m ahead on the net as the fog/far-distance landmark. What it measures (`body.fly` from each
 spawn, `body.where` samples): the 30/45/55° ramps climb at walking speed, the 65/75° faces stop the
@@ -1149,8 +1150,14 @@ alone, and the two operations are simply absent from its program.
 
 `bond` is `Surface` (a contact-field face whose normal makes an angle inside
 `cone` degrees with GRAVITY-up — 0 a floor, 90 a wall, 180 a ceiling; the cone
-is measured against gravity-up, never the body's own leaned up) or `Free` (no
-surface at all). `hold` is `Gravity` (gravity holds the body against the face —
+is measured against gravity-up, never the body's own leaned up), `Free` (no
+surface at all), or `Medium` (the world's own field-lattice column — the world
+either offers a medium where the body is or it does not, so the bond carries no
+cone and no reach, and takes a `medium` law instead:
+`{ buoyancy, maxRiseSpeed, maxSinkSpeed, surfaceSettleRate, floatDepth,
+thrustFraction }`. The medium's drift and the body's own MoveUp thrust are
+summed BEFORE the convergence runs, so nothing writes the vertical channel
+twice, and it publishes `Submerged`/`AtSurface`). `hold` is `Gravity` (gravity holds the body against the face —
 the walkable case, integrating exactly as `ApplyVerticalGravity` does), `Grip`
 (a pull of `grip` u/s toward the face applied as a POSITIONAL standoff, gravity
 suspended while it holds), `Lift` (a fraction `lift` of gravity cancelled — 1
@@ -1167,10 +1174,19 @@ stamina concept of its own).
 
 Frame rules per row: `upLean` in `[0, 1]` blends the body's up axis from
 gravity-up toward the face normal (0 keeps a body upright on a wall, 1 lays it
-on the face — and, because that axis is also what contact resolution grounds
-against, 1 makes the face read as ground); `forward` (`Heading`/`Intent`/
-`Velocity`) chooses what the body's drawn attitude tracks inside the row's own
-frame. Movement rides the face's own tangent plane: forward is gravity-up
+on the face). **Whether that lean also carries the body's CONTACT axis is
+decided by the hold's KIND, never by the lean.** A `gravity` hold is one the
+world's own gravity presses onto its face, so the face IS the ground the solver
+should stand the body on and the axis leans with it, bounded through the same
+accumulator a measured contact normal is adopted by — a kart on a loop. A `grip`
+hold holds the body instead, gravity is suspended, and leaning the contact axis
+there would tell the solver that the floor under the body is a ceiling and that
+falling is upward: the floor stops depenetrating and a released body flies off.
+So a grip's lean is the body's FRAME — the plane it travels in and the attitude
+it is drawn at (`scratch.AttitudeUp`, which every attitude writer including the
+facing snap composes about) — while the contact axis stays with the ambient
+resolve. `forward` (`Heading`/`Intent`/`Velocity`) chooses what that drawn
+attitude tracks inside the row's own frame. Movement rides the face's own tangent plane: forward is gravity-up
 projected onto the face ("up the face"), right completes it, so
 `ComputePlanarTargetVelocity` needs no new operation. A face whose normal is
 parallel to gravity-up leaves that tangent undefined, and there the ordinary
@@ -1210,8 +1226,18 @@ and a positive `spend.ratePerSecond`. A kit whose program selects
 `ResolveHold`/`ApplyHold` under a model that supplies no `Holds` facet refuses
 by name through the same `MotionTuningFacet` gate every other operation walks.
 
+The `swim` motion arm is an authoring spelling of exactly one `Medium` row:
+`FixedWorldKit.Compile` turns it into that row, and `ApplyBuoyancyAndSurface`/
+`ComputeSwimTargetVelocity` are doors onto the same compiled law rather than a
+second implementation of it (`WorldMediumLawTests` pins the two spellings to a
+byte-identical trace). The arm survives only because
+`puck.world.frozen.json`'s `fishKit` authors it; retiring that row retires the
+arm and its two operations with it.
+
 Read back with `body.hold` (`[body.hold: body:<n> hold=<name|none>
-normal=(x, y, z) spend=<left|n/a>]`). The current row index, its anchor and
+normal=(x, y, z) spend=<left|n/a>]`). A program that reaches the medium law
+through the swim operations rather than through `ResolveHold` holds no row, so
+`body.hold` reads `none` there while the law still runs. The current row index, its anchor and
 normal, and the spend accumulator's remainder are simulation state: captured in
 `IntegrationResidue`, carried through `WorldAuthorityCheckpointCodec`, and part
 of the replay hash.
@@ -1238,7 +1264,12 @@ predicate the kit's action gates read, so the snapshot, the gates, and the
 name. `WorldSessionMirror.Facts(int)` and `WorldClient.Facts(int)` front it
 for presentation, which is how animation keys on regime without the client
 deriving one. `body.where` echoes it as `facts=` (lower-case, `|`-joined in
-bit order, `none` when empty). Facts are NOT mutually exclusive: a body can be
+bit order, `none` when empty), followed by `home=(x, y, z)` — the position the
+body was ACTIVATED at (a seat's spawn point, an inhabitant's placement plus its
+own distribution sample). A producer's inward pull steers against that home
+rather than the world origin, so a population spread over several placements
+keeps to its own ground instead of congregating; a teleport moves the body,
+never its home. Facts are NOT mutually exclusive: a body can be
 grounded and rising in one tick, and a body on a wall reads `airborne|climbing`
 because contact resolution keeps running under every hold.
 

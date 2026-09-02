@@ -220,7 +220,16 @@ ceiling and a hover are the same primitive under different cones, so a spider an
 data rather than code. Every surface probe is directed and the grip is a positional constraint, so
 tunnelling through a wall is impossible by construction; `grip: {holdable: true}` on the debug room
 (and `collision.defaultHold`) decides which surfaces admit a hold at all, and `body.hold` echoes
-which row holds a body. The pip carries two arms and
+which row holds a body. Three follow-ups settled the primitive: `upLean` moves the body's CONTACT
+axis only for a hold gravity keeps (a kart on a loop) — a grip's lean is the frame it travels in and
+the attitude it is drawn at, because leaning the contact axis onto a ceiling tells the solver the
+floor is a ceiling and a released body falls through it; a producer's inward pull steers against the
+body's own HOME (its activation position, echoed by `body.where`'s `home=`) rather than the world
+origin, so a population spread over placements keeps to its own ground instead of congregating; and
+`bond: "medium"` folds the swim arm's buoyancy/surface band into the hold vocabulary, with the swim
+arm now an authoring spelling that compiles into exactly one medium row (one law, two spellings,
+pinned to a byte-identical trace). The vehicle arm did not fold: its drive facets are how a velocity
+is SHAPED, not what holds a body. The pip carries two arms and
 two legs on `stride` (contralateral, about X) and `reach` (diagonal pairs, in the wall plane). The
 checks: `body.pose spawn:wall`, `body.fly 0 1 0 0 0 0 2.5` (drive into the wall), then
 `body.fly 1 0 0 0 0 0 2.5` — `body.where` reads `facts=grounded|climbing` at the standoff, rises

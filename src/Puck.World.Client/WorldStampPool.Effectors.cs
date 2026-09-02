@@ -57,6 +57,7 @@ public sealed partial class WorldStampPool {
             if (bones < CreationEffectorDocument.MinChainBones) {
                 live.EffectorWeight[index] = 0f;
                 live.EffectorPlanted[index] = false;
+                live.EffectorHasTarget[index] = false;
 
                 continue;
             }
@@ -114,6 +115,9 @@ public sealed partial class WorldStampPool {
                     ? 0f
                     : weight)
             );
+
+            live.EffectorHasTarget[index] = resolved;
+            live.EffectorTarget[index] = targetWorld;
 
             var applied = (live.EffectorWeight[index] * (effector.Weight?.Value ?? 1f));
 
@@ -404,4 +408,87 @@ public sealed partial class WorldStampPool {
             }
         }
     }
+    /// <summary>Reads a body-rooted creation look's live rig state — the decisions <c>body.rig</c> echoes.</summary>
+    /// <param name="bodyIndex">The population entity index.</param>
+    /// <param name="state">The rig's declared drivers and effectors with their current values, or
+    /// <see langword="null"/> when no live creation look is stamped on the body.</param>
+    /// <returns><see langword="true"/> when a live creation look answered.</returns>
+    /// <remarks>Reports the values the last <see cref="PackTransforms"/> left, never a fresh advance: a read-back
+    /// that stepped the drivers would answer at a phase nothing was drawn at.</remarks>
+    public bool TryBodyRig(int bodyIndex, out WorldRigState? state) {
+        state = null;
+
+        if (!TryFindBody(
+            bodyIndex: bodyIndex,
+            live: out var live,
+            poolIndex: out _
+        )) {
+            return false;
+        }
+
+        var document = live.Creation.EngineDocument;
+        var drivers = new List<WorldRigDriver>();
+        var effectors = new List<WorldRigEffector>();
+        var driverRows = (document.Drivers ?? []);
+        var driverCount = Math.Min(
+            val1: driverRows.Count,
+            val2: CreationDocument.MaxDrivers
+        );
+
+        for (var index = 0; (index < driverCount); index++) {
+            drivers.Add(item: new WorldRigDriver(
+                Name: driverRows[index].Name,
+                Phase: live.DriverPhase[index],
+                Weight: live.DriverWeight[index]
+            ));
+        }
+
+        var effectorRows = (document.Effectors ?? []);
+        var effectorCount = Math.Min(
+            val1: effectorRows.Count,
+            val2: CreationDocument.MaxEffectors
+        );
+
+        for (var index = 0; (index < effectorCount); index++) {
+            effectors.Add(item: new WorldRigEffector(
+                Name: effectorRows[index].Name,
+                Weight: live.EffectorWeight[index],
+                Planted: live.EffectorPlanted[index],
+                Target: (live.EffectorHasTarget[index]
+                    ? live.EffectorTarget[index]
+                    : null),
+                Bones: live.EffectorBoneCount[index]
+            ));
+        }
+
+        state = new WorldRigState(
+            Creation: live.Creation.Id,
+            Drivers: drivers,
+            Effectors: effectors,
+            Speed: live.DriverSpeed
+        );
+
+        return true;
+    }
 }
+/// <summary>One declared driver's live value in a <see cref="WorldRigState"/>.</summary>
+/// <param name="Name">The driver's authored name.</param>
+/// <param name="Phase">Its running phase, radians.</param>
+/// <param name="Weight">Its eased gate weight in [0, 1].</param>
+public readonly record struct WorldRigDriver(string Name, float Phase, float Weight);
+/// <summary>One declared effector's live value in a <see cref="WorldRigState"/>.</summary>
+/// <param name="Name">The effector's authored name.</param>
+/// <param name="Weight">Its eased gate weight in [0, 1].</param>
+/// <param name="Planted">Whether its contact latch is holding a target this frame.</param>
+/// <param name="Target">The world point its tip is being asked for, or <see langword="null"/> when nothing
+/// resolved (a probe that found no surface, an inactive body target, a cell holding no point).</param>
+/// <param name="Bones">The bones its chain resolved to — fewer than
+/// <see cref="CreationEffectorDocument.MinChainBones"/> means the effector is inert.</param>
+public readonly record struct WorldRigEffector(string Name, float Weight, bool Planted, Vector3? Target, int Bones);
+/// <summary>A body-rooted creation look's live animation state — what <c>body.rig</c> echoes.</summary>
+/// <param name="Creation">The stamped creation's row id.</param>
+/// <param name="Speed">The body's eased rendered speed, metres per second — the value the <c>moving</c>/<c>still</c>
+/// gate tokens test.</param>
+/// <param name="Drivers">Each declared driver's live phase and weight.</param>
+/// <param name="Effectors">Each declared effector's live weight, latch, and target.</param>
+public sealed record WorldRigState(string Creation, float Speed, IReadOnlyList<WorldRigDriver> Drivers, IReadOnlyList<WorldRigEffector> Effectors);

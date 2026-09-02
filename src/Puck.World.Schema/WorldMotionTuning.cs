@@ -186,7 +186,8 @@ public abstract record WorldMotionModel {
     /// commands — swimmers climb and dive slower than they cruise. <c>1</c> is fully isotropic thrust.</param>
     /// <param name="Buoyancy">The medium's idle vertical drift velocity (u/s, signed) below the bob band: positive
     /// drifts the body up toward its float line, negative sinks, zero holds depth. Folded into the commanded thrust
-    /// target — see <see cref="FixedSwimTuning"/> — never applied as a separate acceleration.</param>
+    /// target — see <c>FixedBodyMedium</c>, the one compiled form of a medium's displacement law — never applied as a
+/// separate acceleration.</param>
     /// <param name="MaxRiseSpeed">The terminal ascent speed (u/s) the vertical channel is clamped to.</param>
     /// <param name="MaxSinkSpeed">The terminal descent speed (u/s) the vertical channel is clamped to.</param>
     /// <param name="SurfaceSettleRate">The proportional settle gain (1/s) toward the float line, applied inside the
@@ -430,8 +431,8 @@ public static class WorldMotionTuningFactory {
     );
     /// <summary>Compiles an authored swim motion row's shared half — speeds, response table, sprint, frame — to the
     /// same fixed-point form every model rides (the gravity fields compile to zero; the swim program's facet
-    /// coherence already refused any op that would read them). The swim-specific half is
-    /// <see cref="CompileSwim"/>.</summary>
+    /// coherence already refused any op that would read them). The medium-specific half is one hold row, compiled by
+    /// <c>WorldHoldFactory.Compile(WorldMotionModel.Swim)</c>.</summary>
     /// <param name="tuning">The authored swim arm.</param>
     /// <param name="dynamics">The compiled <c>dynamics</c>-row follower <paramref name="tuning"/> names, or
     /// <see langword="null"/> when it shapes convergence through <see cref="WorldMotionModel.Swim.Response"/>
@@ -472,15 +473,5 @@ public static class WorldMotionTuningFactory {
         ? Compile(envelope: envelope)
         : null)
     );
-    /// <summary>Compiles an authored swim motion row's swim-specific fields to fixed point.</summary>
-    /// <param name="tuning">The authored swim arm.</param>
-    /// <returns>The compiled swim-specific tuning.</returns>
-    public static FixedSwimTuning CompileSwim(WorldMotionModel.Swim tuning) => new(
-        VerticalThrustFraction: FixedQ4816.FromDouble(value: tuning.VerticalThrustFraction),
-        Buoyancy: FixedQ4816.FromDouble(value: tuning.Buoyancy),
-        MaxRiseSpeed: FixedQ4816.FromDouble(value: tuning.MaxRiseSpeed),
-        MaxSinkSpeed: FixedQ4816.FromDouble(value: tuning.MaxSinkSpeed),
-        SurfaceSettleRate: FixedQ4816.FromDouble(value: tuning.SurfaceSettleRate),
-        FloatDepth: FixedQ4816.FromDouble(value: tuning.FloatDepth)
-    );
+
 }

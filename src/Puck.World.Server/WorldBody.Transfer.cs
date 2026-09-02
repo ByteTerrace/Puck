@@ -731,6 +731,8 @@ public sealed partial class WorldBody {
     /// <param name="HoldNormal">The held surface's unit normal, on the same terms as
     /// <paramref name="HoldAnchor"/>.</param>
     /// <param name="HoldSpendRemainder">The hold spend rate accumulator's signed remainder.</param>
+    /// <param name="Home">The position this body was activated at — the anchor its producer steers against. Not
+    /// re-derivable after the fact (a teleport never moves it), so a checkpoint carries it.</param>
     public readonly record struct IntegrationResidue(
         FixedVector3 PreviousPosition,
         long PositionRemainderX,
@@ -757,7 +759,8 @@ public sealed partial class WorldBody {
         int HoldIndex,
         FixedVector3 HoldAnchor,
         FixedVector3 HoldNormal,
-        long HoldSpendRemainder
+        long HoldSpendRemainder,
+        FixedVector3 Home
     );
     /// <summary>The checkpoint-only attachment state that remains meaningful only inside the same authoritative
     /// world's coordinate frame. It is intentionally not part of <see cref="TransferState"/>: a cross-world transfer
@@ -812,7 +815,8 @@ public sealed partial class WorldBody {
         HoldAnchor: m_holdAnchor,
         HoldIndex: m_holdIndex,
         HoldNormal: m_holdNormal,
-        HoldSpendRemainder: m_holdSpendAccumulator.Remainder
+        HoldSpendRemainder: m_holdSpendAccumulator.Remainder,
+        Home: m_home
     );
     /// <summary>Restores a previously captured integration residue onto this body — called after
     /// <see cref="Pose(FixedVector3, FixedQ4816, FixedQ4816, FixedQ4816)"/> has already set position/orientation and
@@ -868,6 +872,7 @@ public sealed partial class WorldBody {
             remainder: residue.HoldSpendRemainder,
             ticksPerSecond: EngineTicksPerSecond
         );
+        m_home = residue.Home;
         m_tether = ((attachment.Tether is { } tether)
             ? FixedTetherConstraint.FromState(state: tether)
             : null

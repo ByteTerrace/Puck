@@ -275,110 +275,16 @@ public sealed partial class WorldBody {
     // row's engage/release rate the planar half rides — engage while the vertical stick is deflected, release while
     // centered — so a held ascent parks where thrust and settle balance instead of racing to the surface. The two
     // swim facts are written here, read one tick behind by gates, exactly like m_grounded.
+    // The medium's surface stage, for a program that names it directly rather than reaching it through ApplyHold.
+    // Both doors run the one law (ApplyMedium) against the one compiled medium row, so an authored swim arm and an
+    // authored medium hold cannot drift apart.
     private void ApplyBuoyancyAndSurface(ref BodyMotionScratch scratch) {
-        if (
-            (m_swimTuning is not { } swim) ||
-            (m_mediumSurface is not { } mediumSurface)
-        ) {
-            return;
-        }
-
-        var surfaceRest = (mediumSurface - swim.FloatDepth);
-        var error = (surfaceRest - m_position.Y);
-        FixedQ4816 medium;
-
-        if (m_position.Y < (surfaceRest - swim.FloatDepth)) {
-            medium = FixedQ4816.Clamp(
-                value: swim.Buoyancy,
-                minimum: -swim.MaxSinkSpeed,
-                maximum: swim.MaxRiseSpeed
-            );
-        } else {
-            var upwardCap = ((swim.Buoyancy > FixedQ4816.Zero)
-                ? swim.Buoyancy
-                : FixedQ4816.Zero
-            );
-
-            medium = FixedQ4816.Clamp(
-                value: (error * swim.SurfaceSettleRate),
-                minimum: -swim.MaxSinkSpeed,
-                maximum: upwardCap
+        if (KitMedium is { } medium) {
+            ApplyMedium(
+                medium: in medium,
+                scratch: ref scratch
             );
         }
-
-        var target = FixedQ4816.Clamp(
-            value: (scratch.SwimVerticalTarget + medium),
-            minimum: -swim.MaxSinkSpeed,
-            maximum: swim.MaxRiseSpeed
-        );
-
-        if (m_tuning.PlanarDynamics is { Planar: { } planar }) {
-            // scratch.StepTicks can differ from planar.StepTicks for exactly one tick — a world-load/reload swap
-            // recompiles the propagator at the NEW rate but the batch already in flight still advances at its OLD
-            // width (WorldServer.StepCore's own transition-tick posture; see WorldInstanceHost.ShouldStepBoot). The
-            // follower steps through the mismatched width rather than fault on it — a single deterministic tick of
-            // slightly-off physics, the same tolerance every other piece of body state carries across that tick.
-            StepVerticalFollower(
-                step: in planar,
-                target: target,
-                minimum: -swim.MaxSinkSpeed,
-                maximum: swim.MaxRiseSpeed
-            );
-
-            m_submerged = (m_position.Y < mediumSurface);
-            m_atSurface = (m_submerged && (((error < FixedQ4816.Zero)
-                ? -error
-                : error) <= swim.FloatDepth));
-
-            return;
-        }
-
-        var response = m_tuning.Response;
-
-        if (response.Length == 0) {
-            m_verticalVelocity = target;
-        } else {
-            var matched = false;
-
-            // ShapePlanarVelocity already ticked the recency clocks this step (phase 2 precedes 4); this scan only
-            // SELECTS (first open row wins, same rule the planar half follows).
-            foreach (var row in response) {
-                if (!MotionGateOpen(gate: row.Gate)) {
-                    continue;
-                }
-
-                var hasVerticalInput = (Role(
-                    intent: in scratch.Intent,
-                    role: ChannelRole.MoveUp
-                ) != FixedQ4816.Zero);
-                var rate = (hasVerticalInput
-                    ? row.EngageRate
-                    : row.ReleaseRate
-                );
-                var maxDelta = m_swimThrustRampAccumulator.Integrate(
-                    elapsedTicks: scratch.StepTicks,
-                    ratePerSecond: rate
-                );
-
-                m_verticalVelocity = FixedQ4816.MoveToward(
-                    current: m_verticalVelocity,
-                    maxDelta: maxDelta,
-                    target: target
-                );
-                matched = true;
-
-                break;
-            }
-
-            if (!matched) {
-                m_verticalVelocity = target;
-            }
-        }
-
-        m_submerged = (m_position.Y < mediumSurface);
-        m_atSurface = (m_submerged && (((error < FixedQ4816.Zero)
-            ? -error
-            : error) <= swim.FloatDepth));
     }
     private void ApplyEffects(CompiledBodyInstruction[] effects, ref BodyMotionScratch scratch) {
         foreach (var effect in effects) {
@@ -662,28 +568,12 @@ public sealed partial class WorldBody {
 
         return ((forward / length), (strafe / length));
     }
-    // --- The swim model (the medium's stages). ---
-    // The 3D thrust target in the body's yaw frame: the planar half rides the SAME facing/right the grounded target
-    // uses (a pure-yaw frame carries no Y, so planar thrust never leaks into the vertical channel), the vertical half
-    // is the explicit MoveUp channel scaled down by the authored fraction. The sprint burst scales the WHOLE vector —
-    // the same held-channel read the grounded target applies to its planar half.
-    private void ComputeSwimTargetVelocity(ref BodyMotionScratch scratch) {
-        var effectiveSpeed = (((m_sprintChannelOrdinal >= 0) && (scratch.Intent[m_sprintChannelOrdinal] >= m_channelThresholds[m_sprintChannelOrdinal]))
-            ? (scratch.MoveSpeed * m_tuning.SprintMultiplier)
-            : scratch.MoveSpeed
-        );
-
-        var (forward, strafe) = PlanarIntent(intent: in scratch.Intent);
-
-        scratch.TargetVelocity = (((scratch.Facing * forward) + (scratch.Right * strafe)) * effectiveSpeed);
-        scratch.SwimVerticalTarget = ((m_swimTuning is { } swim)
-            ? ((Role(
-                intent: in scratch.Intent,
-                role: ChannelRole.MoveUp
-            ) * effectiveSpeed) * swim.VerticalThrustFraction)
-            : FixedQ4816.Zero
-        );
-    }
+    // --- The medium's stages. ---
+    // The planar thrust target is the grounded target, unchanged: a pure-yaw frame carries no Y, so planar thrust
+    // never leaks into the vertical channel, and the medium's own vertical half is the MoveUp role the medium law
+    // reads directly (see WorldBody.Hold.cs's MediumThrust). The two used to be one operation computing both; the
+    // vertical half moved to the law that consumes it, which is why nothing here forks on the model any more.
+    private void ComputeSwimTargetVelocity(ref BodyMotionScratch scratch) => ComputePlanarTargetVelocity(scratch: ref scratch);
     // The canonical orientation decomposed to Tait-Bryan angles (radians), the exact inverse of OrientationFromEuler's
     // Ry(yaw)·Rx(pitch)·Rz(roll) construction (the codebase-wide yaw-about-+Y / pitch-about-+X / roll-about-+Z
     // convention). Yaw is atan2 of the facing's horizontal components; pitch is the facing's elevation; roll is the bank
@@ -898,6 +788,7 @@ public sealed partial class WorldBody {
             NextPosition = m_position,
             Orientation = m_orientation,
             StepTicks = stepTicks,
+            AttitudeUp = m_up,
             TurnSpeed = turnSpeed,
             Up = m_up,
         };
@@ -1188,8 +1079,11 @@ public sealed partial class WorldBody {
             value: state.ActivityRate
         );
 
-        var planarX = m_position.X;
-        var planarZ = m_position.Z;
+        // Measured from the body's own HOME, never the world origin: a population spread over several placements
+        // steers back to the ground it was activated on, instead of every wanderer in the world converging on (0, 0).
+        // A body with no home (the zero default) reads exactly as it did when the origin was the only anchor.
+        var planarX = (m_position.X - m_home.X);
+        var planarZ = (m_position.Z - m_home.Z);
         var yawRate = (producer.Scalar(name: "weaveAmplitude") * FixedQ4816.Sin(angle: state.Phase));
         var radius = FixedQ4816.Sqrt(value: ((planarX * planarX) + (planarZ * planarZ)));
 
@@ -1700,6 +1594,7 @@ public sealed partial class WorldBody {
     // reads held.
     private void ResolveVehicleFrame(ref BodyMotionScratch scratch) {
         scratch.Up = ResolveUp(stepTicks: scratch.StepTicks);
+        scratch.AttitudeUp = scratch.Up;
 
         var tuning = m_vehicleTuning;
         // The signed longitudinal speed against the PREVIOUS attitude — shaping runs after this frame op, so the
@@ -1794,6 +1689,7 @@ public sealed partial class WorldBody {
     // MoveUp/Pitch/Roll channels stay inert; contact geometry owns the resting altitude.
     private void ResolveYawAttitudeAndPlanarFrame(ref BodyMotionScratch scratch) {
         scratch.Up = ResolveUp(stepTicks: scratch.StepTicks);
+        scratch.AttitudeUp = scratch.Up;
 
         if (m_tuning.MoveFrame == MotionMoveFrame.World) {
             // World-frame movement means the TRANSLATION axes are already resolved by the seat; it does not make
@@ -2158,13 +2054,16 @@ public sealed partial class WorldBody {
             axis: UnitY
         );
 
-        // The snapped heading is a yaw about the body's OWN up, so it composes under the same tilt the frame resolve
-        // applies; assigning the bare yaw would drop a planetoid walker back to a world-upright attitude mid-stride.
-        scratch.Orientation = ((scratch.Up == UnitY)
+        // The snapped heading is a yaw about the axis the body's ATTITUDE stands against, so it composes under the
+        // same tilt the frame resolve applies; assigning the bare yaw would drop a planetoid walker back to a
+        // world-upright attitude mid-stride. That axis is ordinarily the contact axis and differs from it only where
+        // a hold's lean has put the drawn body on a face the solver still measures against gravity — composing about
+        // the contact axis there would flatten the lean out again on the very next phase.
+        scratch.Orientation = ((scratch.AttitudeUp == UnitY)
             ? attitude
             : (FixedQuaternion.FromTo(
                 from: UnitY,
-                to: scratch.Up
+                to: scratch.AttitudeUp
             ) * attitude)
         );
     }
@@ -2248,11 +2147,13 @@ public sealed partial class WorldBody {
         public FixedQ4816 TurnSpeed;
         public ulong StepTicks;
         public FixedVector3 Up;
+        // The axis the body's drawn attitude stands against — Up unless a hold's lean has moved it (see
+        // WorldBody.Hold.cs's SetHoldFrame). Every attitude writer composes about this; every solver read uses Up.
+        public FixedVector3 AttitudeUp;
         public FixedVector3 Facing;
         public FixedVector3 Right;
         public FixedVector3 TargetVelocity;
         public FixedQ4816 DirectVerticalVelocity;
-        public FixedQ4816 SwimVerticalTarget;
         public FixedVector3 Velocity;
         public FixedVector3 NextPosition;
         public FixedQuaternion Orientation;

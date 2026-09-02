@@ -187,6 +187,24 @@ public sealed class HoldLawTests {
             ),
         };
     }
+    // One inhabitant placement: a wanderer of the fixture kit, standing on its own ground.
+    private static WorldPlacement Den(string id, float x, float z) => new(
+        Id: id,
+        PrototypeId: "room",
+        Position: new Vector3(x: x, y: 0f, z: z),
+        YawDegrees: 0f,
+        Scale: 1f,
+        Inhabit: new WorldPlacementInhabit(
+            Count: 1,
+            Distribution: new WorldDistribution(
+                Region: new WorldDistributionRegion.Disc(Radius: 0.01f, SampleCount: 1),
+                Fill: new WorldSequence(Name: WorldSequence.Additive, Offset: 0, Step: 0.618034f)
+            ),
+            Kit: Fixtures.SeatKitName,
+            Look: null,
+            Source: IntentSource.Producer(name: "wander")
+        )
+    );
     private static PlayerIntent Ascend() => Channel(
         ordinal: ForwardOrdinal,
         value: FixedQ4816.One
@@ -651,8 +669,8 @@ public sealed class HoldLawTests {
         Assert.True(condition: (hovering.Climb > 0.5), userMessage: $"MoveUp must climb a hovering body; it moved {hovering.Climb}");
     }
     [Fact]
-    public void UpLeanOneSetsTheBodyUpToTheSurfaceNormal_WhereUpLeanZeroKeepsGravityUp() {
-        static FixedVector3 Up(float upLean) {
+    public void UpLeanLeansAGrippingBodysATTITUDE_WhileItsContactAxisStaysWithGravity() {
+        static (FixedVector3 Attitude, FixedVector3 Contact) OnWall(float upLean) {
             using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Ground(), Wall(upLean: upLean), Air()]));
             var body = JoinBody(fixture: fixture);
 
@@ -669,21 +687,95 @@ public sealed class HoldLawTests {
 
             Assert.Equal(expected: "wall", actual: body.HoldName);
 
-            return body.FixedUp;
+            return (body.FixedOrientation.Rotate(vector: new FixedVector3(
+                X: FixedQ4816.Zero,
+                Y: FixedQ4816.One,
+                Z: FixedQ4816.Zero
+            )), body.FixedUp);
         }
 
-        var upright = Up(upLean: 0f);
-        var leaned = Up(upLean: 1f);
+        var upright = OnWall(upLean: 0f);
+        var leaned = OnWall(upLean: 1f);
 
-        Assert.Equal(expected: FixedQ4816.One, actual: upright.Y);
-        // The wall's near face faces +Z, so a fully leaned body's up axis is that normal.
+        // The lean is the whole discriminator between the two arms: same wall, same drive, same ascent.
+        Assert.Equal(expected: FixedQ4816.One, actual: upright.Attitude.Y);
+        // The fixture wall's near face faces +Z, so a fully leaned body is DRAWN standing on that normal.
         Assert.True(
-            condition: (((double)leaned.Z) > 0.9),
-            userMessage: $"a fully leaned body's up is the face normal; it read {leaned}"
+            condition: (((double)leaned.Attitude.Z) > 0.9),
+            userMessage: $"a fully leaned body's attitude up is the face normal; it read {leaned.Attitude}"
+        );
+        // And its CONTACT axis is not: a grip holds the body, gravity does not, so the axis the solver grounds and
+        // depenetrates against stays where the ambient resolve put it under both arms.
+        Assert.Equal(expected: FixedQ4816.One, actual: upright.Contact.Y);
+        Assert.Equal(expected: FixedQ4816.One, actual: leaned.Contact.Y);
+    }
+    [Fact]
+    public void AGrippingBodyLeanedOntoACeiling_KeepsTheFloorSolidBeneathIt_AndReturnsToItOnRelease() {
+        // The defect this law pins: leaning the CONTACT axis onto a ceiling tells the solver the floor is a ceiling
+        // and that falling is upward, so the body sinks through the floor it is standing over. The control is the
+        // same world at upLean 0, which never had an inverted axis to begin with — both must keep the floor.
+        static (double Held, double Released, FixedVector3 Attitude) UnderCeiling(float upLean) {
+            using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(
+                ceiling: true,
+                holds: [Wall(coneMax: 180f, coneMin: 100f, onDrive: false, reach: 1.5f, release: "release", upLean: upLean), Ground(), Air()]
+            ));
+            var body = JoinBody(fixture: fixture);
+
+            Pose(
+                body: body,
+                y: (CeilingY - 1.5f),
+                z: 10f
+            );
+            Hold(
+                body: body,
+                fixture: fixture,
+                intent: default,
+                ticks: 30
+            );
+
+            Assert.Equal(expected: "wall", actual: body.HoldName);
+
+            var held = ((double)body.FixedPosition.Y);
+            var attitude = body.FixedOrientation.Rotate(vector: new FixedVector3(
+                X: FixedQ4816.Zero,
+                Y: FixedQ4816.One,
+                Z: FixedQ4816.Zero
+            ));
+
+            // Let go and fall: the floor at y 0 is the only thing that can stop the body, and it only stops it if
+            // its own contact still reads as ground.
+            Hold(
+                body: body,
+                fixture: fixture,
+                intent: Channel(
+                    ordinal: ReleaseOrdinal,
+                    value: FixedQ4816.One
+                ),
+                ticks: 480
+            );
+
+            return (held, ((double)body.FixedPosition.Y), attitude);
+        }
+
+        var leaned = UnderCeiling(upLean: 1f);
+        var upright = UnderCeiling(upLean: 0f);
+
+        // Hanging, not fallen: the floor is at y 0 and the grip is the only thing between the body and it.
+        Assert.True(condition: (leaned.Held > 3.5), userMessage: $"a ceiling grip holds the body up; it hung at {leaned.Held}");
+        Assert.True(condition: (upright.Held > 3.5), userMessage: $"the control must hang too; it hung at {upright.Held}");
+        Assert.True(
+            condition: (((double)leaned.Attitude.Y) < -0.9),
+            userMessage: $"a fully leaned body under a ceiling is drawn upside down; its attitude up read {leaned.Attitude}"
+        );
+        Assert.Equal(expected: FixedQ4816.One, actual: upright.Attitude.Y);
+        // The claim: BOTH land on the floor. Before the fix the leaned arm fell through it.
+        Assert.True(
+            condition: (Math.Abs(value: leaned.Released) < 0.2),
+            userMessage: $"a released leaned body must land on the floor at y 0; it ended at {leaned.Released}"
         );
         Assert.True(
-            condition: (((double)leaned.Y) < 0.1),
-            userMessage: $"a fully leaned body's up carries no gravity-up; it read {leaned}"
+            condition: (Math.Abs(value: upright.Released) < 0.2),
+            userMessage: $"the control must land on the floor at y 0; it ended at {upright.Released}"
         );
     }
     [Fact]
@@ -706,7 +798,7 @@ public sealed class HoldLawTests {
 
         Assert.Equal(expected: BodyFacts.Climbing, actual: (body.Facts & BodyFacts.Climbing));
         Assert.Contains(actualString: body.DescribeWhere(index: 0), expectedSubstring: "climbing");
-        Assert.Equal(expected: BodyFactVocabulary.Describe(facts: body.Facts), actual: body.DescribeWhere(index: 0).Split(separator: "facts=")[1].TrimEnd(trimChar: ']'));
+        Assert.Equal(expected: BodyFactVocabulary.Describe(facts: body.Facts), actual: body.DescribeWhere(index: 0).Split(separator: "facts=")[1].Split(separator: " home=")[0]);
 
         using var flight = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Air(kind: BodyHoldKind.Lift, lift: 1f)]));
         var flier = JoinBody(fixture: flight);
@@ -844,6 +936,115 @@ public sealed class HoldLawTests {
                 );
             }
         }
+    }
+    [Fact]
+    public void AWanderingInhabitantSteersAgainstItsOwnHome_NotTheWorldOrigin() {
+        // Two inhabitant rows, identical in everything but where they stand: one at the origin, one far from it.
+        // Before the producer measured against the body's own home, both converged on (0, 0) — the far one's whole
+        // journey WAS the defect. The near row is the control: it must be unmoved by the change, since its home IS
+        // the origin the old pull aimed at.
+        var document = BuildHoldDocument(holds: [Ground(), Air()]);
+        var creations = document.Creations.ToList();
+
+        creations.Add(item: BuildRoom(ceiling: false) with { Id = "floor2" });
+
+        var placements = document.PlacementsRaw!.Rows!.ToList();
+
+        placements.Add(item: Den(
+            id: "near",
+            x: 0f,
+            z: 0f
+        ));
+        placements.Add(item: Den(
+            id: "far",
+            x: 30f,
+            z: 30f
+        ));
+
+        using var fixture = Fixtures.FreshServer(definition: (document with {
+            PopulationRaw = (document.Population with { CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 2) }),
+            PlacementsRaw = (document.PlacementsRaw! with { Rows = placements }),
+        }));
+
+        var first = fixture.Server.Population.EntryBody(index: WorldBodiesLimits.LocalSeatCount)!;
+        var second = fixture.Server.Population.EntryBody(index: (WorldBodiesLimits.LocalSeatCount + 1))!;
+        // Addressed by the home each row activated it at rather than by index: which row seeds which slot is the
+        // population's business, and this law is about the home, not the seating.
+        var far = ((((double)first.FixedHome.X) > 15.0)
+            ? first
+            : second
+        );
+        var near = ReferenceEquals(objA: far, objB: first)
+            ? second
+            : first;
+
+        Assert.True(condition: (((double)near.FixedHome.X) < 1.0), userMessage: $"the near inhabitant's home is its own placement; it read {near.FixedHome}");
+        Assert.True(condition: (((double)far.FixedHome.X) > 29.0), userMessage: $"the far inhabitant's home is its own placement; it read {far.FixedHome}");
+
+        for (var tick = 0; (tick < 1200); tick++) {
+            fixture.Step();
+        }
+
+        static double Planar(FixedVector3 from, FixedVector3 to) {
+            var x = ((double)(from.X - to.X));
+            var z = ((double)(from.Z - to.Z));
+
+            return Math.Sqrt(d: ((x * x) + (z * z)));
+        }
+
+        var farFromHome = Planar(from: far.FixedPosition, to: far.FixedHome);
+        var farFromOrigin = Planar(from: far.FixedPosition, to: FixedVector3.Zero);
+
+        Assert.True(
+            condition: (farFromHome < farFromOrigin),
+            userMessage: $"a wanderer keeps to its own ground: it ended {farFromHome} from home and {farFromOrigin} from the origin, at {far.FixedPosition}"
+        );
+        // The discriminating number: the old pull would have carried it the whole 42 units to the origin.
+        Assert.True(
+            condition: (farFromOrigin > 20.0),
+            userMessage: $"the far inhabitant drifted to the world origin — it ended {farFromOrigin} from it"
+        );
+        Assert.True(
+            condition: (Planar(from: near.FixedPosition, to: near.FixedHome) < 20.0),
+            userMessage: $"the control inhabitant must still keep to its own ground; it ended at {near.FixedPosition}"
+        );
+    }
+    [Fact]
+    public void BodyWhereEchoesTheHomeAWandererSteersAgainst() {
+        var document = BuildHoldDocument(holds: [Ground(), Air()]);
+        var placements = document.PlacementsRaw!.Rows!.ToList();
+
+        placements.Add(item: Den(
+            id: "far",
+            x: 12f,
+            z: -4f
+        ));
+
+        using var fixture = Fixtures.FreshServer(definition: (document with {
+            PopulationRaw = (document.Population with { CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 1) }),
+            PlacementsRaw = (document.PlacementsRaw! with { Rows = placements }),
+        }));
+
+        var body = fixture.Server.Population.EntryBody(index: WorldBodiesLimits.LocalSeatCount)!;
+
+        var home = body.FixedHome.ToVector3();
+        var echoed = $"home=({home.X:0.00}, {home.Y:0.00}, {home.Z:0.00})";
+
+        // The home is the placement plus the row's own distribution sample, so the echo is asserted against what the
+        // body actually holds — the claim is that body.where reports it at all, and that a teleport never moves it.
+        Assert.True(condition: ((((double)body.FixedHome.X) > 11.5) && (((double)body.FixedHome.X) < 12.5)), userMessage: $"the home is the placement it was activated at; it read {body.FixedHome}");
+        Assert.Contains(actualString: body.DescribeWhere(index: WorldBodiesLimits.LocalSeatCount), expectedSubstring: echoed);
+
+        // A teleport puts the body somewhere; it does not move where the body is from.
+        Pose(
+            body: body,
+            x: -20f,
+            y: 4f,
+            z: 9f
+        );
+
+        Assert.Contains(actualString: body.DescribeWhere(index: WorldBodiesLimits.LocalSeatCount), expectedSubstring: echoed);
+        Assert.Contains(actualString: body.DescribeWhere(index: WorldBodiesLimits.LocalSeatCount), expectedSubstring: "pos=(-20.00, 4.00, 9.00)");
     }
     [Fact]
     public void ASurfaceRowWithNoCone_RefusesValidation_WhereTheSameRowWithOneIsAdmitted() {
