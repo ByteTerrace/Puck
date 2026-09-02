@@ -169,7 +169,6 @@ public sealed class CommandEchoTests {
         Assert.Equal(actual: token, expected: "instance:my world");
         Assert.StartsWith(actualString: token, comparisonType: StringComparison.Ordinal, expectedStartString: "instance:");
     }
-
     [Theory]
     // Every shape Quote can emit round-trips through its own inverse, including the ones the old published rule got
     // wrong: a value carrying spaces, quotes, backslashes, the envelope's own ']' and the segment '|', and the line

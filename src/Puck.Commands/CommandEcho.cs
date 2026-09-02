@@ -169,7 +169,7 @@ public sealed class CommandEcho {
                 (character == '\\') &&
                 ((index + 1) < line.Length)
             ) {
-                _ = builder.Append(value: (line[index + 1] switch {
+                _ = builder.Append(value: (line[(index + 1)] switch {
                     'n' => '\n',
                     'r' => '\r',
                     't' => '\t',

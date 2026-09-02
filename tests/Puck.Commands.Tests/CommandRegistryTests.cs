@@ -506,18 +506,18 @@ public sealed class CommandRegistryTests {
         // the first one's parser graph.
         _ = Assert.Throws<InvalidOperationException>(testCode: () => new CommandRegistry(modules: [module]));
     }
-    [Theory]
     [InlineData(true)]
     [InlineData(false)]
+    [Theory]
     public void ARegistrationMissingItsHandlerNameOrDescriptionIsRefusedWhereItIsWritten(bool wireNative) {
         // A null handler used to construct and register happily, then surface on the first dispatch as
         // `[boom: handler threw NullReferenceException]` — a composition-root bug reported as a runtime command
         // failure, with nothing naming the registration that caused it.
-        _ = Assert.Throws<ArgumentNullException>(testCode: () => Register(handler: null, name: "boom", description: "Throws.", wireNative: wireNative));
-        _ = Assert.Throws<ArgumentNullException>(testCode: () => Register(handler: Nothing, name: null, description: "Throws.", wireNative: wireNative));
-        _ = Assert.Throws<ArgumentNullException>(testCode: () => Register(handler: Nothing, name: "boom", description: null, wireNative: wireNative));
-        _ = Assert.Throws<ArgumentException>(testCode: () => Register(handler: Nothing, name: "  ", description: "Throws.", wireNative: wireNative));
-        _ = Assert.Throws<ArgumentException>(testCode: () => Register(handler: Nothing, name: "boom", description: string.Empty, wireNative: wireNative));
+        _ = Assert.Throws<ArgumentNullException>(testCode: () => Register(description: "Throws.", handler: null, name: "boom", wireNative: wireNative));
+        _ = Assert.Throws<ArgumentNullException>(testCode: () => Register(description: "Throws.", handler: Nothing, name: null, wireNative: wireNative));
+        _ = Assert.Throws<ArgumentNullException>(testCode: () => Register(description: null, handler: Nothing, name: "boom", wireNative: wireNative));
+        _ = Assert.Throws<ArgumentException>(testCode: () => Register(description: "Throws.", handler: Nothing, name: "  ", wireNative: wireNative));
+        _ = Assert.Throws<ArgumentException>(testCode: () => Register(description: string.Empty, handler: Nothing, name: "boom", wireNative: wireNative));
 
         static CommandResult Nothing() => CommandResult.None;
 

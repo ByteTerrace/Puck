@@ -138,7 +138,6 @@ public sealed class CommandRegistryBoundaryTests {
         _ = Assert.Throws<ArgumentException>(testCode: () => other.ApplySnapshot(snapshot: in snapshot));
         Assert.Empty(collection: applied);
     }
-
     [Fact]
     public void ACancellationSignalUnwindsToTheHostInsteadOfBecomingAWireError() {
         var registry = new CommandRegistry(modules: [new CancellingModule()]);
@@ -182,7 +181,6 @@ public sealed class CommandRegistryBoundaryTests {
 
         Assert.Equal(actual: submitted, expected: ["sim.cancel", "sum 2 3"]);
     }
-
     [Fact]
     public void ATextEntryNamingAnIdThisRegistryCannotDecodeIsSkippedWithoutStrandingItsSession() {
         var submitted = new List<string>();

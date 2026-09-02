@@ -11,7 +11,7 @@ public sealed class TextCommandSourceTests {
     [Fact]
     public void AnArmedHoldGateDefersEveryQueuedLineUntilItLetsGo() {
         var submitted = new List<string>();
-        var source = Source(submitted: submitted, session: out var session);
+        var source = Source(session: out var session, submitted: submitted);
         var held = true;
 
         source.HoldGate = () => held;
