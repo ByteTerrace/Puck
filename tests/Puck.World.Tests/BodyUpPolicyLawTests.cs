@@ -41,11 +41,23 @@ public sealed class BodyUpPolicyLawTests {
         AssertNotYawOnly(body: body, context: "ambient frame under tilted solved gravity");
     }
 
-    // Holds own the vertical channel: every Motion-kind kit's attitude is composed through ResolveHold, whose
-    // Free-bond row turns the DRAWN axis toward ambient over the body's own span rather than snapping it, exactly as
-    // a grip's lean does (see WorldBody.Hold.cs's SteerAttitudeToward). A live rebuild that swaps ambient direction
-    // outright is therefore a bounded turn, not an instant pop, however few ticks that turn takes.
-    private const int ReseatBudgetTicks = 240;
+    // Every Motion-kind kit's attitude is composed through ResolveHold, whose Free-bond row turns the DRAWN axis
+    // toward ambient over the body's own span rather than snapping it, exactly as a grip's lean does (see
+    // WorldBody.Hold.cs's SteerAttitudeToward). A live rebuild that swaps ambient direction outright is therefore a
+    // bounded turn, not an instant pop: SteerAttitudeToward integrates a half-angle budget at
+    // MoveSpeed/(2*HoldSpan) rad/s, so a tilt of Theta reseats within Theta*HoldSpan/MoveSpeed seconds — the fixture's
+    // own numbers (the ball-flank tilt, the traveler kit's MoveSpeed, the seat capsule's HoldSpan), converted to
+    // ticks with a two-tick margin for the accumulator's own fixed-point rounding.
+    private const float FixtureMoveSpeed = 4f;
+    // The seat capsule (Fixtures.BuildGradientUpDocument: Endpoint (0,1,0), Radius 0.35), compiled per
+    // FixedWorldCollider.Compile to Center (0, 0.35, 0) and Endpoint (0, 1.35, 0): HoldProbeHeight
+    // ((Center.Y + Endpoint.Y) / 2 = 0.85) plus HoldStandoff (the collider radius, 0.35).
+    private const float FixtureHoldSpan = 1.2f;
+    private const int SimulationRateHz = 240;
+    // The angle between the ball-flank surface normal (FlankHorizontalRatio out along X, the rest along +Y) and
+    // vertical ambient up (0, 1, 0): the normal's own Y component is cos(theta).
+    private static readonly float ReseatAngleRadians = MathF.Acos(x: MathF.Sqrt(x: (1f - (FlankHorizontalRatio * FlankHorizontalRatio))));
+    private static readonly int ReseatBudgetTicks = (int)(MathF.Ceiling(x: (((ReseatAngleRadians * FixtureHoldSpan) / FixtureMoveSpeed) * SimulationRateHz)) + 2);
 
     [Fact]
     public void LiveRebuildFromSurfaceFollowingToAmbient_ReseatsUpWithinABoundedTurn() {

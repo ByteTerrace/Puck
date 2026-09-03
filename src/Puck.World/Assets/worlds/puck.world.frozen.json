@@ -945,6 +945,17 @@
               },
               "name": "water",
               "thrust": 0.4
+            },
+            {
+              "bond": "Free",
+              "gravity": {
+                "rise": 1,
+                "fall": 1,
+                "terminal": 1
+              },
+              "hold": "Gravity",
+              "name": "air",
+              "thrust": 1
             }
           ],
           "moveSpeed": 1.0,

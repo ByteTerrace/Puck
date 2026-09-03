@@ -748,7 +748,10 @@ public sealed partial class WorldBody {
         return m_attitudeUp;
     }
     // With no face to lean on, the drawn axis returns to the contact axis at the same bounded rate it left it, and
-    // the attitude is recomposed about wherever it has got to so the return is drawn rather than popped.
+    // the attitude is recomposed about wherever it has got to so the return is drawn rather than popped — UNLESS the
+    // program integrates its own local attitude (a body-frame 6DOF flight program), which already owns
+    // scratch.Orientation in full: composing a yaw-only snap over it here would discard the pitch/roll that
+    // integration just built, for an axis the program never asked this to draw a facing against.
     private void SetFreeAttitude(ref BodyMotionScratch scratch) {
         var attitude = SteerAttitudeToward(
             speed: scratch.MoveSpeed,
@@ -761,6 +764,11 @@ public sealed partial class WorldBody {
         }
 
         scratch.AttitudeUp = attitude;
+
+        if (m_bodyMotionProgram.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)) {
+            return;
+        }
+
         SnapFacing(
             scratch: ref scratch,
             yaw: m_yaw

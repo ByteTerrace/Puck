@@ -1074,12 +1074,8 @@ public sealed partial class WorldBody {
     }
     // Position/planar contact response applies to ANY collider-bearing body regardless of body motion program — a flying
     // body still shouldn't clip through a wall. The vertical WRITE-BACK (m_verticalVelocity, m_planarVelocity, the
-    // grounded position-accumulator reset) is gated on CompiledBodyMotionProgram.OwnsVerticalContactState: only a
-    // program that runs ApplyHold has ceded its vertical channel to contact resolution. A program with no vertical
-    // channel operation at all owns whatever channel it carries directly (a body-frame 6DOF flight program's own
-    // scratch velocity) and must keep it — folding the resolved velocity back
-    // in every tick regardless would feed such a channel's own prior value back into itself, an unbounded loop
-    // rather than a correction (the defect this gate exists to close). m_grounded/m_lastContactCount stay
+    // grounded position-accumulator reset) is gated on CompiledBodyMotionProgram.OwnsVerticalContactState — see its
+    // own remarks for which programs cede the channel and which keep it. m_grounded/m_lastContactCount stay
     // informational for every model (RunActionTriggers' ActionFact.Grounded/Airborne reads them under any program),
     // since they never feed back into an integration.
     private void ResolveProgramContacts(ref BodyMotionScratch scratch) {

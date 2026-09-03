@@ -66,12 +66,14 @@ public sealed class CompiledBodyMotionProgram {
     /// <summary>Gets the program name.</summary>
     public string Name { get; }
     /// <summary>Gets a value indicating whether this program's selected operations cede the vertical channel to a
-    /// host's contact resolution — <see cref="BodyMotionOp.ApplyHold"/>, whose gravity and lift laws integrate it.
-    /// A program with no vertical channel operation at all owns whatever channel it carries directly (a body-frame
-    /// 6DOF flight program shaping <see cref="BodyMotionOp.ComputeLocalTargetVelocity"/> into
-    /// <see cref="BodyMotionOp.IntegrateScratchVelocity"/>): folding the resolved velocity back in every tick would
-    /// feed such a channel's own prior value into itself, an unbounded loop rather than a correction.</summary>
-    public bool OwnsVerticalContactState => Contains(operation: BodyMotionOp.ApplyHold);
+    /// host's contact resolution — <see cref="BodyMotionOp.ApplyHold"/>, whose gravity and lift laws integrate it —
+    /// UNLESS the program also computes its velocity in local/body frame
+    /// (<see cref="BodyMotionOp.ComputeLocalTargetVelocity"/>, folded through
+    /// <see cref="BodyMotionOp.IntegrateScratchVelocity"/>): such a program owns its whole velocity channel
+    /// directly, and a hold row there (a Lift row's decay bleeding a carried residual back to rest) shapes a term
+    /// INSIDE that channel rather than ceding it, so folding contact's resolved velocity back in every tick would
+    /// feed that residual into itself, an unbounded loop rather than a correction.</summary>
+    public bool OwnsVerticalContactState => (Contains(operation: BodyMotionOp.ApplyHold) && !Contains(operation: BodyMotionOp.ComputeLocalTargetVelocity));
     /// <summary>Gets the operations grouped by their intrinsic host phase.</summary>
     public BodyMotionOp[][] Phases { get; }
 

@@ -1,7 +1,7 @@
 {
   "id": "frozen-fish-medium-thrust",
-  "title": "The frozen world's fish, once it first climbs on its water row's own thrust, pins a state hash past that climb",
-  "binding": "The positive leg boots puck.world.frozen.json headless, waits 720 ticks (past fishKit's wander producer first commanding MoveUp and the water row's thrust folding that into the medium convergence), and reads world.state.hash — pinning the state past the point where the fish's own vertical channel first diverges from a body that never climbs. The discriminating leg re-runs the identical boot but reads the hash at tick 480 instead: a different, independently-observed value, proving the pinned tick-720 hash is not some hash the simulation would already report before the fish acts, but state that has genuinely kept moving.",
+  "title": "The frozen world's fish settles under its water row's own medium law, and a state hash pins the settled state",
+  "binding": "The positive leg boots puck.world.frozen.json headless, waits 720 ticks (well past the fish's own medium convergence), and reads world.state.hash — pinning the settled state. The discriminating leg boots the SAME world with fishKit's water row buoyancy negated instead (a basis delta over the shipped file), reads the hash at the SAME tick 720, and asserts a different value. Buoyancy, not thrust, is the perturbed facet: fishMotion runs ComputePlanarTargetVelocity, and ProduceWanderIntent writes the MoveUp role only under IntegrateLocalAttitude, so the water row's own thrust (folded through MediumThrust) never reads a nonzero MoveUp for this kit — the medium's own buoyancy/settle law is what actually drives the fish, and is what this canary discriminates.",
   "bootShape": "headless",
   "requirements": [],
   "seconds": 6,
@@ -20,15 +20,15 @@
     ]
   },
   "discriminating": {
-    "world": "src/Puck.World/Assets/worlds/puck.world.frozen.json",
+    "world": "tests/Puck.World.Canaries/frozen-fish-medium-thrust/discriminating.world.json",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.state.hash", "occurrence": 1, "outcome": "accepted" }
     ],
     "expect": [
-      { "type": "line", "name": "tick-480-hash-differs", "stream": "stdout", "match": "contains", "text": "[world.state.hash: tick=480 hash=f45e1b6cc8675b12]", "present": true },
-      { "type": "line", "name": "not-the-tick-720-hash", "stream": "stdout", "match": "contains", "text": "hash=94bd67ed9388d827", "present": false },
+      { "type": "line", "name": "tick-720-hash-diverges-on-buoyancy", "stream": "stdout", "match": "contains", "text": "[world.state.hash: tick=720 hash=", "present": true },
+      { "type": "line", "name": "not-the-positive-legs-hash", "stream": "stdout", "match": "contains", "text": "hash=94bd67ed9388d827", "present": false },
       { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
     ]
   }

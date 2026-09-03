@@ -1257,8 +1257,8 @@ public sealed class HoldLawTests {
         Assert.True(condition: (dropped <= 0d), userMessage: $"a body letting go at rest falls from rest; it moved {dropped}");
     }
 
-    // Raw fixed-point trace helpers for the holds-own-the-vertical-channel fold: position, planar velocity,
-    // vertical velocity, and yaw, hex per component — the same shape DriveLawTests pins its own trace to.
+    // Raw fixed-point trace helpers: position, planar velocity, vertical velocity, and yaw, hex per component —
+    // the same shape DriveLawTests pins its own trace to.
     private static string Hex(FixedQ4816 value) => value.Value.ToString(format: "x16", provider: System.Globalization.CultureInfo.InvariantCulture);
     private static string TraceLine(WorldBody body) {
         var state = body.CaptureTransferState();
@@ -1889,6 +1889,19 @@ public sealed class HoldLawTests {
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: denied, reason: out var deniedReason));
         Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "authors no unconditional row");
+    }
+    [Fact]
+    public void AThrustCarryingRowOnAWorldWithNoMoveUpChannel_RefusesValidation_WhereTheSameRowWithOneIsAdmitted() {
+        var admitted = BuildHoldDocument(holds: [Air(thrust: 1f)]);
+
+        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: admitted, reason: out var admittedReason), userMessage: admittedReason);
+
+        var denied = admitted with {
+            ChannelsRaw = [.. admitted.Channels.Where(predicate: channel => (channel.Role != ChannelRole.MoveUp))],
+        };
+
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: denied, reason: out var deniedReason));
+        Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "thrust is positive but the world declares no MoveUp channel");
     }
     [Fact]
     public void AProgramSelectingApplyHoldWithoutResolveHold_RefusesValidation() {

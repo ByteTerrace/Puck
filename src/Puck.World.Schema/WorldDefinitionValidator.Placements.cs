@@ -774,6 +774,7 @@ public static partial class WorldDefinitionValidator {
 
         var kits = definition.Kits;
         var hasMedium = HasMediumField(definition: definition);
+        var hasMoveUpChannel = definition.Channels.Any(predicate: channel => channel.Role == ChannelRole.MoveUp);
 
         // A kit is required exactly when the census implies a body to move (a derived refusal, not a flat floor):
         // zero declared capacity needs no kit at all.
@@ -830,6 +831,7 @@ public static partial class WorldDefinitionValidator {
                 channelNames: compositionChannelNames,
                 dynamicsNames: dynamicsNames,
                 hasMedium: hasMedium,
+                hasMoveUpChannel: hasMoveUpChannel,
                 simulationRateHz: definition.SimulationRateHz,
                 stateSlots: stateSlots,
                 errors: errors

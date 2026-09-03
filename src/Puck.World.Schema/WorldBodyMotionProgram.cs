@@ -87,8 +87,8 @@ public static class BodyMotionProgramRoles {
             || program.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)
             || program.Contains(operation: BodyMotionOp.ResolveDriveFrame)),
         // A hold row's own thrust reads MoveUp too, but that need is per-row data (WorldHold.Thrust), not a shape
-        // this program-only query can see — a thrust-carrying row with no declared MoveUp channel simply never
-        // fires, the same silent-until-authored gap a medium row's own thrust already carried.
+        // this program-only query can see; WorldDefinitionValidator.ValidateHolds refuses a positive thrust by name
+        // against a world declaring no MoveUp channel, so this query answers only for the program's OWN ops.
         ChannelRole.MoveUp => program.Contains(operation: BodyMotionOp.ComputeLocalTargetVelocity),
         // ResolveDriveFrame reads Pitch only under a positive pitchRate, so Pitch is not required for it — a
         // pitchless world's flying drive pitch reads zero rather than refusing the kit.

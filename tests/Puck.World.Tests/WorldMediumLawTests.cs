@@ -248,6 +248,16 @@ public sealed class WorldMediumLawTests {
                         Name: "water",
                         Thrust: 0.75f
                     ),
+                    // The list's unconditional row — a Medium row is conditional on the lattice column, so
+                    // ResolveHold needs a Free fallback behind it for the case the body ever leaves the medium.
+                    // Trailing it keeps the Medium row preferred for every position this suite's traces drive
+                    // through.
+                    new WorldHold(
+                        Bond: BodyHoldBond.Free,
+                        Gravity: new WorldHoldGravity(Fall: 1f, Rise: 1f, Terminal: 1f),
+                        Hold: BodyHoldKind.Gravity,
+                        Name: "air"
+                    ),
                 ]
             ),
             ProducersRaw: new Dictionary<string, BodyProgramParameters> {

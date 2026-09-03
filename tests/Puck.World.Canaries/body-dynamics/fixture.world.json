@@ -117,29 +117,9 @@
           "sprintMultiplier": 1,
           "holds": [
             {
-              "name": "ground",
-              "bond": "Surface",
-              "cone": [
-                0,
-                60
-              ],
-              "hold": "Gravity",
-              "reach": 1.2,
-              "gravity": {
-                "rise": 28,
-                "fall": 46,
-                "terminal": 40
-              }
-            },
-            {
               "name": "air",
               "bond": "Free",
-              "hold": "Gravity",
-              "gravity": {
-                "rise": 28,
-                "fall": 46,
-                "terminal": 40
-              }
+              "hold": "None"
             }
           ]
         },

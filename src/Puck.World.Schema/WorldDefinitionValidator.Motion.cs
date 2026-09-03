@@ -228,7 +228,7 @@ public static partial class WorldDefinitionValidator {
         return true;
     }
     // A kit's full locomotion tuning: speeds, holds, and the velocity-response table every body integrates under.
-    private static void ValidateMotion(WorldMotion tuning, string path, ISet<string> channelNames, ISet<string> dynamicsNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, bool shapesPlanarVelocity, int simulationRateHz, List<string> errors) {
+    private static void ValidateMotion(WorldMotion tuning, string path, ISet<string> channelNames, ISet<string> dynamicsNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, bool hasMoveUpChannel, bool shapesPlanarVelocity, int simulationRateHz, List<string> errors) {
         RequirePositive(
             value: tuning.MoveSpeed,
             name: $"{path}.moveSpeed",
@@ -284,6 +284,7 @@ public static partial class WorldDefinitionValidator {
             channelNames: channelNames,
             errors: errors,
             hasMedium: hasMedium,
+            hasMoveUpChannel: hasMoveUpChannel,
             holds: tuning.Holds,
             path: $"{path}.holds",
             stateSlots: stateSlots
@@ -298,16 +299,19 @@ public static partial class WorldDefinitionValidator {
             );
         }
     }
-    // A row nothing can ever make ineligible: bonded to no surface (Free) or to a medium column (Medium), authoring
-    // neither a release channel nor a spend. ResolveHold always takes such a row once every earlier candidate is
-    // ineligible, so a hold list authoring one guarantees ApplyHold always has a current hold to read.
-    private static bool HoldIsUnconditional(WorldHold hold) => ((hold is not null) && ((hold.Bond == BodyHoldBond.Free) || (hold.Bond == BodyHoldBond.Medium)) && (hold.Release is null) && (hold.Spend is null));
+    // A row nothing can ever make ineligible: bonded to no surface at all (Free), authoring neither a release
+    // channel nor a spend. ResolveHold always takes such a row once every earlier candidate is ineligible, so a hold
+    // list authoring one guarantees ApplyHold always has a current hold to read. A Medium row is NOT unconditional —
+    // ResolveHold takes it only when the world's own lattice offers a medium column where the body stands
+    // (WorldBody.Hold.cs's ResolveHold: `if (m_mediumSurface is not null) { chosen = index; } else { continue; }`),
+    // so a body outside its medium is exactly the case a Medium-only hold list leaves with nothing to fall to.
+    private static bool HoldIsUnconditional(WorldHold hold) => ((hold is not null) && (hold.Bond == BodyHoldBond.Free) && (hold.Release is null) && (hold.Spend is null));
     // The ordered hold list: a unique name per row, a cone inside [0, 180] with min < max for a surface row (and no
     // cone at all for a free one), the kind's own operands, and every named channel/state slot resolvable. Absence,
     // and the presence of an unconditional row, are checked by the caller (ValidateMotionRow) against the compiled
     // program's kind — the hold list is the only spelling of a vertical channel, so a Motion-kind kit must always
     // author at least one row, including an unconditional one.
-    private static void ValidateHolds(IReadOnlyList<WorldHold>? holds, string path, ISet<string> channelNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, List<string> errors) {
+    private static void ValidateHolds(IReadOnlyList<WorldHold>? holds, string path, ISet<string> channelNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, bool hasMoveUpChannel, List<string> errors) {
         if (holds is not { Count: > 0 }) {
             return;
         }
@@ -453,6 +457,12 @@ public static partial class WorldDefinitionValidator {
                 name: $"{rowPath}.thrust",
                 value: hold.Thrust
             );
+            if (
+                (hold.Thrust > 0f) &&
+                !hasMoveUpChannel
+            ) {
+                errors.Add(item: $"{rowPath}.thrust is positive but the world declares no MoveUp channel — a row's thrust reads the MoveUp role, so nothing could ever command it.");
+            }
             if (hold.Hold == BodyHoldKind.Grip) {
                 RequirePositive(
                     errors: errors,
@@ -527,7 +537,7 @@ public static partial class WorldDefinitionValidator {
     // The kit.motion gate: required (a kit with no declared row is a dead kit), coherent with its body motion
     // program's selected operations (program is null when ValidateKits already refused bodyMotionProgram, in which
     // case coherence has nothing sound to check against), and its own fields valid.
-    private static void ValidateMotionRow(WorldMotion? motion, CompiledBodyMotionProgram? program, string path, ISet<string> channelNames, ISet<string> dynamicsNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, int simulationRateHz, List<string> errors) {
+    private static void ValidateMotionRow(WorldMotion? motion, CompiledBodyMotionProgram? program, string path, ISet<string> channelNames, ISet<string> dynamicsNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, bool hasMoveUpChannel, int simulationRateHz, List<string> errors) {
         if (motion is null) {
             errors.Add(item: $"{path} is required.");
 
@@ -551,7 +561,7 @@ public static partial class WorldDefinitionValidator {
             if (motion.Holds is not { Count: > 0 } holds) {
                 errors.Add(item: $"{path}.holds is required for a Motion-kind body motion program ('{program.Name}') — the hold list is the only spelling of a vertical channel.");
             } else if (!holds.Any(predicate: HoldIsUnconditional)) {
-                errors.Add(item: $"{path}.holds authors no unconditional row (a Free or Medium bond authoring neither release nor spend) for a Motion-kind body motion program ('{program.Name}') — ApplyHold keeps whatever vertical channel the body carried in the tick every row goes ineligible, so a hold list must always leave one row nothing can drop.");
+                errors.Add(item: $"{path}.holds authors no unconditional row (a Free bond authoring neither release nor spend) for a Motion-kind body motion program ('{program.Name}') — ApplyHold keeps whatever vertical channel the body carried in the tick every row goes ineligible, so a hold list must always leave one row nothing can drop. A Medium row does not count: ResolveHold takes it only where the world's own lattice offers a medium column.");
             }
             if (
                 program.Contains(operation: BodyMotionOp.ApplyHold) &&
@@ -567,6 +577,7 @@ public static partial class WorldDefinitionValidator {
             errors: errors,
             path: path,
             hasMedium: hasMedium,
+            hasMoveUpChannel: hasMoveUpChannel,
             // The exactly-one planar-shaping rule binds the kit whose program actually shapes planar
             // velocity. A drive kit shapes it through its own row instead, so requiring a dead response
             // table there would author feel nothing reads. An unresolved program name is already refused

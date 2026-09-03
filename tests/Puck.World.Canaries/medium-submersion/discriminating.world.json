@@ -157,6 +157,13 @@
                 "floatDepth": 1
               },
               "thrust": 0.75
+            },
+            {
+              "name": "air",
+              "bond": "Free",
+              "hold": "Gravity",
+              "gravity": { "rise": 1, "fall": 1, "terminal": 1 },
+              "thrust": 0
             }
           ]
         },

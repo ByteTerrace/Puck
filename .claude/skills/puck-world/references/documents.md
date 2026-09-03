@@ -1305,19 +1305,24 @@ refuses a Motion-kind program outright (a fact checked ahead of the facet
 mechanism, since it holds whatever operations the program selects), and a
 drive program against a kit authoring no `drive` row is what the
 `MotionTuningFacet` gate refuses by name. A Motion-kind kit's `holds` list must
-also author at least one UNCONDITIONAL row — a `Free` or `Medium` bond with no
-`release` and no `spend` — so `ResolveHold` always has a row it can fall to
-once every earlier candidate goes ineligible and `ApplyHold` is never left with
-no current hold to read; and a program selecting `ApplyHold` without
-`ResolveHold` refuses by name, since `ApplyHold` applies whatever row
-`ResolveHold` selected.
+also author at least one UNCONDITIONAL row — a `Free` bond with no `release`
+and no `spend` — so `ResolveHold` always has a row it can fall to once every
+earlier candidate goes ineligible and `ApplyHold` is never left with no current
+hold to read; and a program selecting `ApplyHold` without `ResolveHold`
+refuses by name, since `ApplyHold` applies whatever row `ResolveHold`
+selected. A `Medium` row does NOT count toward this: `ResolveHold` takes it
+only where the world's own lattice offers a medium column at the body, so a
+Medium-only list still leaves a body outside its medium with nothing to fall
+to — every kit authoring a Medium row also authors a trailing `Free` row for
+that case.
 
 A `Medium` row is the ONLY spelling of the medium law — `ApplyHold` runs it
 against the row `ResolveHold` took, and `WorldMediumLawTests` pins it to a
 recorded 240-tick fixed-point trace. `puck.world.frozen.json`'s `fishKit` is
 the worked example: a kit whose `fishMotion` program runs
-`ResolveHold`/`ApplyHold`, with one `water` row carrying the five medium
-facets plus its own `thrust`.
+`ResolveHold`/`ApplyHold` over a `water` row carrying the five medium facets
+plus its own `thrust`, and a trailing `air` row (`Free`, `Gravity`) for the
+water's own dry fallback.
 
 Read back with `body.hold` (`[body.hold: body:<n> hold=<name|none>
 normal=(x, y, z) spend=<left|n/a>]`). The current row index, its anchor and
