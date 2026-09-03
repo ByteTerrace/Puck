@@ -947,6 +947,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteFixedVector(value: residue.HoldNormal);
         writer.WriteInt64(value: residue.HoldSpendRemainder);
         writer.WriteFixedVector(value: residue.AttitudeUp);
+        writer.WriteBoolean(value: residue.AttitudeLeaned);
         writer.WriteInt64(value: residue.AttitudeTurnRemainder);
         writer.WriteFixedVector(value: residue.Home);
     }
@@ -981,6 +982,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var holdNormal = reader.ReadFixedVector();
         var holdSpendRemainder = reader.ReadInt64();
         var attitudeUp = reader.ReadFixedVector();
+        var attitudeLeaned = reader.ReadBoolean();
         var attitudeTurnRemainder = reader.ReadInt64();
         var home = reader.ReadFixedVector();
 
@@ -992,6 +994,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             HoldNormal: holdNormal,
             HoldSpendRemainder: holdSpendRemainder,
             AttitudeUp: attitudeUp,
+            AttitudeLeaned: attitudeLeaned,
             AttitudeTurnRemainder: attitudeTurnRemainder,
             Home: home,
             ContactUpTurnRemainder: contactUpTurnRemainder,

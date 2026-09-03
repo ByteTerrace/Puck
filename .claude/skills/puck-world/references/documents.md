@@ -1320,9 +1320,11 @@ A `Medium` row is the ONLY spelling of the medium law — `ApplyHold` runs it
 against the row `ResolveHold` took, and `WorldMediumLawTests` pins it to a
 recorded 240-tick fixed-point trace. `puck.world.frozen.json`'s `fishKit` is
 the worked example: a kit whose `fishMotion` program runs
-`ResolveHold`/`ApplyHold` over a `water` row carrying the five medium facets
-plus its own `thrust`, and a trailing `air` row (`Free`, `Gravity`) for the
-water's own dry fallback.
+`ResolveHold`/`ApplyHold` over a `water` row carrying the five medium facets,
+and a trailing `air` row (`Free`, `Gravity`) for the water's own dry fallback.
+That row authors no `thrust` because its wander producer never writes the
+`MoveUp` role; `WorldMediumLawTests`' own fixture is the thrust-carrying
+example.
 
 Read back with `body.hold` (`[body.hold: body:<n> hold=<name|none>
 normal=(x, y, z) spend=<left|n/a>]`). The current row index, its anchor and

@@ -734,6 +734,8 @@ public sealed partial class WorldBody {
     /// <param name="HoldSpendRemainder">The hold spend rate accumulator's signed remainder.</param>
     /// <param name="AttitudeUp">The axis the body is drawn standing on, carried so a grip's lean is turned into rather than snapped to.</param>
     /// <param name="AttitudeTurnRemainder">The drawn-axis turn accumulator's signed remainder.</param>
+    /// <param name="AttitudeLeaned">Whether a surface hold has leaned the drawn axis, which decides whether leaving
+    /// a hold turns the axis back or seats it outright.</param>
     /// <param name="Home">The position this body was activated at — the anchor its producer steers against. Not
     /// re-derivable after the fact (a teleport never moves it), so a checkpoint carries it.</param>
     public readonly record struct IntegrationResidue(
@@ -765,6 +767,7 @@ public sealed partial class WorldBody {
         long HoldSpendRemainder,
         FixedVector3 AttitudeUp,
         long AttitudeTurnRemainder,
+        bool AttitudeLeaned,
         FixedVector3 Home
     );
     /// <summary>The checkpoint-only attachment state that remains meaningful only inside the same authoritative
@@ -823,6 +826,7 @@ public sealed partial class WorldBody {
         HoldSpendRemainder: m_holdSpendAccumulator.Remainder,
         AttitudeUp: m_attitudeUp,
         AttitudeTurnRemainder: m_attitudeTurnAccumulator.Remainder,
+        AttitudeLeaned: m_attitudeLeaned,
         Home: m_home
     );
     /// <summary>Restores a previously captured integration residue onto this body — called after
@@ -880,6 +884,7 @@ public sealed partial class WorldBody {
             ticksPerSecond: EngineTicksPerSecond
         );
         m_attitudeUp = residue.AttitudeUp;
+        m_attitudeLeaned = residue.AttitudeLeaned;
         m_attitudeTurnAccumulator = FixedRateAccumulator.FromRemainder(
             remainder: residue.AttitudeTurnRemainder,
             ticksPerSecond: EngineTicksPerSecond

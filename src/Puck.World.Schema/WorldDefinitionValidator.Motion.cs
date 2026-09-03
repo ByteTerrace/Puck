@@ -426,6 +426,13 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{rowPath}.medium is refused for a {hold.Bond} hold — only a medium hold has a medium to be displaced by.");
             }
             if (
+                (hold.Bond == BodyHoldBond.Medium) &&
+                (hold.Hold is BodyHoldKind.Gravity or BodyHoldKind.Lift)
+            ) {
+                errors.Add(item: $"{rowPath}.hold '{hold.Hold}' is refused on a Medium bond — a medium displaces a body by its own law, so a medium row applies no arc.");
+            }
+            if (
+                (hold.Bond != BodyHoldBond.Medium) &&
                 (hold.Hold is BodyHoldKind.Gravity or BodyHoldKind.Lift)
             ) {
                 // ApplyHoldGravityDecay owns a full-lift row's vertical channel outright and bleeds it at Rise alone

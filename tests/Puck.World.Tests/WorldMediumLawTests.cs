@@ -440,4 +440,33 @@ public sealed class WorldMediumLawTests {
 
         Assert.Equal(expected: trait, actual: row.Lattice);
     }
+    /// <summary>A medium displaces a body by its own law, so a Medium row applies no arc: authoring a Gravity kind
+    /// on one refuses by name, where the same row holding None is admitted.</summary>
+    [Fact]
+    public void AMediumRowAuthoringAGravityKind_RefusesByName_WhereTheSameRowHoldingNoneIsAdmitted() {
+        var topology = Topology();
+        var admitted = BuildMediumHoldDocument(topology: topology);
+        var motion = admitted.Kits[0].Motion!;
+        var water = motion.Holds![0];
+
+        Assert.Equal(expected: BodyHoldKind.None, actual: water.Hold);
+        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: admitted, reason: out var admittedReason), userMessage: admittedReason);
+
+        var arced = (admitted with {
+            KitRowsRaw = [(admitted.Kits[0] with {
+                Motion = (motion with {
+                    Holds = [
+                        (water with {
+                            Gravity = new WorldHoldGravity(Fall: 1f, Rise: 1f, Terminal: 1f),
+                            Hold = BodyHoldKind.Gravity,
+                        }),
+                        .. motion.Holds.Skip(count: 1),
+                    ],
+                }),
+            })],
+        });
+
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: arced, reason: out var arcedReason));
+        Assert.Contains(actualString: arcedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "is refused on a Medium bond");
+    }
 }

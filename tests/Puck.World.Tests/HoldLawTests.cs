@@ -1921,4 +1921,137 @@ public sealed class HoldLawTests {
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: denied, reason: out var deniedReason));
         Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "selects 'ApplyHold' without 'ResolveHold'");
     }
+    /// <summary>A body that leaned on a surface hold carries that fact through a checkpoint, so the restored body
+    /// turns its drawn axis back the way the live one does when the hold ends. The control is a body in the same
+    /// world that never took a surface row: its axis is seated outright, so the two returns differ.</summary>
+    [Fact]
+    public void ALeanedBodyRestoredFromACheckpoint_ReturnsItsDrawnAxisLikeTheLiveBody_WhereANeverLeanedBodySeatsItInstead() {
+        using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Wall(upLean: 1f), Ground(), Air()]));
+        var uninterrupted = JoinBody(fixture: fixture);
+
+        Assert.NotNull(@object: DriveIntoWall(
+            body: uninterrupted,
+            fixture: fixture
+        ));
+        Hold(
+            body: uninterrupted,
+            fixture: fixture,
+            intent: Ascend(),
+            ticks: 60
+        );
+
+        Assert.Equal(expected: "wall", actual: uninterrupted.HoldName);
+
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(
+            checkpoint: out var checkpoint,
+            hostRow: new WorldAuthorityHostRowCheckpoint(
+                AnnouncedCrossingHolds: [],
+                AppliedTransferHighWater: null,
+                AppliedTransferIds: [],
+                ElapsedEngineTicks: 0,
+                ForwardedBodies: [],
+                FreshCounter: 0,
+                InDoubtTransfers: [],
+                IsPaused: false,
+                NextTransferId: 1,
+                PortalOccupancy: [],
+                Retained: false,
+                ScheduleAccumulatorTicks: 0,
+                SeededArrivals: []
+            ),
+            reason: out var captureRefusal
+        ), userMessage: captureRefusal);
+        Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(
+            bytes: WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint!),
+            checkpoint: out var decoded,
+            reason: out var decodeRefusal
+        ), userMessage: decodeRefusal);
+
+        var definition = WorldDefinitionSerialization.Deserialize(utf8Json: decoded!.Server.DefinitionJson);
+        var stateDirectory = Directory.CreateTempSubdirectory(prefix: "puck-lean-checkpoint-").FullName;
+
+        using var machines = new WorldMachineHost(engines: [], screens: definition.Screens);
+
+        try {
+            var (restoredServer, _) = WorldServer.FromCheckpoint(
+                checkpoint: decoded,
+                instanceIdentity: "lean-checkpoint",
+                machines: machines,
+                profiles: new WorldOwnedWorlds(
+                    directory: stateDirectory,
+                    machineId: Guid.NewGuid(),
+                    template: definition
+                )
+            );
+            var restored = restoredServer.Body(index: 0)!;
+
+            // The flag rides the residue, so the restored body is leaned before it takes a single step.
+            Assert.Equal(expected: uninterrupted.CaptureIntegrationResidue(), actual: restored.CaptureIntegrationResidue());
+
+            // Let go on both and watch the axis come back: the live body turns over its own span, and the restored
+            // body must turn through the same arc rather than seating.
+            var elapsed = 0UL;
+            var nextTick = fixture.Server.NextInputTick;
+            var seated = 0;
+
+            for (var step = 0; (step < 12); step++) {
+                var release = Channel(
+                    ordinal: ReleaseOrdinal,
+                    value: FixedQ4816.One
+                );
+
+                uninterrupted.SubmitIntent(intent: release);
+                restored.SubmitIntent(intent: release);
+                elapsed = checked((elapsed + Fixtures.StepTicks));
+
+                var context = new FixedStepContext(ElapsedTicks: elapsed, StepTicks: Fixtures.StepTicks, Tick: nextTick++);
+
+                fixture.Server.Step(context: in context);
+                restoredServer.Step(context: in context);
+
+                Assert.Equal(expected: uninterrupted.CaptureIntegrationResidue(), actual: restored.CaptureIntegrationResidue());
+
+                if (((double)Up(body: restored).Y) > 0.999) {
+                    seated++;
+                }
+            }
+
+            // The turn takes longer than the twelve ticks watched, which is what makes it a turn and not a seat.
+            Assert.Equal(expected: 0, actual: seated);
+            Assert.True(
+                condition: (((double)Up(body: restored).Y) < 0.999),
+                userMessage: $"the restored body must still be turning its axis back; it read {Up(body: restored)}"
+            );
+
+            // The control: a body in the same world that never leaned. Its drawn axis is seated to ambient, so it
+            // reads upright on the very first tick the same release is submitted.
+            using var never = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Wall(upLean: 1f), Ground(), Air()]));
+            var flat = JoinBody(fixture: never);
+
+            Hold(
+                body: flat,
+                fixture: never,
+                intent: default,
+                ticks: 1
+            );
+
+            Assert.Null(@object: flat.HoldName is "wall" ? "wall" : null);
+            Assert.True(
+                condition: (((double)Up(body: flat).Y) > 0.999),
+                userMessage: $"a body that never leaned is drawn upright at once; it read {Up(body: flat)}"
+            );
+        } finally {
+            if (Directory.Exists(path: stateDirectory)) {
+                Directory.Delete(
+                    path: stateDirectory,
+                    recursive: true
+                );
+            }
+        }
+    }
+    private static FixedVector3 Up(WorldBody body) => body.FixedOrientation.Rotate(vector: new FixedVector3(
+        X: FixedQ4816.Zero,
+        Y: FixedQ4816.One,
+        Z: FixedQ4816.Zero
+    ));
 }
