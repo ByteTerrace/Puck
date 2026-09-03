@@ -27,8 +27,8 @@ public enum BodyHoldKind : byte {
     /// carried in.</summary>
     None,
 
-    /// <summary>Gravity holds the body against the surface — the walkable case, integrating exactly as
-    /// <see cref="BodyMotionOp.ApplyVerticalGravity"/> does.</summary>
+    /// <summary>Gravity holds the body against the surface — the walkable case, integrating the row's own
+    /// <c>Gravity</c> arc.</summary>
     Gravity,
 
     /// <summary>A pull toward the surface at the hold's own rate, applied as a positional standoff rather than a
@@ -62,17 +62,25 @@ public enum BodyHoldForward : byte {
 /// band and above it.</param>
 /// <param name="FloatDepth">How far below the medium surface the body rests when floating, and the bob band's
 /// half-width around that line (u).</param>
-/// <param name="ThrustFraction">The fraction of the hold's travel speed the MoveUp role commands vertically.</param>
 public readonly record struct FixedBodyMedium(
     FixedQ4816 Buoyancy,
     FixedQ4816 MaxRiseSpeed,
     FixedQ4816 MaxSinkSpeed,
     FixedQ4816 SurfaceSettleRate,
-    FixedQ4816 FloatDepth,
-    FixedQ4816 ThrustFraction
+    FixedQ4816 FloatDepth
+);
+/// <summary>The compiled vertical arc a <see cref="BodyHoldKind.Gravity"/> or <see cref="BodyHoldKind.Lift"/> row
+/// falls under — zeroed on every other kind and on a <see cref="BodyHoldBond.Medium"/> row.</summary>
+/// <param name="Rise">The downward acceleration while rising (u/s²).</param>
+/// <param name="Fall">The downward acceleration while falling (u/s²).</param>
+/// <param name="Terminal">The terminal fall speed (u/s) the descent is clamped to.</param>
+public readonly record struct FixedBodyHoldGravity(
+    FixedQ4816 Rise,
+    FixedQ4816 Fall,
+    FixedQ4816 Terminal
 );
 /// <summary>
-/// One compiled hold: the fixed-point form of an authored hold row, in the ordered list a kit's motion model
+/// One compiled hold: the fixed-point form of an authored hold row, in the ordered list a kit's motion row
 /// declares. <see cref="BodyMotionOp.ResolveHold"/> walks the list in order and takes the first hold the world
 /// offers; <see cref="BodyMotionOp.ApplyHold"/> applies <see cref="Kind"/>.
 /// </summary>
@@ -105,6 +113,10 @@ public readonly record struct FixedBodyMedium(
 /// <param name="SpendPerSecond">The rate that slot drains at, per second.</param>
 /// <param name="Medium">The displacement law of a <see cref="BodyHoldBond.Medium"/> bond; zeroed on every
 /// other.</param>
+/// <param name="Gravity">The vertical arc a <see cref="BodyHoldKind.Gravity"/> or <see cref="BodyHoldKind.Lift"/>
+/// row falls under; zeroed on every other kind and on a <see cref="BodyHoldBond.Medium"/> row.</param>
+/// <param name="Thrust">The fraction of the kit's resolved move speed the <c>MoveUp</c> role commands vertically
+/// while this row holds, in every bond; <c>0</c> is no thrust at all.</param>
 public readonly record struct FixedBodyHold(
     string Name,
     BodyHoldBond Bond,
@@ -125,7 +137,9 @@ public readonly record struct FixedBodyHold(
     FixedQ4816 ReleaseThreshold,
     string? SpendState,
     FixedQ4816 SpendPerSecond,
-    FixedBodyMedium Medium
+    FixedBodyMedium Medium,
+    FixedBodyHoldGravity Gravity,
+    FixedQ4816 Thrust
 ) {
     /// <summary>Reports whether a candidate face's alignment with gravity-up falls inside this hold's cone.</summary>
     /// <param name="alignment">The dot product of the candidate's unit normal with gravity-up. Clamped to

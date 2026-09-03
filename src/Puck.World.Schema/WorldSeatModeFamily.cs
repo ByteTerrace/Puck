@@ -29,7 +29,7 @@ public sealed record WorldSeatModeFamily(string Name, IReadOnlyList<WorldSeatMod
     private readonly IReadOnlyList<WorldSeatModeState> m_states = (States ?? []);
 
     /// <summary>Gets the family's admitted states. The absence-coalesce lives in the accessor for the same reason
-    /// <see cref="WorldMotionModel.Grounded.Response"/>'s does.</summary>
+    /// <see cref="WorldHudPanel.Elements"/>'s does.</summary>
     public IReadOnlyList<WorldSeatModeState> States {
         get => m_states;
         init => m_states = (value ?? []);

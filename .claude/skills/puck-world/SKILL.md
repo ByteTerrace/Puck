@@ -219,7 +219,7 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   BOM'd pin writes its preamble into the piped stdin and silently corrupts
   the FIRST command.
 - **Indexing**: `body.*` verbs and `world.grant body:<n>` address the 0-based
-  entity index (0..127); seat-scoped `player.*` verbs (join/leave/assign/mode/
+  entity index (0..4095 at the engine ceiling); seat-scoped `player.*` verbs (join/leave/assign/mode/
   bind/…) stay 1-based seat numbers. `body:1` is seat 2's entity.
 - Scenery boulders HAVE collision — zero displacement with no refusal means
   the physical path, not a dead command. A zero-input boot drifts p1
@@ -323,13 +323,15 @@ choosing fixed-point primitives on sim value paths.
 
 ## Boundaries worth knowing
 
-- `WorldBodiesLimits.CapacityCeiling` is 128 (the largest authored
+- `WorldBodiesLimits.CapacityCeiling` is 4096 (the largest authored
   `population.capacity` the validator admits), and `WorldClient.EntityCapacity`
   is SINGLE-SOURCED from it (`= WorldBodiesLimits.CapacityCeiling`, the F3
   reconciliation 2026-08-06) — so the validator's admitted capacity and the
   client's fixed per-entity view arrays are the SAME number by construction; the
   old gap where a document could author past the client bound, validate, and boot
-  into an out-of-bounds throw is closed. Shipped worlds author 128 with seats 0–3
+  into an out-of-bounds throw is closed. The client reserves detailed rigs for
+  the first 128 indices and emits later active bodies through the coarse crowd
+  representation. Existing shipped worlds may still author 128 with seats 0–3
   local and 124 simulated.
 - `SdfProgramBuilder.MaxInstances = 16384` — the per-tile mask width scales
   with DECLARED instances, which is why the frame source emits active

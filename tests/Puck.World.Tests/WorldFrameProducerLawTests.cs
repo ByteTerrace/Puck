@@ -12,7 +12,7 @@ public sealed class WorldFrameProducerLawTests {
     public void WanderProducer_SteersInTwoAxesUnderWorldFrameMotion() {
         var document = Fixtures.BuildDocument();
         var sourceKit = Assert.Single(collection: document.Kits);
-        var sourceMotion = Assert.IsType<WorldMotionModel.Grounded>(@object: sourceKit.Motion);
+        var sourceMotion = sourceKit.Motion;
         var scalars = Fixtures.TravelerWanderParameters.Scalars.ToDictionary();
 
         scalars = new Dictionary<string, float>(dictionary: scalars) {

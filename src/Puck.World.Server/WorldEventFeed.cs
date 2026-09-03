@@ -4,7 +4,7 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
-/// <summary>The closed world-events vocabulary — five event families; the sixth, machine-memory watches, is
+/// <summary>The closed world-events vocabulary; machine-memory watches are
 /// addon-scoped — each mounted guest declares its own watch rows, so it is computed inside
 /// <see cref="IWorldAddonHost"/>'s implementation directly rather than here; see <c>Addons.WorldAddonRuntime</c>'s
 /// remarks. Mirrors <c>Puck.Scripting.AddonAbi.ObservationVerbs</c>'s event verbs one-for-one.</summary>
@@ -45,21 +45,24 @@ public enum WorldEventFamily : byte {
 /// <param name="B">The wire payload's second lane (a region ordinal, or an encoded route target); zero when unused.</param>
 public readonly record struct WorldEventEdge(WorldEventFamily Family, GrantSubject GateA, GrantSubject? GateB, long A, long B);
 /// <summary>
-/// Computes the five world-scoped event families once per tick — collision pairs, region enter/exit, seat
+/// Computes the world-scoped event families once per tick — collision pairs, region enter/exit, seat
 /// join/leave, route/engagement transitions, and federation link established/dropped — as a flat, pinned-order edge
-/// list every mounted addon's host filters by its own grants. Four of the five are deterministic by construction:
+/// list every mounted addon's host filters by its own grants. All but link liveness are deterministic by construction:
 /// body positions, seat occupancy, the document's region rows, and route commands are already sim-lane state, so
 /// replay covers them by re-execution and nothing about them is taped. The link family is the one exception — see
 /// its own paragraph below.
 /// </summary>
 /// <remarks>
 /// <para><b>Collision pairs are a proximity test, not the physical contact resolver.</b>
-/// <see cref="IContactField"/> resolves a body against static solid scene rows, screens, and creation placements — there is no
-/// body-vs-body physical resolution in this engine today, and adding one is a physics feature far outside this
-/// lane's mission. This feed instead runs a cheap, honest overlap test over every pair of the two bodies' collider
-/// volumes in full 3D — a capsule/sphere pair by 3D segment-to-segment distance against the summed radii, a
+/// <see cref="IContactField"/> resolves a body against static solid scene rows, screens, and creation placements, while
+/// <see cref="WorldBodyContactMode.Solid"/> separately opts a kit into bounded dynamic-body depenetration. This feed
+/// does not reuse either solver's admitted pair set: it runs an honest overlap test over selected pairs of the bodies'
+/// collider volumes in full 3D — a capsule/sphere pair by 3D segment-to-segment distance against the summed radii, a
 /// box-involving pair by an oriented per-axis extent test on X, Y, and Z. A kit with no collider has no event volume
-/// and therefore emits no collision pair. It is deliberately not a claim about physical contact response.</para>
+/// and therefore emits no collision pair. Discovery uses deterministic sweep-and-prune and the authored
+/// <see cref="WorldCollisionEvents"/> limits; established pairs are retained first. A saturated crowd therefore has
+/// bounded work and memory and may omit lower-priority new proximity pairs. It is deliberately not a claim about
+/// physical contact response.</para>
 /// <para><b>Region containment</b> re-reads the document's placements every tick (a linear scan, cheap at
 /// authoring scale) rather than caching a derived structure keyed to the Placements section's install cadence —
 /// simpler and correct; revisit only if profiling ever shows the scan matters.</para>
@@ -89,18 +92,46 @@ public sealed class WorldEventFeed {
     // reorderable ordinal" rule m_regionOccupancy follows).
     private readonly Dictionary<string, LinkState> m_links = new(comparer: StringComparer.Ordinal);
     private readonly bool[] m_seatOccupied = new bool[WorldBodiesLimits.LocalSeatCount];
-    // Pairwise overlap state, keyed by the ascending (a, b) body-index pair. A HashSet rather than a dense bitset —
-    // the active population is small in practice and this is human/gameplay-cadence data, not a hot allocation path
-    // once warmed (Add/Remove/Contains do not allocate on an already-sized set).
+    // Pairwise overlap state, keyed by the ascending (a, b) body-index pair. Its degree is bounded by the authored
+    // collision-events policy, so a dense few-thousand-body crowd never becomes a quadratic table.
     private readonly HashSet<(int A, int B)> m_overlapping = [];
+    private readonly BroadphaseBody[] m_collisionBodies;
+    private readonly byte[] m_collisionDegrees;
+    private readonly ulong[] m_collisionPairKeys;
+    private readonly CollisionTransition[] m_collisionTransitions;
+    private readonly int m_maximumTrackedPairs;
     // Region containment, per (regionId, bodyIndex). Keyed by region id (== the carrying placement's Id) rather
     // than a derived ordinal, so a document edit that reorders placements does not silently reinterpret stale state
     // under a reused ordinal — a region's identity is its name, exactly as GrantSubject.Region already keys it.
     private readonly Dictionary<string, bool[]> m_regionOccupancy = new(comparer: StringComparer.Ordinal);
 
+    /// <summary>Initializes a bounded event feed for one population.</summary>
+    /// <param name="capacity">The population's authored body capacity.</param>
+    public WorldEventFeed(int capacity) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: capacity);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: capacity, other: WorldBodiesLimits.CapacityCeiling);
+
+        m_maximumTrackedPairs = MaximumTrackedPairsForCapacity(capacity);
+        m_collisionBodies = new BroadphaseBody[capacity];
+        m_collisionDegrees = new byte[capacity];
+        m_collisionPairKeys = new ulong[m_maximumTrackedPairs];
+        m_collisionTransitions = new CollisionTransition[checked(m_maximumTrackedPairs * 2)];
+        _ = m_overlapping.EnsureCapacity(capacity: m_maximumTrackedPairs);
+    }
+
     /// <summary>Gets this tick's collected edges, in pinned order (seats, then regions, then collisions, then links,
     /// then routes). Valid only between one <see cref="Collect"/> call and the next.</summary>
     public IReadOnlyList<WorldEventEdge> Edges => m_edges;
+    /// <summary>Gets the new-pair broadphase candidates inspected by the latest collection pass.</summary>
+    public int CollisionCandidates { get; private set; }
+    /// <summary>Gets the bodies whose new-pair search exhausted its candidate budget in the latest pass.</summary>
+    public int CollisionLimitedBodies { get; private set; }
+    /// <summary>Gets the established overlap pairs retained after the latest pass.</summary>
+    public int CollisionTrackedPairs => m_overlapping.Count;
+
+    /// <summary>Returns the absolute overlap-pair storage ceiling for a population capacity.</summary>
+    internal static int MaximumTrackedPairsForCapacity(int capacity) =>
+        checked((capacity * WorldCollisionEvents.MaximumPairsPerBody) / 2);
 
     /// <summary>One authored adjacency row's checkpointed link-liveness state.</summary>
     /// <param name="Adjacency">The authored <c>adjacencies</c> row name.</param>
@@ -128,7 +159,7 @@ public sealed class WorldEventFeed {
         Edges: [.. m_edges],
         PendingRoutes: [.. m_pendingRoutes],
         SeatOccupied: [.. m_seatOccupied],
-        Overlapping: [.. m_overlapping],
+        Overlapping: [.. m_overlapping.OrderBy(static pair => pair.A).ThenBy(static pair => pair.B)],
         RegionOccupancy: [.. m_regionOccupancy.Select(selector: static pair => (pair.Key, ((bool[])pair.Value.Clone())))],
         Links: [.. m_links.Select(selector: static pair => new WorldEventLinkState(
                 Adjacency: pair.Key,
@@ -138,9 +169,74 @@ public sealed class WorldEventFeed {
                 StaleTicks: pair.Value.StaleTicks
             ))]
     );
+    /// <summary>Preflights a checkpoint without changing this feed.</summary>
+    internal void ValidateCheckpoint(WorldEventFeedCheckpoint checkpoint) {
+        ArgumentNullException.ThrowIfNull(argument: checkpoint);
+        if (
+            checkpoint.Edges is null ||
+            checkpoint.PendingRoutes is null ||
+            checkpoint.SeatOccupied is null ||
+            checkpoint.Overlapping is null ||
+            checkpoint.RegionOccupancy is null ||
+            checkpoint.Links is null
+        ) {
+            throw new InvalidOperationException(message: "event feed checkpoint contains a null collection.");
+        }
+        if (checkpoint.SeatOccupied.Length != m_seatOccupied.Length) {
+            throw new InvalidOperationException(message: $"event feed checkpoint carries {checkpoint.SeatOccupied.Length} seat latches; this world requires {m_seatOccupied.Length}.");
+        }
+        if (checkpoint.Overlapping.Count > m_maximumTrackedPairs) {
+            throw new InvalidOperationException(message: $"event feed checkpoint carries {checkpoint.Overlapping.Count} overlap pairs; this population admits at most {m_maximumTrackedPairs}.");
+        }
+
+        Array.Clear(array: m_collisionDegrees);
+        var overlapCount = 0;
+        foreach (var pair in checkpoint.Overlapping) {
+            if (
+                (pair.A < 0) ||
+                (pair.A >= pair.B) ||
+                (((uint)pair.B) >= ((uint)m_collisionDegrees.Length)) ||
+                (++m_collisionDegrees[pair.A] > WorldCollisionEvents.MaximumPairsPerBody) ||
+                (++m_collisionDegrees[pair.B] > WorldCollisionEvents.MaximumPairsPerBody)
+            ) {
+                throw new InvalidOperationException(message: $"event feed checkpoint carries invalid or over-capacity overlap pair ({pair.A}, {pair.B}).");
+            }
+            m_collisionPairKeys[overlapCount++] = CollisionPairKey(a: pair.A, b: pair.B);
+        }
+        Array.Sort(array: m_collisionPairKeys, index: 0, length: overlapCount);
+        for (var index = 1; index < overlapCount; index++) {
+            if (m_collisionPairKeys[index] == m_collisionPairKeys[(index - 1)]) {
+                var key = m_collisionPairKeys[index];
+                throw new InvalidOperationException(message: $"event feed checkpoint duplicates overlap pair ({(int)(key >> 32)}, {(int)(uint)key}).");
+            }
+        }
+
+        var regionNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+        foreach (var row in checkpoint.RegionOccupancy) {
+            if (string.IsNullOrWhiteSpace(value: row.Region) || !regionNames.Add(item: row.Region)) {
+                throw new InvalidOperationException(message: $"event feed checkpoint carries an empty or repeated region name '{row.Region}'.");
+            }
+            if (row.Occupancy is null || row.Occupancy.Length != m_collisionBodies.Length) {
+                throw new InvalidOperationException(message: $"event feed checkpoint region '{row.Region}' carries {row.Occupancy?.Length ?? -1} body latches; this world requires {m_collisionBodies.Length}.");
+            }
+        }
+
+        var linkNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+        foreach (var link in checkpoint.Links) {
+            if (string.IsNullOrWhiteSpace(value: link.Adjacency) || !linkNames.Add(item: link.Adjacency) || link.StaleTicks < 0L) {
+                throw new InvalidOperationException(message: $"event feed checkpoint carries invalid or repeated link state '{link.Adjacency}'.");
+            }
+        }
+        foreach (var edge in checkpoint.Edges.Concat(second: checkpoint.PendingRoutes)) {
+            if (!Enum.IsDefined(value: edge.Family)) {
+                throw new InvalidOperationException(message: $"event feed checkpoint carries unknown event family '{edge.Family}'.");
+            }
+        }
+    }
+
     /// <summary>Restores this feed's live state from a previously captured checkpoint.</summary>
     public void Restore(WorldEventFeedCheckpoint checkpoint) {
-        ArgumentNullException.ThrowIfNull(argument: checkpoint);
+        ValidateCheckpoint(checkpoint: checkpoint);
 
         m_edges.Clear();
         m_edges.AddRange(collection: checkpoint.Edges);
@@ -155,14 +251,8 @@ public sealed class WorldEventFeed {
                 StaleTicks = link.StaleTicks,
             };
         }
-        Array.Copy(
-            sourceArray: checkpoint.SeatOccupied,
-            destinationArray: m_seatOccupied,
-            length: Math.Min(
-                val1: checkpoint.SeatOccupied.Length,
-                val2: m_seatOccupied.Length
-            )
-        );
+        checkpoint.SeatOccupied.CopyTo(array: m_seatOccupied, index: 0);
+
         m_overlapping.Clear();
         foreach (var pair in checkpoint.Overlapping) {
             _ = m_overlapping.Add(item: pair);
@@ -234,56 +324,144 @@ public sealed class WorldEventFeed {
 
         return (Center: center, Extent: boxExtent);
     }
-    private void CollectCollisions(WorldPopulation population) {
-        for (var a = 0; (a < population.Capacity); a++) {
-            if (
-                !population.IsActive(index: a) ||
-                (population.EntryBody(index: a) is not { } bodyA)
-            ) {
-                continue;
-            }
+    private static ulong CollisionPairKey(int a, int b) => (((ulong)(uint)a << 32) | (uint)b);
+    private void AddCollisionTransition(int a, int b, bool now, ref int count) {
+        m_collisionTransitions[count++] = new CollisionTransition(
+            Key: CollisionPairKey(a: a, b: b),
+            Now: now
+        );
+    }
+    private void CollectCollisions(WorldPopulation population, WorldCollisionEvents policy) {
+        Array.Clear(array: m_collisionDegrees);
+        CollisionCandidates = 0;
+        CollisionLimitedBodies = 0;
 
-            for (var b = (a + 1); (b < population.Capacity); b++) {
+        var pairCount = 0;
+        foreach (var pair in m_overlapping) {
+            m_collisionPairKeys[pairCount++] = CollisionPairKey(a: pair.A, b: pair.B);
+        }
+        Array.Sort(array: m_collisionPairKeys, index: 0, length: pairCount);
+
+        // Existing overlap relationships have continuity priority over new discoveries. Validate them in pair order,
+        // retaining the first pairs admitted by a newly-lowered degree limit and ending the rest deterministically.
+        var transitionCount = 0;
+        for (var ordinal = 0; ordinal < pairCount; ordinal++) {
+            var key = m_collisionPairKeys[ordinal];
+            var a = (int)(key >> 32);
+            var b = (int)(uint)key;
+            var retained = (
+                (policy.MaxPairsPerBody > 0) &&
+                (m_collisionDegrees[a] < policy.MaxPairsPerBody) &&
+                (m_collisionDegrees[b] < policy.MaxPairsPerBody) &&
+                population.IsActive(index: a) &&
+                population.IsActive(index: b) &&
+                (population.EntryBody(index: a) is { Collider: not null } bodyA) &&
+                (population.EntryBody(index: b) is { Collider: not null } bodyB) &&
+                Overlaps(a: bodyA, b: bodyB)
+            );
+            if (retained) {
+                m_collisionDegrees[a]++;
+                m_collisionDegrees[b]++;
+            } else {
+                _ = m_overlapping.Remove(item: (a, b));
+                AddCollisionTransition(a: a, b: b, now: false, count: ref transitionCount);
+            }
+        }
+
+        var bodyCount = 0;
+        if (policy.MaxPairsPerBody > 0) {
+            for (var index = 0; index < population.Capacity; index++) {
                 if (
-                    !population.IsActive(index: b) ||
-                    (population.EntryBody(index: b) is not { } bodyB)
+                    !population.IsActive(index: index) ||
+                    (population.EntryBody(index: index) is not { Collider: { } collider } body)
                 ) {
                     continue;
                 }
 
-                var key = (a, b);
-                var latch = m_overlapping.Contains(item: key);
+                var radius = FixedDynamicBodyContacts.BroadphaseRadius(volumes: collider.Volumes);
+                m_collisionBodies[bodyCount++] = new BroadphaseBody(
+                    Index: index,
+                    MinimumX: (body.FixedPosition.X - radius),
+                    MaximumX: (body.FixedPosition.X + radius),
+                    Radius: radius
+                );
+            }
+            Array.Sort(array: m_collisionBodies, index: 0, length: bodyCount);
+        }
 
-                if (!EmitTransition(
-                    latch: ref latch,
-                    now: Overlaps(
-                        a: bodyA,
-                        b: bodyB
-                    ),
-                    onClear: new WorldEventEdge(
-                        Family: WorldEventFamily.CollisionEnd,
-                        GateA: GrantSubject.Body(index: a),
-                        GateB: GrantSubject.Body(index: b),
-                        A: a,
-                        B: b
-                    ),
-                    onSet: new WorldEventEdge(
-                        Family: WorldEventFamily.CollisionBegin,
-                        GateA: GrantSubject.Body(index: a),
-                        GateB: GrantSubject.Body(index: b),
-                        A: a,
-                        B: b
-                    )
-                )) {
+        // Discover new pairs. The x sweep removes distant bodies; Y/Z enclosing-sphere checks remove the other two
+        // axes before the exact compound-volume test. Both the inspected-candidate and retained-degree bounds hold
+        // even when every body occupies the same point.
+        var begins = 0;
+        for (var leftOrdinal = 0; leftOrdinal < bodyCount; leftOrdinal++) {
+            if (begins >= policy.BeginBudget) {
+                break;
+            }
+            var left = m_collisionBodies[leftOrdinal];
+            if (m_collisionDegrees[left.Index] >= policy.MaxPairsPerBody) {
+                continue;
+            }
+
+            var inspected = 0;
+            for (var rightOrdinal = (leftOrdinal + 1);
+                (rightOrdinal < bodyCount) && (m_collisionBodies[rightOrdinal].MinimumX <= left.MaximumX);
+                rightOrdinal++) {
+                if (inspected >= policy.CandidateBudget) {
+                    CollisionLimitedBodies++;
+                    break;
+                }
+                inspected++;
+                CollisionCandidates++;
+
+                var right = m_collisionBodies[rightOrdinal];
+                if (
+                    (m_collisionDegrees[left.Index] >= policy.MaxPairsPerBody) ||
+                    (m_collisionDegrees[right.Index] >= policy.MaxPairsPerBody)
+                ) {
                     continue;
                 }
 
-                if (latch) {
-                    _ = m_overlapping.Add(item: key);
-                } else {
-                    _ = m_overlapping.Remove(item: key);
+                var a = Math.Min(left.Index, right.Index);
+                var b = Math.Max(left.Index, right.Index);
+                if (m_overlapping.Contains(item: (a, b))) {
+                    continue;
+                }
+
+                var leftBody = population.EntryBody(index: left.Index)!;
+                var rightBody = population.EntryBody(index: right.Index)!;
+                var radius = (left.Radius + right.Radius);
+                var delta = (leftBody.FixedPosition - rightBody.FixedPosition);
+                if (
+                    (FixedQ4816.Abs(value: delta.Y) > radius) ||
+                    (FixedQ4816.Abs(value: delta.Z) > radius) ||
+                    !Overlaps(a: leftBody, b: rightBody)
+                ) {
+                    continue;
+                }
+
+                _ = m_overlapping.Add(item: (a, b));
+                m_collisionDegrees[a]++;
+                m_collisionDegrees[b]++;
+                begins++;
+                AddCollisionTransition(a: a, b: b, now: true, count: ref transitionCount);
+                if (begins >= policy.BeginBudget) {
+                    break;
                 }
             }
+        }
+
+        Array.Sort(array: m_collisionTransitions, index: 0, length: transitionCount);
+        for (var ordinal = 0; ordinal < transitionCount; ordinal++) {
+            var transition = m_collisionTransitions[ordinal];
+            var a = (int)(transition.Key >> 32);
+            var b = (int)(uint)transition.Key;
+            m_edges.Add(item: new WorldEventEdge(
+                Family: (transition.Now ? WorldEventFamily.CollisionBegin : WorldEventFamily.CollisionEnd),
+                GateA: GrantSubject.Body(index: a),
+                GateB: GrantSubject.Body(index: b),
+                A: a,
+                B: b
+            ));
         }
     }
     // The shared latched-transition body every per-tick edge-detection pass (collision overlap, region containment,
@@ -302,6 +480,16 @@ public sealed class WorldEventFeed {
         ));
 
         return true;
+    }
+
+    private readonly record struct BroadphaseBody(int Index, FixedQ4816 MinimumX, FixedQ4816 MaximumX, FixedQ4816 Radius) : IComparable<BroadphaseBody> {
+        public int CompareTo(BroadphaseBody other) {
+            var minimum = MinimumX.CompareTo(other.MinimumX);
+            return (minimum != 0 ? minimum : Index.CompareTo(other.Index));
+        }
+    }
+    private readonly record struct CollisionTransition(ulong Key, bool Now) : IComparable<CollisionTransition> {
+        public int CompareTo(CollisionTransition other) => Key.CompareTo(other.Key);
     }
 
     // One authored adjacency row's liveness. Reference type deliberately: the collection pass mutates in place, and a
@@ -683,7 +871,10 @@ public sealed class WorldEventFeed {
             definition: definition,
             population: population
         );
-        CollectCollisions(population: population);
+        CollectCollisions(
+            population: population,
+            policy: definition.Collision.Events
+        );
         CollectLinks(definition: definition);
 
         m_edges.AddRange(collection: m_pendingRoutes);

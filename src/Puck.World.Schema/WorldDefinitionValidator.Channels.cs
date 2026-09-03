@@ -600,7 +600,7 @@ public static partial class WorldDefinitionValidator {
     }
     // The channel table (SIM-AFFECTING — the PlayerIntent vector's vocabulary): name uniqueness; exactly one
     // consumer per row (a role XOR a composition trigger); role channels are bipolar only; channel-count ceiling;
-    // threshold range on binary rows; motion-model role completeness (Grounded needs move-forward/move-strafe/turn,
+    // threshold range on binary rows; body-motion-program role completeness (Grounded needs move-forward/move-strafe/turn,
     // Free needs all six). Returns the composition-channel name set kit Actions maps resolve against; composition
     // channels carry no shape restriction.
     private static (HashSet<string> AllNames, HashSet<string> CompositionNames) ValidateChannels(WorldDefinition definition, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, List<string> errors) {
@@ -652,7 +652,7 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 // A role is a signed axis by construction — reverse/left/down are half the domain, not a degenerate
-                // case — so a non-bipolar shape is meaningless to the motion model, never merely unusual. Refusing it
+                // case — so a non-bipolar shape is meaningless to the body motion program, never merely unusual. Refusing it
                 // here makes WorldBody.Clamped's and SeatController.HeldIntent's hardcoded [-1,1] role range a
                 // CONSEQUENCE of this rule instead of a lucky coincidence with the fold's shape-driven range
                 // (Puck.Maths.FixedContributionFold, whose minimum/maximum WorldServer derives from this shape).
@@ -723,12 +723,12 @@ public static partial class WorldDefinitionValidator {
             }
 
             // A Camera/Heading-framed pair is composed into world axes by the seat's client, which the sim's Heading
-            // arm would then rotate a second time by the body's own heading — refuse the double rotation.
+            // frame would then rotate a second time by the body's own heading — refuse the double rotation.
             if (
                 (moveFrame != ChannelFrame.World) &&
-                (kit.Motion.DeclaredMoveFrame != MotionMoveFrame.World)
+                (kit.Motion.MoveFrame != MotionMoveFrame.World)
             ) {
-                errors.Add(item: $"kit '{kit.Name}' motion frame '{kit.Motion.DeclaredMoveFrame}' cannot carry a '{moveFrame}'-framed MoveAdvance/MoveStrafe pair — a framed pair needs the kit's World frame.");
+                errors.Add(item: $"kit '{kit.Name}' motion frame '{kit.Motion.MoveFrame}' cannot carry a '{moveFrame}'-framed MoveAdvance/MoveStrafe pair — a framed pair needs the kit's World frame.");
             }
 
             if (!programs.TryGetValue(

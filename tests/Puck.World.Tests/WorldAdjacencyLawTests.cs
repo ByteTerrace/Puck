@@ -189,7 +189,7 @@ public sealed class WorldAdjacencyLawTests {
 
         Assert.True(condition: WorldAdjacencyPolicy.TryVerticalSettleDeadband(definition: definition, depth: out var settle, reason: out var reason), userMessage: reason);
 
-        // The document's own envelope, recomputed independently in double precision: the grounded arm's fall gravity
+        // The document's own envelope, recomputed independently in double precision: the kit's motion-row fall gravity
         // over one authority step is the speed a body at rest reaches, and that speed over one more step is the sag.
         var rate = ((double)definition.SimulationRateHz);
         var sag = (Math.Min(val1: 20.0, val2: (23.0 / rate)) / rate);

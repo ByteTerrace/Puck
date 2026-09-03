@@ -152,10 +152,11 @@ public sealed partial class NavigationLawTests {
             Kind: BodyProgramKind.Motion,
             Operations: [
                 BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
+                BodyMotionOp.ResolveHold,
                 BodyMotionOp.ComputePlanarTargetVelocity,
-                BodyMotionOp.ShapePlanarVelocity,
+                BodyMotionOp.ShapeVelocity,
                 BodyMotionOp.RunActionTriggers,
-                BodyMotionOp.ApplyVerticalDrive,
+                BodyMotionOp.ApplyHold,
                 BodyMotionOp.IntegratePlanarAndVerticalVelocity,
                 BodyMotionOp.CommitPose,
             ]
@@ -175,6 +176,12 @@ public sealed partial class NavigationLawTests {
             BodyMotionProgramsRaw = [.. document.BodyMotionPrograms, navigationMotion, producer],
             KitRowsRaw = [kit with {
                 BodyMotionProgram = navigationMotion.Name,
+                // A full-thrust hold row is the "compatible vertical consumer" a Volume/Medium-domain producer
+                // needs: it consumes MoveUp unconditionally.
+                // This navigation program carries no gravity law, so its hold row holds nothing and only consumes
+                // MoveUp: a Gravity row here would sink a navigator
+                // out of its own volume domain between goals.
+                Motion = kit.Motion with { Holds = [kit.Motion.Holds![0] with { Gravity = null, Hold = BodyHoldKind.None, Thrust = 1f }] },
                 ProducersRaw = new Dictionary<string, BodyProgramParameters>(collection: kit.Producers) {
                     [ProducerName] = NavigationParameters(),
                 },
@@ -247,11 +254,12 @@ public sealed partial class NavigationLawTests {
         Assert.Contains(expectedSubstring: "dimensions necessarily exceed", actualString: reason, comparisonType: StringComparison.Ordinal);
 
         var flight = NavigationDocument(domain: VolumeDomain());
+        var flightKits = flight.Kits.ToArray();
         var noVerticalConsumer = flight with {
-            BodyMotionProgramsRaw = flight.BodyMotionPrograms.Select(program => (program.Name == "navigation-motion")
-                ? program with { Operations = program.Operations.Where(operation => operation != BodyMotionOp.ApplyVerticalDrive).ToArray() }
-                : program
-            ).ToArray(),
+            // Zeroing the hold row's own thrust is the "no compatible vertical consumer" shape.
+            KitRowsRaw = [flightKits[0] with {
+                Motion = flightKits[0].Motion with { Holds = [flightKits[0].Motion.Holds![0] with { Thrust = 0f }] },
+            }],
         };
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: noVerticalConsumer, reason: out reason));
         Assert.Contains(expectedSubstring: "no compatible vertical consumer", actualString: reason, comparisonType: StringComparison.Ordinal);

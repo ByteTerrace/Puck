@@ -85,9 +85,10 @@ public static partial class WorldAuthorityCheckpointCodec {
         items: values,
         writeItem: static (w, v) => w.WriteBoolean(value: v)
     );
-    private static bool[] ReadBoolArray(ref WireReader reader, string field) => ReadArray(
+    private static bool[] ReadBoolArray(ref WireReader reader, string field, int maximum = MaxCollectionCount) => ReadArray(
         reader: ref reader,
         field: field,
+        maximum: maximum,
         readItem: static (ref WireReader r) => r.ReadBoolean()
     );
     private static void WriteStringArray(WireWriter writer, IReadOnlyList<string> values) => WriteArray(

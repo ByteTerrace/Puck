@@ -1,4 +1,5 @@
 using Puck.Networking;
+using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
@@ -85,6 +86,14 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer.WriteInt32(observed.Generation);
             writer.WriteFixedVector(observed.Position);
         }
+        writer.WriteUInt64(entry.Autonomy.MotionPeriodTicks);
+        writer.WriteUInt64(entry.Autonomy.MotionElapsedTicks);
+        writer.WriteUInt64(entry.Autonomy.MotionRemainingTicks);
+        writer.WriteUInt64(entry.Autonomy.SteeringPeriodTicks);
+        writer.WriteUInt64(entry.Autonomy.SteeringElapsedTicks);
+        writer.WriteUInt64(entry.Autonomy.SteeringRemainingTicks);
+        WorldWireCodec.WriteIntent(writer, entry.Autonomy.SteeringIntent);
+        writer.WriteBoolean(entry.Autonomy.SteeringSeeded);
         writer.WriteFixedVector(value: entry.Position);
         writer.WriteFixed(value: entry.Yaw);
         WriteTransferState(
@@ -183,6 +192,16 @@ public static partial class WorldAuthorityCheckpointCodec {
         if (reader.ReadBoolean()) {
             flock = flock with { Target = new WorldFlockObservation(reader.ReadInt32(), reader.ReadInt32(), reader.ReadFixedVector()) };
         }
+        var autonomy = new WorldPopulation.WorldPopulationAutonomyCheckpoint(
+            MotionPeriodTicks: reader.ReadUInt64(),
+            MotionElapsedTicks: reader.ReadUInt64(),
+            MotionRemainingTicks: reader.ReadUInt64(),
+            SteeringPeriodTicks: reader.ReadUInt64(),
+            SteeringElapsedTicks: reader.ReadUInt64(),
+            SteeringRemainingTicks: reader.ReadUInt64(),
+            SteeringIntent: WorldWireCodec.ReadIntent(reader: ref reader),
+            SteeringSeeded: reader.ReadBoolean()
+        );
         var position = reader.ReadFixedVector();
         var yaw = reader.ReadFixed();
         var dynamicState = ReadTransferState(reader: ref reader);
@@ -232,6 +251,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             ProducerAcquiredTarget: producerAcquiredTarget,
             ProducerActiveCurveIndex: producerActiveCurveIndex,
             Flock: flock,
+            Autonomy: autonomy,
             ProducerActiveName: producerActiveName,
             ProducerActivityPhase: producerActivityPhase,
             ProducerActivityRate: producerActivityRate,

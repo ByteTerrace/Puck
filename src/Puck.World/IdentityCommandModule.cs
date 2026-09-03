@@ -427,7 +427,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "identity.show",
-            description: "Shows the identity driving a seat, including its private HUD panel (id/layer/style/rect/element count, or 'none') and its move rate BOTH as claimed and as actually applied: identity.show [player]. move= is the profile's own claimed rate, or 'kit' for an identity claiming none (the kit's authored rate then drives, until identity.motion mints a claim); moveEffective= is what the sim integrates under — the claimed-or-kit rate after the kit's own moveSpeedEnvelope clamps it, so a kit whose envelope pins min == max reads its own pinned rate regardless of what the profile claims.",
+            description: "Shows the identity driving a seat, including its private HUD panel (id/layer/style/rect/element count, or 'none') and its move rate BOTH as claimed and as actually applied: identity.show [player]. move= is the profile's own claimed rate, or 'kit' for an identity claiming none (the kit's authored rate then drives, until identity.motion mints a claim); moveEffective= is what the sim integrates under — the claimed-or-kit rate after the kit's own speed.envelope clamps it, so a kit whose envelope pins min == max reads its own pinned rate regardless of what the profile claims.",
             handler: Show
         );
         yield return CommandDefinition.WithWireArgs(

@@ -18,6 +18,7 @@ namespace Puck.World;
 [JsonDerivedType(typeof(ActionPredicate.All), typeDiscriminator: "all")]
 [JsonDerivedType(typeof(ActionPredicate.Any), typeDiscriminator: "any")]
 [JsonDerivedType(typeof(ActionPredicate.Not), typeDiscriminator: "not")]
+[JsonDerivedType(typeof(ActionPredicate.Held), typeDiscriminator: "held")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record ActionPredicate {
     /// <summary>World-scope comparison of two bounded numeric expressions. Arithmetic failure makes this comparison false.</summary>
@@ -76,6 +77,12 @@ public abstract record ActionPredicate {
     /// <summary>Inverts one predicate.</summary>
     /// <param name="Predicate">The child predicate to invert.</param>
     public sealed record Not(ActionPredicate Predicate) : ActionPredicate;
+    /// <summary>The named composition channel's own live read is at or above its declared threshold — the same test
+    /// a held sprint/drift channel makes today. Legitimate only inside a kit's <c>shaping</c>-row gate, where the
+    /// world's channel table resolves <paramref name="Channel"/> to an ordinal at kit-compile time; refused
+    /// everywhere else a predicate is authored.</summary>
+    /// <param name="Channel">The declared composition channel name.</param>
+    public sealed record Held(string Channel) : ActionPredicate;
 }
 
 /// <summary>A bounded postfix numeric expression evaluated by a world rule, decision, or flock affinity. Each token either pushes a value or
@@ -316,14 +323,14 @@ public abstract record ActionEffect {
     /// <summary>Applies a bounded state transform through the ordinary mutation pipeline.</summary>
     /// <param name="Transform">The typed operation.</param>
     public sealed record TransformState(WorldStateTransform Transform) : ActionEffect;
-    /// <summary>Writes the body's vertical-velocity channel (the jump launch / the surge). Under the grounded model
-    /// gravity owns its decay; under the free model it bleeds to zero at the tuning's rise gravity (no fall phase).</summary>
+    /// <summary>Writes the body's vertical-velocity channel (the jump launch / the surge). Under the grounded program
+    /// gravity owns its decay; under the free program it bleeds to zero at the tuning's rise gravity (no fall phase).</summary>
     public sealed record SetVerticalVelocity(float Velocity, ActionTarget Target = ActionTarget.Self) : ActionEffect;
     /// <summary>Multiplies the body's vertical velocity (the jump cut; gate on <see cref="ActionFact.Rising"/>).</summary>
     public sealed record ScaleVerticalVelocity(float Factor, ActionTarget Target = ActionTarget.Self) : ActionEffect;
     /// <summary>A timed planar velocity overlay (the dash): <paramref name="BodyDirection"/> is rotated by the body's
     /// attitude at fire time and ridden at <paramref name="Speed"/> for <paramref name="DurationSeconds"/>, integrated
-    /// through its own accumulator on top of the model's motion — integration itself is untouched.</summary>
+    /// through its own accumulator on top of the body's compiled motion — integration itself is untouched.</summary>
     public sealed record PlanarImpulse(DocumentVector3 BodyDirection, float Speed, float DurationSeconds, ActionTarget Target = ActionTarget.Self) : ActionEffect;
     /// <summary>Writes a named state cell — a kit counter slot at body scope, a <c>state</c>-section row's cell at
     /// world scope (see <see cref="WorldRule"/>).</summary>

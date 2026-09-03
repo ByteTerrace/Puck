@@ -27,9 +27,11 @@ internal static class WorldTravelerProjection {
                 server.TryTransferredPrincipal(request.SourceAuthority, request.Mobility, out var current) && current == principal &&
                 WorldLocalForwardedAuthority.IsLiveTransferredPrincipal(server, principal) &&
                 server.Grants.Allows(principal, WorldCapability.Observe, subject).IsAllowed;
-            sink = new(request.Ceiling, server.AuthorityIdentity, () => server.Population.Revision, Current, principal);
+            var disclosure = new WorldSinkDisclosure(definition.Population.ObserverDisclosure, principal.Index);
+            sink = new(request.Ceiling, server.AuthorityIdentity, () => server.Population.Revision,
+                () => disclosure, Current, principal);
             sink.PrimeRoute(WorldLocalForwardedAuthority.DescribeRoute(server, endpoint, principal));
-            lease = server.AttachSink(sink: sink, disclosure: new WorldSinkDisclosure(definition.Population.ObserverDisclosure, principal.Index));
+            lease = server.AttachSink(sink: sink);
             return (string?)null;
         });
         if (refusal is not null) { return refusal; }

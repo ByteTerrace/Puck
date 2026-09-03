@@ -35,7 +35,7 @@ public abstract record SessionRequest(WorldPrincipal Principal) {
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Count">The requested active simulated count.</param>
     public sealed record SetPopulation(WorldPrincipal Principal, int Count) : SessionRequest(Principal);
-    /// <summary>Sets the peer intent-source default AND sweeps every peer (4..127) to it — last-writer-wins; a
+    /// <summary>Sets the peer intent-source default AND sweeps every peer (indices 4 through capacity minus one) to it — last-writer-wins; a
     /// per-entity source does not survive the global flip.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Source">The intent source to store and sweep.</param>

@@ -35,6 +35,53 @@
       "description": "Whether a body\u0027s surface hold may take any solid surface by default. A placement\u0027s own WorldPlacementGrip overrides this for the colliders it compiles; the field lattice\u0027s own terrain, which no placement row owns, has only this. false (the default) holds nothing.",
       "type": "boolean",
       "default": false
+    },
+    "events": {
+      "description": "The bounded body-overlap event policy. ABSENT takes Default; author maxPairsPerBody: 0 to disable body-pair events while retaining ordinary world contact.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "candidateBudget": {
+          "description": "The most sweep-and-prune candidates inspected for one body while discovering new overlaps. Must be at least MaxPairsPerBody.",
+          "type": "integer",
+          "default": 32
+        },
+        "maxPairsPerBody": {
+          "description": "The maximum retained overlap-event degree of one body; zero disables collision begin/end sensing.",
+          "type": "integer",
+          "default": 8
+        },
+        "beginBudget": {
+          "description": "The maximum collision-begin relationships admitted in one authority tick. Existing relationships and their ends are not delayed.",
+          "type": "integer",
+          "default": 1024
+        }
+      },
+      "additionalProperties": false,
+      "default": null
+    },
+    "bodyContacts": {
+      "description": "The bounded dynamic-body depenetration policy. ABSENT takes Default. This is independent of overlap events.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "candidateBudget": {
+          "description": "The most sweep candidates inspected for one solid body. Must be at least MaxPairsPerBody.",
+          "type": "integer",
+          "default": 16
+        },
+        "maxPairsPerBody": {
+          "description": "The most physical pair corrections incident to one body in a tick.",
+          "type": "integer",
+          "default": 8
+        }
+      },
+      "additionalProperties": false,
+      "default": null
     }
   },
   "required": [

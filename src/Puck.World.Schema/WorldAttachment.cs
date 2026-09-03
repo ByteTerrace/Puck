@@ -7,7 +7,7 @@ namespace Puck.World;
 /// at an anchor within <see cref="GrappleMaxDistance"/>/<see cref="GrappleAssistHalfAngleDegrees"/> on the authored
 /// <see cref="AttachChannel"/> press. Absent (<see cref="Absent"/>) resolves to <see cref="Enabled"/>
 /// <see langword="false"/> — a world authoring nothing here grants no attachment at all. Surface holds are not
-/// authored here: they are a kit's own ordered <see cref="WorldMotionModel.Grounded.Holds"/> list.
+/// authored here: they are a kit's own ordered <see cref="WorldMotion.Holds"/> list.
 /// </summary>
 /// <param name="Enabled">Whether the whole surface is live. <see langword="false"/> makes every other field inert —
 /// a body's attach/detach/reel channels (even if separately declared and bound) never reach the attachment state
@@ -53,7 +53,7 @@ public sealed record WorldAttachmentSection(
 /// <summary>The one-time fixed-point compilation of <see cref="WorldAttachmentSection"/> — every world-unit and
 /// degree field quantized to <see cref="FixedQ4816"/>, and every declared channel name resolved to the ordinal
 /// WorldBody attachment code reads directly (the same resolved-outside/consumed-as-ordinal pattern
-/// <c>FixedWorldKit.SprintChannelOrdinal</c> uses).</summary>
+/// <c>FixedSpeed.HeldOrdinal</c> uses).</summary>
 public readonly record struct FixedWorldAttachment(
     bool Enabled,
     FixedQ4816 GrappleMaxDistance,
@@ -65,7 +65,7 @@ public readonly record struct FixedWorldAttachment(
     // The attach/detach channels' own declared binary threshold — captured at compile time because WorldBody never
     // resolves these two ordinals through a kit's action table (see WorldBody.Attachment.cs), so it never otherwise
     // learns the world's own per-ordinal threshold the way a kit-bound channel does (FixedWorldKit.ActionThresholds,
-    // populated only for ordinals a kit's Actions map or a held-read facet like SprintChannel actually claims). Reel
+    // populated only for ordinals a kit's Actions map or a held-read facet like Speed.Held actually claims). Reel
     // needs no threshold — it is read continuously, never edge-tested.
     FixedQ4816 AttachThreshold,
     int DetachChannelOrdinal,

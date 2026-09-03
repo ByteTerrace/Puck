@@ -201,21 +201,24 @@ documents (`quilt-nw`, `quilt-ne`, `quilt-se`, `quilt-sw`, and `quilt-island`)
 are non-game adjacency/federation stress content — each a `basis` delta over
 the `quilt-base` template (see "Document composition" below). Reusable defaults
 live in `standard.basis.json`. The movement platform
-every grounded kit rides is documented on its kit's `WorldMotionModel.Grounded`
-row (`SprintMultiplier`/`SprintChannel`, `MoveFrame`/`FacingSnap`), the
+every kit rides is documented on its kit's `WorldMotion`
+row (`Speed`/`Turn`, `MoveFrame`/`FacingSnap`), the
 frame its MoveAdvance/MoveStrafe channel rows are authored in
 (`channels[].frame`, `ChannelFrame`: `World` raw, `Camera` camera-relative and
 facing its travel, `Heading` body-relative with `Turn` steering — the stick's
 `player.move` is camera-framed by its own definition, so keyboard-in-heading
 beside stick-in-camera is one document), and the seat rig's own `dynamics` op
-(a named `dynamics` row shaping the boom ease). Beside `holds`, the arm carries one
-more optional row: `drive` (`WorldDrive`) — anisotropic body-frame drive
-(longitudinal accel/brake/coast, lateral grip and a held `drift`,
-speed-scaled steering, optional pitched flight) read by the
-`ResolveDriveFrame`/`ShapeDriveVelocity` operations. A kart is the one arm plus a
-drive row exactly as a swimmer is the one arm plus a `Medium` hold row; a
-program selecting either drive operation against a kit authoring no row refuses
-by the `Drive` tuning facet's name. The retired `arcade` world's
+(a named `dynamics` row shaping the boom ease). Beside `holds`, the motion row's
+`shaping` table admits a row carrying an `across` facet — the anisotropic drive
+decomposition (longitudinal accel/brake/coast via `along`, lateral grip via
+`across`, a held drift row authored ahead of the ordinary one, `Turn`'s own
+speed-scaled steering authority, optional pitched flight) `ShapeVelocity` reads
+alongside `ResolveDriveFrame`. A kart is the same motion row plus an `across`
+shaping row exactly as a swimmer is the same motion row plus a `Medium` hold
+row; a program selecting `ShapeVelocity` against a kit authoring no shaping row
+refuses by the `Shaping` tuning facet's name. An omitted engage/release/brake/
+grip rate means exact convergence, while an explicit rate must be positive;
+drive-only brake/reverse values are refused on a whole-vector row. The retired `arcade` world's
 `gaming-brick`-cabinet + region-gated prompt/prize + `rules`-driven `state`
 reaction ladder (originally a document-mounted addon, ported to a world rule
 before the world itself was retired) survives only in git history; no shipped world exercises the `rules` section
@@ -451,7 +454,7 @@ The `gravitationalConstant` may remain zero for a uniform-only field, but must
 be positive when `points` is nonempty. A positive constant also activates the
 global body-to-body solve when no static source is authored: bodies remain both
 sources and targets, and a lone body participates with the solver's zero answer
-rather than silently falling back to kit gravity. A placement may appear in only one source
+rather than silently falling back to the held row's own gravity. A placement may appear in only one source
 row across both spellings. Point authoring never reads a placement's solid or
 SDF: its transform locates the source, while geometry and acceleration remain
 separate decisions. `world.gravity` reads authored values, derived point masses,
@@ -473,8 +476,8 @@ then folds matching areas in ascending `(priority, authored row index)` order.
 `Combine` adds; `Replace` assigns, so a higher-priority or later equal-priority
 Replace wins. A zero directional Replace deliberately authors a zero-G pocket,
 and exact cancellation or the center of a radial area remains an authored zero
-answer rather than falling back to kit gravity. In an areas-only world, a body
-outside every area does not participate and retains the kit fallback. The cap is
+answer rather than falling back to the held row's own gravity. In an areas-only world, a body
+outside every area does not participate and retains that same fallback. The cap is
 64 areas; `world.gravity` echoes the compiled order and last area checks/matches,
 and `world.budget` reports declared areas per target plus those live counters.
 Every global/uniform/area addition saturates componentwise at the Q48.16 extrema
@@ -1481,6 +1484,29 @@ their conservative cost in the shared 1,000,000-unit admission ceiling.
 Runtime sampling and checkpoint semantics live in the
 [server reference](../Puck.World.Server/README.md#local-flock-steering).
 
+### Crowd scale policies
+
+The engine admits at most 4096 bodies. A kit's optional `autonomy` row gives
+locally simulated non-human bodies independent `motionSeconds` and
+`steeringSeconds` cadences (0..1 seconds; zero means every authority tick).
+Bodies are deterministically phased and integrate the complete elapsed
+engine-tick duration when due. Human bodies, live sources, tapes, and pending
+external input remain full-rate. `bodyContact: solid` requires full-rate motion;
+large crowds that batch motion use the default `overlap` contact mode.
+
+`collision.events` bounds overlap-event sensing without changing physical world
+contact. `candidateBudget` limits inspected broadphase candidates per body,
+`maxPairsPerBody` limits retained degree, and `beginBudget` limits new pairs per
+tick. Established relationships are considered first. Setting
+`maxPairsPerBody` to zero disables body-pair begin/end events.
+
+`collision.bodyContacts` independently bounds physical depenetration between
+two `solid` kits. Its `candidateBudget` caps inspected x-overlapping sweep
+pairs per body (default 16, maximum 32); `maxPairsPerBody` caps corrections
+incident to one body per tick (default 8, maximum 16). Saturation omits later
+stable-index pairs, so even a fully coincident 4096-body stadium has linear,
+authored work rather than an accidental all-pairs frame.
+
 ## The `probes` section — probe and binding rows
 
 `WorldProbesSection` (`WorldProbes.cs`) declares two lists: `probes`
@@ -1631,7 +1657,10 @@ when it walks into another authority: id, name, colour, and the two motion
 rates. `WorldObserverDisclosure` (`bodies.disclosure`) is the per-observer
 snapshot policy — the record lives here (document data); the evaluation over a
 live `EntitySnapshot` (`WorldObserverDisclosureEvaluation.Discloses`) lives in
-`Puck.World.Protocol`, since it operates on the wire snapshot shape.
+`Puck.World.Protocol`, since it operates on the wire snapshot shape. Its
+`updateSeconds` member controls remote QUIC projection cadence only (default
+0.03 s, zero for every authority tick); skipped field writes and continuity
+hints are coalesced by the server sampler before delivery.
 
 ## Verifying a change here
 

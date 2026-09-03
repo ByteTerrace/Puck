@@ -487,11 +487,10 @@
         "ResolveYawAttitudeAndPlanarFrame",
         "ResolveHold",
         "ComputePlanarTargetVelocity",
-        "ShapePlanarVelocity",
+        "ShapeVelocity",
         "SnapYawToPlanarIntent",
         "RunActionTriggers",
         "ApplyHold",
-        "ApplyVerticalDrive",
         "IntegratePlanarAndVerticalVelocity",
         "CommitPose"
       ],
@@ -862,15 +861,47 @@
           "radius": 0.22
         },
         "motion": {
-          "$type": "grounded",
+          "speed": {
+            "value": 1.4
+          },
+          "turn": {
+            "rate": 2.0
+          },
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
           "facingSnap": true,
-          "fallGravity": 46,
-          "maxFallSpeed": 40,
-          "moveSpeed": 1.4,
-          "response": [],
-          "riseGravity": 28,
-          "sprintMultiplier": 1,
-          "turnSpeed": 2.0
+          "holds": [
+            {
+              "name": "ground",
+              "bond": "Surface",
+              "cone": [
+                0,
+                60
+              ],
+              "hold": "Gravity",
+              "reach": 1.2,
+              "gravity": {
+                "rise": 28,
+                "fall": 46,
+                "terminal": 40
+              },
+              "thrust": 1
+            },
+            {
+              "name": "air",
+              "bond": "Free",
+              "hold": "Gravity",
+              "gravity": {
+                "rise": 28,
+                "fall": 46,
+                "terminal": 40
+              },
+              "thrust": 1
+            }
+          ]
         },
         "name": "critterKit",
         "producers": {
@@ -907,9 +938,18 @@
           "radius": 0.2
         },
         "motion": {
-          "$type": "grounded",
+          "speed": {
+            "value": 1.0
+          },
+          "turn": {
+            "rate": 1.5
+          },
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
           "facingSnap": true,
-          "fallGravity": 1,
           "holds": [
             {
               "bond": "Medium",
@@ -919,18 +959,21 @@
                 "floatDepth": 0.6,
                 "maxRiseSpeed": 1.0,
                 "maxSinkSpeed": 1.0,
-                "surfaceSettleRate": 0.8,
-                "thrustFraction": 0.4
+                "surfaceSettleRate": 0.8
               },
               "name": "water"
+            },
+            {
+              "bond": "Free",
+              "gravity": {
+                "rise": 1,
+                "fall": 1,
+                "terminal": 1
+              },
+              "hold": "Gravity",
+              "name": "air"
             }
-          ],
-          "maxFallSpeed": 1,
-          "moveSpeed": 1.0,
-          "response": [],
-          "riseGravity": 1,
-          "sprintMultiplier": 1,
-          "turnSpeed": 1.5
+          ]
         },
         "name": "fishKit",
         "producers": {

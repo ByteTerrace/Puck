@@ -979,7 +979,7 @@
         },
         "indices": {
           "$ref": "#/$defs/Int32List",
-          "description": "The 0-based entity indices in the set, or null for the whole live population (every active entity). Each index is validated 0..127."
+          "description": "The 0-based entity indices in the set, or null for the whole live population (every active entity). Each index is validated against the authored population capacity."
         },
         "smoothRate": {
           "description": "The exponential smoothing rate (per second) the centroid/spread ease at (validated positive and finite) \u2014 seeded un-smoothed on first resolve so a camera does not fly in from the origin.",
@@ -3102,6 +3102,22 @@
       ],
       "additionalProperties": false
     },
+    "ActionPredicateHeld": {
+      "description": "The named composition channel\u0027s own live read is at or above its declared threshold \u2014 the same test a held sprint/drift channel makes today. Legitimate only inside a kit\u0027s shaping-row gate, where the world\u0027s channel table resolves Channel to an ordinal at kit-compile time; refused everywhere else a predicate is authored.",
+      "properties": {
+        "$type": {
+          "const": "held"
+        },
+        "channel": {
+          "description": "The declared composition channel name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "channel"
+      ],
+      "additionalProperties": false
+    },
     "ActionPredicate": {
       "description": "A data-composable gate over body facts and named action state. A trigger fires only while its gate holds. The $type string is the JSON discriminator, the same convention every polymorphic row family uses; a new predicate kind is a new derived record plus its JsonDerivedTypeAttribute line.",
       "type": "object",
@@ -3132,6 +3148,9 @@
         },
         {
           "$ref": "#/$defs/ActionPredicateNot"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateHeld"
         }
       ]
     },
@@ -3184,6 +3203,9 @@
         },
         {
           "$ref": "#/$defs/ActionPredicateNotNonNullable"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateHeld"
         }
       ]
     },
@@ -3238,288 +3260,11 @@
         },
         {
           "$ref": "#/$defs/ActionPredicateNot"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateHeld"
         }
       ]
-    },
-    "MotionResponse": {
-      "description": "One row of a kit\u0027s velocity-response table: how fast planar velocity converges on the commanded target while Gate holds. Rows evaluate in order, first match wins; a body matching no row snaps instantly (the built-in behavior, and the behavior of a kit with no table). The gate reuses the action-lane predicate vocabulary \u2014 only body-fact kinds (now/recently/all) are admissible.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "engageRate": {
-          "description": "The convergence rate (world units/second\u00B2) while the stick is deflected \u2014 acceleration toward the commanded target.",
-          "type": "number"
-        },
-        "releaseRate": {
-          "description": "The convergence rate while the stick is centered \u2014 deceleration toward rest (the coast).",
-          "type": "number"
-        },
-        "gate": {
-          "$ref": "#/$defs/ActionPredicateNullable",
-          "description": "The body-fact predicate that must hold for this row to win, or null for the always-row (permitted only as the final row).",
-          "default": null
-        }
-      },
-      "required": [
-        "engageRate",
-        "releaseRate"
-      ],
-      "additionalProperties": false
-    },
-    "WorldHoldSpend": {
-      "description": "What a hold spends while it is held: a body-lane state slot and the rate it drains at. The hold releases the tick the slot can no longer pay; refilling it, or trading for it, is a world\u0027s own rules\u0027 business.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "state": {
-          "description": "The declared state.body slot name.",
-          "type": "string"
-        },
-        "ratePerSecond": {
-          "description": "The positive rate the slot drains at, per second.",
-          "type": "number"
-        }
-      },
-      "required": [
-        "state",
-        "ratePerSecond"
-      ],
-      "additionalProperties": false
-    },
-    "WorldHoldMedium": {
-      "description": "What the medium does to a body standing in it \u2014 the authored half of a Medium hold, and the one place buoyancy is described. Required for that bond and refused on every other.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "buoyancy": {
-          "description": "The idle vertical drift velocity below the bob band, signed (u/s).",
-          "type": "number"
-        },
-        "maxRiseSpeed": {
-          "description": "The terminal ascent speed (u/s).",
-          "type": "number"
-        },
-        "maxSinkSpeed": {
-          "description": "The terminal descent speed (u/s).",
-          "type": "number"
-        },
-        "surfaceSettleRate": {
-          "description": "The proportional settle gain toward the float line (1/s).",
-          "type": "number"
-        },
-        "floatDepth": {
-          "description": "The float line\u0027s depth below the medium surface, and the bob band\u0027s half-width (u).",
-          "type": "number"
-        },
-        "thrustFraction": {
-          "description": "The fraction of the hold\u0027s travel speed the MoveUp role commands vertically \u2014 a body climbs and dives slower than it cruises. 1 is fully isotropic thrust.",
-          "type": "number"
-        }
-      },
-      "required": [
-        "buoyancy",
-        "maxRiseSpeed",
-        "maxSinkSpeed",
-        "surfaceSettleRate",
-        "floatDepth",
-        "thrustFraction"
-      ],
-      "additionalProperties": false
-    },
-    "WorldHold": {
-      "description": "One authored hold row of a grounded kit\u0027s ordered Holds list \u2014 what may hold this body, in preference order. ResolveHold keeps the hold it has while its surface is still there and the same face, and otherwise takes the first row the world offers; ApplyHold applies Hold.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "name": {
-          "description": "The row\u0027s name, unique within the list \u2014 the body.hold read-back token.",
-          "type": "string"
-        },
-        "bond": {
-          "description": "Whether this row needs a surface (Surface) or holds the body where it is (Free).",
-          "enum": [
-            "Surface",
-            "Free",
-            "Medium"
-          ]
-        },
-        "hold": {
-          "description": "What holds the body once the row is taken.",
-          "enum": [
-            "None",
-            "Gravity",
-            "Grip",
-            "Lift"
-          ]
-        },
-        "cone": {
-          "description": "The inclusive angle band, in degrees, between an admitted surface normal and gravity-up: [0, 60] is floors, [60, 120] walls, [0, 180] everything. Required for Surface, refused for Free.",
-          "default": null
-        },
-        "grip": {
-          "description": "The inward pull, world units per second, under Grip. Applied as a positional standoff, so it closes a gap the surface opens without ever pushing the body through it.",
-          "type": "number",
-          "default": 0
-        },
-        "lift": {
-          "description": "The fraction of gravity cancelled under Lift: 1 hovers, 0.5 halves the fall.",
-          "type": "number",
-          "default": 0
-        },
-        "speed": {
-          "description": "The travel speed along the hold\u0027s tangent plane, world units per second, or null to ride the kit\u0027s own resolved move speed.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "reach": {
-          "description": "How far a surface row\u0027s probes search, world units. Required positive for Surface.",
-          "type": "number",
-          "default": 0
-        },
-        "upLean": {
-          "description": "How far the body\u0027s up axis blends from gravity-up toward the surface normal, in [0, 1].",
-          "type": "number",
-          "default": 0
-        },
-        "forward": {
-          "description": "Where the hold\u0027s frame takes its forward direction when the surface leaves it free.",
-          "enum": [
-            "Heading",
-            "Intent",
-            "Velocity"
-          ],
-          "default": "Heading"
-        },
-        "onDrive": {
-          "description": "Whether driving into an admitted face takes this row with no channel press.",
-          "type": "boolean",
-          "default": false
-        },
-        "driveAlignment": {
-          "description": "The least alignment, in [0, 1], between the commanded direction and the face\u0027s inward normal before OnDrive takes it. Inert without it.",
-          "type": "number",
-          "default": 0
-        },
-        "release": {
-          "description": "The declared channel name whose held read drops this row, or null for a row no channel can drop.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "spend": {
-          "$ref": "#/$defs/WorldHoldSpend",
-          "description": "What the row spends while held, or null for a row that spends nothing.",
-          "default": null
-        },
-        "medium": {
-          "$ref": "#/$defs/WorldHoldMedium",
-          "description": "The medium\u0027s own displacement law. Required for Medium and refused on every other bond.",
-          "default": null
-        }
-      },
-      "required": [
-        "name",
-        "bond",
-        "hold"
-      ],
-      "additionalProperties": false
-    },
-    "WorldDriveDrift": {
-      "description": "The held low-traction state of a kit\u0027s WorldDrive \u2014 a declared channel whose held read swaps the drive\u0027s lateral grip and scales its steering authority. Absent, the kit cannot drift.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "channel": {
-          "description": "The declared composition channel name read while held.",
-          "type": "string"
-        },
-        "grip": {
-          "description": "The lateral convergence rate (u/s\u00B2) replacing Grip while the channel reads held \u2014 the deliberate low-traction state. Required positive.",
-          "type": "number"
-        },
-        "steerScale": {
-          "description": "The steering-authority multiplier while drifting (the tightened drift arc). Required positive.",
-          "type": "number"
-        }
-      },
-      "required": [
-        "channel",
-        "grip",
-        "steerScale"
-      ],
-      "additionalProperties": false
-    },
-    "WorldDrive": {
-      "description": "A kit\u0027s anisotropic drive row \u2014 what only a drive has, authored beside the one motion arm rather than replacing it. Velocity decomposes into longitudinal/lateral (and residual) body-frame components, each converging at its own authored rate: the anisotropy a kart needs and the arm\u0027s isotropic planar shaping cannot express, since that shaping cannot tune grip apart from acceleration. Steering authority scales with longitudinal speed (no spinning in place, looser at top speed) and reverses sign with reversing travel.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "accel": {
-          "description": "The longitudinal convergence rate (u/s\u00B2) while throttle commands more speed.",
-          "type": "number"
-        },
-        "brake": {
-          "description": "The longitudinal convergence rate (u/s\u00B2) while back-throttle opposes forward travel.",
-          "type": "number"
-        },
-        "coast": {
-          "description": "The longitudinal convergence rate (u/s\u00B2) toward rest with throttle centered, and the decay rate while over the commanded speed (the post-boost bleed).",
-          "type": "number"
-        },
-        "grip": {
-          "description": "The lateral convergence rate (u/s\u00B2) toward zero slip \u2014 traction. Lower is slidier.",
-          "type": "number"
-        },
-        "steerReferenceSpeed": {
-          "description": "The longitudinal speed (u/s) at which steering authority peaks; authority rises linearly from zero at standstill.",
-          "type": "number"
-        },
-        "steerFalloff": {
-          "description": "The fraction of full steering authority remaining at the kit\u0027s resolved move speed, in [0, 1]; authority falls linearly from the reference speed.",
-          "type": "number"
-        },
-        "reverseSpeed": {
-          "description": "The reverse speed (u/s) full back-throttle converges on from rest; 0 forbids reversing.",
-          "type": "number",
-          "default": 0
-        },
-        "pitchRate": {
-          "description": "The pitch rate (rad/s) the Pitch channel commands; 0 locks the frame planar (the ground and hover variants). Positive selects the flying variant\u0027s pitched facing, clamped inside the integrator so the frame can never flip past vertical.",
-          "type": "number",
-          "default": 0
-        },
-        "drift": {
-          "$ref": "#/$defs/WorldDriveDrift",
-          "description": "The held low-traction state, or null (the default) for a kit that cannot drift.",
-          "default": null
-        }
-      },
-      "required": [
-        "accel",
-        "brake",
-        "coast",
-        "grip",
-        "steerReferenceSpeed",
-        "steerFalloff"
-      ],
-      "additionalProperties": false
     },
     "WorldValueExpressionNullable": {
       "description": "A bounded postfix numeric expression evaluated by a world rule, decision, or flock affinity. Each token either pushes a value or consumes preceding values; the compiler proves stack shape and numeric kind before simulation begins.",
@@ -3539,7 +3284,7 @@
       "additionalProperties": false
     },
     "ActionEffectSetVerticalVelocity": {
-      "description": "Writes the body\u0027s vertical-velocity channel (the jump launch / the surge). Under the grounded model gravity owns its decay; under the free model it bleeds to zero at the tuning\u0027s rise gravity (no fall phase).",
+      "description": "Writes the body\u0027s vertical-velocity channel (the jump launch / the surge). Under the grounded program gravity owns its decay; under the free program it bleeds to zero at the tuning\u0027s rise gravity (no fall phase).",
       "properties": {
         "$type": {
           "const": "setVerticalVelocity"
@@ -3585,7 +3330,7 @@
       "additionalProperties": false
     },
     "ActionEffectPlanarImpulse": {
-      "description": "A timed planar velocity overlay (the dash): BodyDirection is rotated by the body\u0027s attitude at fire time and ridden at Speed for DurationSeconds, integrated through its own accumulator on top of the model\u0027s motion \u2014 integration itself is untouched.",
+      "description": "A timed planar velocity overlay (the dash): BodyDirection is rotated by the body\u0027s attitude at fire time and ridden at Speed for DurationSeconds, integrated through its own accumulator on top of the body\u0027s compiled motion \u2014 integration itself is untouched.",
       "properties": {
         "$type": {
           "const": "planarImpulse"
@@ -4343,7 +4088,7 @@
         },
         "elements": {
           "$ref": "#/$defs/WorldHudElementList",
-          "description": "Gets the panel\u0027s child elements. The absence-coalesce lives in the accessor for the same reason Response\u0027s does."
+          "description": "Gets the panel\u0027s child elements. Absent and empty read identically to every consumer, and the coalesce lives in the accessor so no caller grows its own; every other list-valued row member that reads absent as empty cites this one."
         }
       },
       "required": [
@@ -5964,7 +5709,7 @@
         },
         "rows": {
           "$ref": "#/$defs/DocumentIdentifierList",
-          "description": "Gets the authored row-name view. The absence-coalesce lives in the accessor for the same reason Response\u0027s does."
+          "description": "Gets the authored row-name view. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does."
         }
       },
       "required": [

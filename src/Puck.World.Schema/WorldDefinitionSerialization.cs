@@ -86,11 +86,11 @@ namespace Puck.World;
 // The editor/authoring policy row (the world.row.set authoring payload shape).
 [JsonSerializable(typeof(WorldPlacementPolicyDefaults))]
 // The contact-solver tuning (the world.row.set collision payload shape) and the velocity-response array (a kit row's
-// own, via world.row.set kits). Both are also reachable from WorldDefinition/WorldMotionModel already; these entries
+// own, via world.row.set kits). Both are also reachable from WorldDefinition/WorldMotion already; these entries
 // expose the typed accessors.
 [JsonSerializable(typeof(WorldCollision))]
 [JsonSerializable(typeof(WorldCollider))]
-[JsonSerializable(typeof(MotionResponse[]))]
+[JsonSerializable(typeof(WorldShaping[]))]
 // The audio sections: the speaker row + tune/patch asset REFERENCE rows + the audio defaults (the world.row.set
 // speakers / world.row.set tunes / world.row.set patches / world.row.set audio payload shapes). WorldTune/WorldPatch
 // are plain name/source/hash rows — no embedded document, no bridging converter (see WorldMusicRow/WorldJudgeRow,

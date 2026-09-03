@@ -25,7 +25,7 @@ namespace Puck.World.Server;
 /// <see cref="WorldContactRequirement.GradientDerivedUp"/>, which derives it from the field gradient instead (a
 /// planetoid, an inverted ceiling, or the inside of a sphere are all walkable). Contact resolution receives the
 /// body's already-resolved ambient up separately, so authored gravity may still define another walkability axis.</para>
-/// <para>Immutable and per-revision: it holds no per-body state, so one instance is shared by reference across all 128
+/// <para>Immutable and per-revision: it holds no per-body state, so one instance is shared by reference across every
 /// bodies and installing a rebuild is a single reference swap on <see cref="WorldServer"/>. The wrapped
 /// <see cref="SdfFieldEvaluator"/> holds only a managed <c>CompiledInstruction[]</c>, so a replaced instance needs no
 /// disposal.</para>

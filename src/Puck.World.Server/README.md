@@ -299,7 +299,7 @@ determinism is a design contract verified by running and by the replay verbs
 below; no build gate enforces it for this game (see `CLAUDE.md` rule 3).
 
 A body's pose is always six-degrees-of-freedom (a `Vector3` position and a
-quaternion attitude); its motion model (`grounded` or `free`) decides how an
+quaternion attitude); its body motion program (`grounded` or `free`) decides how an
 intent integrates. Ways of moving are DATA: a `WorldKit` row in the world
 document names a motion program, tuning, producer parameter maps, and action bindings, and
 entities distribute across kit rows by the document's assignment policy. A new
@@ -312,10 +312,12 @@ tape > submitted > producer > zero.
 
 ## The entity table (`WorldPopulation.cs`, `WorldBody.cs`)
 
-Capacities are single-sourced in `WorldPopulationLimits`
-(`Puck.World.Schema`): up to 128 authoritative bodies, of which indices 0–3 are
+Capacities are single-sourced in `WorldBodiesLimits`
+(`Puck.World.Schema`): up to 4096 authoritative bodies, of which indices 0–3 are
 the reserved local seats and the rest host simulated stand-ins and network
-peers. `WorldBody` owns one entry's integration, pose, tape, motion model, and
+peers. The client reserves 128 full-detail catalog rigs and represents later
+active indices with one-instance coarse capsules, keeping the worst-case SDF
+program under its fixed instruction/transform ceilings. `WorldBody` owns one entry's integration, pose, tape, motion row, and
 action state. Bodies advance against the one contact-resolution seam
 `IContactField.cs`, which has two providers: the analytic `WorldColliderSet`
 (document-derived convex colliders) and the SDF-backed `WorldSolidField.cs`.
@@ -337,8 +339,8 @@ silently pitch the body. A live collision rebuild installs the new policy
 beside the new provider; the adoption rule is authoritative on the next step,
 and a defined new ambient direction reseats the held axis then.
 
-A kit shaping its planar velocity through a `dynamics` row (rather than the
-engage/release response table) carries the follower's Q32 state — position
+A kit shaping its planar velocity through a `dynamics` row (rather than a
+whole-vector `along` row) carries the follower's Q32 state — position
 and velocity raws, plus the previous commanded target the `r` term needs —
 as ordinary `WorldBody` sim state (`WorldBody.Dynamics.cs`); a medium hold's
 vertical lane carries the scalar counterpart. Cross-world motion continuity
@@ -347,6 +349,29 @@ checkpoint additionally carries their seeded latches, the arbitrary-up
 frame/reseat/turn fractions, and complete hold/grapple state through
 `IntegrationResidue`/`WorldAuthorityCheckpointCodec` (`SupportedVersion`,
 bumped whenever the fail-closed wire shape changes).
+
+`kit.autonomy` independently batches non-human motion and producer steering in
+engine-tick time. Bodies are deterministically phased across each interval;
+elapsed time is integrated in one batch. Local seats, connected remote humans,
+live sources, tapes, and bodies with pending external input stay at full
+authority rate. `motionSeconds` must remain zero on `bodyContact: solid`, since
+a body skipped for a tick cannot honestly participate in that tick's dynamic
+contact solve. Use overlap bodies for large flocks and tune perception,
+steering, and motion cadences independently.
+
+`collision.events` bounds proximity-event work separately from physical
+contact: established pairs have continuity priority, new discovery uses a
+deterministic sweep with per-body candidate and degree limits plus a global
+begin budget. `maxPairsPerBody: 0` disables pair events without disabling
+world contact. Saturation deliberately omits lower-priority new event pairs.
+
+`collision.bodyContacts` is the separate physical-depenetration budget for two
+`solid` kits. Its per-body candidate budget (default 16, maximum 32) and
+resolved-pair degree (default 8, maximum 16) bound a fully coincident crowd;
+stable population order decides which later pairs are omitted. The counters
+`DynamicContactCandidates`, `DynamicContactNarrowPairs`,
+`DynamicContactResolvedPairs`, and `DynamicContactLimitedBodies` expose the
+actual work to tests and host diagnostics.
 
 World rules can carry [decision policies](../Puck.World.Schema/README.md#decision-policies).
 `WorldServer.Decisions.cs` owns each binding's selected option, local PCG state,
@@ -876,8 +901,15 @@ refused as `PayloadMalformed`. The reservation leaf carries a
 `WorldIdentityProjection` instead of the traveler's owned document.
 
 An ordinary `Observe` stream attaches with the world's authored
-`population.observerDisclosure` and no observer body index. A narrowed policy
+`bodies.disclosure` and no observer body index. A narrowed policy
 therefore cannot reveal embodied observations to that unembodied connection.
+Remote snapshots are sampled at that policy's `updateSeconds` cadence (0.03 s
+by default; 0 requests every authority tick). The sampler coalesces skipped
+field writes, accumulates the delivered `StepTicks`, and retains one-shot
+teleport/correction hints. This sampling occurs only at QUIC projection egress;
+the local client and authority simulation remain full-rate. For large remote
+crowds, combine cadence with `radius` or `selfOnly` disclosure rather than
+shipping every visible body unnecessarily.
 
 A transferred seat instead opens `ObserveTraveler` with its source-scoped mobility
 credential. Its authenticated entry authority relays the current owner's

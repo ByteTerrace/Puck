@@ -134,18 +134,18 @@ public sealed partial class WorldBody {
     private bool m_ordinaryAdvanceAdmitted;
     private ulong m_overlayRemaining;
     // The timed impulse overlay (the dash): a world-space velocity integrated through its own accumulator on top of
-    // the model's motion for a bounded tick budget — integration itself is untouched. Cleared by hard teleports.
+    // the body's compiled motion for a bounded tick budget — integration itself is untouched. Cleared by hard teleports.
     private FixedVector3 m_overlayVelocity;
     private WorldContinuumTrajectory? m_pendingContinuum;
-    // The response-shaped planar velocity — the ramped horizontal velocity the grounded model integrates. With an empty
-    // response table it equals the commanded target every tick (today's instant snap, byte-identical); with a table it
-    // converges on the target at the matching row's engage/release rate through m_planarRampAccumulator. SURVIVES a live
+    // The shaping-row planar velocity — the horizontal velocity the motion program integrates. With an instant
+    // whole-vector row it equals the commanded target every tick; with finite rates it converges on that target through
+    // m_planarRampAccumulator. SURVIVES a live
     // kit recompile (a retune must not jerk the crowd) but is dropped alongside the vertical velocity in ResetVertical,
     // so only a hard teleport that resets vertical state clears it (Warp/Pose/Reconcile) — Face keeps it (resetVertical:
     // false, no momentum lost across a heading snap).
     private FixedVector3 m_planarVelocity;
-    // The planar dynamics follower's own Q32 state — meaningful only under a kit whose motion model names a
-    // dynamics row (m_tuning.PlanarDynamics is non-null); read/written exclusively by WorldBody.Dynamics.cs. Its
+    // The planar dynamics follower's own Q32 state — meaningful only under a kit whose shaping table names a
+    // dynamics row (m_tuning.HasDynamics); read/written exclusively by WorldBody.Dynamics.cs. Its
     // Position lane tracks m_planarVelocity: StepPlanarFollower re-seeds it (keeping the velocity raw) whenever a
     // contact write-back, an up-axis transport, or a continuum arrival moved m_planarVelocity out from under it, and
     // the follower's own raw output is what a per-tick move-speed clamp on m_planarVelocity later pulls back toward.
@@ -195,11 +195,11 @@ public sealed partial class WorldBody {
     // RecompileKit when the body's kit row is retuned live (pose survives; only the compiled feel changes).
     private FixedMotionTuning m_tuning;
     // The drive frame's authoritative pitch scalar (radians) — the flying variant's climb attitude, integrated
-    // alongside m_yaw and clamped so the facing can never flip past vertical. Inert (held zero) while the drive row's
+    // alongside m_yaw and clamped so the facing can never flip past vertical. Inert (held zero) while the motion row's
     // pitchRate is zero. Levelled by Face, written by Pose, like m_yaw.
     private FixedQ4816 m_drivePitch;
-    // The vertical channel — the axis the bound vertical effects write. Under the grounded model gravity integrates it
-    // and m_grounded gates/refreshes the composition facts; under the free model a written impulse bleeds to zero at
+    // The vertical channel — the axis the bound vertical effects write. Under the grounded program gravity integrates it
+    // and m_grounded gates/refreshes the composition facts; under the free program a written impulse bleeds to zero at
     // the tuning's rise gravity (no fall phase). Reset to a clean grounded rest (in ResetVertical) only by a hard
     // teleport that resets vertical state — Warp/Pose/Reconcile — but NOT by Face (resetVertical: false, the jump arc
     // keeps running), and by SetBodyMotionProgram only when the new program integrates vertical gravity.
@@ -208,15 +208,12 @@ public sealed partial class WorldBody {
     // coupled cell — never captured/restored (see WorldBody.Transfer.cs's own remarks): a pure function of this
     // body's position and the live lattice, re-derived identically the very next tick regardless of any teleport.
     private FixedQ4816? m_mediumSurface;
-    // The grounded model's authoritative heading scalar (radians): integrated from the Turn rate, with m_orientation
+    // The grounded program's authoritative heading scalar (radians): integrated from the Turn rate, with m_orientation
     // derived from it each step (a pure yaw rotation). Under free it is inert (orientation is authoritative and Yaw is
     // read back out of it).
     private FixedQ4816 m_yaw;
 
-    // The drive row's held drift channel: -1 (cannot drift) unless the row names one that resolves — the same
-    // resolved-outside/consumed-as-ordinal pattern as m_sprintChannelOrdinal.
-    private int m_driftChannelOrdinal = -1;
-    // The drive row's longitudinal/lateral/residual convergence remainders — one accumulator per decomposed
+    // The anisotropic shaping row's longitudinal/lateral/residual convergence remainders — one accumulator per decomposed
     // channel so each rate's sub-tick tail carries independently (the body-frame twin of m_planarRampAccumulator).
     private FixedRateAccumulator m_driveLongAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
     private FixedRateAccumulator m_driveLatAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
@@ -258,7 +255,7 @@ public sealed partial class WorldBody {
     private readonly FixedQ4816[] m_channelTimerValues = new FixedQ4816[ActionLaneCount];
     private bool m_grounded = true;
     private FixedRateAccumulator m_planarRampAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
-    // The response table's shared recency clocks — one per Recently gate across the whole table (allocated to match the
+    // The shaping table's shared recency clocks — one per Recently gate across the whole table (allocated to match the
     // compiled tuning's RecencySlots), refreshed while the fact holds and decaying otherwise. Reset by a teleport and a
     // recompile (the clocks are bound to the OLD table shape).
     private ulong[] m_motionRecency = [];
@@ -305,10 +302,6 @@ public sealed partial class WorldBody {
     // value), the same fallback WorldServer uses for an undeclared ordinal.
     private readonly ChannelShape[] m_channelShapes = new ChannelShape[ActionLaneCount];
     private readonly bool[] m_roleChannels = new bool[ActionLaneCount];
-    // The sprint gap's held channel: -1 (no sprint capability) unless the kit names one that resolves. Resolved once
-    // from the world's channel table at construction/recompile, exactly like the per-ordinal arrays above — the SAME
-    // Resolved outside and consumed as a plain ordinal inside.
-    private int m_sprintChannelOrdinal = -1;
     private FixedVector3RateAccumulator m_overlayAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
     // The intent-source axis (Live by default; a peer takes the population's stored default at activation). Set by
     // body.control / the peer sweep. See IntentSource for the merge rule this selects.
@@ -335,10 +328,10 @@ public sealed partial class WorldBody {
     // through it stays exact, with no separate accumulator per stage.
     private FixedRateAccumulator m_mediumThrustRampAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
 
-    /// <summary>Initializes a new instance of the <see cref="WorldBody"/> class under a motion model, its kit's
-    /// per-channel action bindings, and its kit's body motion program. A <see langword="null"/> binding leaves that ordinal
-    /// inert.</summary>
-    /// <param name="motion">The motion model to integrate under (the body's kit's declared <see cref="WorldMotionModel"/>).</param>
+    /// <summary>Initializes a new instance of the <see cref="WorldBody"/> class under a compiled locomotion tuning,
+    /// its kit's per-channel action bindings, and its kit's body motion program. A <see langword="null"/> binding
+    /// leaves that ordinal inert.</summary>
+    /// <param name="tuning">The compiled locomotion tuning to integrate under (<see cref="FixedWorldKit.Tuning"/>).</param>
     /// <param name="program">The kit's compiled body motion program.</param>
     /// <param name="programs">The world's compiled body motion program table.</param>
     /// <param name="actions">The kit's compiled per-ordinal action bindings (<see cref="ChannelLimits.MaxChannels"/> slots).</param>
@@ -349,18 +342,11 @@ public sealed partial class WorldBody {
     /// <param name="actionState">The kit's compiled named action-state register file.</param>
     /// <param name="collider">The kit's compiled body volume, or <see langword="null"/> for a volumeless kit.</param>
     /// <param name="maxSmoothError">The compiled world-distance correction smoothing threshold.</param>
-    /// <param name="sprintChannelOrdinal">The ordinal <see cref="WorldMotionModel.Grounded.SprintChannel"/> resolved to
-    /// (<see cref="FixedWorldKit.SprintChannelOrdinal"/>), or <c>-1</c> for a kit with no sprint capability.</param>
-    /// <param name="driftChannelOrdinal">The ordinal <see cref="WorldDriveDrift.Channel"/> resolved to
-    /// (<see cref="FixedWorldKit.DriftChannelOrdinal"/>), or <c>-1</c> for a kit that cannot drift.</param>
-    /// <param name="planarDynamics">The kit's compiled second-order follower
-    /// (<see cref="FixedWorldKit.PlanarDynamics"/>), or <see langword="null"/> when the kit shapes planar velocity
-    /// through its response table instead.</param>
     /// <param name="holds">The kit's compiled ordered hold list (<see cref="FixedWorldKit.Holds"/>), or
     /// <see langword="null"/> for a kit authoring none.</param>
     /// <exception cref="ArgumentNullException"><paramref name="program"/> or <paramref name="programs"/> is <see langword="null"/>.</exception>
-    public WorldBody(WorldMotionModel motion, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedQ4816 maxSmoothError, CompiledActionSpec?[]? actions = null, FixedQ4816[]? actionThresholds = null, ChannelShape[]? actionShapes = null, bool[]? roleMask = null, RoleChannelOrdinals roleOrdinals = default, CompiledActionStateSlot[]? actionState = null, FixedWorldCollider? collider = null, int sprintChannelOrdinal = -1, int driftChannelOrdinal = -1, FixedMotionDynamics? planarDynamics = null, FixedBodyHold[]? holds = null) {
-        SetTuning(holds: holds, motion: motion, planarDynamics: planarDynamics);
+    public WorldBody(FixedMotionTuning tuning, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedQ4816 maxSmoothError, CompiledActionSpec?[]? actions = null, FixedQ4816[]? actionThresholds = null, ChannelShape[]? actionShapes = null, bool[]? roleMask = null, RoleChannelOrdinals roleOrdinals = default, CompiledActionStateSlot[]? actionState = null, FixedWorldCollider? collider = null, FixedBodyHold[]? holds = null) {
+        SetTuning(holds: holds, tuning: tuning);
         m_bodyMotionProgram = (program ?? throw new ArgumentNullException(paramName: nameof(program)));
         m_bodyMotionPrograms = (programs ?? throw new ArgumentNullException(paramName: nameof(programs)));
         CopyChannelBindings(
@@ -373,8 +359,6 @@ public sealed partial class WorldBody {
         CompileActionState(state: actionState);
         m_collider = collider;
         m_maxSmoothError = maxSmoothError;
-        m_sprintChannelOrdinal = sprintChannelOrdinal;
-        m_driftChannelOrdinal = driftChannelOrdinal;
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
             if (m_laneBindings[lane] is { RecencyFacts.Length: > 0 } binding) {

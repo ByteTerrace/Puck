@@ -82,12 +82,14 @@ public static class BodyMotionProgramRoles {
         ChannelRole.MoveAdvance or ChannelRole.MoveStrafe => (program.Contains(operation: BodyMotionOp.ComputePlanarTargetVelocity)
             || program.Contains(operation: BodyMotionOp.SnapYawToPlanarIntent)
             || program.Contains(operation: BodyMotionOp.ComputeLocalTargetVelocity)
-            || (program.Contains(operation: BodyMotionOp.ShapeDriveVelocity) && (role == ChannelRole.MoveAdvance))),
+            || (program.Contains(operation: BodyMotionOp.ShapeVelocity) && (role == ChannelRole.MoveAdvance))),
         ChannelRole.Turn => (program.Contains(operation: BodyMotionOp.ResolveYawAttitudeAndPlanarFrame)
             || program.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)
             || program.Contains(operation: BodyMotionOp.ResolveDriveFrame)),
-        ChannelRole.MoveUp => (program.Contains(operation: BodyMotionOp.ComputeLocalTargetVelocity)
-            || program.Contains(operation: BodyMotionOp.ApplyVerticalDrive)),
+        // A hold row's own thrust reads MoveUp too, but that need is per-row data (WorldHold.Thrust), not a shape
+        // this program-only query can see; WorldDefinitionValidator.ValidateHolds refuses a positive thrust by name
+        // against a world declaring no MoveUp channel, so this query answers only for the program's OWN ops.
+        ChannelRole.MoveUp => program.Contains(operation: BodyMotionOp.ComputeLocalTargetVelocity),
         // ResolveDriveFrame reads Pitch only under a positive pitchRate, so Pitch is not required for it — a
         // pitchless world's flying drive pitch reads zero rather than refusing the kit.
         ChannelRole.Pitch or ChannelRole.Roll => program.Contains(operation: BodyMotionOp.IntegrateLocalAttitude),
@@ -107,9 +109,13 @@ public static class BodyActionSpecFactory {
     /// <param name="recencyWindows">The shared recency-clock window table, parallel to <paramref name="recencyFacts"/>.</param>
     /// <param name="stateSlots">The kit-wide named action-state lookup, or <see langword="null"/> when no slot may be
     /// referenced.</param>
-    public static void FlattenPredicate(ActionPredicate? predicate, List<CompiledPredicate> gate, List<ActionFact> recencyFacts, List<ulong> recencyWindows, IReadOnlyDictionary<string, int>? stateSlots = null) =>
-        FlattenPredicate(predicate: predicate, gate: gate, recencyFacts: recencyFacts, recencyWindows: recencyWindows, stateSlots: stateSlots, depth: 0);
-    private static void FlattenPredicate(ActionPredicate? predicate, List<CompiledPredicate> gate, List<ActionFact> recencyFacts, List<ulong> recencyWindows, IReadOnlyDictionary<string, int>? stateSlots, int depth) {
+    /// <param name="channels">The world's compiled channel table, required to resolve a <see cref="ActionPredicate.Held"/>
+    /// predicate's channel — legitimate only in a kit's <c>shaping</c>-row gate. <see langword="null"/> everywhere
+    /// else; a <c>held</c> predicate reaching a flatten with no table throws, since validation has already refused
+    /// authoring one outside a shaping gate.</param>
+    public static void FlattenPredicate(ActionPredicate? predicate, List<CompiledPredicate> gate, List<ActionFact> recencyFacts, List<ulong> recencyWindows, IReadOnlyDictionary<string, int>? stateSlots = null, WorldChannelTable? channels = null) =>
+        FlattenPredicate(predicate: predicate, gate: gate, recencyFacts: recencyFacts, recencyWindows: recencyWindows, stateSlots: stateSlots, channels: channels, depth: 0);
+    private static void FlattenPredicate(ActionPredicate? predicate, List<CompiledPredicate> gate, List<ActionFact> recencyFacts, List<ulong> recencyWindows, IReadOnlyDictionary<string, int>? stateSlots, WorldChannelTable? channels, int depth) {
         if (depth >= CompiledPredicateCapacity.MaxTokens) {
             throw new InvalidOperationException(message: $"An action gate is nested past the {CompiledPredicateCapacity.MaxTokens}-token ceiling.");
         }
@@ -129,6 +135,7 @@ public static class BodyActionSpecFactory {
                         recencyFacts: recencyFacts,
                         recencyWindows: recencyWindows,
                         stateSlots: stateSlots,
+                        channels: channels,
                         depth: (depth + 1)
                     );
                 }
@@ -158,6 +165,7 @@ public static class BodyActionSpecFactory {
                         recencyFacts: recencyFacts,
                         recencyWindows: recencyWindows,
                         stateSlots: stateSlots,
+                        channels: channels,
                         depth: (depth + 1)
                     );
                 }
@@ -181,6 +189,7 @@ public static class BodyActionSpecFactory {
                     recencyFacts: recencyFacts,
                     recencyWindows: recencyWindows,
                     stateSlots: stateSlots,
+                    channels: channels,
                     depth: (depth + 1)
                 );
                 gate.Add(item: new CompiledPredicate(
@@ -191,6 +200,28 @@ public static class BodyActionSpecFactory {
                     Comparison: default,
                     Kind: CompiledPredicateKind.Not,
                     Arity: 1
+                ));
+
+                break;
+            case ActionPredicate.Held held:
+                if (
+                    (channels is not { } table) ||
+                    !table.TryGetOrdinal(
+                    name: held.Channel,
+                    ordinal: out var heldOrdinal
+                )
+                ) {
+                    throw new InvalidOperationException(message: $"Predicate 'held' names channel '{held.Channel}', which does not resolve against the world's channel table — 'held' is legitimate only inside a kit's shaping-row gate.");
+                }
+
+                gate.Add(item: new CompiledPredicate(
+                    Fact: default,
+                    RecencySlot: 0,
+                    StateSlot: -1,
+                    Value: default,
+                    Comparison: default,
+                    Kind: CompiledPredicateKind.Held,
+                    ChannelOrdinal: heldOrdinal
                 ));
 
                 break;

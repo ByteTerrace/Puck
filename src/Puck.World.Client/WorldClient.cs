@@ -169,7 +169,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
 
         return false;
     }
-    /// <summary>The move composition — the determinism seam <c>WorldMotionModel</c>'s <c>MoveFrame</c> remarks
+    /// <summary>The move composition — the determinism seam <c>WorldMotion</c>'s <c>MoveFrame</c> remarks
     /// promise: every movement contribution is rotated into WORLD axes here, before it reaches the wire, so the sim
     /// only ever reads a world-frame vector and never a camera pose. Two producers fold: the seat's held channel
     /// rows (already summed by <see cref="SeatController.HeldIntent"/>), rotated by the frame the world declared on
@@ -235,7 +235,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
 
         if (
             (ResolveSeatKit(definition: definition) is not { } kit) ||
-            (kit.Motion.DeclaredMoveFrame != MotionMoveFrame.World)
+            (kit.Motion.MoveFrame != MotionMoveFrame.World)
         ) {
             return WriteMove(
                 forward: (rowForward + stickForward),

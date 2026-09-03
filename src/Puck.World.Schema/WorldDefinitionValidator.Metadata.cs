@@ -383,6 +383,51 @@ public static partial class WorldDefinitionValidator {
         ) {
             errors.Add(item: "collision.gradientProbe > 0 requires at least one field-contact requirement.");
         }
+
+        var events = collision.Events;
+        RequireIntRange(
+            value: events.CandidateBudget,
+            min: 1,
+            max: WorldCollisionEvents.MaximumCandidateBudget,
+            name: "collision.events.candidateBudget",
+            errors: errors
+        );
+        RequireIntRange(
+            value: events.MaxPairsPerBody,
+            min: 0,
+            max: WorldCollisionEvents.MaximumPairsPerBody,
+            name: "collision.events.maxPairsPerBody",
+            errors: errors
+        );
+        RequireIntRange(
+            value: events.BeginBudget,
+            min: 1,
+            max: WorldCollisionEvents.MaximumBeginBudget,
+            name: "collision.events.beginBudget",
+            errors: errors
+        );
+        if (events.CandidateBudget < events.MaxPairsPerBody) {
+            errors.Add(item: $"collision.events.candidateBudget must be >= maxPairsPerBody ({events.CandidateBudget} < {events.MaxPairsPerBody}).");
+        }
+
+        var bodyContacts = collision.BodyContacts;
+        RequireIntRange(
+            value: bodyContacts.CandidateBudget,
+            min: 1,
+            max: WorldBodyContactPolicy.MaximumCandidateBudget,
+            name: "collision.bodyContacts.candidateBudget",
+            errors: errors
+        );
+        RequireIntRange(
+            value: bodyContacts.MaxPairsPerBody,
+            min: 1,
+            max: WorldBodyContactPolicy.MaximumPairsPerBody,
+            name: "collision.bodyContacts.maxPairsPerBody",
+            errors: errors
+        );
+        if (bodyContacts.CandidateBudget < bodyContacts.MaxPairsPerBody) {
+            errors.Add(item: $"collision.bodyContacts.candidateBudget must be >= maxPairsPerBody ({bodyContacts.CandidateBudget} < {bodyContacts.MaxPairsPerBody}).");
+        }
     }
     private static void ValidateDistribution(WorldDistribution distribution, string path, HashSet<string> spawnPointIds, bool allowDisc, bool allowPoints, bool allowLattice, bool allowZeroDisc, List<string> errors, bool allowNoise = false, bool allowScatter = false) {
         if (
@@ -1252,6 +1297,13 @@ public static partial class WorldDefinitionValidator {
         } else if (row.Radius is not null) {
             errors.Add(item: $"bodies.disclosure.radius must be absent for mode '{row.Mode}' — only 'radius' reads one.");
         }
+        RequireRange(
+            errors: errors,
+            max: WorldObserverDisclosure.MaximumUpdateSeconds,
+            min: 0f,
+            name: "bodies.disclosure.updateSeconds",
+            value: row.UpdateSeconds
+        );
     }
     private static void ValidatePlayerDefaults(WorldPlayerDefaults defaults, List<string> errors) {
         ValidateSeatLook(

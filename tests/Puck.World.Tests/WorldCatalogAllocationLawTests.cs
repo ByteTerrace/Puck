@@ -32,20 +32,19 @@ public sealed class WorldCatalogAllocationLawTests {
         const int lastBody = 4095;
         const int rig = 7;
         Assert.True(WorldRigCatalog.TryPartTransformSlot(lastBody, "pelvis", out var first));
-        var transforms = new DynamicTransform[first + WorldRigCatalog.TransformSlotsPerBody];
+        var transforms = new DynamicTransform[WorldRigCatalog.DynamicTransformCapacity];
         var origin = new Vector3(1, 2, 3);
         var orientation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, 0.4f);
         WorldRigCatalog.PackTransforms(0, origin, orientation, 0.7f, true, transforms, rig, 1.5f);
-        var firstBody = transforms.AsSpan(0, WorldRigCatalog.TransformSlotsPerBody).ToArray();
+        Assert.True(WorldRigCatalog.TryPartPose(0, "head", rig, transforms.AsSpan(), out var low, 1.5f));
         WorldRigCatalog.PackTransforms(lastBody, origin, orientation, 0.7f, true, transforms, rig, 1.5f);
-        Assert.Equal(firstBody, transforms.AsSpan(0, firstBody.Length).ToArray());
-        Assert.True(WorldRigCatalog.TryPartPose(0, "head", rig, transforms.AsSpan(), out var low));
-        Assert.True(WorldRigCatalog.TryPartPose(lastBody, "head", rig, transforms.AsSpan(), out var high));
+        Assert.True(WorldRigCatalog.TryPartPose(lastBody, "head", rig, transforms.AsSpan(), out var high, 1.5f));
         Assert.Equal(low, high);
-        Assert.True(WorldRigCatalog.TryPartPose(lastBody, "head", rig, (IReadOnlyList<DynamicTransform>)transforms, out var listPose));
+        Assert.True(WorldRigCatalog.TryPartPose(lastBody, "head", rig, (IReadOnlyList<DynamicTransform>)transforms, out var listPose, 1.5f));
         Assert.Equal(high, listPose);
         var program = Emit(lastBody + 1, rig, index => index == lastBody);
-        Assert.Equal(WorldRigCatalog.InstructionCount(rig), program.Instructions.Count);
+        Assert.Equal(4, program.Instructions.Count);
+        Assert.Single(program.Instances);
         Assert.All(program.Instances, instance => Assert.InRange(instance.Slot, first, transforms.Length - 1));
         var work = WorldRigCatalog.ActiveWorkload(index => index == lastBody, lastBody + 1, _ => rig);
         Assert.Equal(program.Instructions.Count, work.Instructions);
@@ -78,15 +77,36 @@ public sealed class WorldCatalogAllocationLawTests {
         const int population = WorldBodiesLimits.CapacityCeiling;
         var largest = Enumerable.Range(0, WorldLookSource.Catalog.RigCount).MaxBy(WorldRigCatalog.InstructionCount);
         var program = Emit(population, largest, _ => true);
-        Assert.Equal(population * WorldRigCatalog.MaxInstancesPerAvatar, program.Instances.Count);
-        Assert.Equal(population * WorldRigCatalog.InstructionCount(largest), program.Instructions.Count);
+        var detailed = Math.Min(population, WorldRigCatalog.DetailedAvatarCapacity);
+        var coarse = population - detailed;
+        Assert.Equal(detailed * WorldRigCatalog.MaxInstancesPerAvatar + coarse, program.Instances.Count);
+        Assert.Equal(WorldRigCatalog.InstructionCapacity, program.Instructions.Count);
         Assert.True(program.Instances.Count <= SdfProgramBuilder.MaxInstances);
-        Assert.Equal(population * WorldRigCatalog.TransformSlotsPerBody, program.RequiredDynamicTransformCapacity);
+        Assert.Equal(WorldRigCatalog.DynamicTransformCapacity, program.RequiredDynamicTransformCapacity);
         for (var index = 0; index < program.Instances.Count; index++) {
             var instance = program.Instances[index];
-            Assert.Equal(index, instance.Slot);
-            Assert.Equal(5, instance.End - instance.First);
+            Assert.Equal(index < detailed * WorldRigCatalog.MaxInstancesPerAvatar ? 5 : 4, instance.End - instance.First);
         }
+    }
+
+    [Fact]
+    public void CoarseCullBoundEnclosesItsGroundedCapsuleThroughAnyRootOrientation() {
+        var body = WorldBodiesLimits.CapacityCeiling - 1;
+        var program = Emit(WorldBodiesLimits.CapacityCeiling, 0, index => index == body, scale: 1.7f);
+        var instance = Assert.Single(program.Instances);
+        var instructions = program.Instructions
+            .Skip(count: instance.First)
+            .Take(count: instance.End - instance.First)
+            .ToArray();
+        var translation = instructions.Single(instruction => instruction.Op == SdfOp.Translate).Data0;
+        var capsule = instructions.Single(instruction => instruction.Shape == (byte)SdfShapeType.Capsule);
+        var required = new Vector3(translation.X, translation.Y, translation.Z).Length()
+            + new Vector3(capsule.Data0.X, capsule.Data0.Y, capsule.Data0.Z).Length()
+            + capsule.Data0.W;
+
+        Assert.True(required <= instance.Radius + 0.0001f,
+            $"Coarse capsule reaches {required} from its root but its cull bound is only {instance.Radius}.");
+        Assert.Equal(0f, translation.Y - capsule.Data0.W, precision: 5);
     }
 
     [Theory]

@@ -44,9 +44,10 @@ public sealed class TransferAbortKitWideningLawTests {
             Kind: BodyProgramKind.Motion,
             Operations: [
                 BodyMotionOp.ResolveDriveFrame,
-                BodyMotionOp.ShapeDriveVelocity,
+                BodyMotionOp.ResolveHold,
+                BodyMotionOp.ShapeVelocity,
                 BodyMotionOp.RunActionTriggers,
-                BodyMotionOp.ApplyVerticalGravity,
+                BodyMotionOp.ApplyHold,
                 BodyMotionOp.IntegratePlanarAndVerticalVelocity,
                 BodyMotionOp.CommitPose,
             ]
@@ -60,24 +61,23 @@ public sealed class TransferAbortKitWideningLawTests {
         var kit = new WorldKit(
             Name: "kart-test",
             BodyMotionProgram: "drive-ground",
-            Motion: new WorldMotionModel.Grounded(
-                MoveSpeed: 16f,
-                TurnSpeed: 2.4f,
-                RiseGravity: 14f,
-                FallGravity: 26f,
-                MaxFallSpeed: 30f,
-                SprintMultiplier: 1f,
-                MoveSpeedEnvelope: new MotionScalarEnvelope(Max: 16f, Min: 16f),
-                Drive: new WorldDrive(
-                    Accel: 7f,
-                    Brake: 18f,
-                    Coast: 4f,
-                    Grip: 22f,
-                    SteerReferenceSpeed: 4f,
-                    SteerFalloff: 0.55f,
-                    ReverseSpeed: 5f,
-                    PitchRate: 0f
-                )
+            Motion: new WorldMotion(
+                Speed: new WorldSpeed(Value: 16f, Envelope: new MotionScalarEnvelope(Max: 16f, Min: 16f)),
+                Turn: new WorldTurn(Rate: 2.4f, ReferenceSpeed: 4f, Falloff: 0.55f, PitchRate: 0f),
+                Holds: [
+                    new WorldHold(
+                        Bond: BodyHoldBond.Free,
+                        Gravity: new WorldHoldGravity(Fall: 26f, Rise: 14f, Terminal: 30f),
+                        Hold: BodyHoldKind.Gravity,
+                        Name: "air"
+                    ),
+                ],
+                Shaping: [
+                    new WorldShaping(
+                        Along: new WorldShapingAlong(Engage: 7f, Brake: 18f, Release: 4f, Reverse: 5f),
+                        Across: new WorldShapingAcross(Grip: 22f)
+                    ),
+                ]
             ),
             ProducersRaw: new Dictionary<string, BodyProgramParameters> {
                 ["wander"] = Fixtures.TravelerWanderParameters,
@@ -86,7 +86,7 @@ public sealed class TransferAbortKitWideningLawTests {
                 // ONE authored action, bound OnFact only (no OnPress/OnRelease needed) — exercises the lane action
                 // runtime's own edge-latch/FactHeld (LaneLatch/LaneFactHeld) AND a DURABLE action-state write
                 // (ActionStateValues/Dirty/DirtyKind/DirtyOperand) through the SAME RunActionTriggers path real
-                // gameplay drives. Gated on Falling (vertical velocity < 0, arm-agnostic — see WorldBody.FactHolds)
+                // gameplay drives. Gated on Falling (vertical velocity < 0, program-agnostic — see WorldBody.FactHolds)
                 // rather than Grounded: this fixture's kit carries no collider, so gravity alone free-falls the body
                 // from tick 1 (the SAME reason PortalSweepOriginLawTests' own fixture never grounds), making Falling
                 // the reliable, immediately-true fact to gate on.
@@ -126,7 +126,7 @@ public sealed class TransferAbortKitWideningLawTests {
                 BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
                 BodyMotionOp.ResolveHold,
                 BodyMotionOp.ComputePlanarTargetVelocity,
-                BodyMotionOp.ShapePlanarVelocity,
+                BodyMotionOp.ShapeVelocity,
                 BodyMotionOp.RunActionTriggers,
                 BodyMotionOp.ApplyHold,
                 BodyMotionOp.IntegratePlanarAndVerticalVelocity,
@@ -139,19 +139,15 @@ public sealed class TransferAbortKitWideningLawTests {
         var kit = new WorldKit(
             Name: "diver-test",
             BodyMotionProgram: "medium",
-            Motion: new WorldMotionModel.Grounded(
-                MoveSpeed: 3.2f,
-                TurnSpeed: 2.2f,
-                RiseGravity: 1f,
-                FallGravity: 1f,
-                MaxFallSpeed: 1f,
-                SprintMultiplier: 1f,
+            Motion: new WorldMotion(
+                Speed: new WorldSpeed(Value: 3.2f),
+                Turn: new WorldTurn(Rate: 2.2f),
                 // Row 0 gates on "Recently Rising" — driving the Up channel positive for a few ticks makes Rising
                 // hold, which THIS row's own Recently clock then reflects (WorldBody.MotionRecency's own capture).
-                // Row 1 is the always-row (no gate), required last.
-                Response: [
-                    new MotionResponse(EngageRate: 9f, ReleaseRate: 5f, Gate: new ActionPredicate.Recently(Fact: ActionFact.Rising, WindowSeconds: 1f)),
-                    new MotionResponse(EngageRate: 7f, ReleaseRate: 3.5f),
+                // Row 1 is the unconditional row (no gate), required last.
+                Shaping: [
+                    new WorldShaping(When: new ActionPredicate.Recently(Fact: ActionFact.Rising, WindowSeconds: 1f), Along: new WorldShapingAlong(Engage: 9f, Release: 5f)),
+                    new WorldShaping(Along: new WorldShapingAlong(Engage: 7f, Release: 3.5f)),
                 ],
                 Holds: [
                     new WorldHold(
@@ -162,10 +158,19 @@ public sealed class TransferAbortKitWideningLawTests {
                             FloatDepth: 1f,
                             MaxRiseSpeed: 2.4f,
                             MaxSinkSpeed: 3f,
-                            SurfaceSettleRate: 6f,
-                            ThrustFraction: 0.75f
+                            SurfaceSettleRate: 6f
                         ),
-                        Name: "water"
+                        Name: "water",
+                        Thrust: 0.75f
+                    ),
+                    // The list's unconditional row — a Medium row is conditional on the lattice column, so
+                    // ResolveHold needs a Free fallback behind it. The lattice covers the whole drive this law
+                    // exercises, so this row is never actually taken.
+                    new WorldHold(
+                        Bond: BodyHoldBond.Free,
+                        Gravity: new WorldHoldGravity(Fall: 1f, Rise: 1f, Terminal: 1f),
+                        Hold: BodyHoldKind.Gravity,
+                        Name: "air"
                     ),
                 ]
             ),
@@ -248,7 +253,7 @@ public sealed class TransferAbortKitWideningLawTests {
             fixture.Step(); // drive longitudinal/lateral/residual accumulators ramp; gravity falls (no collider); the "surge" OnFact action fires once on the Falling edge.
         }
 
-        // A live timed press (existing coverage, re-proven under a drive row) and an UNTIMED tap staged but not
+        // A live timed press (existing coverage, re-proven under an anisotropic shaping row) and an UNTIMED tap staged but not
         // yet materialized (MaterializeDefaultLanePresses only runs at the NEXT Advance) — captured with NO Step in
         // between, so the pending-tap fields are genuinely still pending at capture time.
         var pressOutcome = body.PressChannel(ordinal: TimedPressOrdinal, value: FixedQ4816.One, holdSeconds: 5f, authoredMaximum: FixedQ4816.FromInteger(value: 60));
@@ -439,11 +444,11 @@ public sealed class TransferAbortKitWideningLawTests {
     public void DetachThenRestore_GroundedDynamicsKitBody_PlanarFollowerStateRoundTripsExactly() {
         var document = Fixtures.BuildDocument();
         var kit = document.Kits[0];
-        var grounded = ((WorldMotionModel.Grounded)kit.Motion);
+        var motion = kit.Motion;
 
         document = document with {
             DynamicsRaw = [.. Fixtures.StandardDynamics, Settle],
-            KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "settle" } }],
+            KitRowsRaw = [kit with { Motion = motion with { Shaping = [motion.Shaping![0] with { Along = null, Dynamics = "settle" }] } }],
         };
 
         using var fixture = Fixtures.FreshServer(definition: document);
@@ -488,11 +493,11 @@ public sealed class TransferAbortKitWideningLawTests {
     public void DetachThenRestore_MediumDynamicsKitBody_VerticalFollowerStateRoundTripsExactly() {
         var document = BuildMediumKitDocument();
         var kit = document.Kits[0];
-        var grounded = ((WorldMotionModel.Grounded)kit.Motion);
+        var motion = kit.Motion;
 
         document = document with {
             DynamicsRaw = [.. Fixtures.StandardDynamics, Settle],
-            KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "settle" } }],
+            KitRowsRaw = [kit with { Motion = motion with { Shaping = [motion.Shaping![1] with { Along = null, Dynamics = "settle" }] } }],
         };
 
         using var fixture = Fixtures.FreshServer(definition: document);

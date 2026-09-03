@@ -165,7 +165,7 @@ internal sealed partial class PlayerCommandModule {
 
         // A PENDING seat's source cannot be set — its inputs drive the profile picker, not gameplay, so a source set
         // now would sit dormant and take effect only on confirm. Reuse the tape verbs' pending guard (seats only;
-        // population entries 4..127 are never pending). Gates BOTH set and read — a pending seat is always Live anyway.
+        // population entries 4..4095 are never pending). Gates BOTH set and read — a pending seat is always Live anyway.
         if (PendingTapeError(
             index: index,
             verb: "body.control"

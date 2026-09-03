@@ -219,7 +219,7 @@ public sealed class WorldMediumLawTests {
                 BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
                 BodyMotionOp.ResolveHold,
                 BodyMotionOp.ComputePlanarTargetVelocity,
-                BodyMotionOp.ShapePlanarVelocity,
+                BodyMotionOp.ShapeVelocity,
                 BodyMotionOp.ApplyHold,
                 BodyMotionOp.IntegratePlanarAndVerticalVelocity,
                 BodyMotionOp.CommitPose,
@@ -229,14 +229,15 @@ public sealed class WorldMediumLawTests {
         var kit = new WorldKit(
             Name: "diver-test",
             BodyMotionProgram: "medium",
-            Motion: new WorldMotionModel.Grounded(
-                MoveSpeed: 3.2f,
-                TurnSpeed: 2.2f,
-                RiseGravity: 1f,
-                FallGravity: 1f,
-                MaxFallSpeed: 1f,
-                SprintMultiplier: 1f,
-                Response: [],
+            Motion: new WorldMotion(
+                Speed: new WorldSpeed(Value: 3.2f),
+                Turn: new WorldTurn(Rate: 2.2f),
+                // One unconditional row using the exact authored spelling: absent engage/release rates snap both
+                // the planar velocity and (through ApplyMedium's own vertical lane) the medium's commanded vertical
+                // target instead of approximating "instant" with a large finite rate.
+                Shaping: [
+                    new WorldShaping(Along: new WorldShapingAlong()),
+                ],
                 Holds: [
                     new WorldHold(
                         Bond: BodyHoldBond.Medium,
@@ -246,10 +247,20 @@ public sealed class WorldMediumLawTests {
                             FloatDepth: 1f,
                             MaxRiseSpeed: 2.4f,
                             MaxSinkSpeed: 3f,
-                            SurfaceSettleRate: 6f,
-                            ThrustFraction: 0.75f
+                            SurfaceSettleRate: 6f
                         ),
-                        Name: "water"
+                        Name: "water",
+                        Thrust: 0.75f
+                    ),
+                    // The list's unconditional row — a Medium row is conditional on the lattice column, so
+                    // ResolveHold needs a Free fallback behind it for the case the body ever leaves the medium.
+                    // Trailing it keeps the Medium row preferred for every position this suite's traces drive
+                    // through.
+                    new WorldHold(
+                        Bond: BodyHoldBond.Free,
+                        Gravity: new WorldHoldGravity(Fall: 1f, Rise: 1f, Terminal: 1f),
+                        Hold: BodyHoldKind.Gravity,
+                        Name: "air"
                     ),
                 ]
             ),
@@ -331,10 +342,10 @@ public sealed class WorldMediumLawTests {
     public void AMediumHoldWithNoLaw_AndASurfaceHoldCarryingOne_BothRefuseByName() {
         var topology = Topology();
         var admitted = BuildMediumHoldDocument(topology: topology);
-        var grounded = ((WorldMotionModel.Grounded)admitted.Kits[0].Motion!);
+        var motion = admitted.Kits[0].Motion!;
 
         WorldDefinition WithHolds(params WorldHold[] holds) => (admitted with {
-            KitRowsRaw = [(admitted.Kits[0] with { Motion = (grounded with { Holds = holds }) })],
+            KitRowsRaw = [(admitted.Kits[0] with { Motion = (motion with { Holds = holds }) })],
         });
 
         var lawless = WithHolds(new WorldHold(
@@ -349,17 +360,18 @@ public sealed class WorldMediumLawTests {
         var misplaced = WithHolds(new WorldHold(
             Bond: BodyHoldBond.Surface,
             Cone: new Vector2(x: 0f, y: 60f),
+            Gravity: new WorldHoldGravity(Fall: 1f, Rise: 1f, Terminal: 1f),
             Hold: BodyHoldKind.Gravity,
             Medium: new WorldHoldMedium(
                 Buoyancy: 0.5f,
                 FloatDepth: 1f,
                 MaxRiseSpeed: 2.4f,
                 MaxSinkSpeed: 3f,
-                SurfaceSettleRate: 6f,
-                ThrustFraction: 0.75f
+                SurfaceSettleRate: 6f
             ),
             Name: "floor",
-            Reach: 1f
+            Reach: 1f,
+            Thrust: 0.75f
         ));
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: misplaced, reason: out var misplacedReason));
@@ -431,5 +443,34 @@ public sealed class WorldMediumLawTests {
         var row = Assert.Single(collection: roundTripped.State);
 
         Assert.Equal(expected: trait, actual: row.Lattice);
+    }
+    /// <summary>A medium displaces a body by its own law, so a Medium row applies no arc: authoring a Gravity kind
+    /// on one refuses by name, where the same row holding None is admitted.</summary>
+    [Fact]
+    public void AMediumRowAuthoringAGravityKind_RefusesByName_WhereTheSameRowHoldingNoneIsAdmitted() {
+        var topology = Topology();
+        var admitted = BuildMediumHoldDocument(topology: topology);
+        var motion = admitted.Kits[0].Motion!;
+        var water = motion.Holds![0];
+
+        Assert.Equal(expected: BodyHoldKind.None, actual: water.Hold);
+        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: admitted, reason: out var admittedReason), userMessage: admittedReason);
+
+        var arced = (admitted with {
+            KitRowsRaw = [(admitted.Kits[0] with {
+                Motion = (motion with {
+                    Holds = [
+                        (water with {
+                            Gravity = new WorldHoldGravity(Fall: 1f, Rise: 1f, Terminal: 1f),
+                            Hold = BodyHoldKind.Gravity,
+                        }),
+                        .. motion.Holds.Skip(count: 1),
+                    ],
+                }),
+            })],
+        });
+
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: arced, reason: out var arcedReason));
+        Assert.Contains(actualString: arcedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "is refused on a Medium bond");
     }
 }

@@ -1,16 +1,54 @@
 {
   "schema": "puck.world.def.v1",
   "documentId": "music-conditional-layer-and-embellishment-canary",
-  "bodies": { "localSeats": 1 },
-  "simulation": { "rateHz": 240 },
-  "audio": { "masterGain": 1, "defaultSpeakerRadius": 8, "defaultCurve": "smoothstep", "defaultBedFadeSeconds": 0.5, "listener": "focus", "cues": [] },
-  "spawnPoints": [{ "id": "origin", "position": [0, 0, 0] }],
-  "channels": [
-    { "name": "forward", "shape": "Bipolar", "role": "MoveAdvance" },
-    { "name": "strafe", "shape": "Bipolar", "role": "MoveStrafe" },
-    { "name": "turn", "shape": "Bipolar", "role": "Turn" }
+  "bodies": {
+    "localSeats": 1
+  },
+  "simulation": {
+    "rateHz": 240
+  },
+  "audio": {
+    "masterGain": 1,
+    "defaultSpeakerRadius": 8,
+    "defaultCurve": "smoothstep",
+    "defaultBedFadeSeconds": 0.5,
+    "listener": "focus",
+    "cues": []
+  },
+  "spawnPoints": [
+    {
+      "id": "origin",
+      "position": [
+        0,
+        0,
+        0
+      ]
+    }
   ],
-  "collision": { "requirements": [], "contactSkin": 0.02, "maxIterations": 4, "maxSlopeDegrees": 60, "gradientProbe": 0 },
+  "channels": [
+    {
+      "name": "forward",
+      "shape": "Bipolar",
+      "role": "MoveAdvance"
+    },
+    {
+      "name": "strafe",
+      "shape": "Bipolar",
+      "role": "MoveStrafe"
+    },
+    {
+      "name": "turn",
+      "shape": "Bipolar",
+      "role": "Turn"
+    }
+  ],
+  "collision": {
+    "requirements": [],
+    "contactSkin": 0.02,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60,
+    "gradientProbe": 0
+  },
   "bodyMotionPrograms": [
     {
       "name": "grounded",
@@ -18,10 +56,11 @@
       "kind": "Motion",
       "operations": [
         "ResolveYawAttitudeAndPlanarFrame",
+        "ResolveHold",
         "ComputePlanarTargetVelocity",
-        "ShapePlanarVelocity",
+        "ShapeVelocity",
         "SnapYawToPlanarIntent",
-        "ApplyVerticalGravity",
+        "ApplyHold",
         "IntegratePlanarAndVerticalVelocity",
         "CommitPose"
       ]
@@ -33,14 +72,44 @@
         "name": "idle",
         "bodyMotionProgram": "grounded",
         "motion": {
-          "$type": "grounded",
-          "moveSpeed": 4,
-          "turnSpeed": 2,
-          "riseGravity": 20,
-          "fallGravity": 30,
-          "maxFallSpeed": 30,
-          "response": [],
-          "sprintMultiplier": 1
+          "speed": {
+            "value": 4
+          },
+          "turn": {
+            "rate": 2
+          },
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "holds": [
+            {
+              "name": "ground",
+              "bond": "Surface",
+              "cone": [
+                0,
+                60
+              ],
+              "hold": "Gravity",
+              "reach": 1.2,
+              "gravity": {
+                "rise": 20,
+                "fall": 30,
+                "terminal": 30
+              }
+            },
+            {
+              "name": "air",
+              "bond": "Free",
+              "hold": "Gravity",
+              "gravity": {
+                "rise": 20,
+                "fall": 30,
+                "terminal": 30
+              }
+            }
+          ]
         }
       }
     ]
@@ -48,14 +117,42 @@
   "defaultSeatKit": "idle",
   "views": {
     "layouts": [],
-    "seatControl": { "yawReference": "World", "minPitch": -0.35, "maxPitch": 1.2 },
+    "seatControl": {
+      "yawReference": "World",
+      "minPitch": -0.35,
+      "maxPitch": 1.2
+    },
     "seatRig": {
       "name": "seatChase",
       "version": "puck.camera.v1",
       "operations": [
-        { "$type": "orbit", "distance": 5.4626001, "yaw": 0, "pitch": 0.4145069, "pivotOffset": [0, 0, 0] },
-        { "$type": "lookAt", "subject": { "$type": "reference" }, "targetOffset": [0, 1, 0], "worldAxes": false },
-        { "$type": "fov", "fieldOfViewRadians": 0.9599311 }
+        {
+          "$type": "orbit",
+          "distance": 5.4626001,
+          "yaw": 0,
+          "pitch": 0.4145069,
+          "pivotOffset": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "$type": "lookAt",
+          "subject": {
+            "$type": "reference"
+          },
+          "targetOffset": [
+            0,
+            1,
+            0
+          ],
+          "worldAxes": false
+        },
+        {
+          "$type": "fov",
+          "fieldOfViewRadians": 0.9599311
+        }
       ]
     }
   },

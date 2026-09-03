@@ -39,8 +39,8 @@ public static partial class WorldDefinitionValidator {
         );
 
         // Every channel name is OPTIONAL (a null lane is simply unreachable), but an AUTHORED one must resolve —
-        // the same "declared or the field is pointless" door SprintChannel/DriftChannel already open on a kit's own
-        // motion model.
+        // the same "declared or the field is pointless" door a kit's own speed.held channel already opens on its
+        // motion row.
         if (attachment.AttachChannel is { Length: > 0 } attachChannel) {
             _ = RequireDeclared(
                 declaredSet: channelNames,

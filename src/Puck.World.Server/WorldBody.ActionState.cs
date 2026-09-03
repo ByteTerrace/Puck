@@ -306,10 +306,12 @@ public sealed partial class WorldBody {
             : $"{reason}; clamped by visited world"
         );
     }
-    // A drive's boost is the kit's own held sprint multiplier under the drive's own name — one ordinal seam (see
-    // FixedWorldKit.SprintChannelOrdinal), never a second channel.
-    private bool BoostHeld(in PlayerIntent intent) =>
-        ((m_sprintChannelOrdinal >= 0) && (intent[m_sprintChannelOrdinal] >= m_channelThresholds[m_sprintChannelOrdinal]));
+    // The kit's own held speed multiplier — a boost/sprint under the shared speed.held name, resolved once at
+    // kit-compile time (FixedSpeed.HeldOrdinal), applied AFTER any envelope clamp on baseSpeed.
+    private FixedQ4816 ApplySpeedHeld(FixedQ4816 baseSpeed, in PlayerIntent intent) => (((m_tuning.Speed.HeldOrdinal >= 0) && (intent[m_tuning.Speed.HeldOrdinal] >= m_channelThresholds[m_tuning.Speed.HeldOrdinal]))
+        ? (baseSpeed * m_tuning.Speed.HeldMultiplier)
+        : baseSpeed
+    );
     private PlayerIntent ClampRole(PlayerIntent intent, ChannelRole role) {
         var ordinal = m_roleOrdinals[role];
 
@@ -467,8 +469,6 @@ public sealed partial class WorldBody {
         )
         : raw.ToString(provider: CultureInfo.InvariantCulture)
     );
-    private bool DriftHeld(in PlayerIntent intent) =>
-        ((m_driftChannelOrdinal >= 0) && (intent[m_driftChannelOrdinal] >= m_channelThresholds[m_driftChannelOrdinal]));
     private bool FactHolds(ActionFact fact) {
         return fact switch {
             ActionFact.Grounded => m_grounded,
@@ -597,9 +597,9 @@ public sealed partial class WorldBody {
             m_laneTimers[ordinal] = holdTicks;
         }
     }
-    // A motion-response gate: a postfix Boolean program of BODY-FACT predicates only (Now/Recently — the validator
-    // rejects action-state predicates on a response gate).
-    private bool MotionGateOpen(CompiledPredicate[] gate) {
+    // A shaping-row gate: a postfix Boolean program of body-fact predicates plus 'held' (a live channel-threshold
+    // read — the validator admits no other action-state predicate on a shaping gate).
+    private bool MotionGateOpen(CompiledPredicate[] gate, in PlayerIntent intent) {
         if (gate.Length == 0) {
             return true;
         }
@@ -630,6 +630,7 @@ public sealed partial class WorldBody {
             var holds = predicate.Kind switch {
                 CompiledPredicateKind.Now => FactHolds(fact: predicate.Fact),
                 CompiledPredicateKind.Recently => (m_motionRecency[predicate.RecencySlot] > 0),
+                CompiledPredicateKind.Held => (intent[predicate.ChannelOrdinal] >= m_channelThresholds[predicate.ChannelOrdinal]),
                 _ => false,
             };
 
@@ -637,6 +638,23 @@ public sealed partial class WorldBody {
         }
 
         return ((top == 1) && stack[0]);
+    }
+    // The first shaping row whose gate opens, or -1 when none does (an unmatched tick, or an empty/absent table).
+    // ExecuteProgram calls this exactly once after refreshing recency clocks and stores the result in its scratch,
+    // so turn, ShapeVelocity, and ApplyMedium share one pre-operation fact/channel snapshot for the whole tick.
+    private int ResolveGoverningShapingRow(in PlayerIntent intent) {
+        var shaping = m_tuning.Shaping;
+
+        for (var index = 0; (index < shaping.Length); index++) {
+            if (MotionGateOpen(
+                gate: shaping[index].When,
+                intent: in intent
+            )) {
+                return index;
+            }
+        }
+
+        return -1;
     }
     // The per-tick action machinery: for each ordinal carrying a compiled binding, derive its edge (the folded value
     // crossing the channel's threshold against the previous sub-step — never carried), refresh the recency clocks (a

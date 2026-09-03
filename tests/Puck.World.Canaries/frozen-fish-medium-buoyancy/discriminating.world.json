@@ -1,0 +1,17 @@
+{
+  "schema": "puck.world.def.v1",
+  "documentId": "frozen-fish-medium-buoyancy-discriminating",
+  "basis": "../../../src/Puck.World/Assets/worlds/puck.world.frozen.json",
+  "kits": {
+    "rows": [
+      {
+        "name": "fishKit",
+        "motion": {
+          "holds": [
+            { "name": "water", "medium": { "buoyancy": -0.6 } }
+          ]
+        }
+      }
+    ]
+  }
+}

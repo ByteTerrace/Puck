@@ -126,7 +126,7 @@ internal static class WorldBootComposition {
         ));
 
         // The server's entity table — the four local seats plus up to 124 network stand-ins the world.population verb
-        // activates — the one body system the snapshot reports (up to 128 avatars: the scale target).
+        // activates — the one body system the snapshot reports (up to 4096 bodies, rendered through the hybrid avatar/crowd representation).
         services.AddSingleton<WorldPopulation>();
 
         // The render-capacity oracle the server consults before applying a scene/screen mutation — configured by the
@@ -879,7 +879,7 @@ internal static class WorldBootComposition {
         // The render root: the shared SDF world assembly over the grass-and-boulders scene. The built Producer (the
         // live SdfEngineNode) is stashed on the WorldRenderProbe so the world.gpu verb can read its per-pass GPU
         // times. The frame source emits active avatars only (declared-but-parked instances widen the per-pixel
-        // shadow mask walk), so the local 128-avatar worst case is held by the capacity floors a construction-time
+        // shadow mask walk), so the hybrid 4,096-body worst case is held by the capacity floors a construction-time
         // probe measured, plus the viewport floor for the join-later split screen. The affordance install, EchoTap,
         // MachineLifecycleTap, and lever-sink attachment live in the shared post-build wiring step
         // (WorldPostBuildWiring) — this factory only builds the render tree.

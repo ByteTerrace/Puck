@@ -16,16 +16,12 @@ public sealed class BodyMotionProgramCompilerLawTests {
         BodyMotionOp.IntegrateLocalAttitude,
         BodyMotionOp.ComputePlanarTargetVelocity,
         BodyMotionOp.ComputeLocalTargetVelocity,
-        BodyMotionOp.ShapePlanarVelocity,
+        BodyMotionOp.ShapeVelocity,
         BodyMotionOp.SnapYawToPlanarIntent,
         BodyMotionOp.ResolveDriveFrame,
         BodyMotionOp.ResolveHold,
-        BodyMotionOp.ShapeDriveVelocity,
         BodyMotionOp.RunActionTriggers,
-        BodyMotionOp.ApplyVerticalGravity,
-        BodyMotionOp.ApplyVerticalDecay,
         BodyMotionOp.ApplyHold,
-        BodyMotionOp.ApplyVerticalDrive,
         BodyMotionOp.IntegratePlanarAndVerticalVelocity,
         BodyMotionOp.IntegrateScratchVelocity,
         BodyMotionOp.CommitPose,
@@ -201,14 +197,14 @@ public sealed class BodyMotionProgramCompilerLawTests {
         }
     }
     [Fact]
-    public void VerticalContactAuthorityFollowsTheGravityOperation() {
+    public void VerticalContactAuthorityFollowsTheHoldOperation() {
         Assert.True(condition: Compile(
             kind: BodyProgramKind.Motion,
-            operations: [BodyMotionOp.ApplyVerticalGravity, BodyMotionOp.CommitPose]
+            operations: [BodyMotionOp.ApplyHold, BodyMotionOp.CommitPose]
         ).OwnsVerticalContactState);
         Assert.False(condition: Compile(
             kind: BodyProgramKind.Motion,
-            operations: [BodyMotionOp.ApplyVerticalDecay, BodyMotionOp.CommitPose]
+            operations: [BodyMotionOp.ComputeLocalTargetVelocity, BodyMotionOp.IntegrateScratchVelocity, BodyMotionOp.CommitPose]
         ).OwnsVerticalContactState);
     }
 }

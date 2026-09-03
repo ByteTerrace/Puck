@@ -1,7 +1,7 @@
 # Puck.World — the world game host
 
 `Puck.World` is the live game: a document-driven, network-shaped local
-multiplayer world of up to 128 simulated players (four local seats plus
+multiplayer world of up to 4096 simulated bodies (four local seats plus
 autonomous stand-ins), rendered through the SDF engine and scripted end to end
 over its own console. This project is the composition root of a multi-project
 split, and this README is the entry point — each sibling owns its own depth:

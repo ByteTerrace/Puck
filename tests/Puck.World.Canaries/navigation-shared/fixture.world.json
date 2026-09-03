@@ -116,11 +116,12 @@
       "kind": "Motion",
       "operations": [
         "ResolveYawAttitudeAndPlanarFrame",
+        "ResolveHold",
         "ComputePlanarTargetVelocity",
-        "ShapePlanarVelocity",
+        "ShapeVelocity",
         "SnapYawToPlanarIntent",
         "RunActionTriggers",
-        "ApplyVerticalDrive",
+        "ApplyHold",
         "IntegratePlanarAndVerticalVelocity",
         "CommitPose"
       ]
@@ -132,14 +133,25 @@
         "name": "defaultKit",
         "bodyMotionProgram": "flock-motion",
         "motion": {
-          "$type": "grounded",
-          "moveSpeed": 2,
-          "turnSpeed": 2.5,
-          "riseGravity": 14,
-          "fallGravity": 23,
-          "maxFallSpeed": 20,
-          "response": [],
-          "sprintMultiplier": 1
+          "speed": {
+            "value": 2
+          },
+          "turn": {
+            "rate": 2.5
+          },
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "holds": [
+            {
+              "bond": "Free",
+              "hold": "None",
+              "name": "air",
+              "thrust": 1.0
+            }
+          ]
         },
         "producers": {
           "flock": {

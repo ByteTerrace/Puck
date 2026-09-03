@@ -30,10 +30,9 @@ public static partial class WorldDefinitionValidator {
         }
     }
     // The op→facet mapping: walks a COMPILED program's selected operations (never the authored list — compilation
-    // already rejected an unknown/inadmissible opcode) and unions the facets each one reads. Speed is unconditional
-    // for every Motion-kind program (WorldBody resolves MoveSpeed/TurnSpeed before op dispatch, independent of which
-    // operations a program selects) — callers only reach here once the kit's program has already been confirmed
-    // Motion-kind (see ValidateKits).
+    // already rejected an unknown/inadmissible opcode) and unions the facets each one reads. Speed/Turn are
+    // structurally mandatory fields of every WorldMotion row (unconditional for every Motion-kind program) —
+    // callers only reach here once the kit's program has already been confirmed Motion-kind (see ValidateKits).
     private static MotionTuningFacet RequiredMotionTuningFacets(CompiledBodyMotionProgram program) {
         var facets = MotionTuningFacet.Speed;
 
@@ -43,31 +42,23 @@ public static partial class WorldDefinitionValidator {
             }
 
             facets |= op switch {
-                BodyMotionOp.ApplyVerticalGravity => MotionTuningFacet.GravityArc,
-                BodyMotionOp.ApplyVerticalDecay => MotionTuningFacet.GravityBleed,
-                BodyMotionOp.ShapePlanarVelocity => MotionTuningFacet.PlanarResponse,
-                BodyMotionOp.ComputePlanarTargetVelocity => MotionTuningFacet.Sprint,
-                BodyMotionOp.ResolveYawAttitudeAndPlanarFrame or BodyMotionOp.SnapYawToPlanarIntent => MotionTuningFacet.WorldFrame,
-                BodyMotionOp.ResolveDriveFrame or BodyMotionOp.ShapeDriveVelocity => MotionTuningFacet.Drive,
-                BodyMotionOp.ResolveHold or BodyMotionOp.ApplyHold => (MotionTuningFacet.GravityArc | MotionTuningFacet.Holds),
+                BodyMotionOp.ShapeVelocity => MotionTuningFacet.Shaping,
+                BodyMotionOp.ResolveHold or BodyMotionOp.ApplyHold => MotionTuningFacet.Holds,
                 _ => MotionTuningFacet.None,
             };
         }
 
         return facets;
     }
-    // The model→facet mapping: what each WorldMotionModel arm supplies. A new arm is a localized addition here,
-    // alongside its record arm (WorldMotionTuning.cs), its WorldBody integrator, and any new BodyMotionOp cases
-    // RequiredMotionTuningFacets needs — never a hunt. The arm's own fields supply every facet unconditionally; Drive
-    // is the one an OPTIONAL row carries, so a kit authoring none refuses a drive program by facet name.
-    private static MotionTuningFacet SuppliedMotionTuningFacets(WorldMotionModel model) => model switch {
-        WorldMotionModel.Grounded grounded => (MotionTuningFacet.Speed | MotionTuningFacet.GravityArc | MotionTuningFacet.GravityBleed
-            | MotionTuningFacet.PlanarResponse | MotionTuningFacet.Sprint | MotionTuningFacet.WorldFrame | MotionTuningFacet.Holds
-            | ((grounded.Drive is not null)
-            ? MotionTuningFacet.Drive
-            : MotionTuningFacet.None)),
-        _ => MotionTuningFacet.None,
-    };
+    // What a kit's motion row supplies. Speed/Turn are always supplied (structurally mandatory record fields); the
+    // two OPTIONAL rows — Holds and Shaping — each refuse their own program by facet name when the kit authors none.
+    private static MotionTuningFacet SuppliedMotionTuningFacets(WorldMotion motion) => (MotionTuningFacet.Speed
+        | ((motion.Holds is { Count: > 0 })
+        ? MotionTuningFacet.Holds
+        : MotionTuningFacet.None)
+        | ((motion.Shaping is { Count: > 0 })
+        ? MotionTuningFacet.Shaping
+        : MotionTuningFacet.None));
     private static bool TryScalar(BodyProgramParameters parameters, string name, out float value) => parameters.Scalars.TryGetValue(
         key: name,
         value: out value
@@ -208,7 +199,7 @@ public static partial class WorldDefinitionValidator {
 
         return compiled;
     }
-    // The shape every authored envelope must have regardless of arm: min/max finite, min <= max (FixedQ4816.Clamp's
+    // The shape every authored envelope must have: min/max finite, min <= max (FixedQ4816.Clamp's
     // own precondition, refused here so it never throws at seat-resolve time), min non-negative — every consumer
     // bounds a speed magnitude, and reverse travel is its own non-negative scalar (drive.reverseSpeed), so a negative
     // endpoint would only widen the clamp past the bound's apparent intent. Returns whether the shape held, so a
@@ -237,97 +228,129 @@ public static partial class WorldDefinitionValidator {
 
         return true;
     }
-    // A kit's full grounded locomotion tuning: speeds, gravity, and the velocity-response table every body
-    // integrates under.
-    private static void ValidateGroundedMotion(WorldMotionModel.Grounded tuning, string path, ISet<string> channelNames, ISet<string> dynamicsNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, bool shapesPlanarVelocity, int simulationRateHz, List<string> errors) {
-        RequirePositive(
-            value: tuning.MoveSpeed,
-            name: $"{path}.moveSpeed",
-            errors: errors
-        );
-        RequirePositive(
-            value: tuning.TurnSpeed,
-            name: $"{path}.turnSpeed",
-            errors: errors
-        );
-        RequirePositive(
-            value: tuning.RiseGravity,
-            name: $"{path}.riseGravity",
-            errors: errors
-        );
-        RequirePositive(
-            value: tuning.FallGravity,
-            name: $"{path}.fallGravity",
-            errors: errors
-        );
-        RequirePositive(
-            value: tuning.MaxFallSpeed,
-            name: $"{path}.maxFallSpeed",
-            errors: errors
-        );
-        RequirePositive(
-            value: tuning.SprintMultiplier,
-            name: $"{path}.sprintMultiplier",
-            errors: errors
-        );
-        if (shapesPlanarVelocity) {
-            ValidatePlanarShaping(
-                dynamics: tuning.Dynamics,
-                dynamicsNames: dynamicsNames,
+    // A kit's full locomotion tuning: speed, turn, holds, and the shaping table every body integrates under.
+    private static void ValidateMotion(WorldMotion tuning, string path, ISet<string> channelNames, ISet<string> dynamicsNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, bool hasMoveUpChannel, int simulationRateHz, List<string> errors) {
+        if (tuning.Speed is null) {
+            errors.Add(item: $"{path}.speed is required.");
+        } else {
+            ValidateSpeed(
+                channelNames: channelNames,
                 errors: errors,
-                path: path,
-                response: tuning.Response,
-                simulationRateHz: simulationRateHz
+                path: $"{path}.speed",
+                speed: tuning.Speed
             );
         }
 
-        // The sprint channel needs the same "must resolve" bar
-        // ValidateRoute holds engageChannel to, for the identical reason (a misspelled name would otherwise be a
-        // silent, permanent no-op — the button never sprints and nothing here would have said why).
-        if (
-            (tuning.SprintChannel is { Length: > 0 } sprintChannel) &&
-            !channelNames.Contains(item: sprintChannel)
-        ) {
-            errors.Add(item: $"{path}.sprintChannel '{sprintChannel}' names no declared composition channel.");
+        if (tuning.Turn is null) {
+            errors.Add(item: $"{path}.turn is required.");
+        } else {
+            ValidateTurn(
+                errors: errors,
+                path: $"{path}.turn",
+                turn: tuning.Turn
+            );
         }
+
+        ValidateShaping(
+            channelNames: channelNames,
+            dynamicsNames: dynamicsNames,
+            errors: errors,
+            path: $"{path}.shaping",
+            shaping: tuning.Shaping,
+            simulationRateHz: simulationRateHz
+        );
 
         if (!Enum.IsDefined(value: tuning.MoveFrame)) {
             errors.Add(item: $"{path}.moveFrame '{tuning.MoveFrame}' is not a defined MotionMoveFrame.");
-        }
-
-        // Absent, this envelope is wide-open (unclamped). Another arm's own overridable scalar walks the same gate.
-        if (tuning.MoveSpeedEnvelope is { } moveSpeedEnvelope) {
-            ValidateScalarEnvelope(
-                envelope: moveSpeedEnvelope,
-                ownValue: tuning.MoveSpeed,
-                ownValueName: "moveSpeed",
-                path: $"{path}.moveSpeedEnvelope",
-                errors: errors
-            );
         }
 
         ValidateHolds(
             channelNames: channelNames,
             errors: errors,
             hasMedium: hasMedium,
+            hasMoveUpChannel: hasMoveUpChannel,
             holds: tuning.Holds,
             path: $"{path}.holds",
             stateSlots: stateSlots
         );
+    }
+    // A kit's movement rate: a positive fallback speed, its optional seat-time envelope (absent is wide-open), and
+    // its optional held multiplier (a misspelled channel name is otherwise a silent, permanent no-op).
+    private static void ValidateSpeed(WorldSpeed speed, string path, ISet<string> channelNames, List<string> errors) {
+        RequirePositive(
+            value: speed.Value,
+            name: $"{path}.value",
+            errors: errors
+        );
 
-        if (tuning.Drive is { } drive) {
-            ValidateDriveMotion(
-                channelNames: channelNames,
-                errors: errors,
-                path: $"{path}.drive",
-                tuning: drive
+        if (speed.Envelope is { } envelope) {
+            ValidateScalarEnvelope(
+                envelope: envelope,
+                ownValue: speed.Value,
+                ownValueName: "value",
+                path: $"{path}.envelope",
+                errors: errors
+            );
+        }
+
+        if (speed.Held is { } held) {
+            if (
+                string.IsNullOrWhiteSpace(value: held.Channel) ||
+                !channelNames.Contains(item: held.Channel)
+            ) {
+                errors.Add(item: $"{path}.held.channel '{held.Channel}' names no declared composition channel.");
+            }
+
+            RequirePositive(
+                value: held.Multiplier,
+                name: $"{path}.held.multiplier",
+                errors: errors
             );
         }
     }
+    // A kit's steering rate: a positive rate at full authority, an optional speed-scaled authority curve (a positive
+    // reference speed and a falloff fraction in [0, 1]), and a non-negative pitch rate for the flying drive variant.
+    private static void ValidateTurn(WorldTurn turn, string path, List<string> errors) {
+        RequirePositive(
+            value: turn.Rate,
+            name: $"{path}.rate",
+            errors: errors
+        );
+        RequireNonNegative(
+            value: turn.PitchRate,
+            name: $"{path}.pitchRate",
+            errors: errors
+        );
+
+        if (turn.ReferenceSpeed is { } referenceSpeed) {
+            RequirePositive(
+                value: referenceSpeed,
+                name: $"{path}.referenceSpeed",
+                errors: errors
+            );
+        }
+
+        if (
+            !float.IsFinite(f: turn.Falloff) ||
+            (turn.Falloff < 0f) ||
+            (turn.Falloff > 1f)
+        ) {
+            errors.Add(item: $"{path}.falloff {turn.Falloff} must be within [0, 1].");
+        }
+    }
+    // A row nothing can ever make ineligible: bonded to no surface at all (Free), authoring neither a release
+    // channel nor a spend. ResolveHold always takes such a row once every earlier candidate is ineligible, so a hold
+    // list authoring one guarantees ApplyHold always has a current hold to read. A Medium row is NOT unconditional —
+    // ResolveHold takes it only when the world's own lattice offers a medium column where the body stands
+    // (WorldBody.Hold.cs's ResolveHold: `if (m_mediumSurface is not null) { chosen = index; } else { continue; }`),
+    // so a body outside its medium is exactly the case a Medium-only hold list leaves with nothing to fall to.
+    private static bool HoldIsUnconditional(WorldHold hold) => ((hold is not null) && (hold.Bond == BodyHoldBond.Free) && (hold.Release is null) && (hold.Spend is null));
     // The ordered hold list: a unique name per row, a cone inside [0, 180] with min < max for a surface row (and no
-    // cone at all for a free one), the kind's own operands, and every named channel/state slot resolvable. Absent (a
-    // kit authoring none) validates nothing: the vertical channel is ApplyVerticalGravity's alone there.
-    private static void ValidateHolds(IReadOnlyList<WorldHold>? holds, string path, ISet<string> channelNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, List<string> errors) {
+    // cone at all for a free one), the kind's own operands, and every named channel/state slot resolvable. Absence,
+    // and the presence of an unconditional row, are checked by the caller (ValidateMotionRow) against the compiled
+    // program's kind — the hold list is the only spelling of a vertical channel, so a Motion-kind kit must always
+    // author at least one row, including an unconditional one.
+    private static void ValidateHolds(IReadOnlyList<WorldHold>? holds, string path, ISet<string> channelNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, bool hasMoveUpChannel, List<string> errors) {
         if (holds is not { Count: > 0 }) {
             return;
         }
@@ -410,7 +433,7 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{rowPath}.bond 'Medium' requires a medium lattice row (state.world[].lattice.medium) — a medium hold implies a medium to stand in.");
                 }
                 if (hold.Medium is not { } medium) {
-                    errors.Add(item: $"{rowPath}.medium is required for a medium hold — buoyancy, the terminal speeds, the settle rate, the float depth and the thrust fraction are its whole law.");
+                    errors.Add(item: $"{rowPath}.medium is required for a medium hold — buoyancy, the terminal speeds, the settle rate and the float depth are its whole law.");
                 } else {
                     RequirePositive(
                         errors: errors,
@@ -432,11 +455,6 @@ public static partial class WorldDefinitionValidator {
                         name: $"{rowPath}.medium.floatDepth",
                         value: medium.FloatDepth
                     );
-                    RequirePositive(
-                        errors: errors,
-                        name: $"{rowPath}.medium.thrustFraction",
-                        value: medium.ThrustFraction
-                    );
                     RequireFinite(
                         errors: errors,
                         name: $"{rowPath}.medium.buoyancy",
@@ -445,6 +463,62 @@ public static partial class WorldDefinitionValidator {
                 }
             } else if (hold.Medium is not null) {
                 errors.Add(item: $"{rowPath}.medium is refused for a {hold.Bond} hold — only a medium hold has a medium to be displaced by.");
+            }
+            if (
+                (hold.Bond == BodyHoldBond.Medium) &&
+                (hold.Hold is BodyHoldKind.Gravity or BodyHoldKind.Lift)
+            ) {
+                errors.Add(item: $"{rowPath}.hold '{hold.Hold}' is refused on a Medium bond — a medium displaces a body by its own law, so a medium row applies no arc.");
+            }
+            if (
+                (hold.Bond != BodyHoldBond.Medium) &&
+                (hold.Hold is BodyHoldKind.Gravity or BodyHoldKind.Lift)
+            ) {
+                // ApplyHoldGravityDecay owns a full-lift row's vertical channel outright and bleeds it at Rise alone
+                // (a symmetric bleed, never the asymmetric arc), so Fall and Terminal go unread there — requiring them
+                // would demand a pair nothing reads.
+                var fullLift = ((hold.Hold == BodyHoldKind.Lift) && (hold.Lift >= 1f));
+
+                if (hold.Gravity is not { } gravity) {
+                    errors.Add(item: (fullLift
+                        ? $"{rowPath}.gravity is required for a full-lift hold — its Rise is the bleed rate the channel decays at."
+                        : $"{rowPath}.gravity is required for a {hold.Hold} hold — the rise, fall and terminal speed are its whole vertical arc."
+                    ));
+                } else {
+                    RequirePositive(
+                        errors: errors,
+                        name: $"{rowPath}.gravity.rise",
+                        value: gravity.Rise
+                    );
+
+                    if (!fullLift) {
+                        RequirePositive(
+                            errors: errors,
+                            name: $"{rowPath}.gravity.fall",
+                            value: gravity.Fall
+                        );
+                        RequirePositive(
+                            errors: errors,
+                            name: $"{rowPath}.gravity.terminal",
+                            value: gravity.Terminal
+                        );
+                    }
+                }
+            } else if (hold.Gravity is not null) {
+                errors.Add(item: $"{rowPath}.gravity is refused for a {hold.Hold} hold on a {hold.Bond} bond — only a Gravity or Lift hold falls under an arc.");
+            }
+            RequireRange(
+                errors: errors,
+                max: 1f,
+                min: 0f,
+                name: $"{rowPath}.thrust",
+                value: hold.Thrust
+            );
+            if (
+                (hold.Thrust > 0f) &&
+                !hasMoveUpChannel
+            ) {
+                errors.Add(item: $"{rowPath}.thrust is positive but the world declares no MoveUp channel — a row's thrust reads the MoveUp role, so nothing could ever command it.");
             }
             if (hold.Hold == BodyHoldKind.Grip) {
                 RequirePositive(
@@ -517,11 +591,11 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
     }
-    // The kit.motion gate: required (a kit with no declared model is a dead kit), coherent with its body motion
+    // The kit.motion gate: required (a kit with no declared row is a dead kit), coherent with its body motion
     // program's selected operations (program is null when ValidateKits already refused bodyMotionProgram, in which
-    // case coherence has nothing sound to check against), and per-arm valid. A new arm is a new case below.
-    private static void ValidateMotionModel(WorldMotionModel? model, CompiledBodyMotionProgram? program, string path, ISet<string> channelNames, ISet<string> dynamicsNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, int simulationRateHz, List<string> errors) {
-        if (model is null) {
+    // case coherence has nothing sound to check against), and its own fields valid.
+    private static void ValidateMotionRow(WorldMotion? motion, CompiledBodyMotionProgram? program, string path, ISet<string> channelNames, ISet<string> dynamicsNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, bool hasMoveUpChannel, int simulationRateHz, List<string> errors) {
+        if (motion is null) {
             errors.Add(item: $"{path} is required.");
 
             return;
@@ -530,38 +604,41 @@ public static partial class WorldDefinitionValidator {
         if (
             (program is not null) &&
             !TryValidateProgramCoherence(
-            model: model,
+            motion: motion,
             program: program,
             reason: out var reason
         )
         ) {
             errors.Add(item: $"{path} {reason}");
         }
-
-        switch (model) {
-            case WorldMotionModel.Grounded grounded:
-                ValidateGroundedMotion(
-                    channelNames: channelNames,
-                    dynamicsNames: dynamicsNames,
-                    errors: errors,
-                    path: path,
-                    hasMedium: hasMedium,
-                    // The exactly-one planar-shaping rule binds the kit whose program actually shapes planar
-                    // velocity. A drive kit shapes it through its own row instead, so requiring a dead response
-                    // table there would author feel nothing reads. An unresolved program name is already refused
-                    // elsewhere; requiring the shaping keeps that kit's refusal complete.
-                    shapesPlanarVelocity: ((program is null) || program.Contains(operation: BodyMotionOp.ShapePlanarVelocity)),
-                    simulationRateHz: simulationRateHz,
-                    stateSlots: stateSlots,
-                    tuning: grounded
-                );
-
-                break;
-            default:
-                errors.Add(item: $"{path} is an unknown motion model kind '{model.GetType().Name}'.");
-
-                break;
+        // The hold list is the only spelling of a vertical channel, so a Motion-kind program requires one regardless
+        // of which facets its own selected operations happen to read — a kit with no vertical law of its own still
+        // authors a single row of kind None rather than omitting the list.
+        if (program is { Kind: BodyProgramKind.Motion }) {
+            if (motion.Holds is not { Count: > 0 } holds) {
+                errors.Add(item: $"{path}.holds is required for a Motion-kind body motion program ('{program.Name}') — the hold list is the only spelling of a vertical channel.");
+            } else if (!holds.Any(predicate: HoldIsUnconditional)) {
+                errors.Add(item: $"{path}.holds authors no unconditional row (a Free bond authoring neither release nor spend) for a Motion-kind body motion program ('{program.Name}') — ApplyHold keeps whatever vertical channel the body carried in the tick every row goes ineligible, so a hold list must always leave one row nothing can drop. A Medium row does not count: ResolveHold takes it only where the world's own lattice offers a medium column.");
+            }
+            if (
+                program.Contains(operation: BodyMotionOp.ApplyHold) &&
+                !program.Contains(operation: BodyMotionOp.ResolveHold)
+            ) {
+                errors.Add(item: $"{path} body motion program '{program.Name}' selects '{BodyMotionOp.ApplyHold}' without '{BodyMotionOp.ResolveHold}' — ApplyHold applies whatever row ResolveHold selected, and never runs paired with a selector of its own.");
+            }
         }
+
+        ValidateMotion(
+            channelNames: channelNames,
+            dynamicsNames: dynamicsNames,
+            errors: errors,
+            path: path,
+            hasMedium: hasMedium,
+            hasMoveUpChannel: hasMoveUpChannel,
+            simulationRateHz: simulationRateHz,
+            stateSlots: stateSlots,
+            tuning: motion
+        );
     }
     private static void ValidateProducerParameters(IReadOnlyDictionary<string, BodyProgramParameters> producers, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, IReadOnlyDictionary<string, BodyMotionProgram> programRows, ISet<string> channelNames, string path, List<string> errors) {
         if (producers is null) {
@@ -817,65 +894,30 @@ public static partial class WorldDefinitionValidator {
             }
             var directVertical = motionProgram is not null && (
                 motionProgram.Contains(operation: BodyMotionOp.ComputeLocalTargetVelocity) ||
-                motionProgram.Contains(operation: BodyMotionOp.ApplyVerticalDrive)
+                (motionProgram.Contains(operation: BodyMotionOp.ApplyHold) && (kit.Motion.Holds?.Any(predicate: hold => hold.Thrust > 0f) ?? false))
             );
-            var mediumVertical = domain.Kind == WorldNavigationKind.Medium && motionProgram?.Contains(operation: BodyMotionOp.ApplyHold) == true && kit.Motion.DeclaredHolds.Any(predicate: hold => hold.Bond == BodyHoldBond.Medium);
+            var mediumVertical = domain.Kind == WorldNavigationKind.Medium && motionProgram?.Contains(operation: BodyMotionOp.ApplyHold) == true && (kit.Motion.Holds?.Any(predicate: hold => hold.Bond == BodyHoldBond.Medium) ?? false);
             if (!directVertical && !mediumVertical) {
-                errors.Add(item: $"{producerPath} targets {domain.Kind.ToString().ToLowerInvariant()} navigation domain '{domain.Name}', but kit '{kit.Name}' bodyMotionProgram has no compatible vertical consumer (ComputeLocalTargetVelocity, ApplyVerticalDrive, or a medium ApplyHold).");
+                errors.Add(item: $"{producerPath} targets {domain.Kind.ToString().ToLowerInvariant()} navigation domain '{domain.Name}', but kit '{kit.Name}' bodyMotionProgram has no compatible vertical consumer (ComputeLocalTargetVelocity, an ApplyHold row's own thrust, or a medium ApplyHold).");
             }
             if (!definition.Channels.Any(predicate: channel => channel.Role == ChannelRole.MoveUp)) {
                 errors.Add(item: $"{producerPath} targets {domain.Kind.ToString().ToLowerInvariant()} navigation domain '{domain.Name}', but the world declares no MoveUp channel.");
             }
         }
     }
-    // A kit's planar shaping: exactly one of the authored velocity-response table or a named dynamics-row
-    // second-order follower — never both, never neither. A dynamics row that resolves needs the world's own
-    // simulation rate to compile its step-width coefficients, so a rate-0 (resident, non-stepping) world refuses a
-    // kit naming one by the same door a dangling name refuses through.
-    private static void ValidatePlanarShaping(IReadOnlyList<MotionResponse>? response, string? dynamics, string path, ISet<string> dynamicsNames, int simulationRateHz, List<string> errors) {
-        if (dynamics is { Length: 0 }) {
-            errors.Add(item: $"{path}.dynamics is empty — name a dynamics row or omit it.");
+    // A kit's shaping table (SIM-AFFECTING): each row authors exactly one of along (alone for the whole-vector
+    // response law, or paired with across for the drive decomposition) or dynamics — never both, never neither; each
+    // row's gate admits the shaping-gate predicate vocabulary (body facts plus held); and a null (always) gate before
+    // the final row makes every later row unreachable. A named dynamics row needs the world's own simulation rate to
+    // compile its step-width coefficients, so a rate-0 (resident, non-stepping) world refuses a row naming one by the
+    // same door a dangling name refuses through.
+    private static void ValidateShaping(IReadOnlyList<WorldShaping>? shaping, string path, ISet<string> channelNames, ISet<string> dynamicsNames, int simulationRateHz, List<string> errors) {
+        if (shaping is not { Count: > 0 } rows) {
+            return;
         }
 
-        var hasResponse = (response is not null);
-        var hasDynamics = (dynamics is { Length: > 0 });
-
-        if (hasResponse && hasDynamics) {
-            errors.Add(item: $"{path} authors both response and dynamics '{dynamics}' — a kit shapes planar velocity through exactly one.");
-        } else if (!hasResponse && !hasDynamics) {
-            errors.Add(item: $"{path} requires exactly one of response or dynamics (neither is authored).");
-        }
-
-        if (hasResponse) {
-            ValidateResponse(
-                errors: errors,
-                path: $"{path}.response",
-                response: response!
-            );
-        }
-
-        if (
-            hasDynamics &&
-            RequireDeclared(
-            declaredSet: dynamicsNames,
-            errors: errors,
-            field: "dynamics",
-            path: path,
-            rowNoun: "dynamics",
-            value: dynamics
-        ) &&
-            (simulationRateHz <= 0)
-        ) {
-            errors.Add(item: $"{path}.dynamics '{dynamics}' cannot compile — the world authors no simulation rate (simulation.rateHz), and a follower's coefficients are bound to one step size.");
-        }
-    }
-    // A velocity-response table (SIM-AFFECTING): each row's engage/release rates must be positive (a zero rate never
-    // converges — a stuck body, not a feel), each gate is a body-fact-only predicate (the lane-scoped action-state
-    // predicates are rejected by name), and a null (always) gate before the final row makes every later row
-    // unreachable.
-    private static void ValidateResponse(IReadOnlyList<MotionResponse> response, string path, List<string> errors) {
-        for (var index = 0; (index < response.Count); index++) {
-            var row = response[index];
+        for (var index = 0; (index < rows.Count); index++) {
+            var row = rows[index];
             var rowPath = $"{path}[{index}]";
 
             if (row is null) {
@@ -884,35 +926,115 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            RequirePositive(
-                value: row.EngageRate,
-                name: $"{rowPath}.engageRate",
-                errors: errors
-            );
-            RequirePositive(
-                value: row.ReleaseRate,
-                name: $"{rowPath}.releaseRate",
-                errors: errors
-            );
             ValidateMotionGate(
-                predicate: row.Gate,
-                path: $"{rowPath}.gate",
+                predicate: row.When,
+                channelNames: channelNames,
+                path: $"{rowPath}.when",
                 errors: errors
             );
 
             if (
-                (row.Gate is null) &&
-                (index < (response.Count - 1))
+                (row.When is null) &&
+                (index < (rows.Count - 1))
             ) {
-                errors.Add(item: $"{rowPath}.gate is the always-row (null) but is not last — every later row is unreachable.");
+                errors.Add(item: $"{rowPath}.when is the unconditional row (omitted) but is not last — every later row is unreachable.");
             }
+
+            var hasAlong = (row.Along is not null);
+            var hasDynamics = (row.Dynamics is { Length: > 0 });
+
+            if (row.Dynamics is { Length: 0 }) {
+                errors.Add(item: $"{rowPath}.dynamics is empty — name a dynamics row or omit it.");
+            }
+
+            if (hasAlong && hasDynamics) {
+                errors.Add(item: $"{rowPath} authors both along and dynamics '{row.Dynamics}' — a shaping row selects exactly one.");
+            } else if (!hasAlong && !hasDynamics) {
+                errors.Add(item: $"{rowPath} requires exactly one of along or dynamics (neither is authored).");
+            }
+
+            if (row.Across is not null) {
+                if (!hasAlong) {
+                    errors.Add(item: $"{rowPath}.across is authored without along — the drive decomposition needs a longitudinal facet to pair with.");
+                }
+
+                if (row.Across.Grip is { } grip) {
+                    RequirePositive(
+                        value: grip,
+                        name: $"{rowPath}.across.grip",
+                        errors: errors
+                    );
+                }
+            }
+
+            if (row.Along is { } along) {
+                if (along.Engage is { } engage) {
+                    RequirePositive(
+                        value: engage,
+                        name: $"{rowPath}.along.engage",
+                        errors: errors
+                    );
+                }
+                if (along.Release is { } release) {
+                    RequirePositive(
+                        value: release,
+                        name: $"{rowPath}.along.release",
+                        errors: errors
+                    );
+                }
+
+                if (row.Across is not null) {
+                    if (along.Brake is { } brake) {
+                        RequirePositive(
+                            value: brake,
+                            name: $"{rowPath}.along.brake",
+                            errors: errors
+                        );
+                    }
+                    if (along.Reverse is { } reverse) {
+                        RequireNonNegative(
+                            value: reverse,
+                            name: $"{rowPath}.along.reverse",
+                            errors: errors
+                        );
+                    }
+                } else {
+                    if (along.Brake is not null) {
+                        errors.Add(item: $"{rowPath}.along.brake is authored without across — whole-vector shaping never reads a drive brake rate; omit it.");
+                    }
+                    if (along.Reverse is not null) {
+                        errors.Add(item: $"{rowPath}.along.reverse is authored without across — whole-vector shaping never reads a drive reverse speed; omit it.");
+                    }
+                }
+            }
+
+            if (
+                hasDynamics &&
+                RequireDeclared(
+                declaredSet: dynamicsNames,
+                errors: errors,
+                field: "dynamics",
+                path: rowPath,
+                rowNoun: "dynamics",
+                value: row.Dynamics
+            ) &&
+                (simulationRateHz <= 0)
+            ) {
+                errors.Add(item: $"{rowPath}.dynamics '{row.Dynamics}' cannot compile — the world authors no simulation rate (simulation.rateHz), and a follower's coefficients are bound to one step size.");
+            }
+
+            RequirePositive(
+                value: row.TurnScale,
+                name: $"{rowPath}.turnScale",
+                errors: errors
+            );
         }
     }
     // Layered over ValidateEnvelopeShape: the kit's own authored value for the bounded scalar must also sit inside
     // its own declared envelope — a world that pins a scalar narrower than the baseline it authors for profileless
-    // stand-ins is self-contradictory. One arm means one rule: a kit pinning its speed outright (min == max, what a
-    // kart authors) still authors a moveSpeed inside that pin, so a live world.row.set retune past the cap refuses
-    // by name instead of clamping silently.
+    // stand-ins is self-contradictory. A kit pinning its speed outright (min == max, what a kart authors) still
+    // authors a moveSpeed inside that pin, so a live world.row.set retune past the cap refuses by name instead of
+    // clamping silently.
     private static void ValidateScalarEnvelope(MotionScalarEnvelope envelope, float ownValue, string ownValueName, string path, List<string> errors) {
         if (!ValidateEnvelopeShape(
             envelope: envelope,
@@ -929,76 +1051,6 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} [{envelope.Min}, {envelope.Max}] does not contain the kit's own {ownValueName} ({ownValue}).");
         }
     }
-    // A kit's drive row: every convergence rate positive, the steering authority curve well-formed, and a declared
-    // drift naming a channel that resolves (a misspelled name is otherwise a silent, permanent no-op). The forward
-    // speed, the steering rate, and the gravity trio are the arm's own fields and are validated with it.
-    private static void ValidateDriveMotion(WorldDrive tuning, string path, ISet<string> channelNames, List<string> errors) {
-        RequireNonNegative(
-            value: tuning.ReverseSpeed,
-            name: $"{path}.reverseSpeed",
-            errors: errors
-        );
-        RequirePositive(
-            value: tuning.Accel,
-            name: $"{path}.accel",
-            errors: errors
-        );
-        RequirePositive(
-            value: tuning.Brake,
-            name: $"{path}.brake",
-            errors: errors
-        );
-        RequirePositive(
-            value: tuning.Coast,
-            name: $"{path}.coast",
-            errors: errors
-        );
-        RequirePositive(
-            value: tuning.Grip,
-            name: $"{path}.grip",
-            errors: errors
-        );
-        RequirePositive(
-            value: tuning.SteerReferenceSpeed,
-            name: $"{path}.steerReferenceSpeed",
-            errors: errors
-        );
-        RequireNonNegative(
-            value: tuning.PitchRate,
-            name: $"{path}.pitchRate",
-            errors: errors
-        );
-
-        if (
-            !float.IsFinite(f: tuning.SteerFalloff) ||
-            (tuning.SteerFalloff < 0f) ||
-            (tuning.SteerFalloff > 1f)
-        ) {
-            errors.Add(item: $"{path}.steerFalloff {tuning.SteerFalloff} must be within [0, 1].");
-        }
-
-        if (tuning.Drift is not { } drift) {
-            return;
-        }
-
-        if (
-            (drift.Channel is not { Length: > 0 } channel) ||
-            !channelNames.Contains(item: channel)
-        ) {
-            errors.Add(item: $"{path}.drift.channel '{drift.Channel}' names no declared composition channel.");
-        }
-
-        RequirePositive(
-            value: drift.Grip,
-            name: $"{path}.drift.grip",
-            errors: errors
-        );
-        RequirePositive(
-            value: drift.SteerScale,
-            name: $"{path}.drift.steerScale",
-            errors: errors
-        );
-    }
     private static readonly string[] WanderScalars = [
         "forward", "softRadius", "weaveAmplitude", "inwardGain", "turnScale",
         "weaveFrequencyBase", "weaveFrequencyRange", "altitudeGain", "activityRateBase", "activityRateRange",
@@ -1007,44 +1059,25 @@ public static partial class WorldDefinitionValidator {
     private static readonly string[] AttendScalars = ["standoffRadius", "approach", "orbit", "altitudeGain"];
 
     /// <summary>The tuning facets a body motion program's selected operations read from a kit's declared
-    /// <see cref="WorldMotionModel"/> — the validator's own mapping (never convention; see
-    /// <see cref="RequiredMotionTuningFacets"/>/<see cref="SuppliedMotionTuningFacets"/>) that a new operation or a new
-    /// model arm must extend. A declared model missing a facet an operation still reads refuses by name at
-    /// validation instead of the operation reading a silent zero at runtime.</summary>
+    /// <see cref="WorldMotion"/> row — the validator's own mapping (never convention; see
+    /// <see cref="RequiredMotionTuningFacets"/>/<see cref="SuppliedMotionTuningFacets"/>) that a new operation must
+    /// extend. A declared row missing a facet an operation still reads refuses by name at validation instead of the
+    /// operation reading a silent zero at runtime.</summary>
     [Flags]
     private enum MotionTuningFacet : ushort {
         None = 0,
 
-        /// <summary>MoveSpeed/TurnSpeed — read unconditionally by every Motion-kind body motion program.</summary>
+        /// <summary>Speed/Turn — read unconditionally by every Motion-kind body motion program.</summary>
         Speed = 1,
 
-        /// <summary>RiseGravity/FallGravity/MaxFallSpeed, the full gravity arc (<see cref="BodyMotionOp.ApplyVerticalGravity"/>) —
-        /// the same op <see cref="CompiledBodyMotionProgram.OwnsVerticalContactState"/> keys off, at runtime, to decide
-        /// whether contact resolution may write back into a body's vertical channel.</summary>
-        GravityArc = 2,
+        /// <summary>The <c>shaping</c> table (<see cref="BodyMotionOp.ShapeVelocity"/>). Supplied only by a kit
+        /// that authors at least one row.</summary>
+        Shaping = 8,
 
-        /// <summary>RiseGravity alone, read as a symmetric bleed rate (<see cref="BodyMotionOp.ApplyVerticalDecay"/>).</summary>
-        GravityBleed = 4,
-
-        /// <summary>The response table OR the dynamics follower (<see cref="BodyMotionOp.ShapePlanarVelocity"/>) —
-        /// whichever the arm's exactly-one authoring rule admitted.</summary>
-        PlanarResponse = 8,
-
-        /// <summary>SprintMultiplier/SprintChannel (<see cref="BodyMotionOp.ComputePlanarTargetVelocity"/>).</summary>
-        Sprint = 16,
-
-        /// <summary>MoveFrame/FacingSnap (<see cref="BodyMotionOp.ResolveYawAttitudeAndPlanarFrame"/>/
-        /// <see cref="BodyMotionOp.SnapYawToPlanarIntent"/>).</summary>
-        WorldFrame = 32,
-
-        /// <summary>The optional <c>drive</c> row — longitudinal accel/brake/coast, lateral grip/drift, and
-        /// speed-scaled steering (<see cref="BodyMotionOp.ResolveDriveFrame"/>/
-        /// <see cref="BodyMotionOp.ShapeDriveVelocity"/>). Supplied only by a kit that authors one.</summary>
-        Drive = 64,
-
-        /// <summary>The ordered hold list (<see cref="BodyMotionOp.ResolveHold"/>/
-        /// <see cref="BodyMotionOp.ApplyHold"/>), plus the gravity arc a hold's own gravity and lift laws
-        /// integrate.</summary>
+        /// <summary>The ordered hold list (<see cref="BodyMotionOp.ResolveHold"/>/<see cref="BodyMotionOp.ApplyHold"/>)
+        /// — the only spelling of a vertical channel, so every Motion-kind kit authors at least one row (see
+        /// <see cref="ValidateMotionRow"/>'s own unconditional check, which does not route through this facet
+        /// mechanism since the requirement holds whether or not a program even selects the two ops).</summary>
         Holds = 512,
     }
 }

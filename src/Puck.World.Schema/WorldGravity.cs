@@ -98,8 +98,8 @@ public enum WorldGravitySolver : byte {
 /// the static sources it is summed from.
 /// </summary>
 /// <remarks>
-/// <para>Absent or inert, a body integrating <c>ApplyVerticalGravity</c> falls at its kit's authored rate along world
-/// <c>-Y</c>. Active, that same op takes its magnitude and direction from here instead, and the kit's rise/fall
+/// <para>Absent or inert, a body under a Gravity or Lift hold falls at that row's own authored rate along world
+/// <c>-Y</c>. Active, <c>ApplyHold</c> takes its magnitude and direction from here instead, and the row's rise/fall
 /// asymmetry and terminal speed still shape the result.</para>
 /// <para>Bodies are sources as well as targets, so they attract one another. Attractors are sources only — they ride a
 /// placement's authored transform and never move, so the acceleration a solve computes for them is discarded.</para>

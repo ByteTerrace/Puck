@@ -774,6 +774,7 @@ public static partial class WorldDefinitionValidator {
 
         var kits = definition.Kits;
         var hasMedium = HasMediumField(definition: definition);
+        var hasMoveUpChannel = definition.Channels.Any(predicate: channel => channel.Role == ChannelRole.MoveUp);
 
         // A kit is required exactly when the census implies a body to move (a derived refusal, not a flat floor):
         // zero declared capacity needs no kit at all.
@@ -804,7 +805,7 @@ public static partial class WorldDefinitionValidator {
                 errors: errors
             );
 
-            // Resolved only when the program name is defined AND Motion-kind — ValidateMotionModel's coherence check
+            // Resolved only when the program name is defined AND Motion-kind — ValidateMotionRow's coherence check
             // needs a real program to walk; a bad bodyMotionProgram is already refused above, so it skips coherence
             // rather than compounding the refusal with a second, derived one.
             CompiledBodyMotionProgram? motionProgram = null;
@@ -823,13 +824,14 @@ public static partial class WorldDefinitionValidator {
                 motionProgram = resolvedProgram;
             }
 
-            ValidateMotionModel(
-                model: kit.Motion,
+            ValidateMotionRow(
+                motion: kit.Motion,
                 program: motionProgram,
                 path: $"{path}.motion",
                 channelNames: compositionChannelNames,
                 dynamicsNames: dynamicsNames,
                 hasMedium: hasMedium,
+                hasMoveUpChannel: hasMoveUpChannel,
                 simulationRateHz: definition.SimulationRateHz,
                 stateSlots: stateSlots,
                 errors: errors
@@ -851,6 +853,26 @@ public static partial class WorldDefinitionValidator {
                 errors: errors
             );
             ValidateFlockMotion(definition, kit, motionProgram, path, errors);
+            RequireRange(
+                value: kit.Autonomy.MotionSeconds,
+                min: 0f,
+                max: WorldAutonomyCadence.MaximumSeconds,
+                name: $"{path}.autonomy.motionSeconds",
+                errors: errors
+            );
+            RequireRange(
+                value: kit.Autonomy.SteeringSeconds,
+                min: 0f,
+                max: WorldAutonomyCadence.MaximumSeconds,
+                name: $"{path}.autonomy.steeringSeconds",
+                errors: errors
+            );
+            if (
+                (kit.BodyContact == WorldBodyContactMode.Solid) &&
+                (kit.Autonomy.MotionSeconds > 0f)
+            ) {
+                errors.Add(item: $"{path}.autonomy.motionSeconds must be 0 when bodyContact is Solid; a deferred body cannot preserve per-tick dynamic-contact semantics.");
+            }
 
             // Actions is a channel-NAME-keyed map now (never a fixed Primary/Secondary pair): a kit naming an
             // undeclared or non-composition channel is a dead reference; a declared composition channel with no

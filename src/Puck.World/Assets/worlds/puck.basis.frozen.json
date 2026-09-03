@@ -1067,12 +1067,12 @@
       "name": "defaultMotionProgram",
       "operations": [
         "ResolveYawAttitudeAndPlanarFrame",
+        "ResolveHold",
         "ComputePlanarTargetVelocity",
-        "ShapePlanarVelocity",
+        "ShapeVelocity",
         "SnapYawToPlanarIntent",
         "RunActionTriggers",
-        "ApplyVerticalGravity",
-        "ApplyVerticalDrive",
+        "ApplyHold",
         "IntegratePlanarAndVerticalVelocity",
         "CommitPose"
       ],
@@ -1994,16 +1994,51 @@
           "radius": 0.35
         },
         "motion": {
-          "$type": "grounded",
+          "speed": {
+            "value": 4,
+            "held": {
+              "channel": "run",
+              "multiplier": 1.6
+            }
+          },
+          "turn": {
+            "rate": 2.5
+          },
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
           "facingSnap": false,
-          "fallGravity": 46,
-          "maxFallSpeed": 40,
-          "moveSpeed": 4,
-          "response": [],
-          "riseGravity": 28,
-          "sprintChannel": "run",
-          "sprintMultiplier": 1.6,
-          "turnSpeed": 2.5
+          "holds": [
+            {
+              "name": "ground",
+              "bond": "Surface",
+              "cone": [
+                0,
+                60
+              ],
+              "hold": "Gravity",
+              "reach": 1.2,
+              "gravity": {
+                "rise": 28,
+                "fall": 46,
+                "terminal": 40
+              },
+              "thrust": 1
+            },
+            {
+              "name": "air",
+              "bond": "Free",
+              "hold": "Gravity",
+              "gravity": {
+                "rise": 28,
+                "fall": 46,
+                "terminal": 40
+              },
+              "thrust": 1
+            }
+          ]
         },
         "name": "defaultKit"
       }

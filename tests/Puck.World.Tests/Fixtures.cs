@@ -66,8 +66,8 @@ internal static class Fixtures {
     /// <see cref="TestPatternScreenIndex"/> — <see cref="EngageAuthorityLawTests"/>'s target.</description></item>
     /// </list>
     /// Every other section is the smallest legal value <c>WorldDefinitionValidator</c> accepts: one locomotion kit
-    /// ("traveler", a bare-bones grounded model with an empty response table — "the empty table snaps planar
-    /// velocity instantly"), the three channels its body motion program's selected operations require
+    /// ("traveler", a bare-bones grounded program with one exact instant-convergence shaping row), the three
+    /// channels its body motion program's selected operations require
     /// (<c>MoveAdvance</c>/<c>MoveStrafe</c>/<c>Turn</c>), and <see cref="IntentSource.Idle"/> as the population's
     /// default peer source so no producer program (wander/attend/designated) is needed at all. This kit carries NO
     /// collider — no law here needs one — so <see cref="BuildDocumentCore"/> is the shared shape
@@ -133,16 +133,24 @@ internal static class Fixtures {
         new(
             Name: SeatKitName,
             BodyMotionProgram: "grounded",
-            Motion: new WorldMotionModel.Grounded(
-                MoveSpeed: 4f,
-                TurnSpeed: 2.5f,
-                RiseGravity: 14f,
-                FallGravity: 23f,
-                MaxFallSpeed: 20f,
-                // The empty response table snaps planar velocity instantly — a legitimate, minimal table
-                // (WorldDefinitionValidator.ValidateResponse loops zero times over it).
-                Response: [],
-                SprintMultiplier: 1f
+            Motion: new WorldMotion(
+                Speed: new WorldSpeed(Value: 4f),
+                Turn: new WorldTurn(Rate: 2.5f),
+                // The one row every Motion-kind kit must author: a Free bond takes it unconditionally every tick
+                // (no collider here for a Surface row to probe against anyway).
+                Holds: [
+                    new WorldHold(
+                        Bond: BodyHoldBond.Free,
+                        Gravity: new WorldHoldGravity(Fall: 23f, Rise: 14f, Terminal: 20f),
+                        Hold: BodyHoldKind.Gravity,
+                        Name: "air"
+                    ),
+                ],
+                // One unconditional row using the exact authored spelling: absent engage/release rates snap planar
+                // velocity to its target instead of approximating "instant" with a large finite rate.
+                Shaping: [
+                    new WorldShaping(Along: new WorldShapingAlong()),
+                ]
             ),
             // The full parameter set ValidateProducerParameters requires for a kit naming the "wander"
             // producer — see the bodyMotionPrograms remark above for why this exists at all. Values mirror the
@@ -176,11 +184,12 @@ internal static class Fixtures {
                 Kind: BodyProgramKind.Motion,
                 Operations: [
                     BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
+                    BodyMotionOp.ResolveHold,
                     BodyMotionOp.ComputePlanarTargetVelocity,
-                    BodyMotionOp.ShapePlanarVelocity,
+                    BodyMotionOp.ShapeVelocity,
                     BodyMotionOp.SnapYawToPlanarIntent,
                     BodyMotionOp.RunActionTriggers,
-                    BodyMotionOp.ApplyVerticalGravity,
+                    BodyMotionOp.ApplyHold,
                     BodyMotionOp.IntegratePlanarAndVerticalVelocity,
                     BodyMotionOp.CommitPose,
                 ]

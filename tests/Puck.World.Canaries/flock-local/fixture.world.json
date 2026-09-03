@@ -1,16 +1,53 @@
 {
   "schema": "puck.world.def.v1",
   "documentId": "flock-local-canary",
-  "simulation": { "rateHz": 240 },
-  "collision": { "contactSkin": 0.02, "gradientProbe": 0, "maxIterations": 4, "maxSlopeDegrees": 60, "requirements": [] },
+  "simulation": {
+    "rateHz": 240
+  },
+  "collision": {
+    "contactSkin": 0.02,
+    "gradientProbe": 0,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60,
+    "requirements": []
+  },
   "views": {
-    "seatControl": { "minPitch": -0.35, "maxPitch": 1.2, "yawReference": "World" },
+    "seatControl": {
+      "minPitch": -0.35,
+      "maxPitch": 1.2,
+      "yawReference": "World"
+    },
     "seatRig": {
-      "name": "flock-view", "version": "puck.camera.v1",
+      "name": "flock-view",
+      "version": "puck.camera.v1",
       "operations": [
-        { "$type": "orbit", "distance": 16, "pitch": 0.6, "yaw": 0, "pivotOffset": [0,0,0] },
-        { "$type": "lookAt", "subject": { "$type": "reference" }, "targetOffset": [0,0,0], "worldAxes": true },
-        { "$type": "fov", "fieldOfViewRadians": 0.96 }
+        {
+          "$type": "orbit",
+          "distance": 16,
+          "pitch": 0.6,
+          "yaw": 0,
+          "pivotOffset": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "$type": "lookAt",
+          "subject": {
+            "$type": "reference"
+          },
+          "targetOffset": [
+            0,
+            0,
+            0
+          ],
+          "worldAxes": true
+        },
+        {
+          "$type": "fov",
+          "fieldOfViewRadians": 0.96
+        }
       ]
     },
     "layouts": []
@@ -19,43 +56,114 @@
     "localSeats": 0,
     "networkPlayers": 128,
     "capacity": 128,
-    "defaultPeerSource": { "$type": "producer", "name": "flock" },
+    "defaultPeerSource": {
+      "$type": "producer",
+      "name": "flock"
+    },
     "distribution": {
-      "region": { "$type": "disc", "radius": 4, "sampleCount": 128 },
-      "fill": { "name": "additive", "offset": 0, "step": 0.38196602 }
+      "region": {
+        "$type": "disc",
+        "radius": 4,
+        "sampleCount": 128
+      },
+      "fill": {
+        "name": "additive",
+        "offset": 0,
+        "step": 0.38196602
+      }
     }
   },
   "channels": [
-    { "name": "forward", "shape": "Bipolar", "role": "MoveAdvance" },
-    { "name": "strafe", "shape": "Bipolar", "role": "MoveStrafe" },
-    { "name": "turn", "shape": "Bipolar", "role": "Turn" }
+    {
+      "name": "forward",
+      "shape": "Bipolar",
+      "role": "MoveAdvance"
+    },
+    {
+      "name": "strafe",
+      "shape": "Bipolar",
+      "role": "MoveStrafe"
+    },
+    {
+      "name": "turn",
+      "shape": "Bipolar",
+      "role": "Turn"
+    }
   ],
   "bodyMotionPrograms": [
     {
-      "name": "flock", "version": "puck.body-motion.v1", "kind": "Producer",
-      "operations": ["ProduceFlockIntent"]
+      "name": "flock",
+      "version": "puck.body-motion.v1",
+      "kind": "Producer",
+      "operations": [
+        "ProduceFlockIntent"
+      ]
     },
     {
-      "name": "flock-motion", "version": "puck.body-motion.v1", "kind": "Motion",
-      "operations": ["ResolveYawAttitudeAndPlanarFrame", "ComputePlanarTargetVelocity", "ShapePlanarVelocity", "SnapYawToPlanarIntent", "RunActionTriggers", "IntegratePlanarAndVerticalVelocity", "CommitPose"]
+      "name": "flock-motion",
+      "version": "puck.body-motion.v1",
+      "kind": "Motion",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ResolveHold",
+        "ComputePlanarTargetVelocity",
+        "ShapeVelocity",
+        "SnapYawToPlanarIntent",
+        "RunActionTriggers",
+        "ApplyHold",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ]
     }
   ],
   "kits": {
-    "rows": [{
-      "name": "defaultKit",
-      "bodyMotionProgram": "flock-motion",
-      "motion": { "$type": "grounded", "moveSpeed": 2, "turnSpeed": 2.5, "riseGravity": 14, "fallGravity": 23, "maxFallSpeed": 20, "response": [], "sprintMultiplier": 1 },
-      "producers": {
-        "flock": {
-          "scalars": {}, "channels": {},
+    "rows": [
+      {
+        "name": "defaultKit",
+        "bodyMotionProgram": "flock-motion",
+        "motion": {
+          "speed": {
+            "value": 2
+          },
+          "turn": {
+            "rate": 2.5
+          },
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "holds": [
+            {
+              "bond": "Free",
+              "hold": "None",
+              "name": "air"
+            }
+          ]
+        },
+        "producers": {
           "flock": {
-            "range": 10, "separationRadius": 0.5, "candidateBudget": 16, "maxNeighbors": 8,
-            "updateSeconds": 0.05, "space": "Tangent", "separation": 0.75,
-            "alignment": 0.3, "cohesion": 0.5, "goal": 0, "inertia": 0.2,
-            "arrivalDistance": 0, "halfAngleDegrees": 180, "requiresLineOfSight": false
+            "scalars": {},
+            "channels": {},
+            "flock": {
+              "range": 10,
+              "separationRadius": 0.5,
+              "candidateBudget": 16,
+              "maxNeighbors": 8,
+              "updateSeconds": 0.05,
+              "space": "Tangent",
+              "separation": 0.75,
+              "alignment": 0.3,
+              "cohesion": 0.5,
+              "goal": 0,
+              "inertia": 0.2,
+              "arrivalDistance": 0,
+              "halfAngleDegrees": 180,
+              "requiresLineOfSight": false
+            }
           }
         }
       }
-    }]
+    ]
   }
 }

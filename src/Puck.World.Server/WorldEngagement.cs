@@ -37,7 +37,8 @@ public readonly record struct ScreenPadSnapshot(int ScreenIndex, MachinePadState
 /// roster's claim state — client-only bookkeeping this class has no business holding. The read half's
 /// entity→principal resolution needs no such indirection: a body/entity index is a
 /// <see cref="WorldPrincipal.Index"/> directly for both <see cref="PrincipalKind.Seat"/> (0..3,
-/// <see cref="WorldPopulation.LocalSeatCount"/>-bounded) and <see cref="PrincipalKind.Peer"/> (4..127) principals,
+/// <see cref="WorldPopulation.LocalSeatCount"/>-bounded) and <see cref="PrincipalKind.Peer"/> (indices 4 through
+/// the population capacity minus one) principals,
 /// so <see cref="PlayersOn"/>/<see cref="FoldTick"/>/<see cref="DissolveScreen"/> resolve bodies with plain index
 /// arithmetic and never consult a roster.
 /// <para><b>The capture latch is derived, never stored beside the set.</b> <see cref="WorldBody.SetEngaged"/> is a
@@ -106,7 +107,7 @@ public sealed class WorldEngagement {
         }
     }
 
-    /// <summary>Initializes the application fold over the population (bodies 0..127) and the one grant table the
+    /// <summary>Initializes the application fold over the population (up to bodies 0..4095) and the one grant table the
     /// sets live in.</summary>
     /// <param name="population">The entity table.</param>
     /// <param name="grants">The capability table's view (application set reads/writes plus the Control-over-target check).</param>

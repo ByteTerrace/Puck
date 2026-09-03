@@ -3,8 +3,12 @@
     "rateHz": 60
   },
   "motion": {
-    "moveSpeed": 4,
-    "turnSpeed": 2.5,
+    "speed": {
+      "value": 4
+    },
+    "turn": {
+      "rate": 2.5
+    },
     "maxSmoothError": 3
   },
   "spawnPoints": [
@@ -501,11 +505,12 @@
       "kind": "Motion",
       "operations": [
         "ResolveYawAttitudeAndPlanarFrame",
+        "ResolveHold",
         "ComputePlanarTargetVelocity",
-        "ShapePlanarVelocity",
+        "ShapeVelocity",
         "SnapYawToPlanarIntent",
         "RunActionTriggers",
-        "ApplyVerticalGravity",
+        "ApplyHold",
         "IntegratePlanarAndVerticalVelocity",
         "CommitPose"
       ]
@@ -516,9 +521,10 @@
       "kind": "Motion",
       "operations": [
         "IntegrateLocalAttitude",
+        "ResolveHold",
         "ComputeLocalTargetVelocity",
         "RunActionTriggers",
-        "ApplyVerticalDecay",
+        "ApplyHold",
         "IntegrateScratchVelocity",
         "CommitPose"
       ]
@@ -570,14 +576,34 @@
         "name": "flyer",
         "bodyMotionProgram": "free",
         "motion": {
-          "$type": "grounded",
-          "moveSpeed": 4,
-          "turnSpeed": 2.5,
-          "riseGravity": 14,
-          "fallGravity": 23,
-          "maxFallSpeed": 20,
-          "sprintMultiplier": 1,
-          "response": []
+          "speed": {
+            "value": 4
+          },
+          "turn": {
+            "rate": 2.5
+          },
+          "shaping": [
+            {
+              "along": {
+                "engage": 1000000,
+                "brake": 0,
+                "release": 1000000
+              }
+            }
+          ],
+          "holds": [
+            {
+              "name": "air",
+              "bond": "Free",
+              "hold": "Lift",
+              "lift": 1,
+              "gravity": {
+                "rise": 14,
+                "fall": 23,
+                "terminal": 20
+              }
+            }
+          ]
         },
         "producers": {
           "wander": {
@@ -632,14 +658,34 @@
         "name": "swimmer",
         "bodyMotionProgram": "free",
         "motion": {
-          "$type": "grounded",
-          "moveSpeed": 4,
-          "turnSpeed": 2.5,
-          "riseGravity": 14,
-          "fallGravity": 23,
-          "maxFallSpeed": 20,
-          "sprintMultiplier": 1,
-          "response": []
+          "speed": {
+            "value": 4
+          },
+          "turn": {
+            "rate": 2.5
+          },
+          "shaping": [
+            {
+              "along": {
+                "engage": 1000000,
+                "brake": 0,
+                "release": 1000000
+              }
+            }
+          ],
+          "holds": [
+            {
+              "name": "air",
+              "bond": "Free",
+              "hold": "Lift",
+              "lift": 1,
+              "gravity": {
+                "rise": 14,
+                "fall": 23,
+                "terminal": 20
+              }
+            }
+          ]
         },
         "producers": {
           "wander": {
@@ -694,34 +740,69 @@
         "name": "jumper",
         "bodyMotionProgram": "grounded",
         "motion": {
-          "$type": "grounded",
-          "moveSpeed": 4,
-          "turnSpeed": 2.5,
-          "riseGravity": 14,
-          "fallGravity": 23,
-          "maxFallSpeed": 20,
-          "sprintMultiplier": 1,
-          "response": [
+          "speed": {
+            "value": 4
+          },
+          "turn": {
+            "rate": 2.5
+          },
+          "shaping": [
             {
-              "gate": {
+              "when": {
                 "$type": "recently",
                 "fact": "Grounded",
                 "windowSeconds": 0.09
               },
-              "engageRate": 45,
-              "releaseRate": 55
+              "along": {
+                "engage": 45,
+                "brake": 0,
+                "release": 55
+              }
             },
             {
-              "gate": {
+              "when": {
                 "$type": "now",
                 "fact": "Falling"
               },
-              "engageRate": 34,
-              "releaseRate": 18
+              "along": {
+                "engage": 34,
+                "brake": 0,
+                "release": 18
+              }
             },
             {
-              "engageRate": 30,
-              "releaseRate": 17
+              "along": {
+                "engage": 30,
+                "brake": 0,
+                "release": 17
+              }
+            }
+          ],
+          "holds": [
+            {
+              "name": "ground",
+              "bond": "Surface",
+              "cone": [
+                0,
+                60
+              ],
+              "hold": "Gravity",
+              "reach": 1.2,
+              "gravity": {
+                "rise": 14,
+                "fall": 23,
+                "terminal": 20
+              }
+            },
+            {
+              "name": "air",
+              "bond": "Free",
+              "hold": "Gravity",
+              "gravity": {
+                "rise": 14,
+                "fall": 23,
+                "terminal": 20
+              }
             }
           ]
         },
@@ -849,34 +930,69 @@
         "name": "runner",
         "bodyMotionProgram": "grounded",
         "motion": {
-          "$type": "grounded",
-          "moveSpeed": 4,
-          "turnSpeed": 2.5,
-          "riseGravity": 14,
-          "fallGravity": 23,
-          "maxFallSpeed": 20,
-          "sprintMultiplier": 1,
-          "response": [
+          "speed": {
+            "value": 4
+          },
+          "turn": {
+            "rate": 2.5
+          },
+          "shaping": [
             {
-              "gate": {
+              "when": {
                 "$type": "recently",
                 "fact": "Grounded",
                 "windowSeconds": 0.09
               },
-              "engageRate": 45,
-              "releaseRate": 55
+              "along": {
+                "engage": 45,
+                "brake": 0,
+                "release": 55
+              }
             },
             {
-              "gate": {
+              "when": {
                 "$type": "now",
                 "fact": "Falling"
               },
-              "engageRate": 34,
-              "releaseRate": 18
+              "along": {
+                "engage": 34,
+                "brake": 0,
+                "release": 18
+              }
             },
             {
-              "engageRate": 30,
-              "releaseRate": 17
+              "along": {
+                "engage": 30,
+                "brake": 0,
+                "release": 17
+              }
+            }
+          ],
+          "holds": [
+            {
+              "name": "ground",
+              "bond": "Surface",
+              "cone": [
+                0,
+                60
+              ],
+              "hold": "Gravity",
+              "reach": 1.2,
+              "gravity": {
+                "rise": 14,
+                "fall": 23,
+                "terminal": 20
+              }
+            },
+            {
+              "name": "air",
+              "bond": "Free",
+              "hold": "Gravity",
+              "gravity": {
+                "rise": 14,
+                "fall": 23,
+                "terminal": 20
+              }
             }
           ]
         },
@@ -1018,34 +1134,69 @@
         "name": "kart",
         "bodyMotionProgram": "grounded",
         "motion": {
-          "$type": "grounded",
-          "moveSpeed": 4,
-          "turnSpeed": 2.5,
-          "riseGravity": 14,
-          "fallGravity": 23,
-          "maxFallSpeed": 20,
-          "sprintMultiplier": 1,
-          "response": [
+          "speed": {
+            "value": 4
+          },
+          "turn": {
+            "rate": 2.5
+          },
+          "shaping": [
             {
-              "gate": {
+              "when": {
                 "$type": "recently",
                 "fact": "Grounded",
                 "windowSeconds": 0.09
               },
-              "engageRate": 45,
-              "releaseRate": 55
+              "along": {
+                "engage": 45,
+                "brake": 0,
+                "release": 55
+              }
             },
             {
-              "gate": {
+              "when": {
                 "$type": "now",
                 "fact": "Falling"
               },
-              "engageRate": 34,
-              "releaseRate": 18
+              "along": {
+                "engage": 34,
+                "brake": 0,
+                "release": 18
+              }
             },
             {
-              "engageRate": 30,
-              "releaseRate": 17
+              "along": {
+                "engage": 30,
+                "brake": 0,
+                "release": 17
+              }
+            }
+          ],
+          "holds": [
+            {
+              "name": "ground",
+              "bond": "Surface",
+              "cone": [
+                0,
+                60
+              ],
+              "hold": "Gravity",
+              "reach": 1.2,
+              "gravity": {
+                "rise": 14,
+                "fall": 23,
+                "terminal": 20
+              }
+            },
+            {
+              "name": "air",
+              "bond": "Free",
+              "hold": "Gravity",
+              "gravity": {
+                "rise": 14,
+                "fall": 23,
+                "terminal": 20
+              }
             }
           ]
         },

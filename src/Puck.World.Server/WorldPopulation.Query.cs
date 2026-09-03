@@ -77,7 +77,7 @@ public sealed partial class WorldPopulation {
 
         return null;
     }
-    // The highest slot (127 downward) not currently claimed by an active seat/census peer or an inhabited peer — where a
+    // The highest slot (capacity minus one downward) not currently claimed by an active seat/census peer or an inhabited peer — where a
     // new inhabited body lands, so inhabitants cluster at the top and never renumber an existing peer. A free slot is one
     // that holds no placement back-reference and no active census body.
     private int HighestFreeSlot() {
@@ -503,12 +503,12 @@ public sealed partial class WorldPopulation {
     /// <param name="index">The population index (0-based).</param>
     /// <returns>The slot's assigned kit row index.</returns>
     public byte KitIndex(int index) => m_entries[index].KitIndex;
-    /// <summary>The declared locomotion model of the kit assigned to a stable population slot — the runtime
+    /// <summary>The declared motion tuning of the kit assigned to a stable population slot — the runtime
     /// <c>body.motion</c> door's read of the same fact <see cref="WorldDefinitionValidator.TryValidateProgramCoherence"/>
-    /// checks at boot, so a document-legal kit cannot runtime-switch into a program its model cannot back.</summary>
+    /// checks at boot, so a document-legal kit cannot runtime-switch into a program its tuning cannot back.</summary>
     /// <param name="index">The population index (0-based).</param>
-    /// <returns>The slot's assigned kit's motion model.</returns>
-    public WorldMotionModel KitMotion(int index) => m_kitRows[ResolveKitIndex(index: index)].Motion;
+    /// <returns>The slot's assigned kit's motion tuning.</returns>
+    public WorldMotion KitMotion(int index) => m_kitRows[ResolveKitIndex(index: index)].Motion;
     /// <summary>The most recent timed <c>body.press</c> outcome for a body, or a zeroed/<see cref="PressHoldCapKind.None"/>
     /// outcome when none has been made (or the last attempt was refused — see <see cref="PressRefusal"/>).</summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>
@@ -651,7 +651,7 @@ public sealed partial class WorldPopulation {
         var kit = m_kits[kitIndex];
 
         return new WorldBody(
-            motion: m_kitRows[kitIndex].Motion,
+            tuning: kit.Tuning,
             program: kit.BodyMotionProgram,
             programs: m_bodyMotionPrograms,
             actions: kit.Actions,
@@ -662,10 +662,7 @@ public sealed partial class WorldPopulation {
             actionState: kit.ActionState,
             collider: kit.Collider,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
-            sprintChannelOrdinal: kit.SprintChannelOrdinal,
-            driftChannelOrdinal: kit.DriftChannelOrdinal,
-            holds: kit.Holds,
-            planarDynamics: kit.PlanarDynamics
+            holds: kit.Holds
         ) {
             Profile = profile,
         };

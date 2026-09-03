@@ -780,9 +780,10 @@ public static class WorldAdjacencyPolicy {
     /// commanded one. A settling body sags at most one step of gravity from rest and therefore never re-crosses; a
     /// body driven or already falling downward clears the deadband inside one step and transfers. The two-body
     /// contact envelope <see cref="TryReciprocalHysteresis"/> derives for a wall breaks the second half.</para>
-    /// <para>Per kit: the arm's gravity over one step, capped by its own terminal speed, carried over one more step
-    /// to a distance. Every quotient rounds outward and one raw unit is added last, so the result strictly exceeds
-    /// the sag.</para>
+    /// <para>Per kit: the steepest fall acceleration any of its holds author, over one step, capped by their fastest
+    /// terminal speed, carried over one more step to a distance. Every quotient rounds outward and one raw unit is
+    /// added last, so the result strictly exceeds the sag. A kit whose holds are all Grip or None authors neither, so
+    /// its sag is zero and its deadband is the contact skin alone plus that one raw unit.</para>
     /// </remarks>
     /// <param name="definition">The document whose kits, contact skin, and authority rate bound the sag.</param>
     /// <param name="depth">The derived deadband; zero when this returns <see langword="false"/>.</param>
@@ -804,12 +805,10 @@ public static class WorldAdjacencyPolicy {
                 continue;
             }
 
-            var (acceleration, terminalSpeed) = motion switch {
-                WorldMotionModel.Grounded grounded => (CeilingFixed(value: MathF.Abs(x: grounded.FallGravity)), CeilingFixed(value: MathF.Abs(x: grounded.MaxFallSpeed))),
-                _ => (FixedQ4816.Zero, FixedQ4816.Zero),
-            };
+            var acceleration = CeilingFixed(value: MathF.Abs(x: WorldHoldFactory.MaxFallAcceleration(holds: motion.Holds)));
+            var terminalSpeed = CeilingFixed(value: MathF.Abs(x: WorldHoldFactory.MaxTerminalFallSpeed(holds: motion.Holds)));
 
-            // An arm declaring no acceleration has its terminal speed as the one-step speed directly.
+            // A motion row declaring no acceleration has its terminal speed as the one-step speed directly.
             var stepSpeed = terminalSpeed;
 
             if (acceleration > FixedQ4816.Zero) {

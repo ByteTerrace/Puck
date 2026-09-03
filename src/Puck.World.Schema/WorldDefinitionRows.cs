@@ -223,8 +223,12 @@ public static class WorldDefinitionRows {
                 continue;
             }
 
-            if (kit.Motion.DeclaredDynamics is { } kitDynamics) {
-                yield return ("kits", $"kits.{kit.Name}", kitDynamics);
+            var shapingRows = (kit.Motion.Shaping ?? []);
+
+            for (var index = 0; (index < shapingRows.Count); index++) {
+                if (shapingRows[index]?.Dynamics is { } shapingDynamics) {
+                    yield return ("kits", $"kits.{kit.Name}.shaping[{index}]", shapingDynamics);
+                }
             }
         }
 

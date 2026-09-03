@@ -52,9 +52,10 @@ public sealed class AbsentDerivationLawTests {
                   "operations": [
                     "ResolveYawAttitudeAndPlanarFrame",
                     "ComputePlanarTargetVelocity",
-                    "ShapePlanarVelocity",
+                    "ShapeVelocity",
                     "SnapYawToPlanarIntent",
-                    "ApplyVerticalGravity",
+                    "ResolveHold",
+                    "ApplyHold",
                     "IntegratePlanarAndVerticalVelocity",
                     "CommitPose"
                   ]
@@ -65,14 +66,12 @@ public sealed class AbsentDerivationLawTests {
                   "name": "stander",
                   "bodyMotionProgram": "traverse",
                   "motion": {
-                    "$type": "grounded",
-                    "moveSpeed": 4,
-                    "turnSpeed": 2.5,
-                    "riseGravity": 28,
-                    "fallGravity": 46,
-                    "maxFallSpeed": 40,
-                    "response": [],
-                    "sprintMultiplier": 1
+                    "speed": { "value": 4 },
+                    "turn": { "rate": 2.5 },
+                    "holds": [
+                      { "name": "air", "bond": "Free", "hold": "Gravity", "gravity": { "rise": 28, "fall": 46, "terminal": 40 } }
+                    ],
+                    "shaping": [ { "along": {} } ]
                   },
                   "collider": { "$type": "sphere", "radius": 0.5 },
                   "bodyContact": "Solid"
@@ -108,10 +107,10 @@ public sealed class AbsentDerivationLawTests {
         """;
     private const string MinimalKitSection = """
         "bodyMotionPrograms": [
-          { "name": "p", "version": "puck.body-motion.v1", "kind": "Motion", "operations": ["ResolveYawAttitudeAndPlanarFrame", "ComputePlanarTargetVelocity", "ShapePlanarVelocity", "SnapYawToPlanarIntent", "ApplyVerticalGravity", "IntegratePlanarAndVerticalVelocity", "CommitPose"] }
+          { "name": "p", "version": "puck.body-motion.v1", "kind": "Motion", "operations": ["ResolveYawAttitudeAndPlanarFrame", "ComputePlanarTargetVelocity", "ShapeVelocity", "SnapYawToPlanarIntent", "ResolveHold", "ApplyHold", "IntegratePlanarAndVerticalVelocity", "CommitPose"] }
         ],
         "kits": { "rows": [
-          { "name": "k", "bodyMotionProgram": "p", "motion": { "$type": "grounded", "moveSpeed": 4, "turnSpeed": 2.5, "riseGravity": 28, "fallGravity": 46, "maxFallSpeed": 40, "response": [], "sprintMultiplier": 1 } }
+          { "name": "k", "bodyMotionProgram": "p", "motion": { "speed": { "value": 4 }, "turn": { "rate": 2.5 }, "holds": [ { "name": "air", "bond": "Free", "hold": "Gravity", "gravity": { "rise": 28, "fall": 46, "terminal": 40 } } ], "shaping": [ { "along": {} } ] } }
         ] }
         """;
     private const string MinimalViewsSection = """
@@ -178,13 +177,13 @@ public sealed class AbsentDerivationLawTests {
               "documentId": "sole-kit-derive",
               {{MinimalChannelSection}},
               "bodyMotionPrograms": [
-                { "name": "p", "version": "puck.body-motion.v1", "kind": "Motion", "operations": ["ResolveYawAttitudeAndPlanarFrame", "ComputePlanarTargetVelocity", "ShapePlanarVelocity", "SnapYawToPlanarIntent", "ApplyVerticalGravity", "IntegratePlanarAndVerticalVelocity", "CommitPose"] }
+                { "name": "p", "version": "puck.body-motion.v1", "kind": "Motion", "operations": ["ResolveYawAttitudeAndPlanarFrame", "ComputePlanarTargetVelocity", "ShapeVelocity", "SnapYawToPlanarIntent", "ResolveHold", "ApplyHold", "IntegratePlanarAndVerticalVelocity", "CommitPose"] }
               ],
               "kits": { "rows": [
                 {
                   "name": "solo",
                   "bodyMotionProgram": "p",
-                  "motion": { "$type": "grounded", "moveSpeed": 4, "turnSpeed": 2.5, "riseGravity": 28, "fallGravity": 46, "maxFallSpeed": 40, "response": [], "sprintMultiplier": 1 }
+                  "motion": { "speed": { "value": 4 }, "turn": { "rate": 2.5 }, "holds": [ { "name": "air", "bond": "Free", "hold": "Gravity", "gravity": { "rise": 28, "fall": 46, "terminal": 40 } } ], "shaping": [ { "along": {} } ] }
                 }
               ] }
             }

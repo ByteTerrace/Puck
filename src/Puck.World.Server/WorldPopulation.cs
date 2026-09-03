@@ -19,7 +19,7 @@ internal enum PopulationKind {
     /// per-tick submitted intent.</summary>
     LocalSeat,
 
-    /// <summary>Slots 4..127 — a joined peer body. A remote-human peer owns its own <see cref="WorldBody"/> state and,
+    /// <summary>Slots 4 through capacity minus one — a joined peer body. A remote-human peer owns its own <see cref="WorldBody"/> state and,
     /// until a transport supplies its intent stream, runs its authored default producer; an inhabited peer (its
     /// entry carries a placement back-reference) is driven by its authored source. Admitted while a slot is free,
     /// bounded only by the entity table itself.</summary>
@@ -85,6 +85,10 @@ public sealed partial class WorldPopulation {
     public IReadOnlyList<DurableStateOutput> DurableStateOutputs => m_durableStateOutputs;
     /// <summary>Number of pairs admitted to narrow phase by the most recently completed broadphase.</summary>
     public int DynamicContactNarrowPairs { get; private set; }
+    /// <summary>Number of x-overlapping sweep candidates inspected by the latest dynamic-body solve.</summary>
+    public int DynamicContactCandidates { get; private set; }
+    /// <summary>Number of solid bodies whose latest sweep search exhausted its candidate budget.</summary>
+    public int DynamicContactLimitedBodies { get; private set; }
     /// <summary>Number of solid-body pairs before broadphase pruning in the most recently completed solve.</summary>
     public int DynamicContactPotentialPairs { get; private set; }
     /// <summary>Number of overlaps resolved by the most recently completed dynamic-body solve.</summary>
@@ -135,6 +139,11 @@ public sealed partial class WorldPopulation {
     public int LocalSeatCount { get; private set; }
 
     private readonly Entry[] m_entries;
+    // Reused broadphase scratch. This used to be four population-sized stackallocs while the table ceiling was
+    // 128; the few-thousand-body representation makes that a stack-overflow hazard. Keeping it population-local
+    // preserves allocation-free ticks and sizes the storage to the authored census rather than the global ceiling.
+    private readonly DynamicContactBody[] m_dynamicContactBodies;
+    private readonly byte[] m_dynamicContactDegrees;
 
     private IWorldAdjacencySource? m_adjacencies;
     private WorldDefinition? m_adjacencyDefinition;
@@ -158,6 +167,7 @@ public sealed partial class WorldPopulation {
     // The compiled population distribution (fixed point). SIM-AFFECTING: SeedSimulated reads only this, never the authored floats.
     // Live for FUTURE activations, inert for bodies already standing (resetPhase: false keeps the running crowd put).
     private FixedWorldDistribution m_distribution;
+    private WorldBodyContactPolicy m_bodyContactPolicy = WorldBodyContactPolicy.Default;
     // The fixed-point derived tables — recompiled in place by Rebuild when a sim-affecting section mutates (a live kit
     // tune, motion/wander retune, seat-kit or assignment change), so they are no longer readonly.
     private FixedMotionDefaults m_fixedMotion;
@@ -173,7 +183,7 @@ public sealed partial class WorldPopulation {
     // live) so the peer slice is entirely free for inhabitants. Refreshed by CompileFixedTables on a swap/rebuild.
     private int m_remoteCap;
     // The lowest slot index a live inhabited body occupies (Capacity = none). Inhabited bodies claim the top of the
-    // entity table (slots 127 downward); the census ceiling reads this floor so census peers never reach an inhabitant.
+    // entity table (capacity minus one downward); the census ceiling reads this floor so census peers never reach an inhabitant.
     // Reconciled by ReconcileInhabitants.
     private int m_revision;
     private byte m_seatKit;
@@ -252,7 +262,7 @@ public sealed partial class WorldPopulation {
     /// <summary>Initializes a new instance of the <see cref="WorldPopulation"/> class: the four local slots reserved for
     /// session joins, every peer slot seeded with its deterministic color, kit, activity phase, and spawn pose. The census
     /// stands at zero at boot — <c>networkPlayers</c> is the remote admission cap, not a static reservation, so the whole
-    /// peer slice is free for inhabitants and later <c>world.population</c> raises. The color must be valid for all 128
+    /// peer slice is free for inhabitants and later <c>world.population</c> raises. The color must be valid for every
     /// from frame 1, since the program's material capacity is probed from a worst-case all-avatars build. An entry
     /// receives its <see cref="WorldBody"/> when activated.</summary>
     /// <param name="definition">The world definition supplying the kit rows, producer parameters, and the profileless
@@ -262,6 +272,8 @@ public sealed partial class WorldPopulation {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         m_entries = new Entry[definition.Population.Capacity];
+        m_dynamicContactBodies = new DynamicContactBody[m_entries.Length];
+        m_dynamicContactDegrees = new byte[m_entries.Length];
 
         m_seatSpawns = CompileSeatSpawns(
             spawnPoints: definition.SpawnPoints,
@@ -338,7 +350,7 @@ public sealed partial class WorldPopulation {
         // ApplyPeerDisconnected — SetSimulatedCount skips a slot carrying it exactly like an inhabited one, so a
         // world.population edit can never silently reassign or deactivate a connected human's body.
         public bool IsRemoteHuman { get; set; }
-        // Kind is fixed at construction (LocalSeat for slots 0..3, NetworkPeer for 4..127) and never changes: an
+        // Kind is fixed at construction (LocalSeat for slots 0..3, NetworkPeer thereafter) and never changes: an
         // inhabitant is a NetworkPeer distinguished by its PlacementId, not a kind flip.
         public required PopulationKind Kind { get; init; }
         // Reassigned in place by Rebuild when the kit-assignment policy (or kit set) mutates; set at construction.
@@ -407,6 +419,7 @@ public sealed partial class WorldPopulation {
         public string PressRefusal { get; set; } = string.Empty;
 
         public BodyProducerState ProducerState;
+        public BodyAutonomyState AutonomyState;
         public BodyNavigationState NavigationState { get; } = new();
     }
 }

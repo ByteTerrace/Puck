@@ -76,7 +76,7 @@ public sealed partial class WorldSocialImportReservationLawTests {
         }
         var held = bank.StateHash;
         Assert.NotEqual(original, held);
-        Assert.False(bank.TryFreezeObserver(Person(999), Transfer(), out _));
+        Assert.False(bank.TryFreezeObserver(new("another-origin", 0, 1), Transfer(), out _));
         Assert.True(bank.TryFreezeObserver(Person(0), Transfer(), out _));
         Assert.False(bank.TryReserveImport(Transfer(2), [new(Person(0), 0, 0)], out _));
         Assert.False(bank.TryImportObserver(Person(0), bank.Policy, Bank().Capture(), out _));

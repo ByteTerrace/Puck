@@ -20,6 +20,12 @@ public sealed partial class WorldBody {
     // body's own span rather than by snapping — see SteerAttitudeToward. Zero until the first resolve seats it.
     private FixedVector3 m_attitudeUp;
     private FixedRateAccumulator m_attitudeTurnAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
+    // Whether this body has ever taken a Surface-bond hold — the only source of a REAL lean (m_attitudeUp diverging
+    // from ambient). A body that never does never has one to return from, so SetFreeAttitude seats the drawn axis
+    // to ambient outright instead of turning toward a target that is itself moving: a hold list authoring nothing
+    // but Free and Medium rows is otherwise a moving target the accumulator's bounded rate chases forever without
+    // ever catching, one that never wants a leaned axis to begin with.
+    private bool m_attitudeLeaned;
     // The world's compiled cos(maxSlopeDegrees) — the same threshold contact resolution grounds on, so a hold and
     // the ground it ends on cannot disagree about which faces are walkable.
     private FixedQ4816 m_walkableThreshold = FixedQ4816.One;
@@ -605,6 +611,8 @@ public sealed partial class WorldBody {
             return;
         }
 
+        m_attitudeLeaned = true;
+
         var normal = m_holdNormal;
         var leaned = (gravityUp + ((normal - gravityUp) * hold.UpLean)).Normalize();
 
@@ -747,13 +755,21 @@ public sealed partial class WorldBody {
 
         return m_attitudeUp;
     }
-    // With no face to lean on, the drawn axis returns to the contact axis at the same bounded rate it left it, and
-    // the attitude is recomposed about wherever it has got to so the return is drawn rather than popped.
+    // With a face to lean back out of (m_attitudeLeaned, set only by a Surface-bond resolve in SetHoldFrame), the
+    // drawn axis returns to the contact axis at the same bounded rate it left it, recomposed about wherever it has
+    // got to so the return is drawn rather than popped. A body that has never taken a Surface-bond hold has no lean
+    // to be returning from, so it seats the axis to ambient outright instead: steering it would be chasing a target
+    // rather than returning from one — under GradientDerivedUp that target itself moves every tick with the body's
+    // own position, and a bounded turn never quite closes on a moving target, drifting the drawn axis off the
+    // ambient the ordinary frame operation already composed.
     private void SetFreeAttitude(ref BodyMotionScratch scratch) {
-        var attitude = SteerAttitudeToward(
-            speed: scratch.MoveSpeed,
-            stepTicks: scratch.StepTicks,
-            target: in scratch.Up
+        var attitude = (m_attitudeLeaned
+            ? SteerAttitudeToward(
+                speed: scratch.MoveSpeed,
+                stepTicks: scratch.StepTicks,
+                target: in scratch.Up
+            )
+            : SeatFreeAttitude(target: in scratch.Up)
         );
 
         if (attitude == scratch.AttitudeUp) {
@@ -761,10 +777,26 @@ public sealed partial class WorldBody {
         }
 
         scratch.AttitudeUp = attitude;
+
+        // A body-frame 6DOF flight program already owns scratch.Orientation in full via IntegrateLocalAttitude;
+        // composing a yaw-only snap over it here would discard the pitch/roll that integration just built, for an
+        // axis the program never asked this to draw a facing against.
+        if (m_bodyMotionProgram.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)) {
+            return;
+        }
+
         SnapFacing(
             scratch: ref scratch,
             yaw: m_yaw
         );
+    }
+    // The counterpart to SteerAttitudeToward's bounded turn, for a target an ordinary frame operation already
+    // computed correctly: seats the drawn axis to it outright, so the next real lean (a Grip's own steer, or a
+    // return through the un-gated path above) turns from the true ambient rather than a stale one.
+    private FixedVector3 SeatFreeAttitude(in FixedVector3 target) {
+        m_attitudeUp = target;
+
+        return target;
     }
     // A grip owns the whole tangent-plane velocity, its rise included, so the tick it ends that rise would be
     // replaced by the next planar shape and lost. It is momentum the body earned: split it against gravity-up, the
@@ -912,27 +944,35 @@ public sealed partial class WorldBody {
 
         return (twist * arc).Normalize();
     }
-    // The ApplyHold operation: the current row's vertical law. Nothing holding the body is gravity — the same law an
-    // unheld body falls under.
+    // The ApplyHold operation: the current row's vertical law, plus its own MoveUp thrust in every bond. Pairing
+    // this with ResolveHold, and authoring a hold list with one row nothing can drop, are both required for a
+    // Motion-kind program (see ValidateMotionRow/ValidateHolds), so TryCurrentHold always succeeds against a
+    // validated document; the guard exists because this method itself has no document to check that against.
     private void ApplyHold(ref BodyMotionScratch scratch) {
         if (!TryCurrentHold(hold: out var hold)) {
-            ApplyVerticalGravity(stepTicks: scratch.StepTicks);
-
             return;
         }
 
         switch (hold.Kind) {
             case BodyHoldKind.Gravity:
-                ApplyVerticalGravity(stepTicks: scratch.StepTicks);
+                ApplyHoldGravity(
+                    hold: in hold,
+                    scale: FixedQ4816.One,
+                    stepTicks: scratch.StepTicks
+                );
 
                 break;
             case BodyHoldKind.Lift:
                 if (hold.Lift >= FixedQ4816.One) {
                     // Full lift owns the vertical channel: whatever contact folded into it (a glance off a walkable
                     // face) bleeds back to rest instead of carrying the body away forever.
-                    ApplyVerticalDecay(scratch: ref scratch);
+                    ApplyHoldGravityDecay(
+                        hold: in hold,
+                        scratch: ref scratch
+                    );
                 } else {
-                    ApplyVerticalGravity(
+                    ApplyHoldGravity(
+                        hold: in hold,
                         scale: (FixedQ4816.One - hold.Lift),
                         stepTicks: scratch.StepTicks
                     );
@@ -953,18 +993,122 @@ public sealed partial class WorldBody {
         }
         if (hold.Bond == BodyHoldBond.Medium) {
             // A medium holds by displacement whatever its kind says about gravity, so its law runs alongside rather
-            // than instead of the kind switch above (a medium row ordinarily authors kind None).
+            // than instead of the kind switch above (a medium row ordinarily authors kind None), and folds the
+            // row's own thrust into its drift before the convergence runs rather than through ApplyHoldThrust below.
             ApplyMedium(
-                medium: hold.Medium,
+                hold: in hold,
+                scratch: ref scratch
+            );
+        } else {
+            ApplyHoldThrust(
+                hold: in hold,
                 scratch: ref scratch
             );
         }
+    }
+    // Integrates ONE gravity channel whatever sources it — the world's solved field when it authors one, the row's
+    // own arc otherwise. The rise/fall asymmetry is SHAPING, not a source — under a solved field it rides as the
+    // row's authored Rise:Fall ratio so a floaty top of the arc survives on a planetoid, and the row's own Terminal
+    // clamps either way. scale is the fraction of the arc still reaching the body — a lift row's own fraction
+    // cancels the rest; one is the unscaled arc.
+    private void ApplyHoldGravity(in FixedBodyHold hold, FixedQ4816 scale, ulong stepTicks) {
+        var rising = (m_verticalVelocity > FixedQ4816.Zero);
+        var gravity = (rising
+            ? hold.Gravity.Rise
+            : hold.Gravity.Fall
+        );
+
+        if (TrySolvedGravityMagnitude(magnitude: out var solved)) {
+            gravity = solved;
+
+            if (
+                rising &&
+                (hold.Gravity.Fall > FixedQ4816.Zero)
+            ) {
+                gravity = ((gravity * hold.Gravity.Rise) / hold.Gravity.Fall);
+            }
+        }
+
+        var gravityStep = m_verticalVelocityAccumulator.Integrate(
+            elapsedTicks: stepTicks,
+            ratePerSecond: -(gravity * scale)
+        );
+        var terminalVelocity = -hold.Gravity.Terminal;
+        var acceleratedVelocity = (m_verticalVelocity + gravityStep);
+
+        if (acceleratedVelocity < terminalVelocity) {
+            m_verticalVelocity = terminalVelocity;
+            m_verticalVelocityAccumulator.Reset();
+        } else {
+            m_verticalVelocity = acceleratedVelocity;
+        }
+    }
+    // A full-lift row owns the vertical channel outright, bleeding whatever it carries back toward rest at the
+    // row's own Rise rate (a symmetric bleed, not the asymmetric arc) rather than integrating gravity onto it.
+    private void ApplyHoldGravityDecay(in FixedBodyHold hold, ref BodyMotionScratch scratch) {
+        if (m_verticalVelocity == FixedQ4816.Zero) {
+            return;
+        }
+
+        scratch.Velocity = scratch.Velocity with { Y = (scratch.Velocity.Y + m_verticalVelocity) };
+
+        if (m_verticalVelocity > FixedQ4816.Zero) {
+            var bleed = m_verticalVelocityAccumulator.Integrate(
+                ratePerSecond: -hold.Gravity.Rise,
+                elapsedTicks: scratch.StepTicks
+            );
+            var next = (m_verticalVelocity + bleed);
+
+            m_verticalVelocity = ((next < FixedQ4816.Zero)
+                ? FixedQ4816.Zero
+                : next
+            );
+        } else {
+            var bleed = m_verticalVelocityAccumulator.Integrate(
+                ratePerSecond: hold.Gravity.Rise,
+                elapsedTicks: scratch.StepTicks
+            );
+            var next = (m_verticalVelocity + bleed);
+
+            m_verticalVelocity = ((next > FixedQ4816.Zero)
+                ? FixedQ4816.Zero
+                : next
+            );
+        }
+
+        if (m_verticalVelocity == FixedQ4816.Zero) {
+            m_verticalVelocityAccumulator.Reset();
+        }
+    }
+    // A row's own thrust, applied to every non-Medium bond: while MoveUp is non-zero, drives vertical velocity
+    // directly at the row's thrust fraction of the resolved move speed and suspends the ballistic channel; releasing
+    // MoveUp returns vertical ownership to the row's own kind this same tick. A Medium bond's own thrust folds into
+    // ApplyMedium's convergence instead, so this never runs for one.
+    private void ApplyHoldThrust(in FixedBodyHold hold, ref BodyMotionScratch scratch) {
+        if (hold.Thrust <= FixedQ4816.Zero) {
+            return;
+        }
+
+        var drive = Role(
+            intent: in scratch.Intent,
+            role: ChannelRole.MoveUp
+        );
+
+        if (drive == FixedQ4816.Zero) {
+            return;
+        }
+
+        m_verticalVelocity = FixedQ4816.Zero;
+        m_verticalVelocityAccumulator.Reset();
+        scratch.DirectVerticalVelocity = ((drive * scratch.MoveSpeed) * hold.Thrust);
     }
     // The one medium law. The body's own commanded thrust is folded into the medium's drift BEFORE the convergence
     // runs, so nothing writes the vertical channel twice: below the bob band the medium drifts the body at its
     // buoyancy, inside the band (and above it, recovering a breach) it settles proportionally toward the float line,
     // and the sum is clamped to the medium's own terminal speeds.
-    private void ApplyMedium(in FixedBodyMedium medium, ref BodyMotionScratch scratch) {
+    private void ApplyMedium(in FixedBodyHold hold, ref BodyMotionScratch scratch) {
+        var medium = hold.Medium;
+
         if (m_mediumSurface is not { } mediumSurface) {
             return;
         }
@@ -994,14 +1138,22 @@ public sealed partial class WorldBody {
 
         var target = FixedQ4816.Clamp(
             value: (MediumThrust(
-                medium: in medium,
+                hold: in hold,
                 scratch: ref scratch
             ) + drift),
             minimum: -medium.MaxSinkSpeed,
             maximum: medium.MaxRiseSpeed
         );
 
-        if (m_tuning.PlanarDynamics is { Planar: { } planar }) {
+        // ExecuteProgram already refreshed the recency clocks and selected the row once before phase 0, so this
+        // reads the SAME shaping row the planar and turn lanes govern under even if an earlier action changed a fact.
+        var governingRow = scratch.GoverningShapingRow;
+        var row = ((governingRow >= 0)
+            ? m_tuning.Shaping[governingRow]
+            : default
+        );
+
+        if (row.Dynamics is { Planar: { } planar }) {
             // scratch.StepTicks can differ from planar.StepTicks for exactly one tick — a world-load/reload swap
             // recompiles the propagator at the NEW rate but the batch already in flight still advances at its OLD
             // width. The follower steps through the mismatched width rather than fault on it.
@@ -1020,27 +1172,23 @@ public sealed partial class WorldBody {
             return;
         }
 
-        var response = m_tuning.Response;
+        if (row.Along is { } along) {
+            var hasVerticalInput = (Role(
+                intent: in scratch.Intent,
+                role: ChannelRole.MoveUp
+            ) != FixedQ4816.Zero);
+            var instant = (hasVerticalInput
+                ? ShapingInstant.Engage
+                : ShapingInstant.Release
+            );
 
-        if (response.Length == 0) {
-            m_verticalVelocity = target;
-        } else {
-            var matched = false;
-
-            // ShapePlanarVelocity already ticked the recency clocks this step (phase 2 precedes 4); this scan only
-            // SELECTS (first open row wins, same rule the planar half follows).
-            foreach (var row in response) {
-                if (!MotionGateOpen(gate: row.Gate)) {
-                    continue;
-                }
-
-                var hasVerticalInput = (Role(
-                    intent: in scratch.Intent,
-                    role: ChannelRole.MoveUp
-                ) != FixedQ4816.Zero);
+            if ((along.Instant & instant) != 0) {
+                m_mediumThrustRampAccumulator.Reset();
+                m_verticalVelocity = target;
+            } else {
                 var rate = (hasVerticalInput
-                    ? row.EngageRate
-                    : row.ReleaseRate
+                    ? along.Engage
+                    : along.Release
                 );
                 var maxDelta = m_mediumThrustRampAccumulator.Integrate(
                     elapsedTicks: scratch.StepTicks,
@@ -1052,14 +1200,9 @@ public sealed partial class WorldBody {
                     maxDelta: maxDelta,
                     target: target
                 );
-                matched = true;
-
-                break;
             }
-
-            if (!matched) {
-                m_verticalVelocity = target;
-            }
+        } else {
+            m_verticalVelocity = target;
         }
 
         WriteMediumFacts(
@@ -1068,18 +1211,18 @@ public sealed partial class WorldBody {
             surface: mediumSurface
         );
     }
-    // The vertical half of the commanded thrust: the MoveUp role scaled by the hold's travel speed and the medium's
-    // own thrust fraction, with the same held-sprint multiplier the planar half applies.
-    private FixedQ4816 MediumThrust(in FixedBodyMedium medium, ref BodyMotionScratch scratch) {
-        var speed = (((m_sprintChannelOrdinal >= 0) && (scratch.Intent[m_sprintChannelOrdinal] >= m_channelThresholds[m_sprintChannelOrdinal]))
-            ? (scratch.MoveSpeed * m_tuning.SprintMultiplier)
-            : scratch.MoveSpeed
+    // The vertical half of the commanded thrust: the MoveUp role scaled by the hold's travel speed and the row's own
+    // thrust, with the same held-sprint multiplier the planar half applies.
+    private FixedQ4816 MediumThrust(in FixedBodyHold hold, ref BodyMotionScratch scratch) {
+        var speed = ApplySpeedHeld(
+            baseSpeed: scratch.MoveSpeed,
+            intent: in scratch.Intent
         );
 
         return ((Role(
             intent: in scratch.Intent,
             role: ChannelRole.MoveUp
-        ) * speed) * medium.ThrustFraction);
+        ) * speed) * hold.Thrust);
     }
     // The two medium facts, on the same one-tick-behind terms every other body fact is published under.
     private void WriteMediumFacts(FixedQ4816 surface, FixedQ4816 error, in FixedBodyMedium medium) {

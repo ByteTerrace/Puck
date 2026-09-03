@@ -46,8 +46,8 @@ public static partial class WorldDefinitionValidator {
             }
             if (flock.Space == WorldFlockSpace.Volume &&
                 (!definition.Channels.Any(channel => channel.Role == ChannelRole.MoveUp) ||
-                 !(motion.Contains(BodyMotionOp.ComputeLocalTargetVelocity) || motion.Contains(BodyMotionOp.ApplyVerticalDrive) ||
-                   (motion.Contains(BodyMotionOp.ApplyHold) && kit.Motion.DeclaredHolds.Any(hold => hold.Bond == BodyHoldBond.Medium))))) {
+                 !(motion.Contains(BodyMotionOp.ComputeLocalTargetVelocity) ||
+                   (motion.Contains(BodyMotionOp.ApplyHold) && (kit.Motion?.Holds ?? []).Any(hold => ((hold.Bond == BodyHoldBond.Medium) || (hold.Thrust > 0f))))))) {
                 errors.Add($"{path}.producers[{name}].flock volume motion requires a MoveUp channel and a compatible vertical consumer.");
             }
         }

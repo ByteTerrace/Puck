@@ -3,11 +3,14 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
-/// <summary>Copies borrowed projection records into a bounded wire queue; no socket writes run on the authority tick.</summary>
+/// <summary>Samples borrowed authority snapshots at the live disclosure cadence, redacts only frames that are due,
+/// and copies them into a bounded wire queue; no socket writes run on the authority tick.</summary>
 internal sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, string authority, Func<int> revision,
-    Func<bool>? isCurrent = null, WorldPrincipal? recipient = null) : IClientSink {
+    Func<WorldSinkDisclosure> disclosure, Func<bool>? isCurrent = null, WorldPrincipal? recipient = null) : IClientSink {
     private readonly Channel<(WorldFederationResponse Kind, byte[] Body)> m_frames = Channel.CreateBounded<(WorldFederationResponse, byte[])>(
         new BoundedChannelOptions(8) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true, SingleWriter = true });
+    private readonly WorldProjectionSampler m_sampler = new(updateSeconds: disclosure().Policy.UpdateSeconds);
+    private EntitySnapshot[] m_redacted = [];
     private bool m_invalidated;
 
     private bool Current() {
@@ -31,7 +34,22 @@ internal sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, st
         if (Current()) { Write(WorldFederationResponse.Definition, WorldFederationCodec.EncodeDocument(definition, tier, authority, revision(), recipient)); }
     }
     public void DeliverSnapshot(in WorldSnapshot snapshot) {
-        if (Current()) { Write(WorldFederationResponse.Snapshot, WorldFederationCodec.EncodeSnapshot(in snapshot)); }
+        if (!Current()) {
+            return;
+        }
+        var currentDisclosure = disclosure();
+        m_sampler.SetUpdateSeconds(updateSeconds: currentDisclosure.Policy.UpdateSeconds);
+        if (!m_sampler.TryProject(snapshot: in snapshot, projected: out var projected)) {
+            return;
+        }
+        if (!currentDisclosure.IsFull) {
+            projected = WorldOutputHub.Redact(
+                disclosure: in currentDisclosure,
+                snapshot: in projected,
+                scratch: ref m_redacted
+            );
+        }
+        Write(WorldFederationResponse.Snapshot, WorldFederationCodec.EncodeSnapshot(snapshot: in projected));
     }
 
     public Task StreamAsync(Stream output, CancellationToken ct) =>

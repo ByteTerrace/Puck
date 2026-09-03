@@ -20,6 +20,7 @@ public sealed class ObserverDisclosureLawTests {
 
         Assert.Null(@object: population.Disclosure);
         Assert.Equal(expected: WorldObserverDisclosureMode.All, actual: population.ObserverDisclosure.Mode);
+        Assert.Equal(expected: 0.03f, actual: population.ObserverDisclosure.UpdateSeconds);
         Assert.True(condition: new WorldSinkDisclosure(Policy: population.ObserverDisclosure, ObserverBodyIndex: -1).IsFull);
     }
     [Fact]
@@ -92,6 +93,87 @@ public sealed class ObserverDisclosureLawTests {
         Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: (document with { PopulationRaw = (document.Population with { Disclosure = new WorldObserverDisclosure(Mode: WorldObserverDisclosureMode.Radius, Radius: 12f) }) }),
             reason: out var wellFormed), userMessage: wellFormed);
+
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
+            definition: (document with { PopulationRaw = (document.Population with {
+                Disclosure = new WorldObserverDisclosure(UpdateSeconds: 1.01f),
+            }) }),
+            reason: out var badCadence));
+        Assert.Contains(actualString: badCadence, comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "bodies.disclosure.updateSeconds");
+    }
+
+    [Fact]
+    public void RemoteProjectionCadenceCoalescesFieldsAndRetainsDiscontinuities() {
+        var sampler = new WorldProjectionSampler(updateSeconds: 0.03f);
+
+        WorldSnapshot Snapshot(ulong tick, EntityContinuity continuity = default, long fieldRaw = 0L) => new(
+            Authority: "boot",
+            Entries: new[] { Entity(index: 7, x: tick) with { Continuity = continuity, Generation = 3 } },
+            FieldCells: (fieldRaw == 0L ? [] : new[] { new FieldCellDelta(Cell: 11, Field: 2, Raw: fieldRaw) }),
+            Revision: 0,
+            StepTicks: Fixtures.StepTicks,
+            Tick: tick
+        );
+
+        var first = Snapshot(tick: 1UL);
+        Assert.True(sampler.TryProject(snapshot: in first, projected: out var primer));
+        Assert.Equal(Fixtures.StepTicks, primer.StepTicks);
+
+        for (var tick = 2UL; tick <= 8UL; tick++) {
+            var continuity = (tick == 3UL ? EntityContinuity.Teleport : EntityContinuity.Continuous);
+            var raw = (tick == 4UL ? 40L : (tick == 6UL ? 60L : 0L));
+            var skipped = Snapshot(tick, continuity, raw);
+            Assert.False(sampler.TryProject(snapshot: in skipped, projected: out _));
+        }
+
+        var due = Snapshot(tick: 9UL, fieldRaw: 90L);
+        Assert.True(sampler.TryProject(snapshot: in due, projected: out var projected));
+        Assert.Equal(expected: 8UL * Fixtures.StepTicks, actual: projected.StepTicks);
+        Assert.Equal(expected: 9UL, actual: projected.Tick);
+        Assert.Equal(expected: EntityContinuity.Teleport, actual: Assert.Single(projected.Entries.ToArray()).Continuity);
+        Assert.Equal(expected: 90L, actual: Assert.Single(projected.FieldCells.ToArray()).Raw);
+    }
+
+    [Fact]
+    public void LiveProjectionCadenceChangePreservesSkippedFullFieldImage() {
+        var sampler = new WorldProjectionSampler(updateSeconds: 1f);
+        var primer = new WorldSnapshot(1UL, 0, Fixtures.StepTicks, new[] { Entity(index: 0, x: 0f) }, "boot");
+        Assert.True(sampler.TryProject(snapshot: in primer, projected: out _));
+
+        var full = primer with {
+            Tick = 2UL,
+            FieldsFull = true,
+            FieldCells = new[] {
+                new FieldCellDelta(Cell: 3, Field: 0, Raw: 30L),
+                new FieldCellDelta(Cell: 4, Field: 0, Raw: 40L),
+            },
+        };
+        Assert.False(sampler.TryProject(snapshot: in full, projected: out _));
+
+        sampler.SetUpdateSeconds(updateSeconds: 0f);
+        var latest = primer with {
+            Tick = 3UL,
+            FieldCells = new[] { new FieldCellDelta(Cell: 3, Field: 0, Raw: 31L) },
+        };
+        Assert.True(sampler.TryProject(snapshot: in latest, projected: out var projected));
+        Assert.True(projected.FieldsFull);
+        Assert.Equal(2UL * Fixtures.StepTicks, projected.StepTicks);
+        Assert.Equal(new[] { (3, 31L), (4, 40L) },
+            projected.FieldCells.Span.ToArray().Select(delta => (delta.Cell, delta.Raw)).ToArray());
+    }
+
+    [Fact]
+    public void ProjectionSamplerRefusesInvalidCadenceAndNonIncreasingTicks() {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new WorldProjectionSampler(updateSeconds: -0.01f));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new WorldProjectionSampler(updateSeconds: float.NaN));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new WorldProjectionSampler(
+            updateSeconds: WorldObserverDisclosure.MaximumUpdateSeconds + 0.01f));
+
+        var sampler = new WorldProjectionSampler(updateSeconds: 0f);
+        var snapshot = new WorldSnapshot(7UL, 0, Fixtures.StepTicks, Array.Empty<EntitySnapshot>(), "boot");
+        Assert.True(sampler.TryProject(snapshot: in snapshot, projected: out _));
+        Assert.Throws<ArgumentException>(() => sampler.TryProject(snapshot: in snapshot, projected: out _));
     }
 
     private static EntitySnapshot Entity(int index, float x) =>

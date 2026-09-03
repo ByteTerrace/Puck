@@ -51,9 +51,11 @@ public static class WorldFacePortalPolicy {
         return ((SpeedCeiling(definition: definition) * step) + FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: definition.Collision.ContactSkin)));
     }
     /// <summary>The fastest travel a document declares, in world units per second — the maximum over the world's
-    /// profileless motion default and every kit's own arm ceiling (an authored envelope's upper bound where one is
-    /// declared, the arm's own base speed otherwise, scaled by its held sprint/boost multiplier) together with the
-    /// arm's terminal vertical speeds.</summary>
+    /// profileless motion default and, per kit, its speed row's ceiling (the authored <c>speed.envelope</c> upper
+    /// bound where one is declared, its own <c>speed.value</c> otherwise, scaled by its held multiplier), its
+    /// holds' fastest authored vertical speed (a terminal fall speed or a medium's rise/sink terminal — zero for a
+    /// kit whose holds are all Grip or None, which folds into this maximum as a no-op rather than lowering it), and
+    /// a drive-decomposition shaping row's <c>along.reverse</c> where one is authored.</summary>
     /// <param name="definition">The document to read.</param>
     /// <returns>The declared speed ceiling.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
@@ -62,41 +64,33 @@ public static class WorldFacePortalPolicy {
 
         var ceiling = FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: definition.Motion.MoveSpeed));
 
-        // A sibling of WorldBody's own motion-arm switch (the sim) and WorldDefinitionValidator's (authoring
-        // checks) — each dispatches on the SAME closed WorldMotionModel hierarchy for a DIFFERENT question (drive
-        // the body vs. validate the document vs., here, bound how fast a body can travel), so collapsing them into
-        // one predicate would blur three distinct policies rather than deduplicate one. A new WorldMotionModel arm
-        // owes all three switches an entry; the compiler will not name the other two for you.
         foreach (var kit in definition.Kits) {
             if (kit is null) {
                 continue;
             }
 
-            switch (kit.Motion) {
-                case WorldMotionModel.Grounded grounded:
+            var motion = kit.Motion;
+
+            ceiling = FixedQ4816.Max(
+                x: ceiling,
+                y: Scaled(
+                    baseSpeed: (motion.Speed.Envelope?.Max ?? motion.Speed.Value),
+                    multiplier: (motion.Speed.Held?.Multiplier ?? 1f)
+                )
+            );
+            ceiling = FixedQ4816.Max(
+                x: ceiling,
+                y: Magnitude(value: WorldHoldFactory.MaxTerminalFallSpeed(holds: motion.Holds))
+            );
+
+            // An anisotropic shaping row's along facet travels backwards at its own rate, which no forward bound covers.
+            foreach (var row in (motion.Shaping ?? [])) {
+                if ((row?.Across is not null) && (row.Along?.Reverse is { } reverse)) {
                     ceiling = FixedQ4816.Max(
                         x: ceiling,
-                        y: Scaled(
-                            baseSpeed: (grounded.MoveSpeedEnvelope?.Max ?? grounded.MoveSpeed),
-                            multiplier: grounded.SprintMultiplier
-                        )
+                        y: Magnitude(value: reverse)
                     );
-                    ceiling = FixedQ4816.Max(
-                        x: ceiling,
-                        y: Magnitude(value: grounded.MaxFallSpeed)
-                    );
-
-                    // A drive row travels backwards at its own rate, which no forward bound covers.
-                    if (grounded.Drive is { } drive) {
-                        ceiling = FixedQ4816.Max(
-                            x: ceiling,
-                            y: Magnitude(value: drive.ReverseSpeed)
-                        );
-                    }
-
-                    break;
-                default:
-                    break;
+                }
             }
         }
 

@@ -85,7 +85,8 @@ public static class WorldEntityPartResolver {
                 catalogRig: client.CatalogRig(index: entityIndex)
             ),
             transforms: transforms,
-            pose: out pose
+            pose: out pose,
+            scale: look.Scale
         );
     }
     /// <summary>Resolves a live part pose from a list-backed composed transform buffer.</summary>
@@ -119,7 +120,8 @@ public static class WorldEntityPartResolver {
                 catalogRig: client.CatalogRig(index: entityIndex)
             ),
             transforms: transforms,
-            pose: out pose
+            pose: out pose,
+            scale: look.Scale
         );
     }
 }

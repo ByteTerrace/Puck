@@ -2,8 +2,12 @@
   "basis": "../worlds/prototypes/standard.world.json",
   "$schema": "../worlds/puck.world.def.v1.schema.json",
   "motion": {
-    "moveSpeed": 4,
-    "turnSpeed": 2.5,
+    "speed": {
+      "value": 4
+    },
+    "turn": {
+      "rate": 2.5
+    },
     "maxSmoothError": 3
   },
   "spawnPoints": [
@@ -149,11 +153,12 @@
       "kind": "Motion",
       "operations": [
         "ResolveYawAttitudeAndPlanarFrame",
+        "ResolveHold",
         "ComputePlanarTargetVelocity",
-        "ShapePlanarVelocity",
+        "ShapeVelocity",
         "SnapYawToPlanarIntent",
         "RunActionTriggers",
-        "ApplyVerticalGravity",
+        "ApplyHold",
         "IntegratePlanarAndVerticalVelocity",
         "CommitPose"
       ]
@@ -209,39 +214,74 @@
         "name": "traveler",
         "bodyMotionProgram": "grounded",
         "motion": {
-          "$type": "grounded",
-          "moveSpeed": 4,
-          "turnSpeed": 2.5,
-          "riseGravity": 14,
-          "fallGravity": 23,
-          "maxFallSpeed": 20,
-          "sprintMultiplier": 1.6,
-          "response": [
+          "speed": {
+            "value": 4,
+            "held": {
+              "channel": "run",
+              "multiplier": 1.6
+            }
+          },
+          "turn": {
+            "rate": 2.5
+          },
+          "shaping": [
             {
-              "gate": {
+              "when": {
                 "$type": "recently",
                 "fact": "Grounded",
                 "windowSeconds": 0.09
               },
-              "engageRate": 45,
-              "releaseRate": 55
+              "along": {
+                "engage": 45,
+                "release": 55
+              }
             },
             {
-              "gate": {
+              "when": {
                 "$type": "now",
                 "fact": "Falling"
               },
-              "engageRate": 34,
-              "releaseRate": 18
+              "along": {
+                "engage": 34,
+                "release": 18
+              }
             },
             {
-              "engageRate": 30,
-              "releaseRate": 17
+              "along": {
+                "engage": 30,
+                "release": 17
+              }
             }
           ],
-          "sprintChannel": "run",
           "moveFrame": "World",
-          "facingSnap": true
+          "facingSnap": true,
+          "holds": [
+            {
+              "name": "ground",
+              "bond": "Surface",
+              "cone": [
+                0,
+                60
+              ],
+              "hold": "Gravity",
+              "reach": 1.2,
+              "gravity": {
+                "rise": 14,
+                "fall": 23,
+                "terminal": 20
+              }
+            },
+            {
+              "name": "air",
+              "bond": "Free",
+              "hold": "Gravity",
+              "gravity": {
+                "rise": 14,
+                "fall": 23,
+                "terminal": 20
+              }
+            }
+          ]
         },
         "producers": {
           "wander": {

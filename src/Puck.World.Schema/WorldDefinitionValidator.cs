@@ -1952,19 +1952,19 @@ public static partial class WorldDefinitionValidator {
             return false;
         }
     }
-    /// <summary>Determines whether <paramref name="model"/> supplies every tuning facet <paramref name="program"/>'s
-    /// selected operations read — the one check <see cref="ValidateMotionModel"/> (at boot) and the runtime
+    /// <summary>Determines whether <paramref name="motion"/> supplies every tuning facet <paramref name="program"/>'s
+    /// selected operations read — the one check <see cref="ValidateMotionRow"/> (at boot) and the runtime
     /// body-motion-program switch (the <c>body.motion</c> door) share, so a document-legal kit can never
-    /// runtime-switch into a program its declared model cannot back.</summary>
-    /// <param name="model">The kit's declared locomotion model.</param>
+    /// runtime-switch into a program its declared motion row cannot back.</summary>
+    /// <param name="motion">The kit's declared motion row.</param>
     /// <param name="program">The compiled body motion program the switch targets.</param>
     /// <param name="reason">On failure, the refusal detail naming the missing facet(s) and the program; <c>""</c> on success.</param>
-    /// <returns><see langword="true"/> when <paramref name="model"/> supplies every facet <paramref name="program"/> requires.</returns>
-    public static bool TryValidateProgramCoherence(WorldMotionModel model, CompiledBodyMotionProgram program, out string reason) {
-        ArgumentNullException.ThrowIfNull(argument: model);
+    /// <returns><see langword="true"/> when <paramref name="motion"/> supplies every facet <paramref name="program"/> requires.</returns>
+    public static bool TryValidateProgramCoherence(WorldMotion motion, CompiledBodyMotionProgram program, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: motion);
         ArgumentNullException.ThrowIfNull(argument: program);
 
-        var missing = RequiredMotionTuningFacets(program: program) & ~SuppliedMotionTuningFacets(model: model);
+        var missing = RequiredMotionTuningFacets(program: program) & ~SuppliedMotionTuningFacets(motion: motion);
 
         if (missing == MotionTuningFacet.None) {
             reason = "";
@@ -1972,7 +1972,7 @@ public static partial class WorldDefinitionValidator {
             return true;
         }
 
-        reason = $"motion model '{model.GetType().Name}' does not supply {missing} required by body motion program '{program.Name}'.";
+        reason = $"motion row does not supply {missing} required by body motion program '{program.Name}'.";
 
         return false;
     }

@@ -43,6 +43,7 @@ public sealed partial class WorldPopulation {
         );
         m_bodyUpPolicy = WorldBodyUpPolicyCompiler.Compile(collision: definition.Collision);
         m_walkableThreshold = FixedWorldCollision.Compile(collision: definition.Collision).GroundedThreshold;
+        m_bodyContactPolicy = definition.Collision.BodyContacts;
         m_targetRows = definition.TargetRegisters;
         m_targets = WorldTargetRegisterTable.Compile(
             registers: definition.TargetRegisters,
@@ -491,6 +492,9 @@ public sealed partial class WorldPopulation {
             // Drop every cached route at the same boundary that installs the new domain runtime; the next producer
             // tick deterministically replans from its retained designation.
             m_entries[bodyIndex].NavigationState.Clear();
+            // Cadence periods and cached steering are compiled-kit products. A live kit/assignment rebuild must not
+            // carry a partial interval or producer image authored under the previous row into the replacement.
+            m_entries[bodyIndex].AutonomyState.Clear();
             var prior = m_entries[bodyIndex].Designations;
             var current = NewDesignations();
 
@@ -553,7 +557,7 @@ public sealed partial class WorldPopulation {
             var kit = m_kits[kitIndex];
 
             body.RecompileKit(
-                motion: m_kitRows[kitIndex].Motion,
+                tuning: kit.Tuning,
                 actions: kit.Actions,
                 actionThresholds: kit.ActionThresholds,
                 actionShapes: kit.ActionShapes,
@@ -564,10 +568,7 @@ public sealed partial class WorldPopulation {
                 programs: m_bodyMotionPrograms,
                 collider: kit.Collider,
                 maxSmoothError: m_fixedMotion.MaxSmoothError,
-                sprintChannelOrdinal: kit.SprintChannelOrdinal,
-                driftChannelOrdinal: kit.DriftChannelOrdinal,
-                holds: kit.Holds,
-            planarDynamics: kit.PlanarDynamics
+                holds: kit.Holds
             );
             // Hand the (possibly rebuilt) contact field to every live body, so a live solid-geometry or collision-tuning
             // edit takes effect on the next tick.
@@ -582,16 +583,23 @@ public sealed partial class WorldPopulation {
 
         m_revision++;
     }
+    /// <summary>One reusable sweep row for dynamic-body contact.</summary>
+    private readonly record struct DynamicContactBody(int Index, FixedQ4816 MinimumX, FixedQ4816 MaximumX,
+        FixedQ4816 Radius) : IComparable<DynamicContactBody> {
+        public int CompareTo(DynamicContactBody other) {
+            var minimum = MinimumX.CompareTo(other.MinimumX);
+            return minimum != 0 ? minimum : Index.CompareTo(other.Index);
+        }
+    }
+
     /// <summary>
-    /// Resolves active local body pairs after every body has integrated. Pair order is stable population-index order;
-    /// each body's own authority remains its sole pose writer and an overlap is shared equally between the pair.
+    /// Resolves active local body pairs after every body has integrated. Pair order is deterministic sweep order with
+    /// population index as the complete tie-breaker; each body's own authority remains its sole pose writer and an
+    /// overlap is shared equally between the pair.
     /// </summary>
     public void ResolveDynamicContacts() {
         var two = FixedQ4816.FromInteger(value: 2L);
-        Span<int> indices = stackalloc int[WorldBodiesLimits.CapacityCeiling];
-        Span<FixedQ4816> minimumX = stackalloc FixedQ4816[WorldBodiesLimits.CapacityCeiling];
-        Span<FixedQ4816> maximumX = stackalloc FixedQ4816[WorldBodiesLimits.CapacityCeiling];
-        Span<FixedQ4816> radii = stackalloc FixedQ4816[WorldBodiesLimits.CapacityCeiling];
+        var contacts = m_dynamicContactBodies;
         var count = 0;
 
         for (var index = 0; (index < Capacity); index++) {
@@ -605,53 +613,50 @@ public sealed partial class WorldPopulation {
 
             var radius = FixedDynamicBodyContacts.BroadphaseRadius(volumes: collider.Volumes);
 
-            indices[count] = index;
-            minimumX[count] = (body.FixedPosition.X - radius);
-            maximumX[count] = (body.FixedPosition.X + radius);
-            radii[count] = radius;
-            count++;
+            contacts[count++] = new DynamicContactBody(
+                Index: index,
+                MinimumX: body.FixedPosition.X - radius,
+                MaximumX: body.FixedPosition.X + radius,
+                Radius: radius
+            );
         }
 
-        // Stable insertion sort: the table is tiny (<=128), already nearly ordered between ticks, and this avoids a
-        // per-tick allocation. Population index is the complete tie-breaker, so replay cannot depend on sort quirks.
-        for (var index = 1; (index < count); index++) {
-            var bodyIndex = indices[index];
-            var min = minimumX[index];
-            var max = maximumX[index];
-            var radius = radii[index];
-            var destination = index;
-
-            while (
-                (destination > 0) &&
-                ((minimumX[(destination - 1)] > min) ||
-                ((minimumX[(destination - 1)] == min) && (indices[(destination - 1)] > bodyIndex)))
-            ) {
-                indices[destination] = indices[(destination - 1)];
-                minimumX[destination] = minimumX[(destination - 1)];
-                maximumX[destination] = maximumX[(destination - 1)];
-                radii[destination] = radii[(destination - 1)];
-                destination--;
-            }
-            indices[destination] = bodyIndex;
-            minimumX[destination] = min;
-            maximumX[destination] = max;
-            radii[destination] = radius;
-        }
+        // Introspective sort keeps a badly reshuffled few-thousand-body frame O(n log n), while the body index is a
+        // complete tie-breaker that makes its result deterministic. The reused array keeps this allocation-free.
+        Array.Sort(array: contacts, index: 0, length: count);
 
         DynamicContactPotentialPairs = ((count * (count - 1)) / 2);
+        DynamicContactCandidates = 0;
+        DynamicContactLimitedBodies = 0;
         DynamicContactNarrowPairs = 0;
         DynamicContactResolvedPairs = 0;
+        Array.Clear(array: m_dynamicContactDegrees);
 
         for (var leftOrdinal = 0; (leftOrdinal < count); leftOrdinal++) {
-            var leftIndex = indices[leftOrdinal];
+            var leftContact = contacts[leftOrdinal];
+            var leftIndex = leftContact.Index;
             var left = m_entries[leftIndex].Body!;
             var leftCollider = left.Collider!.Value;
+            if (m_dynamicContactDegrees[leftIndex] >= m_bodyContactPolicy.MaxPairsPerBody) {
+                continue;
+            }
 
-            for (var rightOrdinal = (leftOrdinal + 1); ((rightOrdinal < count) && (minimumX[rightOrdinal] <= maximumX[leftOrdinal])); rightOrdinal++) {
-                var rightIndex = indices[rightOrdinal];
+            var inspected = 0;
+            for (var rightOrdinal = (leftOrdinal + 1); ((rightOrdinal < count) && (contacts[rightOrdinal].MinimumX <= leftContact.MaximumX)); rightOrdinal++) {
+                if (inspected >= m_bodyContactPolicy.CandidateBudget) {
+                    DynamicContactLimitedBodies++;
+                    break;
+                }
+                inspected++;
+                DynamicContactCandidates++;
+                var rightContact = contacts[rightOrdinal];
+                var rightIndex = rightContact.Index;
+                if (m_dynamicContactDegrees[rightIndex] >= m_bodyContactPolicy.MaxPairsPerBody) {
+                    continue;
+                }
                 var right = m_entries[rightIndex].Body!;
                 var rightCollider = right.Collider!.Value;
-                var radius = (radii[leftOrdinal] + radii[rightOrdinal]);
+                var radius = (leftContact.Radius + rightContact.Radius);
                 var delta = (left.FixedPosition - right.FixedPosition);
 
                 if (
@@ -677,7 +682,12 @@ public sealed partial class WorldPopulation {
 
                     left.ApplyDynamicContact(correction: shared);
                     right.ApplyDynamicContact(correction: -shared);
+                    m_dynamicContactDegrees[leftIndex]++;
+                    m_dynamicContactDegrees[rightIndex]++;
                     DynamicContactResolvedPairs++;
+                    if (m_dynamicContactDegrees[leftIndex] >= m_bodyContactPolicy.MaxPairsPerBody) {
+                        break;
+                    }
                 }
             }
         }
