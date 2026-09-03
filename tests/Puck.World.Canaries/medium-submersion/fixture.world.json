@@ -127,7 +127,7 @@
         "ResolveYawAttitudeAndPlanarFrame",
         "ResolveHold",
         "ComputePlanarTargetVelocity",
-        "ShapePlanarVelocity",
+        "ShapeVelocity",
         "ApplyHold",
         "IntegratePlanarAndVerticalVelocity",
         "CommitPose"
@@ -140,10 +140,21 @@
         "name": "diver",
         "bodyMotionProgram": "medium",
         "motion": {
-          "moveSpeed": 3.2,
-          "turnSpeed": 2.2,
-          "response": [],
-          "sprintMultiplier": 1,
+          "speed": {
+            "value": 3.2
+          },
+          "turn": {
+            "rate": 2.2
+          },
+          "shaping": [
+            {
+              "along": {
+                "engage": 1000000,
+                "brake": 0,
+                "release": 1000000
+              }
+            }
+          ],
           "holds": [
             {
               "name": "water",
@@ -162,7 +173,11 @@
               "name": "air",
               "bond": "Free",
               "hold": "Gravity",
-              "gravity": { "rise": 1, "fall": 1, "terminal": 1 }
+              "gravity": {
+                "rise": 1,
+                "fall": 1,
+                "terminal": 1
+              }
             }
           ]
         },

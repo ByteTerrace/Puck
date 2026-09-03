@@ -1022,41 +1022,73 @@ other prototype-specific sections over it.
 
 **Kit motion row (`WorldKit.Motion`, a `WorldMotion` row).** A kit declares
 its motion tuning, alongside `BodyMotionProgram` (which operations run each
-tick) — a flat record (`WorldMotionTuning.cs`), authored under `motion` — e.g.
-`jump.world.json`'s `vaulter` kit.
+tick) — a flat record (`WorldMotionTuning.cs`), authored under `motion`.
 
-The row carries the movement platform every kit reads — `MoveSpeed`,
-`TurnSpeed`, `SprintMultiplier`/`SprintChannel`,
-`MoveFrame`/`FacingSnap`, `MoveSpeedEnvelope` — plus two rows beside
-it, each supplying its own tuning facet and each read by its own operations:
-`Holds` (below; the hold LIST is mandatory — the hold list is the only
-spelling of a vertical channel, so a Motion-kind kit authoring none refuses by
-name — while `ResolveHold`/`ApplyHold` are selected like any other op) and
-`Drive` (optional, `ResolveDriveFrame`/`ShapeDriveVelocity`). Submerged
-locomotion is a kit authoring a `bond: "Medium"` hold row; a kart is a kit
-authoring a `drive` row.
+The row carries the movement platform every kit reads — `Speed` (`WorldSpeed`:
+`value`, an optional `envelope` clamp, and an optional `held` multiplier
+channel — a kart's "boost") and `Turn` (`WorldTurn`: `rate`, an optional
+speed-scaled authority curve — `referenceSpeed`/`falloff` — and `pitchRate`
+for a drive kit's flying variant) — plus `MoveFrame`/`FacingSnap`, and two
+rows beside them, each supplying its own tuning facet and each read by its
+own operations: `Holds` (below; the hold LIST is mandatory — the hold list is
+the only spelling of a vertical channel, so a Motion-kind kit authoring none
+refuses by name — while `ResolveHold`/`ApplyHold` are selected like any other
+op) and `Shaping` (required only when the program selects `ShapeVelocity`).
+Submerged locomotion is a kit authoring a `bond: "Medium"` hold row; a kart
+is a kit whose shaping table carries an `across` row.
 
-**`drive` (`WorldDrive`) — anisotropic body-frame drive.** Velocity decomposes
-into body-frame longitudinal/lateral/residual lanes, each converging at its own
-authored rate: `accel`/`brake`/`coast` longitudinally, `grip` laterally, with
-`steerReferenceSpeed`/`steerFalloff` scaling the kit's own `turnSpeed` by the
-resolved speed, `reverseSpeed` the rate full back-throttle converges on from
-rest, `pitchRate` selecting the flying variant, and a nullable
-`drift { channel, grip, steerScale }` — the held low-traction state. What the
-drive does NOT carry is what the motion row and its holds already name: the
-forward speed full throttle converges on is `moveSpeed` (bounded by
-`moveSpeedEnvelope`, scaled by `sprintMultiplier` while `sprintChannel` reads
-held — a kart's "boost"), the steering rate at full authority is `turnSpeed`,
-and gravity is the held row's own `gravity` arc. One row serves the ground,
-hover, and air variants: a contact-pinned variant pairs the drive ops with a
-Surface `Gravity` hold row, a flying variant a Free `Lift` row (`lift: 1`) and
-a positive `pitchRate`, which is what decides vertical contact ownership per
-the seam's rule. Validation (`WorldDefinitionValidator.ValidateDriveMotion`):
-every convergence rate positive, `steerFalloff` in `[0, 1]`,
-`reverseSpeed`/`pitchRate` non-negative, and a declared `drift` naming a
-resolvable channel with a positive `grip` and `steerScale`. `DriveLawTests`
-pins the whole family to a recorded 240-tick fixed-point trace whose
-discriminating control perturbs one facet.
+**`shaping` (`WorldShaping[]`) — the unified velocity-shaping table.** One
+row shape serves the whole-vector response law, the anisotropic drive
+decomposition, and a named second-order follower: `{ "when": <predicate,
+optional>, "along": { "engage", "brake", "release", "reverse" }, "across":
+{ "grip" }, "dynamics": "<row>", "turnScale": 1 }`. Rows evaluate in order,
+first open gate wins; `when` admits the shaping-gate predicate vocabulary —
+body-fact kinds (`now`/`recently`/`all`/`any`/`not`) plus `held` (`{ "held":
+"<channel>" }` — the named composition channel's own live read at or above
+its declared threshold, resolved against the world's channel table at
+kit-compile time; legitimate only here). Exactly one of `along` or `dynamics`
+is authored per row; `across` is legitimate only beside `along`.
+
+A row without `across` shapes the whole vector through the engage/release
+response law — `engage` while the stick is deflected, `release` while
+centered, with the shared recency clocks its `when` gate's `recently`
+predicates read. A row with `across` runs the anisotropic drive
+decomposition instead, the same body-frame longitudinal/lateral/residual
+lanes converging each at its own authored rate: `along.engage` while throttle commands
+more speed, `along.brake` while back-throttle opposes forward travel,
+`along.release` toward rest with throttle centered (and the over-speed
+bleed), `along.reverse` the reverse target speed full back-throttle
+converges on from rest, and `across.grip` the lateral convergence rate
+toward zero slip. `turnScale` multiplies the turn tuning's own authority
+curve while this row governs — `1` (the default) for an ordinary row, and a
+held drift row's own tightened arc. A `dynamics` row names a `dynamics`-
+section row (a pole-matched second-order follower — see the `dynamics`
+section above) shaping velocity instead of either mechanism; it compiles
+once per kit (`WorldKit.Compile`) against the world's own
+`simulation.rateHz` — a world authoring no simulation rate cannot compile
+one and refuses by name. The follower's state lives in `WorldBody` as
+ordinary sim state, included in whatever the body snapshot/checkpoint
+covers; changing which mechanism a row uses, or retuning a live `dynamics`
+row, is expected to change replay hashes. A drift/boost row is authored as
+an ordinary row gated on `held` — never a bespoke mechanism — so it must sit
+AHEAD of the row it overrides.
+
+What a drive row does NOT carry is what the motion row and its holds already
+name: the forward speed full throttle converges on is `speed.value` (bounded
+by `speed.envelope`, scaled by `speed.held.multiplier` while its channel
+reads held), the steering rate at full authority is `turn.rate`, and gravity
+is the held row's own `gravity` arc. One shaping table serves the ground,
+hover, and air variants: a contact-pinned variant pairs an `across` row with
+a Surface `Gravity` hold row, a flying variant a Free `Lift` row (`lift: 1`)
+and a positive `turn.pitchRate`, which is what decides vertical contact
+ownership per the seam's rule. Validation
+(`WorldDefinitionValidator.ValidateShaping`): every convergence rate
+positive (`along.reverse` non-negative), `across` refused without `along`,
+`turn.falloff` in `[0, 1]`, `turn.pitchRate` non-negative, and a `held` gate
+naming a resolvable channel. `DriveLawTests` pins the drive family, and
+`ShapingRowLawTests` the response-table and dynamics-row families, to
+recorded 240-tick fixed-point traces whose discriminating controls perturb
+one facet each.
 
 A worked kart:
 
@@ -1065,50 +1097,34 @@ A worked kart:
   "name": "kart",
   "bodyMotionProgram": "kart-drive",
   "motion": {
-    "moveSpeed": 16.0,
-    "moveSpeedEnvelope": { "min": 16.0, "max": 16.0 },
-    "turnSpeed": 2.4,
-    "sprintMultiplier": 1.5,
-    "sprintChannel": "boost",
+    "speed": { "value": 16.0, "envelope": { "min": 16.0, "max": 16.0 }, "held": { "channel": "boost", "multiplier": 1.5 } },
+    "turn": { "rate": 2.4, "referenceSpeed": 4.0, "falloff": 0.55 },
     "holds": [
       { "name": "ground", "bond": "Surface", "cone": [0, 60], "hold": "Gravity", "reach": 1.2, "gravity": { "rise": 14.0, "fall": 26.0, "terminal": 30.0 } },
       { "name": "air", "bond": "Free", "hold": "Gravity", "gravity": { "rise": 14.0, "fall": 26.0, "terminal": 30.0 } }
     ],
-    "drive": {
-      "accel": 7.0, "brake": 18.0, "coast": 4.0, "grip": 22.0,
-      "steerReferenceSpeed": 4.0, "steerFalloff": 0.55,
-      "reverseSpeed": 5.0, "pitchRate": 0.0,
-      "drift": { "channel": "drift", "grip": 6.0, "steerScale": 1.4 }
-    }
+    "shaping": [
+      { "when": { "$type": "held", "channel": "drift" }, "along": { "engage": 7.0, "brake": 18.0, "release": 4.0, "reverse": 5.0 }, "across": { "grip": 6.0 }, "turnScale": 1.4 },
+      { "along": { "engage": 7.0, "brake": 18.0, "release": 4.0, "reverse": 5.0 }, "across": { "grip": 22.0 } }
+    ]
   }
 }
 ```
 
-with the program `[ResolveDriveFrame, ResolveHold, ShapeDriveVelocity,
+with the program `[ResolveDriveFrame, ResolveHold, ShapeVelocity,
 RunActionTriggers, ApplyHold, IntegratePlanarAndVerticalVelocity, CommitPose]`
 (op ORDER in the authored list is inert — `CompiledBodyMotionProgram` groups the
 selected set into its intrinsic phases) — the same op list every grounded kit
 runs, since the hold list is where a kart's gravity lives.
 
-A kit whose program selects `ShapePlanarVelocity` shapes its planar velocity
-through exactly ONE of two mechanisms — the engage/release `Response` table
-(`MotionResponse` rows, gated on movement regime) or a named `Dynamics` row (a
-pole-matched second-order follower — see the `dynamics` section above);
-authoring both, or neither, refuses by name
-(`WorldDefinitionValidator.ValidatePlanarShaping`). A drive kit shapes it
-through its own row instead and its program selects no `ShapePlanarVelocity`, so
-that rule does not bind it and it authors neither.
-`Dynamics` compiles once
-per kit (`WorldKit.Compile`) against the world's own `simulation.rateHz` —
-a world authoring no simulation rate cannot compile one and refuses by name.
-The follower's state lives in `WorldBody` as ordinary sim state, included in
-whatever the body snapshot/checkpoint covers; changing which mechanism a kit
-uses, or retuning a live `dynamics` row, is expected to change replay hashes.
-`SprintMultiplier`/`SprintChannel` is a HELD
-(not edge-triggered) channel that scales the commanded planar speed while it
-reads held, default `1`/`null` (no sprint) — a drive row's boost is this seam
-under that name, never a second channel; resolved to
-`FixedWorldKit.SprintChannelOrdinal` the same way
+A kit with no shaping row (empty or absent) refuses validation by name when
+its program selects `ShapeVelocity`, exactly as an empty/absent hold list
+does for `ResolveHold`/`ApplyHold`; a kit whose program never selects it (a
+free-flight kit that owns its whole velocity channel directly) may author
+none. `Speed.Held` is a HELD (not edge-triggered) channel that scales the
+resolved planar speed while it reads held, default `null` (no held
+multiplier) — a drive row's boost is this seam under that name, never a
+second channel; resolved to `FixedSpeed.HeldOrdinal` the same way
 `WanderFlavor.PressChannel` resolves its own ordinal, since a channel name
 needs the world's compiled channel table and a body's own compile step has
 none. `MoveFrame` (`MotionMoveFrame.Heading` / `.World` default) and
@@ -1118,48 +1134,48 @@ as ALREADY-WORLD-FRAME axes (the seat's client resolves its camera yaw into
 the submitted intent BEFORE the wire — determinism: the sim never reads a
 camera pose) and, with `FacingSnap` on, snaps the body's facing to
 `Atan2` of the commanded direction every tick carrying input, no ramp — the
-camera-frame 3D-platformer feel `jump.world.json`'s `vaulter` kit authors.
+camera-frame 3D-platformer feel a `FacingSnap` kit authors.
 Under `World` a seat's aim elevation also splits the commanded
 forward into planar and vertical channels client-side; the explicit `MoveUp`
 channel is orthogonal and stays live regardless of `MoveFrame`.
 
-**Response-row ORDER shadows regimes — author air rows first.** The
-velocity-response table evaluates in order, first open gate wins, and a
-`recently Grounded` window (`0.09s` ≈ 21 ticks at 240 Hz) stays open through
-the RISE of every jump — so a recently-Grounded row above a `now Rising` row
-governs the first ~21 airborne ticks with GROUND rates (a stick released at
-takeoff bleeds momentum at the ground `releaseRate`; air steering briefly
-runs the ground `engageRate`). Author `now Rising` / `now Falling` rows
-ABOVE any recently-Grounded row; a plain always-row then covers grounded
-ticks. `jump.world.json`'s `vaulter` kit is the worked example of the
-corrected order, with the measured arc numbers in its motion row.
+**Shaping-row ORDER shadows regimes — author air rows first.** The shaping
+table evaluates in order, first open gate wins, and a `recently Grounded`
+window (`0.09s` ≈ 21 ticks at 240 Hz) stays open through the RISE of every
+jump — so a recently-Grounded row above a `now Rising` row governs the first
+~21 airborne ticks with GROUND rates (a stick released at takeoff bleeds
+momentum at the ground `release` rate; air steering briefly runs the ground
+`engage` rate). Author `now Rising` / `now Falling` rows ABOVE any
+recently-Grounded row; a plain unconditional row then covers grounded ticks.
+`ShapingRowLawTests`' walker kit is the worked example of the corrected
+order, with the measured arc numbers in its motion row.
 
 `WorldDefinitionValidator` cross-checks the kit's `BodyMotionProgram`
 against its declared motion row: an operation the program selects that reads a
 tuning facet (`MotionTuningFacet`) the row doesn't supply refuses
-BY NAME. The row supplies `Speed`/`PlanarResponse`/`Sprint`/`WorldFrame`
-unconditionally; `Holds` and `Drive` are each supplied CONDITIONALLY — only
-when the kit's `holds` list is non-empty, or its `drive` row is present — so a
-program selecting `ResolveHold`/`ApplyHold` or
-`ResolveDriveFrame`/`ShapeDriveVelocity` against a kit authoring none refuses
-by that facet's name. Separately, and unconditionally: a Motion-kind kit
-authoring no holds at all refuses by name outright, whatever operations its
-program selects — the hold list is the only spelling of a vertical channel,
-so even a kit with no vertical law of its own still authors one row of
-kind `None`. A world whose kit authors a `Medium` hold row with no medium
-lattice row (`state.world[].lattice.medium`) refuses at boot.
-A `BodyMotionOp` reading a further facet owes `RequiredMotionTuningFacets` and
-`SuppliedMotionTuningFacets` an entry — never a hunt.
+BY NAME. The row supplies `Speed` (Speed/Turn together) unconditionally;
+`Holds` and `Shaping` are each supplied CONDITIONALLY — only when the kit's
+`holds` list is non-empty, or its `shaping` list is non-empty — so a
+program selecting `ResolveHold`/`ApplyHold` or `ShapeVelocity` against a kit
+authoring none refuses by that facet's name. Separately, and unconditionally:
+a Motion-kind kit authoring no holds at all refuses by name outright,
+whatever operations its program selects — the hold list is the only
+spelling of a vertical channel, so even a kit with no vertical law of its
+own still authors one row of kind `None`. A world whose kit authors a
+`Medium` hold row with no medium lattice row (`state.world[].lattice.medium`)
+refuses at boot. A `BodyMotionOp` reading a further facet owes
+`RequiredMotionTuningFacets` and `SuppliedMotionTuningFacets` an entry —
+never a hunt.
 
-A seated player's live profile overrides the kit's `MoveSpeed`
+A seated player's live profile overrides the kit's `Speed.Value`
 (feel stays real-time under `profile.set`/`identity.motion`);
-`WorldMotion.MoveSpeedEnvelope` is the world's own counter-pin — an
+`WorldSpeed.Envelope` is the world's own counter-pin — an
 authored `MotionScalarEnvelope { min, max }` that clamps the RESOLVED
 speed at the seat-time read (`WorldBody.ResolveMoveSpeed`, before the
 program ever sees it), regardless of whether it came from the profile or
 the profileless fallback. Absent (the default) is wide-open, today's
 behavior exactly; `min == max` pins the effective speed outright; the
-validator refuses `min > max` and refuses a kit whose OWN `MoveSpeed`
+validator refuses `min > max` and refuses a kit whose OWN `speed.value`
 falls outside its own envelope, by name. `identity.show`'s
 `moveEffective=` echoes what the sim actually applied beside `move=` (the
 profile's raw request) — the two diverge only when an envelope is
@@ -1168,18 +1184,19 @@ reusable shape every overridable scalar adopts, never a bespoke
 bound.
 
 `ResolveMoveSpeed` is ONE law for every kit — the seated profile's claimed rate,
-else the kit's own, clamped by `MoveSpeedEnvelope` — shared by the sim and every
+else the kit's own, clamped by `Speed.Envelope` — shared by the sim and every
 read-back so the two can never disagree. A kit that means to pin its speed
 against any profile authors `min == max` rather than opting out of the profile
-read, and a held sprint (a drive row's boost) multiplies AFTER the clamp, on the
-resolved value: the envelope pins the base rate, the boost rides on top.
-`ResolveDriveFrame`'s steering-authority falloff anchor and
-`ShapeDriveVelocity`'s commanded speed both read the SAME resolved value
+read, and a held speed multiplier (a drive row's boost) multiplies AFTER the
+clamp, on the resolved value: the envelope pins the base rate, the boost
+rides on top. `ResolveTurnAuthority`'s falloff anchor and every shaping
+row's own commanded speed both read the SAME resolved value
 (`scratch.MoveSpeed`, filled once before phase 0), so a clamped kit's falloff
 still reaches its anchor. The validator's own-value check applies to every kit
-too: a kit whose `moveSpeed` falls outside its own envelope refuses by name, so
+too: a kit whose `speed.value` falls outside its own envelope refuses by name, so
 a live `world.row.set kits …` retune past the cap refuses instead of clamping
 silently.
+
 
 **Holds (`WorldMotion.Holds`, a list of `WorldHold` rows →
 `FixedBodyHold[]`) — what may hold a body, in preference order, and the only

@@ -2,8 +2,12 @@
   "basis": "../worlds/prototypes/standard.world.json",
   "$schema": "../worlds/puck.world.def.v1.schema.json",
   "motion": {
-    "moveSpeed": 4,
-    "turnSpeed": 2.5,
+    "speed": {
+      "value": 4
+    },
+    "turn": {
+      "rate": 2.5
+    },
     "maxSmoothError": 3
   },
   "spawnPoints": [
@@ -151,7 +155,7 @@
         "ResolveYawAttitudeAndPlanarFrame",
         "ResolveHold",
         "ComputePlanarTargetVelocity",
-        "ShapePlanarVelocity",
+        "ShapeVelocity",
         "SnapYawToPlanarIntent",
         "RunActionTriggers",
         "ApplyHold",
@@ -210,33 +214,48 @@
         "name": "traveler",
         "bodyMotionProgram": "grounded",
         "motion": {
-          "moveSpeed": 4,
-          "turnSpeed": 2.5,
-          "sprintMultiplier": 1.6,
-          "response": [
+          "speed": {
+            "value": 4,
+            "held": {
+              "channel": "run",
+              "multiplier": 1.6
+            }
+          },
+          "turn": {
+            "rate": 2.5
+          },
+          "shaping": [
             {
-              "gate": {
+              "when": {
                 "$type": "recently",
                 "fact": "Grounded",
                 "windowSeconds": 0.09
               },
-              "engageRate": 45,
-              "releaseRate": 55
+              "along": {
+                "engage": 45,
+                "brake": 0,
+                "release": 55
+              }
             },
             {
-              "gate": {
+              "when": {
                 "$type": "now",
                 "fact": "Falling"
               },
-              "engageRate": 34,
-              "releaseRate": 18
+              "along": {
+                "engage": 34,
+                "brake": 0,
+                "release": 18
+              }
             },
             {
-              "engageRate": 30,
-              "releaseRate": 17
+              "along": {
+                "engage": 30,
+                "brake": 0,
+                "release": 17
+              }
             }
           ],
-          "sprintChannel": "run",
           "moveFrame": "World",
           "facingSnap": true,
           "holds": [

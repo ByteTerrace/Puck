@@ -73,10 +73,8 @@ public sealed class LocalAttitudeHoldLawTests {
             Name: "flyer-test",
             BodyMotionProgram: "free",
             Motion: new WorldMotion(
-                MoveSpeed: 4f,
-                TurnSpeed: 2.5f,
-                SprintMultiplier: 1f,
-                Response: [],
+                Speed: new WorldSpeed(Value: 4f),
+                Turn: new WorldTurn(Rate: 2.5f),
                 Holds: [
                     new WorldHold(
                         Bond: BodyHoldBond.Free,
@@ -165,7 +163,7 @@ public sealed class LocalAttitudeHoldLawTests {
                 BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
                 BodyMotionOp.ResolveHold,
                 BodyMotionOp.ComputePlanarTargetVelocity,
-                BodyMotionOp.ShapePlanarVelocity,
+                BodyMotionOp.ShapeVelocity,
                 BodyMotionOp.ApplyHold,
                 BodyMotionOp.IntegratePlanarAndVerticalVelocity,
                 BodyMotionOp.CommitPose,

@@ -10,28 +10,16 @@ namespace Puck.World;
 /// become runtime simulation state.
 /// </summary>
 /// <remarks>Contact-solved locomotion: vertical velocity is the current <see cref="WorldHold"/> row's own arc,
-/// integrated by <c>ApplyHold</c> and resolved against the world contact field; planar velocity is
-/// response-shaped toward the commanded target; sprint/frame/facing read as described below. Gravity, lift, and
-/// MoveUp thrust are <see cref="Holds"/> facets, not this row's own — every Motion-kind kit authors at least one
-/// hold row, so a kit with no vertical law of its own still authors a row of kind <c>None</c>.</remarks>
-/// <param name="MoveSpeed">Locomotion speed in world units per second — the profileless fallback a stand-in advances on
-/// (a seated player reads its live profile's speed instead, so <c>identity.motion</c> stays real-time).</param>
-/// <param name="TurnSpeed">Turn speed in radians per second (the profileless fallback counterpart to <paramref name="MoveSpeed"/>).</param>
-/// <param name="SprintMultiplier">The held-sprint speed multiplier, applied while
-/// <paramref name="SprintChannel"/> reads held; <c>1</c> is a no-op.</param>
-/// <param name="Response">The velocity-response table (see <see cref="MotionResponse"/>) planar velocity converges
-/// through, or <see langword="null"/> (the default) when <paramref name="Dynamics"/> shapes it instead — exactly
-/// one of the two is authored, so <see langword="null"/> means "not authored" to that rule and is never coalesced
-/// here. An authored empty table is distinct: it snaps planar velocity instantly. The one place
-/// <see langword="null"/> reads as the empty table is <c>WorldMotionTuningFactory.Compile</c>.</param>
-/// <param name="Dynamics">The <c>dynamics</c> row a second-order follower shapes planar velocity through instead
-/// of <paramref name="Response"/>, or <see langword="null"/> (the default) for the response table. Exactly one of
-/// the two is authored.</param>
-/// <param name="SprintChannel">The declared channel name a body reads while held (not edge-triggered — a continuous
-/// multiplier, unlike the press/release <see cref="ActionSpec"/> vocabulary) to apply <paramref name="SprintMultiplier"/>,
-/// or <see langword="null"/> (the default) for a kit with no sprint capability. Resolved to an ordinal once, alongside
-/// every other kit-channel name, by <see cref="FixedWorldKit.Compile"/> — an unresolvable name (validator-refused
-/// already) reads as "no sprint" rather than throwing.</param>
+/// integrated by <c>ApplyHold</c> and resolved against the world contact field; planar velocity converges toward
+/// the commanded target through <see cref="Shaping"/>. Gravity, lift, and MoveUp thrust are <see cref="Holds"/>
+/// facets, not this row's own — every Motion-kind kit authors at least one hold row, so a kit with no vertical law
+/// of its own still authors a row of kind <c>None</c>.</remarks>
+/// <param name="Speed">The kit's movement rate (see <see cref="WorldSpeed"/>).</param>
+/// <param name="Turn">The kit's steering rate (see <see cref="WorldTurn"/>).</param>
+/// <param name="Shaping">The ordered velocity-shaping table (see <see cref="WorldShaping"/>) the <c>ShapeVelocity</c>
+/// operation reads — the first row whose <c>when</c> gate opens governs. Required (non-empty) for a kit whose
+/// program selects <c>ShapeVelocity</c>; <see langword="null"/> for a kit whose program never shapes planar
+/// velocity through it (a free-flight kit that owns its whole velocity channel directly).</param>
 /// <param name="MoveFrame">Which frame <c>MoveAdvance</c>/<c>MoveStrafe</c> resolve in.
 /// <see cref="MotionMoveFrame.Heading"/> explicitly rotates the commanded planar target by the body's own
 /// integrated heading. <see cref="MotionMoveFrame.World"/> (the default) takes the two channels as
@@ -44,36 +32,20 @@ namespace Puck.World;
 /// attitude returns to the heading the tick movement stops. Only the Face roles turn the heading itself. Ignored
 /// under <see cref="MotionMoveFrame.Heading"/>, where attitude is the integrated heading by construction.
 /// <see langword="true"/> is the default.</param>
-/// <param name="MoveSpeedEnvelope">The inclusive bound a seated player's live profile speed (and the profileless
-/// <paramref name="MoveSpeed"/> fallback) is clamped to at seat time, or <see langword="null"/> (the default) for
-/// no bound — a feel-pinned world authors this to keep a seat's speed inside its own kit's envelope regardless of
-/// what the player's identity requests. <see langword="null"/> reproduces today's unclamped behavior exactly;
-/// <c>Min == Max</c> pins the effective speed outright; a narrower-than-wide-open range still admits a bounded
-/// profile override. See <see cref="MotionScalarEnvelope"/>.</param>
 /// <param name="Holds">The ordered list of what may hold this body — see <see cref="WorldHold"/> — read by the
 /// <c>ResolveHold</c>/<c>ApplyHold</c> operations. A Motion-kind kit authoring none refuses validation by name: the
 /// hold list is the only spelling of a vertical channel, so a kit with no vertical law of its own still authors
 /// one row of kind <see cref="BodyHoldKind.None"/>.</param>
-/// <param name="Drive">The anisotropic drive row — see <see cref="WorldDrive"/> — read by the
-/// <c>ResolveDriveFrame</c>/<c>ShapeDriveVelocity</c> operations, or <see langword="null"/> (the default) for a
-/// kit whose planar velocity is the isotropic shaping's alone. A program selecting either drive operation
-/// against a kit authoring no row refuses by name through the <c>Drive</c> tuning facet.</param>
 public sealed record WorldMotion(
-    float MoveSpeed,
-    float TurnSpeed,
-    float SprintMultiplier,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<MotionResponse>? Response = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Dynamics = null,
-    string? SprintChannel = null,
+    WorldSpeed Speed,
+    WorldTurn Turn,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldShaping>? Shaping = null,
     MotionMoveFrame MoveFrame = MotionMoveFrame.World,
     bool FacingSnap = true,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MotionScalarEnvelope? MoveSpeedEnvelope = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldHold>? Holds = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDrive? Drive = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldHold>? Holds = null
 );
-/// <summary>
-/// The world's motion defaults — the profileless locomotion speeds a stand-in with no seated profile advances on.
-/// This is the whole top-level motion section: gravity and the velocity-response table are per-kit
+/// <summary>The world's motion defaults — the profileless locomotion speeds a stand-in with no seated profile advances on.
+/// This is the whole top-level motion section: shaping and holds are per-kit
 /// (<see cref="WorldKit.Motion"/>), which is the only place
 /// a body ever reads them from, and <c>world.row.set kits</c> is the surface that moves them.
 /// </summary>
@@ -99,27 +71,8 @@ public readonly record struct WorldMotionDefaults(
         TurnSpeed: 0.01f
     );
 }
-/// <summary>One row of a kit's velocity-response table: how fast planar velocity converges on the commanded
-/// target while <paramref name="Gate"/> holds. Rows evaluate in order, first match wins; a body matching no row
-/// snaps instantly (the built-in behavior, and the behavior of a kit with no table). The gate reuses the
-/// action-lane predicate vocabulary — only body-fact kinds (<c>now</c>/<c>recently</c>/<c>all</c>) are admissible.</summary>
-/// <param name="EngageRate">The convergence rate (world units/second²) while the stick is deflected — acceleration
-/// toward the commanded target.</param>
-/// <param name="ReleaseRate">The convergence rate while the stick is centered — deceleration toward rest (the coast).</param>
-/// <param name="Gate">The body-fact predicate that must hold for this row to win, or <see langword="null"/> for the
-/// always-row (permitted only as the final row).</param>
-/// <remarks><see cref="Gate"/> trails the two rates and carries an explicit <see langword="null"/> default because it
-/// is genuinely optional — the always-row omits it, and the writer already omits it when null. Parameter order is what
-/// expresses that to the loader: a constructor parameter with no default is required (the source-generated context
-/// enforces it), so an optional member has to be able to carry one, which means trailing the required ones. Document
-/// order is unaffected — JSON binds by name.</remarks>
-public sealed record MotionResponse(
-    float EngageRate,
-    float ReleaseRate,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ActionPredicate? Gate = null
-);
-/// <summary>An authored inclusive bound on one <see cref="WorldMotion"/> scalar — the reusable shape every
-/// overridable scalar clamps through (today: <see cref="WorldMotion.MoveSpeedEnvelope"/>). Applied at the
+/// <summary>An authored inclusive bound on one overridable motion scalar — the reusable shape every
+/// overridable scalar clamps through (today: <see cref="WorldSpeed.Envelope"/>). Applied at the
 /// seat-time profile resolve, never inside the sim: the value simulation reads is already clamped, so the guarantee
 /// holds regardless of what a player's identity requests. Absent (the field default) is wide-open — today's
 /// behavior exactly.</summary>
@@ -128,128 +81,101 @@ public sealed record MotionResponse(
 /// <paramref name="Max"/> &lt; <paramref name="Min"/> by name. Equal to <paramref name="Min"/> pins the scalar
 /// outright regardless of what a profile requests.</param>
 public readonly record struct MotionScalarEnvelope(float Min, float Max);
-/// <summary>The held low-traction state of a kit's <see cref="WorldDrive"/> — a declared channel whose held read
-/// swaps the drive's lateral grip and scales its steering authority. Absent, the kit cannot drift.</summary>
-/// <param name="Channel">The declared composition channel name read while held.</param>
-/// <param name="Grip">The lateral convergence rate (u/s²) replacing <see cref="WorldDrive.Grip"/> while the channel
-/// reads held — the deliberate low-traction state. Required positive.</param>
-/// <param name="SteerScale">The steering-authority multiplier while drifting (the tightened drift arc). Required
-/// positive.</param>
-public sealed record WorldDriveDrift(
-    string Channel,
-    float Grip,
-    float SteerScale
+/// <summary>A kit's movement rate. Replaces the old top-level <c>moveSpeed</c>/<c>moveSpeedEnvelope</c>/
+/// <c>sprintChannel</c>/<c>sprintMultiplier</c> fields with one row: the seated profile read and the envelope
+/// clamp stay one law for every kit.</summary>
+/// <param name="Value">Locomotion speed in world units per second — the profileless fallback a stand-in advances
+/// on (a seated player reads its live profile's speed instead, so <c>identity.motion</c> stays real-time).</param>
+/// <param name="Envelope">The inclusive bound a seated player's live profile speed (and the profileless
+/// <paramref name="Value"/> fallback) is clamped to at seat time, or <see langword="null"/> (the default) for
+/// no bound — a feel-pinned world authors this to keep a seat's speed inside its own kit's envelope regardless of
+/// what the player's identity requests. <see langword="null"/> reproduces an unclamped resolve exactly;
+/// <c>Min == Max</c> pins the effective speed outright; a narrower-than-wide-open range still admits a bounded
+/// profile override.</param>
+/// <param name="Held">The held-multiplier channel (a "boost"/"sprint"), or <see langword="null"/> for a kit with
+/// no held speed multiplier. The multiplier applies AFTER <paramref name="Envelope"/> clamps the resolved value:
+/// the envelope pins the base rate, the multiplier rides on top.</param>
+public sealed record WorldSpeed(
+    float Value,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MotionScalarEnvelope? Envelope = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSpeedHeld? Held = null
 );
-/// <summary>
-/// A kit's anisotropic drive row — what only a drive has, authored beside the one motion row rather than replacing
-/// it. Velocity decomposes into longitudinal/lateral (and residual) body-frame components, each converging at its
-/// own authored rate: the anisotropy a kart needs and the motion row's isotropic planar shaping cannot express,
-/// since that shaping cannot tune grip apart from acceleration. Steering authority scales with longitudinal speed
-/// (no spinning in place, looser at top speed) and reverses sign with reversing travel.
-/// </summary>
-/// <remarks>The forward speed full throttle converges on is the kit's own
-/// <see cref="WorldMotion.MoveSpeed"/> (bounded by its
-/// <see cref="WorldMotion.MoveSpeedEnvelope"/>, scaled by its
-/// <see cref="WorldMotion.SprintMultiplier"/> while the sprint channel reads held), and the steering rate
-/// at full authority is its <see cref="WorldMotion.TurnSpeed"/> — one name each, never a second spelling. The
-/// vertical channel is the kit's own hold row, as for any other kit: one row serves the ground and hover variants
-/// (a Surface Gravity row), the flying variant a Free row with a positive <paramref name="PitchRate"/> so climb
-/// emerges from the pitched facing.</remarks>
-/// <param name="Accel">The longitudinal convergence rate (u/s²) while throttle commands more speed.</param>
-/// <param name="Brake">The longitudinal convergence rate (u/s²) while back-throttle opposes forward travel.</param>
-/// <param name="Coast">The longitudinal convergence rate (u/s²) toward rest with throttle centered, and the decay
-/// rate while over the commanded speed (the post-boost bleed).</param>
-/// <param name="Grip">The lateral convergence rate (u/s²) toward zero slip — traction. Lower is slidier.</param>
-/// <param name="SteerReferenceSpeed">The longitudinal speed (u/s) at which steering authority peaks; authority
-/// rises linearly from zero at standstill.</param>
-/// <param name="SteerFalloff">The fraction of full steering authority remaining at the kit's resolved move speed,
-/// in <c>[0, 1]</c>; authority falls linearly from the reference speed.</param>
-/// <param name="ReverseSpeed">The reverse speed (u/s) full back-throttle converges on from rest; <c>0</c> forbids
-/// reversing.</param>
-/// <param name="PitchRate">The pitch rate (rad/s) the Pitch channel commands; <c>0</c> locks the frame planar (the
-/// ground and hover variants). Positive selects the flying variant's pitched facing, clamped inside the integrator
-/// so the frame can never flip past vertical.</param>
-/// <param name="Drift">The held low-traction state, or <see langword="null"/> (the default) for a kit that cannot
-/// drift.</param>
-public sealed record WorldDrive(
-    float Accel,
-    float Brake,
-    float Coast,
-    float Grip,
-    float SteerReferenceSpeed,
-    float SteerFalloff,
-    float ReverseSpeed = 0f,
-    float PitchRate = 0f,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDriveDrift? Drift = null
+/// <summary>A kit's held speed multiplier — the declared channel a body reads while held (not edge-triggered — a
+/// continuous multiplier, unlike the press/release <see cref="ActionSpec"/> vocabulary) to apply
+/// <paramref name="Multiplier"/>.</summary>
+/// <param name="Channel">The declared composition channel name read while held.</param>
+/// <param name="Multiplier">The speed multiplier while the channel reads held. Required positive.</param>
+public sealed record WorldSpeedHeld(string Channel, float Multiplier);
+/// <summary>A kit's steering rate. Replaces the old top-level <c>turnSpeed</c> and a <c>drive</c> row's own
+/// <c>steerReferenceSpeed</c>/<c>steerFalloff</c>/<c>pitchRate</c> with one row every yaw-writing motion operation
+/// reads.</summary>
+/// <param name="Rate">Turn speed in radians per second at full authority (the profileless fallback counterpart to
+/// <see cref="WorldSpeed.Value"/>).</param>
+/// <param name="ReferenceSpeed">The longitudinal (drive) or local (grounded/free) speed, world units per second,
+/// at which steering authority peaks — authority rises linearly from zero at standstill and falls linearly past it
+/// toward <paramref name="Falloff"/> at the kit's resolved move speed. Omitted (the default): full authority at
+/// every speed, the behavior every kit authoring no curve keeps.</param>
+/// <param name="Falloff">The fraction of full steering authority remaining at the kit's resolved move speed, in
+/// <c>[0, 1]</c>. Unread while <paramref name="ReferenceSpeed"/> is omitted.</param>
+/// <param name="PitchRate">The pitch rate (rad/s) a drive kit's Pitch channel commands; <c>0</c> (the default)
+/// locks the drive frame planar (the ground and hover variants). Positive selects the flying variant's pitched
+/// facing, clamped inside the integrator so the frame can never flip past vertical.</param>
+public sealed record WorldTurn(
+    float Rate,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? ReferenceSpeed = null,
+    float Falloff = 1f,
+    float PitchRate = 0f
+);
+/// <summary>The along-the-target (whole vector) or along-the-heading (drive longitudinal) facet of one
+/// <see cref="WorldShaping"/> row. <see cref="Brake"/> and <see cref="Reverse"/> are read only when the row also
+/// carries <see cref="WorldShaping.Across"/>.</summary>
+/// <param name="Engage">The whole-vector engage rate (u/s²) while the commanded target exceeds the body's current
+/// magnitude, or — paired with <see cref="WorldShaping.Across"/> — the drive's longitudinal accel rate while
+/// throttle commands more speed.</param>
+/// <param name="Brake">The drive's sign-reversal (brake) rate (u/s²) while back-throttle opposes forward travel.
+/// Refused without a paired <see cref="WorldShaping.Across"/>.</param>
+/// <param name="Release">The whole-vector release rate (u/s²) while the target does not exceed the current
+/// magnitude, or — paired with <see cref="WorldShaping.Across"/> — the drive's coast rate toward rest with
+/// throttle centered, and the decay rate while over the commanded speed.</param>
+/// <param name="Reverse">The reverse speed (u/s) full back-throttle converges on from rest; <c>0</c> (the default)
+/// forbids reversing. Refused (non-zero) without a paired <see cref="WorldShaping.Across"/>.</param>
+public sealed record WorldShapingAlong(float Engage, float Brake, float Release, float Reverse = 0f);
+/// <summary>The across-the-heading (lateral) facet of one <see cref="WorldShaping"/> row — its presence is what
+/// selects the anisotropic drive decomposition over the whole-vector response law.</summary>
+/// <param name="Grip">The lateral convergence rate (u/s²) toward zero slip while this row governs.</param>
+public sealed record WorldShapingAcross(float Grip);
+/// <summary>One row of a kit's ordered <c>shaping</c> table: how velocity converges on the commanded intent while
+/// <see cref="When"/> holds. Rows evaluate in order, first match wins; the table must carry exactly one
+/// unconditional (<see cref="When"/> omitted) row, and it must be last. Exactly one of <see cref="Along"/> or
+/// <see cref="Dynamics"/> is authored per row; <see cref="Across"/> is legitimate only beside <see cref="Along"/>.
+/// A drift/boost row is authored as an ordinary row gated on a <c>held</c> predicate: the FIRST open row governs,
+/// so a drift row belongs ahead of the kit's ordinary drive row.</summary>
+/// <param name="When">The gate that must hold for this row to win, or <see langword="null"/> for the unconditional
+/// row (permitted only as the final row). The gate reuses the action-lane predicate vocabulary, admitting
+/// body-fact kinds (<c>now</c>/<c>recently</c>/<c>all</c>/<c>any</c>/<c>not</c>) and <c>held</c> (a composition
+/// channel's own live read) — never a per-body action-state predicate.</param>
+/// <param name="Along">The along facet — see <see cref="WorldShapingAlong"/> — or <see langword="null"/> for a
+/// <see cref="Dynamics"/> row.</param>
+/// <param name="Across">The across facet — see <see cref="WorldShapingAcross"/> — selecting the drive
+/// decomposition, or <see langword="null"/> for a row that shapes the whole vector. Refused paired with
+/// <see cref="Dynamics"/> or without <see cref="Along"/>.</param>
+/// <param name="Dynamics">The <c>dynamics</c> row a second-order follower shapes velocity through instead of
+/// <see cref="Along"/>, or <see langword="null"/> (the default) for the response/drive law. Exactly one of the two
+/// is authored per row.</param>
+/// <param name="TurnScale">The steering-authority multiplier while this row governs — the tightened drift arc's
+/// spelling, and the neutral default for every ordinary row.</param>
+public sealed record WorldShaping(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ActionPredicate? When = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldShapingAlong? Along = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldShapingAcross? Across = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Dynamics = null,
+    float TurnScale = 1f
 );
 /// <summary>The document intake for the engine's compiled motion tunings — the one place an authored
-/// <see cref="WorldMotion"/> row becomes the fixed-point form simulation reads.</summary>
+/// <see cref="WorldMotion"/> row becomes the fixed-point form simulation reads. Channel names (a shaping row's
+/// <c>held</c> gate, <see cref="WorldSpeedHeld.Channel"/>) resolve through the world's compiled channel table here,
+/// the same resolved-outside/consumed-as-ordinal seam <see cref="WorldHoldFactory"/> uses.</summary>
 public static class WorldMotionTuningFactory {
-    private static FixedMotionTuning Compile(float moveSpeed, float turnSpeed, IReadOnlyList<MotionResponse> response, float sprintMultiplier, MotionMoveFrame moveFrame, bool facingSnap, MotionScalarEnvelope? moveSpeedEnvelope, FixedMotionDynamics? dynamics, WorldDrive? drive) {
-        var rows = response;
-        var compiled = new FixedMotionResponse[rows.Count];
-        var recencyFacts = new List<ActionFact>();
-        var recencyWindows = new List<ulong>();
-
-        for (var index = 0; (index < rows.Count); index++) {
-            var gate = new List<CompiledPredicate>();
-
-            // The response table shares ONE recency-clock table across all rows (as one lane's press/release channels
-            // share one), slotted by the same predicate flattener the action lanes use.
-            BodyActionSpecFactory.FlattenPredicate(
-                predicate: rows[index].Gate,
-                gate: gate,
-                recencyFacts: recencyFacts,
-                recencyWindows: recencyWindows
-            );
-
-            compiled[index] = new FixedMotionResponse(
-                Gate: gate.ToArray(),
-                EngageRate: FixedQ4816.FromDouble(value: rows[index].EngageRate),
-                ReleaseRate: FixedQ4816.FromDouble(value: rows[index].ReleaseRate)
-            );
-        }
-
-        return new(
-            MoveSpeed: FixedQ4816.FromDouble(value: moveSpeed),
-            TurnSpeed: FixedQ4816.FromDouble(value: turnSpeed),
-            Response: compiled,
-            ResponseRecencyFacts: recencyFacts.ToArray(),
-            ResponseRecencyWindows: recencyWindows.ToArray(),
-            SprintMultiplier: FixedQ4816.FromDouble(value: sprintMultiplier),
-            MoveFrame: moveFrame,
-            FacingSnap: facingSnap,
-            MoveSpeedEnvelope: ((moveSpeedEnvelope is { } envelope)
-            ? Compile(envelope: envelope)
-            : null),
-            PlanarDynamics: dynamics,
-            Drive: ((drive is not null)
-            ? Compile(drive: drive)
-            : null)
-        );
-    }
-
-    /// <summary>Compiles an authored drive row to its fixed-point form. The held drift channel name resolves to an
-    /// ordinal separately, through the world's channel table.</summary>
-    /// <param name="drive">The authored drive row.</param>
-    /// <returns>The compiled row.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="drive"/> is <see langword="null"/>.</exception>
-    public static FixedBodyDrive Compile(WorldDrive drive) {
-        ArgumentNullException.ThrowIfNull(argument: drive);
-
-        return new(
-            ReverseSpeed: FixedQ4816.FromDouble(value: drive.ReverseSpeed),
-            Accel: FixedQ4816.FromDouble(value: drive.Accel),
-            Brake: FixedQ4816.FromDouble(value: drive.Brake),
-            Coast: FixedQ4816.FromDouble(value: drive.Coast),
-            Grip: FixedQ4816.FromDouble(value: drive.Grip),
-            SteerReferenceSpeed: FixedQ4816.FromDouble(value: drive.SteerReferenceSpeed),
-            SteerFalloff: FixedQ4816.FromDouble(value: drive.SteerFalloff),
-            PitchRate: FixedQ4816.FromDouble(value: drive.PitchRate),
-            DriftGrip: FixedQ4816.FromDouble(value: (drive.Drift?.Grip ?? 0f)),
-            DriftSteerScale: FixedQ4816.FromDouble(value: (drive.Drift?.SteerScale ?? 0f))
-        );
-    }
     /// <summary>Compiles an authored scalar envelope to its fixed-point form.</summary>
     /// <param name="envelope">The authored inclusive bound.</param>
     /// <returns>The compiled bound.</returns>
@@ -265,22 +191,121 @@ public static class WorldMotionTuningFactory {
         TurnSpeed: FixedQ4816.FromDouble(value: motion.TurnSpeed),
         MaxSmoothError: FixedQ4816.FromDouble(value: motion.MaxSmoothError)
     );
-    /// <summary>Compiles an authored kit motion row to its fixed-point form.</summary>
-    /// <param name="tuning">The authored motion row.</param>
-    /// <param name="dynamics">The compiled <c>dynamics</c>-row follower <paramref name="tuning"/> names, or
-    /// <see langword="null"/> when it shapes planar velocity through <see cref="WorldMotion.Response"/>
-    /// instead.</param>
-    /// <returns>The compiled tuning.</returns>
-    public static FixedMotionTuning Compile(WorldMotion tuning, FixedMotionDynamics? dynamics = null) => Compile(
-        moveSpeed: tuning.MoveSpeed,
-        turnSpeed: tuning.TurnSpeed,
-        response: (tuning.Response ?? []),
-        sprintMultiplier: tuning.SprintMultiplier,
-        moveFrame: tuning.MoveFrame,
-        facingSnap: tuning.FacingSnap,
-        moveSpeedEnvelope: tuning.MoveSpeedEnvelope,
-        dynamics: dynamics,
-        drive: tuning.Drive
-    );
+    private static FixedMotionDynamics? CompileDynamics(string? name, IReadOnlyList<WorldDynamicsRow> dynamics, int simulationRateHz) {
+        if (
+            (name is not { Length: > 0 }) ||
+            (WorldDefinitionRows.FindDynamics(
+            dynamics: dynamics,
+            name: name
+        ) is not { } row)
+        ) {
+            return null;
+        }
 
+        var compiled = SecondOrderDynamics.Create(
+            dampingRatio: FixedQ4816.FromDouble(value: row.Damping),
+            frequencyHz: FixedQ4816.FromDouble(value: row.Frequency),
+            initialResponse: FixedQ4816.FromDouble(value: row.Response)
+        );
+
+        return new FixedMotionDynamics(Planar: compiled.Compile(
+            stepTicks: (FixedTickConversion.TicksPerSecond / ((ulong)simulationRateHz)),
+            ticksPerSecond: FixedTickConversion.TicksPerSecond
+        ));
+    }
+    private static FixedBodyShaping[] CompileShaping(IReadOnlyList<WorldShaping>? shaping, WorldChannelTable channels, IReadOnlyList<WorldDynamicsRow> dynamics, int simulationRateHz, List<ActionFact> recencyFacts, List<ulong> recencyWindows) {
+        if (shaping is not { Count: > 0 } rows) {
+            return [];
+        }
+
+        var compiled = new FixedBodyShaping[rows.Count];
+
+        for (var index = 0; (index < rows.Count); index++) {
+            var row = rows[index];
+            var gate = new List<CompiledPredicate>();
+
+            // The shaping table shares ONE recency-clock table across all rows (as one lane's press/release channels
+            // share one), slotted by the same predicate flattener the action lanes use — extended here to resolve a
+            // `held` predicate's channel against the world's own table.
+            BodyActionSpecFactory.FlattenPredicate(
+                predicate: row.When,
+                gate: gate,
+                recencyFacts: recencyFacts,
+                recencyWindows: recencyWindows,
+                channels: channels
+            );
+
+            compiled[index] = new FixedBodyShaping(
+                When: gate.ToArray(),
+                Along: ((row.Along is { } along)
+                ? new FixedShapingAlong(
+                    Engage: FixedQ4816.FromDouble(value: along.Engage),
+                    Brake: FixedQ4816.FromDouble(value: along.Brake),
+                    Release: FixedQ4816.FromDouble(value: along.Release),
+                    Reverse: FixedQ4816.FromDouble(value: along.Reverse)
+                )
+                : null),
+                Across: ((row.Across is { } across)
+                ? new FixedShapingAcross(Grip: FixedQ4816.FromDouble(value: across.Grip))
+                : null),
+                Dynamics: CompileDynamics(
+                    name: row.Dynamics,
+                    dynamics: dynamics,
+                    simulationRateHz: simulationRateHz
+                ),
+                TurnScale: FixedQ4816.FromDouble(value: row.TurnScale)
+            );
+        }
+
+        return compiled;
+    }
+    /// <summary>Compiles an authored kit motion row to its fixed-point form against a world's compiled channel
+    /// table and its own <c>dynamics</c>-row table.</summary>
+    /// <param name="tuning">The authored motion row.</param>
+    /// <param name="channels">The world's compiled channel table.</param>
+    /// <param name="dynamics">The world's declared <c>dynamics</c> rows a shaping row may name.</param>
+    /// <param name="simulationRateHz">The world's own simulation rate — a named dynamics row's step-width
+    /// divisor.</param>
+    /// <returns>The compiled tuning.</returns>
+    public static FixedMotionTuning Compile(WorldMotion tuning, WorldChannelTable channels, IReadOnlyList<WorldDynamicsRow> dynamics, int simulationRateHz) {
+        var recencyFacts = new List<ActionFact>();
+        var recencyWindows = new List<ulong>();
+        var shaping = CompileShaping(
+            shaping: tuning.Shaping,
+            channels: channels,
+            dynamics: dynamics,
+            simulationRateHz: simulationRateHz,
+            recencyFacts: recencyFacts,
+            recencyWindows: recencyWindows
+        );
+        var heldOrdinal = (((tuning.Speed.Held?.Channel is { Length: > 0 } held) && channels.TryGetOrdinal(
+            name: held,
+            ordinal: out var heldResolved
+        ))
+            ? heldResolved
+            : -1
+        );
+
+        return new(
+            Speed: new FixedSpeed(
+                Value: FixedQ4816.FromDouble(value: tuning.Speed.Value),
+                Envelope: ((tuning.Speed.Envelope is { } envelope)
+                ? Compile(envelope: envelope)
+                : null),
+                HeldOrdinal: heldOrdinal,
+                HeldMultiplier: FixedQ4816.FromDouble(value: (tuning.Speed.Held?.Multiplier ?? 1f))
+            ),
+            Turn: new FixedTurn(
+                Rate: FixedQ4816.FromDouble(value: tuning.Turn.Rate),
+                ReferenceSpeed: FixedQ4816.FromDouble(value: (tuning.Turn.ReferenceSpeed ?? 0f)),
+                Falloff: FixedQ4816.FromDouble(value: tuning.Turn.Falloff),
+                PitchRate: FixedQ4816.FromDouble(value: tuning.Turn.PitchRate)
+            ),
+            Shaping: shaping,
+            ShapingRecencyFacts: recencyFacts.ToArray(),
+            ShapingRecencyWindows: recencyWindows.ToArray(),
+            MoveFrame: tuning.MoveFrame,
+            FacingSnap: tuning.FacingSnap
+        );
+    }
 }

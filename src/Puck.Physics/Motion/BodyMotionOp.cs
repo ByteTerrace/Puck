@@ -14,7 +14,12 @@ public enum BodyMotionOp : byte {
     IntegrateLocalAttitude,
     ComputePlanarTargetVelocity,
     ComputeLocalTargetVelocity,
-    ShapePlanarVelocity,
+
+    /// <summary>Converges velocity on the commanded intent through the kit's <c>shaping</c> table: the first row
+    /// whose gate opens governs, running the whole-vector response law (a row with no <c>across</c> facet), the
+    /// anisotropic drive decomposition (a row with one), or a named second-order follower — exactly one of the
+    /// three per row.</summary>
+    ShapeVelocity,
     SnapYawToPlanarIntent,
     ResolveDriveFrame,
 
@@ -23,7 +28,6 @@ public enum BodyMotionOp : byte {
     /// up axis the body's attitude and its contact walkable test stand against. Runs after the ordinary frame
     /// operation, whose heading it leaves intact.</summary>
     ResolveHold,
-    ShapeDriveVelocity,
     RunActionTriggers,
 
     /// <summary>Applies the current hold's vertical law: the row's own arc for a hold gravity keeps, a rate-limited

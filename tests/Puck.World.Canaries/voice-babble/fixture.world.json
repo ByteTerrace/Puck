@@ -50,7 +50,7 @@
         "ResolveYawAttitudeAndPlanarFrame",
         "ResolveHold",
         "ComputePlanarTargetVelocity",
-        "ShapePlanarVelocity",
+        "ShapeVelocity",
         "SnapYawToPlanarIntent",
         "ApplyHold",
         "IntegratePlanarAndVerticalVelocity",
@@ -64,10 +64,21 @@
         "name": "idle",
         "bodyMotionProgram": "grounded",
         "motion": {
-          "moveSpeed": 4,
-          "turnSpeed": 2,
-          "response": [],
-          "sprintMultiplier": 1,
+          "speed": {
+            "value": 4
+          },
+          "turn": {
+            "rate": 2
+          },
+          "shaping": [
+            {
+              "along": {
+                "engage": 1000000,
+                "brake": 0,
+                "release": 1000000
+              }
+            }
+          ],
           "holds": [
             {
               "name": "ground",

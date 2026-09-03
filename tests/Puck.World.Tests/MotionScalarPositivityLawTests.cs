@@ -20,11 +20,11 @@ public sealed class MotionScalarPositivityLawTests {
         var kit = document.Kits[0];
         var motion = kit.Motion;
         var negative = document with {
-            KitRowsRaw = [kit with { Motion = motion with { MoveSpeedEnvelope = new MotionScalarEnvelope(Max: 10f, Min: -100f) } }],
+            KitRowsRaw = [kit with { Motion = motion with { Speed = motion.Speed with { Envelope = new MotionScalarEnvelope(Max: 10f, Min: -100f) } } }],
         };
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: negative, neighbours: null, reason: out var reason), userMessage: "a [-100, 10] envelope was expected to refuse");
-        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "moveSpeedEnvelope.min");
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "speed.envelope.min");
         Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "-100");
     }
     [Fact]
@@ -32,9 +32,9 @@ public sealed class MotionScalarPositivityLawTests {
         var document = Fixtures.BuildDocument();
         var kit = document.Kits[0];
         var motion = kit.Motion;
-        // Min 0 is the legitimate edge (full slowdown admitted); the kit's own moveSpeed must sit inside the bound.
+        // Min 0 is the legitimate edge (full slowdown admitted); the kit's own speed.value must sit inside the bound.
         var control = document with {
-            KitRowsRaw = [kit with { Motion = motion with { MoveSpeedEnvelope = new MotionScalarEnvelope(Min: 0f, Max: (motion.MoveSpeed + 1f)) } }],
+            KitRowsRaw = [kit with { Motion = motion with { Speed = motion.Speed with { Envelope = new MotionScalarEnvelope(Min: 0f, Max: (motion.Speed.Value + 1f)) } } }],
         };
 
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: control, neighbours: null, reason: out var reason), userMessage: reason);

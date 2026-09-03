@@ -147,7 +147,7 @@ public sealed class HoldLawTests {
                 BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
                 BodyMotionOp.ResolveHold,
                 BodyMotionOp.ComputePlanarTargetVelocity,
-                BodyMotionOp.ShapePlanarVelocity,
+                BodyMotionOp.ShapeVelocity,
                 BodyMotionOp.RunActionTriggers,
                 BodyMotionOp.ApplyHold,
                 BodyMotionOp.IntegratePlanarAndVerticalVelocity,

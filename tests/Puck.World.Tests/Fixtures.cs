@@ -135,8 +135,8 @@ internal static class Fixtures {
             Name: SeatKitName,
             BodyMotionProgram: "grounded",
             Motion: new WorldMotion(
-                MoveSpeed: 4f,
-                TurnSpeed: 2.5f,
+                Speed: new WorldSpeed(Value: 4f),
+                Turn: new WorldTurn(Rate: 2.5f),
                 // The one row every Motion-kind kit must author: a Free bond takes it unconditionally every tick
                 // (no collider here for a Surface row to probe against anyway).
                 Holds: [
@@ -147,10 +147,12 @@ internal static class Fixtures {
                         Name: "air"
                     ),
                 ],
-                // The empty response table snaps planar velocity instantly — a legitimate, minimal table
-                // (WorldDefinitionValidator.ValidateResponse loops zero times over it).
-                Response: [],
-                SprintMultiplier: 1f
+                // One unconditional row at engage/release rates far above anything a tick could need to converge —
+                // MoveToward returns the target exactly whenever maxDelta exceeds the distance, so this snaps planar
+                // velocity instantly, byte-identical to the retired empty-response-table fixture.
+                Shaping: [
+                    new WorldShaping(Along: new WorldShapingAlong(Engage: 1_000_000f, Brake: 0f, Release: 1_000_000f)),
+                ]
             ),
             // The full parameter set ValidateProducerParameters requires for a kit naming the "wander"
             // producer — see the bodyMotionPrograms remark above for why this exists at all. Values mirror the
@@ -186,7 +188,7 @@ internal static class Fixtures {
                     BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
                     BodyMotionOp.ResolveHold,
                     BodyMotionOp.ComputePlanarTargetVelocity,
-                    BodyMotionOp.ShapePlanarVelocity,
+                    BodyMotionOp.ShapeVelocity,
                     BodyMotionOp.SnapYawToPlanarIntent,
                     BodyMotionOp.RunActionTriggers,
                     BodyMotionOp.ApplyHold,

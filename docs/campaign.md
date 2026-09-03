@@ -329,7 +329,7 @@ ghost records**.
    order, defaulting, nor serialization — the canary still needs a state-sensitive observation, and
    the read-back must show declared envelope values AND derived placements with proof margins.
    **Track 1 also closes the soundness input that adjacency overlap now consumes**: every kit's
-   speed is bound by an authored envelope (`MoveSpeedEnvelope`/`ThrustSpeedEnvelope`/
+   speed is bound by an authored envelope (`WorldSpeed.Envelope`/`ThrustSpeedEnvelope`/
    `TopSpeedEnvelope`). Adjacencies themselves accept no guessed depth; the compiler derives one
    symmetric overlap from body reach, interaction/targeting reach, and two slower-side delivery
    periods of closing speed, with outward rounding.

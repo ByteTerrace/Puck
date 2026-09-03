@@ -21,22 +21,27 @@ selection into its intrinsic host phases), the per-body trigger and action-state
 (`CompiledActionSpec`, `CompiledTrigger`, `CompiledFactTrigger`, `CompiledPredicate`,
 `CompiledBodyInstruction`, `CompiledActionStateSlot`, `CompiledActionStateEnvelope`),
 and the compiled fixed-point tunings the stages read (`FixedMotionTuning`,
-`FixedMotionDefaults`, `FixedMotionScalarEnvelope`, and the optional
-`FixedMotionTuning.Drive` — a `FixedBodyDrive`). A kit shaping its planar
-velocity isotropically does so through exactly one of two compiled forms:
-`FixedMotionTuning.PlanarDynamics` (`FixedMotionDynamics` — a compiled
-`Puck.Maths.SecondOrderDynamics.SecondOrderStep`, a pole-matched second-order
-follower the host steps once per tick) or the engage/release response table
-already compiled into the tuning's velocity-shaping facet — never both. A kit
-carrying a `FixedBodyDrive` shapes it anisotropically instead, through
-`ResolveDriveFrame`/`ShapeDriveVelocity`, which decompose the carried velocity
-into body-frame longitudinal/lateral/residual lanes and converge each at its own
-rate; the forward target and the steering rate those operations read are the
-tuning's own `MoveSpeed`/`TurnSpeed`, not a second spelling. The vertical
-channel is a hold row's own concern (`FixedBodyHold.Gravity`/`.Thrust`,
-`ResolveHold`/`ApplyHold` in `BodyHold.cs`) — every Motion-kind kit authors at
-least one, so a drive kit's own gravity and MoveUp thrust ride its hold list
-exactly as any other kit's do.
+`FixedMotionDefaults`, `FixedMotionScalarEnvelope`, `FixedSpeed`, `FixedTurn`).
+`ShapeVelocity` reads the one unified velocity-shaping table,
+`FixedMotionTuning.Shaping` (`FixedBodyShaping[]`): the first row whose gate
+opens governs — a row with no `Across` facet shapes the whole vector through
+the engage/release response law (`FixedShapingAlong`), a row carrying one runs
+the anisotropic drive decomposition instead (body-frame longitudinal/lateral/
+residual lanes, each converging at its own rate), and a row naming `Dynamics`
+(a compiled `Puck.Maths.SecondOrderDynamics.SecondOrderStep`, a pole-matched
+second-order follower the host steps once per tick) shapes it through that
+follower instead of either — exactly one of `Along` or `Dynamics` per row. The
+forward target and the steering rate every row's drive decomposition reads are
+the tuning's own `FixedSpeed`/`FixedTurn`, not a second spelling; `FixedTurn`'s
+own speed-scaled authority curve and the governing row's `TurnScale` apply
+identically whichever yaw-writing frame operation (`ResolveDriveFrame`,
+`ResolveYawAttitudeAndPlanarFrame`, `IntegrateLocalAttitude`) is selected. A
+held low-traction row (a kart's drift) is an ordinary row gated on a `Held`
+predicate (`CompiledPredicateKind.Held`, a live channel-threshold read),
+authored ahead of the row it overrides. The vertical channel is a hold row's
+own concern (`FixedBodyHold.Gravity`/`.Thrust`, `ResolveHold`/`ApplyHold` in
+`BodyHold.cs`) — every Motion-kind kit authors at least one, so a drive kit's
+own gravity and MoveUp thrust ride its hold list exactly as any other kit's do.
 
 The translation from an authored world row into these shapes lives with the
 authoring vocabulary, in `Puck.World.Schema` (`BodyMotionProgramFactory`,

@@ -90,7 +90,7 @@ namespace Puck.World;
 // expose the typed accessors.
 [JsonSerializable(typeof(WorldCollision))]
 [JsonSerializable(typeof(WorldCollider))]
-[JsonSerializable(typeof(MotionResponse[]))]
+[JsonSerializable(typeof(WorldShaping[]))]
 // The audio sections: the speaker row + tune/patch asset REFERENCE rows + the audio defaults (the world.row.set
 // speakers / world.row.set tunes / world.row.set patches / world.row.set audio payload shapes). WorldTune/WorldPatch
 // are plain name/source/hash rows — no embedded document, no bridging converter (see WorldMusicRow/WorldJudgeRow,

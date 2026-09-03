@@ -26,67 +26,179 @@
           "motion": {
             "type": "object",
             "properties": {
-              "moveSpeed": {
-                "description": "Locomotion speed in world units per second \u2014 the profileless fallback a stand-in advances on (a seated player reads its live profile\u0027s speed instead, so identity.motion stays real-time).",
-                "type": "number"
+              "speed": {
+                "description": "The kit\u0027s movement rate (see WorldSpeed).",
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "description": "Locomotion speed in world units per second \u2014 the profileless fallback a stand-in advances on (a seated player reads its live profile\u0027s speed instead, so identity.motion stays real-time).",
+                    "type": "number"
+                  },
+                  "envelope": {
+                    "description": "The inclusive bound a seated player\u0027s live profile speed (and the profileless Value fallback) is clamped to at seat time, or null (the default) for no bound \u2014 a feel-pinned world authors this to keep a seat\u0027s speed inside its own kit\u0027s envelope regardless of what the player\u0027s identity requests. null reproduces an unclamped resolve exactly; Min == Max pins the effective speed outright; a narrower-than-wide-open range still admits a bounded profile override.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "min": {
+                        "description": "The least admitted value (inclusive).",
+                        "type": "number"
+                      },
+                      "max": {
+                        "description": "The greatest admitted value (inclusive) \u2014 WorldDefinitionValidator refuses Max \u003C Min by name. Equal to Min pins the scalar outright regardless of what a profile requests.",
+                        "type": "number"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "default": null
+                  },
+                  "held": {
+                    "description": "The held-multiplier channel (a \u0022boost\u0022/\u0022sprint\u0022), or null for a kit with no held speed multiplier. The multiplier applies AFTER Envelope clamps the resolved value: the envelope pins the base rate, the multiplier rides on top.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "channel": {
+                        "description": "The declared composition channel name read while held.",
+                        "type": "string"
+                      },
+                      "multiplier": {
+                        "description": "The speed multiplier while the channel reads held. Required positive.",
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "channel",
+                      "multiplier"
+                    ],
+                    "additionalProperties": false,
+                    "default": null
+                  }
+                },
+                "required": [
+                  "value"
+                ],
+                "additionalProperties": false
               },
-              "turnSpeed": {
-                "description": "Turn speed in radians per second (the profileless fallback counterpart to MoveSpeed).",
-                "type": "number"
+              "turn": {
+                "description": "The kit\u0027s steering rate (see WorldTurn).",
+                "type": "object",
+                "properties": {
+                  "rate": {
+                    "description": "Turn speed in radians per second at full authority (the profileless fallback counterpart to Value).",
+                    "type": "number"
+                  },
+                  "referenceSpeed": {
+                    "description": "The longitudinal (drive) or local (grounded/free) speed, world units per second, at which steering authority peaks \u2014 authority rises linearly from zero at standstill and falls linearly past it toward Falloff at the kit\u0027s resolved move speed. Omitted (the default): full authority at every speed, the behavior every kit authoring no curve keeps.",
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "falloff": {
+                    "description": "The fraction of full steering authority remaining at the kit\u0027s resolved move speed, in [0, 1]. Unread while ReferenceSpeed is omitted.",
+                    "type": "number",
+                    "default": 1
+                  },
+                  "pitchRate": {
+                    "description": "The pitch rate (rad/s) a drive kit\u0027s Pitch channel commands; 0 (the default) locks the drive frame planar (the ground and hover variants). Positive selects the flying variant\u0027s pitched facing, clamped inside the integrator so the frame can never flip past vertical.",
+                    "type": "number",
+                    "default": 0
+                  }
+                },
+                "required": [
+                  "rate"
+                ],
+                "additionalProperties": false
               },
-              "sprintMultiplier": {
-                "description": "The held-sprint speed multiplier, applied while SprintChannel reads held; 1 is a no-op.",
-                "type": "number"
-              },
-              "response": {
-                "description": "The velocity-response table (see MotionResponse) planar velocity converges through, or null (the default) when Dynamics shapes it instead \u2014 exactly one of the two is authored, so null means \u0022not authored\u0022 to that rule and is never coalesced here. An authored empty table is distinct: it snaps planar velocity instantly. The one place null reads as the empty table is WorldMotionTuningFactory.Compile.",
+              "shaping": {
+                "description": "The ordered velocity-shaping table (see WorldShaping) the ShapeVelocity operation reads \u2014 the first row whose when gate opens governs. Required (non-empty) for a kit whose program selects ShapeVelocity; null for a kit whose program never shapes planar velocity through it (a free-flight kit that owns its whole velocity channel directly).",
                 "type": [
                   "array",
                   "null"
                 ],
                 "items": {
-                  "description": "One row of a kit\u0027s velocity-response table: how fast planar velocity converges on the commanded target while Gate holds. Rows evaluate in order, first match wins; a body matching no row snaps instantly (the built-in behavior, and the behavior of a kit with no table). The gate reuses the action-lane predicate vocabulary \u2014 only body-fact kinds (now/recently/all) are admissible.",
+                  "description": "One row of a kit\u0027s ordered shaping table: how velocity converges on the commanded intent while When holds. Rows evaluate in order, first match wins; the table must carry exactly one unconditional (When omitted) row, and it must be last. Exactly one of Along or Dynamics is authored per row; Across is legitimate only beside Along. A drift/boost row is authored as an ordinary row gated on a held predicate: the FIRST open row governs, so a drift row belongs ahead of the kit\u0027s ordinary drive row.",
                   "type": [
                     "object",
                     "null"
                   ],
                   "properties": {
-                    "engageRate": {
-                      "description": "The convergence rate (world units/second\u00B2) while the stick is deflected \u2014 acceleration toward the commanded target.",
-                      "type": "number"
-                    },
-                    "releaseRate": {
-                      "description": "The convergence rate while the stick is centered \u2014 deceleration toward rest (the coast).",
-                      "type": "number"
-                    },
-                    "gate": {
+                    "when": {
                       "$ref": "./common.schema.json#/$defs/ActionPredicateNullable",
-                      "description": "The body-fact predicate that must hold for this row to win, or null for the always-row (permitted only as the final row).",
+                      "description": "The gate that must hold for this row to win, or null for the unconditional row (permitted only as the final row). The gate reuses the action-lane predicate vocabulary, admitting body-fact kinds (now/recently/all/any/not) and held (a composition channel\u0027s own live read) \u2014 never a per-body action-state predicate.",
                       "default": null
+                    },
+                    "along": {
+                      "description": "The along facet \u2014 see WorldShapingAlong \u2014 or null for a Dynamics row.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "engage": {
+                          "description": "The whole-vector engage rate (u/s\u00B2) while the commanded target exceeds the body\u0027s current magnitude, or \u2014 paired with Across \u2014 the drive\u0027s longitudinal accel rate while throttle commands more speed.",
+                          "type": "number"
+                        },
+                        "brake": {
+                          "description": "The drive\u0027s sign-reversal (brake) rate (u/s\u00B2) while back-throttle opposes forward travel. Refused without a paired Across.",
+                          "type": "number"
+                        },
+                        "release": {
+                          "description": "The whole-vector release rate (u/s\u00B2) while the target does not exceed the current magnitude, or \u2014 paired with Across \u2014 the drive\u0027s coast rate toward rest with throttle centered, and the decay rate while over the commanded speed.",
+                          "type": "number"
+                        },
+                        "reverse": {
+                          "description": "The reverse speed (u/s) full back-throttle converges on from rest; 0 (the default) forbids reversing. Refused (non-zero) without a paired Across.",
+                          "type": "number",
+                          "default": 0
+                        }
+                      },
+                      "required": [
+                        "engage",
+                        "brake",
+                        "release"
+                      ],
+                      "additionalProperties": false,
+                      "default": null
+                    },
+                    "across": {
+                      "description": "The across facet \u2014 see WorldShapingAcross \u2014 selecting the drive decomposition, or null for a row that shapes the whole vector. Refused paired with Dynamics or without Along.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "grip": {
+                          "description": "The lateral convergence rate (u/s\u00B2) toward zero slip while this row governs.",
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "grip"
+                      ],
+                      "additionalProperties": false,
+                      "default": null
+                    },
+                    "dynamics": {
+                      "description": "The dynamics row a second-order follower shapes velocity through instead of Along, or null (the default) for the response/drive law. Exactly one of the two is authored per row.",
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "turnScale": {
+                      "description": "The steering-authority multiplier while this row governs \u2014 the tightened drift arc\u0027s spelling, and the neutral default for every ordinary row.",
+                      "type": "number",
+                      "default": 1
                     }
                   },
-                  "required": [
-                    "engageRate",
-                    "releaseRate"
-                  ],
                   "additionalProperties": false
                 },
-                "default": null
-              },
-              "dynamics": {
-                "description": "The dynamics row a second-order follower shapes planar velocity through instead of Response, or null (the default) for the response table. Exactly one of the two is authored.",
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "default": null
-              },
-              "sprintChannel": {
-                "description": "The declared channel name a body reads while held (not edge-triggered \u2014 a continuous multiplier, unlike the press/release ActionSpec vocabulary) to apply SprintMultiplier, or null (the default) for a kit with no sprint capability. Resolved to an ordinal once, alongside every other kit-channel name, by Compile \u2014 an unresolvable name (validator-refused already) reads as \u0022no sprint\u0022 rather than throwing.",
-                "type": [
-                  "string",
-                  "null"
-                ],
                 "default": null
               },
               "moveFrame": {
@@ -101,25 +213,6 @@
                 "description": "Under World only: whether the body\u0027s drawn ATTITUDE snaps to Atan2 of the commanded planar direction every tick that carries input (no turn-rate ramp, no skid) \u2014 the body angles toward its travel, a strafe included \u2014 while its HEADING (the Turn role\u0027s integral, WorldBody.FixedYaw, the frame a Heading pair moves in) holds, and the attitude returns to the heading the tick movement stops. Only the Face roles turn the heading itself. Ignored under Heading, where attitude is the integrated heading by construction. true is the default.",
                 "type": "boolean",
                 "default": true
-              },
-              "moveSpeedEnvelope": {
-                "description": "The inclusive bound a seated player\u0027s live profile speed (and the profileless MoveSpeed fallback) is clamped to at seat time, or null (the default) for no bound \u2014 a feel-pinned world authors this to keep a seat\u0027s speed inside its own kit\u0027s envelope regardless of what the player\u0027s identity requests. null reproduces today\u0027s unclamped behavior exactly; Min == Max pins the effective speed outright; a narrower-than-wide-open range still admits a bounded profile override. See MotionScalarEnvelope.",
-                "type": [
-                  "object",
-                  "null"
-                ],
-                "properties": {
-                  "min": {
-                    "description": "The least admitted value (inclusive).",
-                    "type": "number"
-                  },
-                  "max": {
-                    "description": "The greatest admitted value (inclusive) \u2014 WorldDefinitionValidator refuses Max \u003C Min by name. Equal to Min pins the scalar outright regardless of what a profile requests.",
-                    "type": "number"
-                  }
-                },
-                "additionalProperties": false,
-                "default": null
               },
               "holds": {
                 "description": "The ordered list of what may hold this body \u2014 see WorldHold \u2014 read by the ResolveHold/ApplyHold operations. A Motion-kind kit authoring none refuses validation by name: the hold list is the only spelling of a vertical channel, so a kit with no vertical law of its own still authors one row of kind None.",
@@ -317,93 +410,11 @@
                   "additionalProperties": false
                 },
                 "default": null
-              },
-              "drive": {
-                "description": "The anisotropic drive row \u2014 see WorldDrive \u2014 read by the ResolveDriveFrame/ShapeDriveVelocity operations, or null (the default) for a kit whose planar velocity is the isotropic shaping\u0027s alone. A program selecting either drive operation against a kit authoring no row refuses by name through the Drive tuning facet.",
-                "type": [
-                  "object",
-                  "null"
-                ],
-                "properties": {
-                  "accel": {
-                    "description": "The longitudinal convergence rate (u/s\u00B2) while throttle commands more speed.",
-                    "type": "number"
-                  },
-                  "brake": {
-                    "description": "The longitudinal convergence rate (u/s\u00B2) while back-throttle opposes forward travel.",
-                    "type": "number"
-                  },
-                  "coast": {
-                    "description": "The longitudinal convergence rate (u/s\u00B2) toward rest with throttle centered, and the decay rate while over the commanded speed (the post-boost bleed).",
-                    "type": "number"
-                  },
-                  "grip": {
-                    "description": "The lateral convergence rate (u/s\u00B2) toward zero slip \u2014 traction. Lower is slidier.",
-                    "type": "number"
-                  },
-                  "steerReferenceSpeed": {
-                    "description": "The longitudinal speed (u/s) at which steering authority peaks; authority rises linearly from zero at standstill.",
-                    "type": "number"
-                  },
-                  "steerFalloff": {
-                    "description": "The fraction of full steering authority remaining at the kit\u0027s resolved move speed, in [0, 1]; authority falls linearly from the reference speed.",
-                    "type": "number"
-                  },
-                  "reverseSpeed": {
-                    "description": "The reverse speed (u/s) full back-throttle converges on from rest; 0 forbids reversing.",
-                    "type": "number",
-                    "default": 0
-                  },
-                  "pitchRate": {
-                    "description": "The pitch rate (rad/s) the Pitch channel commands; 0 locks the frame planar (the ground and hover variants). Positive selects the flying variant\u0027s pitched facing, clamped inside the integrator so the frame can never flip past vertical.",
-                    "type": "number",
-                    "default": 0
-                  },
-                  "drift": {
-                    "description": "The held low-traction state, or null (the default) for a kit that cannot drift.",
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "properties": {
-                      "channel": {
-                        "description": "The declared composition channel name read while held.",
-                        "type": "string"
-                      },
-                      "grip": {
-                        "description": "The lateral convergence rate (u/s\u00B2) replacing Grip while the channel reads held \u2014 the deliberate low-traction state. Required positive.",
-                        "type": "number"
-                      },
-                      "steerScale": {
-                        "description": "The steering-authority multiplier while drifting (the tightened drift arc). Required positive.",
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "channel",
-                      "grip",
-                      "steerScale"
-                    ],
-                    "additionalProperties": false,
-                    "default": null
-                  }
-                },
-                "required": [
-                  "accel",
-                  "brake",
-                  "coast",
-                  "grip",
-                  "steerReferenceSpeed",
-                  "steerFalloff"
-                ],
-                "additionalProperties": false,
-                "default": null
               }
             },
             "required": [
-              "moveSpeed",
-              "turnSpeed",
-              "sprintMultiplier"
+              "speed",
+              "turn"
             ],
             "additionalProperties": false
           },

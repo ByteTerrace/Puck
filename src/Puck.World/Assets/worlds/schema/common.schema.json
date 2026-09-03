@@ -2771,6 +2771,22 @@
       ],
       "additionalProperties": false
     },
+    "ActionPredicateHeld": {
+      "description": "The named composition channel\u0027s own live read is at or above its declared threshold \u2014 the same test a held sprint/drift channel makes today. Legitimate only inside a kit\u0027s shaping-row gate, where the world\u0027s channel table resolves Channel to an ordinal at kit-compile time; refused everywhere else a predicate is authored.",
+      "properties": {
+        "$type": {
+          "const": "held"
+        },
+        "channel": {
+          "description": "The declared composition channel name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "channel"
+      ],
+      "additionalProperties": false
+    },
     "ActionPredicate": {
       "description": "A data-composable gate over body facts and named action state. A trigger fires only while its gate holds. The $type string is the JSON discriminator, the same convention every polymorphic row family uses; a new predicate kind is a new derived record plus its JsonDerivedTypeAttribute line.",
       "type": "object",
@@ -2798,6 +2814,9 @@
         },
         {
           "$ref": "#/$defs/ActionPredicateNot"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateHeld"
         }
       ]
     },
@@ -2847,6 +2866,9 @@
         },
         {
           "$ref": "#/$defs/ActionPredicateNotNonNullable"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateHeld"
         }
       ]
     },
@@ -2898,6 +2920,9 @@
         },
         {
           "$ref": "#/$defs/ActionPredicateNot"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateHeld"
         }
       ]
     },

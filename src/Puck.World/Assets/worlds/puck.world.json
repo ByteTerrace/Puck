@@ -116,7 +116,7 @@
         "ResolveYawAttitudeAndPlanarFrame",
         "ResolveHold",
         "ComputePlanarTargetVelocity",
-        "ShapePlanarVelocity",
+        "ShapeVelocity",
         "SnapYawToPlanarIntent",
         "RunActionTriggers",
         "ApplyHold",
@@ -398,6 +398,21 @@
           "radius": 0.35
         },
         "motion": {
+          "speed": {
+            "value": 4
+          },
+          "turn": {
+            "rate": 2.5
+          },
+          "shaping": [
+            {
+              "along": {
+                "engage": 1000000,
+                "brake": 0,
+                "release": 1000000
+              }
+            }
+          ],
           "facingSnap": false,
           "holds": [
             {
@@ -446,11 +461,7 @@
                 "terminal": 40
               }
             }
-          ],
-          "moveSpeed": 4,
-          "response": [],
-          "sprintMultiplier": 1.0,
-          "turnSpeed": 2.5
+          ]
         },
         "name": "walker"
       },
@@ -467,6 +478,21 @@
           "radius": 0.14
         },
         "motion": {
+          "speed": {
+            "value": 1.6
+          },
+          "turn": {
+            "rate": 2.5
+          },
+          "shaping": [
+            {
+              "along": {
+                "engage": 1000000,
+                "brake": 0,
+                "release": 1000000
+              }
+            }
+          ],
           "facingSnap": true,
           "holds": [
             {
@@ -526,11 +552,7 @@
                 "terminal": 40
               }
             }
-          ],
-          "moveSpeed": 1.6,
-          "response": [],
-          "sprintMultiplier": 1,
-          "turnSpeed": 2.5
+          ]
         },
         "name": "spiderKit",
         "producers": {
@@ -572,6 +594,21 @@
           "radius": 0.08
         },
         "motion": {
+          "speed": {
+            "value": 3.0
+          },
+          "turn": {
+            "rate": 2.5
+          },
+          "shaping": [
+            {
+              "along": {
+                "engage": 1000000,
+                "brake": 0,
+                "release": 1000000
+              }
+            }
+          ],
           "facingSnap": true,
           "holds": [
             {
@@ -605,11 +642,7 @@
               },
               "thrust": 1
             }
-          ],
-          "moveSpeed": 3.0,
-          "response": [],
-          "sprintMultiplier": 1,
-          "turnSpeed": 2.5
+          ]
         },
         "name": "dragonflyKit",
         "producers": {
@@ -651,6 +684,21 @@
           "radius": 0.16
         },
         "motion": {
+          "speed": {
+            "value": 3.2
+          },
+          "turn": {
+            "rate": 2.5
+          },
+          "shaping": [
+            {
+              "along": {
+                "engage": 1000000,
+                "brake": 0,
+                "release": 1000000
+              }
+            }
+          ],
           "facingSnap": true,
           "holds": [
             {
@@ -678,11 +726,7 @@
                 "terminal": 40
               }
             }
-          ],
-          "moveSpeed": 3.2,
-          "response": [],
-          "sprintMultiplier": 1,
-          "turnSpeed": 2.5
+          ]
         },
         "name": "houndKit",
         "producers": {

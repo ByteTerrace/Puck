@@ -20,14 +20,12 @@ public enum MotionMoveFrame : byte {
 /// <summary>The one-time fixed-point compilation of a world's motion defaults. Runtime simulation reads only this
 /// form.</summary>
 public readonly record struct FixedMotionDefaults(FixedQ4816 MoveSpeed, FixedQ4816 TurnSpeed, FixedQ4816 MaxSmoothError);
-/// <summary>The flattened, fixed-point form of one velocity-response row: the conjunction gate (body-fact predicates
-/// only), and the engage/release convergence rates the ramp integrates through the shared rate accumulator.</summary>
-public readonly record struct FixedMotionResponse(CompiledPredicate[] Gate, FixedQ4816 EngageRate, FixedQ4816 ReleaseRate);
-/// <summary>The one-time fixed-point compilation of a kit's <c>dynamics</c>-row planar shaping — the second-order
-/// follower alternative to <see cref="FixedMotionResponse"/>'s response table, bound to the world's own simulation
-/// step width. <see cref="Planar"/> steps the three-lane planar follower <c>ShapePlanarVelocity</c> reads and, for a
-/// kit authoring a medium hold, the same compiled step also drives the one-dimensional vertical lane that hold's law
-/// reads (one authored row, one compiled propagator, two lane counts) — never a second compile.</summary>
+/// <summary>The one-time fixed-point compilation of a shaping row's <c>dynamics</c> facet — the second-order
+/// follower alternative to a row's own <c>Along</c> facet, bound to the world's own simulation step width.
+/// <see cref="Planar"/> steps the planar/drive lanes <c>ShapeVelocity</c> reads and, for a kit authoring a medium
+/// hold whose governing row also names this facet, the same compiled step also drives the one-dimensional vertical
+/// lane that hold's law reads (one authored row, one compiled propagator, two lane counts) — never a second
+/// compile.</summary>
 public readonly record struct FixedMotionDynamics(SecondOrderStep Planar);
 /// <summary>The compiled fixed-point form of an authored motion scalar envelope — the reusable seat-time clamp bound
 /// every overridable motion-arm scalar shares. Authoring validation has already refused <see cref="Max"/> &lt;
@@ -40,56 +38,89 @@ public readonly record struct FixedMotionScalarEnvelope(FixedQ4816 Min, FixedQ48
         maximum: Max
     );
 }
+/// <summary>The compiled form of a <c>shaping</c> row's <c>along</c> facet: the whole-vector response law's
+/// engage/release rates (read when the row carries no <see cref="FixedShapingAcross"/>), and the drive
+/// decomposition's longitudinal accel/brake/coast/reverse rates (read when it does).</summary>
+/// <param name="Engage">The whole-vector engage rate (u/s²), or the drive's longitudinal accel rate.</param>
+/// <param name="Brake">Unread without a paired <see cref="FixedShapingAcross"/>: the drive's sign-reversal
+/// (brake) rate (u/s²).</param>
+/// <param name="Release">The whole-vector release rate (u/s²), or the drive's coast rate.</param>
+/// <param name="Reverse">Unread without a paired <see cref="FixedShapingAcross"/>: the reverse target speed
+/// (u/s) full back-throttle converges on from rest.</param>
+public readonly record struct FixedShapingAlong(FixedQ4816 Engage, FixedQ4816 Brake, FixedQ4816 Release, FixedQ4816 Reverse);
+/// <summary>The compiled form of a <c>shaping</c> row's <c>across</c> facet — present only on a row that runs the
+/// drive decomposition.</summary>
+/// <param name="Grip">The lateral convergence rate (u/s²) toward zero slip while this row governs.</param>
+public readonly record struct FixedShapingAcross(FixedQ4816 Grip);
+/// <summary>One compiled row of a kit's <c>shaping</c> table — the unified velocity-shaping law
+/// <see cref="BodyMotionOp.ShapeVelocity"/> reads. The first row whose <see cref="When"/> gate opens governs the
+/// whole tick; a row carries exactly one of <see cref="Along"/> (used alone for the whole-vector response law, or
+/// paired with <see cref="Across"/> for the drive decomposition) or <see cref="Dynamics"/> (the second-order
+/// follower alternative).</summary>
+/// <param name="When">The flattened gate, empty for the unconditional row.</param>
+/// <param name="Along">The along-the-target/along-the-heading facet, or <see langword="null"/> for a
+/// <see cref="Dynamics"/> row.</param>
+/// <param name="Across">The across-the-heading facet selecting the drive decomposition, or <see langword="null"/>
+/// for a row that shapes the whole vector.</param>
+/// <param name="Dynamics">The second-order follower this row names, or <see langword="null"/> for an
+/// <see cref="Along"/> row.</param>
+/// <param name="TurnScale">The steering-authority multiplier while this row governs.</param>
+public readonly record struct FixedBodyShaping(
+    CompiledPredicate[] When,
+    FixedShapingAlong? Along,
+    FixedShapingAcross? Across,
+    FixedMotionDynamics? Dynamics,
+    FixedQ4816 TurnScale
+);
+/// <summary>The one-time fixed-point compilation of a kit's <c>turn</c> row — the steering rate every yaw-writing
+/// motion operation reads, and the speed-scaled authority curve <see cref="BodyMotionOp.ResolveDriveFrame"/>,
+/// <see cref="BodyMotionOp.ResolveYawAttitudeAndPlanarFrame"/>, and <see cref="BodyMotionOp.IntegrateLocalAttitude"/>
+/// each apply identically.</summary>
+/// <param name="Rate">The turn rate (rad/s) at full authority.</param>
+/// <param name="ReferenceSpeed">The longitudinal/local speed (u/s) at which authority peaks, or zero — the
+/// compiled sentinel for "not authored" — for full authority at every speed.</param>
+/// <param name="Falloff">The fraction of full authority remaining at the kit's resolved move speed, in
+/// <c>[0, 1]</c>; unread while <see cref="ReferenceSpeed"/> is zero.</param>
+/// <param name="PitchRate">The pitch rate (rad/s) the Pitch channel commands under a pitched frame; zero locks it
+/// planar.</param>
+public readonly record struct FixedTurn(FixedQ4816 Rate, FixedQ4816 ReferenceSpeed, FixedQ4816 Falloff, FixedQ4816 PitchRate);
+/// <summary>The one-time fixed-point compilation of a kit's <c>speed</c> row — the movement rate every planar
+/// motion operation reads.</summary>
+/// <param name="Value">The profileless fallback speed (u/s); a seated profile's own claim overrides it before
+/// <see cref="Envelope"/> clamps the resolved value.</param>
+/// <param name="Envelope">The seat-time clamp bound, or <see langword="null"/> for none.</param>
+/// <param name="HeldOrdinal">The resolved held-multiplier channel ordinal, or <c>-1</c> for a kit with no held
+/// speed multiplier.</param>
+/// <param name="HeldMultiplier">The multiplier applied to the resolved speed while the channel at
+/// <see cref="HeldOrdinal"/> reads held; meaningless when <see cref="HeldOrdinal"/> is negative.</param>
+public readonly record struct FixedSpeed(FixedQ4816 Value, FixedMotionScalarEnvelope? Envelope, int HeldOrdinal, FixedQ4816 HeldMultiplier);
 /// <summary>The one-time fixed-point compilation of an authored grounded motion row. Runtime simulation reads only
 /// this form.</summary>
-/// <remarks><see cref="Response"/> is simulation-affecting: it promotes the slice of the tuning the planar shaping
-/// stage reads. <see cref="ResponseRecencyFacts"/>/<see cref="ResponseRecencyWindows"/> are the shared recency-clock
+/// <remarks><see cref="Shaping"/> is simulation-affecting: it selects the slice of the tuning the velocity-shaping
+/// stage reads. <see cref="ShapingRecencyFacts"/>/<see cref="ShapingRecencyWindows"/> are the shared recency-clock
 /// table across every row's <c>recently</c> gate, and the per-tick clock updater walks it.</remarks>
 public readonly record struct FixedMotionTuning(
-    FixedQ4816 MoveSpeed,
-    FixedQ4816 TurnSpeed,
-    FixedMotionResponse[] Response,
-    ActionFact[] ResponseRecencyFacts,
-    ulong[] ResponseRecencyWindows,
-    FixedQ4816 SprintMultiplier,
+    FixedSpeed Speed,
+    FixedTurn Turn,
+    FixedBodyShaping[] Shaping,
+    ActionFact[] ShapingRecencyFacts,
+    ulong[] ShapingRecencyWindows,
     MotionMoveFrame MoveFrame,
-    bool FacingSnap,
-    FixedMotionScalarEnvelope? MoveSpeedEnvelope,
-    FixedMotionDynamics? PlanarDynamics = null,
-    FixedBodyDrive? Drive = null
+    bool FacingSnap
 ) {
-    /// <summary>Gets the number of recency clocks the response table's recency gates share.</summary>
-    public int RecencySlots => ResponseRecencyFacts.Length;
+    /// <summary>Gets the number of recency clocks the shaping table's recency gates share.</summary>
+    public int RecencySlots => ShapingRecencyFacts.Length;
+    /// <summary>Gets a value indicating whether any shaping row names a second-order follower — whether the body's
+    /// planar/vertical follower state is live and needs carrying across an up-axis transport.</summary>
+    public bool HasDynamics {
+        get {
+            foreach (var row in Shaping) {
+                if (row.Dynamics is not null) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
 }
-/// <summary>The one-time fixed-point compilation of a kit's authored <c>drive</c> row — the anisotropic
-/// body-frame drive <see cref="BodyMotionOp.ResolveDriveFrame"/>/<see cref="BodyMotionOp.ShapeDriveVelocity"/>
-/// read, beside the planar shaping every other operation reads. The kit's own
-/// <see cref="FixedMotionTuning.MoveSpeed"/> is the forward target and <see cref="FixedMotionTuning.TurnSpeed"/> the
-/// steering rate: this row carries only what a drive alone has. The held drift channel name resolves to an ordinal
-/// separately, through the world's channel table.</summary>
-/// <param name="ReverseSpeed">The reverse speed (u/s) full back-throttle converges on from rest; zero forbids
-/// reversing.</param>
-/// <param name="Accel">The longitudinal convergence rate (u/s²) while throttle commands more speed.</param>
-/// <param name="Brake">The longitudinal convergence rate (u/s²) while back-throttle opposes forward travel.</param>
-/// <param name="Coast">The longitudinal convergence rate (u/s²) toward rest with throttle centered, and the decay
-/// rate while over the commanded speed.</param>
-/// <param name="Grip">The lateral convergence rate (u/s²) toward zero slip.</param>
-/// <param name="SteerReferenceSpeed">The longitudinal speed (u/s) at which steering authority peaks.</param>
-/// <param name="SteerFalloff">The fraction of full steering authority remaining at the resolved move speed, in
-/// <c>[0, 1]</c>.</param>
-/// <param name="PitchRate">The pitch rate (rad/s) the Pitch channel commands; zero locks the frame planar.</param>
-/// <param name="DriftGrip">The lateral convergence rate (u/s²) replacing <paramref name="Grip"/> while the drift
-/// channel reads held; zero without a drift row.</param>
-/// <param name="DriftSteerScale">The steering-authority multiplier while drifting; zero without a drift row.</param>
-public readonly record struct FixedBodyDrive(
-    FixedQ4816 ReverseSpeed,
-    FixedQ4816 Accel,
-    FixedQ4816 Brake,
-    FixedQ4816 Coast,
-    FixedQ4816 Grip,
-    FixedQ4816 SteerReferenceSpeed,
-    FixedQ4816 SteerFalloff,
-    FixedQ4816 PitchRate,
-    FixedQ4816 DriftGrip,
-    FixedQ4816 DriftSteerScale
-);

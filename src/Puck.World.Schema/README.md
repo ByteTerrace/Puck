@@ -97,20 +97,21 @@ are non-game adjacency/federation stress content — each a `basis` delta over
 the `quilt-base` template (see "Document composition" below). Every one of
 them layers over `standard.world.json`, the standard library document. The movement platform
 every kit rides is documented on its kit's `WorldMotion`
-row (`SprintMultiplier`/`SprintChannel`, `MoveFrame`/`FacingSnap`), the
+row (`Speed`/`Turn`, `MoveFrame`/`FacingSnap`), the
 frame its MoveAdvance/MoveStrafe channel rows are authored in
 (`channels[].frame`, `ChannelFrame`: `World` raw, `Camera` camera-relative and
 facing its travel, `Heading` body-relative with `Turn` steering — the stick's
 `player.move` is camera-framed by its own definition, so keyboard-in-heading
 beside stick-in-camera is one document), and the seat rig's own `dynamics` op
-(a named `dynamics` row shaping the boom ease). Beside `holds`, the motion row carries one
-more optional row: `drive` (`WorldDrive`) — anisotropic body-frame drive
-(longitudinal accel/brake/coast, lateral grip and a held `drift`,
-speed-scaled steering, optional pitched flight) read by the
-`ResolveDriveFrame`/`ShapeDriveVelocity` operations. A kart is the same motion row plus a
-drive row exactly as a swimmer is the same motion row plus a `Medium` hold row; a
-program selecting either drive operation against a kit authoring no row refuses
-by the `Drive` tuning facet's name. The retired `arcade` world's
+(a named `dynamics` row shaping the boom ease). Beside `holds`, the motion row's
+`shaping` table admits a row carrying an `across` facet — the anisotropic drive
+decomposition (longitudinal accel/brake/coast via `along`, lateral grip via
+`across`, a held drift row authored ahead of the ordinary one, `Turn`'s own
+speed-scaled steering authority, optional pitched flight) `ShapeVelocity` reads
+alongside `ResolveDriveFrame`. A kart is the same motion row plus an `across`
+shaping row exactly as a swimmer is the same motion row plus a `Medium` hold
+row; a program selecting `ShapeVelocity` against a kit authoring no shaping row
+refuses by the `Shaping` tuning facet's name. The retired `arcade` world's
 `gaming-brick`-cabinet + region-gated prompt/prize + `rules`-driven `state`
 reaction ladder (originally a document-mounted addon, ported to a world rule
 before the world itself was retired) survives only in git history; no shipped world exercises the `rules` section

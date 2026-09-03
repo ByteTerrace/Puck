@@ -53,7 +53,7 @@ public sealed record WorldAttachmentSection(
 /// <summary>The one-time fixed-point compilation of <see cref="WorldAttachmentSection"/> — every world-unit and
 /// degree field quantized to <see cref="FixedQ4816"/>, and every declared channel name resolved to the ordinal
 /// WorldBody attachment code reads directly (the same resolved-outside/consumed-as-ordinal pattern
-/// <c>FixedWorldKit.SprintChannelOrdinal</c> uses).</summary>
+/// <c>FixedSpeed.HeldOrdinal</c> uses).</summary>
 public readonly record struct FixedWorldAttachment(
     bool Enabled,
     FixedQ4816 GrappleMaxDistance,
@@ -65,7 +65,7 @@ public readonly record struct FixedWorldAttachment(
     // The attach/detach channels' own declared binary threshold — captured at compile time because WorldBody never
     // resolves these two ordinals through a kit's action table (see WorldBody.Attachment.cs), so it never otherwise
     // learns the world's own per-ordinal threshold the way a kit-bound channel does (FixedWorldKit.ActionThresholds,
-    // populated only for ordinals a kit's Actions map or a held-read facet like SprintChannel actually claims). Reel
+    // populated only for ordinals a kit's Actions map or a held-read facet like Speed.Held actually claims). Reel
     // needs no threshold — it is read continuously, never edge-tested.
     FixedQ4816 AttachThreshold,
     int DetachChannelOrdinal,

@@ -144,7 +144,7 @@ public sealed class ConstantUpLipContactLawTests {
             ),
             KitRowsRaw = source.Kits.Select(selector: kit => kit with {
                 Motion = kit.Motion with {
-                    MoveSpeed = 4f,
+                    Speed = kit.Motion.Speed with { Value = 4f },
                     Holds = [
                         kit.Motion.Holds![0] with { Gravity = new WorldHoldGravity(Fall: 46f, Rise: 28f, Terminal: 40f) },
                     ],

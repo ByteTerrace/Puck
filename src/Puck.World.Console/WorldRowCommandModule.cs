@@ -686,28 +686,39 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
 
         return builder.Append(value: ']').ToString();
     }
-    // A kit's planar shaping is exactly one of the two mechanisms — echoed alongside the motion row so world.kits
-    // answers "how does this kit feel" without a separate lookup. A drive kit shapes planar velocity through its own
-    // row and authors neither, which reads as none here.
-    private static string DescribeShaping(WorldMotion motion) => ((motion.Dynamics is { Length: > 0 } row)
-        ? $"shaping=dynamics:{row}"
-        : (((motion.Response?.Count ?? 0) == 0) && (motion.Drive is not null))
-        ? "shaping=drive"
-        : string.Create(
-        provider: CultureInfo.InvariantCulture,
-        handler: $"shaping=response({motion.Response?.Count ?? 0})"
-    ));
-    // The optional drive row's own key scalars, or nothing at all for a kit authoring none.
-    private static string DescribeDrive(WorldMotion motion) => ((motion.Drive is { } drive)
-        ? string.Create(
-        provider: CultureInfo.InvariantCulture,
-        handler: $" drive=(accel={drive.Accel:0.###} brake={drive.Brake:0.###} coast={drive.Coast:0.###} grip={drive.Grip:0.###} reverseSpeed={drive.ReverseSpeed:0.###} drift={((drive.Drift is { } drift)
-            ? drift.Channel
-            : "none"
-        )})"
-    )
-        : string.Empty
-    );
+    // A kit's shaping table: each row's mechanism in order — a named dynamics follower, the drive decomposition (with
+    // its own key scalars), or the whole-vector response law — echoed alongside the motion row so world.kits answers
+    // "how does this kit feel" without a separate lookup.
+    private static string DescribeShaping(WorldMotion motion) {
+        var rows = motion.Shaping;
+
+        if (rows is not { Count: > 0 }) {
+            return "shaping=none";
+        }
+
+        var builder = new StringBuilder(value: "shaping=");
+
+        for (var index = 0; (index < rows.Count); index++) {
+            var row = rows[index];
+
+            if (index > 0) {
+                _ = builder.Append(value: '+');
+            }
+
+            if (row?.Dynamics is { Length: > 0 } name) {
+                _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"dynamics:{name}");
+            } else if ((row?.Across is { } across) && (row.Along is { } along)) {
+                _ = builder.Append(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $"drive(engage={along.Engage:0.###} brake={along.Brake:0.###} release={along.Release:0.###} reverse={along.Reverse:0.###} grip={across.Grip:0.###})"
+                );
+            } else {
+                _ = builder.Append(value: "response");
+            }
+        }
+
+        return builder.ToString();
+    }
     // The ordered hold list's own kind/gravity/thrust per row — the vertical channel's whole authoring surface.
     private static string DescribeHolds(WorldMotion motion) {
         if (motion.Holds is not { Count: > 0 } holds) {
@@ -733,7 +744,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
     }
     private static string DescribeMotion(WorldMotion motion) => string.Create(
         provider: CultureInfo.InvariantCulture,
-        handler: $"moveSpeed={motion.MoveSpeed:0.###} turnSpeed={motion.TurnSpeed:0.###} {DescribeHolds(motion: motion)} {DescribeShaping(motion: motion)}{DescribeDrive(motion: motion)}"
+        handler: $"speed={motion.Speed.Value:0.###} turn={motion.Turn.Rate:0.###} {DescribeHolds(motion: motion)} {DescribeShaping(motion: motion)}"
     );
     private CommandResult HandleAssign(CommandContext context, WireArgs args) {
         if (args.Count < 2) {

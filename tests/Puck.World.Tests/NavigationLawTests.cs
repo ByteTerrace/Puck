@@ -154,7 +154,7 @@ public sealed class NavigationLawTests {
                 BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
                 BodyMotionOp.ResolveHold,
                 BodyMotionOp.ComputePlanarTargetVelocity,
-                BodyMotionOp.ShapePlanarVelocity,
+                BodyMotionOp.ShapeVelocity,
                 BodyMotionOp.RunActionTriggers,
                 BodyMotionOp.ApplyHold,
                 BodyMotionOp.IntegratePlanarAndVerticalVelocity,

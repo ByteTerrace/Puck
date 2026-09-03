@@ -219,7 +219,7 @@ public sealed class WorldMediumLawTests {
                 BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
                 BodyMotionOp.ResolveHold,
                 BodyMotionOp.ComputePlanarTargetVelocity,
-                BodyMotionOp.ShapePlanarVelocity,
+                BodyMotionOp.ShapeVelocity,
                 BodyMotionOp.ApplyHold,
                 BodyMotionOp.IntegratePlanarAndVerticalVelocity,
                 BodyMotionOp.CommitPose,
@@ -230,10 +230,15 @@ public sealed class WorldMediumLawTests {
             Name: "diver-test",
             BodyMotionProgram: "medium",
             Motion: new WorldMotion(
-                MoveSpeed: 3.2f,
-                TurnSpeed: 2.2f,
-                SprintMultiplier: 1f,
-                Response: [],
+                Speed: new WorldSpeed(Value: 3.2f),
+                Turn: new WorldTurn(Rate: 2.2f),
+                // One unconditional row at engage/release rates far above anything a tick could need to converge —
+                // MoveToward returns the target exactly whenever maxDelta exceeds the distance, so this snaps both
+                // the planar velocity and (through ApplyMedium's own vertical lane) the medium's own commanded
+                // vertical target instantly, byte-identical to the retired empty-response-table fixture.
+                Shaping: [
+                    new WorldShaping(Along: new WorldShapingAlong(Engage: 1_000_000f, Brake: 0f, Release: 1_000_000f)),
+                ],
                 Holds: [
                     new WorldHold(
                         Bond: BodyHoldBond.Medium,

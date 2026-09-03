@@ -478,10 +478,11 @@ public static partial class WorldDefinitionValidator {
         }
 
     }
-    // A motion-response gate: the body-fact predicate vocabulary ONLY. Now/Recently/All/Any/Not are accepted; the lane-scoped
-    // CompareState/TimerElapsed are rejected by name ("action-state predicates apply only to action triggers"); an
-    // unknown kind is loud. Mirrors ValidatePredicate's structure but narrows the admissible set.
-    private static void ValidateMotionGate(ActionPredicate? predicate, string path, List<string> errors) {
+    // A shaping-row gate: the body-fact predicate vocabulary, plus 'held' (a shaping row's own channel test).
+    // Now/Recently/All/Any/Not/Held are accepted; the lane-scoped CompareState/TimerElapsed are rejected by name
+    // ("action-state predicates apply only to action triggers"); an unknown kind is loud. Mirrors ValidatePredicate's
+    // structure but narrows the admissible set.
+    private static void ValidateMotionGate(ActionPredicate? predicate, ISet<string> channelNames, string path, List<string> errors) {
         switch (predicate) {
             case null:
                 break;
@@ -502,6 +503,15 @@ public static partial class WorldDefinitionValidator {
                 );
 
                 break;
+            case ActionPredicate.Held held:
+                if (
+                    string.IsNullOrWhiteSpace(value: held.Channel) ||
+                    !channelNames.Contains(item: held.Channel)
+                ) {
+                    errors.Add(item: $"{path}.channel '{held.Channel}' names no declared composition channel.");
+                }
+
+                break;
             case ActionPredicate.All all:
                 if (all.Predicates is not { Count: > 0 } inner) {
                     errors.Add(item: $"{path}.all must contain at least one predicate.");
@@ -512,6 +522,7 @@ public static partial class WorldDefinitionValidator {
                 for (var index = 0; (index < inner.Count); index++) {
                     ValidateMotionGate(
                         predicate: inner[index],
+                        channelNames: channelNames,
                         path: $"{path}.all[{index}]",
                         errors: errors
                     );
@@ -528,6 +539,7 @@ public static partial class WorldDefinitionValidator {
                 for (var index = 0; (index < alternatives.Count); index++) {
                     ValidateMotionGate(
                         predicate: alternatives[index],
+                        channelNames: channelNames,
                         path: $"{path}.any[{index}]",
                         errors: errors
                     );
@@ -540,6 +552,7 @@ public static partial class WorldDefinitionValidator {
                 } else {
                     ValidateMotionGate(
                         predicate: not.Predicate,
+                        channelNames: channelNames,
                         path: $"{path}.not",
                         errors: errors
                     );
@@ -548,7 +561,7 @@ public static partial class WorldDefinitionValidator {
                 break;
             case ActionPredicate.CompareState:
             case ActionPredicate.TimerElapsed:
-                errors.Add(item: $"{path} is an action-state predicate ('{PredicateKind(predicate: predicate)}') — action-state predicates apply only to action triggers, not a motion response gate.");
+                errors.Add(item: $"{path} is an action-state predicate ('{PredicateKind(predicate: predicate)}') — action-state predicates apply only to action triggers, not a shaping-row gate.");
                 break;
             default:
                 errors.Add(item: $"{path} is an unknown predicate kind.");
@@ -664,6 +677,9 @@ public static partial class WorldDefinitionValidator {
                     path: $"{path}.not",
                     errors: errors
                 );
+                break;
+            case ActionPredicate.Held:
+                errors.Add(item: $"{path} is 'held' — legitimate only inside a kit's shaping-row gate, not an action trigger.");
                 break;
             default:
                 errors.Add(item: $"{path} is an unknown predicate kind.");

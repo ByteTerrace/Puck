@@ -45,7 +45,7 @@ public sealed class TransferAbortKitWideningLawTests {
             Operations: [
                 BodyMotionOp.ResolveDriveFrame,
                 BodyMotionOp.ResolveHold,
-                BodyMotionOp.ShapeDriveVelocity,
+                BodyMotionOp.ShapeVelocity,
                 BodyMotionOp.RunActionTriggers,
                 BodyMotionOp.ApplyHold,
                 BodyMotionOp.IntegratePlanarAndVerticalVelocity,
@@ -62,8 +62,8 @@ public sealed class TransferAbortKitWideningLawTests {
             Name: "kart-test",
             BodyMotionProgram: "drive-ground",
             Motion: new WorldMotion(
-                MoveSpeed: 16f,
-                TurnSpeed: 2.4f,
+                Speed: new WorldSpeed(Value: 16f, Envelope: new MotionScalarEnvelope(Max: 16f, Min: 16f)),
+                Turn: new WorldTurn(Rate: 2.4f, ReferenceSpeed: 4f, Falloff: 0.55f, PitchRate: 0f),
                 Holds: [
                     new WorldHold(
                         Bond: BodyHoldBond.Free,
@@ -72,18 +72,12 @@ public sealed class TransferAbortKitWideningLawTests {
                         Name: "air"
                     ),
                 ],
-                SprintMultiplier: 1f,
-                MoveSpeedEnvelope: new MotionScalarEnvelope(Max: 16f, Min: 16f),
-                Drive: new WorldDrive(
-                    Accel: 7f,
-                    Brake: 18f,
-                    Coast: 4f,
-                    Grip: 22f,
-                    SteerReferenceSpeed: 4f,
-                    SteerFalloff: 0.55f,
-                    ReverseSpeed: 5f,
-                    PitchRate: 0f
-                )
+                Shaping: [
+                    new WorldShaping(
+                        Along: new WorldShapingAlong(Engage: 7f, Brake: 18f, Release: 4f, Reverse: 5f),
+                        Across: new WorldShapingAcross(Grip: 22f)
+                    ),
+                ]
             ),
             ProducersRaw: new Dictionary<string, BodyProgramParameters> {
                 ["wander"] = Fixtures.TravelerWanderParameters,
@@ -132,7 +126,7 @@ public sealed class TransferAbortKitWideningLawTests {
                 BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
                 BodyMotionOp.ResolveHold,
                 BodyMotionOp.ComputePlanarTargetVelocity,
-                BodyMotionOp.ShapePlanarVelocity,
+                BodyMotionOp.ShapeVelocity,
                 BodyMotionOp.RunActionTriggers,
                 BodyMotionOp.ApplyHold,
                 BodyMotionOp.IntegratePlanarAndVerticalVelocity,
@@ -146,15 +140,14 @@ public sealed class TransferAbortKitWideningLawTests {
             Name: "diver-test",
             BodyMotionProgram: "medium",
             Motion: new WorldMotion(
-                MoveSpeed: 3.2f,
-                TurnSpeed: 2.2f,
-                SprintMultiplier: 1f,
+                Speed: new WorldSpeed(Value: 3.2f),
+                Turn: new WorldTurn(Rate: 2.2f),
                 // Row 0 gates on "Recently Rising" — driving the Up channel positive for a few ticks makes Rising
                 // hold, which THIS row's own Recently clock then reflects (WorldBody.MotionRecency's own capture).
-                // Row 1 is the always-row (no gate), required last.
-                Response: [
-                    new MotionResponse(EngageRate: 9f, ReleaseRate: 5f, Gate: new ActionPredicate.Recently(Fact: ActionFact.Rising, WindowSeconds: 1f)),
-                    new MotionResponse(EngageRate: 7f, ReleaseRate: 3.5f),
+                // Row 1 is the unconditional row (no gate), required last.
+                Shaping: [
+                    new WorldShaping(When: new ActionPredicate.Recently(Fact: ActionFact.Rising, WindowSeconds: 1f), Along: new WorldShapingAlong(Engage: 9f, Brake: 0f, Release: 5f)),
+                    new WorldShaping(Along: new WorldShapingAlong(Engage: 7f, Brake: 0f, Release: 3.5f)),
                 ],
                 Holds: [
                     new WorldHold(
@@ -455,7 +448,7 @@ public sealed class TransferAbortKitWideningLawTests {
 
         document = document with {
             DynamicsRaw = [.. Fixtures.StandardDynamics, Settle],
-            KitRowsRaw = [kit with { Motion = motion with { Response = null, Dynamics = "settle" } }],
+            KitRowsRaw = [kit with { Motion = motion with { Shaping = [motion.Shaping![0] with { Along = null, Dynamics = "settle" }] } }],
         };
 
         using var fixture = Fixtures.FreshServer(definition: document);
@@ -504,7 +497,7 @@ public sealed class TransferAbortKitWideningLawTests {
 
         document = document with {
             DynamicsRaw = [.. Fixtures.StandardDynamics, Settle],
-            KitRowsRaw = [kit with { Motion = motion with { Response = null, Dynamics = "settle" } }],
+            KitRowsRaw = [kit with { Motion = motion with { Shaping = [motion.Shaping![1] with { Along = null, Dynamics = "settle" }] } }],
         };
 
         using var fixture = Fixtures.FreshServer(definition: document);

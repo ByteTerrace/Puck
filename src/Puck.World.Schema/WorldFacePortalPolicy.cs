@@ -51,11 +51,11 @@ public static class WorldFacePortalPolicy {
         return ((SpeedCeiling(definition: definition) * step) + FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: definition.Collision.ContactSkin)));
     }
     /// <summary>The fastest travel a document declares, in world units per second — the maximum over the world's
-    /// profileless motion default and, per kit, its motion row's ceiling (the authored <c>moveSpeedEnvelope</c>
-    /// upper bound where one is declared, its own <c>moveSpeed</c> otherwise, scaled by its
-    /// <c>sprintMultiplier</c>), its holds' fastest authored vertical speed (a terminal fall speed or a medium's
-    /// rise/sink terminal — zero for a kit whose holds are all Grip or None, which folds into this maximum as a
-    /// no-op rather than lowering it), and a drive row's <c>reverseSpeed</c> where one is authored.</summary>
+    /// profileless motion default and, per kit, its speed row's ceiling (the authored <c>speed.envelope</c> upper
+    /// bound where one is declared, its own <c>speed.value</c> otherwise, scaled by its held multiplier), its
+    /// holds' fastest authored vertical speed (a terminal fall speed or a medium's rise/sink terminal — zero for a
+    /// kit whose holds are all Grip or None, which folds into this maximum as a no-op rather than lowering it), and
+    /// a drive-decomposition shaping row's <c>along.reverse</c> where one is authored.</summary>
     /// <param name="definition">The document to read.</param>
     /// <returns>The declared speed ceiling.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
@@ -74,8 +74,8 @@ public static class WorldFacePortalPolicy {
             ceiling = FixedQ4816.Max(
                 x: ceiling,
                 y: Scaled(
-                    baseSpeed: (motion.MoveSpeedEnvelope?.Max ?? motion.MoveSpeed),
-                    multiplier: motion.SprintMultiplier
+                    baseSpeed: (motion.Speed.Envelope?.Max ?? motion.Speed.Value),
+                    multiplier: (motion.Speed.Held?.Multiplier ?? 1f)
                 )
             );
             ceiling = FixedQ4816.Max(
@@ -83,12 +83,14 @@ public static class WorldFacePortalPolicy {
                 y: Magnitude(value: WorldHoldFactory.MaxTerminalFallSpeed(holds: motion.Holds))
             );
 
-            // A drive row travels backwards at its own rate, which no forward bound covers.
-            if (motion.Drive is { } drive) {
-                ceiling = FixedQ4816.Max(
-                    x: ceiling,
-                    y: Magnitude(value: drive.ReverseSpeed)
-                );
+            // A drive row's along facet travels backwards at its own rate, which no forward bound covers.
+            foreach (var row in (motion.Shaping ?? [])) {
+                if ((row?.Across is not null) && (row.Along?.Reverse is { } reverse)) {
+                    ceiling = FixedQ4816.Max(
+                        x: ceiling,
+                        y: Magnitude(value: reverse)
+                    );
+                }
             }
         }
 

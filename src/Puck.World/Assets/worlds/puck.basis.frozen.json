@@ -1069,7 +1069,7 @@
         "ResolveYawAttitudeAndPlanarFrame",
         "ResolveHold",
         "ComputePlanarTargetVelocity",
-        "ShapePlanarVelocity",
+        "ShapeVelocity",
         "SnapYawToPlanarIntent",
         "RunActionTriggers",
         "ApplyHold",
@@ -1994,12 +1994,26 @@
           "radius": 0.35
         },
         "motion": {
+          "speed": {
+            "value": 4,
+            "held": {
+              "channel": "run",
+              "multiplier": 1.6
+            }
+          },
+          "turn": {
+            "rate": 2.5
+          },
+          "shaping": [
+            {
+              "along": {
+                "engage": 1000000,
+                "brake": 0,
+                "release": 1000000
+              }
+            }
+          ],
           "facingSnap": false,
-          "moveSpeed": 4,
-          "response": [],
-          "sprintChannel": "run",
-          "sprintMultiplier": 1.6,
-          "turnSpeed": 2.5,
           "holds": [
             {
               "name": "ground",

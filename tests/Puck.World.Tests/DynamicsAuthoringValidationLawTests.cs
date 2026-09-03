@@ -106,11 +106,12 @@ public sealed class DynamicsAuthoringValidationLawTests {
         var kit = document.Kits[0];
         var motion = kit.Motion;
 
-        var dangling = document with { KitRowsRaw = [kit with { Motion = motion with { Response = null, Dynamics = "missing" } }] };
-        var resolving = document with { KitRowsRaw = [kit with { Motion = motion with { Response = null, Dynamics = "chase" } }] };
+        var row = motion.Shaping![0];
+        var dangling = document with { KitRowsRaw = [kit with { Motion = motion with { Shaping = [row with { Along = null, Dynamics = "missing" }] } }] };
+        var resolving = document with { KitRowsRaw = [kit with { Motion = motion with { Shaping = [row with { Along = null, Dynamics = "chase" }] } }] };
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: dangling, neighbours: null, reason: out var deniedReason));
-        Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "kits[0].motion.dynamics 'missing' names no dynamics row.");
+        Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "kits[0].motion.shaping[0].dynamics 'missing' names no dynamics row.");
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: resolving, neighbours: null, reason: out var controlReason), userMessage: controlReason);
     }
 

@@ -1145,7 +1145,15 @@ public sealed partial class WorldBody {
             maximum: medium.MaxRiseSpeed
         );
 
-        if (m_tuning.PlanarDynamics is { Planar: { } planar }) {
+        // ShapeVelocity already ticked the recency clocks this step (the refresh runs once, before phase 0), so
+        // this reads the SAME shaping row it governs under (first open row wins, same rule the planar half follows).
+        var governingRow = ResolveGoverningShapingRow(intent: in scratch.Intent);
+        var row = ((governingRow >= 0)
+            ? m_tuning.Shaping[governingRow]
+            : default
+        );
+
+        if (row.Dynamics is { Planar: { } planar }) {
             // scratch.StepTicks can differ from planar.StepTicks for exactly one tick — a world-load/reload swap
             // recompiles the propagator at the NEW rate but the batch already in flight still advances at its OLD
             // width. The follower steps through the mismatched width rather than fault on it.
@@ -1164,46 +1172,27 @@ public sealed partial class WorldBody {
             return;
         }
 
-        var response = m_tuning.Response;
+        if (row.Along is { } along) {
+            var hasVerticalInput = (Role(
+                intent: in scratch.Intent,
+                role: ChannelRole.MoveUp
+            ) != FixedQ4816.Zero);
+            var rate = (hasVerticalInput
+                ? along.Engage
+                : along.Release
+            );
+            var maxDelta = m_mediumThrustRampAccumulator.Integrate(
+                elapsedTicks: scratch.StepTicks,
+                ratePerSecond: rate
+            );
 
-        if (response.Length == 0) {
-            m_verticalVelocity = target;
+            m_verticalVelocity = FixedQ4816.MoveToward(
+                current: m_verticalVelocity,
+                maxDelta: maxDelta,
+                target: target
+            );
         } else {
-            var matched = false;
-
-            // ShapePlanarVelocity already ticked the recency clocks this step (phase 2 precedes 4); this scan only
-            // SELECTS (first open row wins, same rule the planar half follows).
-            foreach (var row in response) {
-                if (!MotionGateOpen(gate: row.Gate)) {
-                    continue;
-                }
-
-                var hasVerticalInput = (Role(
-                    intent: in scratch.Intent,
-                    role: ChannelRole.MoveUp
-                ) != FixedQ4816.Zero);
-                var rate = (hasVerticalInput
-                    ? row.EngageRate
-                    : row.ReleaseRate
-                );
-                var maxDelta = m_mediumThrustRampAccumulator.Integrate(
-                    elapsedTicks: scratch.StepTicks,
-                    ratePerSecond: rate
-                );
-
-                m_verticalVelocity = FixedQ4816.MoveToward(
-                    current: m_verticalVelocity,
-                    maxDelta: maxDelta,
-                    target: target
-                );
-                matched = true;
-
-                break;
-            }
-
-            if (!matched) {
-                m_verticalVelocity = target;
-            }
+            m_verticalVelocity = target;
         }
 
         WriteMediumFacts(
@@ -1215,9 +1204,9 @@ public sealed partial class WorldBody {
     // The vertical half of the commanded thrust: the MoveUp role scaled by the hold's travel speed and the row's own
     // thrust, with the same held-sprint multiplier the planar half applies.
     private FixedQ4816 MediumThrust(in FixedBodyHold hold, ref BodyMotionScratch scratch) {
-        var speed = (((m_sprintChannelOrdinal >= 0) && (scratch.Intent[m_sprintChannelOrdinal] >= m_channelThresholds[m_sprintChannelOrdinal]))
-            ? (scratch.MoveSpeed * m_tuning.SprintMultiplier)
-            : scratch.MoveSpeed
+        var speed = ApplySpeedHeld(
+            baseSpeed: scratch.MoveSpeed,
+            intent: in scratch.Intent
         );
 
         return ((Role(

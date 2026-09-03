@@ -12,7 +12,7 @@ public sealed partial class WorldPopulation {
         var entry = m_entries[index];
         var kit = m_kits[kitIndex];
         var body = new WorldBody(
-            motion: m_kitRows[kitIndex].Motion,
+            tuning: kit.Tuning,
             program: kit.BodyMotionProgram,
             programs: m_bodyMotionPrograms,
             actions: kit.Actions,
@@ -23,10 +23,7 @@ public sealed partial class WorldPopulation {
             actionState: kit.ActionState,
             collider: kit.Collider,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
-            sprintChannelOrdinal: kit.SprintChannelOrdinal,
-            driftChannelOrdinal: kit.DriftChannelOrdinal,
-            holds: kit.Holds,
-            planarDynamics: kit.PlanarDynamics
+            holds: kit.Holds
         );
 
         body.SetContactConfiguration(
@@ -81,7 +78,7 @@ public sealed partial class WorldPopulation {
         var kit = m_kits[entry.KitIndex];
         // Profileless — advances on the kit row's tuning with the row's lane bindings.
         var player = new WorldBody(
-            motion: m_kitRows[entry.KitIndex].Motion,
+            tuning: kit.Tuning,
             program: kit.BodyMotionProgram,
             programs: m_bodyMotionPrograms,
             actions: kit.Actions,
@@ -92,10 +89,7 @@ public sealed partial class WorldPopulation {
             actionState: kit.ActionState,
             collider: kit.Collider,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
-            sprintChannelOrdinal: kit.SprintChannelOrdinal,
-            driftChannelOrdinal: kit.DriftChannelOrdinal,
-            holds: kit.Holds,
-            planarDynamics: kit.PlanarDynamics
+            holds: kit.Holds
         );
 
         player.SetContactConfiguration(
@@ -251,7 +245,7 @@ public sealed partial class WorldPopulation {
         // The seat body constructs from the definition's designated seat kit row (its tuning and lane bindings); the
         // seated profile's speeds still override live.
         var body = new WorldBody(
-            motion: m_kitRows[m_seatKit].Motion,
+            tuning: m_kits[m_seatKit].Tuning,
             program: m_kits[m_seatKit].BodyMotionProgram,
             programs: m_bodyMotionPrograms,
             actions: m_kits[m_seatKit].Actions,
@@ -262,10 +256,7 @@ public sealed partial class WorldPopulation {
             actionState: m_kits[m_seatKit].ActionState,
             collider: m_kits[m_seatKit].Collider,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
-            sprintChannelOrdinal: m_kits[m_seatKit].SprintChannelOrdinal,
-            driftChannelOrdinal: m_kits[m_seatKit].DriftChannelOrdinal,
-            holds: m_kits[m_seatKit].Holds,
-            planarDynamics: m_kits[m_seatKit].PlanarDynamics
+            holds: m_kits[m_seatKit].Holds
         ) {
             Profile = profile,
         };
@@ -689,7 +680,7 @@ public sealed partial class WorldPopulation {
             entry.LookIndex = ResolveInhabitLook(placement: placement);
             entry.Body?.SetIntentSource(source: placement.Inhabit!.Source);
             entry.Body?.RecompileKit(
-                motion: m_kitRows[kitIndex].Motion,
+                tuning: m_kits[kitIndex].Tuning,
                 actions: m_kits[kitIndex].Actions,
                 actionThresholds: m_kits[kitIndex].ActionThresholds,
                 actionShapes: m_kits[kitIndex].ActionShapes,
@@ -700,10 +691,7 @@ public sealed partial class WorldPopulation {
                 programs: m_bodyMotionPrograms,
                 collider: m_kits[kitIndex].Collider,
                 maxSmoothError: m_fixedMotion.MaxSmoothError,
-                sprintChannelOrdinal: m_kits[kitIndex].SprintChannelOrdinal,
-                driftChannelOrdinal: m_kits[kitIndex].DriftChannelOrdinal,
-                holds: m_kits[kitIndex].Holds,
-                planarDynamics: m_kits[kitIndex].PlanarDynamics
+                holds: m_kits[kitIndex].Holds
             );
         }
 
@@ -852,7 +840,7 @@ public sealed partial class WorldPopulation {
         }
 
         var body = new WorldBody(
-            motion: m_kitRows[m_seatKit].Motion,
+            tuning: m_kits[m_seatKit].Tuning,
             program: m_kits[m_seatKit].BodyMotionProgram,
             programs: m_bodyMotionPrograms,
             actions: m_kits[m_seatKit].Actions,
@@ -863,10 +851,7 @@ public sealed partial class WorldPopulation {
             actionState: m_kits[m_seatKit].ActionState,
             collider: m_kits[m_seatKit].Collider,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
-            sprintChannelOrdinal: m_kits[m_seatKit].SprintChannelOrdinal,
-            driftChannelOrdinal: m_kits[m_seatKit].DriftChannelOrdinal,
-            holds: m_kits[m_seatKit].Holds,
-            planarDynamics: m_kits[m_seatKit].PlanarDynamics
+            holds: m_kits[m_seatKit].Holds
         ) {
             Profile = profile,
         };

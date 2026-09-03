@@ -628,7 +628,7 @@ public sealed partial class WorldPopulation {
         var kit = m_kits[kitIndex];
 
         return new WorldBody(
-            motion: m_kitRows[kitIndex].Motion,
+            tuning: kit.Tuning,
             program: kit.BodyMotionProgram,
             programs: m_bodyMotionPrograms,
             actions: kit.Actions,
@@ -639,10 +639,7 @@ public sealed partial class WorldPopulation {
             actionState: kit.ActionState,
             collider: kit.Collider,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
-            sprintChannelOrdinal: kit.SprintChannelOrdinal,
-            driftChannelOrdinal: kit.DriftChannelOrdinal,
-            holds: kit.Holds,
-            planarDynamics: kit.PlanarDynamics
+            holds: kit.Holds
         ) {
             Profile = profile,
         };

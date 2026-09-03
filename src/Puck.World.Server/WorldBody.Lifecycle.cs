@@ -117,11 +117,11 @@ public sealed partial class WorldBody {
         CommitTeleport(resetVertical: program.OwnsVerticalContactState);
         m_continuity = EntityContinuity.Teleport;
     }
-    // The one dispatch point from a kit's declared WorldMotion row to the compiled fixed-point tuning this class
-    // integrates under — never a hunt through Advance's op handlers, which stay generic over whatever the kit's
-    // body motion program selects. WorldDefinitionValidator has already refused an incoherent pairing (a program
-    // whose operations need a facet the declared row doesn't supply) before this ever runs.
-    private void SetTuning(WorldMotion motion, FixedMotionDynamics? planarDynamics = null, FixedBodyHold[]? holds = null) {
+    // The one dispatch point from a kit's compiled locomotion tuning to the field this class integrates under —
+    // never a hunt through Advance's op handlers, which stay generic over whatever the kit's body motion program
+    // selects. WorldDefinitionValidator has already refused an incoherent pairing (a program whose operations need a
+    // facet the declared row doesn't supply) before this ever runs.
+    private void SetTuning(FixedMotionTuning tuning, FixedBodyHold[]? holds = null) {
         m_holds = (holds ?? []);
 
         if (m_holdIndex >= m_holds.Length) {
@@ -133,7 +133,7 @@ public sealed partial class WorldBody {
             m_holdSpendAccumulator.Reset();
         }
 
-        m_tuning = WorldMotionTuningFactory.Compile(dynamics: planarDynamics, tuning: motion);
+        m_tuning = tuning;
     }
 
     /// <summary>Clears the scripted tape, dropping every queued segment. The held keys (if any) resume driving.</summary>
@@ -378,7 +378,7 @@ public sealed partial class WorldBody {
     /// changes. The action runtime resets because it is bound to the old binding and named-state shapes, and an
     /// incompatible program switch re-pins the pose exactly as
     /// <c>body.motion</c> does (a no-op when unchanged).</summary>
-    /// <param name="motion">The kit's authored motion row.</param>
+    /// <param name="tuning">The kit's compiled locomotion tuning (<see cref="FixedWorldKit.Tuning"/>).</param>
     /// <param name="actions">The kit's compiled per-ordinal action bindings.</param>
     /// <param name="actionThresholds">The kit's per-ordinal binary crossing thresholds, parallel to <paramref name="actions"/>.</param>
     /// <param name="actionShapes">The world's per-ordinal declared channel shapes (every ordinal, not just bound ones).</param>
@@ -389,20 +389,12 @@ public sealed partial class WorldBody {
     /// <param name="programs">The world's compiled body motion program table.</param>
     /// <param name="collider">The kit's compiled body volume, or <see langword="null"/> for a volumeless kit.</param>
     /// <param name="maxSmoothError">The compiled world-distance correction smoothing threshold.</param>
-    /// <param name="sprintChannelOrdinal">The ordinal <see cref="WorldMotion.SprintChannel"/> resolved to, or <c>-1</c>
-    /// for a kit with no sprint capability.</param>
-    /// <param name="driftChannelOrdinal">The ordinal <see cref="WorldDriveDrift.Channel"/> resolved to,
-    /// or <c>-1</c> for a kit that cannot drift.</param>
-    /// <param name="planarDynamics">The kit's compiled second-order follower
-    /// (<see cref="FixedWorldKit.PlanarDynamics"/>), or <see langword="null"/> when the kit shapes planar velocity
-    /// through its response table instead.</param>
     /// <param name="holds">The kit's compiled ordered hold list (<see cref="FixedWorldKit.Holds"/>), or
     /// <see langword="null"/> for a kit authoring none.</param>
-    public void RecompileKit(WorldMotion motion, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, int sprintChannelOrdinal = -1, int driftChannelOrdinal = -1, FixedMotionDynamics? planarDynamics = null, FixedBodyHold[]? holds = null) {
+    public void RecompileKit(FixedMotionTuning tuning, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, FixedBodyHold[]? holds = null) {
         SetTuning(
             holds: holds,
-            motion: motion,
-            planarDynamics: planarDynamics
+            tuning: tuning
         );
         CopyChannelBindings(
             actionShapes: actionShapes,
@@ -414,8 +406,6 @@ public sealed partial class WorldBody {
         CompileActionState(state: actionState);
         m_collider = collider;
         m_maxSmoothError = maxSmoothError;
-        m_sprintChannelOrdinal = sprintChannelOrdinal;
-        m_driftChannelOrdinal = driftChannelOrdinal;
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
             m_laneActions[lane] = default;
@@ -716,8 +706,8 @@ public sealed partial class WorldBody {
     public int ContactCount => m_lastContactCount;
     /// <summary>Gets the base move speed the sim integrates under right now: <see cref="Profile"/>'s requested rate
     /// (or the tuning's profileless fallback) after the kit's
-    /// <see cref="WorldMotion.MoveSpeedEnvelope"/> clamp. A held sprint channel — a drive row's boost
-    /// included — scales this after the clamp, so the envelope pins the base rate and not the sprinting one; a kit
+    /// <see cref="WorldSpeed.Envelope"/> clamp. A held speed multiplier — a drive row's boost
+    /// included — scales this after the clamp, so the envelope pins the base rate and not the boosted one; a kit
     /// that means to pin its speed against any profile authors <c>min == max</c>. This is the same resolve
     /// <see cref="Advance"/> performs every tick. A read-only echo: querying this never mutates state, and an
     /// unenveloped kit returns the requested/kit rate unchanged.</summary>

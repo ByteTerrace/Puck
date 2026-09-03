@@ -509,8 +509,7 @@ public sealed partial class WorldBody {
     /// <see cref="FixedTickConversion.DurationEngineTicks"/>'s own seconds conversion, which would drift the
     /// restored duration from what was actually live) — the body's own future trajectory.</para>
     /// <para><b>Deliberately re-derived (with reason) — never added to this struct.</b>
-    /// <c>m_tuning</c>/<c>m_driftChannelOrdinal</c>/
-    /// <c>m_sprintChannelOrdinal</c>/<c>m_laneBindings</c>/<c>m_channelThresholds</c>/<c>m_channelShapes</c>/
+    /// <c>m_tuning</c>/<c>m_laneBindings</c>/<c>m_channelThresholds</c>/<c>m_channelShapes</c>/
     /// <c>m_roleChannels</c>/<c>m_roleOrdinals</c>/<c>m_actionStateDefinitions</c>/<c>m_collider</c>/
     /// <c>m_maxSmoothError</c> — compiled kit config; <see cref="Puck.World.Server.WorldPopulation.RestoreDetachedSeat"/>
     /// reconstructs the body from the same seat kit row (<c>m_kits[m_seatKit]</c>), so these are byte-identical

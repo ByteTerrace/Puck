@@ -93,7 +93,7 @@ public sealed class CompiledBodyMotionProgram {
         BodyMotionOp.ResolveYawAttitudeAndPlanarFrame or BodyMotionOp.IntegrateLocalAttitude or BodyMotionOp.ResolveDriveFrame
             or BodyMotionOp.ResolveHold => 0,
         BodyMotionOp.ComputePlanarTargetVelocity or BodyMotionOp.ComputeLocalTargetVelocity => 1,
-        BodyMotionOp.ShapePlanarVelocity or BodyMotionOp.SnapYawToPlanarIntent or BodyMotionOp.ShapeDriveVelocity => 2,
+        BodyMotionOp.ShapeVelocity or BodyMotionOp.SnapYawToPlanarIntent => 2,
         BodyMotionOp.RunActionTriggers => 3,
         BodyMotionOp.ApplyHold => 4,
         BodyMotionOp.IntegratePlanarAndVerticalVelocity or BodyMotionOp.IntegrateScratchVelocity => 5,
@@ -114,8 +114,8 @@ public sealed class CompiledBodyMotionProgram {
         BodyMotionOp.SenseNearestInCone => BodyProgramAdmission.Sensors,
         BodyMotionOp.ProduceWanderIntent or BodyMotionOp.ProduceAttendIntent or BodyMotionOp.FaceSensorTarget => (BodyProgramAdmission.Sensors | BodyProgramAdmission.Channels | BodyProgramAdmission.ActionState),
         BodyMotionOp.ResolveYawAttitudeAndPlanarFrame or BodyMotionOp.IntegrateLocalAttitude or BodyMotionOp.ComputePlanarTargetVelocity
-            or BodyMotionOp.ComputeLocalTargetVelocity or BodyMotionOp.ShapePlanarVelocity
-            or BodyMotionOp.SnapYawToPlanarIntent or BodyMotionOp.ResolveDriveFrame or BodyMotionOp.ShapeDriveVelocity
+            or BodyMotionOp.ComputeLocalTargetVelocity or BodyMotionOp.ShapeVelocity
+            or BodyMotionOp.SnapYawToPlanarIntent or BodyMotionOp.ResolveDriveFrame
             => (BodyProgramAdmission.Channels | BodyProgramAdmission.Pose | BodyProgramAdmission.Velocity),
         // A hold reads intent, writes the body frame, and spends a body-lane state slot, so it claims every register
         // family a motion program owns.

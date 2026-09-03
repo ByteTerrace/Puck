@@ -17,6 +17,7 @@ namespace Puck.World;
 [JsonDerivedType(typeof(ActionPredicate.All), typeDiscriminator: "all")]
 [JsonDerivedType(typeof(ActionPredicate.Any), typeDiscriminator: "any")]
 [JsonDerivedType(typeof(ActionPredicate.Not), typeDiscriminator: "not")]
+[JsonDerivedType(typeof(ActionPredicate.Held), typeDiscriminator: "held")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record ActionPredicate {
     /// <summary>The fact holds this tick.</summary>
@@ -69,6 +70,12 @@ public abstract record ActionPredicate {
     /// <summary>Inverts one predicate.</summary>
     /// <param name="Predicate">The child predicate to invert.</param>
     public sealed record Not(ActionPredicate Predicate) : ActionPredicate;
+    /// <summary>The named composition channel's own live read is at or above its declared threshold — the same test
+    /// a held sprint/drift channel makes today. Legitimate only inside a kit's <c>shaping</c>-row gate, where the
+    /// world's channel table resolves <paramref name="Channel"/> to an ordinal at kit-compile time; refused
+    /// everywhere else a predicate is authored.</summary>
+    /// <param name="Channel">The declared composition channel name.</param>
+    public sealed record Held(string Channel) : ActionPredicate;
 }
 
 /// <summary>A bounded postfix numeric expression evaluated by a world rule. Each token either pushes a value or

@@ -76,18 +76,13 @@ public enum WorldBodyContactMode : byte {
 /// <param name="Collider">The kit's compiled body volumes, or <see langword="null"/> for a volumeless kit.</param>
 /// <param name="BodyContact">The authored dynamic-body contact mode.</param>
 /// <param name="Mass">The compiled gravitational mass.</param>
-/// <param name="SprintChannelOrdinal">The ordinal <see cref="WorldMotion.SprintChannel"/> resolved
-/// to, or <c>-1</c> for a kit with no sprint capability (including a kit whose motion row carries none).</param>
-/// <param name="DriftChannelOrdinal">The ordinal <see cref="WorldDriveDrift.Channel"/> resolved to, or <c>-1</c>
-/// for a kit that cannot drift (every kit authoring no drive row, and every drive row authoring no drift).</param>
 /// <param name="RoleOrdinals">The authored ordinals resolved for engine motion roles.</param>
 /// <param name="RoleMask">The compiled per-ordinal role predicate.</param>
 /// <param name="ActionState">The kit's compiled named action-state register file.</param>
-/// <param name="PlanarDynamics">The compiled second-order follower the kit's declared motion row's <c>dynamics</c>
-/// row names, or <see langword="null"/> when it shapes planar velocity through its response table instead
-/// (validation has already refused any other combination by the time this compiles).</param>
 /// <param name="Holds">The kit's compiled ordered hold list (<see cref="WorldMotion.Holds"/>), empty
 /// for a kit authoring none.</param>
+/// <param name="Tuning">The kit's compiled locomotion tuning — speed, turn, and the shaping table — resolved
+/// against the world's channel table and <c>dynamics</c> rows here, once, rather than per body.</param>
 public readonly record struct FixedWorldKit(
     CompiledBodyMotionProgram BodyMotionProgram,
     IReadOnlyDictionary<string, CompiledBodyProducer> Producers,
@@ -97,13 +92,11 @@ public readonly record struct FixedWorldKit(
     FixedWorldCollider? Collider,
     WorldBodyContactMode BodyContact,
     FixedQ4816 Mass,
-    int SprintChannelOrdinal,
-    int DriftChannelOrdinal,
     RoleChannelOrdinals RoleOrdinals,
     bool[] RoleMask,
     CompiledActionStateSlot[] ActionState,
     FixedBodyHold[] Holds,
-    FixedMotionDynamics? PlanarDynamics = null
+    FixedMotionTuning Tuning
 ) {
     private static (CompiledActionStateSlot[] Slots, Dictionary<string, int> ByName) CompileActionState(IReadOnlyList<ActionStateSlot> bodyState, IReadOnlyList<ActionStateSlot> identityState) {
         var slots = new List<CompiledActionStateSlot>();
@@ -233,24 +226,6 @@ public readonly record struct FixedWorldKit(
             thresholds[ordinal] = channels.Threshold(ordinal: ordinal);
         }
 
-        // A kit with the sprint field unset resolves -1 here — "no sprint" by construction. A drive row's drift
-        // channel is its own held read, resolved the same way below.
-        var sprintOrdinal = (((kit.Motion.SprintChannel is { Length: > 0 } sprintChannel)
-            && channels.TryGetOrdinal(
-            name: sprintChannel,
-            ordinal: out var sprintResolved
-        ))
-            ? sprintResolved
-            : -1
-        );
-        var driftOrdinal = (((kit.Motion.Drive?.Drift?.Channel is { Length: > 0 } driftChannel)
-            && channels.TryGetOrdinal(
-            name: driftChannel,
-            ordinal: out var driftResolved
-        ))
-            ? driftResolved
-            : -1
-        );
         var roleOrdinals = channels.RoleOrdinals;
         var producers = new Dictionary<string, CompiledBodyProducer>(
             capacity: kit.Producers.Count,
@@ -279,37 +254,34 @@ public readonly record struct FixedWorldKit(
             ordinals: roleOrdinals
         );
 
-        // The sprint/boost and drift ordinals are HELD reads, not Actions bindings — each needs its threshold in
-        // ActionThresholds regardless of whether kit.Actions also binds a press/release effect there (the loop above
-        // only writes a threshold where an ActionSpec exists), so WorldBody's held-channel test compares against the
-        // channel's OWN declared threshold rather than the array's zero default.
-        if (sprintOrdinal >= 0) {
-            thresholds[sprintOrdinal] = channels.Threshold(ordinal: sprintOrdinal);
-        }
-
-        if (driftOrdinal >= 0) {
-            thresholds[driftOrdinal] = channels.Threshold(ordinal: driftOrdinal);
-        }
-
-        FixedMotionDynamics? planarDynamics = null;
-
-        if (
-            (kit.Motion.Dynamics is { Length: > 0 } dynamicsName) &&
-            (WorldDefinitionRows.FindDynamics(
+        var tuning = WorldMotionTuningFactory.Compile(
+            channels: channels,
             dynamics: dynamics,
-            name: dynamicsName
-        ) is { } row)
-        ) {
-            var compiled = SecondOrderDynamics.Create(
-                dampingRatio: FixedQ4816.FromDouble(value: row.Damping),
-                frequencyHz: FixedQ4816.FromDouble(value: row.Frequency),
-                initialResponse: FixedQ4816.FromDouble(value: row.Response)
-            );
+            simulationRateHz: simulationRateHz,
+            tuning: kit.Motion
+        );
 
-            planarDynamics = new FixedMotionDynamics(Planar: compiled.Compile(
-                stepTicks: (FixedTickConversion.TicksPerSecond / ((ulong)simulationRateHz)),
-                ticksPerSecond: FixedTickConversion.TicksPerSecond
-            ));
+        // The speed-held channel is a HELD read, not an Actions binding — it needs its threshold in ActionThresholds
+        // regardless of whether kit.Actions also binds a press/release effect there (the loop above only writes a
+        // threshold where an ActionSpec exists), so WorldBody's held-channel test compares against the channel's
+        // OWN declared threshold rather than the array's zero default.
+        if (tuning.Speed.HeldOrdinal >= 0) {
+            thresholds[tuning.Speed.HeldOrdinal] = channels.Threshold(ordinal: tuning.Speed.HeldOrdinal);
+        }
+
+        // Every shaping row's flattened gate may test a `held` channel the kit binds no action to (a drift row).
+        // MotionGateOpen compares the SAME channelThresholds array every other held read uses, so each one needs
+        // its own declared threshold here too — never the array's zero default, which a channel at rest (raw 0)
+        // would then read as held.
+        foreach (var row in tuning.Shaping) {
+            foreach (var predicate in row.When) {
+                if (
+                    (predicate.Kind == CompiledPredicateKind.Held) &&
+                    (predicate.ChannelOrdinal >= 0)
+                ) {
+                    thresholds[predicate.ChannelOrdinal] = channels.Threshold(ordinal: predicate.ChannelOrdinal);
+                }
+            }
         }
 
         return new FixedWorldKit(
@@ -324,8 +296,6 @@ public readonly record struct FixedWorldKit(
             ),
             BodyContact: kit.BodyContact,
             Mass: FixedQ4816.FromDouble(value: kit.Mass),
-            SprintChannelOrdinal: sprintOrdinal,
-            DriftChannelOrdinal: driftOrdinal,
             RoleOrdinals: roleOrdinals,
             RoleMask: roleMask,
             ActionState: actionState,
@@ -333,7 +303,7 @@ public readonly record struct FixedWorldKit(
                 channels: channels,
                 holds: kit.Motion.Holds
             ),
-            PlanarDynamics: planarDynamics
+            Tuning: tuning
         );
     }
 }

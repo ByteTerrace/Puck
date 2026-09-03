@@ -551,7 +551,7 @@ public sealed partial class WorldPopulation {
             var kit = m_kits[kitIndex];
 
             body.RecompileKit(
-                motion: m_kitRows[kitIndex].Motion,
+                tuning: kit.Tuning,
                 actions: kit.Actions,
                 actionThresholds: kit.ActionThresholds,
                 actionShapes: kit.ActionShapes,
@@ -562,10 +562,7 @@ public sealed partial class WorldPopulation {
                 programs: m_bodyMotionPrograms,
                 collider: kit.Collider,
                 maxSmoothError: m_fixedMotion.MaxSmoothError,
-                sprintChannelOrdinal: kit.SprintChannelOrdinal,
-                driftChannelOrdinal: kit.DriftChannelOrdinal,
-                holds: kit.Holds,
-            planarDynamics: kit.PlanarDynamics
+                holds: kit.Holds
             );
             // Hand the (possibly rebuilt) contact field to every live body, so a live solid-geometry or collision-tuning
             // edit takes effect on the next tick.

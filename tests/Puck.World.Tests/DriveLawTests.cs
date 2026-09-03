@@ -9,7 +9,7 @@ namespace Puck.World.Tests;
 
 /// <summary>
 /// CONTRACT UNDER TEST: the <c>drive</c> row — the anisotropic drive facets a kit authors beside the motion
-/// row, read by <c>ResolveDriveFrame</c>/<c>ShapeDriveVelocity</c>. The trace law drives one body 240 ticks through
+/// row, read by <c>ResolveDriveFrame</c>/<c>ShapeVelocity</c>. The trace law drives one body 240 ticks through
 /// every drive facet (throttle, speed-scaled steering, brake, reverse, a held drift stretch, a held sprint stretch,
 /// a pitched frame) and pins the fixed-point result raw value for raw value; its discriminating control perturbs a
 /// single drive facet and requires the trace to move. The facet law proves a drive program refuses by name against a
@@ -268,17 +268,22 @@ public sealed class DriveLawTests {
         "fffffffffffd2583 fffffffffff31fdd fffffffffff55d49 fffffffffff62afb 0000000000027e14 ffffffffffedd197 ffffffffffe60000 0000000000007ee7 0000000000001eb8",
     ];
 
-    private static WorldDrive Drive(float grip = 22f) => new(
-        Accel: 96f,
-        Brake: 120f,
-        Coast: 20f,
-        Grip: grip,
-        SteerReferenceSpeed: 4f,
-        SteerFalloff: 0.55f,
-        ReverseSpeed: 5f,
-        PitchRate: 0.9f,
-        Drift: new WorldDriveDrift(Channel: "drift", Grip: 6f, SteerScale: 1.4f)
-    );
+    // The drive decomposition, spelled as two shaping rows: a held-gated drift row authored first (its own grip
+    // and turnScale apply while the drift channel reads held), and the ordinary row behind it (unconditional,
+    // last) — the FIRST open row governs, so the drift row's own facets replace the ordinary row's whenever it
+    // wins. Both rows share the same longitudinal along facet; only across.grip and turnScale differ.
+    private static WorldShaping[] Shaping(float grip = 22f) => [
+        new WorldShaping(
+            When: new ActionPredicate.Held(Channel: "drift"),
+            Along: new WorldShapingAlong(Engage: 96f, Brake: 120f, Release: 20f, Reverse: 5f),
+            Across: new WorldShapingAcross(Grip: 6f),
+            TurnScale: 1.4f
+        ),
+        new WorldShaping(
+            Along: new WorldShapingAlong(Engage: 96f, Brake: 120f, Release: 20f, Reverse: 5f),
+            Across: new WorldShapingAcross(Grip: grip)
+        ),
+    ];
     private static WorldDefinition BuildDriveDocument(float grip = 22f, bool authorDrive = true) {
         var channels = new WorldChannel[] {
             new(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveAdvance),
@@ -296,7 +301,7 @@ public sealed class DriveLawTests {
             Operations: [
                 BodyMotionOp.ResolveDriveFrame,
                 BodyMotionOp.ResolveHold,
-                BodyMotionOp.ShapeDriveVelocity,
+                BodyMotionOp.ShapeVelocity,
                 BodyMotionOp.RunActionTriggers,
                 BodyMotionOp.ApplyHold,
                 BodyMotionOp.IntegratePlanarAndVerticalVelocity,
@@ -307,12 +312,17 @@ public sealed class DriveLawTests {
         var kit = new WorldKit(
             Name: "kart-test",
             BodyMotionProgram: "drive",
-            // The kart spelling: the motion row carries the forward speed, the steering rate, and the held sprint
-            // (the boost); moveSpeedEnvelope pins that speed against any seated profile with min == max; gravity is
-            // the one authored hold row's own field, and the drive row carries what only a drive has.
+            // The kart spelling: the motion row carries the forward speed and its held boost, the steering rate and
+            // its speed-scaled authority curve and pitch rate; the speed envelope pins that speed against any seated
+            // profile with min == max; gravity is the one authored hold row's own field; the shaping table carries
+            // what only a drive kit has.
             Motion: new WorldMotion(
-                MoveSpeed: 16f,
-                TurnSpeed: 2.4f,
+                Speed: new WorldSpeed(
+                    Value: 16f,
+                    Envelope: new MotionScalarEnvelope(Max: 16f, Min: 16f),
+                    Held: new WorldSpeedHeld(Channel: "boost", Multiplier: 1.5f)
+                ),
+                Turn: new WorldTurn(Rate: 2.4f, ReferenceSpeed: 4f, Falloff: 0.55f, PitchRate: 0.9f),
                 Holds: [
                     new WorldHold(
                         Bond: BodyHoldBond.Free,
@@ -321,12 +331,9 @@ public sealed class DriveLawTests {
                         Name: "air"
                     ),
                 ],
-                SprintMultiplier: 1.5f,
-                SprintChannel: "boost",
-                MoveSpeedEnvelope: new MotionScalarEnvelope(Max: 16f, Min: 16f),
-                Drive: (authorDrive
-                ? Drive(grip: grip)
-                : null)
+                Shaping: (authorDrive
+                ? Shaping(grip: grip)
+                : [])
             ),
             ProducersRaw: new Dictionary<string, BodyProgramParameters>(),
             ActionsRaw: new Dictionary<string, ActionSpec>(),
@@ -438,7 +445,7 @@ public sealed class DriveLawTests {
         Assert.True(condition: (moved > 0), userMessage: "a slidier drive grip must move the trace, or the trace pins nothing about grip");
     }
     [Fact]
-    public void ADriveProgramOnAKitAuthoringNoDriveRow_RefusesValidationNamingTheFacet() {
+    public void ADriveProgramOnAKitAuthoringNoShapingRow_RefusesValidationNamingTheFacet() {
         Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: BuildDriveDocument(),
             reason: out var admittedReason
@@ -448,36 +455,36 @@ public sealed class DriveLawTests {
             definition: BuildDriveDocument(authorDrive: false),
             reason: out var deniedReason
         ),
-            userMessage: "a drive program against a kit authoring no drive row was expected to refuse"
+            userMessage: "a drive program against a kit authoring no shaping row was expected to refuse"
         );
-        Assert.Contains(actualString: deniedReason, expectedSubstring: "Drive");
+        Assert.Contains(actualString: deniedReason, expectedSubstring: "Shaping");
     }
     [Fact]
-    public void ADriveRowsOwnRatesAndDriftAreRangeCheckedByName() {
-        foreach (var (row, token) in new (WorldDrive Row, string Token)[] {
-            ((Drive() with { Accel = 0f }), "accel"),
-            ((Drive() with { Brake = -1f }), "brake"),
-            ((Drive() with { Coast = 0f }), "coast"),
-            ((Drive() with { Grip = 0f }), "grip"),
-            ((Drive() with { SteerReferenceSpeed = 0f }), "steerReferenceSpeed"),
-            ((Drive() with { SteerFalloff = 1.5f }), "steerFalloff"),
-            ((Drive() with { ReverseSpeed = -1f }), "reverseSpeed"),
-            ((Drive() with { PitchRate = -1f }), "pitchRate"),
-            ((Drive() with { Drift = new WorldDriveDrift(Channel: "nope", Grip: 6f, SteerScale: 1.4f) }), "drift.channel"),
-            ((Drive() with { Drift = new WorldDriveDrift(Channel: "drift", Grip: 0f, SteerScale: 1.4f) }), "drift.grip"),
-            ((Drive() with { Drift = new WorldDriveDrift(Channel: "drift", Grip: 6f, SteerScale: 0f) }), "drift.steerScale"),
+    public void AShapingRowsOwnRatesAndDriftAreRangeCheckedByName() {
+        foreach (var (mutate, token) in new (Func<WorldMotion, WorldMotion> Mutate, string Token)[] {
+            (motion => motion with { Shaping = [motion.Shaping![0], motion.Shaping[1] with { Along = motion.Shaping[1].Along! with { Engage = 0f } }] }, "along.engage"),
+            (motion => motion with { Shaping = [motion.Shaping![0], motion.Shaping[1] with { Along = motion.Shaping[1].Along! with { Brake = -1f } }] }, "along.brake"),
+            (motion => motion with { Shaping = [motion.Shaping![0], motion.Shaping[1] with { Along = motion.Shaping[1].Along! with { Release = 0f } }] }, "along.release"),
+            (motion => motion with { Shaping = [motion.Shaping![0], motion.Shaping[1] with { Across = motion.Shaping[1].Across! with { Grip = 0f } }] }, "across.grip"),
+            (motion => motion with { Turn = motion.Turn with { ReferenceSpeed = 0f } }, "turn.referenceSpeed"),
+            (motion => motion with { Turn = motion.Turn with { Falloff = 1.5f } }, "turn.falloff"),
+            (motion => motion with { Shaping = [motion.Shaping![0], motion.Shaping[1] with { Along = motion.Shaping[1].Along! with { Reverse = -1f } }] }, "along.reverse"),
+            (motion => motion with { Turn = motion.Turn with { PitchRate = -1f } }, "turn.pitchRate"),
+            (motion => motion with { Shaping = [motion.Shaping![0] with { When = new ActionPredicate.Held(Channel: "nope") }, motion.Shaping[1]] }, "shaping[0].when.channel"),
+            (motion => motion with { Shaping = [motion.Shaping![0] with { Across = motion.Shaping[0].Across! with { Grip = 0f } }, motion.Shaping[1]] }, "shaping[0].across.grip"),
+            (motion => motion with { Shaping = [motion.Shaping![0] with { TurnScale = 0f }, motion.Shaping[1]] }, "shaping[0].turnScale"),
         }) {
             var document = BuildDriveDocument();
             var kits = document.Kits.ToList();
 
-            kits[0] = (kits[0] with { Motion = (kits[0].Motion! with { Drive = row }) });
+            kits[0] = (kits[0] with { Motion = mutate(kits[0].Motion!) });
 
             Assert.False(
                 condition: WorldDefinitionValidator.TryValidateLocally(
                 definition: (document with { KitRowsRaw = kits }),
                 reason: out var reason
             ),
-                userMessage: $"a drive row failing {token} was expected to refuse"
+                userMessage: $"a shaping row failing {token} was expected to refuse"
             );
             Assert.Contains(actualString: reason, expectedSubstring: token);
         }

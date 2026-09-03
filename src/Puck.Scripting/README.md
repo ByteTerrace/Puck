@@ -450,7 +450,7 @@ declares:
 | `roll` | `Bipolar` | `PlayerIntent.Roll = A` (role `Roll`, free program only) |
 | `jump` | `Binary` | composition ordinal `6`; play's grounded kit binds it to the vertical impulse, pressed iff `A == One` THIS tick |
 | `dash` | `Binary` | composition ordinal `7`; per-kit binding (declared, unbound by play's own kit), pressed iff `A == One` THIS tick |
-| `run` | `Binary` | composition ordinal `8`; the `promenader` kit's `sprintChannel` — scales commanded planar speed by `sprintMultiplier` (`1.3`) while held (a HELD, not edge-triggered, read) |
+| `run` | `Binary` | composition ordinal `8`; the `promenader` kit's `speed.held.channel` — scales commanded planar speed by its `multiplier` (`1.3`) while held (a HELD, not edge-triggered, read) |
 
 A different world document declares a different table — same resolver class, a different
 `WorldChannelTable` constructor argument.

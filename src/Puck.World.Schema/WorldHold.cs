@@ -104,7 +104,7 @@ public sealed record WorldHold(
 );
 /// <summary>The one-time compilation of an authored hold list into the fixed-point form simulation reads. Channel
 /// names resolve through the world's compiled channel table here, the same resolved-outside/consumed-as-ordinal
-/// seam <see cref="FixedWorldKit.SprintChannelOrdinal"/> uses.</summary>
+/// seam <see cref="FixedSpeed.HeldOrdinal"/> uses.</summary>
 public static class WorldHoldFactory {
     private const double DegreesToRadians = (Math.PI / 180.0);
 
