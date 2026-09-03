@@ -23,7 +23,7 @@ public sealed record WorldViewLayout(string Name, int SeatCount, IReadOnlyList<W
     private readonly IReadOnlyList<WorldViewSlot> m_slots = (Slots ?? []);
 
     /// <summary>Gets the slots, in order. The absence-coalesce lives in the accessor for the same reason
-    /// <see cref="WorldMotion.Response"/>'s does.</summary>
+    /// <see cref="WorldHudPanel.Elements"/>'s does.</summary>
     public IReadOnlyList<WorldViewSlot> Slots {
         get => m_slots;
         init => m_slots = (value ?? []);
@@ -89,7 +89,7 @@ public sealed record WorldViewDefaults(WorldCameraProgram SeatRig, WorldSeatView
         Layouts: []
     );
     /// <summary>Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason
-    /// <see cref="WorldMotion.Response"/>'s does.</summary>
+    /// <see cref="WorldHudPanel.Elements"/>'s does.</summary>
     public IReadOnlyList<WorldViewLayout> Layouts {
         get => m_layouts;
         init => m_layouts = (value ?? []);

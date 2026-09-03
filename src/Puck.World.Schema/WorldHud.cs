@@ -187,8 +187,9 @@ public sealed record WorldHudElement(
 public sealed record WorldHudPanel(string Id, WorldHudRect Rect, WorldHudLayer Layer, WorldHudPanelStyle Style, IReadOnlyList<WorldHudElement> Elements, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OverlayPredicate? Visible = null) {
     private readonly IReadOnlyList<WorldHudElement> m_elements = (Elements ?? []);
 
-    /// <summary>Gets the panel's child elements. The absence-coalesce lives in the accessor for the same reason
-    /// <see cref="WorldMotion.Response"/>'s does.</summary>
+    /// <summary>Gets the panel's child elements. Absent and empty read identically to every consumer, and the
+    /// coalesce lives in the accessor so no caller grows its own; every other list-valued row member that reads
+    /// absent as empty cites this one.</summary>
     public IReadOnlyList<WorldHudElement> Elements {
         get => m_elements;
         init => m_elements = (value ?? []);
@@ -250,7 +251,7 @@ public sealed record WorldHudSection(WorldHudDefaults Defaults, IReadOnlyList<Wo
         Panels: []
     );
     /// <summary>Gets the authored world-scope panels. The absence-coalesce lives in the accessor for the same reason
-    /// <see cref="WorldMotion.Response"/>'s does.</summary>
+    /// <see cref="WorldHudPanel.Elements"/>'s does.</summary>
     public IReadOnlyList<WorldHudPanel> Panels {
         get => m_panels;
         init => m_panels = (value ?? []);

@@ -27,7 +27,9 @@ namespace Puck.World;
 /// <paramref name="SprintChannel"/> reads held; <c>1</c> is a no-op.</param>
 /// <param name="Response">The velocity-response table (see <see cref="MotionResponse"/>) planar velocity converges
 /// through, or <see langword="null"/> (the default) when <paramref name="Dynamics"/> shapes it instead — exactly
-/// one of the two is authored. The empty table snaps planar velocity instantly.</param>
+/// one of the two is authored, so <see langword="null"/> means "not authored" to that rule and is never coalesced
+/// here. An authored empty table is distinct: it snaps planar velocity instantly. The one place
+/// <see langword="null"/> reads as the empty table is <c>WorldMotionTuningFactory.Compile</c>.</param>
 /// <param name="Dynamics">The <c>dynamics</c> row a second-order follower shapes planar velocity through instead
 /// of <paramref name="Response"/>, or <see langword="null"/> (the default) for the response table. Exactly one of
 /// the two is authored.</param>

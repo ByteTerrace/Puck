@@ -38,7 +38,7 @@ public sealed record WorldRowAssignment(WorldSequence Sequence, IReadOnlyList<Do
         Rows: []
     );
     /// <summary>Gets the authored row-name view. The absence-coalesce lives in the accessor for the same reason
-    /// <see cref="WorldMotion.Response"/>'s does.</summary>
+    /// <see cref="WorldHudPanel.Elements"/>'s does.</summary>
     public IReadOnlyList<DocumentIdentifier> Rows {
         get => m_rows;
         init => m_rows = (value ?? []);
