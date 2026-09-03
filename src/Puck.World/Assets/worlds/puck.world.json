@@ -415,7 +415,6 @@
           "radius": 0.35
         },
         "motion": {
-          "$type": "grounded",
           "facingSnap": false,
           "fallGravity": 46,
           "holds": [
@@ -478,7 +477,6 @@
           "radius": 0.14
         },
         "motion": {
-          "$type": "grounded",
           "facingSnap": true,
           "fallGravity": 46,
           "holds": [
@@ -577,7 +575,6 @@
           "radius": 0.08
         },
         "motion": {
-          "$type": "grounded",
           "facingSnap": true,
           "fallGravity": 46,
           "holds": [
@@ -648,7 +645,6 @@
           "radius": 0.16
         },
         "motion": {
-          "$type": "grounded",
           "facingSnap": true,
           "fallGravity": 46,
           "holds": [

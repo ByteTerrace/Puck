@@ -723,12 +723,12 @@ public static partial class WorldDefinitionValidator {
             }
 
             // A Camera/Heading-framed pair is composed into world axes by the seat's client, which the sim's Heading
-            // arm would then rotate a second time by the body's own heading — refuse the double rotation.
+            // frame would then rotate a second time by the body's own heading — refuse the double rotation.
             if (
                 (moveFrame != ChannelFrame.World) &&
-                (kit.Motion.DeclaredMoveFrame != MotionMoveFrame.World)
+                (kit.Motion.MoveFrame != MotionMoveFrame.World)
             ) {
-                errors.Add(item: $"kit '{kit.Name}' motion frame '{kit.Motion.DeclaredMoveFrame}' cannot carry a '{moveFrame}'-framed MoveAdvance/MoveStrafe pair — a framed pair needs the kit's World frame.");
+                errors.Add(item: $"kit '{kit.Name}' motion frame '{kit.Motion.MoveFrame}' cannot carry a '{moveFrame}'-framed MoveAdvance/MoveStrafe pair — a framed pair needs the kit's World frame.");
             }
 
             if (!programs.TryGetValue(

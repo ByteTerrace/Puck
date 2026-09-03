@@ -26,7 +26,7 @@ public sealed class MotionShapingValidationLawTests {
     public void BothResponseAndDynamicsRefusesWhileEitherAlonePasses() {
         var document = WithDynamics(rows: [Chase]);
         var kit = document.Kits[0];
-        var grounded = ((WorldMotionModel.Grounded)kit.Motion);
+        var grounded = kit.Motion;
 
         var denied = document with { KitRowsRaw = [kit with { Motion = grounded with { Dynamics = "chase" } }] }; // Response already authored by Fixtures.BuildKits
         var responseOnly = document with { KitRowsRaw = [kit with { Motion = grounded with { Dynamics = null } }] };
@@ -41,7 +41,7 @@ public sealed class MotionShapingValidationLawTests {
     public void NeitherResponseNorDynamicsRefusesWhileEitherAlonePasses() {
         var document = WithDynamics(rows: [Chase]);
         var kit = document.Kits[0];
-        var grounded = ((WorldMotionModel.Grounded)kit.Motion);
+        var grounded = kit.Motion;
 
         var denied = document with { KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = null } }] };
         var responseOnly = document with { KitRowsRaw = [kit with { Motion = grounded with { Dynamics = null } }] };
@@ -56,7 +56,7 @@ public sealed class MotionShapingValidationLawTests {
     public void EmptyDynamicsNameRefusesWhileANamedRowPasses() {
         var document = WithDynamics(rows: [Chase]);
         var kit = document.Kits[0];
-        var grounded = ((WorldMotionModel.Grounded)kit.Motion);
+        var grounded = kit.Motion;
 
         var denied = document with { KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "" } }] };
         var admitted = document with { KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "chase" } }] };
@@ -69,7 +69,7 @@ public sealed class MotionShapingValidationLawTests {
     public void DanglingDynamicsNameRefusesWhileResolvingPasses() {
         var document = WithDynamics(rows: [Chase]);
         var kit = document.Kits[0];
-        var grounded = ((WorldMotionModel.Grounded)kit.Motion);
+        var grounded = kit.Motion;
 
         var denied = document with { KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "missing" } }] };
         var admitted = document with { KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "chase" } }] };
@@ -82,7 +82,7 @@ public sealed class MotionShapingValidationLawTests {
     public void DynamicsAtResidentSimulationRateRefusesWhileASteppingRatePasses() {
         var document = WithDynamics(rows: [Chase]);
         var kit = document.Kits[0];
-        var grounded = ((WorldMotionModel.Grounded)kit.Motion);
+        var grounded = kit.Motion;
         var withDynamics = document with { KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "chase" } }] };
 
         var denied = withDynamics with { Simulation = null }; // rate-0, resident, non-stepping

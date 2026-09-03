@@ -1,5 +1,5 @@
 world.wait 1
-world.row.set kits {"name":"stander","bodyMotionProgram":"traverse","motion":{"$type":"grounded","moveSpeed":4,"turnSpeed":2.5,"riseGravity":28,"fallGravity":46,"maxFallSpeed":40,"response":[],"dynamics":"stride","sprintMultiplier":1},"collider":{"$type":"sphere","radius":0.5},"bodyContact":"Solid"}
+world.row.set kits {"name":"stander","bodyMotionProgram":"traverse","motion":{"moveSpeed":4,"turnSpeed":2.5,"riseGravity":28,"fallGravity":46,"maxFallSpeed":40,"response":[],"dynamics":"stride","sprintMultiplier":1},"collider":{"$type":"sphere","radius":0.5},"bodyContact":"Solid"}
 world.wait 1
 world.kits
 world.wait 1

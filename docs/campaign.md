@@ -287,7 +287,7 @@ body reads live, and refuses by name for an identity not owned here). An identit
 before the reshape still carries its seeded 0.01 rows and reads as an explicit 0.01 claim — cure it
 with `identity.motion`, or delete the state dir.
 
-**The foundation is complete and overshot.** One motion arm, with `holds` and `drive` rows beside it; the portal
+**The foundation is complete and overshot.** One flat motion row, with `holds` and `drive` rows beside it; the portal
 lane end to end — step into a frame and the whole party transfers, all-or-nothing across capacity
 *and* authorization; input vocabulary with ordered chord activators; the radial wheel; roster sync;
 durations authored in seconds with ticks derived at compile; per-world clocks; the market/auction

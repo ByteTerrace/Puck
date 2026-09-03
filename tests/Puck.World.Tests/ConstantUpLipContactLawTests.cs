@@ -143,7 +143,7 @@ public sealed class ConstantUpLipContactLawTests {
                 Uniform: new DocumentVector3(x: 0f, y: -46f, z: 0f)
             ),
             KitRowsRaw = source.Kits.Select(selector: kit => kit with {
-                Motion = ((WorldMotionModel.Grounded)kit.Motion) with { MoveSpeed = 4f, RiseGravity = 28f, FallGravity = 46f, MaxFallSpeed = 40f },
+                Motion = kit.Motion with { MoveSpeed = 4f, RiseGravity = 28f, FallGravity = 46f, MaxFallSpeed = 40f },
             }).ToArray(),
             CreationsRaw = [creation],
             PlacementRowsRaw = [new WorldPlacement(Id: "platform", PrototypeId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],

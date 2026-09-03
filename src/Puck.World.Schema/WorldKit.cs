@@ -7,12 +7,12 @@ using Puck.World.Protocol;
 namespace Puck.World;
 
 /// <summary>One locomotion kit — a world-definition row naming a way of moving: the body motion program it runs under,
-/// the motion model its
+/// the motion tuning its
 /// bodies compile, its producer arguments, and its action-lane bindings. Every game-flavored movement noun is a
 /// row of this data, never an engine enum; the census echo prints these names. <see cref="Name"/> is the kit's
 /// kebab-case name (the census echo token); <see cref="BodyMotionProgram"/> names the body motion program the
-/// kit's bodies execute; <see cref="Motion"/> is the locomotion model the kit's bodies compile (a seat's profile
-/// speeds still override its speed fields) — see <see cref="WorldMotionModel"/>.</summary>
+/// kit's bodies execute; <see cref="Motion"/> is the locomotion tuning the kit's bodies compile (a seat's profile
+/// speeds still override its speed fields) — see <see cref="WorldMotion"/>.</summary>
 /// <remarks><see cref="Collider"/> is the kit's body volume solved against the world contact field, or
 /// <see langword="null"/> for a kit with no volume (never solved against the field), omitted from the wire when
 /// null. <see cref="BodyContact"/> is whether bodies wearing this kit overlap one another or participate in
@@ -22,7 +22,7 @@ namespace Puck.World;
 public sealed record WorldKit(
     string Name,
     string BodyMotionProgram,
-    WorldMotionModel Motion,
+    WorldMotion Motion,
     [property: JsonPropertyName("producers"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, BodyProgramParameters>? ProducersRaw = null,
     [property: JsonPropertyName("actions"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, ActionSpec>? ActionsRaw = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCollider? Collider = null,
@@ -76,17 +76,17 @@ public enum WorldBodyContactMode : byte {
 /// <param name="Collider">The kit's compiled body volumes, or <see langword="null"/> for a volumeless kit.</param>
 /// <param name="BodyContact">The authored dynamic-body contact mode.</param>
 /// <param name="Mass">The compiled gravitational mass.</param>
-/// <param name="SprintChannelOrdinal">The ordinal <see cref="WorldMotionModel.Grounded.SprintChannel"/> resolved
-/// to, or <c>-1</c> for a kit with no sprint capability (including a kit whose declared model carries none).</param>
+/// <param name="SprintChannelOrdinal">The ordinal <see cref="WorldMotion.SprintChannel"/> resolved
+/// to, or <c>-1</c> for a kit with no sprint capability (including a kit whose motion row carries none).</param>
 /// <param name="DriftChannelOrdinal">The ordinal <see cref="WorldDriveDrift.Channel"/> resolved to, or <c>-1</c>
 /// for a kit that cannot drift (every kit authoring no drive row, and every drive row authoring no drift).</param>
 /// <param name="RoleOrdinals">The authored ordinals resolved for engine motion roles.</param>
 /// <param name="RoleMask">The compiled per-ordinal role predicate.</param>
 /// <param name="ActionState">The kit's compiled named action-state register file.</param>
-/// <param name="PlanarDynamics">The compiled second-order follower the kit's declared motion model's <c>dynamics</c>
+/// <param name="PlanarDynamics">The compiled second-order follower the kit's declared motion row's <c>dynamics</c>
 /// row names, or <see langword="null"/> when it shapes planar velocity through its response table instead
 /// (validation has already refused any other combination by the time this compiles).</param>
-/// <param name="Holds">The kit's compiled ordered hold list (<see cref="WorldMotionModel.Grounded.Holds"/>), empty
+/// <param name="Holds">The kit's compiled ordered hold list (<see cref="WorldMotion.Holds"/>), empty
 /// for a kit authoring none.</param>
 public readonly record struct FixedWorldKit(
     CompiledBodyMotionProgram BodyMotionProgram,
@@ -233,10 +233,9 @@ public readonly record struct FixedWorldKit(
             thresholds[ordinal] = channels.Threshold(ordinal: ordinal);
         }
 
-        // An arm without a held-multiplier channel resolves -1 here the same way a kit with the field unset does —
-        // "no sprint" by construction, not a special case (DeclaredSprintChannel is the one arm-dispatch read). A
-        // drive row's drift channel is its own held read, resolved the same way below.
-        var sprintOrdinal = (((kit.Motion.DeclaredSprintChannel is { Length: > 0 } sprintChannel)
+        // A kit with the sprint field unset resolves -1 here — "no sprint" by construction. A drive row's drift
+        // channel is its own held read, resolved the same way below.
+        var sprintOrdinal = (((kit.Motion.SprintChannel is { Length: > 0 } sprintChannel)
             && channels.TryGetOrdinal(
             name: sprintChannel,
             ordinal: out var sprintResolved
@@ -244,7 +243,7 @@ public readonly record struct FixedWorldKit(
             ? sprintResolved
             : -1
         );
-        var driftOrdinal = (((kit.Motion.DeclaredDrive?.Drift?.Channel is { Length: > 0 } driftChannel)
+        var driftOrdinal = (((kit.Motion.Drive?.Drift?.Channel is { Length: > 0 } driftChannel)
             && channels.TryGetOrdinal(
             name: driftChannel,
             ordinal: out var driftResolved
@@ -295,7 +294,7 @@ public readonly record struct FixedWorldKit(
         FixedMotionDynamics? planarDynamics = null;
 
         if (
-            (kit.Motion.DeclaredDynamics is { Length: > 0 } dynamicsName) &&
+            (kit.Motion.Dynamics is { Length: > 0 } dynamicsName) &&
             (WorldDefinitionRows.FindDynamics(
             dynamics: dynamics,
             name: dynamicsName
@@ -332,7 +331,7 @@ public readonly record struct FixedWorldKit(
             ActionState: actionState,
             Holds: WorldHoldFactory.Compile(
                 channels: channels,
-                holds: kit.Motion.DeclaredHolds
+                holds: kit.Motion.Holds
             ),
             PlanarDynamics: planarDynamics
         );

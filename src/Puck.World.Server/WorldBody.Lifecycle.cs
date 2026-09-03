@@ -117,12 +117,11 @@ public sealed partial class WorldBody {
         CommitTeleport(resetVertical: program.OwnsVerticalContactState);
         m_continuity = EntityContinuity.Teleport;
     }
-    // The one dispatch point from a kit's declared WorldMotionModel to the compiled fixed-point tuning this class
-    // integrates under. A new model arm is a localized addition here — a new case producing that model's own
-    // compiled/integrator state — never a hunt through Advance's op handlers, which stay generic over whatever the
-    // kit's body motion program selects. WorldDefinitionValidator has already refused an incoherent
-    // pairing (a program whose operations need a facet the declared model doesn't supply) before this ever runs.
-    private void SetTuning(WorldMotionModel motion, FixedMotionDynamics? planarDynamics = null, FixedBodyHold[]? holds = null) {
+    // The one dispatch point from a kit's declared WorldMotion row to the compiled fixed-point tuning this class
+    // integrates under — never a hunt through Advance's op handlers, which stay generic over whatever the kit's
+    // body motion program selects. WorldDefinitionValidator has already refused an incoherent pairing (a program
+    // whose operations need a facet the declared row doesn't supply) before this ever runs.
+    private void SetTuning(WorldMotion motion, FixedMotionDynamics? planarDynamics = null, FixedBodyHold[]? holds = null) {
         m_holds = (holds ?? []);
 
         if (m_holdIndex >= m_holds.Length) {
@@ -134,13 +133,7 @@ public sealed partial class WorldBody {
             m_holdSpendAccumulator.Reset();
         }
 
-        switch (motion) {
-            case WorldMotionModel.Grounded grounded:
-                m_tuning = WorldMotionTuningFactory.Compile(dynamics: planarDynamics, tuning: grounded);
-                break;
-            default:
-                throw new NotSupportedException(message: $"Motion model '{motion.GetType().Name}' has no compiled WorldBody integrator.");
-        }
+        m_tuning = WorldMotionTuningFactory.Compile(dynamics: planarDynamics, tuning: motion);
     }
 
     /// <summary>Clears the scripted tape, dropping every queued segment. The held keys (if any) resume driving.</summary>
@@ -396,7 +389,7 @@ public sealed partial class WorldBody {
     /// <param name="programs">The world's compiled body motion program table.</param>
     /// <param name="collider">The kit's compiled body volume, or <see langword="null"/> for a volumeless kit.</param>
     /// <param name="maxSmoothError">The compiled world-distance correction smoothing threshold.</param>
-    /// <param name="sprintChannelOrdinal">The ordinal <see cref="WorldMotionModel.Grounded.SprintChannel"/> resolved to, or <c>-1</c>
+    /// <param name="sprintChannelOrdinal">The ordinal <see cref="WorldMotion.SprintChannel"/> resolved to, or <c>-1</c>
     /// for a kit with no sprint capability.</param>
     /// <param name="driftChannelOrdinal">The ordinal <see cref="WorldDriveDrift.Channel"/> resolved to,
     /// or <c>-1</c> for a kit that cannot drift.</param>
@@ -405,7 +398,7 @@ public sealed partial class WorldBody {
     /// through its response table instead.</param>
     /// <param name="holds">The kit's compiled ordered hold list (<see cref="FixedWorldKit.Holds"/>), or
     /// <see langword="null"/> for a kit authoring none.</param>
-    public void RecompileKit(WorldMotionModel motion, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, int sprintChannelOrdinal = -1, int driftChannelOrdinal = -1, FixedMotionDynamics? planarDynamics = null, FixedBodyHold[]? holds = null) {
+    public void RecompileKit(WorldMotion motion, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, int sprintChannelOrdinal = -1, int driftChannelOrdinal = -1, FixedMotionDynamics? planarDynamics = null, FixedBodyHold[]? holds = null) {
         SetTuning(
             holds: holds,
             motion: motion,
@@ -723,7 +716,7 @@ public sealed partial class WorldBody {
     public int ContactCount => m_lastContactCount;
     /// <summary>Gets the base move speed the sim integrates under right now: <see cref="Profile"/>'s requested rate
     /// (or the tuning's profileless fallback) after the kit's
-    /// <see cref="WorldMotionModel.Grounded.MoveSpeedEnvelope"/> clamp. A held sprint channel — a drive row's boost
+    /// <see cref="WorldMotion.MoveSpeedEnvelope"/> clamp. A held sprint channel — a drive row's boost
     /// included — scales this after the clamp, so the envelope pins the base rate and not the sprinting one; a kit
     /// that means to pin its speed against any profile authors <c>min == max</c>. This is the same resolve
     /// <see cref="Advance"/> performs every tick. A read-only echo: querying this never mutates state, and an

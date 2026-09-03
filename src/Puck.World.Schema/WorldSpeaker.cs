@@ -368,7 +368,7 @@ public sealed record WorldAudioDefaults(
     private readonly IReadOnlyList<WorldAudioCue> m_cues = (Cues ?? []);
 
     /// <summary>Gets the cue table. The absence-coalesce lives in the accessor for the same reason
-    /// <see cref="WorldMotionModel.Grounded.Response"/>'s does.</summary>
+    /// <see cref="WorldMotion.Response"/>'s does.</summary>
     public IReadOnlyList<WorldAudioCue> Cues {
         get => m_cues;
         init => m_cues = (value ?? []);

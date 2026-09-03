@@ -14,7 +14,7 @@ public sealed class BodyDynamicsLawTests {
     private static WorldDefinition WithKitDynamics(string dynamicsRow, float damping) {
         var document = Fixtures.BuildDocument();
         var kit = document.Kits[0];
-        var grounded = ((WorldMotionModel.Grounded)kit.Motion);
+        var grounded = kit.Motion;
 
         return document with {
             DynamicsRaw = [.. Fixtures.StandardDynamics, new WorldDynamicsRow(Damping: damping, Frequency: 2f, Name: dynamicsRow, Response: 0f)],

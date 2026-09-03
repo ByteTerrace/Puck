@@ -188,7 +188,7 @@ public sealed record WorldHudPanel(string Id, WorldHudRect Rect, WorldHudLayer L
     private readonly IReadOnlyList<WorldHudElement> m_elements = (Elements ?? []);
 
     /// <summary>Gets the panel's child elements. The absence-coalesce lives in the accessor for the same reason
-    /// <see cref="WorldMotionModel.Grounded.Response"/>'s does.</summary>
+    /// <see cref="WorldMotion.Response"/>'s does.</summary>
     public IReadOnlyList<WorldHudElement> Elements {
         get => m_elements;
         init => m_elements = (value ?? []);
@@ -250,7 +250,7 @@ public sealed record WorldHudSection(WorldHudDefaults Defaults, IReadOnlyList<Wo
         Panels: []
     );
     /// <summary>Gets the authored world-scope panels. The absence-coalesce lives in the accessor for the same reason
-    /// <see cref="WorldMotionModel.Grounded.Response"/>'s does.</summary>
+    /// <see cref="WorldMotion.Response"/>'s does.</summary>
     public IReadOnlyList<WorldHudPanel> Panels {
         get => m_panels;
         init => m_panels = (value ?? []);

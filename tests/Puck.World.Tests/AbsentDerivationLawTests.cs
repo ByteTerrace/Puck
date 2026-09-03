@@ -65,7 +65,6 @@ public sealed class AbsentDerivationLawTests {
                   "name": "stander",
                   "bodyMotionProgram": "traverse",
                   "motion": {
-                    "$type": "grounded",
                     "moveSpeed": 4,
                     "turnSpeed": 2.5,
                     "riseGravity": 28,
@@ -111,7 +110,7 @@ public sealed class AbsentDerivationLawTests {
           { "name": "p", "version": "puck.body-motion.v1", "kind": "Motion", "operations": ["ResolveYawAttitudeAndPlanarFrame", "ComputePlanarTargetVelocity", "ShapePlanarVelocity", "SnapYawToPlanarIntent", "ApplyVerticalGravity", "IntegratePlanarAndVerticalVelocity", "CommitPose"] }
         ],
         "kits": { "rows": [
-          { "name": "k", "bodyMotionProgram": "p", "motion": { "$type": "grounded", "moveSpeed": 4, "turnSpeed": 2.5, "riseGravity": 28, "fallGravity": 46, "maxFallSpeed": 40, "response": [], "sprintMultiplier": 1 } }
+          { "name": "k", "bodyMotionProgram": "p", "motion": { "moveSpeed": 4, "turnSpeed": 2.5, "riseGravity": 28, "fallGravity": 46, "maxFallSpeed": 40, "response": [], "sprintMultiplier": 1 } }
         ] }
         """;
     private const string MinimalViewsSection = """
@@ -184,7 +183,7 @@ public sealed class AbsentDerivationLawTests {
                 {
                   "name": "solo",
                   "bodyMotionProgram": "p",
-                  "motion": { "$type": "grounded", "moveSpeed": 4, "turnSpeed": 2.5, "riseGravity": 28, "fallGravity": 46, "maxFallSpeed": 40, "response": [], "sprintMultiplier": 1 }
+                  "motion": { "moveSpeed": 4, "turnSpeed": 2.5, "riseGravity": 28, "fallGravity": 46, "maxFallSpeed": 40, "response": [], "sprintMultiplier": 1 }
                 }
               ] }
             }

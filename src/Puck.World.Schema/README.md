@@ -96,19 +96,19 @@ documents (`quilt-nw`, `quilt-ne`, `quilt-se`, `quilt-sw`, and `quilt-island`)
 are non-game adjacency/federation stress content — each a `basis` delta over
 the `quilt-base` template (see "Document composition" below). Every one of
 them layers over `standard.world.json`, the standard library document. The movement platform
-every grounded kit rides is documented on its kit's `WorldMotionModel.Grounded`
+every kit rides is documented on its kit's `WorldMotion`
 row (`SprintMultiplier`/`SprintChannel`, `MoveFrame`/`FacingSnap`), the
 frame its MoveAdvance/MoveStrafe channel rows are authored in
 (`channels[].frame`, `ChannelFrame`: `World` raw, `Camera` camera-relative and
 facing its travel, `Heading` body-relative with `Turn` steering — the stick's
 `player.move` is camera-framed by its own definition, so keyboard-in-heading
 beside stick-in-camera is one document), and the seat rig's own `dynamics` op
-(a named `dynamics` row shaping the boom ease). Beside `holds`, the arm carries one
+(a named `dynamics` row shaping the boom ease). Beside `holds`, the motion row carries one
 more optional row: `drive` (`WorldDrive`) — anisotropic body-frame drive
 (longitudinal accel/brake/coast, lateral grip and a held `drift`,
 speed-scaled steering, optional pitched flight) read by the
-`ResolveDriveFrame`/`ShapeDriveVelocity` operations. A kart is the one arm plus a
-drive row exactly as a swimmer is the one arm plus a `Medium` hold row; a
+`ResolveDriveFrame`/`ShapeDriveVelocity` operations. A kart is the same motion row plus a
+drive row exactly as a swimmer is the same motion row plus a `Medium` hold row; a
 program selecting either drive operation against a kit authoring no row refuses
 by the `Drive` tuning facet's name. The retired `arcade` world's
 `gaming-brick`-cabinet + region-gated prompt/prize + `rules`-driven `state`

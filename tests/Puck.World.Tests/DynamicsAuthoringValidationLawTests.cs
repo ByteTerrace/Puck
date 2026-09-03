@@ -104,7 +104,7 @@ public sealed class DynamicsAuthoringValidationLawTests {
     public void KitDynamicsDanglingReferenceRefusesWhileResolvingPasses() {
         var document = WithDynamics(rows: [Chase]);
         var kit = document.Kits[0];
-        var grounded = ((WorldMotionModel.Grounded)kit.Motion);
+        var grounded = kit.Motion;
 
         var dangling = document with { KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "missing" } }] };
         var resolving = document with { KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "chase" } }] };

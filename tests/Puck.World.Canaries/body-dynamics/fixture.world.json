@@ -48,7 +48,6 @@
         "name": "stander",
         "bodyMotionProgram": "traverse",
         "motion": {
-          "$type": "grounded",
           "moveSpeed": 4,
           "turnSpeed": 2.5,
           "riseGravity": 28,

@@ -18,7 +18,7 @@ public sealed class MotionScalarPositivityLawTests {
     public void NegativeEnvelopeMinRefusesByName() {
         var document = Fixtures.BuildDocument();
         var kit = document.Kits[0];
-        var grounded = ((WorldMotionModel.Grounded)kit.Motion);
+        var grounded = kit.Motion;
         var negative = document with {
             KitRowsRaw = [kit with { Motion = grounded with { MoveSpeedEnvelope = new MotionScalarEnvelope(Max: 10f, Min: -100f) } }],
         };
@@ -31,7 +31,7 @@ public sealed class MotionScalarPositivityLawTests {
     public void NonNegativeEnvelopeValidates() {
         var document = Fixtures.BuildDocument();
         var kit = document.Kits[0];
-        var grounded = ((WorldMotionModel.Grounded)kit.Motion);
+        var grounded = kit.Motion;
         // Min 0 is the legitimate edge (full slowdown admitted); the kit's own moveSpeed must sit inside the bound.
         var control = document with {
             KitRowsRaw = [kit with { Motion = grounded with { MoveSpeedEnvelope = new MotionScalarEnvelope(Min: 0f, Max: (grounded.MoveSpeed + 1f)) } }],

@@ -663,7 +663,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         )
     ),
     };
-    // world.kits: name, program, arm, and the arm's key scalars — the census this section never had.
+    // world.kits: name, program, and the motion row's key scalars — the census this section never had.
     private static string DescribeKits(WorldServer server) {
         var kits = server.Definition.Kits;
 
@@ -680,25 +680,25 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
                 provider: CultureInfo.InvariantCulture,
                 handler: $"{((index == 0)
                 ? " "
-                : " | ")}{kit.Name} program={kit.BodyMotionProgram} {DescribeMotionArm(motion: kit.Motion)}"
+                : " | ")}{kit.Name} program={kit.BodyMotionProgram} {DescribeMotion(motion: kit.Motion)}"
             );
         }
 
         return builder.Append(value: ']').ToString();
     }
-    // A kit's planar shaping is exactly one of the two mechanisms — echoed alongside the arm so world.kits answers
-    // "how does this kit feel" without a separate lookup. A drive kit shapes planar velocity through its own row and
-    // authors neither, which reads as none here.
-    private static string DescribeShaping(WorldMotionModel motion) => ((motion.DeclaredDynamics is { Length: > 0 } row)
+    // A kit's planar shaping is exactly one of the two mechanisms — echoed alongside the motion row so world.kits
+    // answers "how does this kit feel" without a separate lookup. A drive kit shapes planar velocity through its own
+    // row and authors neither, which reads as none here.
+    private static string DescribeShaping(WorldMotion motion) => ((motion.Dynamics is { Length: > 0 } row)
         ? $"shaping=dynamics:{row}"
-        : ((motion.DeclaredResponse.Count == 0) && (motion.DeclaredDrive is not null))
+        : (((motion.Response?.Count ?? 0) == 0) && (motion.Drive is not null))
         ? "shaping=drive"
         : string.Create(
         provider: CultureInfo.InvariantCulture,
-        handler: $"shaping=response({motion.DeclaredResponse.Count})"
+        handler: $"shaping=response({motion.Response?.Count ?? 0})"
     ));
     // The optional drive row's own key scalars, or nothing at all for a kit authoring none.
-    private static string DescribeDrive(WorldMotionModel motion) => ((motion.DeclaredDrive is { } drive)
+    private static string DescribeDrive(WorldMotion motion) => ((motion.Drive is { } drive)
         ? string.Create(
         provider: CultureInfo.InvariantCulture,
         handler: $" drive=(accel={drive.Accel:0.###} brake={drive.Brake:0.###} coast={drive.Coast:0.###} grip={drive.Grip:0.###} reverseSpeed={drive.ReverseSpeed:0.###} drift={((drive.Drift is { } drift)
@@ -708,13 +708,10 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
     )
         : string.Empty
     );
-    private static string DescribeMotionArm(WorldMotionModel? motion) => motion switch {
-        WorldMotionModel.Grounded grounded => string.Create(
+    private static string DescribeMotion(WorldMotion motion) => string.Create(
         provider: CultureInfo.InvariantCulture,
-        handler: $"arm=grounded moveSpeed={grounded.MoveSpeed:0.###} turnSpeed={grounded.TurnSpeed:0.###} riseGravity={grounded.RiseGravity:0.###} fallGravity={grounded.FallGravity:0.###} maxFallSpeed={grounded.MaxFallSpeed:0.###} {DescribeShaping(motion: grounded)}{DescribeDrive(motion: grounded)}"
-    ),
-        _ => "arm=(none)",
-    };
+        handler: $"moveSpeed={motion.MoveSpeed:0.###} turnSpeed={motion.TurnSpeed:0.###} riseGravity={motion.RiseGravity:0.###} fallGravity={motion.FallGravity:0.###} maxFallSpeed={motion.MaxFallSpeed:0.###} {DescribeShaping(motion: motion)}{DescribeDrive(motion: motion)}"
+    );
     private CommandResult HandleAssign(CommandContext context, WireArgs args) {
         if (args.Count < 2) {
             return CommandResult.Usage(

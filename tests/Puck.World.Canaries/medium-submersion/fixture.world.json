@@ -73,7 +73,6 @@
         "name": "diver",
         "bodyMotionProgram": "medium",
         "motion": {
-          "$type": "grounded",
           "moveSpeed": 3.2,
           "turnSpeed": 2.2,
           "riseGravity": 1,

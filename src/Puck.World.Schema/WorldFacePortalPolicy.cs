@@ -62,41 +62,31 @@ public static class WorldFacePortalPolicy {
 
         var ceiling = FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: definition.Motion.MoveSpeed));
 
-        // A sibling of WorldBody's own motion-arm switch (the sim) and WorldDefinitionValidator's (authoring
-        // checks) — each dispatches on the SAME closed WorldMotionModel hierarchy for a DIFFERENT question (drive
-        // the body vs. validate the document vs., here, bound how fast a body can travel), so collapsing them into
-        // one predicate would blur three distinct policies rather than deduplicate one. A new WorldMotionModel arm
-        // owes all three switches an entry; the compiler will not name the other two for you.
         foreach (var kit in definition.Kits) {
             if (kit is null) {
                 continue;
             }
 
-            switch (kit.Motion) {
-                case WorldMotionModel.Grounded grounded:
-                    ceiling = FixedQ4816.Max(
-                        x: ceiling,
-                        y: Scaled(
-                            baseSpeed: (grounded.MoveSpeedEnvelope?.Max ?? grounded.MoveSpeed),
-                            multiplier: grounded.SprintMultiplier
-                        )
-                    );
-                    ceiling = FixedQ4816.Max(
-                        x: ceiling,
-                        y: Magnitude(value: grounded.MaxFallSpeed)
-                    );
+            var motion = kit.Motion;
 
-                    // A drive row travels backwards at its own rate, which no forward bound covers.
-                    if (grounded.Drive is { } drive) {
-                        ceiling = FixedQ4816.Max(
-                            x: ceiling,
-                            y: Magnitude(value: drive.ReverseSpeed)
-                        );
-                    }
+            ceiling = FixedQ4816.Max(
+                x: ceiling,
+                y: Scaled(
+                    baseSpeed: (motion.MoveSpeedEnvelope?.Max ?? motion.MoveSpeed),
+                    multiplier: motion.SprintMultiplier
+                )
+            );
+            ceiling = FixedQ4816.Max(
+                x: ceiling,
+                y: Magnitude(value: motion.MaxFallSpeed)
+            );
 
-                    break;
-                default:
-                    break;
+            // A drive row travels backwards at its own rate, which no forward bound covers.
+            if (motion.Drive is { } drive) {
+                ceiling = FixedQ4816.Max(
+                    x: ceiling,
+                    y: Magnitude(value: drive.ReverseSpeed)
+                );
             }
         }
 

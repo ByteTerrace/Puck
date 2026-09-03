@@ -31,7 +31,7 @@ public sealed record WorldHoldMedium(
     float ThrustFraction
 );
 /// <summary>
-/// One authored hold row of a grounded kit's ordered <see cref="WorldMotionModel.Grounded.Holds"/> list — what may
+/// One authored hold row of a kit's ordered <see cref="WorldMotion.Holds"/> list — what may
 /// hold this body, in preference order. <c>ResolveHold</c> keeps the hold it has while its surface is still there
 /// and the same face, and otherwise takes the first row the world offers; <c>ApplyHold</c> applies
 /// <paramref name="Hold"/>.

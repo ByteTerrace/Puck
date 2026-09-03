@@ -197,7 +197,7 @@ public sealed class HighSpeedGroundContactLawTests {
                 Requirements = (requireField ? [WorldContactRequirement.SmoothUnionContact] : []),
             },
             KitRowsRaw = source.Kits.Select(selector: kit => kit with {
-                Motion = ((WorldMotionModel.Grounded)kit.Motion) with { MaxFallSpeed = 40f },
+                Motion = kit.Motion with { MaxFallSpeed = 40f },
             }).ToArray(),
             CreationsRaw = [creation],
             PlacementRowsRaw = [new WorldPlacement(Id: "floor", PrototypeId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],

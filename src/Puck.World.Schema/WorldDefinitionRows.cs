@@ -223,7 +223,7 @@ public static class WorldDefinitionRows {
                 continue;
             }
 
-            if (kit.Motion.DeclaredDynamics is { } kitDynamics) {
+            if (kit.Motion.Dynamics is { } kitDynamics) {
                 yield return ("kits", $"kits.{kit.Name}", kitDynamics);
             }
         }

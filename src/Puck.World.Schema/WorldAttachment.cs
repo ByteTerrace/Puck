@@ -7,7 +7,7 @@ namespace Puck.World;
 /// at an anchor within <see cref="GrappleMaxDistance"/>/<see cref="GrappleAssistHalfAngleDegrees"/> on the authored
 /// <see cref="AttachChannel"/> press. Absent (<see cref="Absent"/>) resolves to <see cref="Enabled"/>
 /// <see langword="false"/> — a world authoring nothing here grants no attachment at all. Surface holds are not
-/// authored here: they are a kit's own ordered <see cref="WorldMotionModel.Grounded.Holds"/> list.
+/// authored here: they are a kit's own ordered <see cref="WorldMotion.Holds"/> list.
 /// </summary>
 /// <param name="Enabled">Whether the whole surface is live. <see langword="false"/> makes every other field inert —
 /// a body's attach/detach/reel channels (even if separately declared and bound) never reach the attachment state

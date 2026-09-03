@@ -1994,7 +1994,6 @@
           "radius": 0.35
         },
         "motion": {
-          "$type": "grounded",
           "facingSnap": false,
           "fallGravity": 46,
           "maxFallSpeed": 40,

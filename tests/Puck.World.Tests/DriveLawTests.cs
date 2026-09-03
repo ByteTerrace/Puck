@@ -309,7 +309,7 @@ public sealed class DriveLawTests {
             // The kart spelling: the one arm carries the forward speed, the steering rate, the gravity trio and the
             // held sprint (the boost); moveSpeedEnvelope pins that speed against any seated profile with min == max;
             // the drive row carries what only a drive has.
-            Motion: new WorldMotionModel.Grounded(
+            Motion: new WorldMotion(
                 MoveSpeed: 16f,
                 TurnSpeed: 2.4f,
                 RiseGravity: 14f,
@@ -464,7 +464,7 @@ public sealed class DriveLawTests {
             var document = BuildDriveDocument();
             var kits = document.Kits.ToList();
 
-            kits[0] = (kits[0] with { Motion = (((WorldMotionModel.Grounded)kits[0].Motion!) with { Drive = row }) });
+            kits[0] = (kits[0] with { Motion = (kits[0].Motion! with { Drive = row }) });
 
             Assert.False(
                 condition: WorldDefinitionValidator.TryValidateLocally(

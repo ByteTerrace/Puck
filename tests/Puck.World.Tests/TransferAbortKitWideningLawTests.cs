@@ -60,7 +60,7 @@ public sealed class TransferAbortKitWideningLawTests {
         var kit = new WorldKit(
             Name: "kart-test",
             BodyMotionProgram: "drive-ground",
-            Motion: new WorldMotionModel.Grounded(
+            Motion: new WorldMotion(
                 MoveSpeed: 16f,
                 TurnSpeed: 2.4f,
                 RiseGravity: 14f,
@@ -139,7 +139,7 @@ public sealed class TransferAbortKitWideningLawTests {
         var kit = new WorldKit(
             Name: "diver-test",
             BodyMotionProgram: "medium",
-            Motion: new WorldMotionModel.Grounded(
+            Motion: new WorldMotion(
                 MoveSpeed: 3.2f,
                 TurnSpeed: 2.2f,
                 RiseGravity: 1f,
@@ -439,7 +439,7 @@ public sealed class TransferAbortKitWideningLawTests {
     public void DetachThenRestore_GroundedDynamicsKitBody_PlanarFollowerStateRoundTripsExactly() {
         var document = Fixtures.BuildDocument();
         var kit = document.Kits[0];
-        var grounded = ((WorldMotionModel.Grounded)kit.Motion);
+        var grounded = kit.Motion;
 
         document = document with {
             DynamicsRaw = [.. Fixtures.StandardDynamics, Settle],
@@ -488,7 +488,7 @@ public sealed class TransferAbortKitWideningLawTests {
     public void DetachThenRestore_MediumDynamicsKitBody_VerticalFollowerStateRoundTripsExactly() {
         var document = BuildMediumKitDocument();
         var kit = document.Kits[0];
-        var grounded = ((WorldMotionModel.Grounded)kit.Motion);
+        var grounded = kit.Motion;
 
         document = document with {
             DynamicsRaw = [.. Fixtures.StandardDynamics, Settle],

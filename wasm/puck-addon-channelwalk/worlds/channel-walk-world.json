@@ -570,7 +570,6 @@
         "name": "flyer",
         "bodyMotionProgram": "free",
         "motion": {
-          "$type": "grounded",
           "moveSpeed": 4,
           "turnSpeed": 2.5,
           "riseGravity": 14,
@@ -632,7 +631,6 @@
         "name": "swimmer",
         "bodyMotionProgram": "free",
         "motion": {
-          "$type": "grounded",
           "moveSpeed": 4,
           "turnSpeed": 2.5,
           "riseGravity": 14,
@@ -694,7 +692,6 @@
         "name": "jumper",
         "bodyMotionProgram": "grounded",
         "motion": {
-          "$type": "grounded",
           "moveSpeed": 4,
           "turnSpeed": 2.5,
           "riseGravity": 14,
@@ -849,7 +846,6 @@
         "name": "runner",
         "bodyMotionProgram": "grounded",
         "motion": {
-          "$type": "grounded",
           "moveSpeed": 4,
           "turnSpeed": 2.5,
           "riseGravity": 14,
@@ -1018,7 +1014,6 @@
         "name": "kart",
         "bodyMotionProgram": "grounded",
         "motion": {
-          "$type": "grounded",
           "moveSpeed": 4,
           "turnSpeed": 2.5,
           "riseGravity": 14,

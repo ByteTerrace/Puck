@@ -64,7 +64,7 @@ public sealed class ChannelFrameLawTests {
 
             return (document with {
                 ChannelsRaw = [Forward(frame: ChannelFrame.Heading), Strafe(frame: ChannelFrame.Heading), Turn],
-                KitRowsRaw = [kit with { Motion = ((WorldMotionModel.Grounded)kit.Motion) with { MoveFrame = kitFrame } }],
+                KitRowsRaw = [kit with { Motion = kit.Motion with { MoveFrame = kitFrame } }],
             });
         }
 
@@ -84,7 +84,7 @@ public sealed class ChannelFrameLawTests {
         var kit = document.Kits[0];
 
         using var fixture = Fixtures.FreshServer(definition: (document with {
-            KitRowsRaw = [kit with { Motion = ((WorldMotionModel.Grounded)kit.Motion) with { MoveFrame = MotionMoveFrame.World, FacingSnap = true } }],
+            KitRowsRaw = [kit with { Motion = kit.Motion with { MoveFrame = MotionMoveFrame.World, FacingSnap = true } }],
         }));
         var actor = WorldPrincipal.Seat(slot: 0);
 

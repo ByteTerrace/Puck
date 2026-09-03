@@ -56,18 +56,13 @@ public static partial class WorldDefinitionValidator {
 
         return facets;
     }
-    // The model→facet mapping: what each WorldMotionModel arm supplies. A new arm is a localized addition here,
-    // alongside its record arm (WorldMotionTuning.cs), its WorldBody integrator, and any new BodyMotionOp cases
-    // RequiredMotionTuningFacets needs — never a hunt. The arm's own fields supply every facet unconditionally; Drive
-    // is the one an OPTIONAL row carries, so a kit authoring none refuses a drive program by facet name.
-    private static MotionTuningFacet SuppliedMotionTuningFacets(WorldMotionModel model) => model switch {
-        WorldMotionModel.Grounded grounded => (MotionTuningFacet.Speed | MotionTuningFacet.GravityArc | MotionTuningFacet.GravityBleed
-            | MotionTuningFacet.PlanarResponse | MotionTuningFacet.Sprint | MotionTuningFacet.WorldFrame | MotionTuningFacet.Holds
-            | ((grounded.Drive is not null)
-            ? MotionTuningFacet.Drive
-            : MotionTuningFacet.None)),
-        _ => MotionTuningFacet.None,
-    };
+    // What a kit's motion row supplies. Its own fields supply every facet unconditionally; Drive is the one an
+    // OPTIONAL row carries, so a kit authoring none refuses a drive program by facet name.
+    private static MotionTuningFacet SuppliedMotionTuningFacets(WorldMotion model) => (MotionTuningFacet.Speed | MotionTuningFacet.GravityArc | MotionTuningFacet.GravityBleed
+        | MotionTuningFacet.PlanarResponse | MotionTuningFacet.Sprint | MotionTuningFacet.WorldFrame | MotionTuningFacet.Holds
+        | ((model.Drive is not null)
+        ? MotionTuningFacet.Drive
+        : MotionTuningFacet.None));
     private static bool TryScalar(BodyProgramParameters parameters, string name, out float value) => parameters.Scalars.TryGetValue(
         key: name,
         value: out value
@@ -202,7 +197,7 @@ public static partial class WorldDefinitionValidator {
 
         return compiled;
     }
-    // The shape every authored envelope must have regardless of arm: min/max finite, min <= max (FixedQ4816.Clamp's
+    // The shape every authored envelope must have: min/max finite, min <= max (FixedQ4816.Clamp's
     // own precondition, refused here so it never throws at seat-resolve time), min non-negative — every consumer
     // bounds a speed magnitude, and reverse travel is its own non-negative scalar (drive.reverseSpeed), so a negative
     // endpoint would only widen the clamp past the bound's apparent intent. Returns whether the shape held, so a
@@ -231,9 +226,8 @@ public static partial class WorldDefinitionValidator {
 
         return true;
     }
-    // A kit's full grounded locomotion tuning: speeds, gravity, and the velocity-response table every body
-    // integrates under.
-    private static void ValidateGroundedMotion(WorldMotionModel.Grounded tuning, string path, ISet<string> channelNames, ISet<string> dynamicsNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, bool shapesPlanarVelocity, int simulationRateHz, List<string> errors) {
+    // A kit's full locomotion tuning: speeds, gravity, and the velocity-response table every body integrates under.
+    private static void ValidateMotion(WorldMotion tuning, string path, ISet<string> channelNames, ISet<string> dynamicsNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, bool shapesPlanarVelocity, int simulationRateHz, List<string> errors) {
         RequirePositive(
             value: tuning.MoveSpeed,
             name: $"{path}.moveSpeed",
@@ -289,7 +283,7 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.moveFrame '{tuning.MoveFrame}' is not a defined MotionMoveFrame.");
         }
 
-        // Absent, this envelope is wide-open (unclamped). Another arm's own overridable scalar walks the same gate.
+        // Absent, this envelope is wide-open (unclamped). Another overridable scalar walks the same gate.
         if (tuning.MoveSpeedEnvelope is { } moveSpeedEnvelope) {
             ValidateScalarEnvelope(
                 envelope: moveSpeedEnvelope,
@@ -511,10 +505,10 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
     }
-    // The kit.motion gate: required (a kit with no declared model is a dead kit), coherent with its body motion
+    // The kit.motion gate: required (a kit with no declared row is a dead kit), coherent with its body motion
     // program's selected operations (program is null when ValidateKits already refused bodyMotionProgram, in which
-    // case coherence has nothing sound to check against), and per-arm valid. A new arm is a new case below.
-    private static void ValidateMotionModel(WorldMotionModel? model, CompiledBodyMotionProgram? program, string path, ISet<string> channelNames, ISet<string> dynamicsNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, int simulationRateHz, List<string> errors) {
+    // case coherence has nothing sound to check against), and its own fields valid.
+    private static void ValidateMotionModel(WorldMotion? model, CompiledBodyMotionProgram? program, string path, ISet<string> channelNames, ISet<string> dynamicsNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, int simulationRateHz, List<string> errors) {
         if (model is null) {
             errors.Add(item: $"{path} is required.");
 
@@ -532,30 +526,21 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} {reason}");
         }
 
-        switch (model) {
-            case WorldMotionModel.Grounded grounded:
-                ValidateGroundedMotion(
-                    channelNames: channelNames,
-                    dynamicsNames: dynamicsNames,
-                    errors: errors,
-                    path: path,
-                    hasMedium: hasMedium,
-                    // The exactly-one planar-shaping rule binds the kit whose program actually shapes planar
-                    // velocity. A drive kit shapes it through its own row instead, so requiring a dead response
-                    // table there would author feel nothing reads. An unresolved program name is already refused
-                    // elsewhere; requiring the shaping keeps that kit's refusal complete.
-                    shapesPlanarVelocity: ((program is null) || program.Contains(operation: BodyMotionOp.ShapePlanarVelocity)),
-                    simulationRateHz: simulationRateHz,
-                    stateSlots: stateSlots,
-                    tuning: grounded
-                );
-
-                break;
-            default:
-                errors.Add(item: $"{path} is an unknown motion model kind '{model.GetType().Name}'.");
-
-                break;
-        }
+        ValidateMotion(
+            channelNames: channelNames,
+            dynamicsNames: dynamicsNames,
+            errors: errors,
+            path: path,
+            hasMedium: hasMedium,
+            // The exactly-one planar-shaping rule binds the kit whose program actually shapes planar
+            // velocity. A drive kit shapes it through its own row instead, so requiring a dead response
+            // table there would author feel nothing reads. An unresolved program name is already refused
+            // elsewhere; requiring the shaping keeps that kit's refusal complete.
+            shapesPlanarVelocity: ((program is null) || program.Contains(operation: BodyMotionOp.ShapePlanarVelocity)),
+            simulationRateHz: simulationRateHz,
+            stateSlots: stateSlots,
+            tuning: model
+        );
     }
     private static void ValidateProducerParameters(IReadOnlyDictionary<string, BodyProgramParameters> producers, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, IReadOnlyDictionary<string, BodyMotionProgram> programRows, ISet<string> channelNames, string path, List<string> errors) {
         if (producers is null) {
@@ -797,7 +782,7 @@ public static partial class WorldDefinitionValidator {
                 motionProgram.Contains(operation: BodyMotionOp.ComputeLocalTargetVelocity) ||
                 motionProgram.Contains(operation: BodyMotionOp.ApplyVerticalDrive)
             );
-            var mediumVertical = domain.Kind == WorldNavigationKind.Medium && motionProgram?.Contains(operation: BodyMotionOp.ApplyHold) == true && kit.Motion.DeclaredHolds.Any(predicate: hold => hold.Bond == BodyHoldBond.Medium);
+            var mediumVertical = domain.Kind == WorldNavigationKind.Medium && motionProgram?.Contains(operation: BodyMotionOp.ApplyHold) == true && (kit.Motion.Holds?.Any(predicate: hold => hold.Bond == BodyHoldBond.Medium) ?? false);
             if (!directVertical && !mediumVertical) {
                 errors.Add(item: $"{producerPath} targets {domain.Kind.ToString().ToLowerInvariant()} navigation domain '{domain.Name}', but kit '{kit.Name}' bodyMotionProgram has no compatible vertical consumer (ComputeLocalTargetVelocity, ApplyVerticalDrive, or a medium ApplyHold).");
             }
@@ -888,9 +873,9 @@ public static partial class WorldDefinitionValidator {
     }
     // Layered over ValidateEnvelopeShape: the kit's own authored value for the bounded scalar must also sit inside
     // its own declared envelope — a world that pins a scalar narrower than the baseline it authors for profileless
-    // stand-ins is self-contradictory. One arm means one rule: a kit pinning its speed outright (min == max, what a
-    // kart authors) still authors a moveSpeed inside that pin, so a live world.row.set retune past the cap refuses
-    // by name instead of clamping silently.
+    // stand-ins is self-contradictory. A kit pinning its speed outright (min == max, what a kart authors) still
+    // authors a moveSpeed inside that pin, so a live world.row.set retune past the cap refuses by name instead of
+    // clamping silently.
     private static void ValidateScalarEnvelope(MotionScalarEnvelope envelope, float ownValue, string ownValueName, string path, List<string> errors) {
         if (!ValidateEnvelopeShape(
             envelope: envelope,
@@ -909,7 +894,7 @@ public static partial class WorldDefinitionValidator {
     }
     // A kit's drive row: every convergence rate positive, the steering authority curve well-formed, and a declared
     // drift naming a channel that resolves (a misspelled name is otherwise a silent, permanent no-op). The forward
-    // speed, the steering rate, and the gravity trio are the arm's own fields and are validated with it.
+    // speed, the steering rate, and the gravity trio are the motion row's own fields and are validated with it.
     private static void ValidateDriveMotion(WorldDrive tuning, string path, ISet<string> channelNames, List<string> errors) {
         RequireNonNegative(
             value: tuning.ReverseSpeed,
@@ -985,10 +970,10 @@ public static partial class WorldDefinitionValidator {
     private static readonly string[] AttendScalars = ["standoffRadius", "approach", "orbit", "altitudeGain"];
 
     /// <summary>The tuning facets a body motion program's selected operations read from a kit's declared
-    /// <see cref="WorldMotionModel"/> — the validator's own mapping (never convention; see
-    /// <see cref="RequiredMotionTuningFacets"/>/<see cref="SuppliedMotionTuningFacets"/>) that a new operation or a new
-    /// model arm must extend. A declared model missing a facet an operation still reads refuses by name at
-    /// validation instead of the operation reading a silent zero at runtime.</summary>
+    /// <see cref="WorldMotion"/> row — the validator's own mapping (never convention; see
+    /// <see cref="RequiredMotionTuningFacets"/>/<see cref="SuppliedMotionTuningFacets"/>) that a new operation must
+    /// extend. A declared row missing a facet an operation still reads refuses by name at validation instead of the
+    /// operation reading a silent zero at runtime.</summary>
     [Flags]
     private enum MotionTuningFacet : ushort {
         None = 0,
@@ -1005,7 +990,7 @@ public static partial class WorldDefinitionValidator {
         GravityBleed = 4,
 
         /// <summary>The response table OR the dynamics follower (<see cref="BodyMotionOp.ShapePlanarVelocity"/>) —
-        /// whichever the arm's exactly-one authoring rule admitted.</summary>
+        /// whichever the exactly-one authoring rule admitted.</summary>
         PlanarResponse = 8,
 
         /// <summary>SprintMultiplier/SprintChannel (<see cref="BodyMotionOp.ComputePlanarTargetVelocity"/>).</summary>

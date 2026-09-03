@@ -12,7 +12,7 @@ namespace Puck.World;
 /// <param name="Description">The author description, when authored.</param>
 public sealed record WorldProjectedMetadata(string? Title = null, string? Description = null);
 /// <summary>
-/// One kit as a visitor's client sees it — the embodiment facts (which motion model a body wears, what shape it
+/// One kit as a visitor's client sees it — the embodiment facts (which motion tuning a body wears, what shape it
 /// occupies, whether it depenetrates). The projection document's own row type, not a <see cref="WorldKit"/> with
 /// holes: it carries no member for the kit's <c>producers</c>/<c>actions</c>, which are the world's game logic and
 /// are read only by the authority that runs them.
@@ -20,14 +20,14 @@ public sealed record WorldProjectedMetadata(string? Title = null, string? Descri
 /// <param name="Name">The kit's name — the identity a placement/assignment row addresses.</param>
 /// <param name="BodyMotionProgram">The program name the destination advances this kit on. A name only; the
 /// <c>bodyMotionPrograms</c> section itself never crosses below the replica tier.</param>
-/// <param name="Motion">The kit's motion model — the arm and its tuning, which is what decides how a client
-/// interpolates and frames a body wearing it.</param>
+/// <param name="Motion">The kit's motion tuning, which is what decides how a client interpolates and frames a body
+/// wearing it.</param>
 /// <param name="Collider">The kit's collider, when it authors one.</param>
 /// <param name="BodyContact">Whether two bodies wearing this kit physically depenetrate.</param>
 public sealed record WorldProjectedKit(
     string Name,
     string BodyMotionProgram,
-    WorldMotionModel Motion,
+    WorldMotion Motion,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCollider? Collider = null,
     WorldBodyContactMode BodyContact = WorldBodyContactMode.Overlap
 );

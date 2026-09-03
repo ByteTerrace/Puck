@@ -86,7 +86,7 @@ namespace Puck.World;
 // The editor/authoring policy row (the world.row.set authoring payload shape).
 [JsonSerializable(typeof(WorldPlacementPolicyDefaults))]
 // The contact-solver tuning (the world.row.set collision payload shape) and the velocity-response array (a kit row's
-// own, via world.row.set kits). Both are also reachable from WorldDefinition/WorldMotionModel already; these entries
+// own, via world.row.set kits). Both are also reachable from WorldDefinition/WorldMotion already; these entries
 // expose the typed accessors.
 [JsonSerializable(typeof(WorldCollision))]
 [JsonSerializable(typeof(WorldCollider))]

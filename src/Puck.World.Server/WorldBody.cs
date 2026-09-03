@@ -338,7 +338,7 @@ public sealed partial class WorldBody {
     /// <summary>Initializes a new instance of the <see cref="WorldBody"/> class under a motion model, its kit's
     /// per-channel action bindings, and its kit's body motion program. A <see langword="null"/> binding leaves that ordinal
     /// inert.</summary>
-    /// <param name="motion">The motion model to integrate under (the body's kit's declared <see cref="WorldMotionModel"/>).</param>
+    /// <param name="motion">The motion tuning to integrate under (the body's kit's declared <see cref="WorldMotion"/>).</param>
     /// <param name="program">The kit's compiled body motion program.</param>
     /// <param name="programs">The world's compiled body motion program table.</param>
     /// <param name="actions">The kit's compiled per-ordinal action bindings (<see cref="ChannelLimits.MaxChannels"/> slots).</param>
@@ -349,7 +349,7 @@ public sealed partial class WorldBody {
     /// <param name="actionState">The kit's compiled named action-state register file.</param>
     /// <param name="collider">The kit's compiled body volume, or <see langword="null"/> for a volumeless kit.</param>
     /// <param name="maxSmoothError">The compiled world-distance correction smoothing threshold.</param>
-    /// <param name="sprintChannelOrdinal">The ordinal <see cref="WorldMotionModel.Grounded.SprintChannel"/> resolved to
+    /// <param name="sprintChannelOrdinal">The ordinal <see cref="WorldMotion.SprintChannel"/> resolved to
     /// (<see cref="FixedWorldKit.SprintChannelOrdinal"/>), or <c>-1</c> for a kit with no sprint capability.</param>
     /// <param name="driftChannelOrdinal">The ordinal <see cref="WorldDriveDrift.Channel"/> resolved to
     /// (<see cref="FixedWorldKit.DriftChannelOrdinal"/>), or <c>-1</c> for a kit that cannot drift.</param>
@@ -359,7 +359,7 @@ public sealed partial class WorldBody {
     /// <param name="holds">The kit's compiled ordered hold list (<see cref="FixedWorldKit.Holds"/>), or
     /// <see langword="null"/> for a kit authoring none.</param>
     /// <exception cref="ArgumentNullException"><paramref name="program"/> or <paramref name="programs"/> is <see langword="null"/>.</exception>
-    public WorldBody(WorldMotionModel motion, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedQ4816 maxSmoothError, CompiledActionSpec?[]? actions = null, FixedQ4816[]? actionThresholds = null, ChannelShape[]? actionShapes = null, bool[]? roleMask = null, RoleChannelOrdinals roleOrdinals = default, CompiledActionStateSlot[]? actionState = null, FixedWorldCollider? collider = null, int sprintChannelOrdinal = -1, int driftChannelOrdinal = -1, FixedMotionDynamics? planarDynamics = null, FixedBodyHold[]? holds = null) {
+    public WorldBody(WorldMotion motion, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedQ4816 maxSmoothError, CompiledActionSpec?[]? actions = null, FixedQ4816[]? actionThresholds = null, ChannelShape[]? actionShapes = null, bool[]? roleMask = null, RoleChannelOrdinals roleOrdinals = default, CompiledActionStateSlot[]? actionState = null, FixedWorldCollider? collider = null, int sprintChannelOrdinal = -1, int driftChannelOrdinal = -1, FixedMotionDynamics? planarDynamics = null, FixedBodyHold[]? holds = null) {
         SetTuning(holds: holds, motion: motion, planarDynamics: planarDynamics);
         m_bodyMotionProgram = (program ?? throw new ArgumentNullException(paramName: nameof(program)));
         m_bodyMotionPrograms = (programs ?? throw new ArgumentNullException(paramName: nameof(programs)));

@@ -229,7 +229,7 @@ public sealed class WorldMediumLawTests {
         var kit = new WorldKit(
             Name: "diver-test",
             BodyMotionProgram: "medium",
-            Motion: new WorldMotionModel.Grounded(
+            Motion: new WorldMotion(
                 MoveSpeed: 3.2f,
                 TurnSpeed: 2.2f,
                 RiseGravity: 1f,
@@ -331,7 +331,7 @@ public sealed class WorldMediumLawTests {
     public void AMediumHoldWithNoLaw_AndASurfaceHoldCarryingOne_BothRefuseByName() {
         var topology = Topology();
         var admitted = BuildMediumHoldDocument(topology: topology);
-        var grounded = ((WorldMotionModel.Grounded)admitted.Kits[0].Motion!);
+        var grounded = admitted.Kits[0].Motion!;
 
         WorldDefinition WithHolds(params WorldHold[] holds) => (admitted with {
             KitRowsRaw = [(admitted.Kits[0] with { Motion = (grounded with { Holds = holds }) })],

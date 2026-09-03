@@ -134,7 +134,7 @@ internal static class Fixtures {
         new(
             Name: SeatKitName,
             BodyMotionProgram: "grounded",
-            Motion: new WorldMotionModel.Grounded(
+            Motion: new WorldMotion(
                 MoveSpeed: 4f,
                 TurnSpeed: 2.5f,
                 RiseGravity: 14f,

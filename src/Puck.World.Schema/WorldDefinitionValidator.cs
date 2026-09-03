@@ -1959,7 +1959,7 @@ public static partial class WorldDefinitionValidator {
     /// <param name="program">The compiled body motion program the switch targets.</param>
     /// <param name="reason">On failure, the refusal detail naming the missing facet(s) and the program; <c>""</c> on success.</param>
     /// <returns><see langword="true"/> when <paramref name="model"/> supplies every facet <paramref name="program"/> requires.</returns>
-    public static bool TryValidateProgramCoherence(WorldMotionModel model, CompiledBodyMotionProgram program, out string reason) {
+    public static bool TryValidateProgramCoherence(WorldMotion model, CompiledBodyMotionProgram program, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: model);
         ArgumentNullException.ThrowIfNull(argument: program);
 
@@ -1971,7 +1971,7 @@ public static partial class WorldDefinitionValidator {
             return true;
         }
 
-        reason = $"motion model '{model.GetType().Name}' does not supply {missing} required by body motion program '{program.Name}'.";
+        reason = $"motion row does not supply {missing} required by body motion program '{program.Name}'.";
 
         return false;
     }

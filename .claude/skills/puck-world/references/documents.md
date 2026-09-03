@@ -1019,23 +1019,18 @@ the standard set by naming `standard.world.json` as its `basis`;
 `null.world.json` does, authoring only its own `layouts` and
 other prototype-specific sections over it.
 
-**Kit motion model (`WorldKit.Motion`, a `WorldMotionModel` row).** A kit
-declares WHICH motion model it advances on, alongside `BodyMotionProgram`
-(which operations run each tick) — a `$type`-discriminated union
-(`WorldMotionTuning.cs`, the same pattern as `WorldScreenSource`) with ONE arm,
-`"grounded"` (`WorldMotionModel.Grounded`, authored under `motion` —
-e.g. `jump.world.json`'s `vaulter` kit). The union and its discriminator stay
-in place; a second arm would be a second record, a second
-`JsonDerivedTypeAttribute`, and a `SuppliedMotionTuningFacets` case.
+**Kit motion model (`WorldKit.Motion`, a `WorldMotion` row).** A kit declares
+its motion tuning, alongside `BodyMotionProgram` (which operations run each
+tick) — a flat record (`WorldMotionTuning.cs`), authored under `motion` — e.g.
+`jump.world.json`'s `vaulter` kit.
 
-The arm carries the movement platform every kit reads — `MoveSpeed`,
+The row carries the movement platform every kit reads — `MoveSpeed`,
 `TurnSpeed`, the gravity trio, `SprintMultiplier`/`SprintChannel`,
 `MoveFrame`/`FacingSnap`, `MoveSpeedEnvelope` — plus two OPTIONAL rows beside
 it, each supplying its own tuning facet and each read by its own operations:
 `Holds` (below, `ResolveHold`/`ApplyHold`) and `Drive`
 (`ResolveDriveFrame`/`ShapeDriveVelocity`). Submerged locomotion is a kit
 authoring a `bond: "Medium"` hold row; a kart is a kit authoring a `drive` row.
-Neither is an arm of its own.
 
 **`drive` (`WorldDrive`) — anisotropic body-frame drive.** Velocity decomposes
 into body-frame longitudinal/lateral/residual lanes, each converging at its own
@@ -1044,11 +1039,11 @@ authored rate: `accel`/`brake`/`coast` longitudinally, `grip` laterally, with
 resolved speed, `reverseSpeed` the rate full back-throttle converges on from
 rest, `pitchRate` selecting the flying variant, and a nullable
 `drift { channel, grip, steerScale }` — the held low-traction state. What the
-drive does NOT carry is what the arm already names: the forward speed full
-throttle converges on is `moveSpeed` (bounded by `moveSpeedEnvelope`, scaled by
-`sprintMultiplier` while `sprintChannel` reads held — a kart's "boost"), the
-steering rate at full authority is `turnSpeed`, and the gravity trio is the
-arm's. One row serves the ground, hover, and air variants: a contact-pinned
+drive does NOT carry is what the motion row already names: the forward speed
+full throttle converges on is `moveSpeed` (bounded by `moveSpeedEnvelope`,
+scaled by `sprintMultiplier` while `sprintChannel` reads held — a kart's
+"boost"), the steering rate at full authority is `turnSpeed`, and the gravity
+trio is the motion row's. One row serves the ground, hover, and air variants: a contact-pinned
 variant pairs the drive ops with a program keeping `ApplyVerticalGravity`, a
 flying variant with `ApplyVerticalDecay` and a positive `pitchRate`, which is
 what decides vertical contact ownership per the seam's rule. Validation
@@ -1065,7 +1060,6 @@ A worked kart:
   "name": "kart",
   "bodyMotionProgram": "kart-drive",
   "motion": {
-    "$type": "grounded",
     "moveSpeed": 16.0,
     "moveSpeedEnvelope": { "min": 16.0, "max": 16.0 },
     "turnSpeed": 2.4,
@@ -1115,17 +1109,15 @@ under that name, never a second channel; resolved to
 `FixedWorldKit.SprintChannelOrdinal` the same way
 `WanderFlavor.PressChannel` resolves its own ordinal, since a channel name
 needs the world's compiled channel table and a body's own compile step has
-none. The `DeclaredSprintChannel`/`DeclaredMoveFrame`/`DeclaredDrive` helpers
-are the arm-agnostic reads every caller shares rather than growing its own cast
-chain. `MoveFrame` (`MotionMoveFrame.Heading` default / `.World`) and
+none. `MoveFrame` (`MotionMoveFrame.Heading` default / `.World`) and
 `FacingSnap` — `Heading` is tank controls (the historical default, every
 kit that never sets this field); `World` treats `MoveAdvance`/`MoveStrafe`
 as ALREADY-WORLD-FRAME axes (the seat's client resolves its camera yaw into
 the submitted intent BEFORE the wire — determinism: the sim never reads a
 camera pose) and, with `FacingSnap` on, snaps the body's facing to
 `Atan2` of the commanded direction every tick carrying input, no ramp — the
-camera-frame 3D-platformer feel `jump.world.json`'s `vaulter` kit authors
-(Grounded). Under `World` a seat's aim elevation also splits the commanded
+camera-frame 3D-platformer feel `jump.world.json`'s `vaulter` kit authors.
+Under `World` a seat's aim elevation also splits the commanded
 forward into planar and vertical channels client-side; the explicit `MoveUp`
 channel is orthogonal and stays live regardless of `MoveFrame`.
 
@@ -1141,23 +1133,21 @@ ticks. `jump.world.json`'s `vaulter` kit is the worked example of the
 corrected order, with the measured arc numbers in its motion row.
 
 `WorldDefinitionValidator` cross-checks the kit's `BodyMotionProgram`
-against its declared model: an operation the program selects that reads a
-tuning facet (`MotionTuningFacet`) the declared model doesn't supply refuses
-BY NAME. `grounded` supplies every facet the `grounded` and `free` programs
+against its declared motion row: an operation the program selects that reads a
+tuning facet (`MotionTuningFacet`) the row doesn't supply refuses
+BY NAME. The row supplies every facet the `grounded` and `free` programs
 read (the `free` program's facets are a strict subset), so the world's
-`free`-program kits also author a `grounded` motion row. `Drive` is the one
-facet the arm supplies CONDITIONALLY — only a kit whose `drive` row is present
+`free`-program kits also author a motion row. `Drive` is the one
+facet supplied CONDITIONALLY — only when a kit's `drive` row is present
 — so a program selecting `ResolveDriveFrame`/`ShapeDriveVelocity` against a kit
 authoring none refuses by that facet's name. A world whose kit authors a `Medium` hold row
 with no medium lattice row (`state.world[].lattice.medium`) refuses at boot.
-A further model is another record arm, a new
-`CompiledBodyMotionProgram` capability where one is needed (see
-`CompiledBodyMotionProgram.OwnsVerticalContactState`), and
-a new `SuppliedMotionTuningFacets`/`WorldBody.SetTuning` case — never a hunt.
+A `BodyMotionOp` reading a further facet owes `RequiredMotionTuningFacets` and
+`SuppliedMotionTuningFacets` an entry — never a hunt.
 
 A seated player's live profile overrides the kit's `MoveSpeed`
 (feel stays real-time under `profile.set`/`identity.motion`);
-`Grounded.MoveSpeedEnvelope` is the world's own counter-pin — an
+`WorldMotion.MoveSpeedEnvelope` is the world's own counter-pin — an
 authored `MotionScalarEnvelope { min, max }` that clamps the RESOLVED
 speed at the seat-time read (`WorldBody.ResolveMoveSpeed`, before the
 program ever sees it), regardless of whether it came from the profile or
@@ -1168,7 +1158,7 @@ falls outside its own envelope, by name. `identity.show`'s
 `moveEffective=` echoes what the sim actually applied beside `move=` (the
 profile's raw request) — the two diverge only when an envelope is
 narrower than what the profile asked for. `MotionScalarEnvelope` is the
-reusable shape every arm's own overridable scalar adopts, never a bespoke
+reusable shape every overridable scalar adopts, never a bespoke
 bound.
 
 `ResolveMoveSpeed` is ONE law for every kit — the seated profile's claimed rate,
@@ -1185,9 +1175,9 @@ too: a kit whose `moveSpeed` falls outside its own envelope refuses by name, so
 a live `world.row.set kits …` retune past the cap refuses instead of clamping
 silently.
 
-**Holds (`WorldMotionModel.Grounded.Holds`, a list of `WorldHold` rows →
-`FixedBodyHold[]`) — what may hold a body, in preference order.** A grounded
-kit authors an ordered list; the `ResolveHold` operation takes the first row
+**Holds (`WorldMotion.Holds`, a list of `WorldHold` rows →
+`FixedBodyHold[]`) — what may hold a body, in preference order.** A kit
+authors an ordered list; the `ResolveHold` operation takes the first row
 the world offers and `ApplyHold` applies that row's vertical law. A kit
 authoring none is unchanged: its vertical channel is `ApplyVerticalGravity`'s
 alone, and the two operations are simply absent from its program.
@@ -1287,7 +1277,7 @@ required for a `Surface` row and refused for a `Free` one, finite, inside
 `driveAlignment` in `[0, 1]`; a positive `grip` on a `Grip` row and `Grip`/
 `onDrive` requiring `Surface`; `lift` in `[0, 1]`; `release` naming a declared
 composition channel; `spend.state` naming a declared body/identity Counter slot
-and a positive `spend.ratePerSecond`. The arm supplies the `Holds` facet unconditionally, so a hold program is
+and a positive `spend.ratePerSecond`. The row supplies the `Holds` facet unconditionally, so a hold program is
 admitted whatever the list holds; `Drive` is the conditionally-supplied facet,
 and a drive program against a kit authoring no row is what the
 `MotionTuningFacet` gate refuses by name.
@@ -1295,7 +1285,7 @@ and a drive program against a kit authoring no row is what the
 A `Medium` row is the ONLY spelling of the medium law — `ApplyHold` runs it
 against the row `ResolveHold` took, and `WorldMediumLawTests` pins it to a
 recorded 240-tick fixed-point trace. `puck.world.frozen.json`'s `fishKit` is
-the worked example: a `grounded` arm whose `fishMotion` program runs
+the worked example: a kit whose `fishMotion` program runs
 `ResolveHold`/`ApplyHold`, with one `water` row carrying the six medium facets.
 
 Read back with `body.hold` (`[body.hold: body:<n> hold=<name|none>

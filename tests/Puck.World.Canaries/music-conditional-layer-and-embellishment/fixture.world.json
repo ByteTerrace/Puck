@@ -33,7 +33,6 @@
         "name": "idle",
         "bodyMotionProgram": "grounded",
         "motion": {
-          "$type": "grounded",
           "moveSpeed": 4,
           "turnSpeed": 2,
           "riseGravity": 20,
