@@ -34,15 +34,17 @@ public static class WorldPlacementPolicy {
     /// 48-shape stamp across hundreds of materialized pattern copies while refusing unbounded authored lattices
     /// before materialization.</summary>
     public const int MaxSolidPlacementColliders = 32_768;
-    /// <summary>The hard cap on simultaneous STAMP-POOL registrations — an ANIMATED placement (a creation carrying
-    /// timeline frames), an ATTACHED placement (<see cref="WorldPlacementAttach"/>, rooted on a live body), OR a
-    /// body-rooted creation stamp (an inhabited placement's body, or a crowd body wearing a creation look).
-    /// CONTRACT INVARIANT: sizes <c>Client.WorldStampPool</c>'s pool array
-    /// (<c>new Registration?[MaxStampRegistrations]</c>) and the field-initializer-time dynamic-transform capacity — the
-    /// validator's rejection line names this ceiling word-exactly. Set to 8: all three sources share the pool; the
-    /// validator gates the two document-declared ones (animated + attached) against it and the pool degrades a starved
-    /// body-rooted stamp to a catalog avatar with a loud warn.</summary>
-    public const int MaxStampRegistrations = 8;
+    /// <summary>The stamp-pool registration count — one slot per body in the detailed render band
+    /// (<see cref="WorldBodiesLimits.DetailedRenderBand"/>), shared by the three registration sources: an ANIMATED
+    /// placement (a creation carrying timeline frames), an ATTACHED placement (<see cref="WorldPlacementAttach"/>,
+    /// rooted on a live body), and a body-rooted creation stamp (an inhabited placement's body, or a crowd body
+    /// wearing a creation look). Derived, never authored: the band that gets a full rig is the band that gets its
+    /// creature, so a detailed body's creation stamp cannot starve behind a smaller pool. The validator gates the two
+    /// document-declared sources (animated + attached) against this count; a body-rooted stamp past it degrades to
+    /// the catalog avatar with a loud warn, exactly as a body past the band degrades to a coarse instance. CONTRACT
+    /// INVARIANT: sizes <c>Client.WorldStampPool</c>'s pool array and the field-initializer-time dynamic-transform
+    /// capacity; the validator's rejection line names this ceiling word-exactly.</summary>
+    public const int MaxStampRegistrations = WorldBodiesLimits.DetailedRenderBand;
     /// <summary>The timeline replay hold per frame, in seconds — an 8-tick-at-60-Hz cadence, hold-style with no
     /// interpolation. Presentation-only (rides the render clock, never simulation state). A contract invariant, not
     /// an authoring knob — a world wanting a different replay feel is a future authoring surface.</summary>

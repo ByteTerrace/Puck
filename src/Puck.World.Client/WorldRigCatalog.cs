@@ -129,11 +129,12 @@ public static class WorldRigCatalog {
         Reach = reach;
     }
 
-    /// <summary>The number of lowest-index bodies retaining the complete independently animated humanoid rig.
-    /// Remaining bodies still render as one individually positioned coarse capsule. The local-seat band therefore
-    /// always remains detailed while SDF storage and evaluation inputs stay finitely bounded; this representation
-    /// alone does not establish a dense-crowd frame-rate target.</summary>
-    public const int DetailedAvatarCapacity = 128;
+    /// <summary>The number of lowest-index bodies retaining the complete independently animated humanoid rig —
+    /// <see cref="WorldBodiesLimits.DetailedRenderBand"/>, the one detailed-render band every per-body presentation
+    /// reservation reads. Remaining bodies still render as one individually positioned coarse capsule. The local-seat
+    /// band therefore always remains detailed while SDF storage and evaluation inputs stay finitely bounded; this
+    /// representation alone does not establish a dense-crowd frame-rate target.</summary>
+    public const int DetailedAvatarCapacity = WorldBodiesLimits.DetailedRenderBand;
     /// <summary>The compact dynamic-transform lane: full ranges for the detailed band, then one root per coarse body.</summary>
     public static int DynamicTransformCapacity => checked(
         Math.Min(WorldBodiesLimits.CapacityCeiling, DetailedAvatarCapacity) * MaxLeafCount +

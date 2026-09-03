@@ -97,7 +97,7 @@
     }
   ],
   "bodies": {
-    "capacity": 8,
+    "capacity": 64,
     "localSeats": 2
   },
   "bodyMotionPrograms": [
@@ -112,6 +112,67 @@
     {
       "kind": "Motion",
       "name": "walk",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ResolveHold",
+        "ComputePlanarTargetVelocity",
+        "ShapeVelocity",
+        "SnapYawToPlanarIntent",
+        "RunActionTriggers",
+        "ApplyHold",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ],
+      "version": "puck.body-motion.v1"
+    },
+    {
+      "kind": "Producer",
+      "name": "pack",
+      "operations": [
+        "SenseNearestInCone",
+        "ProduceFlockIntent"
+      ],
+      "target": {
+        "$type": "designated",
+        "register": "companion"
+      },
+      "version": "puck.body-motion.v1"
+    },
+    {
+      "kind": "Producer",
+      "name": "swarm",
+      "operations": [
+        "ProduceFlockIntent"
+      ],
+      "version": "puck.body-motion.v1"
+    },
+    {
+      "kind": "Producer",
+      "name": "school",
+      "operations": [
+        "ProduceFlockIntent"
+      ],
+      "version": "puck.body-motion.v1"
+    },
+    {
+      "kind": "Producer",
+      "name": "stalk",
+      "operations": [
+        "SenseNearestInCone",
+        "ProduceWanderIntent",
+        "ProduceAttendIntent",
+        "FaceSensorTarget"
+      ],
+      "target": {
+        "$type": "navigated",
+        "domain": "deck",
+        "register": "quarry"
+      },
+      "version": "puck.body-motion.v1"
+    },
+    {
+      "kind": "Motion",
+      "name": "fishMotion",
       "operations": [
         "ResolveYawAttitudeAndPlanarFrame",
         "ResolveHold",
@@ -383,6 +444,112 @@
     "timing": false,
     "width": 1280
   },
+  "interactions": {
+    "interactions": [
+      {
+        "coOccurrence": "Distance",
+        "effects": [
+          {
+            "$type": "observeSocial",
+            "evidence": {
+              "aspect": "meet",
+              "occurredAt": {
+                "tokens": [
+                  {
+                    "$type": "socialClock"
+                  }
+                ]
+              },
+              "origin": {
+                "body": "right"
+              },
+              "relationship": {
+                "dimension": "affection",
+                "observer": {
+                  "body": "left"
+                },
+                "subject": {
+                  "body": "right"
+                }
+              },
+              "sequence": {
+                "tokens": [
+                  {
+                    "$type": "socialClock"
+                  }
+                ]
+              },
+              "value": {
+                "tokens": [
+                  {
+                    "$type": "constant",
+                    "value": 0.5
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "left": "hound",
+        "mode": "Edge",
+        "name": "hounds-meet",
+        "range": 1.6,
+        "right": "hound"
+      },
+      {
+        "coOccurrence": "Region",
+        "effects": [
+          {
+            "$type": "setState",
+            "expression": {
+              "tokens": [
+                {
+                  "$type": "state",
+                  "key": "$left",
+                  "name": "self"
+                }
+              ]
+            },
+            "key": "0",
+            "state": "boneHolder"
+          },
+          {
+            "$type": "setState",
+            "key": "0",
+            "state": "reporter",
+            "value": -1
+          },
+          {
+            "$type": "setState",
+            "expression": {
+              "tokens": [
+                {
+                  "$type": "state",
+                  "name": "eventSeq"
+                }
+              ]
+            },
+            "state": "claimSeq"
+          },
+          {
+            "$type": "addState",
+            "state": "eventSeq",
+            "value": 1
+          },
+          {
+            "$type": "setState",
+            "state": "claimTicks",
+            "valueSeconds": 3.0
+          }
+        ],
+        "left": "hound",
+        "mode": "Edge",
+        "name": "bone-claim",
+        "range": 0,
+        "right": "bone"
+      }
+    ]
+  },
   "kits": {
     "rows": [
       {
@@ -398,17 +565,6 @@
           "radius": 0.35
         },
         "motion": {
-          "speed": {
-            "value": 4
-          },
-          "turn": {
-            "rate": 2.5
-          },
-          "shaping": [
-            {
-              "along": {}
-            }
-          ],
           "facingSnap": false,
           "holds": [
             {
@@ -438,26 +594,37 @@
                 0,
                 60
               ],
+              "gravity": {
+                "fall": 46,
+                "rise": 28,
+                "terminal": 40
+              },
               "hold": "Gravity",
               "name": "ground",
-              "reach": 1.2,
-              "gravity": {
-                "rise": 28,
-                "fall": 46,
-                "terminal": 40
-              }
+              "reach": 1.2
             },
             {
               "bond": "Free",
-              "hold": "Gravity",
-              "name": "air",
               "gravity": {
-                "rise": 28,
                 "fall": 46,
+                "rise": 28,
                 "terminal": 40
-              }
+              },
+              "hold": "Gravity",
+              "name": "air"
             }
-          ]
+          ],
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "speed": {
+            "value": 4
+          },
+          "turn": {
+            "rate": 2.5
+          }
         },
         "name": "walker"
       },
@@ -474,17 +641,6 @@
           "radius": 0.14
         },
         "motion": {
-          "speed": {
-            "value": 1.6
-          },
-          "turn": {
-            "rate": 2.5
-          },
-          "shaping": [
-            {
-              "along": {}
-            }
-          ],
           "facingSnap": true,
           "holds": [
             {
@@ -525,29 +681,66 @@
                 0,
                 60
               ],
+              "gravity": {
+                "fall": 46,
+                "rise": 28,
+                "terminal": 40
+              },
               "hold": "Gravity",
               "name": "ground",
-              "reach": 0.6,
-              "gravity": {
-                "rise": 28,
-                "fall": 46,
-                "terminal": 40
-              }
+              "reach": 0.6
             },
             {
               "bond": "Free",
-              "hold": "Gravity",
-              "name": "air",
               "gravity": {
-                "rise": 28,
                 "fall": 46,
+                "rise": 28,
                 "terminal": 40
-              }
+              },
+              "hold": "Gravity",
+              "name": "air"
             }
-          ]
+          ],
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "speed": {
+            "value": 1.6
+          },
+          "turn": {
+            "rate": 2.5
+          }
         },
         "name": "spiderKit",
         "producers": {
+          "stalk": {
+            "channels": {},
+            "scalars": {
+              "activityRateBase": 1.0,
+              "activityRateRange": 0.3,
+              "altitudeBase": 0.0,
+              "altitudeGain": 0.5,
+              "altitudeRange": 0.0,
+              "approach": 1.0,
+              "forward": 1.0,
+              "inwardGain": 3.0,
+              "orbit": 0.0,
+              "pitchWave": 0.0,
+              "pressThreshold": 0.0,
+              "rollTurn": 0.0,
+              "softRadius": 2.5,
+              "standoffRadius": 0.8,
+              "strafeWave": 0.0,
+              "turnScale": 3.0,
+              "turnWave": 0.0,
+              "upWave": 0.0,
+              "weaveAmplitude": 0.4,
+              "weaveFrequencyBase": 0.6,
+              "weaveFrequencyRange": 0.2
+            }
+          },
           "wander": {
             "channels": {},
             "scalars": {
@@ -574,7 +767,11 @@
         }
       },
       {
-        "bodyContact": "Solid",
+        "autonomy": {
+          "motionSeconds": 0.1,
+          "steeringSeconds": 0.1
+        },
+        "bodyContact": "Overlap",
         "bodyMotionProgram": "walk",
         "collider": {
           "$type": "capsule",
@@ -586,33 +783,22 @@
           "radius": 0.08
         },
         "motion": {
-          "speed": {
-            "value": 3.0
-          },
-          "turn": {
-            "rate": 2.5
-          },
-          "shaping": [
-            {
-              "along": {}
-            }
-          ],
           "facingSnap": true,
           "holds": [
             {
               "bond": "Free",
               "forward": "Heading",
+              "gravity": {
+                "fall": 46,
+                "rise": 28,
+                "terminal": 40
+              },
               "hold": "Lift",
               "lift": 1.0,
               "name": "air",
               "speed": 3.0,
-              "upLean": 0.0,
-              "gravity": {
-                "rise": 28,
-                "fall": 46,
-                "terminal": 40
-              },
-              "thrust": 1
+              "thrust": 1,
+              "upLean": 0.0
             },
             {
               "bond": "Surface",
@@ -620,20 +806,52 @@
                 0,
                 60
               ],
+              "gravity": {
+                "fall": 46,
+                "rise": 28,
+                "terminal": 40
+              },
               "hold": "Gravity",
               "name": "ground",
               "reach": 0.4,
-              "gravity": {
-                "rise": 28,
-                "fall": 46,
-                "terminal": 40
-              },
               "thrust": 1
             }
-          ]
+          ],
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "speed": {
+            "value": 3.0
+          },
+          "turn": {
+            "rate": 2.5
+          }
         },
         "name": "dragonflyKit",
         "producers": {
+          "swarm": {
+            "channels": {},
+            "flock": {
+              "alignment": 0.5,
+              "arrivalDistance": 0.5,
+              "candidateBudget": 16,
+              "cohesion": 0.6,
+              "goal": 0,
+              "halfAngleDegrees": 180,
+              "inertia": 0.3,
+              "maxNeighbors": 6,
+              "movementDomain": "sky",
+              "range": 5,
+              "requiresLineOfSight": false,
+              "separation": 1.0,
+              "separationRadius": 0.6,
+              "space": "Volume",
+              "updateSeconds": 0.1
+            },
+            "scalars": {}
+          },
           "wander": {
             "channels": {},
             "scalars": {
@@ -660,6 +878,10 @@
         }
       },
       {
+        "autonomy": {
+          "motionSeconds": 0,
+          "steeringSeconds": 0.1
+        },
         "bodyContact": "Solid",
         "bodyMotionProgram": "walk",
         "collider": {
@@ -672,17 +894,6 @@
           "radius": 0.16
         },
         "motion": {
-          "speed": {
-            "value": 3.2
-          },
-          "turn": {
-            "rate": 2.5
-          },
-          "shaping": [
-            {
-              "along": {}
-            }
-          ],
           "facingSnap": true,
           "holds": [
             {
@@ -691,29 +902,98 @@
                 0,
                 60
               ],
+              "gravity": {
+                "fall": 46,
+                "rise": 28,
+                "terminal": 40
+              },
               "hold": "Gravity",
               "name": "ground",
-              "reach": 0.8,
-              "gravity": {
-                "rise": 28,
-                "fall": 46,
-                "terminal": 40
-              }
+              "reach": 0.8
             },
             {
               "bond": "Free",
-              "hold": "Gravity",
-              "name": "air",
               "gravity": {
-                "rise": 28,
                 "fall": 46,
+                "rise": 28,
                 "terminal": 40
-              }
+              },
+              "hold": "Gravity",
+              "name": "air"
             }
-          ]
+          ],
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "speed": {
+            "value": 3.2
+          },
+          "turn": {
+            "rate": 2.5
+          }
         },
         "name": "houndKit",
         "producers": {
+          "pack": {
+            "channels": {},
+            "flock": {
+              "alignment": 0.4,
+              "alignmentAffinity": {
+                "tokens": [
+                  {
+                    "$type": "social",
+                    "query": {
+                      "facet": "Value",
+                      "relationship": {
+                        "dimension": "competence",
+                        "observer": {
+                          "body": "left"
+                        },
+                        "subject": {
+                          "body": "right"
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "arrivalDistance": 1.2,
+              "candidateBudget": 16,
+              "cohesion": 0.6,
+              "cohesionAffinity": {
+                "tokens": [
+                  {
+                    "$type": "social",
+                    "query": {
+                      "facet": "Value",
+                      "relationship": {
+                        "dimension": "affection",
+                        "observer": {
+                          "body": "left"
+                        },
+                        "subject": {
+                          "body": "right"
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "goal": 0.8,
+              "halfAngleDegrees": 180,
+              "inertia": 0.2,
+              "maxNeighbors": 6,
+              "range": 8,
+              "requiresLineOfSight": false,
+              "separation": 1.0,
+              "separationRadius": 0.9,
+              "space": "Tangent",
+              "updateSeconds": 0.1
+            },
+            "scalars": {}
+          },
           "wander": {
             "channels": {},
             "scalars": {
@@ -733,6 +1013,103 @@
               "turnWave": 0.0,
               "upWave": 0.0,
               "weaveAmplitude": 0.4,
+              "weaveFrequencyBase": 0.6,
+              "weaveFrequencyRange": 0.2
+            }
+          }
+        }
+      },
+      {
+        "autonomy": {
+          "motionSeconds": 0.1,
+          "steeringSeconds": 0.1
+        },
+        "bodyContact": "Overlap",
+        "bodyMotionProgram": "fishMotion",
+        "collider": {
+          "$type": "sphere",
+          "radius": 0.1
+        },
+        "motion": {
+          "facingSnap": true,
+          "holds": [
+            {
+              "bond": "Medium",
+              "hold": "None",
+              "medium": {
+                "buoyancy": 0.6,
+                "floatDepth": 0.6,
+                "maxRiseSpeed": 1.0,
+                "maxSinkSpeed": 1.0,
+                "surfaceSettleRate": 0.8
+              },
+              "name": "water"
+            },
+            {
+              "bond": "Free",
+              "gravity": {
+                "fall": 1,
+                "rise": 1,
+                "terminal": 1
+              },
+              "hold": "Gravity",
+              "name": "air"
+            }
+          ],
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "speed": {
+            "value": 1.0
+          },
+          "turn": {
+            "rate": 1.5
+          }
+        },
+        "name": "fishKit",
+        "producers": {
+          "school": {
+            "channels": {},
+            "flock": {
+              "alignment": 0.6,
+              "arrivalDistance": 0.2,
+              "candidateBudget": 12,
+              "cohesion": 0.5,
+              "goal": 0,
+              "halfAngleDegrees": 180,
+              "inertia": 0.3,
+              "maxNeighbors": 6,
+              "movementDomain": "pond",
+              "range": 3,
+              "requiresLineOfSight": false,
+              "separation": 1.0,
+              "separationRadius": 0.35,
+              "space": "Volume",
+              "updateSeconds": 0.1
+            },
+            "scalars": {}
+          },
+          "wander": {
+            "channels": {},
+            "scalars": {
+              "activityRateBase": 1.0,
+              "activityRateRange": 0.3,
+              "altitudeBase": 0.0,
+              "altitudeGain": 0.5,
+              "altitudeRange": 0.0,
+              "forward": 0.6,
+              "inwardGain": 0.8,
+              "pitchWave": 0.0,
+              "pressThreshold": 0.0,
+              "rollTurn": 0.0,
+              "softRadius": 5.0,
+              "strafeWave": 0.0,
+              "turnScale": 3.0,
+              "turnWave": 0.0,
+              "upWave": 0.0,
+              "weaveAmplitude": 0.3,
               "weaveFrequencyBase": 0.6,
               "weaveFrequencyRange": 0.2
             }
@@ -815,6 +1192,85 @@
           "$type": "creation",
           "prototypeId": "hound"
         }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "fish",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "fish"
+        }
+      }
+    ]
+  },
+  "navigation": {
+    "domains": [
+      {
+        "agentHeight": 0.5,
+        "agentRadius": 0.2,
+        "arrivalDistance": 0.9,
+        "cellSize": 1,
+        "depth": 48,
+        "kind": "Surface",
+        "layers": 1,
+        "maxExpandedNodes": 2304,
+        "maxPathNodes": 128,
+        "maxSlopeDegrees": 60,
+        "maxStepHeight": 0.55,
+        "name": "deck",
+        "origin": [
+          -24,
+          -2,
+          -24
+        ],
+        "probeDown": 3,
+        "probeUp": 2.5,
+        "width": 48
+      },
+      {
+        "agentRadius": 0.3,
+        "arrivalDistance": 0.5,
+        "cellSize": 1,
+        "depth": 24,
+        "kind": "Volume",
+        "layers": 5,
+        "maxExpandedNodes": 512,
+        "maxPathNodes": 64,
+        "name": "sky",
+        "origin": [
+          -12,
+          0.75,
+          -12
+        ],
+        "width": 24
+      },
+      {
+        "agentRadius": 0.24,
+        "arrivalDistance": 0.4,
+        "cellSize": 0.5,
+        "depth": 16,
+        "kind": "Medium",
+        "layers": 3,
+        "maxExpandedNodes": 768,
+        "maxPathNodes": 64,
+        "medium": "water",
+        "name": "pond",
+        "origin": [
+          12,
+          -0.5,
+          10
+        ],
+        "shared": {
+          "expandedNodesPerTick": 64,
+          "goalCapacity": 2
+        },
+        "width": 16
       }
     ]
   },
@@ -852,9 +1308,37 @@
         "yawDegrees": 0
       },
       {
-        "id": "spiderDen",
+        "id": "bone",
+        "position": [
+          -8,
+          -0.5,
+          -16
+        ],
+        "prototypeId": "bone",
+        "region": {
+          "radius": 1.4
+        },
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "pondBasin",
+        "position": [
+          16,
+          -0.5,
+          14
+        ],
+        "prototypeId": "pondBasin",
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0
+      },
+      {
+        "id": "houndPack",
         "inhabit": {
-          "count": 1,
+          "count": 6,
           "distribution": {
             "fill": {
               "name": "additive",
@@ -863,20 +1347,51 @@
             },
             "region": {
               "$type": "disc",
-              "radius": 0.5
+              "radius": 1.5
+            }
+          },
+          "kit": "houndKit",
+          "look": "hound",
+          "source": {
+            "$type": "producer",
+            "name": "pack"
+          }
+        },
+        "position": [
+          -14,
+          0,
+          -14
+        ],
+        "prototypeId": "hound",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "spiderDen",
+        "inhabit": {
+          "count": 4,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.618034
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 1.0
             }
           },
           "kit": "spiderKit",
           "look": "spider",
           "source": {
             "$type": "producer",
-            "name": "wander"
+            "name": "stalk"
           }
         },
         "position": [
-          6.5,
+          14,
           0,
-          6.0
+          -14
         ],
         "prototypeId": "spider",
         "scale": 1,
@@ -885,7 +1400,7 @@
       {
         "id": "dragonflyPerch",
         "inhabit": {
-          "count": 1,
+          "count": 12,
           "distribution": {
             "fill": {
               "name": "additive",
@@ -894,29 +1409,29 @@
             },
             "region": {
               "$type": "disc",
-              "radius": 0.5
+              "radius": 2.0
             }
           },
           "kit": "dragonflyKit",
           "look": "dragonfly",
           "source": {
             "$type": "producer",
-            "name": "wander"
+            "name": "swarm"
           }
         },
         "position": [
-          -3.0,
-          1.5,
-          -2.0
+          0,
+          2.5,
+          14
         ],
         "prototypeId": "dragonfly",
         "scale": 1,
         "yawDegrees": 0
       },
       {
-        "id": "houndRun",
+        "id": "pondFish",
         "inhabit": {
-          "count": 1,
+          "count": 8,
           "distribution": {
             "fill": {
               "name": "additive",
@@ -925,25 +1440,30 @@
             },
             "region": {
               "$type": "disc",
-              "radius": 0.5
+              "radius": 1.2
             }
           },
-          "kit": "houndKit",
-          "look": "hound",
+          "kit": "fishKit",
+          "look": "fish",
           "source": {
             "$type": "producer",
-            "name": "wander"
+            "name": "school"
           }
         },
         "position": [
-          -6.0,
-          0,
-          -2.0
+          16,
+          0.2,
+          14
         ],
-        "prototypeId": "hound",
+        "prototypeId": "fish",
         "scale": 1,
         "yawDegrees": 0
       }
+    ]
+  },
+  "properties": {
+    "names": [
+      "hound"
     ]
   },
   "prototypes": [
@@ -5743,11 +6263,730 @@
         ]
       },
       "id": "hound"
+    },
+    {
+      "document": {
+        "name": "fish",
+        "palette": [
+          {
+            "color": "state.fishColors.body",
+            "shininess": 40,
+            "specular": 0.3
+          },
+          {
+            "color": "state.fishColors.tail",
+            "shininess": 40,
+            "specular": 0.3
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.7071,
+              0.7071
+            ],
+            "scale": [
+              0.09,
+              0.16,
+              0.09
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 1,
+            "material": 1,
+            "name": "tail",
+            "position": [
+              0,
+              0,
+              -0.22
+            ],
+            "rotation": [
+              0.7071,
+              0,
+              0,
+              0.7071
+            ],
+            "scale": [
+              0.1,
+              0.08,
+              0.1
+            ],
+            "smooth": 0.04,
+            "type": "Cone"
+          }
+        ]
+      },
+      "id": "fish"
+    },
+    {
+      "document": {
+        "name": "bone",
+        "palette": [
+          {
+            "color": "state.boneColors.bone"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "shaft",
+            "position": [
+              0,
+              0.12,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.7071,
+              0.7071
+            ],
+            "scale": [
+              0.07,
+              0.35,
+              0.07
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 0,
+            "name": "knobA",
+            "position": [
+              0.35,
+              0.12,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.12,
+              0.12,
+              0.12
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "id": 2,
+            "material": 0,
+            "name": "knobB",
+            "position": [
+              -0.35,
+              0.12,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.12,
+              0.12,
+              0.12
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          }
+        ]
+      },
+      "id": "bone"
+    },
+    {
+      "document": {
+        "name": "pondBasin",
+        "palette": [
+          {
+            "color": "state.pondColors.wall"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "wallWest",
+            "position": [
+              -4.25,
+              0.4,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.25,
+              0.9,
+              4.5
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 0,
+            "name": "wallEast",
+            "position": [
+              4.25,
+              0.4,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.25,
+              0.9,
+              4.5
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 2,
+            "material": 0,
+            "name": "wallNorth",
+            "position": [
+              0,
+              0.4,
+              -4.25
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              4.5,
+              0.9,
+              0.25
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 3,
+            "material": 0,
+            "name": "wallSouth",
+            "position": [
+              0,
+              0.4,
+              4.25
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              4.5,
+              0.9,
+              0.25
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "pondBasin"
     }
   ],
   "render": {
     "farDistance": 160
   },
+  "rules": [
+    {
+      "effects": [
+        {
+          "$type": "countdownState",
+          "state": "claimTicks"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Greater",
+        "state": "claimTicks",
+        "value": 0
+      },
+      "mode": "Level",
+      "name": "claim-tick"
+    },
+    {
+      "effects": [
+        {
+          "$type": "observeSocial",
+          "evidence": {
+            "aspect": "bone.claim",
+            "occurredAt": {
+              "tokens": [
+                {
+                  "$type": "socialClock"
+                }
+              ]
+            },
+            "origin": {
+              "body": "cell:boneHolder:0"
+            },
+            "relationship": {
+              "dimension": "competence",
+              "observer": {
+                "body": "each"
+              },
+              "subject": {
+                "body": "cell:boneHolder:0"
+              }
+            },
+            "sequence": {
+              "tokens": [
+                {
+                  "$type": "state",
+                  "name": "claimSeq"
+                }
+              ]
+            },
+            "value": {
+              "tokens": [
+                {
+                  "$type": "constant",
+                  "value": 1.0
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "forEach": "hound",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "key": "0",
+            "state": "boneHolder",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "0",
+            "comparandState": "boneHolder",
+            "comparison": "NotEqual",
+            "key": "$each",
+            "state": "self"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$los:each:cell:boneHolder:0",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "state": "$distance:each:cell:boneHolder:0",
+            "value": 9
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "witness-claim"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "key": "$each",
+                "name": "self"
+              }
+            ]
+          },
+          "key": "0",
+          "state": "reporter"
+        }
+      ],
+      "forEach": "hound",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "key": "0",
+            "state": "boneHolder",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "0",
+            "comparandState": "boneHolder",
+            "comparison": "NotEqual",
+            "key": "$each",
+            "state": "self"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$los:each:cell:boneHolder:0",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "state": "$distance:each:cell:boneHolder:0",
+            "value": 9
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Less",
+            "key": "0",
+            "state": "reporter",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "first-witness"
+    },
+    {
+      "effects": [
+        {
+          "$type": "observeSocial",
+          "evidence": {
+            "aspect": "bone.claim",
+            "occurredAt": {
+              "tokens": [
+                {
+                  "$type": "socialClock"
+                }
+              ]
+            },
+            "origin": {
+              "body": "cell:boneHolder:0"
+            },
+            "relationship": {
+              "dimension": "competence",
+              "observer": {
+                "body": "each"
+              },
+              "subject": {
+                "body": "cell:boneHolder:0"
+              }
+            },
+            "sequence": {
+              "tokens": [
+                {
+                  "$type": "state",
+                  "name": "claimSeq"
+                }
+              ]
+            },
+            "source": {
+              "body": "cell:reporter:0"
+            },
+            "value": {
+              "tokens": [
+                {
+                  "$type": "constant",
+                  "value": 1.0
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "forEach": "hound",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "key": "0",
+            "state": "boneHolder",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "0",
+            "comparandState": "boneHolder",
+            "comparison": "NotEqual",
+            "key": "$each",
+            "state": "self"
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "0",
+            "comparandState": "reporter",
+            "comparison": "NotEqual",
+            "key": "$each",
+            "state": "self"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "key": "0",
+            "state": "reporter",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$los:each:cell:boneHolder:0",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "state": "$distance:each:cell:reporter:0",
+            "value": 6
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "rumor"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "boneHolder",
+          "value": -1
+        },
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "reporter",
+          "value": -1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "state": "claimTicks",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "key": "0",
+            "state": "boneHolder",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "claim-expire"
+    },
+    {
+      "decision": {
+        "commitmentSeconds": 3.0,
+        "incumbentBonus": 0.05,
+        "mode": "HighestScore",
+        "options": [
+          {
+            "effects": [
+              {
+                "$type": "designateBody",
+                "key": "$each",
+                "kind": "Body",
+                "register": "companion",
+                "targetKey": "$right"
+              }
+            ],
+            "gate": {
+              "$type": "compareState",
+              "comparison": "Equal",
+              "key": "$right",
+              "state": "hound",
+              "value": 1
+            },
+            "name": "follow",
+            "neighbors": {
+              "candidateBudget": 12,
+              "halfAngleDegrees": 180,
+              "maxCandidates": 4,
+              "range": 10,
+              "requiresLineOfSight": false,
+              "retainCurrent": true
+            },
+            "score": {
+              "tokens": [
+                {
+                  "$type": "social",
+                  "query": {
+                    "facet": "Value",
+                    "relationship": {
+                      "dimension": "competence",
+                      "observer": {
+                        "body": "left"
+                      },
+                      "subject": {
+                        "body": "right"
+                      }
+                    }
+                  }
+                },
+                {
+                  "$type": "social",
+                  "query": {
+                    "facet": "Value",
+                    "relationship": {
+                      "dimension": "affection",
+                      "observer": {
+                        "body": "left"
+                      },
+                      "subject": {
+                        "body": "right"
+                      }
+                    }
+                  }
+                },
+                {
+                  "$type": "constant",
+                  "value": 0.5
+                },
+                {
+                  "$type": "multiply"
+                },
+                {
+                  "$type": "add"
+                }
+              ]
+            }
+          },
+          {
+            "effects": [
+              {
+                "$type": "designateBody",
+                "key": "$each",
+                "kind": "Body",
+                "register": "companion",
+                "targetKey": "0"
+              }
+            ],
+            "gate": {
+              "$type": "compareState",
+              "comparison": "LessOrEqual",
+              "state": "$distance:each:body:0",
+              "value": 6
+            },
+            "name": "visitor",
+            "score": {
+              "tokens": [
+                {
+                  "$type": "constant",
+                  "value": 0.6
+                }
+              ]
+            }
+          },
+          {
+            "effects": [
+              {
+                "$type": "designateBody",
+                "key": "$each",
+                "kind": "Clear",
+                "register": "companion"
+              }
+            ],
+            "name": "alone",
+            "score": {
+              "tokens": [
+                {
+                  "$type": "constant",
+                  "value": 0.05
+                }
+              ]
+            }
+          }
+        ],
+        "periodSeconds": 1.0,
+        "scoreKind": "Fixed",
+        "seed": 11
+      },
+      "effects": [],
+      "forEach": "hound",
+      "mode": "Level",
+      "name": "choose-companion"
+    },
+    {
+      "decision": {
+        "commitmentSeconds": 2.0,
+        "mode": "HighestScore",
+        "options": [
+          {
+            "effects": [
+              {
+                "$type": "designateBody",
+                "key": "$each",
+                "kind": "Body",
+                "register": "quarry",
+                "targetKey": "0"
+              }
+            ],
+            "gate": {
+              "$type": "compareState",
+              "comparison": "LessOrEqual",
+              "state": "$distance:each:body:0",
+              "value": 10
+            },
+            "name": "stalk",
+            "score": {
+              "tokens": [
+                {
+                  "$type": "constant",
+                  "value": 1
+                }
+              ]
+            }
+          },
+          {
+            "effects": [
+              {
+                "$type": "designateBody",
+                "key": "$each",
+                "kind": "Clear",
+                "register": "quarry"
+              }
+            ],
+            "name": "lurk",
+            "score": {
+              "tokens": [
+                {
+                  "$type": "constant",
+                  "value": 0.1
+                }
+              ]
+            }
+          }
+        ],
+        "periodSeconds": 0.5,
+        "scoreKind": "Fixed",
+        "seed": 5
+      },
+      "effects": [],
+      "forEach": "spider",
+      "mode": "Level",
+      "name": "stalk-visitor"
+    }
+  ],
   "schema": "puck.world.def.v1",
   "seatDefaults": {
     "seatCameraFeel": {
@@ -5845,6 +7084,42 @@
         -9
       ],
       "yawDegrees": 0
+    },
+    {
+      "id": "pack",
+      "position": [
+        -10,
+        0,
+        -10
+      ],
+      "yawDegrees": 45
+    },
+    {
+      "id": "colony",
+      "position": [
+        10,
+        0,
+        -10
+      ],
+      "yawDegrees": -45
+    },
+    {
+      "id": "swarm",
+      "position": [
+        0,
+        0,
+        9
+      ],
+      "yawDegrees": 180
+    },
+    {
+      "id": "pond",
+      "position": [
+        11,
+        0,
+        9
+      ],
+      "yawDegrees": -135
     }
   ],
   "state": {
@@ -5856,6 +7131,50 @@
         "resetFact": "Grounded"
       }
     ],
+    "lattices": [
+      {
+        "cellSize": 0.5,
+        "depth": 16,
+        "layers": 1,
+        "name": "pondBasin",
+        "origin": [
+          12,
+          -0.5,
+          10
+        ],
+        "stepEveryTicks": 8,
+        "width": 16
+      }
+    ],
+    "social": {
+      "dimensions": [
+        {
+          "name": "affection"
+        },
+        {
+          "baseline": 0,
+          "maximum": 1,
+          "minimum": 0,
+          "name": "competence"
+        },
+        {
+          "baseline": 0.5,
+          "maximum": 1,
+          "minimum": 0,
+          "name": "trust"
+        }
+      ],
+      "directWeight": 1,
+      "evidenceAttemptsPerTick": 256,
+      "evidenceLifetimeSeconds": 30,
+      "expiredReceiptsPerTick": 256,
+      "impressionCapacity": 4096,
+      "impressionsPerObserver": 64,
+      "receiptCapacity": 4096,
+      "reliabilityDimension": "trust",
+      "reportWeight": 0.5,
+      "unfamiliarReliability": 0.5
+    },
     "world": [
       {
         "cells": [
@@ -6011,9 +7330,447 @@
         ],
         "kind": "text",
         "name": "houndColors"
+      },
+      {
+        "capacity": 64,
+        "cells": [
+          {
+            "key": "58",
+            "value": 1
+          },
+          {
+            "key": "59",
+            "value": 1
+          },
+          {
+            "key": "60",
+            "value": 1
+          },
+          {
+            "key": "61",
+            "value": 1
+          },
+          {
+            "key": "62",
+            "value": 1
+          },
+          {
+            "key": "63",
+            "value": 1
+          }
+        ],
+        "kind": "int",
+        "name": "hound"
+      },
+      {
+        "capacity": 64,
+        "cells": [
+          {
+            "key": "54",
+            "value": 1
+          },
+          {
+            "key": "55",
+            "value": 1
+          },
+          {
+            "key": "56",
+            "value": 1
+          },
+          {
+            "key": "57",
+            "value": 1
+          }
+        ],
+        "kind": "int",
+        "name": "spider"
+      },
+      {
+        "capacity": 64,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 1
+          },
+          {
+            "key": "2",
+            "value": 2
+          },
+          {
+            "key": "3",
+            "value": 3
+          },
+          {
+            "key": "4",
+            "value": 4
+          },
+          {
+            "key": "5",
+            "value": 5
+          },
+          {
+            "key": "6",
+            "value": 6
+          },
+          {
+            "key": "7",
+            "value": 7
+          },
+          {
+            "key": "8",
+            "value": 8
+          },
+          {
+            "key": "9",
+            "value": 9
+          },
+          {
+            "key": "10",
+            "value": 10
+          },
+          {
+            "key": "11",
+            "value": 11
+          },
+          {
+            "key": "12",
+            "value": 12
+          },
+          {
+            "key": "13",
+            "value": 13
+          },
+          {
+            "key": "14",
+            "value": 14
+          },
+          {
+            "key": "15",
+            "value": 15
+          },
+          {
+            "key": "16",
+            "value": 16
+          },
+          {
+            "key": "17",
+            "value": 17
+          },
+          {
+            "key": "18",
+            "value": 18
+          },
+          {
+            "key": "19",
+            "value": 19
+          },
+          {
+            "key": "20",
+            "value": 20
+          },
+          {
+            "key": "21",
+            "value": 21
+          },
+          {
+            "key": "22",
+            "value": 22
+          },
+          {
+            "key": "23",
+            "value": 23
+          },
+          {
+            "key": "24",
+            "value": 24
+          },
+          {
+            "key": "25",
+            "value": 25
+          },
+          {
+            "key": "26",
+            "value": 26
+          },
+          {
+            "key": "27",
+            "value": 27
+          },
+          {
+            "key": "28",
+            "value": 28
+          },
+          {
+            "key": "29",
+            "value": 29
+          },
+          {
+            "key": "30",
+            "value": 30
+          },
+          {
+            "key": "31",
+            "value": 31
+          },
+          {
+            "key": "32",
+            "value": 32
+          },
+          {
+            "key": "33",
+            "value": 33
+          },
+          {
+            "key": "34",
+            "value": 34
+          },
+          {
+            "key": "35",
+            "value": 35
+          },
+          {
+            "key": "36",
+            "value": 36
+          },
+          {
+            "key": "37",
+            "value": 37
+          },
+          {
+            "key": "38",
+            "value": 38
+          },
+          {
+            "key": "39",
+            "value": 39
+          },
+          {
+            "key": "40",
+            "value": 40
+          },
+          {
+            "key": "41",
+            "value": 41
+          },
+          {
+            "key": "42",
+            "value": 42
+          },
+          {
+            "key": "43",
+            "value": 43
+          },
+          {
+            "key": "44",
+            "value": 44
+          },
+          {
+            "key": "45",
+            "value": 45
+          },
+          {
+            "key": "46",
+            "value": 46
+          },
+          {
+            "key": "47",
+            "value": 47
+          },
+          {
+            "key": "48",
+            "value": 48
+          },
+          {
+            "key": "49",
+            "value": 49
+          },
+          {
+            "key": "50",
+            "value": 50
+          },
+          {
+            "key": "51",
+            "value": 51
+          },
+          {
+            "key": "52",
+            "value": 52
+          },
+          {
+            "key": "53",
+            "value": 53
+          },
+          {
+            "key": "54",
+            "value": 54
+          },
+          {
+            "key": "55",
+            "value": 55
+          },
+          {
+            "key": "56",
+            "value": 56
+          },
+          {
+            "key": "57",
+            "value": 57
+          },
+          {
+            "key": "58",
+            "value": 58
+          },
+          {
+            "key": "59",
+            "value": 59
+          },
+          {
+            "key": "60",
+            "value": 60
+          },
+          {
+            "key": "61",
+            "value": 61
+          },
+          {
+            "key": "62",
+            "value": 62
+          },
+          {
+            "key": "63",
+            "value": 63
+          }
+        ],
+        "kind": "int",
+        "name": "self"
+      },
+      {
+        "kind": "int",
+        "name": "eventSeq",
+        "nonNegative": true,
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "name": "claimSeq",
+        "nonNegative": true,
+        "value": 0
+      },
+      {
+        "capacity": 1,
+        "cells": [
+          {
+            "key": "0",
+            "value": -1
+          }
+        ],
+        "kind": "int",
+        "max": 63,
+        "min": -1,
+        "name": "boneHolder"
+      },
+      {
+        "capacity": 1,
+        "cells": [
+          {
+            "key": "0",
+            "value": -1
+          }
+        ],
+        "kind": "int",
+        "max": 63,
+        "min": -1,
+        "name": "reporter"
+      },
+      {
+        "kind": "int",
+        "max": 50400,
+        "min": 0,
+        "name": "claimTicks",
+        "nonNegative": true,
+        "value": 0
+      },
+      {
+        "cells": [
+          {
+            "key": "body",
+            "value": "#E8A93F"
+          },
+          {
+            "key": "tail",
+            "value": "#F2D98A"
+          }
+        ],
+        "kind": "text",
+        "name": "fishColors"
+      },
+      {
+        "cells": [
+          {
+            "key": "bone",
+            "value": "#EDE6D6"
+          }
+        ],
+        "kind": "text",
+        "name": "boneColors"
+      },
+      {
+        "cells": [
+          {
+            "key": "wall",
+            "value": "#6E6A63"
+          },
+          {
+            "key": "water",
+            "value": "#3E8FD0"
+          }
+        ],
+        "kind": "text",
+        "name": "pondColors"
+      },
+      {
+        "kind": "fixed",
+        "lattice": {
+          "color": "state.pondColors.water",
+          "heightScale": 1,
+          "initial": 1.4,
+          "max": 2,
+          "medium": {},
+          "min": 0,
+          "paint": [
+            {
+              "$type": "rect",
+              "maxX": 20,
+              "maxZ": 18,
+              "minX": 12,
+              "minZ": 10,
+              "value": 1.4
+            }
+          ],
+          "topology": "pondBasin"
+        },
+        "name": "water"
       }
     ]
   },
+  "targetRegisters": [
+    {
+      "maximumHalfAngleDegrees": 180,
+      "maximumRange": 40,
+      "name": "companion",
+      "requiresLineOfSight": false
+    },
+    {
+      "maximumHalfAngleDegrees": 180,
+      "maximumRange": 40,
+      "name": "quarry",
+      "requiresLineOfSight": false
+    }
+  ],
   "views": {
     "layouts": [
       {
