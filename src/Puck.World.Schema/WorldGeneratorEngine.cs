@@ -55,7 +55,7 @@ public static class WorldGeneratorEngine {
     /// <param name="Decks">The site's updated dealt masks, or <see langword="null"/> when nothing dealt (a source under
     /// <see cref="WorldGeneratorMode.WithReplacement"/>, and every source that cannot deal). A Markov source carries one
     /// mask per context, by declaration ordinal; a weighted numeric source carries exactly one.</param>
-    public readonly record struct FireResult(string? Text, long? Numeric, long Samples, IReadOnlyList<long>? Decks);
+    public readonly record struct FireResult(string? Text, long? Numeric, long Samples, IReadOnlyList<ClosedBitset256>? Decks);
 
     // What a source's declaration determines once: each context's entry set dealt as cards, a weighted source's
     // entry set dealt as cards, and the context key → ordinal map. Built once per WorldGenerator instance and held
@@ -194,7 +194,7 @@ public static class WorldGeneratorEngine {
     // ReshuffleOnExhaustion, in the same emission. Exactly two generator advances either way, so cursor seeking
     // stays exact. On success the picked card's bit is set in `deck` (deck modes only) and the card's ENTRY ordinal
     // is returned; -1 with `reason` set otherwise.
-    private static int Deal(WorldGeneratorMode mode, EntrySet? set, ref ulong deck, ref Pcg32XshRr rng, string what, out string reason) {
+    private static int Deal(WorldGeneratorMode mode, EntrySet? set, ref ClosedBitset256 deck, ref Pcg32XshRr rng, string what, out string reason) {
         reason = string.Empty;
 
         if (set?.CardCount > WorldGeneratorCapacity.MaxCardsPerSet) {
@@ -217,7 +217,7 @@ public static class WorldGeneratorEngine {
 
         int picked;
 
-        if (deck == 0UL) {
+        if (deck.IsEmpty) {
             picked = set.Full.Sample(generator: ref rng);
         }
         else {
@@ -226,7 +226,7 @@ public static class WorldGeneratorEngine {
             var anyWeight = false;
 
             for (var card = 0; (card < cards); card++) {
-                if ((deck & (1UL << card)) == 0UL) {
+                if (!deck.Contains(card)) {
                     buffer[pooled++] = (card, set.CardWeights[card]);
                     anyWeight |= (set.CardWeights[card] != 0UL);
                 }
@@ -243,7 +243,7 @@ public static class WorldGeneratorEngine {
                     return -1;
                 }
 
-                deck = 0UL;
+                deck = default;
                 picked = set.Full.Sample(generator: ref rng);
             }
             else {
@@ -251,7 +251,7 @@ public static class WorldGeneratorEngine {
             }
         }
 
-        deck |= (1UL << picked);
+        deck = deck.Add(picked);
 
         return set.CardEntries[picked];
     }
@@ -335,19 +335,19 @@ public static class WorldGeneratorEngine {
 
         return entries[selected].Element;
     }
-    private static bool TryFireMarkov(WorldGenerator generator, ref Pcg32XshRr rng, IReadOnlyList<long>? decks, out FireResult result, out string reason) {
+    private static bool TryFireMarkov(WorldGenerator generator, ref Pcg32XshRr rng, IReadOnlyList<ClosedBitset256>? decks, out FireResult result, out string reason) {
         var contexts = generator.Contexts!;
         var compiled = Compiled(generator: generator);
         var tokens = new List<string>(capacity: generator.Bound);
         var context = generator.Start!.Value;
         var samples = 0L;
-        var working = new long[contexts.Count];
+        var working = new ClosedBitset256[contexts.Count];
         var dealt = false;
 
         for (var index = 0; (index < working.Length); index++) {
             working[index] = (((decks is not null) && (index < decks.Count))
                 ? decks[index]
-                : 0L
+                : default
             );
         }
 
@@ -373,7 +373,7 @@ public static class WorldGeneratorEngine {
                 return false;
             }
 
-            var deck = unchecked((ulong)working[ordinal]);
+            var deck = working[ordinal];
             var picked = Deal(
                 deck: ref deck,
                 mode: generator.Mode,
@@ -392,7 +392,7 @@ public static class WorldGeneratorEngine {
             samples++;
 
             if (generator.Mode != WorldGeneratorMode.WithReplacement) {
-                working[ordinal] = unchecked((long)deck);
+                working[ordinal] = deck;
                 dealt = true;
             }
 
@@ -418,7 +418,7 @@ public static class WorldGeneratorEngine {
     // One numeric sample of a non-Markov source at the generator's current position, threading the one deck a
     // weighted source deals through. The single draw TryFire answers and every cell of a TryFireBatch fill share
     // this body, so a fill's cell k is exactly the sample a site at cursor + k would have drawn.
-    private static bool TryDrawNumeric(WorldGenerator generator, CellKind targetKind, ref Pcg32XshRr rng, ref ulong deck, out long value, out string reason) {
+    private static bool TryDrawNumeric(WorldGenerator generator, CellKind targetKind, ref Pcg32XshRr rng, ref ClosedBitset256 deck, out long value, out string reason) {
         switch (generator.Source) {
             case WorldGeneratorSource.UniformRange: {
                     var span = unchecked((uint)(generator.RangeMax!.Value - generator.RangeMin!.Value));
@@ -483,7 +483,7 @@ public static class WorldGeneratorEngine {
     /// <returns>The raw cell value.</returns>
     public static long EncodeNode(int node, CellKind targetKind) =>
         ((targetKind == CellKind.Fixed) ? (((long)node) << FixedQ4816.FractionBitCount) : node);
-    private static bool TryRunBatch(WorldGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<long>? decks, Span<long> values, int sampleCount, bool writeValues, out IReadOnlyList<long>? decksAfter, out string reason) {
+    private static bool TryRunBatch(WorldGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? decks, Span<long> values, int sampleCount, bool writeValues, out IReadOnlyList<ClosedBitset256>? decksAfter, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: generator);
 
         decksAfter = null;
@@ -528,7 +528,7 @@ public static class WorldGeneratorEngine {
         rng.Advance(count: unchecked((((ulong)cursor) * AdvancesPerSample(source: generator.Source))));
 
         var deals = (Deals(source: generator.Source) && (generator.Mode != WorldGeneratorMode.WithReplacement));
-        var deck = ((deals && (decks is { Count: > 0 })) ? unchecked((ulong)decks[0]) : 0UL);
+        var deck = ((deals && (decks is { Count: > 0 })) ? decks[0] : default(ClosedBitset256));
 
         // A pass that neither writes values nor deals has no output at all: its only purpose would be the tail decks,
         // and a non-dealing source has none.
@@ -555,7 +555,7 @@ public static class WorldGeneratorEngine {
             }
         }
 
-        decksAfter = (deals ? [unchecked((long)deck)] : null);
+        decksAfter = (deals ? [deck] : null);
         reason = string.Empty;
 
         return true;
@@ -574,7 +574,7 @@ public static class WorldGeneratorEngine {
     /// <param name="decksAfter">The site's dealt masks after the fill, or <see langword="null"/> when the source never deals.</param>
     /// <param name="reason">Why the fill was refused, on failure.</param>
     /// <returns><see langword="true"/> when every cell was filled.</returns>
-    public static bool TryFireBatch(WorldGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<long>? decks, Span<long> values, out IReadOnlyList<long>? decksAfter, out string reason) => TryRunBatch(
+    public static bool TryFireBatch(WorldGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? decks, Span<long> values, out IReadOnlyList<ClosedBitset256>? decksAfter, out string reason) => TryRunBatch(
         generator: generator,
         targetKind: targetKind,
         seedState: seedState,
@@ -600,7 +600,7 @@ public static class WorldGeneratorEngine {
     /// <param name="decksAfter">The dealt masks after the pass, or <see langword="null"/> when the source never deals.</param>
     /// <param name="reason">Why the pass was refused, on failure.</param>
     /// <returns><see langword="true"/> when all samples were consumed.</returns>
-    public static bool TryAdvanceBatch(WorldGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<long>? decks, int sampleCount, out IReadOnlyList<long>? decksAfter, out string reason) => TryRunBatch(
+    public static bool TryAdvanceBatch(WorldGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? decks, int sampleCount, out IReadOnlyList<ClosedBitset256>? decksAfter, out string reason) => TryRunBatch(
         generator: generator,
         targetKind: targetKind,
         seedState: seedState,
@@ -621,7 +621,7 @@ public static class WorldGeneratorEngine {
     /// <param name="sampleCount">The required batch length.</param>
     /// <param name="reason">Why the source cannot supply the batch.</param>
     /// <returns><see langword="true"/> when batch execution cannot exhaust the source.</returns>
-    public static bool TryCheckBatchCapacity(WorldGenerator generator, IReadOnlyList<long>? decks, long sampleCount, out string reason) {
+    public static bool TryCheckBatchCapacity(WorldGenerator generator, IReadOnlyList<ClosedBitset256>? decks, long sampleCount, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: generator);
 
         reason = string.Empty;
@@ -634,7 +634,7 @@ public static class WorldGeneratorEngine {
             return true;
         }
 
-        var deck = ((decks is { Count: > 0 }) ? unchecked((ulong)decks[0]) : 0UL);
+        var deck = ((decks is { Count: > 0 }) ? decks[0] : default(ClosedBitset256));
         var card = 0;
         var available = 0L;
 
@@ -646,7 +646,7 @@ public static class WorldGeneratorEngine {
             }
 
             for (; (card < orbitNodes.Length); card++) {
-                if ((deck & (1UL << card)) == 0UL) {
+                if (!deck.Contains(card)) {
                     available++;
                 }
             }
@@ -673,7 +673,7 @@ public static class WorldGeneratorEngine {
                 }
 
                 for (var copy = Math.Max(val1: 1, val2: (outcome.Count ?? 1)); (copy > 0); copy--) {
-                    if ((outcome.Weight != 0UL) && ((deck & (1UL << card)) == 0UL)) {
+                    if ((outcome.Weight != 0UL) && (!deck.Contains(card))) {
                         available++;
                     }
 
@@ -789,7 +789,7 @@ public static class WorldGeneratorEngine {
     /// <param name="fired">The emission's dealt masks, or <see langword="null"/>.</param>
     /// <param name="previous">The site's persisted masks before the emission.</param>
     /// <returns>The masks to persist.</returns>
-    public static IReadOnlyList<long>? DecksAfter(WorldGenerator generator, IReadOnlyList<long>? fired, IReadOnlyList<long>? previous) {
+    public static IReadOnlyList<ClosedBitset256>? DecksAfter(WorldGenerator generator, IReadOnlyList<ClosedBitset256>? fired, IReadOnlyList<ClosedBitset256>? previous) {
         ArgumentNullException.ThrowIfNull(argument: generator);
 
         return ((Deals(source: generator.Source) && (generator.Mode != WorldGeneratorMode.WithReplacement))
@@ -893,7 +893,8 @@ public static class WorldGeneratorEngine {
     /// <param name="result">The emission, on success.</param>
     /// <param name="reason">Why the emission was refused, on failure.</param>
     /// <returns><see langword="true"/> on a successful emission.</returns>
-    public static bool TryFire(WorldGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<long>? decks, out FireResult result, out string reason) {
+    /// <param name="secret">Optional authority secret; admitted only for integer streamDraw sources.</param>
+    public static bool TryFire(WorldGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? decks, out FireResult result, out string reason, ClosedBitset256? secret = null) {
         ArgumentNullException.ThrowIfNull(argument: generator);
 
         result = default;
@@ -918,6 +919,12 @@ public static class WorldGeneratorEngine {
             return false;
         }
 
+        if (secret is { } key) {
+            if (key.IsEmpty || generator.Source != WorldGeneratorSource.StreamDraw || targetKind != CellKind.Int || generator.Mode != WorldGeneratorMode.WithReplacement) {
+                reason = "secret draws require a nonzero key and an integer streamDraw source with replacement"; return false;
+            }
+            result = new(null, WorldPrivateDraw.Sample(key, seedState, stream, cursor), 1, null); reason = string.Empty; return true;
+        }
         var rng = Pcg32XshRr.Create(
             state: seedState,
             stream: stream
@@ -937,7 +944,7 @@ public static class WorldGeneratorEngine {
                 );
             default: {
                     var deals = (generator.Mode != WorldGeneratorMode.WithReplacement);
-                    var deck = ((deals && (decks is { Count: > 0 })) ? unchecked((ulong)decks[0]) : 0UL);
+                    var deck = ((deals && (decks is { Count: > 0 })) ? decks[0] : default(ClosedBitset256));
 
                     if (!TryDrawNumeric(
                         deck: ref deck,
@@ -954,7 +961,7 @@ public static class WorldGeneratorEngine {
                         Text: null,
                         Numeric: value,
                         Samples: 1L,
-                        Decks: (deals ? [unchecked((long)deck)] : null)
+                        Decks: (deals ? [deck] : null)
                     );
                     reason = string.Empty;
 

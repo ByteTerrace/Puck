@@ -44,6 +44,8 @@ public enum WorldFederationRequest : byte {
 
     /// <summary>Confirm the source has consumed a committed transfer.</summary>
     AcknowledgeTransfer = 12,
+    /// <summary>Stream the current owner's projection through a committed traveler credential.</summary>
+    ObserveTraveler = 13,
 }
 /// <summary>The federation response kinds an authority writes back.</summary>
 public enum WorldFederationResponse : byte {
@@ -76,6 +78,10 @@ public enum WorldFederationResponse : byte {
 
     /// <summary>A committed traveler's route description.</summary>
     Route = 10,
+    /// <summary>The accepted application authentication and destination authority namespace.</summary>
+    Authenticated = 11,
+    /// <summary>The observed owner or disclosure policy changed; reopen through the original credential.</summary>
+    ProjectionInvalidated = 12,
 }
 /// <summary>The stable names a federation authority refuses under. A refusal frame's text always opens with one of
 /// these, so a peer and a read-back can both count refusals by name rather than by sentence.</summary>
@@ -123,7 +129,7 @@ public enum WorldFederationRefusal : byte {
 /// bounded and Try-shaped and none of them throws on hostile bytes. Local colocation invokes the same server methods
 /// directly; this codec is only the transport underneath that contract.
 /// </summary>
-public static class WorldFederationCodec {
+public static partial class WorldFederationCodec {
     /// <summary>The hard ceiling on any framed federation payload, applied before a frame body is allocated. The
     /// per-kind caps below refuse the rest by name.</summary>
     public const int MaxFrameBytes = ((32 * 1024) * 1024);
@@ -135,7 +141,7 @@ public static class WorldFederationCodec {
     /// both dialects off the first eight bytes. A dialer opens every federation connection by writing it through
     /// <see cref="HandshakeWireFormat.WriteHelloAsync"/> — that is the only hello; the challenge/authenticate exchange
     /// that follows rides ordinary frames.</summary>
-    public const ulong WireKey = 0x35444546554B4350UL;
+    public const ulong WireKey = 0x314445464B435550UL; // "PUCKFED1", the first World federation contract.
 
     private static bool Finish(ref WireReader reader, out WireFailure failure) => reader.TryFinish(failure: out failure);
     private static WorldTransferCommitMember ReadCommitMember(ref WireReader reader, WorldPlayerDefaults defaults, int ordinal) {
@@ -412,6 +418,8 @@ public static class WorldFederationCodec {
             return false;
         }
 
+        var social = reader.ReadBoolean() ? WorldAuthorityCheckpointCodec.ReadSocialMemory(ref reader) : null;
+        if (reader.Failed) { failure = reader.Failure; return false; }
         member = new WorldTransferReservationMember(
             Principal: WorldPrincipal.Console,
             PreferredSlot: preferred,
@@ -419,7 +427,8 @@ public static class WorldFederationCodec {
             Source: source,
             BodyColor: bodyColor,
             CatalogRig: catalogRig,
-            Mobility: mobility
+            Mobility: mobility,
+            Social: social
         );
         failure = default;
 
@@ -531,7 +540,8 @@ public static class WorldFederationCodec {
     /// <returns>The encoded leaf.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="tier"/> is
     /// <see cref="WorldDisclosureTier.Frames"/>, which carries no document at all.</exception>
-    public static byte[] EncodeDocument(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision) {
+    /// <param name="recipient">The authenticated recipient, or null for public observation.</param>
+    public static byte[] EncodeDocument(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, WorldPrincipal? recipient = null) {
         var payload = ((WorldProjection.Compose(
             authority: authority,
             definition: definition,
@@ -640,6 +650,8 @@ public static class WorldFederationCodec {
                 writer.WriteNullableFixed(value: projected.MoveSpeed);
                 writer.WriteNullableFixed(value: projected.TurnSpeed);
             }
+            writer.WriteBoolean(member.Social is not null);
+            if (member.Social is { } social) { WorldAuthorityCheckpointCodec.WriteSocialMemory(writer, social); }
         }
 
         return writer.ToArray();
@@ -683,7 +695,8 @@ public static class WorldFederationCodec {
     /// <param name="authority">The composing authority's addressable namespace.</param>
     /// <param name="revision">The document revision this composition names.</param>
     /// <returns>The encoded leaf.</returns>
-    public static byte[] EncodeRoute(in WorldAuthorityRouteDescription route, WorldDisclosureTier tier, string authority, int revision) {
+    /// <param name="recipient">The observation principal whose presentation-visible state is composed, or null for an unembodied observer.</param>
+    public static byte[] EncodeRoute(in WorldAuthorityRouteDescription route, WorldDisclosureTier tier, string authority, int revision, WorldPrincipal? recipient = null) {
         var writer = new WireWriter(capacity: 4096);
 
         writer.WriteString(value: route.Endpoint);
@@ -703,7 +716,8 @@ public static class WorldFederationCodec {
             definition: route.Definition,
             tier: tier,
             authority: authority,
-            revision: revision
+            revision: revision,
+            recipient: recipient
         ));
 
         return writer.ToArray();
@@ -804,6 +818,7 @@ public static class WorldFederationCodec {
         WorldFederationRequest.Status => (2 * WireLimits.MaxStringBytes),
         WorldFederationRequest.AcknowledgeTransfer => (2 * WireLimits.MaxStringBytes),
         WorldFederationRequest.Route => (4 * WireLimits.MaxStringBytes),
+        WorldFederationRequest.ObserveTraveler => (4 * WireLimits.MaxStringBytes),
         WorldFederationRequest.Intent => (64 * 1024),
         WorldFederationRequest.Submission => (WireLimits.MaxDocumentBytes + (64 * 1024)),
         WorldFederationRequest.Reserve => MaxFrameBytes,
@@ -815,6 +830,8 @@ public static class WorldFederationCodec {
     /// <returns>The maximum body bytes accepted.</returns>
     public static int MaxResponseBytes(WorldFederationResponse kind) => kind switch {
         WorldFederationResponse.Ack => 0,
+        WorldFederationResponse.ProjectionInvalidated => 0,
+        WorldFederationResponse.Authenticated => (sizeof(int) + WireLimits.MaxStringBytes),
         WorldFederationResponse.Status => sizeof(byte),
         WorldFederationResponse.Challenge => MaxProofBytes,
         WorldFederationResponse.Refusal => WireLimits.MaxStringBytes,
@@ -1425,7 +1442,7 @@ public static class WorldFederationCodec {
         mobility = WorldWireLeaves.ReadMobility(reader: ref reader);
         frame = reader.ReadRest(
             field: "submission frame",
-            maxBytes: WorldTcpWireFormat.MaxUpstreamFrameBytes
+            maxBytes: WorldPeerWireFormat.MaxUpstreamFrameBytes
         );
 
         if (

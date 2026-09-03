@@ -2,10 +2,9 @@ namespace Puck.World.Protocol;
 
 /// <summary>The opaque identity of the one World wire contract this build speaks.</summary>
 public static class WorldProtocol {
-    /// <summary>The current wire identity. This is an opaque re-key, never an ordered version and never shared with
-    /// replay-tape or guest-ABI shape identities: a peer offering a stale key refuses cleanly on the Hello door
-    /// rather than desynchronizing mid-handshake.</summary>
-    public const ulong WireProtocolKey = 0x5055_434B_5034_4C32UL; // "PUCKP4L2"
+    /// <summary>The first World application contract, distinguished from federation, replay, and guest messages.
+    /// Its shape is still developed in place; there is no compatibility reader for earlier development builds.</summary>
+    public const ulong WireProtocolKey = 0x314C52574B435550UL; // "PUCKWRL1"
 }
 /// <summary>A Hello-door refusal. The name is the stable protocol diagnostic; detail is narration only. This is the
 /// version-compatibility door only — checked first, over the wire-protocol key alone, before any identity is asked
@@ -16,7 +15,7 @@ public enum WorldHelloRefusal : byte {
     /// <summary>The offered opaque wire identity is not the one this build accepts.</summary>
     WireProtocolKeyMismatch,
 }
-/// <summary>The Hello door every connection checks before admission — <c>Server.WorldTcpHost</c>'s raw handshake for a
+/// <summary>The Hello door every connection checks before admission — <c>Server.WorldPeerHost</c>'s raw handshake for a
 /// remote peer, and the loopback <c>Session.Join</c> path for a local one — both before any frame is admitted. This
 /// door is protocol-version compatibility only, and stays that way: the loopback path (the owner's own process,
 /// never a socket) calls only this check, by construction, and stops there — see <c>WorldServer.ApplySession</c>'s

@@ -1,0 +1,5 @@
+world.state.act turns 0 {"$type":"moveToken","positions":"positions","token":"scout","destination":15,"terrain":"terrain","allowance":"moves","maxVisits":16}
+world.state positions scout
+world.state moves scout
+world.state hand
+wire.errors

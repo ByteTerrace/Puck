@@ -498,6 +498,9 @@ public sealed partial class WorldBody {
             case BodyMotionOp.ProduceAttendIntent:
                 ProduceAttendIntent(scratch: ref scratch);
                 break;
+            case BodyMotionOp.ProduceFlockIntent:
+                ProduceFlockIntent(scratch: ref scratch);
+                break;
             case BodyMotionOp.FaceSensorTarget:
                 FaceSensorTarget(scratch: ref scratch);
                 break;
@@ -538,6 +541,7 @@ public sealed partial class WorldBody {
                 IntegrateScratchVelocity(scratch: ref scratch);
                 break;
             case BodyMotionOp.CommitPose:
+                ConstrainFlockLocomotion(ref scratch);
                 m_position = scratch.NextPosition;
                 m_orientation = scratch.Orientation;
                 break;
@@ -1045,10 +1049,20 @@ public sealed partial class WorldBody {
     // survives an authoritative reposition. The action track (held/timed lanes) is left alone: a teleport moves the
     // body, not the player's buttons.
     private void ResetVertical() {
-        m_verticalVelocity = FixedQ4816.Zero;
-        m_verticalVelocityAccumulator.Reset();
         m_positionAccumulator.ResetY();
         m_grounded = true;
+        ResetTranslationMomentum();
+
+        // A hard teleport also clears observations about the prior support/medium.
+        Array.Clear(array: m_motionRecency);
+        m_submerged = false;
+        m_atSurface = false;
+    }
+
+    // Stops integrated locomotion without claiming a teleport, changing support facts, or cancelling timed actions.
+    private void ResetTranslationMomentum() {
+        m_verticalVelocity = FixedQ4816.Zero;
+        m_verticalVelocityAccumulator.Reset();
 
         // A teleport must not carry momentum: drop the ramped planar velocity, its accumulator carries (the
         // isotropic ramp and a drive row's decomposed channels alike), the response table's recency clocks, and the
@@ -1058,7 +1072,6 @@ public sealed partial class WorldBody {
         m_driveLongAccumulator.Reset();
         m_driveLatAccumulator.Reset();
         m_driveResidualAccumulator.Reset();
-        Array.Clear(array: m_motionRecency);
         m_planarFollower = default;
         m_planarPreviousTarget = default;
         m_planarFollowerSeeded = false;
@@ -1066,11 +1079,7 @@ public sealed partial class WorldBody {
         m_verticalPreviousTarget = default;
         m_verticalFollowerSeeded = false;
 
-        // The medium carries are momentum and medium facts on the same terms — a warp never carries a dive across,
-        // and a body warped out of the water must not read Submerged until the medium law says so again.
         m_mediumThrustRampAccumulator.Reset();
-        m_submerged = false;
-        m_atSurface = false;
     }
     // The one seat-time resolve. Shared by Advance (which feeds this into the program) and EffectiveMoveSpeed
     // (which only reads it back) so the two can never compute two different answers to "what speed is this body
@@ -1675,8 +1684,9 @@ public sealed partial class WorldBody {
 
         // Release-radius hysteresis exists to damp flicker among a COMPETITIVELY sensed population (Sensed alone);
         // a Designated register and a Curve follow-point are each a single deterministic candidate every tick with
-        // nothing to flicker against, so both take the fresh candidate outright.
-        if (producer.Target?.Source is not BodyTargetSource.Sensed) {
+        // nothing to flicker against, so both take the fresh candidate outright. Flocks retain observations on
+        // their own bounded perception cadence and do not consume attend's release-radius scalar.
+        if (producer.Flock is not null || producer.Target?.Source is not BodyTargetSource.Sensed) {
             scratch.SensorTarget = candidate;
         } else {
             var release = producer.Scalar(name: "releaseRadius");

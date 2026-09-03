@@ -9,6 +9,13 @@ These tests keep the Physics kernels honest through separate evidence:
   Barnes–Hut, remains bit-deterministic and allocation-free after workspace warm-up, and reduces 4,096-body interaction
   work below the quadratic baseline; overflow fixtures pin both rejected M2L pairs and deferred L2L expansions;
 - the contact cases pin dynamic compound correction direction and the policy-free analytic static push contract;
+- `FixedSpatialNeighborhoodTests` compares complete grid queries with an independent wide-integer distance oracle,
+  and pins bounded candidate work, independent cell/occupant rotation (including one-inspection budgets), zero steady-state allocation, and
+  coordinate-extreme behavior at 4,096 points; `FixedFlockSteeringTests` isolates separation, weighted-centroid
+  cohesion, independent heading influence, tangent-plane/volume motion, coincident-pair antisymmetry, and wide means;
+- `FixedFlockPipelineStressTests` combines perception and steering for 4,096 moving creatures, including initially
+  coincident crowds. It checks bounded work, zero warmed allocations, and identical trajectories under reversed
+  body-update order. Its reported timings exclude world rules, collision, navigation, and rendering;
 - `FixedSurfaceQueryTests` pins the nearest-surface-point query's per-kind exactness (box face/edge/corner, sphere,
   half-space), the unit-outward-normal contract, reach inclusion at the boundary, the `(Source, ColliderIndex)`
   tie-break under 1,000 shuffled rebuilds of a set containing an exact tie, and the directed variant's

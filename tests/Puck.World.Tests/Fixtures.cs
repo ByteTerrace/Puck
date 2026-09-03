@@ -96,9 +96,8 @@ internal static class Fixtures {
     /// producer — shared by every fixture kit that declares one (<see cref="BuildKits"/>'s own "traveler" row, and
     /// any other suite file's own custom kit — see <see cref="TransferAbortKitWideningLawTests"/>'s drive/medium
     /// kits). Values mirror the shipped worlds' own "traveler"-style kit; none of them is exercised by any of these
-    /// suites' laws — WorldPopulation.SeedSeatWander unconditionally resolves this producer on the assigned kit's
-    /// row regardless of whether anything actually wanders (see <see cref="BuildKits"/>'s own remarks on why the
-    /// row must exist at all).</summary>
+    /// suites' laws. Kits that declare wander seed its variation whether or not it is selected; kits without
+    /// wander still receive ordinary spawn/color initialization.</summary>
     public static BodyProgramParameters TravelerWanderParameters { get; } = new(
         Scalars: new Dictionary<string, float> {
             ["forward"] = 0.375f,
@@ -196,12 +195,8 @@ internal static class Fixtures {
                     BodyMotionOp.CommitPose,
                 ]
             ),
-            // WorldPopulation.SeedSeatWander/SeedSimulated unconditionally look up a "ProduceWanderIntent" producer
-            // on the assigned kit's row (WorldPopulation.SeedProducer) to seed per-index wander phase/altitude —
-            // even for a body whose IntentSource is Idle and that never actually wanders. EngageAuthorityLawTests
-            // joins a seat (Server.WorldPopulation.ActivateSeat, reached through the ordinary session door) to get
-            // a LIVE body to route, which walks this exact path, so the producer must exist even though nothing in
-            // this suite drives it.
+            // Keep an authored wander program available for laws that explicitly select it. Spawn and color
+            // initialization are independent of whether the assigned kit declares this optional behavior.
             new(
                 Name: "wander",
                 Version: "puck.body-motion.v1",
@@ -213,8 +208,7 @@ internal static class Fixtures {
         var population = new WorldBodiesDefaults(
             SeatActivationRaw: [SeatActivationPolicy.Eager, SeatActivationPolicy.Eager, SeatActivationPolicy.Eager, SeatActivationPolicy.Eager],
             NetworkPlayers: 0,
-            // Idle, not Producer("wander") — this fixture declares no producer program at all; nothing simulated
-            // ever needs to resolve a producer name.
+            // The minimal fixture leaves simulated bodies idle; individual laws opt into a named producer.
             DefaultPeerSourceRaw: IntentSource.Idle,
             SeatSpawnsRaw: ["seat-1", "seat-2", "seat-3", "seat-4"],
             DistributionRaw: new WorldDistribution(
@@ -232,12 +226,7 @@ internal static class Fixtures {
                 Activity: new WorldSequence(Name: WorldSequence.R2, Offset: 1, Step: 0f)
             ),
             PeerColorsRaw: new WorldSequence(Name: WorldSequence.Additive, Offset: -4, Step: 0.618034f),
-            // Capacity == LocalSeatCount (the validator's own floor) deliberately: WorldPopulation seeds every
-            // entry from LocalSeatCount..Capacity as a "simulated" crowd stand-in (WorldPopulation.SeedSimulated),
-            // which unconditionally requires a "wander" producer program on the assigned kit REGARDLESS of
-            // DefaultPeerSource — a requirement this minimal fixture has no reason to carry, since none of this
-            // suite's laws exercise simulated/peer bodies. Pinning capacity to the seat count makes that loop empty
-            // (LocalSeatCount..Capacity is 4..4) rather than declaring an unused producer just to satisfy it.
+            // Allocate just the four seats by default. Laws exercising peers explicitly enlarge this table.
             CapacityRaw: WorldBodiesLimits.LocalSeatCount,
             ReconnectGraceSeconds: 3.0f
         );
@@ -760,9 +749,6 @@ internal sealed class WorldFixture : IDisposable {
     private readonly WorldMachineHost m_machines;
     private readonly string m_stateDirectory;
 
-    private ulong m_tick;
-    private ulong m_elapsedTicks;
-
     internal WorldFixture(WorldServer server, WorldMachineHost machines, string stateDirectory) {
         Server = server;
         m_machines = machines;
@@ -772,19 +758,12 @@ internal sealed class WorldFixture : IDisposable {
     /// <summary>The live server under test.</summary>
     public WorldServer Server { get; }
 
-    /// <summary>Drains one tick — enqueues nothing itself; a law body enqueues a mutation/grant/undo first, then
-    /// calls this to reach the tick boundary where it applies (the mutation substrate's one pipeline: buffer,
-    /// drain FIFO at the tick boundary, compose, revalidate, swap). Mirrors the composition root's own
-    /// <c>WorldInstanceHost</c>'s per-instance tick counter (out of reach here — <c>Puck.World</c> is not
-    /// referenced by this project).</summary>
+    /// <summary>Drains one authority step through the normal buffered mutation pipeline. Uses the same
+    /// authority-owned advancement as the production step shell, including checkpoint rewinds.</summary>
     public void Step(ulong? stepTicks = null) {
         var width = (stepTicks ?? Fixtures.StepTicks);
 
-        m_elapsedTicks = checked((m_elapsedTicks + width));
-        var context = new FixedStepContext(ElapsedTicks: m_elapsedTicks, StepTicks: width, Tick: m_tick);
-
-        Server.Step(context: in context);
-        m_tick++;
+        Server.Advance(stepTicks: width);
     }
     /// <summary>The live document's current bytes — the byte-identity probe the all-or-nothing law compares
     /// before/after an apply attempt.</summary>

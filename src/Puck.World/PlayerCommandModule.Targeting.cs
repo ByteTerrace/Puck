@@ -58,7 +58,7 @@ internal sealed partial class PlayerCommandModule {
             principal: context.ActingPrincipal()
         );
 
-        return TargetsResult(index: index);
+        return TargetsResult(index: index, verb: "body.designate");
     }
     // The at:x,y,z world-point token — three invariant-culture decimals quantized through the same FixedQ4816
     // conversion every authored document value takes.
@@ -116,16 +116,19 @@ internal sealed partial class PlayerCommandModule {
         );
         return ((player is null)
             ? CommandResult.Error(output: error!)
-            : TargetsResult(index: index)
+            : TargetsResult(index: index, verb: "body.targets")
         );
     }
-    private CommandResult TargetsResult(int index) {
+    private CommandResult TargetsResult(int index, string verb) {
         var result = default(CommandResult);
 
         m_link.Query(
             query: new WorldQuery.PlayerTargets(Index: index),
             completion: answer => {
-                result = new CommandResult(Output: answer.Text) { IsError = answer.Refused };
+                const string prefix = "[body.targets:";
+                var text = answer.Text.StartsWith(prefix, StringComparison.Ordinal)
+                    ? $"[{verb}:{answer.Text.AsSpan(prefix.Length)}" : answer.Text;
+                result = new CommandResult(Output: text) { IsError = answer.Refused };
             }
         );
         return result;

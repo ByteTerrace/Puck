@@ -9,6 +9,7 @@ namespace Puck.World;
 /// carries. Carries no float kind: simulation state is float-free by the determinism contract (see
 /// <see cref="Fixed"/> for how a fractional value still rides here). A counter is represented as
 /// <see cref="Fixed"/>; a timer is <see cref="Int"/> with <see cref="WorldStateRow.NonNegative"/> set.</summary>
+[JsonConverter(typeof(StrictEnumConverter<CellKind>))]
 public enum CellKind : byte {
     /// <summary>A whole 64-bit signed integer cell (a score, a round counter, an inventory count, or — with
     /// <see cref="WorldStateRow.NonNegative"/> set — a tick-count timer).</summary>
@@ -37,11 +38,13 @@ public enum CellKind : byte {
 /// <param name="Identity">Per-body counters and timers synchronized through the durable identity-document seam.</param>
 /// <param name="Lattices">The lattice topologies the section's lattice-shaped rows lie over (see
 /// <see cref="WorldStateLatticeTopology"/>).</param>
+/// <param name="Social">Optional bounded social-memory policy; learned runtime impressions are checkpoint state, not public cell rows.</param>
 public sealed record WorldStateSection(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldStateRow>? World = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ActionStateSlot>? Body = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ActionStateSlot>? Identity = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldStateLatticeTopology>? Lattices = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldStateLatticeTopology>? Lattices = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSocialPolicy? Social = null
 );
 /// <summary>
 /// One cell of the <c>state</c> section's substrate — a typed value addressed by a stable string <see cref="Key"/>
@@ -74,7 +77,9 @@ public sealed record WorldStateSection(
 /// the keyed counterpart of <see cref="WorldStateRow.Cycle"/>, which governs a slot's own cell instead. See
 /// <see cref="WorldStateCycle"/>; <see cref="Value"/> is the phase (or the lattice node) the trait turns from.
 /// Legitimate only on a cell whose <see cref="Key"/> is not <see cref="WorldStateRow.SlotKey"/>.</param>
-public sealed record WorldStateCell(WorldCellName Key, long Value = 0, string? Text = null, WorldStateAdvance? Advance = null, string? Provenance = null, WorldStateDynamics? Dynamics = null, WorldStateCycle? Cycle = null);
+/// <param name="Visibility">An additional cell-level audience restriction; slot policies belong on the row.</param>
+/// <param name="Observation">The persisted last-seen stamp of a knowledge cell.</param>
+public sealed record WorldStateCell(WorldCellName Key, long Value = 0, string? Text = null, WorldStateAdvance? Advance = null, string? Provenance = null, WorldStateDynamics? Dynamics = null, WorldStateCycle? Cycle = null, WorldStateVisibility? Visibility = null, WorldStateObservation? Observation = null);
 /// <summary>
 /// One row of the <c>state</c> section — a named cell or a named collection of cells, addressed by its stable
 /// <see cref="Name"/>. <see cref="Name"/> is the <c>UpsertStateRow</c>/<c>RemoveStateRow</c> key, the
@@ -166,6 +171,15 @@ public sealed record WorldStateCell(WorldCellName Key, long Value = 0, string? T
 /// <see cref="CellKind.Fixed"/>, only on a scalar (slot-eligible) row, and never together with
 /// <see cref="Advance"/>, <see cref="Dynamics"/>, <see cref="Draw"/> or <see cref="Lattice"/>. A keyed row's own
 /// cells turn independently through <see cref="WorldStateCell.Cycle"/> instead.</param>
+/// <param name="Board">Discrete topology addressing for this keyed row; absent for ordinary rows.</param>
+/// <param name="Tokens">A stable token identity domain.</param>
+/// <param name="Zone">Membership and pile order over a token domain.</param>
+/// <param name="KeysFrom">The token domain whose keys this attribute row may address.</param>
+/// <param name="ValuesFrom">The discrete topology whose cell ordinals this integer attribute row stores.</param>
+/// <param name="Phase">A finite participant phase protocol and its persisted progression.</param>
+/// <param name="Visibility">An opt-in observation policy; empty readers retains the row at the authority.</param>
+/// <param name="Knowledge">The source and visibility mask of a remembered board layer.</param>
+/// <param name="PhaseOf">The phase row required on external gameplay transforms that write this row.</param>
 public sealed record WorldStateRow(
     WorldCellName Name,
     CellKind Kind,
@@ -179,10 +193,16 @@ public sealed record WorldStateRow(
     WorldStateAdvance? Advance = null,
     WorldDraw? Draw = null,
     long DrawCursor = 0,
-    IReadOnlyList<long>? DrawDecks = null,
+    IReadOnlyList<ClosedBitset256>? DrawDecks = null,
     WorldStateDynamics? Dynamics = null,
     WorldStateLatticeTrait? Lattice = null,
-    WorldStateCycle? Cycle = null
+    WorldStateCycle? Cycle = null,
+    WorldStateBoard? Board = null,
+    WorldStateTokens? Tokens = null,
+    WorldStateZone? Zone = null,
+    string? KeysFrom = null,
+    string? ValuesFrom = null,
+    WorldStatePhase? Phase = null, WorldStateVisibility? Visibility = null, WorldStateKnowledge? Knowledge = null, string? PhaseOf = null
 ) {
     /// <summary>The prefix every engine-minted row or cell name carries, and the one an author may never spell. A
     /// row name starting with it is refused outright (nothing mints a row); a cell key starting with it is refused
@@ -196,7 +216,9 @@ public sealed record WorldStateRow(
     /// <see cref="WorldCellName"/> like any other.</summary>
     public static readonly WorldCellName SlotKey = WorldCellName.Parse(candidate: "$value");
 
-    /// <summary>Gets a value indicating whether this row declares a <see cref="WorldStateAdvance"/> continuous-accumulation trait.</summary>
+    /// <summary>Gets the storage ceiling admitted by the row's shape. Ordinary rows retain the 128-cell ceiling.</summary>
+    public int CellCeiling => (Tokens is { } tokens ? Math.Clamp(tokens.Capacity, 1, WorldTopologyCompilation.MaxCells) : (int?)null) ?? ((Board is not null || Zone is not null || KeysFrom is not null) ? WorldTopologyCompilation.MaxCells : WorldStateCapacity.MaxCellsPerRow);
+    /// <summary>Gets whether the row accumulates continuously.</summary>
     public bool IsAdvancing => (Advance is not null);
     /// <summary>Gets a value indicating whether this row declares a <see cref="WorldStateDynamics"/> easing trait.</summary>
     public bool IsEasing => (Dynamics is not null);
@@ -213,7 +235,7 @@ public sealed record WorldStateRow(
     /// slot-addressable, since the first write mints its slot cell exactly as <c>world.state.cell.set</c> does.
     /// <see cref="IsSlot"/> asks whether a single value exists to read; this asks whether an omitted key can address
     /// one.</remarks>
-    public bool IsKeyed => ((Capacity is not null) || (Cells is { Count: > 1 }) || ((Cells is { Count: 1 } cells) && (cells[0].Key != SlotKey)));
+    public bool IsKeyed => ((Board is not null || Tokens is not null || Zone is not null || KeysFrom is not null || Phase is not null) || (Capacity is not null) || (Cells is { Count: > 1 }) || ((Cells is { Count: 1 } cells) && (cells[0].Key != SlotKey)));
     /// <summary>Gets a value indicating whether this row is shaped as a scalar slot — no declared
     /// <see cref="Capacity"/> and exactly one cell keyed <see cref="SlotKey"/>. Drives whether
     /// <c>Puck.World.WorldStateRowJsonConverter</c> writes the row's one cell back as the bare <c>value</c> sugar or
@@ -221,7 +243,7 @@ public sealed record WorldStateRow(
     /// value column) resolve a live value for — a keyed row has no single value to show. A draw site is an ordinary
     /// slot: its one cell holds the drawn value, and its own bookkeeping (<see cref="DrawCursor"/>/
     /// <see cref="DrawDecks"/>) lives in row fields rather than in cells.</summary>
-    public bool IsSlot => ((Capacity is null) && (Cells is { Count: 1 } cells) && (cells[0].Key == SlotKey));
+    public bool IsSlot => ((Board is null && Tokens is null && Zone is null && KeysFrom is null && Phase is null) && (Capacity is null) && (Cells is { Count: 1 } cells) && (cells[0].Key == SlotKey));
 
     /// <summary>Clamps <paramref name="value"/> into this row's declared numeric envelope: the
     /// <see cref="NonNegative"/> floor first, then an authored <see cref="Min"/>/<see cref="Max"/> pair.</summary>
@@ -901,11 +923,11 @@ public sealed record WorldGenerator(
 public sealed record WorldGeneratorRow(WorldCellName Name, WorldGenerator Generator);
 /// <summary>The <see cref="WorldGenerator"/> caps enforced by <see cref="WorldDefinitionValidator"/>.</summary>
 /// <remarks>The context cap and the alternative cap are load-bearing together, not decorative: a deck mode records
-/// one <see cref="WorldStateRow.DrawDecks"/> mask per context, and each such mask is a 64-bit dealt lane (so a
-/// context can hold no more alternatives than a <c>ulong</c> has bits).</remarks>
+/// one <see cref="WorldStateRow.DrawDecks"/> mask per context, and each such mask is a 256-bit dealt set (so a
+/// context can hold no more alternatives than the membership set has bits).</remarks>
 public static class WorldGeneratorCapacity {
     /// <summary>A context's alternative-count ceiling — one bit per alternative in its deck mask.</summary>
-    public const int MaxAlternativesPerContext = 64;
+    public const int MaxAlternativesPerContext = 256;
     /// <summary>A source's context-count ceiling.</summary>
     public const int MaxContexts = 32;
     /// <summary>The document's declared-source count ceiling.</summary>
@@ -921,10 +943,10 @@ public static class WorldGeneratorCapacity {
     public const int MaxTokenLength = 64;
     /// <summary>A <see cref="WorldGeneratorSource.WeightedNumeric"/> source's outcome-count ceiling — matches
     /// <see cref="MaxAlternativesPerContext"/> since both build an alias table over an authored entry list.</summary>
-    public const int MaxWeightedOutcomes = 64;
+    public const int MaxWeightedOutcomes = 256;
     /// <summary>The most cards one dealt set may hold — a context's alternatives or a weighted source's outcomes,
-    /// each counted <c>Count</c> times — since a deck mask is one 64-bit lane with one bit per card.</summary>
-    public const int MaxCardsPerSet = 64;
+    /// each counted <c>Count</c> times — since a deck mask is one 256-bit set with one bit per card.</summary>
+    public const int MaxCardsPerSet = 256;
     /// <summary>The least value a <see cref="WorldGeneratorSource.UniformRange"/> bound may hold — see
     /// <see cref="MaxRangeBound"/>.</summary>
     public const long MinRangeBound = int.MinValue;

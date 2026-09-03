@@ -17,6 +17,111 @@ vocabulary layered on top of this document model; the runtime that folds
 against both is [`Puck.World.Server`](../Puck.World.Server/README.md); the
 process that composes everything is [`Puck.World`](../Puck.World/README.md).
 
+## Discrete boards, cards, and turns
+
+The discrete substrate shares `state.lattices` with physical fields. Declare
+`kind: "Grid"`, `"Ring"`, or `"Hex"` and bind an integer/boolean row through
+`board: { "topology": "map", "empty": 0 }`. Only `Field` declarations create
+physical field storage. A world may declare at most 16 topologies, including
+at most one physical field topology. Each discrete topology admits 4096 cells;
+boards together admit 65536 cells, and all declared state storage admits
+262144 cells. Ordinary keyed rows retain their 128-cell limit.
+
+Grid keys are decimal `y * width + x` ordinals. Directions are `N`, `NE`, `E`,
+`SE`, `S`, `SW`, `W`, `NW`; `wrap` is `None`, `X`, `Y`, or `Both`. Rings use
+`width` cells, `depth: 1`, and `forward`/`backward`, with implicit wrapping.
+Hexes use axial coordinates, `radius`, `width: 1`, and `depth: 1`; ordinals
+follow ascending r then q. Hex directions are `E`, `NE`, `NW`, `W`, `SW`, `SE`.
+All shapes still carry the registry's required `origin` and `cellSize` fields.
+Missing board entries read as the declared `empty` value. Wrapped scans stop
+before revisiting their origin.
+
+Rule operands accept these bounded channels:
+
+| Channel | Result |
+|---|---|
+| `$board:neighbour:<row>:<direction>` | Neighbour ordinal, or -1 at the edge |
+| `$board:rayCell:<row>:<direction>` | First nonempty cell ordinal, or -1 |
+| `$board:rayDistance:<row>:<direction>` | Distance to that cell, or -1 |
+| `$board:line:<row>:<length>:<value>:<exact\|atLeast>` | 1 when a matching line exists, otherwise 0 |
+| `$board:pathCost:<row>:<target>:<maxCost>:<maxVisits>` | Minimum terrain entry cost, -1 when unreachable/unaffordable, -2 when the visit budget is exhausted |
+| `$phase:<row>:<current\|active\|ready\|sequence\|round\|deadline>` | Persisted phase fact; active is -1 outside sequential phases |
+
+Board operands use the ordinary predicate/source `key` for their origin,
+including the existing `$cell:` dynamic-key form; `line` accepts no key.
+Path search uses all topology neighbours, including grid diagonals, at the
+destination cell's entry cost. Negative terrain is impassable. Equal-cost
+nodes settle by ordinal; the visit bound counts settled nodes. A path budget
+refusal is distinct from proof that no route exists.
+
+`tokens: { "capacity": 256 }` declares stable token identities. `keysFrom`
+restricts an attribute row to those identities; `valuesFrom` additionally
+restricts integer positions to a named topology. A `zone: { "tokens": "cards",
+"ordered": true }` row contains boolean membership cells. For any domain
+with zones, every token belongs to exactly one zone. Cell order is pile order;
+two cards with equal ranks still have different keys. Dealt-generator masks
+are separate from these piles: each `drawDecks` mask is four 64-bit words,
+serialized as exactly 64 hexadecimal digits, and supports 256 dealt entries.
+
+The closed `transformState` effect and transaction step carry one of `transfer`,
+`setRay`, `moveToken`, `completePhase`, or `observe`. The same operation travels
+as the `TransformState` document mutation. Transfers preserve keys and accept
+`Key`, `First`, `Last`, or `Random` selectors; random selection names a
+redrawable integer `streamDraw` site. A cursor advances only with the committed
+transfer. `setRay` changes a nonempty run of `through` cells closed by `until`;
+it excludes the origin and terminator and refuses a broken bracket.
+`moveToken` checks all position rows over the topology for occupancy, searches
+within `maxVisits`, and debits the token's allowance atomically with its move.
+Every written row requires edit authority. Transaction preflight leaves no
+partial transfer, ray, cursor, allowance, or phase change after refusal.
+
+A `phase` row declares up to 32 authenticated participants and 32 named phases.
+`Sequential` activates participants in order; `Together` accepts actions until
+a participant becomes ready; `Resolution` admits only world-program completion.
+Readiness alone preserves `sequence`; changing activation or phase increments
+it. Returning to phase zero increments `round`. A timeout expires at its exact
+deadline tick and takes precedence over a player action at that tick; a world
+rule explicitly performs timeout completion. Timeout completion advances the
+phase, including when some participants remain unready. Rows with `phaseOf`
+require the corresponding guard on external gameplay transforms. Grant those
+players the `TransformState` mutation kind, leaving document authoring to the
+authority. Phase eligibility does not grant access to another player's units.
+
+`visibility: {}` opts a row into public literal observations. `readers` limits
+that audience to canonical authenticated principals; `readers: []` retains it
+at the authority. Row and cell restrictions intersect. Hidden entries are
+omitted, including their keys and pile positions, and token attributes inherit
+their containing zone's restrictions. An absent policy preserves the existing
+absence of raw state from presentation documents. This is an observation
+payload, not a partial executable authority document. `StateObservations(row)`
+queries require `observe state:<row>` and apply the submission's stamped
+principal. Public federation observers receive public observations;
+`Replica` is an explicitly trusted authority tier and retains the full document.
+Presentation bindings into restricted state fail closed before flattening.
+
+For remembered fog, a board's `knowledge: { "source": "truth", "mask": "sight" }`
+names a compatible source board and boolean visibility board. An authority-only
+`observe` transform copies currently visible values, stamps their last-seen
+tick, and marks previously known cells outside sight as no longer visible.
+Unseen cells remain absent; remembered values never refresh from hidden truth.
+Rules author the visibility mask and refresh cadence. This does not generate
+line of sight or render a tactical UI automatically.
+
+Private random transfers can use `draw.secret`, a nonzero 256-bit key provisioned
+by the authority before simulation. This selects cursor-addressed HMAC-SHA256
+samples for integer `streamDraw` sites; ordinary generators keep their PCG
+contract. Use a fresh unpredictable secret per game and keep authority saves,
+replays, and replica access private. The simulation draws no system entropy.
+No hidden keys, generator definitions, cursors, or dealt masks enter observation
+payloads. Publicly authored seeds alone are unsuitable for hidden deals.
+
+The [tabletop state fixture](../../tests/Puck.World.Canaries/tabletop-state/fixture.world.json)
+and its [positive script](../../tests/Puck.World.Canaries/tabletop-state/positive.script.txt)
+exercise movement, pile order, ray flips, phase progression, and replay through
+the real headless application. The [control script](../../tests/Puck.World.Canaries/tabletop-state/discriminating.script.txt)
+checks that an occupied destination spends nothing. Complex scoring remains
+an addon concern; these operators introduce no scripts, recursion, or open loops.
+
 ## The dependency firewall
 
 `Puck.World.Schema` references only `Puck.Abstractions`, `Puck.Assets`,
@@ -66,7 +171,7 @@ Every validation path is covered without this project ever naming `Puck.Input`,
 
 A handful of files carry the `Puck.World.Protocol` namespace despite
 physically living in this project: `WorldAdmission.cs`, `WorldAdmissionDoor.cs`,
-`WorldGrant.cs`, `WorldPrincipal.cs`, `PlayerIntent.cs`, `ChannelPolicy.cs`,
+`WorldGrant.cs`, `WorldPrincipal.cs`, `WorldEntityAddress.cs`, `PlayerIntent.cs`, `ChannelPolicy.cs`,
 `MutationKindMask.cs`, `MutationKindVocabularyHook.cs`, and
 `WorldDocumentWriteMask.cs`. These types are document-embedded (a grant row,
 a principal, a channel value ride inside `WorldDefinition` itself) but were
@@ -94,8 +199,8 @@ floor, no scenery or crowd, four anchored camera eyes and a `sheet` layout)
 reached with `--world` or through the nexus's mapped archway. Five quilt
 documents (`quilt-nw`, `quilt-ne`, `quilt-se`, `quilt-sw`, and `quilt-island`)
 are non-game adjacency/federation stress content — each a `basis` delta over
-the `quilt-base` template (see "Document composition" below). Every one of
-them layers over `standard.world.json`, the standard library document. The movement platform
+the `quilt-base` template (see "Document composition" below). Reusable defaults
+live in `standard.basis.json`. The movement platform
 every kit rides is documented on its kit's `WorldMotion`
 row (`Speed`/`Turn`, `MoveFrame`/`FacingSnap`), the
 frame its MoveAdvance/MoveStrafe channel rows are authored in
@@ -617,7 +722,7 @@ through the same one mask, so `withoutReplacement` on a ring is "every node of
 the ring once per pass". An alternative or
 outcome may declare `count`: under a deck mode it is that many cards per pass
 (an outcome that should come out twice per pass declares `2`), under
-`withReplacement` it only scales the weight; a set's cards total at most 64,
+`withReplacement` it only scales the weight; a set's cards total at most 256,
 one deck-mask bit each. Each shape reads a disjoint field set, and a foreign
 field is refused BY NAME rather than parsed and ignored — including `bound` and
 `mode`, which are non-nullable and so are refused against their declared
@@ -904,8 +1009,7 @@ creation through record-sharing.
 row, or wheel may name its group literally or with the same
 `state.<row>[.<key>]` grammar. The referenced Text cell holds the group name
 directly, so all linked rows can share one value—for example,
-`"group": "state.bindingGroups.defaultActionGroup"`, which is what
-`standard.world.json` authors. Changing that cell
+`"group": "state.bindingGroups.defaultActionGroup"`. Changing that cell
 renames every consumer together, then recomposes and validates the complete
 binding profile before the mutation is accepted.
 
@@ -932,11 +1036,229 @@ door the other walks around.
 ## The `rules` document — the per-body action primitive, one level up
 
 `WorldRules.cs` holds the optional `rules` section. A `WorldRule` is
-`(Name, Gate, Effects, Mode)` over the same `ActionPredicate`, `ActionEffect` and
+`(Name, Gate, Effects, Mode, ForEach, Decision)` over the same `ActionPredicate`, `ActionEffect` and
 `ActionTriggerMode` types a kit's per-body actions use. `WorldRuleCompiler`
 checks the world-scope subset at the document or mutation boundary. Gates admit
-`all`, `any`, `not`, and `compareState`; they compile to a bounded postfix
+`all`, `any`, `not`, `compareState`, and `compareValue`; they compile to a bounded postfix
 Boolean program, so nested logic does not allocate or recurse during a tick.
+
+### Decision policies
+
+A rule's optional `decision` chooses among named alternatives. It uses the same
+predicates, numeric expressions, effects, and `$each` binding as other rules:
+filter out ineligible options, evaluate their scores, then select a winner.
+For example, this rule writes a declared integer `activity` row when its choice
+changes:
+
+```json
+{
+  "name": "choose-activity",
+  "effects": [],
+  "decision": {
+    "periodSeconds": 0.1,
+    "commitmentSeconds": 0.5,
+    "mode": "Weighted",
+    "scoreKind": "Int",
+    "seed": 7,
+    "options": [
+      {
+        "name": "rest",
+        "score": { "tokens": [{ "$type": "constant", "value": 1 }] },
+        "effects": [{ "$type": "setState", "state": "activity", "value": 0 }]
+      },
+      {
+        "name": "explore",
+        "score": { "tokens": [{ "$type": "constant", "value": 3 }] },
+        "effects": [{ "$type": "setState", "state": "activity", "value": 1 }]
+      }
+    ]
+  }
+}
+```
+
+`HighestScore` picks the greatest eligible score, including negative scores;
+ties use option order. `Weighted` uses positive scores as relative weights.
+Zero or negative weights cannot win, and an all-ineligible decision chooses
+nothing. An invalid arithmetic expression excludes that option for that
+reconsideration. `scoreKind` is `Int` or `Fixed` (the default); expression
+operands must match it, without implicit numeric casts.
+
+The first evaluation is immediate. Later evaluations wait `periodSeconds` and
+the current choice's `commitmentSeconds`, rounded to the next simulation
+boundary; they do not catch up by executing several choices in one step.
+Durations must be exact whole engine-tick counts. The optional `interrupt`
+predicate bypasses both timers on a **rising edge**, not every tick it remains
+true. The current option losing its eligibility gate also bypasses both.
+`incumbentBonus` adds a bounded preference for staying; in weighted mode it
+does not revive a non-positive weight. Keeping the same choice does not renew
+commitment or repeat entry effects.
+
+Decision rules require ordinary rule mode `Level`; the choice policy owns
+their timing. Common rule effects run before option effects, only on a
+selection transition. Either list may be empty. `onNoChoice` runs when an
+enabled decision first finds no choice, loses its choice, or its enclosing
+gate closes while a choice is held. Closing that gate clears the choice, not
+its random history. Selection records intent: effects keep ordinary
+transaction/refusal semantics, so a selected option does not imply every
+effect succeeded.
+
+Each rule binding owns its reproducible random state. Other decisions and
+their evaluation order do not consume its draws. A weighted choice with
+multiple positive options uses one 64-bit ticket (two PCG32 draws); this bounds
+work without a rejection loop, with probability quantization below 2^-64 per
+option. A deterministic choice, no choice, or one positive option consumes no
+draws. Numeric aliases of the same `forEach` key evaluate once. Removing a
+binding, replacing a body generation, or changing the source policy starts a
+new decision episode; unrelated recompilation retains the episode and refreshes
+its compiled state handles.
+
+An option may expand into nearby individuals through `neighbors`. The enclosing
+rule must name a numeric keyed `forEach` row whose keys identify observers.
+Only this option's gate, score, and effects gain `left` (observer) and `right`
+(candidate) body references, or `$left`/`$right` state keys; `$each` still names
+the observer. Common effects, the enclosing gate, `interrupt`, `onNoChoice`,
+and options without `neighbors` do not gain these bindings. Inactive or non-body
+observer keys have no nearby candidates but can still choose a fixed option.
+
+For example, inside an option, this declaration considers at most eight nearby
+individuals from at most 32 inspected points per reconsideration:
+
+```json
+"neighbors": {
+  "range": 20,
+  "candidateBudget": 32,
+  "maxCandidates": 8,
+  "halfAngleDegrees": 180,
+  "requiresLineOfSight": false,
+  "retainCurrent": true
+}
+```
+
+The option can score a social query from `left` to `right`, then enter with
+`{"$type":"designateBody","key":"$each","register":"companion","kind":"Body","targetKey":"$right"}`.
+The register must be declared, and a producer must consume it to cause movement.
+A fixed "alone" option can clear the same register. This selects a movement
+companion, not friendship or membership in a social group.
+
+`maxCandidates` is 1..32, no greater than `candidateBudget`; the inspection
+budget is 1..the body-capacity ceiling. Range is inclusive, from 1/65536 through
+1,000,000 world units, and the forward half-angle is in (0,180]. Coincident
+individuals remain perceptible. Each option uses a rotating sample of nearby
+grid cells, then retains the nearest eligible sampled individuals. Self,
+rejections, and repeated inspection of an incumbent all consume budget; this
+is not a globally best-neighbor search. Decision sample phases reverse the low
+bits within population-sized power-of-two blocks, exploring distant portions
+first without consuming choice randomness. The spatial sampler separates cell
+rotation from occupant rotation so a one-inspection budget cannot lock onto only
+one residue class of occupants. Poses are frozen before ordinary rules
+run. State gates and solid-field sight queries retain ordinary same-tick semantics.
+
+By default, `retainCurrent` spends one inspection explicitly rechecking the
+current individual. If perceptible and gate-eligible, it occupies one retained
+slot; a budget of one may therefore spend all attention on that individual.
+Disabling retention lets the rotating sample replace an unobserved incumbent.
+Range, cone, and sight refresh on reconsideration, not every held tick. A lost
+incarnation or closed candidate gate interrupts commitment immediately.
+The selected incarnation, not just its body slot, is saved and hashed.
+
+Within an option, stable body index breaks score ties and orders weighted
+ticket intervals. Each individual is a separate weighted alternative: an option
+with more eligible individuals can receive more total probability. The incumbent
+bonus applies only to the exact option/individual pair. Switching individuals
+repeats entry effects and renews commitment; retaining the same one does neither.
+Perception scratch and range-level grids are reused; `world.decisions` exposes
+image size, grid builds, inspections, score evaluations, sight tests, and limited
+queries. `world.budget` charges candidate gates and expanded scores, even when
+ordinary cadence would usually spread them across ticks. It also charges one
+shared pose-image visit per population slot and two point visits per grid
+rebuild (copying and grouping). The cost sheet separately reports the maximum
+poses copied, distinct range-scale grids rebuilt, and total grid points sorted.
+Those ceilings assume simultaneous reconsideration; sharing a range scale does
+not charge a new grid per option or observer. Structural work units are not a
+CPU-time or sort-comparison bound: whole-frame performance still needs measurement.
+
+`world.decisions` reports choices, last evaluated raw scores, timers, and draw
+counts. `world.budget` includes all option gates/scores, the current-option and
+interrupt checks, and the greatest effect branch in its conservative per-tick
+cost. A policy has at most 32 options. Decision state is checkpointed and hashed;
+render-frame timing never drives it. These are world-authority rules: using
+them for limited creature knowledge requires scoring the creature's observed
+state, not unrestricted world facts.
+
+### Social evidence and belief queries
+
+`state.social` is an optional memory policy. It declares named dimensions such
+as helpfulness or navigation competence, with independent bounds, baselines,
+learning rates, uncertainty, and memory/work limits. It does not make creatures
+omniscient or infer their personality. For example, add this member to `state`:
+
+```json
+"social": {
+  "dimensions": [{ "name": "helpfulness", "maximumChange": 0.25 }],
+  "impressionCapacity": 65536,
+  "impressionsPerObserver": 256,
+  "receiptCapacity": 65536,
+  "evidenceAttemptsPerTick": 1024,
+  "expiredReceiptsPerTick": 1024,
+  "evidenceLifetimeSeconds": 60
+}
+```
+
+Every relationship names an observer, a subject, and a dimension. An individual
+reference contains exactly one of `body` (the ordinary rule grammar, including
+`body:0`, `each`, `left`, `right`, `cell:row:key`, or `argmax:row`) and `identity`
+(`authority`, `index`, `generation`). Live bodies resolve to their original
+mobility incarnation; literal identities remain usable while absent. An
+inactive body is unresolved, not the previous occupant.
+
+An `observeSocial` effect carries `evidence`: a `relationship`, an event
+`origin`, an `aspect` such as `help.attempt`, and numeric expressions for
+`sequence`, `occurredAt`, `value`, and optional `quality`. Sequence and original
+occurrence time are non-negative Int values; time uses engine ticks, with
+`socialClock` supplying the current clock. Value and quality are Fixed;
+quality defaults to one. Optional `source` makes the evidence a report rather
+than direct observation. Relays preserve the original event identity and time.
+Rules must explicitly gate perception; an effect is a delivery, not a sensor.
+`forgetSocial` takes a relationship and removes its impression without erasing
+unexpired duplicate receipts. These effects are world-only and cannot be state
+transaction steps.
+
+The expression token below reads one belief. Its `query.facet` defaults to
+`Value`; `Value`, `Confidence`, `Uncertainty`, and `Weight` produce Fixed values.
+`Known`, `EventCount`, and `Age` produce Int values (Age is engine ticks).
+An unknown valid identity reads the authored baseline with zero confidence;
+an unresolved body reads zero for every facet. Check `Known` when that distinction
+matters. EventCount and Age saturate at Int64.MaxValue.
+
+```json
+{
+  "$type": "social",
+  "query": {
+    "relationship": {
+      "observer": { "body": "each" },
+      "subject": { "body": "body:0" },
+      "dimension": "helpfulness"
+    },
+    "facet": "Confidence"
+  }
+}
+```
+
+Social queries work in ordinary numeric effects and decision scores.
+`compareValue` compares `left` and `right` expressions using a `comparison`
+and one explicit `kind` (`Int` or `Fixed`, default Fixed). Kind mismatches
+refuse compilation; failed arithmetic closes the predicate. `socialResult`
+returns the last evidence/forgetting outcome as an Int ordinal, or -1 before
+an attempt. Sequential effects can store it in an authored row for branching.
+The outcome enum and memory semantics live in the
+[server contract](../Puck.World.Server/README.md#social-memory-component).
+
+`world.social [<query-json>]` is an operator read-back under `Observe/all`.
+Its query uses the same shape as the token's `query`, but cannot use rule-local
+bindings. No argument reports policy and work. Memory is runtime state, carried
+by authority checkpoints and hashes rather than public document cells.
+
+### World-rule state effects
 
 The state effects are `setState`, `addState`, `countdownState`,
 `removeStateCell`, `scheduleState`, and `transaction`. Rules may also generate a
@@ -1084,7 +1406,8 @@ Rule execution has three independent ceilings: 128 ordinary rules, 64 top-level
 effects per rule/interaction, and 1,000,000 statically derived work units per
 tick. The cost includes gate/expression operands, keyed scans, `forEach`, the
 quadratic worst case of distance interactions, mutation rebuild weights, nested
-transaction preflight, and field-paint candidate visits. Validation refuses a
+transaction preflight, field-paint candidate visits, and flock-affinity expressions
+for every body's worst-case simultaneous initial sample. Validation refuses a
 document above the aggregate ceiling; `world.budget` prints the current rule,
 interaction, evaluation-slot, and work-unit totals. Interaction `range` is an
 exact JSON decimal lowered directly to fixed point, with no binary32 round trip.
@@ -1109,6 +1432,55 @@ mutation (`UpsertWorldRule`/`RemoveWorldRule`, `Mutate`/`section:rules`); a
 rule's own EFFECTS act as `WorldPrincipal.World`, which the server's admission
 predicate exempts STRUCTURALLY — the same standing a per-body `ActionEffect`
 always had.
+
+### Social flock affinities
+
+A flock profile can prefer particular neighbors without assigning one universal
+friendship score. `cohesionAffinity` weights neighbors in the attraction centroid;
+`alignmentAffinity` independently weights their headings. For example, add these
+optional fields to a kit producer's `flock` profile to stay near affectionate
+companions while following demonstrated navigation competence:
+
+```json
+{
+  "cohesionAffinity": {
+    "tokens": [{ "$type": "social", "query": {
+      "relationship": {
+        "observer": { "body": "left" }, "subject": { "body": "right" },
+        "dimension": "affection"
+      }, "facet": "Value"
+    }}]
+  },
+  "alignmentAffinity": {
+    "tokens": [{ "$type": "social", "query": {
+      "relationship": {
+        "observer": { "body": "left" }, "subject": { "body": "right" },
+        "dimension": "navigation-competence"
+      }, "facet": "Value"
+    }}]
+  }
+}
+```
+
+Declare those dimensions in `state.social`; the names have no engine-defined
+meaning. Expressions may combine Fixed social facets, Fixed state cells and
+state-backed reductions/symmetry with ordinary postfix arithmetic. `left` is
+the observer and `right` the sampled neighbor; state keys use `$left`/`$right`.
+`each` is unavailable. Movement-dependent world facts are refused so every body
+reads the same state/social image during a movement pass.
+
+Absent expressions give uniform weight one. Each result clamps to [0,1], with
+arithmetic failure reading zero. Negative affection therefore means no cohesion
+in this example, not repulsion. Authors can use arithmetic to remap a dimension,
+or multiply by `Confidence` when unknown individuals should have no influence.
+The expressions refresh with `updateSeconds` and keep the ordinary perception
+limits: they neither grant omniscient sensing nor enlarge the inspected sample.
+Zero affinity does not disable separation. These are relative mean weights;
+the profile's outer `cohesion` and `alignment` still set each term's strength.
+`world.flock` echoes the expressions and counters, and `world.budget` includes
+their conservative cost in the shared 1,000,000-unit admission ceiling.
+Runtime sampling and checkpoint semantics live in the
+[server reference](../Puck.World.Server/README.md#local-flock-steering).
 
 ## The `probes` section — probe and binding rows
 

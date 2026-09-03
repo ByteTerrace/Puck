@@ -6,6 +6,20 @@ using Puck.World.Server;
 namespace Puck.World.Tests;
 
 public sealed class WorldAuthorityCheckpointLawTests {
+    [Fact]
+    public void CurrentContractsRemainVersionOneAndRejectAnotherCheckpointVersion() {
+        using var fixture = Fixtures.FreshServer();
+        Assert.True(fixture.Server.TryCaptureCheckpoint(checkpoint: out var checkpoint, reason: out var reason, hostRow: EmptyHostRow()), reason);
+        var bytes = WorldAuthorityCheckpointCodec.Encode(checkpoint!);
+        Assert.Equal((ushort)1, System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(4)));
+        Assert.Equal(0x314C52574B435550UL, WorldProtocol.WireProtocolKey);
+        Assert.Equal(0x314445464B435550UL, WorldFederationCodec.WireKey);
+        Assert.True(WorldAuthorityCheckpointCodec.TryDecode(bytes, out _, out reason), reason);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(4), 2);
+        Assert.False(WorldAuthorityCheckpointCodec.TryDecode(bytes, out _, out reason));
+        Assert.Contains("version 2", reason);
+    }
+
     private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
         AnnouncedCrossingHolds: [],
         AppliedTransferHighWater: null,
@@ -112,8 +126,8 @@ public sealed class WorldAuthorityCheckpointLawTests {
             b: restoredFinal
         ));
     }
-    // Discriminating control: corrupting one entry's Generation before restore must diverge the restored trajectory
-    // from the uninterrupted one — the restore path must actually consult the captured value, not silently ignore it.
+    // Discriminating control: an entry generation must agree with the full slot-generation image. Reject a
+    // corrupted entry before mutating the authority rather than silently accepting contradictory identities.
     [Fact]
     public void Activation_roundtrip_identity_control_corrupted_generation_reads_red() {
         using var fixture = Fixtures.FreshServer();
@@ -149,16 +163,11 @@ public sealed class WorldAuthorityCheckpointLawTests {
             screens: definition.Screens
         );
 
-        var (restoredServer, restoredPopulation) = WorldServer.FromCheckpoint(
+        Assert.Throws<InvalidOperationException>(() => WorldServer.FromCheckpoint(
             checkpoint: corrupted,
             instanceIdentity: "boot",
             machines: machines,
             profiles: FreshProfiles(definition: definition)
-        );
-
-        Assert.NotEqual(
-            expected: entries[0].Generation,
-            actual: restoredPopulation.Generation(index: entries[0].Index)
-        );
+        ));
     }
 }

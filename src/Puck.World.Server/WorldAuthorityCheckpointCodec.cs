@@ -9,8 +9,9 @@ namespace Puck.World.Server;
 /// carries no compat path), a <c>sha256-64</c> content pin of the whole framed body, then that body — itself a
 /// <c>sha256-64</c> pin of the captured definition JSON followed by the checkpoint's nine sections in the record's
 /// own declared order, each its own length-prefixed block. Journal entries and a buffered
-/// <see cref="WorldPendingOpCheckpoint.Mutate"/> op reuse <see cref="WorldSubmissionCodec"/>'s own mutation leaf
-/// verbatim; every embedded document (the definition, the base definition, an escrow lease's destination definition)
+/// <see cref="WorldPendingOpCheckpoint.Mutate"/> op reuse <see cref="WorldSubmissionCodec"/>'s own mutation leaf.
+/// Committed journal entries permit the canonical world actor through the trusted-storage entry point; pending
+/// external submissions retain the live actor restriction. Every embedded document (the definition, the base definition, an escrow lease's destination definition)
 /// reuses <see cref="WorldDefinitionSerialization.Serialize"/> bytes verbatim — this codec never re-serializes a
 /// document itself. Every read is bounded; every decoder — the outer envelope, the body, and each of the nine
 /// sections — asks its own <see cref="WireReader.TryFinish"/> exactly once, so a truncated or trailing-byte payload
@@ -22,11 +23,9 @@ public static partial class WorldAuthorityCheckpointCodec {
     private const int MaxHashChars = 128;
     private const int MaxSectionBytes = ((64 * 1024) * 1024);
     private const int MaxStringBytes = WireLimits.MaxStringBytes;
-    // Bump on EVERY wire-layout change; there is deliberately no compatibility reader. In particular,
-    // WritePrincipal/ReadPrincipal, WriteSubject/ReadSubject, and the capability leaf carry WorldWireTags's pinned
-    // bytes rather than raw enum ordinals, so a mapping change is a layout change too and must refuse by version
-    // instead of decoding a different principal, subject, or capability kind.
-    private const ushort SupportedVersion = 7;
+    // The first format is still under development. Change its shape directly; no compatibility reader or
+    // development-only version sequence is maintained.
+    private const ushort SupportedVersion = 1;
 
     private delegate T ReadItem<T>(ref WireReader reader);
     private delegate T ReadStructItem<T>(ref WireReader reader) where T : struct;

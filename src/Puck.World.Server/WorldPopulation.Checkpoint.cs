@@ -42,8 +42,18 @@ public sealed partial class WorldPopulation {
         WorldBody.TransferState DynamicState,
         WorldBody.IntegrationResidue Residue,
         WorldIdentityProjection? Profile,
-        WorldPopulationNavigationCheckpoint? Navigation = null
+        WorldPopulationNavigationCheckpoint? Navigation = null,
+        WorldPopulationFlockCheckpoint Flock = default
     );
+    /// <summary>Cached local perception, timing residue, and observer-local attention stream.</summary>
+    /// <param name="Seeded">Whether the neighbor contribution has been sampled for this producer.</param>
+    /// <param name="Generation">The occupant generation that owns the attention stream.</param>
+    /// <param name="Desired">The unclamped, weighted neighbor contribution; goal and heading are not cached.</param>
+    /// <param name="RemainingTicks">Engine ticks until the next perception update.</param>
+    /// <param name="SampleOrdinal">Observer-local rotating sample position.</param>
+    /// <param name="Target">Last bounded sensed-target observation; never a live target-pose reference.</param>
+    public readonly record struct WorldPopulationFlockCheckpoint(bool Seeded, int Generation, FixedVector3 Desired,
+        ulong RemainingTicks, ulong SampleOrdinal, WorldFlockObservation? Target = null);
     /// <summary>One body's cached deterministic route and producer binding.</summary>
     public readonly record struct WorldPopulationNavigationCheckpoint(
         int ActiveProducerDomainIndex,
@@ -55,7 +65,8 @@ public sealed partial class WorldPopulation {
         int[] Path
     );
     /// <summary>The population's own checkpointed state — see <see cref="Capture"/>.</summary>
-    public sealed record WorldPopulationCheckpoint(int SimulatedCount, int Revision, byte SeatKit, IReadOnlyList<WorldPopulationEntryCheckpoint> Entries);
+    public sealed record WorldPopulationCheckpoint(int SimulatedCount, int Revision, byte SeatKit, IReadOnlyList<WorldPopulationEntryCheckpoint> Entries,
+        int[] Generations, WorldNavigationSharedCheckpoint[]? SharedNavigation = null);
 
     /// <summary>Captures every active slot's simulation state. Asserts the per-tick pending-output lists are empty —
     /// guaranteed by <see cref="WorldServer.TryCaptureCheckpoint"/>'s capture point sitting between a completed
@@ -119,6 +130,9 @@ public sealed partial class WorldPopulation {
                 ProducerCurveArcRaw: entry.ProducerState.CurveArcRaw,
                 ProducerActiveName: entry.ProducerState.ActiveProducerName,
                 ProducerActiveCurveIndex: entry.ProducerState.ActiveProducerCurveIndex,
+                Flock: new WorldPopulationFlockCheckpoint(entry.ProducerState.FlockSeeded, entry.ProducerState.FlockGeneration,
+                    entry.ProducerState.FlockDesired, entry.ProducerState.FlockRemainingTicks, entry.ProducerState.FlockSampleOrdinal,
+                    entry.ProducerState.FlockTarget),
                 Position: body.FixedPosition,
                 Yaw: body.FixedYaw,
                 DynamicState: body.CaptureTransferState(),
@@ -138,6 +152,8 @@ public sealed partial class WorldPopulation {
 
         return new WorldPopulationCheckpoint(
             Entries: entries,
+            Generations: m_entries.Select(entry => entry.Generation).ToArray(),
+            SharedNavigation: m_navigation.CaptureShared(),
             Revision: m_revision,
             SeatKit: m_seatKit,
             SimulatedCount: m_simulatedCount
@@ -147,7 +163,7 @@ public sealed partial class WorldPopulation {
     /// this replaces the live table wholesale rather than merging onto it. A captured entry that is
     /// <see cref="Entry.IsRemoteHuman"/> and not already <see cref="Entry.Parked"/> is parked as of
     /// <paramref name="tick"/>, exactly as <see cref="ApplyPeerDisconnected"/> parks a live disconnect — the
-    /// connection that occupied it does not survive a restore (<see cref="WorldOutputHub"/>/<see cref="WorldTcpHost"/>
+    /// connection that occupied it does not survive a restore (<see cref="WorldOutputHub"/>/<see cref="WorldPeerHost"/>
     /// state is excluded from the checkpoint), so a captured non-parked remote human is always stale: nothing will
     /// ever again feed a fresh federated intent into that slot under this process's own tables. Only the BODY parks;
     /// the generation's grant rows are released by <c>WorldServer.RestoreCheckpoint</c> right after the grant table
@@ -161,6 +177,7 @@ public sealed partial class WorldPopulation {
         ArgumentNullException.ThrowIfNull(argument: defaults);
 
         ValidateCheckpoint(checkpoint: checkpoint);
+        m_navigation.RestoreShared(checkpoint.SharedNavigation);
 
         // Restore is replacement. All caller-controlled entry and route addresses were preflighted above, before
         // this destructive phase starts.
@@ -168,6 +185,12 @@ public sealed partial class WorldPopulation {
             var entry = m_entries[index];
 
             entry.Active = false;
+            entry.Generation = checkpoint.Generations[index];
+            entry.ProducerState = new BodyProducerState {
+                AcquiredTarget = -1,
+                ActiveProducerCurveIndex = -1,
+                ActiveProducerNavigationDomainIndex = -1,
+            };
             entry.Body = null;
             entry.Parked = false;
             entry.ParkedUntilTick = null;
@@ -253,7 +276,17 @@ public sealed partial class WorldPopulation {
                 Phase = captured.ProducerPhase,
                 PreferredAltitude = captured.ProducerPreferredAltitude,
                 WeaveFrequency = captured.ProducerWeaveFrequency,
+                FlockSeeded = captured.Flock.Seeded,
+                FlockGeneration = captured.Flock.Generation,
+                FlockDesired = captured.Flock.Desired,
+                FlockRemainingTicks = captured.Flock.RemainingTicks,
+                FlockSampleOrdinal = captured.Flock.SampleOrdinal,
+                FlockTarget = captured.Flock.Target,
             };
+            var producerKit = captured.Index < LocalSeatCount ? checkpoint.SeatKit : captured.KitIndex;
+            if (captured.ProducerActiveName is { } activeName && m_kits[producerKit].Producers.TryGetValue(activeName, out var binding)) {
+                entry.ProducerState.FlockBinding = binding;
+            }
             if (captured.Navigation is { } navigation) {
                 entry.NavigationState.DomainIndex = navigation.DomainIndex;
                 entry.NavigationState.GoalCell = navigation.GoalCell;
@@ -298,6 +331,10 @@ public sealed partial class WorldPopulation {
     /// <summary>Preflights caller-controlled population and route addresses without mutating live state.</summary>
     internal void ValidateCheckpoint(WorldPopulationCheckpoint checkpoint) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
+        m_navigation.ValidateShared(checkpoint.SharedNavigation);
+        if (checkpoint.Generations is null || checkpoint.Generations.Length != Capacity || checkpoint.Generations.Any(generation => generation < 0)) {
+            throw new InvalidOperationException("population checkpoint must carry every slot's nonnegative generation.");
+        }
 
         var restored = new bool[Capacity];
         foreach (var captured in checkpoint.Entries) {
@@ -308,6 +345,19 @@ public sealed partial class WorldPopulation {
                 throw new InvalidOperationException(message: $"population checkpoint repeats entry index {captured.Index}.");
             }
             restored[captured.Index] = true;
+            if (captured.Generation != checkpoint.Generations[captured.Index]) {
+                throw new InvalidOperationException("population checkpoint entry generation disagrees with the slot image.");
+            }
+            if (captured.Flock.RemainingTicks > 120UL * FixedTickConversion.TicksPerSecond ||
+                captured.Flock.Desired.Length > FixedQ4816.FromDouble(3.0001) ||
+                (captured.Flock.Seeded && captured.Flock.Generation != captured.Generation)) {
+                throw new InvalidOperationException("population checkpoint carries invalid flock steering or cadence state.");
+            }
+            if (captured.Flock.Target is { } observed &&
+                ((uint)observed.Index >= (uint)Capacity || observed.Index == captured.Index || observed.Generation < 0 ||
+                 observed.Generation > checkpoint.Generations[observed.Index])) {
+                throw new InvalidOperationException("population checkpoint carries an invalid flock target observation.");
+            }
             ValidateNavigationCheckpoint(navigation: captured.Navigation);
         }
     }
@@ -342,6 +392,12 @@ public sealed partial class WorldPopulation {
         }
 
         var domain = m_navigation[state.DomainIndex];
+        if (domain.Sharing is null && state.Status is WorldNavigationStatus.Pending or WorldNavigationStatus.CapacityLimited) {
+            throw new InvalidOperationException(message: "population checkpoint shared navigation status requires a shared domain.");
+        }
+        if (domain.Sharing is not null && state.ExpandedLast != 0) {
+            throw new InvalidOperationException(message: "population checkpoint shared search work belongs to its domain, not a body.");
+        }
         if (state.ActiveProducerDomainIndex != state.DomainIndex) {
             throw new InvalidOperationException(message: $"population checkpoint route domain {state.DomainIndex} does not match active producer domain {state.ActiveProducerDomainIndex}.");
         }
@@ -358,7 +414,7 @@ public sealed partial class WorldPopulation {
             throw new InvalidOperationException(message: $"population checkpoint navigation waypoint {state.Waypoint} lies outside its {state.Path.Length}-node path.");
         }
         if (state.Path.Length == 0) {
-            if (state.Status is not (WorldNavigationStatus.Unreachable or WorldNavigationStatus.SearchLimit or WorldNavigationStatus.PathLimit)) {
+            if (state.Status is not (WorldNavigationStatus.Unreachable or WorldNavigationStatus.SearchLimit or WorldNavigationStatus.PathLimit or WorldNavigationStatus.Pending or WorldNavigationStatus.CapacityLimited)) {
                 throw new InvalidOperationException(message: $"population checkpoint navigation status '{state.Status}' requires a stored path.");
             }
         } else {

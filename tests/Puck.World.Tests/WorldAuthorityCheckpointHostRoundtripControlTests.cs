@@ -375,13 +375,10 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
             expected: WorldTransferStatus.Reserved
         );
     }
-    // Control 7 — restore with CommitMembers emptied: RestoreRow's own member-count check (WorldInstanceHost's own
-    // remarks — a retried Commit's member-count mismatch would otherwise release the destination's lease as a side
-    // effect of refusing, silently rolling the whole transfer back) refuses to re-materialize the entry, by name, on
-    // the source row's own state channel, before any live call.
+    // A malformed retry payload must refuse the host restore before any installed state or live peer call changes.
     [Fact]
     public void Control_EmptiedCommitMembers_RestoreRefusesByName() {
-        var (host, rowA, rowB, machineId, _) = HostRoundtripFixture.BuildInDoubtScenario();
+        var (host, rowA, rowB, _, _) = HostRoundtripFixture.BuildInDoubtScenario();
         using var disposeA = rowA;
         using var disposeB = rowB;
 
@@ -397,39 +394,10 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
             },
         };
         var decodedA = HostRoundtripFixture.EncodeDecode(checkpoint: emptiedA);
-        var decodedB = HostRoundtripFixture.EncodeDecode(checkpoint: checkpointB);
-
-        var originalError = Console.Error;
-        using var captured = new StringWriter();
-
-        Console.SetError(newError: captured);
-
-        WorldInstanceHost restoredHost;
-        HostRow restoredA;
-        HostRow restoredB;
-
-        try {
-            (restoredHost, restoredA, restoredB) = HostRoundtripFixture.RestoreBoth(checkpointA: decodedA, checkpointB: decodedB, machineId: machineId);
-        } finally {
-            Console.SetError(newError: originalError);
-        }
-
-        using var disposeRestoredA = restoredA;
-        using var disposeRestoredB = restoredB;
-
-        Assert.Contains(
-            actualString: captured.ToString(),
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "commit member count"
-        );
-        // The refused entry never entered m_inDoubtTransfers, so a full tail never resolves it — the destination's
-        // reservation is left exactly as Control_DroppedInDoubtEntry_LeaksTheReservationAndLosesTheBody's own.
-        for (var tick = 0; (tick < 50); tick++) {
-            restoredHost.DrainPendingTransfers();
-            restoredHost.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
-        }
-
-        Assert.False(condition: restoredA.Server.Population.IsActive(index: 0));
-        Assert.False(condition: restoredB.Server.Population.IsActive(index: 0));
+        var error = Assert.Throws<ArgumentException>(() => host.RestoreRow(rowA.Instance, decodedA.HostRow));
+        Assert.Contains("commit member count", error.Message, StringComparison.Ordinal);
+        var (afterA, afterB) = HostRoundtripFixture.CaptureBoth(host, rowA, rowB);
+        Assert.Equal(WorldAuthorityCheckpointCodec.Encode(checkpointA), WorldAuthorityCheckpointCodec.Encode(afterA));
+        Assert.Equal(WorldAuthorityCheckpointCodec.Encode(checkpointB), WorldAuthorityCheckpointCodec.Encode(afterB));
     }
 }

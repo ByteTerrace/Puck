@@ -2704,6 +2704,337 @@
       ],
       "additionalProperties": false
     },
+    "WorldValueTokenConstant": {
+      "description": "An exact authored decimal, converted to the destination row\u0027s numeric kind at compile time.",
+      "properties": {
+        "$type": {
+          "const": "constant"
+        },
+        "value": {
+          "description": "The exact decimal literal.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "WorldValueTokenState": {
+      "description": "A live state cell or reserved world-rule channel.",
+      "properties": {
+        "$type": {
+          "const": "state"
+        },
+        "name": {
+          "description": "The state row or reserved-channel name.",
+          "type": "string"
+        },
+        "key": {
+          "description": "The optional keyed-row cell.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "WorldEntityAddress": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "authority": {
+          "type": "string"
+        },
+        "index": {
+          "type": "integer"
+        },
+        "generation": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldSocialEntityReference": {
+      "description": "Exactly one way to name an individual: a live body reference resolved to its mobility incarnation, or a literal stable identity that remains addressable while absent.",
+      "type": "object",
+      "properties": {
+        "body": {
+          "description": "The ordinary world-rule body-reference grammar, such as body:0, each, or cell:row:key.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "identity": {
+          "$ref": "#/$defs/WorldEntityAddress",
+          "description": "An original authority/index/generation address, not a current transfer destination.",
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldSocialRelationship": {
+      "description": "One directed contextual relationship, shared by queries, evidence, and forgetting.",
+      "type": "object",
+      "properties": {
+        "observer": {
+          "$ref": "#/$defs/WorldSocialEntityReference",
+          "description": "The individual whose belief is addressed."
+        },
+        "subject": {
+          "$ref": "#/$defs/WorldSocialEntityReference",
+          "description": "The individual the belief concerns."
+        },
+        "dimension": {
+          "description": "The exact dimension name declared in state.social.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "observer",
+        "subject",
+        "dimension"
+      ],
+      "additionalProperties": false
+    },
+    "WorldSocialFacet": {
+      "description": "One numeric view of a remembered impression.",
+      "enum": [
+        "Value",
+        "Confidence",
+        "Uncertainty",
+        "Weight",
+        "Known",
+        "EventCount",
+        "Age"
+      ]
+    },
+    "WorldSocialQuery": {
+      "description": "A read-only belief query. Unknown valid identities return the authored baseline and zero confidence; an inactive body reference is unresolved and cannot inherit a former occupant\u0027s belief.",
+      "type": "object",
+      "properties": {
+        "relationship": {
+          "$ref": "#/$defs/WorldSocialRelationship"
+        },
+        "facet": {
+          "$ref": "#/$defs/WorldSocialFacet",
+          "default": "Value"
+        }
+      },
+      "required": [
+        "relationship"
+      ],
+      "additionalProperties": false
+    },
+    "WorldValueTokenSocial": {
+      "description": "A directed impression query, with its facet\u0027s declared numeric kind.",
+      "properties": {
+        "$type": {
+          "const": "social"
+        },
+        "query": {
+          "$ref": "#/$defs/WorldSocialQuery"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "additionalProperties": false
+    },
+    "WorldValueTokenSocialClock": {
+      "description": "The social bank\u0027s current engine tick, Int saturated at Int64.MaxValue.",
+      "properties": {
+        "$type": {
+          "const": "socialClock"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldValueTokenSocialResult": {
+      "description": "The last social evidence result ordinal, Int; -1 before any attempt. Rule effects execute in document order.",
+      "properties": {
+        "$type": {
+          "const": "socialResult"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldValueTokenAdd": {
+      "description": "Consumes two values and pushes their sum.",
+      "properties": {
+        "$type": {
+          "const": "add"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldValueTokenSubtract": {
+      "description": "Consumes two values and pushes left minus right.",
+      "properties": {
+        "$type": {
+          "const": "subtract"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldValueTokenMultiply": {
+      "description": "Consumes two values and pushes their product in the destination row\u0027s numeric domain.",
+      "properties": {
+        "$type": {
+          "const": "multiply"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldValueTokenDivide": {
+      "description": "Consumes two values and pushes left divided by right; zero fails evaluation. The caller closes a gate, rejects an effect/decision candidate, or supplies zero affinity according to its own contract.",
+      "properties": {
+        "$type": {
+          "const": "divide"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldValueTokenMin": {
+      "description": "Consumes two values and pushes the lesser.",
+      "properties": {
+        "$type": {
+          "const": "min"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldValueTokenMax": {
+      "description": "Consumes two values and pushes the greater.",
+      "properties": {
+        "$type": {
+          "const": "max"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldValueTokenClamp": {
+      "description": "Consumes value, minimum, maximum (in that authored order) and pushes the inclusive clamp.",
+      "properties": {
+        "$type": {
+          "const": "clamp"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldValueToken": {
+      "description": "One authored token in a WorldValueExpression.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WorldValueTokenConstant"
+        },
+        {
+          "$ref": "#/$defs/WorldValueTokenState"
+        },
+        {
+          "$ref": "#/$defs/WorldValueTokenSocial"
+        },
+        {
+          "$ref": "#/$defs/WorldValueTokenSocialClock"
+        },
+        {
+          "$ref": "#/$defs/WorldValueTokenSocialResult"
+        },
+        {
+          "$ref": "#/$defs/WorldValueTokenAdd"
+        },
+        {
+          "$ref": "#/$defs/WorldValueTokenSubtract"
+        },
+        {
+          "$ref": "#/$defs/WorldValueTokenMultiply"
+        },
+        {
+          "$ref": "#/$defs/WorldValueTokenDivide"
+        },
+        {
+          "$ref": "#/$defs/WorldValueTokenMin"
+        },
+        {
+          "$ref": "#/$defs/WorldValueTokenMax"
+        },
+        {
+          "$ref": "#/$defs/WorldValueTokenClamp"
+        }
+      ]
+    },
+    "WorldValueTokenList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/WorldValueToken"
+      }
+    },
+    "WorldValueExpression": {
+      "description": "A bounded postfix numeric expression evaluated by a world rule, decision, or flock affinity. Each token either pushes a value or consumes preceding values; the compiler proves stack shape and numeric kind before simulation begins.",
+      "type": "object",
+      "properties": {
+        "tokens": {
+          "$ref": "#/$defs/WorldValueTokenList",
+          "description": "The postfix tokens, in evaluation order."
+        }
+      },
+      "required": [
+        "tokens"
+      ],
+      "additionalProperties": false
+    },
+    "ActionPredicateCompareValue": {
+      "description": "World-scope comparison of two bounded numeric expressions. Arithmetic failure makes this comparison false.",
+      "properties": {
+        "$type": {
+          "const": "compareValue"
+        },
+        "left": {
+          "$ref": "#/$defs/WorldValueExpression",
+          "description": "Left numeric expression."
+        },
+        "comparison": {
+          "$ref": "#/$defs/ActionStateComparison",
+          "description": "The comparison operation."
+        },
+        "right": {
+          "$ref": "#/$defs/WorldValueExpression",
+          "description": "Right numeric expression."
+        },
+        "kind": {
+          "description": "The common Int or Fixed domain; no implicit conversion is performed.",
+          "enum": [
+            "Int",
+            "Fixed",
+            "Bool",
+            "Text"
+          ],
+          "default": "Fixed"
+        }
+      },
+      "required": [
+        "left",
+        "comparison",
+        "right"
+      ],
+      "additionalProperties": false
+    },
     "ActionPredicateTimerElapsed": {
       "description": "Whether a named timer slot has drained.",
       "properties": {
@@ -2804,6 +3135,9 @@
           "$ref": "#/$defs/ActionPredicateCompareState"
         },
         {
+          "$ref": "#/$defs/ActionPredicateCompareValue"
+        },
+        {
           "$ref": "#/$defs/ActionPredicateTimerElapsed"
         },
         {
@@ -2854,6 +3188,9 @@
         },
         {
           "$ref": "#/$defs/ActionPredicateCompareState"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateCompareValue"
         },
         {
           "$ref": "#/$defs/ActionPredicateTimerElapsed"
@@ -2910,6 +3247,9 @@
           "$ref": "#/$defs/ActionPredicateCompareState"
         },
         {
+          "$ref": "#/$defs/ActionPredicateCompareValue"
+        },
+        {
           "$ref": "#/$defs/ActionPredicateTimerElapsed"
         },
         {
@@ -2925,6 +3265,23 @@
           "$ref": "#/$defs/ActionPredicateHeld"
         }
       ]
+    },
+    "WorldValueExpressionNullable": {
+      "description": "A bounded postfix numeric expression evaluated by a world rule, decision, or flock affinity. Each token either pushes a value or consumes preceding values; the compiler proves stack shape and numeric kind before simulation begins.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "tokens": {
+          "$ref": "#/$defs/WorldValueTokenList",
+          "description": "The postfix tokens, in evaluation order."
+        }
+      },
+      "required": [
+        "tokens"
+      ],
+      "additionalProperties": false
     },
     "ActionEffectSetVerticalVelocity": {
       "description": "Writes the body\u0027s vertical-velocity channel (the jump launch / the surge). Under the grounded program gravity owns its decay; under the free program it bleeds to zero at the tuning\u0027s rise gravity (no fall phase).",
@@ -3001,171 +3358,6 @@
       ],
       "additionalProperties": false
     },
-    "WorldValueTokenConstant": {
-      "description": "An exact authored decimal, converted to the destination row\u0027s numeric kind at compile time.",
-      "properties": {
-        "$type": {
-          "const": "constant"
-        },
-        "value": {
-          "description": "The exact decimal literal.",
-          "type": "number"
-        }
-      },
-      "required": [
-        "value"
-      ],
-      "additionalProperties": false
-    },
-    "WorldValueTokenState": {
-      "description": "A live state cell or reserved world-rule channel.",
-      "properties": {
-        "$type": {
-          "const": "state"
-        },
-        "name": {
-          "description": "The state row or reserved-channel name.",
-          "type": "string"
-        },
-        "key": {
-          "description": "The optional keyed-row cell.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        }
-      },
-      "required": [
-        "name"
-      ],
-      "additionalProperties": false
-    },
-    "WorldValueTokenAdd": {
-      "description": "Consumes two values and pushes their sum.",
-      "properties": {
-        "$type": {
-          "const": "add"
-        }
-      },
-      "additionalProperties": false
-    },
-    "WorldValueTokenSubtract": {
-      "description": "Consumes two values and pushes left minus right.",
-      "properties": {
-        "$type": {
-          "const": "subtract"
-        }
-      },
-      "additionalProperties": false
-    },
-    "WorldValueTokenMultiply": {
-      "description": "Consumes two values and pushes their product in the destination row\u0027s numeric domain.",
-      "properties": {
-        "$type": {
-          "const": "multiply"
-        }
-      },
-      "additionalProperties": false
-    },
-    "WorldValueTokenDivide": {
-      "description": "Consumes two values and pushes left divided by right; zero fails the effect or transaction.",
-      "properties": {
-        "$type": {
-          "const": "divide"
-        }
-      },
-      "additionalProperties": false
-    },
-    "WorldValueTokenMin": {
-      "description": "Consumes two values and pushes the lesser.",
-      "properties": {
-        "$type": {
-          "const": "min"
-        }
-      },
-      "additionalProperties": false
-    },
-    "WorldValueTokenMax": {
-      "description": "Consumes two values and pushes the greater.",
-      "properties": {
-        "$type": {
-          "const": "max"
-        }
-      },
-      "additionalProperties": false
-    },
-    "WorldValueTokenClamp": {
-      "description": "Consumes value, minimum, maximum (in that authored order) and pushes the inclusive clamp.",
-      "properties": {
-        "$type": {
-          "const": "clamp"
-        }
-      },
-      "additionalProperties": false
-    },
-    "WorldValueToken": {
-      "description": "One authored token in a WorldValueExpression.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "required": [
-        "$type"
-      ],
-      "anyOf": [
-        {
-          "$ref": "#/$defs/WorldValueTokenConstant"
-        },
-        {
-          "$ref": "#/$defs/WorldValueTokenState"
-        },
-        {
-          "$ref": "#/$defs/WorldValueTokenAdd"
-        },
-        {
-          "$ref": "#/$defs/WorldValueTokenSubtract"
-        },
-        {
-          "$ref": "#/$defs/WorldValueTokenMultiply"
-        },
-        {
-          "$ref": "#/$defs/WorldValueTokenDivide"
-        },
-        {
-          "$ref": "#/$defs/WorldValueTokenMin"
-        },
-        {
-          "$ref": "#/$defs/WorldValueTokenMax"
-        },
-        {
-          "$ref": "#/$defs/WorldValueTokenClamp"
-        }
-      ]
-    },
-    "WorldValueTokenList": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/WorldValueToken"
-      }
-    },
-    "WorldValueExpression": {
-      "description": "A bounded postfix numeric expression evaluated by a world rule. Each token either pushes a value or consumes preceding values; the compiler proves stack shape and numeric kind before simulation begins.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "tokens": {
-          "$ref": "#/$defs/WorldValueTokenList",
-          "description": "The postfix tokens, in evaluation order."
-        }
-      },
-      "required": [
-        "tokens"
-      ],
-      "additionalProperties": false
-    },
     "ActionEffectSetState": {
       "description": "Writes a named state cell \u2014 a kit counter slot at body scope, a state-section row\u0027s cell at world scope (see WorldRule).",
       "properties": {
@@ -3234,7 +3426,7 @@
           "default": null
         },
         "expression": {
-          "$ref": "#/$defs/WorldValueExpression",
+          "$ref": "#/$defs/WorldValueExpressionNullable",
           "description": "World scope only: a bounded numeric expression evaluated in the destination row\u0027s integer or fixed-point domain. Exactly one source spelling is authored.",
           "default": null
         }
@@ -3304,13 +3496,239 @@
           "default": null
         },
         "expression": {
-          "$ref": "#/$defs/WorldValueExpression",
+          "$ref": "#/$defs/WorldValueExpressionNullable",
           "description": "World scope only \u2014 see Expression.",
           "default": null
         }
       },
       "required": [
         "state"
+      ],
+      "additionalProperties": false
+    },
+    "WorldStateTransformTransfer": {
+      "description": "Moves one token, preserving identity. A random draw advances only when the whole transfer commits.",
+      "properties": {
+        "$type": {
+          "const": "transfer"
+        },
+        "from": {
+          "description": "The source zone.",
+          "type": "string"
+        },
+        "to": {
+          "description": "The destination zone.",
+          "type": "string"
+        },
+        "selector": {
+          "description": "The source selector.",
+          "enum": [
+            "Key",
+            "First",
+            "Last",
+            "Random"
+          ],
+          "default": "Key"
+        },
+        "key": {
+          "description": "The token key for key selection.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "insertFirst": {
+          "description": "Insert at the first position rather than the last.",
+          "type": "boolean",
+          "default": false
+        },
+        "draw": {
+          "description": "A streamDraw site for random selection; absent for other selectors.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "additionalProperties": false
+    },
+    "WorldStateTransformSetRay": {
+      "description": "Writes only a nonempty run of matching cells closed by a required terminator; otherwise refuses.",
+      "properties": {
+        "$type": {
+          "const": "setRay"
+        },
+        "row": {
+          "description": "The board row.",
+          "type": "string"
+        },
+        "from": {
+          "description": "The origin key, excluded from the write.",
+          "type": "string"
+        },
+        "direction": {
+          "description": "A direction in the board\u0027s topology.",
+          "type": "string"
+        },
+        "through": {
+          "description": "Every intervening cell must have this value.",
+          "type": "integer"
+        },
+        "until": {
+          "description": "The closing value, excluded from the write.",
+          "type": "integer"
+        },
+        "value": {
+          "description": "The replacement value.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "row",
+        "from",
+        "direction",
+        "through",
+        "until",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "WorldStateTransformCompletePhase": {
+      "description": "Completes the acting participant\u0027s activation or readiness, guarded against stale submissions.",
+      "properties": {
+        "$type": {
+          "const": "completePhase"
+        },
+        "row": {
+          "description": "The phase row.",
+          "type": "string"
+        },
+        "expectedSequence": {
+          "description": "The exact observed progression sequence; only the world program may omit it.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "timeout": {
+          "description": "World-only completion after the current deadline.",
+          "type": "boolean",
+          "default": false
+        },
+        "participant": {
+          "description": "World-only named participant on whose completion the authored rule acts.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "row"
+      ],
+      "additionalProperties": false
+    },
+    "WorldStateTransformMoveToken": {
+      "description": "Moves a token along an affordable route, debiting movement points in the same candidate.",
+      "properties": {
+        "$type": {
+          "const": "moveToken"
+        },
+        "positions": {
+          "description": "The token-keyed position row; valuesFrom names the terrain topology.",
+          "type": "string"
+        },
+        "token": {
+          "description": "The stable token key.",
+          "type": "string"
+        },
+        "destination": {
+          "description": "The destination cell ordinal.",
+          "type": "integer"
+        },
+        "terrain": {
+          "description": "The board row containing nonnegative entry costs; negative values are impassable.",
+          "type": "string"
+        },
+        "allowance": {
+          "description": "The token-keyed movement-points row.",
+          "type": "string"
+        },
+        "maxVisits": {
+          "description": "The route search\u0027s settled-node bound.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "positions",
+        "token",
+        "destination",
+        "terrain",
+        "allowance",
+        "maxVisits"
+      ],
+      "additionalProperties": false
+    },
+    "WorldStateTransformObserve": {
+      "description": "Refreshes a knowledge board from its declared source and visibility mask; authority only.",
+      "properties": {
+        "$type": {
+          "const": "observe"
+        },
+        "row": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "row"
+      ],
+      "additionalProperties": false
+    },
+    "WorldStateTransform": {
+      "description": "The closed set of atomic state transforms. Each folds one candidate document and journals once.",
+      "type": "object",
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WorldStateTransformTransfer"
+        },
+        {
+          "$ref": "#/$defs/WorldStateTransformSetRay"
+        },
+        {
+          "$ref": "#/$defs/WorldStateTransformCompletePhase"
+        },
+        {
+          "$ref": "#/$defs/WorldStateTransformMoveToken"
+        },
+        {
+          "$ref": "#/$defs/WorldStateTransformObserve"
+        }
+      ]
+    },
+    "ActionEffectTransformState": {
+      "description": "Applies a bounded state transform through the ordinary mutation pipeline.",
+      "properties": {
+        "$type": {
+          "const": "transformState"
+        },
+        "transform": {
+          "$ref": "#/$defs/WorldStateTransform",
+          "description": "The typed operation."
+        }
+      },
+      "required": [
+        "transform"
       ],
       "additionalProperties": false
     },
@@ -4287,6 +4705,22 @@
       ],
       "additionalProperties": false
     },
+    "WorldTransactionStepTransformStateStep": {
+      "description": "One atomic state transform.",
+      "properties": {
+        "$type": {
+          "const": "transformState"
+        },
+        "transform": {
+          "$ref": "#/$defs/WorldStateTransform",
+          "description": "The bounded operation."
+        }
+      },
+      "required": [
+        "transform"
+      ],
+      "additionalProperties": false
+    },
     "WorldTransactionStepSetCell": {
       "description": "Sets one state cell from exactly one numeric source spelling.",
       "properties": {
@@ -4338,7 +4772,7 @@
           "default": null
         },
         "expression": {
-          "$ref": "#/$defs/WorldValueExpression",
+          "$ref": "#/$defs/WorldValueExpressionNullable",
           "description": "The bounded postfix numeric source.",
           "default": null
         }
@@ -4399,7 +4833,7 @@
           "default": null
         },
         "expression": {
-          "$ref": "#/$defs/WorldValueExpression",
+          "$ref": "#/$defs/WorldValueExpressionNullable",
           "description": "The bounded postfix numeric source.",
           "default": null
         }
@@ -4752,6 +5186,9 @@
       ],
       "anyOf": [
         {
+          "$ref": "#/$defs/WorldTransactionStepTransformStateStep"
+        },
+        {
           "$ref": "#/$defs/WorldTransactionStepSetCell"
         },
         {
@@ -5025,6 +5462,108 @@
       ],
       "additionalProperties": false
     },
+    "WorldSocialEntityReferenceNullable": {
+      "description": "Exactly one way to name an individual: a live body reference resolved to its mobility incarnation, or a literal stable identity that remains addressable while absent.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "body": {
+          "description": "The ordinary world-rule body-reference grammar, such as body:0, each, or cell:row:key.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "identity": {
+          "$ref": "#/$defs/WorldEntityAddress",
+          "description": "An original authority/index/generation address, not a current transfer destination.",
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldSocialObservation": {
+      "description": "One world-authorized evidence delivery, not a sensor or a claim of objective truth. A world rule must explicitly gate who can perceive it. Relays retain the original event identity and occurrence tick.",
+      "type": "object",
+      "properties": {
+        "relationship": {
+          "$ref": "#/$defs/WorldSocialRelationship",
+          "description": "The directed belief to update."
+        },
+        "origin": {
+          "$ref": "#/$defs/WorldSocialEntityReference",
+          "description": "The stable identity that minted the underlying event, unchanged across relays."
+        },
+        "aspect": {
+          "description": "An authored event-aspect token of 1..64 characters, such as help.attempt or help.outcome.",
+          "type": "string"
+        },
+        "sequence": {
+          "$ref": "#/$defs/WorldValueExpression",
+          "description": "Non-negative Int event sequence; the minting rule must not reuse IDs for different events."
+        },
+        "occurredAt": {
+          "$ref": "#/$defs/WorldValueExpression",
+          "description": "Non-negative Int original engine tick, not delivery time. socialClock supplies the current clock."
+        },
+        "value": {
+          "$ref": "#/$defs/WorldValueExpression",
+          "description": "Fixed evidence value within the relationship dimension\u0027s bounds."
+        },
+        "quality": {
+          "$ref": "#/$defs/WorldValueExpressionNullable",
+          "description": "Fixed [0,1] evidence quality; absent means one.",
+          "default": null
+        },
+        "source": {
+          "$ref": "#/$defs/WorldSocialEntityReferenceNullable",
+          "description": "Report source, or null for direct observation. Private intent is never inferred or exposed by this effect.",
+          "default": null
+        }
+      },
+      "required": [
+        "relationship",
+        "origin",
+        "aspect",
+        "sequence",
+        "occurredAt",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "ActionEffectObserveSocial": {
+      "description": "Delivers explicitly perceived evidence through the world\u0027s bounded social-memory policy. World-scope only.",
+      "properties": {
+        "$type": {
+          "const": "observeSocial"
+        },
+        "evidence": {
+          "$ref": "#/$defs/WorldSocialObservation"
+        }
+      },
+      "required": [
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "ActionEffectForgetSocial": {
+      "description": "Forgets one impression without clearing its unexpired evidence receipts. World-scope only.",
+      "properties": {
+        "$type": {
+          "const": "forgetSocial"
+        },
+        "relationship": {
+          "$ref": "#/$defs/WorldSocialRelationship"
+        }
+      },
+      "required": [
+        "relationship"
+      ],
+      "additionalProperties": false
+    },
     "ActionEffect": {
       "description": "An authored operand row lowered to a BodyMotionOp and executed by the body instruction interpreter when its trigger fires.",
       "type": [
@@ -5049,6 +5588,9 @@
         },
         {
           "$ref": "#/$defs/ActionEffectAddState"
+        },
+        {
+          "$ref": "#/$defs/ActionEffectTransformState"
         },
         {
           "$ref": "#/$defs/ActionEffectCountdownState"
@@ -5109,6 +5651,12 @@
         },
         {
           "$ref": "#/$defs/ActionEffectPaintField"
+        },
+        {
+          "$ref": "#/$defs/ActionEffectObserveSocial"
+        },
+        {
+          "$ref": "#/$defs/ActionEffectForgetSocial"
         }
       ]
     },

@@ -852,6 +852,7 @@ public static partial class WorldDefinitionValidator {
                 path: $"{path}.producers",
                 errors: errors
             );
+            ValidateFlockMotion(definition, kit, motionProgram, path, errors);
 
             // Actions is a channel-NAME-keyed map now (never a fixed Primary/Secondary pair): a kit naming an
             // undeclared or non-composition channel is a dead reference; a declared composition channel with no

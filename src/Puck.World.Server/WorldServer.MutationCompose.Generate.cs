@@ -114,6 +114,7 @@ public sealed partial class WorldServer {
             cursor: siteRow.DrawCursor,
             decks: siteRow.DrawDecks,
             result: out var fired,
+            secret: draw.Secret,
             reason: out var fireReason
         )) {
             reason = $"state row '{mutation.Row}' {fireReason}";

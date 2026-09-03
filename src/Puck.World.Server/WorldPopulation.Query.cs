@@ -272,7 +272,8 @@ public sealed partial class WorldPopulation {
         for (var index = 0; index < rows.Length; index++) {
             var domain = m_navigation[index];
             var tuning = domain.Tuning;
-            rows[index] = $"{domain.Name}:{tuning.Kind.ToString().ToLowerInvariant()} {tuning.Width}x{tuning.Depth}x{tuning.Layers} clear={domain.WalkableCellCount}/{domain.CellCount} connectivity={tuning.Connectivity.ToString().ToLowerInvariant()} search<={tuning.MaxExpandedNodes} path<={tuning.MaxPathNodes} medium={(tuning.Medium ?? "none")}";
+            var shared = domain.Sharing is { } sharing ? $",shared={domain.SharedResidentGoals}/{sharing.GoalCapacity},expanded={domain.SharedExpandedLast}/{sharing.ExpandedNodesPerTick},paths={domain.SharedPathsLast},capacityRefusals={domain.SharedCapacityRefusalsLast}" : ",shared=none";
+            rows[index] = $"{domain.Name}:{tuning.Kind.ToString().ToLowerInvariant()} {tuning.Width}x{tuning.Depth}x{tuning.Layers} clear={domain.WalkableCellCount}/{domain.CellCount} connectivity={tuning.Connectivity.ToString().ToLowerInvariant()} search<={tuning.MaxExpandedNodes} path<={tuning.MaxPathNodes} medium={(tuning.Medium ?? "none")}{shared}";
         }
         return $"[world.navigation: {string.Join(separator: "; ", values: rows)}]";
     }
@@ -280,14 +281,20 @@ public sealed partial class WorldPopulation {
     public long NavigationCellCount => m_navigation.CellCount;
     /// <summary>Gets the fixed domain-search workspace allocated at compile time.</summary>
     public long NavigationWorkspaceBytes => m_navigation.WorkspaceBytes;
-    /// <summary>Gets the sum of hard per-search expansion caps across declared domains.</summary>
-    public long NavigationDeclaredSearchWork => m_navigation.Count == 0 ? 0L : Enumerable.Range(start: 0, count: m_navigation.Count).Sum(selector: index => (long)m_navigation[index].Tuning.MaxExpandedNodes);
-    /// <summary>Gets active navigated producers, their most recent expansion total, and the maximum work they could
+    /// <summary>Gets the sum of shared per-tick or independent per-search caps across declared domains.</summary>
+    public long NavigationDeclaredSearchWork => Enumerable.Range(0, m_navigation.Count).Sum(index => (long)(m_navigation[index].Sharing?.ExpandedNodesPerTick ?? m_navigation[index].Tuning.MaxExpandedNodes));
+    /// <summary>Gets active navigated producers, this tick's expansion total, and the maximum work they could
     /// consume together if every follower had to replan on the same tick.</summary>
     public (int Followers, long LastExpanded, long WorstExpanded) NavigationWork() {
         var followers = 0;
         var expanded = 0L;
         var worst = 0L;
+        for (var domain = 0; domain < m_navigation.Count; domain++) {
+            if (m_navigation[domain].Sharing is { } sharing) {
+                expanded += m_navigation[domain].SharedExpandedLast;
+                worst += sharing.ExpandedNodesPerTick;
+            }
+        }
         for (var index = 0; index < Capacity; index++) {
             var entry = m_entries[index];
             if (!entry.Active || entry.Body?.Source.ProducerName is not { } name) {
@@ -299,7 +306,7 @@ public sealed partial class WorldPopulation {
                 expanded += entry.NavigationState.ExpandedLast;
                 var domainIndex = producer.Target.Value.NavigationDomainIndex;
                 if ((uint)domainIndex < (uint)m_navigation.Count) {
-                    worst += m_navigation[domainIndex].Tuning.MaxExpandedNodes;
+                    if (m_navigation[domainIndex].Sharing is null) { worst += m_navigation[domainIndex].Tuning.MaxExpandedNodes; }
                 }
             }
         }
@@ -315,6 +322,8 @@ public sealed partial class WorldPopulation {
             "hasPath" => (state.PathLength != 0 ? 1L : 0L),
             "active" => (state.Status == WorldNavigationStatus.Active ? 1L : 0L),
             "arrived" => (state.Status == WorldNavigationStatus.Arrived ? 1L : 0L),
+            "pending" => (state.Status == WorldNavigationStatus.Pending ? 1L : 0L),
+            "capacity" => (state.Status == WorldNavigationStatus.CapacityLimited ? 1L : 0L),
             "unreachable" => (state.Status is WorldNavigationStatus.Unreachable or WorldNavigationStatus.SearchLimit or WorldNavigationStatus.PathLimit or WorldNavigationStatus.OutsideDomain ? 1L : 0L),
             "remaining" => Math.Max(0, state.PathLength - state.Waypoint),
             _ => 0L,
@@ -322,6 +331,7 @@ public sealed partial class WorldPopulation {
     }
     /// <summary>Appends route state that can affect rule reads and subsequent producer motion.</summary>
     internal void AppendNavigationStateHash(ref Fnv1aHash hash) {
+        m_navigation.AppendSharedHash(ref hash);
         hash.Add(value: ((uint)Capacity));
         for (var index = 0; index < Capacity; index++) {
             var entry = m_entries[index];
@@ -431,6 +441,19 @@ public sealed partial class WorldPopulation {
             min: 0f,
             value: ((float)((double)requested))
         );
+    }
+    /// <summary>Resolves an active occupant's original mobility incarnation without minting or changing state.</summary>
+    /// <param name="index">The current population slot.</param>
+    /// <param name="authority">The local authority identity used for a not-yet-minted local incarnation.</param>
+    /// <returns>The stable original address, or null when the slot is inactive or outside capacity.</returns>
+    /// <exception cref="ArgumentException">The authority is empty or whitespace.</exception>
+    public WorldEntityAddress? ResolveIncarnation(int index, string authority) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(authority);
+        if ((uint)index >= (uint)Capacity) { return null; }
+        var entry = m_entries[index];
+        if (!entry.Active || entry.Body is null) { return null; }
+        return entry.Mobility is { } mobility && entry.MobilityGeneration == entry.Generation
+            ? mobility.Incarnation : new WorldEntityAddress(authority, index, entry.Generation);
     }
     /// <summary>Reads or mints the stable mobility identity for one active occupant. A new local incarnation is
     /// derived from the complete authority/index/generation address; a transferred incarnation retains its origin.</summary>

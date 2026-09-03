@@ -73,11 +73,11 @@ internal static class WorldSessionRenderEnvelope {
             );
         }
 
-        var bodyMaterials = new int[WorldRigCatalog.Capacity];
-        var accentMaterials = new int[WorldRigCatalog.Capacity];
+        var bodyMaterials = new int[WorldBodiesLimits.CapacityCeiling];
+        var accentMaterials = new int[WorldBodiesLimits.CapacityCeiling];
         var noseFactor = candidate.PlayerDefaults.NoseFactor;
 
-        for (var index = 0; (index < WorldRigCatalog.Capacity); index++) {
+        for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
             var color = bodyColor(index);
 
             bodyMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: color));

@@ -4,6 +4,11 @@ using Puck.Maths;
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
+    private static void ValidateSocial(WorldDefinition definition, List<string> errors) {
+        if (definition.StateRaw?.Social is not { } policy) { return; }
+        try { _ = CompiledWorldSocialPolicy.Compile(policy); }
+        catch (ArgumentException exception) { errors.Add($"state.social: {exception.Message}"); }
+    }
     /// <summary>Validates the bounded value surface affected by one scalar state-cell mutation. The containing
     /// definition has already passed full validation; this check is therefore intentionally limited to properties
     /// an <c>UpsertStateCell</c> mutation can change.</summary>
@@ -20,13 +25,20 @@ public static partial class WorldDefinitionValidator {
             return false;
         }
 
-        var capacity = Math.Clamp(value: (row.Capacity ?? WorldStateCapacity.MaxCellsPerRow), min: 1, max: WorldStateCapacity.MaxCellsPerRow);
+        if (row.Tokens is not null || row.Zone is not null || row.KeysFrom is not null || row.Phase is not null || row.Knowledge is not null || cell.Visibility is not null || cell.Observation is not null) {
+            return TryValidateLocally(definition, out reason);
+        }
+        var capacity = Math.Clamp(value: (row.Capacity ?? row.CellCeiling), min: 1, max: row.CellCeiling);
 
         if ((row.Cells?.Count ?? 0) > capacity) {
             reason = $"state row '{rowName}' cell count exceeds its capacity of {capacity}";
             return false;
         }
 
+        if (row.Board is { } board && (WorldTopologyCompilation.Find(definition.StateRaw, board.Topology) is not { } topology || !topology.TryCell(key, out _))) {
+            reason = $"state row '{rowName}' cell '{key}' is outside its topology";
+            return false;
+        }
         if (row.Kind == CellKind.Text) {
             if (cell.Text is null || cell.Text.Length > WorldStateCapacity.MaxTextValueLength) {
                 reason = $"state row '{rowName}' cell '{key}' text is missing or exceeds {WorldStateCapacity.MaxTextValueLength} characters";
@@ -422,7 +434,7 @@ public static partial class WorldDefinitionValidator {
     /// <summary>Refuses persisted dealt masks that do not fit the site's source — a mask left behind by an earlier
     /// source shape would otherwise be read as cards already dealt, silently skipping outcomes or declaring a bag
     /// dealt out early. Stated once, for a draw site and for a lattice row's draw fill alike.</summary>
-    internal static void ValidateDrawDecks(WorldGenerator generator, IReadOnlyList<long>? decks, string path, List<string> errors) {
+    internal static void ValidateDrawDecks(WorldGenerator generator, IReadOnlyList<ClosedBitset256>? decks, string path, List<string> errors) {
         if (decks is not { Count: > 0 }) {
             return;
         }
@@ -480,11 +492,11 @@ public static partial class WorldDefinitionValidator {
 
         return cards;
     }
-    private static void RefuseMaskPastCards(long mask, int cards, string path, List<string> errors) {
-        var bits = unchecked((ulong)mask);
+    private static void RefuseMaskPastCards(ClosedBitset256 mask, int cards, string path, List<string> errors) {
+        var bits = mask;
 
-        if ((cards < WorldGeneratorCapacity.MaxCardsPerSet) && ((bits >> cards) != 0UL)) {
-            errors.Add(item: $"{path} marks a card past the {cards} the source holds (mask 0x{bits:X}) — a stale deck from an earlier source shape; clear drawDecks.");
+        if ((cards < WorldGeneratorCapacity.MaxCardsPerSet) && !bits.Fits(cards)) {
+            errors.Add(item: $"{path} marks a card past the {cards} the source holds (mask 0x{bits}) — a stale deck from an earlier source shape; clear drawDecks.");
         }
     }
     /// <summary>
@@ -1099,9 +1111,9 @@ public static partial class WorldDefinitionValidator {
 
             if (
                 (row.Capacity is { } declaredCapacity) &&
-                ((declaredCapacity < 1) || (declaredCapacity > WorldStateCapacity.MaxCellsPerRow))
+                ((declaredCapacity < 1) || (declaredCapacity > row.CellCeiling))
             ) {
-                errors.Add(item: $"{path}.capacity {declaredCapacity} must be between 1 and {WorldStateCapacity.MaxCellsPerRow}.");
+                errors.Add(item: $"{path}.capacity {declaredCapacity} must be between 1 and {row.CellCeiling}.");
             }
 
             ValidateDraw(
@@ -1130,9 +1142,9 @@ public static partial class WorldDefinitionValidator {
                 row: row
             );
             var effectiveCapacity = Math.Clamp(
-                value: (row.Capacity ?? WorldStateCapacity.MaxCellsPerRow),
+                value: (row.Capacity ?? row.CellCeiling),
                 min: 1,
-                max: WorldStateCapacity.MaxCellsPerRow
+                max: row.CellCeiling
             );
             var cells = (row.Cells ?? []);
 

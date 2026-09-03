@@ -237,7 +237,7 @@ public sealed partial class WorldInstanceHost {
                     continue;
                 }
 
-                // A remotely committed arrival bypasses this host's FinalizeCommittedTransfer path, but escrow
+                // A remotely committed arrival bypasses this host's PublishCommittedTransfer path, but escrow
                 // retains the authenticated source border on the destination authority. Handoff occurs at the far
                 // side of the boundary's own ownership threshold, so a mapped arrival starts at least that far
                 // inside the new owner: a wall carries the reciprocal contact hysteresis, a floor/ceiling the much
@@ -612,13 +612,9 @@ public sealed partial class WorldInstanceHost {
         if (
             accepted &&
             (payload is WorldSubmissionPayload.Session { Value: SessionRequest.Leave }) &&
-            (result is WorldSubmissionResult.Session { Reply.Accepted: true }) &&
-            m_forwardedBodies.TryRemove(
-            key: (source, mobility.Incarnation),
-            value: out var departed
-        )
+            (result is WorldSubmissionResult.Session { Reply.Accepted: true })
         ) {
-            (departed.Authority as IDisposable)?.Dispose();
+            RetireForwardedTraveler(in mobility);
         }
         return accepted;
     }

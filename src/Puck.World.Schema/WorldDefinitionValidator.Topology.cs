@@ -216,7 +216,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         // Listen is SHAPE-only too: null (loopback-only, the default) or a non-whitespace "host:port" pair.
-        // Server.WorldTcpHost is what actually parses/binds it; the validator only refuses an obviously malformed
+        // Server.WorldPeerHost is what actually parses/binds it; the validator only refuses an obviously malformed
         // value so a typo fails loudly at boot rather than surfacing as a silent "never listening".
         if ((host.Listen is { } listen)) {
             if (string.IsNullOrWhiteSpace(value: listen)) {
@@ -707,7 +707,7 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.mode '{rule.Mode}' is not a defined ActionTriggerMode.");
             }
 
-            if (rule.Effects is not { Count: > 0 }) {
+            if (rule.Effects is null || (rule.Effects.Count == 0 && rule.Decision is null)) {
                 errors.Add(item: $"{path}.effects must be non-empty — a rule that does nothing is a rule nothing can read back.");
             }
         }
@@ -732,25 +732,20 @@ public static partial class WorldDefinitionValidator {
         return false;
     }
     private static void ValidateFields(WorldDefinition definition, List<string> errors) {
-        var topologies = definition.StateRaw?.Lattices;
-
-        if (topologies is { Count: > 1 }) {
-            errors.Add(item: $"state.lattices declares {topologies.Count} topologies; exactly one is admitted today (the wire frame and checkpoint key off a single lattice).");
+        ValidateDiscreteState(definition, errors);
+        var physical = WorldTopologyCompilation.FindPhysical(definition.StateRaw);
+        var physicalCount = (definition.StateRaw?.Lattices ?? []).Count(t => t?.Kind == WorldTopologyKind.Field);
+        if (physicalCount > 1) {
+            errors.Add("state.lattices admits at most one physical field topology.");
         }
-
-        foreach (var row in (definition.StateRaw?.World ?? [])) {
-            if (
-                (row?.Lattice is { } trait) &&
-                ((topologies is not { Count: > 0 }) || !string.Equals(a: trait.Topology, b: topologies[0].Name, comparisonType: StringComparison.Ordinal))
-            ) {
-                errors.Add(item: $"state row '{row.Name}' lattice.topology '{trait.Topology}' names no declared state.lattices topology.");
+        foreach (var row in definition.StateRaw?.World ?? []) {
+            if (row?.Lattice is { } trait && (physical is null || trait.Topology != physical.Name)) {
+                errors.Add($"state row '{row.Name}' lattice.topology '{trait.Topology}' names no physical topology.");
             }
         }
-
-        if ((topologies is { Count: > 0 }) && (definition.Fields is { Fields.Count: 0 })) {
-            errors.Add(item: $"state.lattices '{topologies[0].Name}' is declared but no state row carries a lattice trait — a topology with no rows steps nothing.");
+        if (physical is not null && definition.Fields is { Fields.Count: 0 }) {
+            errors.Add($"state.lattices '{physical.Name}' is declared but no state row carries a lattice trait.");
         }
-
         if (definition.Fields is not { } fields) {
             return;
         }

@@ -11,7 +11,7 @@ namespace Puck.World.Tests;
 /// </summary>
 /// <remarks>
 /// The two roles are driven explicitly because the invariant is a threading one. <c>WorldServer.Submit</c> is
-/// reached from the tick thread (<c>WorldTcpHost.RunOnTickThreadAsync</c> → <c>DrainPending</c>, and the composition
+/// reached from the tick thread (<c>WorldPeerHost.RunOnTickThreadAsync</c> → <c>DrainPending</c>, and the composition
 /// root's console verbs); an authenticated federation commit is reached from a socket worker under
 /// <see cref="WorldServer.ExecuteAuthorityOperation{T}"/>. Both reach the one ordered domain, and a submission's
 /// completion callback runs inside its drain — the seam that lets a law hold the drain open across a commit.

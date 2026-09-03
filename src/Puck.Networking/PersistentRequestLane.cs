@@ -104,6 +104,7 @@ public sealed class PersistentRequestLane<TRequestKind, TResponseKind> : IDispos
     private readonly record struct PendingRequest(TRequestKind Kind, byte[] Body, TaskCompletionSource<LaneResponse<TResponseKind>> Completion);
 
     private readonly TimeSpan m_connectRetryDelay;
+    private readonly Func<IPEndPoint, CancellationToken, ValueTask<Stream>> m_connect;
     private readonly CancellationTokenSource m_lifetime;
     private readonly Action<Exception>? m_onUnavailable;
     private readonly ILaneProtocol<TRequestKind, TResponseKind> m_protocol;
@@ -113,7 +114,6 @@ public sealed class PersistentRequestLane<TRequestKind, TResponseKind> : IDispos
     private readonly TimeSpan m_unavailableBackoff;
     private readonly Task m_worker;
 
-    private TcpClient? m_client;
     private int m_disposed;
     private Stream? m_stream;
     private int m_unavailableNoted;
@@ -132,6 +132,8 @@ public sealed class PersistentRequestLane<TRequestKind, TResponseKind> : IDispos
     /// the description recorded for it always come from the same call.</param>
     /// <param name="sourceAuthority">The authority namespace this lane authenticates as.</param>
     /// <param name="protocol">The wire dialect.</param>
+    /// <param name="connect">Opens an owned stream through the application's peer transport. The lane never
+    /// selects a socket transport or creates a separate identity.</param>
     /// <param name="lifetime">Cancelled when the lane and its worker must stop.</param>
     /// <param name="connectRetryDelay">How long the worker waits before retrying a failed connect. Must lie in
     /// [0, 1 day].</param>
@@ -151,10 +153,12 @@ public sealed class PersistentRequestLane<TRequestKind, TResponseKind> : IDispos
     /// <exception cref="ArgumentException"><paramref name="sourceAuthority"/> is null or whitespace.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="connectRetryDelay"/> or
     /// <paramref name="requestTimeout"/> is negative or exceeds one day.</exception>
-    public PersistentRequestLane(Func<LaneRoute> route, string sourceAuthority, ILaneProtocol<TRequestKind, TResponseKind> protocol, CancellationToken lifetime, TimeSpan connectRetryDelay, TimeSpan unavailableBackoff, TimeSpan requestTimeout, Action<Exception>? onUnavailable = null) {
+    public PersistentRequestLane(Func<LaneRoute> route, string sourceAuthority, ILaneProtocol<TRequestKind, TResponseKind> protocol, Func<IPEndPoint, CancellationToken, ValueTask<Stream>> connect, CancellationToken lifetime, TimeSpan connectRetryDelay, TimeSpan unavailableBackoff, TimeSpan requestTimeout, Action<Exception>? onUnavailable = null) {
         ArgumentNullException.ThrowIfNull(argument: route);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: sourceAuthority);
         ArgumentNullException.ThrowIfNull(argument: protocol);
+        ArgumentNullException.ThrowIfNull(connect);
+        m_connect = connect;
         // One day is the same ceiling the backoff is clamped to, and it sits well inside every timer these values
         // reach — the per-attempt CancelAfter, the retry Task.Delay, and the disposal join's Task.Wait — so no value
         // admitted here can make one of them throw later.
@@ -204,13 +208,7 @@ public sealed class PersistentRequestLane<TRequestKind, TResponseKind> : IDispos
             location1: ref m_stream,
             value: null
         );
-        var client = Interlocked.Exchange(
-            location1: ref m_client,
-            value: null
-        );
-
         stream?.Dispose();
-        client?.Dispose();
         m_connectedEndpoint = string.Empty;
     }
     private async Task EnsureConnectedAsync(LaneRoute route, CancellationToken ct) {
@@ -227,16 +225,7 @@ public sealed class PersistentRequestLane<TRequestKind, TResponseKind> : IDispos
 
         Drop();
 
-        var client = new TcpClient { NoDelay = true };
-
-        m_client = client;
-
-        await client.ConnectAsync(
-            cancellationToken: ct,
-            remoteEP: route.Endpoint
-        ).ConfigureAwait(continueOnCapturedContext: false);
-
-        var stream = client.GetStream();
+        var stream = await m_connect(route.Endpoint, ct).ConfigureAwait(false);
 
         m_stream = stream;
         m_connectedEndpoint = route.Description;

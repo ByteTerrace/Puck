@@ -14,20 +14,27 @@ namespace Puck.World;
 /// the offscreen shape's (<c>host.presentation: offscreen</c>) <see cref="IWorldSimulationClock"/> — offscreen steps
 /// the server exactly like <c>none</c> and drives the frame producer separately, off the same fixed-step pump.
 /// </summary>
-internal sealed class HeadlessWorldSimulation(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldTcpHost tcpHost, WorldInstanceHost instances) : IFixedStepSimulation, IWorldSimulationClock {
+internal sealed class HeadlessWorldSimulation(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldPeerHost peerHost, WorldInstanceHost instances) : IFixedStepSimulation, IWorldSimulationClock {
     private readonly WorldServer m_server = server;
     private readonly WorldReplayTape m_replayTape = replayTape;
     private readonly WorldConsoleWaitGate m_waitGate = waitGate;
-    private readonly WorldCaptureScheduler m_captureScheduler = captureScheduler;
-    private readonly WorldTcpHost m_tcpHost = tcpHost;
+    private readonly WorldPeerHost m_peerHost = peerHost;
     private readonly WorldInstanceHost m_instances = instances;
 
-    /// <summary>The exact engine time completed by the authoritative simulation.</summary>
-    public ulong ElapsedTicks { get; private set; }
+    // Monotonic host work coordinates keep console waits independent of an authority timeline restored by replay.
+    private ulong m_completedHostSteps;
+    private ulong m_completedHostEngineTicks;
+    private readonly Action<ulong> m_publishStep = tick => {
+        waitGate.PublishTick(tick);
+        captureScheduler.PublishTick(server.NextInputTick - 1UL);
+    };
+
+    /// <summary>The exact engine time completed on the current authority timeline.</summary>
+    public ulong ElapsedTicks => m_server.CompletedEngineTicks;
     /// <inheritdoc/>
     public uint RatePerSecond => ((uint)m_server.Definition.SimulationRateHz);
-    /// <summary>The number of fixed ticks completed.</summary>
-    public ulong Tick { get; private set; }
+    /// <summary>The number of fixed ticks completed on the current authority timeline.</summary>
+    public ulong Tick => m_server.NextInputTick - 1UL;
 
     /// <inheritdoc/>
     public void Step(in FixedStepContext context, in CommandSnapshot commands) {
@@ -53,33 +60,28 @@ internal sealed class HeadlessWorldSimulation(WorldServer server, WorldReplayTap
         // mutation apply. The portal scan for boot runs immediately after its own step, never when it did not step
         // at all. context.StepTicks is threaded in so ShouldStepBoot can refuse a call whose pump-supplied width no
         // longer matches boot's current rate.
-        var stepTick = Tick;
+        var stepTick = m_completedHostSteps;
 
         if (stepsBoot) {
-            // The boot world's OWN contiguous tick coordinate — see WorldSimulation.Step's identical remark for the
-            // full reasoning: the pump's raw context.Tick/ElapsedTicks keep advancing every fixed-step call
-            // regardless of whether boot actually stepped, so passing it straight through here would hand
-            // WorldServerStepShell a jumped coordinate on the first step after a resume. Built from Tick/ElapsedTicks
-            // as THIS shell already holds them (frozen below while boot does not step); only context.StepTicks — the
-            // pump's own per-call step width — is read from the raw context.
+            // Host work advances only when this authority steps. The server independently advances from its
+            // checkpointed clock; restoring a replay timeline rewinds that clock without rewinding console waits.
             var bootContext = new FixedStepContext(
-                ElapsedTicks: (ElapsedTicks + context.StepTicks),
+                ElapsedTicks: (m_completedHostEngineTicks + context.StepTicks),
                 StepTicks: context.StepTicks,
-                Tick: Tick
+                Tick: m_completedHostSteps
             );
 
             stepTick = WorldServerStepShell.Step(
                 context: in bootContext,
-                publishTick: (((Action<ulong>)m_waitGate.PublishTick) + m_captureScheduler.PublishTick),
+                publishTick: m_publishStep,
                 server: m_server,
                 tape: m_replayTape,
-                tcpHost: m_tcpHost
+                peerHost: m_peerHost
             );
             m_instances.ScanBootBoundaryTriggers();
-            // Frozen — not merely unchanged — while boot did not step; see WorldSimulation.Step's identical remark.
-            // Derived from the ticks the shell actually completed, never from the raw pump context.
-            ElapsedTicks += ((stepTick - Tick) * context.StepTicks);
-            Tick = stepTick;
+            // Count actual host work, including fast-forward bursts, but never paused pump calls.
+            m_completedHostEngineTicks += ((stepTick - m_completedHostSteps) * context.StepTicks);
+            m_completedHostSteps = stepTick;
         } else {
             _ = m_server.DrainAdministrative();
 

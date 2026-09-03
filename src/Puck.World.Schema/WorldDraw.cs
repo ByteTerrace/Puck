@@ -60,11 +60,13 @@ public enum WorldDrawTiming : byte {
 /// <param name="Generator">An inline anonymous source — or <see langword="null"/> when <see cref="Source"/> names a
 /// declared one.</param>
 /// <param name="Timing">When this site draws and whether it may be redrawn (see <see cref="WorldDrawTiming"/>).</param>
+/// <param name="Secret">An authority-provisioned 256-bit secret for an independently keyed streamDraw sample at each cursor. Never sent in observations.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldDraw(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCellName? Source = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldGenerator? Generator = null,
-    WorldDrawTiming Timing = WorldDrawTiming.Boot
+    WorldDrawTiming Timing = WorldDrawTiming.Boot,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ClosedBitset256? Secret = null
 );
 /// <summary>
 /// The document's SITE vocabulary — the descriptors the seed ladder's last rung folds, and the two rules that follow

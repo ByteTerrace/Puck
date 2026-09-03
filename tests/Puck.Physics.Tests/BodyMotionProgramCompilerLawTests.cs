@@ -30,6 +30,7 @@ public sealed class BodyMotionProgramCompilerLawTests {
         BodyMotionOp.SenseNearestInCone,
         BodyMotionOp.ProduceWanderIntent,
         BodyMotionOp.ProduceAttendIntent,
+        BodyMotionOp.ProduceFlockIntent,
         BodyMotionOp.FaceSensorTarget,
     ];
 

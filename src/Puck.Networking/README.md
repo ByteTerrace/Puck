@@ -205,6 +205,13 @@ link.
   the seam and the QUIC transport reports the absence rather than emulating
   it. `IsSupported` is the platform guard a caller checks before
   constructing one.
+- `PeerStream` adapts one exclusively owned peer link to asynchronous ordered
+  byte I/O for stream-based application codecs, including World. Each write is
+  segmented at the existing message payload limit; the receiver retains one
+  message beside the link's bounded queue. An authenticated empty message ends
+  one write direction through `CompleteWritesAsync`; ordinary empty writes are
+  no-ops. A refused message closes the stream instead of skipping bytes. The
+  adapter adds no socket transport, identity, unbounded queue, or synchronous I/O.
 - `Peer` — one process's identity, transport, listener, and dialer.
   `ListenAsync` binds and accepts connections in the background; a peer
   listens at most once (a second call throws `InvalidOperationException`, a
@@ -327,7 +334,11 @@ length, or a frame over `MaxFrameBytes`), `ChannelUnbound`,
 `IdentityKeyInvalid`, `IdentityUnproven` — is sent as a `HelloRefused` frame
 naming it, so the far side reports `RefusedByPeer` with that name rather than
 a bare closed connection. Only the refusal byte crosses; the `PeerFailure`
-detail stays on the refusing side. The refusing side then drains the stream
+detail stays on the refusing side. `StreamDrain.UntilClosedAsync` consumes
+and discards bytes without disposing the caller-owned stream; its caller
+supplies a bounded cancellation deadline. It checks cancellation between
+reads even when a stream keeps returning buffered bytes synchronously.
+The refusing side uses it to drain the stream
 until the peer closes or `PeerWireProtocol.RefusalDrainTimeout` (500 ms)
 elapses, so two sides refusing each other do not both sit until the handshake
 deadline. A peer that closes first is reported as `ConnectionClosed` without

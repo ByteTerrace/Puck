@@ -68,6 +68,7 @@ public sealed class WorldFieldLattice {
     private readonly int m_flowDirections;
     private readonly int m_stepEveryTicks;
     private readonly FixedQ4816[][] m_values;
+    private readonly ulong[] m_valueRevisions;
     private readonly int m_width;
 
     private bool m_fullResync = true;
@@ -132,6 +133,7 @@ public sealed class WorldFieldLattice {
         m_heightScale = new FixedQ4816[fields.Count];
         m_isMedium = new bool[fields.Count];
         m_values = new FixedQ4816[fields.Count][];
+        m_valueRevisions = new ulong[fields.Count];
         m_deltaDirty = new bool[fields.Count][];
         m_scratch = new FixedQ4816[CellCount];
         m_flowDelta = new Int128[CellCount];
@@ -207,6 +209,8 @@ public sealed class WorldFieldLattice {
     public FixedVector3 Origin => m_origin;
     /// <summary>Gets a counter that moves on every cell write.</summary>
     public int Revision => m_revision;
+    // Derived invalidation stamp, not simulation truth. Restore stamps it anew after installing the saved values.
+    internal ulong ValueRevision(int field) => m_valueRevisions[field];
 
     // The field portion of WorldRuntimeStateHash's authoritative boundary. Field-major/cell-major is the same
     // canonical order Capture and the checkpoint codec use, without allocating a checkpoint-shaped jagged array.
@@ -393,6 +397,7 @@ public sealed class WorldFieldLattice {
         }
 
         m_values[field][cell] = clamped;
+        m_valueRevisions[field]++;
 
         if (!m_deltaDirty[field][cell]) {
             m_deltaDirty[field][cell] = true;
@@ -602,31 +607,16 @@ public sealed class WorldFieldLattice {
     public bool IsInsideMedium(int field, in FixedVector3 position) {
         return IsInsideMediumPoint(field: field, position: in position);
     }
-    /// <summary>Reports whether an axis-aligned clearance cube around a point remains inside a live medium. Navigation
-    /// constrains the radius to at most half a lattice cell, so the eight corners plus center cover every voxel the
-    /// enclosed agent sphere can enter; requiring the cube is conservative at curved boundaries.</summary>
+    /// <summary>Reports whether an axis-aligned clearance cube around a point remains inside a live medium. Clearance
+    /// must be in [0, half a lattice cell]. Every intersected voxel and its local free surface are checked; wet corners
+    /// alone cannot prove the interior wet. The cube conservatively encloses an agent sphere.</summary>
     public bool IsInsideMedium(int field, in FixedVector3 position, FixedQ4816 clearance) {
-        if (clearance < FixedQ4816.Zero || !IsInsideMediumPoint(field: field, position: in position)) {
+        if (clearance < FixedQ4816.Zero || clearance.Value > m_cellSize.Value / 2) {
             return false;
         }
-        if (clearance == FixedQ4816.Zero) {
-            return true;
-        }
-        for (var ySign = -1; ySign <= 1; ySign += 2) {
-            for (var zSign = -1; zSign <= 1; zSign += 2) {
-                for (var xSign = -1; xSign <= 1; xSign += 2) {
-                    var sample = new FixedVector3(
-                        X: (position.X + (clearance * FixedQ4816.FromInteger(value: xSign))),
-                        Y: (position.Y + (clearance * FixedQ4816.FromInteger(value: ySign))),
-                        Z: (position.Z + (clearance * FixedQ4816.FromInteger(value: zSign)))
-                    );
-                    if (!IsInsideMediumPoint(field: field, position: in sample)) {
-                        return false;
-                    }
-                }
-            }
-        }
-        return true;
+        return IsMediumBox(field, (Int128)position.X.Value - clearance.Value, (Int128)position.Y.Value - clearance.Value,
+            (Int128)position.Z.Value - clearance.Value, (Int128)position.X.Value + clearance.Value,
+            (Int128)position.Y.Value + clearance.Value, (Int128)position.Z.Value + clearance.Value);
     }
     private bool IsInsideMediumPoint(int field, in FixedVector3 position) {
         if ((uint)field >= (uint)m_isMedium.Length || !m_isMedium[field] || !TryCellOf(position: in position, cell: out var cell)) {
@@ -635,29 +625,64 @@ public sealed class WorldFieldLattice {
         var value = m_values[field][cell];
         return value > FixedQ4816.Zero && position.Y <= (m_origin.Y + (value * m_heightScale[field]));
     }
-    /// <summary>Reports whether an entire short segment remains inside one live medium. Samples at no more than half
-    /// a lattice-cell interval on every axis, so a route edge cannot skip a dry voxel or a lower intervening free
-    /// surface. The caller supplies a hard subdivision ceiling and an edge exceeding it refuses conservatively.</summary>
+    /// <summary>Conservatively proves an entire clearance-cube sweep inside one live medium. Each half-cell-or-shorter
+    /// piece checks its swept bounding box, not just sample points, including every crossed voxel's free surface.
+    /// Each piece checks at most 27 voxels. Clearance above half a cell, an invalid field, or a segment exceeding the
+    /// caller's subdivision ceiling refuses. Outward-rounded endpoints cannot leave a sub-quantum gap in the proof.</summary>
     public bool IsSegmentInsideMedium(int field, in FixedVector3 from, in FixedVector3 to, FixedQ4816 clearance, int maximumSubdivisions) {
-        if (maximumSubdivisions <= 0) {
+        if (maximumSubdivisions <= 0 || clearance < FixedQ4816.Zero || clearance.Value > m_cellSize.Value / 2 ||
+            (uint)field >= (uint)m_isMedium.Length || !m_isMedium[field]) {
             return false;
         }
-        var delta = (to - from);
-        var maximum = FixedQ4816.Max(
-            x: FixedQ4816.Abs(value: delta.X),
-            y: FixedQ4816.Max(x: FixedQ4816.Abs(value: delta.Y), y: FixedQ4816.Abs(value: delta.Z))
-        );
-        var interval = (m_cellSize / FixedQ4816.FromInteger(value: 2));
-        var subdivisions = (maximum.Value / interval.Value) + ((maximum.Value % interval.Value) == 0L ? 0L : 1L);
+        var maximum = Int128.Max(Int128.Abs((Int128)to.X.Value - from.X.Value),
+            Int128.Max(Int128.Abs((Int128)to.Y.Value - from.Y.Value), Int128.Abs((Int128)to.Z.Value - from.Z.Value)));
+        var interval = Math.Max(1, m_cellSize.Value / 2);
+        var subdivisions = maximum / interval + (maximum % interval == 0 ? 0 : 1);
         if (subdivisions > maximumSubdivisions) {
             return false;
         }
         var count = Math.Max(1, checked((int)subdivisions));
-        for (var index = 0; index <= count; index++) {
-            var amount = (FixedQ4816.FromInteger(value: index) / FixedQ4816.FromInteger(value: count));
-            var sample = FixedVector3.Lerp(from: from, to: to, amount: amount);
-            if (!IsInsideMedium(field: field, position: sample, clearance: clearance)) {
+        for (var index = 0; index < count; index++) {
+            SegmentAxisBounds(from.X.Value, to.X.Value, index, count, clearance.Value, out var minX, out var maxX);
+            SegmentAxisBounds(from.Y.Value, to.Y.Value, index, count, clearance.Value, out var minY, out var maxY);
+            SegmentAxisBounds(from.Z.Value, to.Z.Value, index, count, clearance.Value, out var minZ, out var maxZ);
+            if (!IsMediumBox(field, minX, minY, minZ, maxX, maxY, maxZ)) {
                 return false;
+            }
+        }
+        return true;
+    }
+
+    private static void SegmentAxisBounds(long from, long to, int piece, int count, long clearance, out Int128 minimum, out Int128 maximum) {
+        // Keep the segment parameter rational until the final outward round. Multiplication is at most 96 bits.
+        var delta = (Int128)to - from;
+        var first = (Int128)from * count + delta * piece;
+        var second = first + delta;
+        var low = Int128.Min(first, second);
+        var high = Int128.Max(first, second);
+        minimum = low / count - (low % count < 0 ? 1 : 0) - clearance;
+        maximum = high / count + (high % count > 0 ? 1 : 0) + clearance;
+    }
+
+    private bool IsMediumBox(int field, Int128 minX, Int128 minY, Int128 minZ, Int128 maxX, Int128 maxY, Int128 maxZ) {
+        if ((uint)field >= (uint)m_isMedium.Length || !m_isMedium[field]) { return false; }
+        minX -= m_origin.X.Value; maxX -= m_origin.X.Value;
+        minY -= m_origin.Y.Value; maxY -= m_origin.Y.Value;
+        minZ -= m_origin.Z.Value; maxZ -= m_origin.Z.Value;
+        var size = m_cellSize.Value;
+        if (minX < 0 || minY < 0 || minZ < 0 || maxX >= (Int128)size * m_width ||
+            maxY >= (Int128)size * m_layers || maxZ >= (Int128)size * m_depth) { return false; }
+        var x0 = (int)(minX / size); var x1 = (int)(maxX / size);
+        var y0 = (int)(minY / size); var y1 = (int)(maxY / size);
+        var z0 = (int)(minZ / size); var z1 = (int)(maxZ / size);
+        for (var z = z0; z <= z1; z++) {
+            for (var y = y0; y <= y1; y++) {
+                // A lower voxel can have a dry cap even when both the cube's bottom and the next layer are wet.
+                var requiredHeight = Int128.Min(maxY, (Int128)(y + 1) * size);
+                for (var x = x0; x <= x1; x++) {
+                    var value = m_values[field][CellIndex(x, y, z)];
+                    if (value <= FixedQ4816.Zero || requiredHeight > (value * m_heightScale[field]).Value) { return false; }
+                }
             }
         }
         return true;
@@ -811,6 +836,7 @@ public sealed class WorldFieldLattice {
         }
         else {
             m_values[field][cell] = value;
+            m_valueRevisions[field]++;
         }
     }
     private void ApplyRectFill(int field, WorldLatticeFill.Rect fill, bool trackDeltas) {
@@ -1419,6 +1445,7 @@ public sealed class WorldFieldLattice {
 
         ClearDeltas();
         m_fullResync = true;
+        for (var field = 0; field < m_valueRevisions.Length; field++) { m_valueRevisions[field]++; }
         m_revision++;
     }
     /// <summary>Describes the lattice for a console read-back.</summary>

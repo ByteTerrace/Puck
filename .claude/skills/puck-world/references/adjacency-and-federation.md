@@ -109,10 +109,57 @@ IDs. Acknowledgement retires that outcome; a later epoch for the same traveler
 may supersede a lost acknowledgement. The one current credential per mobility
 identity rejects delayed replay. These tables are bounded by active
 transactions/travelers, not lifetime crossing count.
+An exact committed retry includes action-continuity collection order and every
+channel/register value, not just profile and motion. Escrow retains detached
+continuity values at commit and checkpoint restore; mutating a caller's original
+lists cannot rewrite the accepted receipt. Independently allocated equal values
+remain idempotent; altered edge bits, held values, names, register kinds, values,
+or timers refuse as a different commit.
+The same reservation carries a detached, private social-memory export for each
+mobility incarnation. Freeze at the source before reserve; reserve destination
+identity and memory quota with body slots; prepare all memories before landing
+bodies; retire source histories only after confirmed commit. An ambiguous reply
+retains frozen source histories. Restore bodies before thawing on non-commit;
+failed source restoration retains rollback-only recovery and never retries Commit.
+Non-atomic parties split before any parent reservation. Full details and limits:
+[Server memory contract](../../../../src/Puck.World.Server/README.md#social-memory-component).
+Host restore preflights every in-doubt and forwarding record before installing that host slice.
+It preserves unresolved peer addresses and source-boundary completion data across
+repeated restarts. A later local admission resolves by exact authority identity;
+a same-named unrelated authority cannot resolve the transaction. Remote recovery
+reconnects to the retained endpoint with the expected authority identity. On
+confirmed commit, forwarding and local seat routes reconstruct the credential
+from the retained member's incarnation and next ownership epoch, not a fresh
+connection's empty reservation cache or a later occupant's slot-keyed entry.
+`CommitConfirmed` remains checkpointed while source-side publication is pending.
+Neither status nor commit is reissued in that phase, and rollback is forbidden.
+Retain frozen source histories and the captured followed-seat masks until every
+route/roster publication succeeds; partial publication must not vacate an already
+moved participant. Invalid phases or overlapping seat masks refuse before host
+restore writes. Publication failures are named `PUBLICATION-PENDING` once per run.
+Finalized forwarding routes persist independently of in-doubt transactions. Preserve
+their source namespace and mobility credential; never reconstruct the namespace from
+the new process's machine ID. Missing local destinations remain checkpointed and bind
+on exact-identity admission. Remote routes retain endpoint/definition seeds and
+reconnect lazily through QUIC. Empty authorities with outgoing routes are not reaped.
+Explicit destination stop unbinds incoming routes; later admission can rebind them.
+Replacing a local arm releases its held-input lease and forbids further publication.
+Traveler observations use `ObserveTraveler` over the original authenticated QUIC
+entry, not the final route's endpoint label. Local destinations need no listener.
+Each hop validates its own source-scoped credential and reduces the shared 64-hop
+budget; document disclosure cannot exceed any hop's arrival tier at stream opening.
+The final owner uses the traveler's body-relative disclosure and Observe grant.
+Its ownership, document, or grant change invalidates the stream for reopening.
+Client lease disposal cancels observation; EOF detaches the server sink even paused.
 A committed route can forward later input and submissions through further
 handoffs, so an old credential remains a route to the one current writer
 rather than a stale body slot. Generation recycle creates a different mobility
 identity and cannot inherit the old credential.
+Local arms validate their source-scoped credential before following an onward
+route, exactly as QUIC ingress does. Never hold one authority gate across that
+call. Local synchronous traversal has a 64-hop stack-safety bound. Accepted leave
+retires every retained branch for the incarnation in each traversed host, including
+branches left by revisiting the final authority; other incarnations remain intact.
 
 Entity identity is `WorldEntityAddress(authority, index, generation)`.
 `WorldAuthorityRoute` carries that complete address plus an epoch, and
@@ -285,14 +332,22 @@ codec. It reuses the framing, bounded reader/writer, and refusal vocabulary in
 Try-shaped and bounded before it allocates; a decoder that throws on hostile
 bytes is a defect. Add a message as a leaf there, never as a second dialect.
 
-One connection carries the whole conversation: the federation wire key
+World uses `WorldPeerNetwork` over `Puck.Networking.Peers.Peer` and its QUIC
+transport. Never introduce a TCP fallback or a second connection identity.
+`PeerStream` carries the existing bounded application codecs over signed peer
+messages; the networking handshake precedes World's own admission policy.
+`PersistentRequestLane` receives a stream connector and owns no socket choice.
+Desktop boot shares one network owner across the listener, transfers, observations,
+and intent streams; silo activations own their configured peer lifetime.
+
+One application stream carries the whole conversation: the federation wire key
 (`WorldFederationCodec.WireKey`, distinct from the interactive peer key), then
-`Challenge`/`Authenticate`/`Ack`, then framed requests in order,
+`Challenge`/`Authenticate`/`Authenticated` (the destination namespace), then framed requests in order,
 request-then-response, until `Observe` or `IntentStream` takes the connection
 over and streams on it. There is no second hello and no correlation id.
 
 Refusals are named (`WorldFederationRefusal`) and every refusal frame's text
-opens with the name, so a peer and `WorldTcpHost.FederationRefusals` count the
+opens with the name, so a peer and `WorldPeerHost.FederationRefusals` count the
 same vocabulary.
 
 `WorldRemoteAuthority` holds persistent authenticated lanes per source authority

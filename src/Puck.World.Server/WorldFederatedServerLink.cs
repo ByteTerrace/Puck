@@ -13,7 +13,7 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
             Console.Error.WriteLine(value: $"[world.authority unavailable: body:{bodyIndex} input/submission held ({reason})]");
         }
     }
-    private (WorldTcpWireFormat.DownstreamKind Kind, ReadOnlyMemory<byte> Body)? Submit(int bodyIndex, WorldSubmissionPayload payload) {
+    private (WorldPeerWireFormat.DownstreamKind Kind, ReadOnlyMemory<byte> Body)? Submit(int bodyIndex, WorldSubmissionPayload payload) {
         if (!m_authority.TryCredential(
             bodyIndex: bodyIndex,
             mobility: out var mobility,
@@ -55,13 +55,13 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
                 bodyIndex: bodyIndex,
                 reason: narration
             );
-            return (WorldTcpWireFormat.DownstreamKind.Refusal, System.Text.Encoding.UTF8.GetBytes(s: narration));
+            return (WorldPeerWireFormat.DownstreamKind.Refusal, System.Text.Encoding.UTF8.GetBytes(s: narration));
         }
 
         _ = m_unavailableBodies.Remove(item: bodyIndex);
 
         // A Completion body is one whole downstream frame, decoded in place over the response's own buffer.
-        return (WorldTcpWireFormat.TryDecodeDownstream(
+        return (WorldPeerWireFormat.TryDecodeDownstream(
             body: out var completionBody,
             frame: response.Body,
             kind: out var completionKind
@@ -70,7 +70,7 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
             : null
         );
     }
-    private (WorldTcpWireFormat.DownstreamKind Kind, ReadOnlyMemory<byte> Body)? SubmitAny(WorldSubmissionPayload payload) => Submit(
+    private (WorldPeerWireFormat.DownstreamKind Kind, ReadOnlyMemory<byte> Body)? SubmitAny(WorldSubmissionPayload payload) => Submit(
         bodyIndex: -1,
         payload: payload
     );
@@ -100,7 +100,7 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
             ));
             return;
         }
-        if (!WorldTcpWireFormat.TryReadResult(
+        if (!WorldPeerWireFormat.TryReadResult(
             body: reply.Value.Body.Span,
             kind: reply.Value.Kind,
             reason: out var reason,
@@ -170,7 +170,7 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
             ));
             return;
         }
-        if (!WorldTcpWireFormat.TryReadResult(
+        if (!WorldPeerWireFormat.TryReadResult(
             body: reply.Value.Body.Span,
             kind: reply.Value.Kind,
             reason: out var reason,

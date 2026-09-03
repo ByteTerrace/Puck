@@ -115,7 +115,27 @@ source count, declared areas per target, last exact/approximate evaluations, and
 last area checks/matches so gravity authoring does not create a silent per-tick
 price. `world.navigation` and `world.budget` are authoritative-core verbs: both
 remain registered headless, with budget naming the absent renderer while still
-reporting simulation costs. None of these verbs mutates the field.
+reporting simulation costs. `world.flock` reads each kit's local-perception
+profile, movement-domain binding, optional cohesion/alignment expressions, and
+last-step candidate/neighbor/sight, movement-check/refusal, and affinity
+evaluation/failure counters; `world.budget` repeats the scratch capacities and
+charged affinity work, included in the shared rule-work ceiling. Navigation also reports shared destination slots, actual/budgeted
+expansions, extracted paths, and capacity refusals. A bounded sample is not globally nearest
+neighbors, and a headless work count is not an FPS measurement. None of these
+verbs mutates the field.
+
+Body command targets use the world's authored local-seat prefix, not the host's
+four-seat ceiling. A zero-seat world can address peer body 0 through the same
+designation and control verbs as any other active peer.
+`body.designate` returns the target read-back under its own verb prefix;
+`body.targets` keeps its query prefix, so command accounting cannot conflate them.
+
+`world.transfer <source-instance> body:<index> <destination>` addresses any
+zero-based body index, including creature and network-peer slots. Bare numbers
+are one-based local seats (1..4), and `party` selects the active local-seat cohort.
+Parsing enforces the global body ceiling; the transfer drain checks the named
+source's actual capacity, occupancy, and the stamped caller's Drive grant. Use
+explicit body targets when verifying onward transfers of remote travelers.
 
 `wire.ack [on|quiet]`: quiet drops SUCCESSFUL echoes of verbs registered
 `ackOnly: true` (flood-friendly); errors and answer-bearing verbs always
@@ -275,3 +295,31 @@ composing writes. That is a defect class, not a shortcut.
   other `world.row.set`/`.remove`. The drain barrier makes a following
   `world.addons` read wait for settled state.
 - New decision surface ⇒ read-back verb in the same change.
+
+`world.decisions` is an Immediate, no-argument, headless-safe read-back of
+world-rule choice policies and their active bindings. It reports the selected
+option, selected body incarnation, last raw score, remaining engine-tick timers,
+reconsiderations, and local random draws. It echoes neighbor policies and last-pass
+image points, grid builds, inspected/scored candidates, sight tests, and limited
+queries. `world.rules` routes decision rules to this richer echo;
+`world.budget` includes candidate inspections/gates, expanded score programs, and
+the greatest effect branch, plus shared pose-image and grid copy/group visits.
+It separately echoes the per-tick pose, distinct range-scale rebuild, and sorted
+grid-point ceilings without cadence discounts. These structural units do not
+claim a CPU-time or sorting-comparison bound.
+
+`world.social [<query-json>]` is Immediate, headless-safe operator inspection
+under the stamped caller's Observe/all grant. No argument reports policy,
+clock, storage/work limits, and last evidence outcome; a query reads one directed
+impression. Use `WorldCommandArguments.RawAfter` for its JSON tail and the
+source-generated query type. It is not a network creature-observation channel.
+`world.budget` includes social storage and ingestion/expiry budgets, while
+rule costs account for expression tokens and body-reference row scans.
+
+Discrete state commands: `world.state.transform <transform-json>` and
+`world.state.act <phase-row> <sequence> <transform-json>` are Simulation-routed,
+stamp the caller, and register deferred refusal echoes. `world.topologies`
+and `world.state.observe` are Immediate read-backs. The latter uses a stamped
+query and returns observation JSON; `world.state` remains an authority-console
+read-back. Operators and limits live in the Schema README's discrete-state
+section rather than a second command vocabulary here.

@@ -718,6 +718,7 @@ public sealed class WorldGrants : IWorldGrantsView {
             // Adjacency are unbounded (an unknown name simply never fires); Seat is bounded to the reserved
             // local-seat band.
             WorldCapability.Observe => (((subject.Kind == GrantSubjectKind.Body) && (((uint)subject.Value) < ((uint)m_population))) ||
+                (subject.Kind == GrantSubjectKind.State) ||
                 (!trustedWildcard && (subject.Kind == GrantSubjectKind.Screen)) ||
                 (!trustedWildcard && (subject.Kind == GrantSubjectKind.Region)) ||
                 (!trustedWildcard && (subject.Kind == GrantSubjectKind.Adjacency)) ||
@@ -951,8 +952,8 @@ public sealed class WorldGrants : IWorldGrantsView {
                 ? " or the wildcard 'all'"
                 : "")}"),
             WorldCapability.Observe => (trusted
-            ? "observe must name a concrete body (observe body:<n>) or the wildcard 'all' — screen/region/seat/adjacency are event-only subjects with no trusted-principal consumer"
-            : "observe must name a concrete body, screen, region, seat, or adjacency (observe body:<n> | observe screen:<n> | observe region:<name> | observe seat:<n> | observe adjacency:<name>)"),
+            ? "observe must name a concrete body or state row (observe body:<n> | observe state:<name>) or the wildcard 'all' — screen/region/seat/adjacency are event-only subjects with no trusted-principal consumer"
+            : "observe must name a concrete body, state row, screen, region, seat, or adjacency (observe body:<n> | observe state:<name> | observe screen:<n> | observe region:<name> | observe seat:<n> | observe adjacency:<name>)"),
             WorldCapability.Control => $"control must name a concrete screen or body (control screen:<n> | control body:<n>){((trusted || (principal.Kind == PrincipalKind.Peer))
             ? " or the wildcard 'all'"
             : "")}",
@@ -2118,7 +2119,7 @@ public sealed class WorldGrants : IWorldGrantsView {
     /// stale, and every live handle a guest could hold is meaningless the instant that guest's own connection drops
     /// — which every checkpoint restart already forces (the arm gate refuses a checkpoint of a server any addon has
     /// ever pumped, and a remote human is parked, not left connected, across a restore) — the same "subscribers
-    /// re-attach" exclusion <see cref="WorldOutputHub"/>/<see cref="WorldTcpHost"/> connections already carry.</summary>
+    /// re-attach" exclusion <see cref="WorldOutputHub"/>/<see cref="WorldPeerHost"/> connections already carry.</summary>
     public sealed record WorldGrantsPrincipalCheckpoint(
         WorldPrincipal Principal,
         IReadOnlyList<GrantSubject> Drive,

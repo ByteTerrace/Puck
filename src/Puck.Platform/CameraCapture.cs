@@ -37,7 +37,8 @@ public interface ICameraCaptureService {
     /// <summary>Enumerates every physical camera currently attached, in a stable order by <see cref="CameraDeviceInfo.Id"/>.
     /// A completed scan distinguishes itself from a failed one: an empty machine (or an unsupported platform) returns an
     /// empty list, while the platform's scan mechanism itself failing throws instead — a caller must never read an empty
-    /// list as "every camera was unplugged".</summary>
+    /// list as "every camera was unplugged". This call may block on platform discovery: call it on a worker thread.
+    /// Implementations support enumeration concurrently with graph opens and existing streams.</summary>
     /// <returns>The attached cameras from a completed scan; empty when none are attached or the platform is unsupported.</returns>
     /// <exception cref="InvalidOperationException">The platform's device scan failed.</exception>
     IReadOnlyList<CameraDeviceInfo> EnumerateDevices();

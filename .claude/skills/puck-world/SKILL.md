@@ -252,8 +252,8 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   seat is seeded wide, so self-targeting discriminates nothing), and prove
   a new assertion once by breaking it. This repo's recorded dominant
   failure mode is verification scripts that lie silently.
-- `replay.verify` MATCH proves the authoritative pose trajectory only —
-  nothing about document, grant-table, or HUD state
+- `replay.verify` MATCH proves the explicitly hashed authoritative state-system
+  trajectory, not the whole document, grant table, or HUD
   ([references/replay.md](references/replay.md)).
 - Committed proofs: `puck canary` manifests under `tests/Puck.World.Canaries/`
   for every load-bearing seam, including `world.grant`-driven claims (a
@@ -312,7 +312,7 @@ add-a-kind procedure: [references/mutations.md](references/mutations.md).
 | Invisible reciprocal boundaries, derived overlap/corner peers, frame isometries, generation-addressed authority routes, reserve/commit handoff, action continuity, neighbour contact, seam liveness (`livenessGraceSeconds`, the `$link:` reserved rule channel, `world.links`), and the five-authority quilt | [references/adjacency-and-federation.md](references/adjacency-and-federation.md) |
 | `body.engage`, control applications (the (target, kit) set a principal holds; capture as own-body membership), the kit pad map, server-internal merged pads, possession's co-drive path, machines | [references/engagement.md](references/engagement.md) |
 | Join/leave (local seat and peer), park-with-grace, the `$parked:` reserved rule channel, body-resume's identity match rule | [references/session-lifecycle.md](references/session-lifecycle.md) |
-| The replay tape: format/re-key, capture scope, pose hash, verify semantics, receipts | [references/replay.md](references/replay.md) |
+| The replay tape: version-1 format, capture scope, pose hash, verify semantics, receipts | [references/replay.md](references/replay.md) |
 | Addon rows, the prepare/commit mount transaction, pump points, channels, fuel, ABI verdicts, `world.row.set addons`/`.remove` | [references/addons.md](references/addons.md) |
 | Command modules, routing, the stdin barrier, output contract, verb grammar, screenshots | [references/console.md](references/console.md) |
 

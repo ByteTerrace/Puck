@@ -31,7 +31,7 @@ namespace Puck.World.Tests;
 /// on both sides — not built here; the remote-human control proves parking-on-restore on its own, and
 /// <see cref="WorldInstanceHostTwoRowTransferLawTests"/> proves <c>ForwardedBodies</c> capture (the one section this
 /// scenario therefore does not reach) without a round-trip. And an emptied, non-retained source row auto-reaps
-/// (<c>FinalizeCommittedTransfer</c>'s own <c>ReapIfEmpty(transfer.SourceInstance)</c>), after which
+/// (<c>CompleteCommittedTransfer</c>'s own <c>ReapIfEmpty(transfer.SourceInstance)</c>), after which
 /// <c>StepInstances</c> silently stops advancing it — comparing its further trajectory would then be meaningless
 /// rather than a genuine round-trip proof, which is the second reason row-a keeps an occupant.
 /// </remarks>

@@ -17,12 +17,12 @@ namespace Puck.World.Tests;
 
 /// <summary>
 /// Laws for the four findings a Codex security review returned against the authenticated-game-socket door
-/// (<see cref="WorldAdmissionDoor"/>, <see cref="WorldTcpHost"/>, <c>WorldServer.RemintPeerAdmissionGrants</c>
+/// (<see cref="WorldAdmissionDoor"/>, <see cref="WorldPeerHost"/>, <c>WorldServer.RemintPeerAdmissionGrants</c>
 /// — private, exercised only through <see cref="WorldServer.EnqueueRebuild"/> — and
 /// <see cref="TrustListEntry.Validate"/>). Three of the four land here as executable laws (the fourth, Finding 3's
 /// concurrent-handshake CEILING, is proven by code review + the deadline law below exercising the same accounting
 /// fields — a dedicated ceiling law was judged not worth 64 additional live sockets per run). These drive the REAL
-/// wire door (<see cref="WorldTcpHost"/>, a genuine <see cref="TcpClient"/>, a genuine signed attestation claim) rather
+/// wire door (<see cref="WorldPeerHost"/>, a genuine <see cref="PeerTestClient"/>, a genuine signed attestation claim) rather
 /// than poking server-internal state directly — <c>WorldServer.TryAdmitPeerConnection</c> is <c>internal</c>
 /// and deliberately has no test-only public seam (CLAUDE.md's IVT ruling: widen the member or don't reach it, and
 /// this member should NOT be public — it is a security-relevant door, not a utility), so the only faithful way to
@@ -74,7 +74,7 @@ public sealed class AdmissionSecurityLawTests {
     /// frame entirely must be closed by the server's OWN handshake deadline — never held open indefinitely. The
     /// control, run first against the SAME host, is an ordinary connection that completes the whole handshake
     /// promptly and is admitted — proving the deadline machinery does not interfere with a legitimate peer. The
-    /// deadline's exact value is a private implementation constant (<c>WorldTcpHost.HandshakeDeadline</c>, 10s at
+    /// deadline's exact value is a private implementation constant (<c>WorldPeerHost.HandshakeDeadline</c>, 10s at
     /// the time of writing); this law waits generously past it (20s) rather than pinning the number, per this
     /// suite's own red-line against asserting internal structure.</summary>
     [Fact]
@@ -86,7 +86,7 @@ public sealed class AdmissionSecurityLawTests {
             var document = BuildAdmissionDocument(entry: entry);
 
             using var fixture = Fixtures.FreshServer(definition: document);
-            using var host = new WorldTcpHost(server: fixture.Server);
+            using var host = new WorldPeerHost(server: fixture.Server);
 
             host.Start(listen: "127.0.0.1:0");
 
@@ -107,7 +107,7 @@ public sealed class AdmissionSecurityLawTests {
                 // server must close this on its own; no further bytes travel in either direction.
                 var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
 
-                using var stalling = new TcpClient();
+                using var stalling = new PeerTestClient();
 
                 await stalling.ConnectAsync(address: endpoint.Address, port: endpoint.Port, cancellationToken: testCt);
 
@@ -115,16 +115,16 @@ public sealed class AdmissionSecurityLawTests {
 
                 await HandshakeWireFormat.WriteHelloAsync(ct: testCt, key: WorldProtocol.WireProtocolKey, stream: stallingStream);
 
-                var challenge = await WorldTcpWireFormat.TryReadDownstreamAsync(ct: testCt, stream: stallingStream);
+                var challenge = await WorldPeerWireFormat.TryReadDownstreamAsync(ct: testCt, stream: stallingStream);
 
                 Assert.NotNull(@object: challenge);
-                Assert.Equal(expected: WorldTcpWireFormat.DownstreamKind.HelloChallenge, actual: challenge!.Value.Kind);
+                Assert.Equal(expected: WorldPeerWireFormat.DownstreamKind.HelloChallenge, actual: challenge!.Value.Kind);
 
                 var closed = false;
                 var probe = new byte[1];
 
                 try {
-                    // Longer than WorldTcpHost.HandshakeDeadline: this read is waiting for that deadline to fire.
+                    // Longer than WorldPeerHost.HandshakeDeadline: this read is waiting for that deadline to fire.
                     using var waitCts = Laws.SocketDeadline();
 
                     var read = await stallingStream.ReadAsync(buffer: probe, cancellationToken: waitCts.Token);
@@ -158,12 +158,12 @@ public sealed class AdmissionSecurityLawTests {
             var document = BuildAdmissionDocument(entry: BuildEntry(grants: [], identity: identity));
 
             using var fixture = Fixtures.FreshServer(definition: document);
-            using var host = new WorldTcpHost(server: fixture.Server);
+            using var host = new WorldPeerHost(server: fixture.Server);
 
             host.Start(listen: "127.0.0.1:0");
 
-            using var client = new TcpClient();
-            // Longer than WorldTcpHost.HandshakeDeadline: the close this law waits for is that deadline firing.
+            using var client = new PeerTestClient();
+            // Longer than WorldPeerHost.HandshakeDeadline: the close this law waits for is that deadline firing.
             using var testCts = Laws.SocketDeadline();
             var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
 
@@ -173,10 +173,10 @@ public sealed class AdmissionSecurityLawTests {
 
             await HandshakeWireFormat.WriteHelloAsync(stream: stream, key: WorldProtocol.WireProtocolKey, ct: testCts.Token);
 
-            var challenge = ((await WorldTcpWireFormat.TryReadDownstreamAsync(stream: stream, ct: testCts.Token))
+            var challenge = ((await WorldPeerWireFormat.TryReadDownstreamAsync(stream: stream, ct: testCts.Token))
                 ?? throw new InvalidOperationException(message: "connection closed before the challenge"));
 
-            Assert.Equal(actual: challenge.Kind, expected: WorldTcpWireFormat.DownstreamKind.HelloChallenge);
+            Assert.Equal(actual: challenge.Kind, expected: WorldPeerWireFormat.DownstreamKind.HelloChallenge);
 
             await WriteIdentityResponseAsync(stream: stream, identity: identity, challenge: challenge.Body, ct: testCts.Token);
 
@@ -203,7 +203,7 @@ public sealed class AdmissionSecurityLawTests {
     [Fact]
     public async Task MalformedHelloIdentityFrame_DrawsNamedRefusal_ControlCleanDisconnectStaysSilent() {
         using var fixture = Fixtures.FreshServer();
-        using var host = new WorldTcpHost(server: fixture.Server);
+        using var host = new WorldPeerHost(server: fixture.Server);
 
         host.Start(listen: "127.0.0.1:0");
 
@@ -212,16 +212,16 @@ public sealed class AdmissionSecurityLawTests {
         var marker = "ATTACKER-SUPPLIED-MARKER-3ee19c";
         var malformedBody = new byte[] { 5 }.Concat(second: System.Text.Encoding.UTF8.GetBytes(s: marker)).ToArray();
 
-        using (var malformedClient = new TcpClient()) {
+        using (var malformedClient = new PeerTestClient()) {
             var reply = await SendRawIdentityFrameAsync(body: malformedBody, client: malformedClient, ct: testCt, host: host);
-            var text = WorldTcpWireFormat.DecodeText(body: reply.Body.Span);
+            var text = WorldPeerWireFormat.DecodeText(body: reply.Body.Span);
 
-            Assert.Equal(actual: reply.Kind, expected: WorldTcpWireFormat.DownstreamKind.HelloRefused);
+            Assert.Equal(actual: reply.Kind, expected: WorldPeerWireFormat.DownstreamKind.HelloRefused);
             Assert.Contains(actualString: text, comparisonType: StringComparison.Ordinal, expectedSubstring: "identity-refused: ");
             Assert.DoesNotContain(actualString: text, expectedSubstring: marker);
         }
 
-        using (var cleanClient = new TcpClient()) {
+        using (var cleanClient = new PeerTestClient()) {
             var closedSilently = await DisconnectAfterChallengeAsync(client: cleanClient, ct: testCt, host: host);
 
             Assert.True(condition: closedSilently, userMessage: "a genuine disconnect while awaiting the HelloIdentity frame drew a reply instead of closing silently");
@@ -233,7 +233,7 @@ public sealed class AdmissionSecurityLawTests {
     [Fact]
     public async Task WellFormedFrameWithTrailingBytes_DrawsNamedRefusal() {
         using var fixture = Fixtures.FreshServer();
-        using var host = new WorldTcpHost(server: fixture.Server);
+        using var host = new WorldPeerHost(server: fixture.Server);
 
         host.Start(listen: "127.0.0.1:0");
 
@@ -250,11 +250,11 @@ public sealed class AdmissionSecurityLawTests {
         // bytes the grammar never accounts for.
         var body = new byte[] { 0 }.Concat(second: claimEnvelope).Concat(second: trailing).ToArray();
 
-        using var client = new TcpClient();
+        using var client = new PeerTestClient();
         var reply = await SendRawIdentityFrameAsync(body: body, client: client, ct: testCt, host: host);
-        var text = WorldTcpWireFormat.DecodeText(body: reply.Body.Span);
+        var text = WorldPeerWireFormat.DecodeText(body: reply.Body.Span);
 
-        Assert.Equal(actual: reply.Kind, expected: WorldTcpWireFormat.DownstreamKind.HelloRefused);
+        Assert.Equal(actual: reply.Kind, expected: WorldPeerWireFormat.DownstreamKind.HelloRefused);
         Assert.Contains(actualString: text, comparisonType: StringComparison.Ordinal, expectedSubstring: "identity-refused: the frame carries trailing bytes after the claim attestation");
     }
     /// <summary>A length prefix that declares a HelloIdentity frame, followed by a half-close before the body
@@ -264,18 +264,18 @@ public sealed class AdmissionSecurityLawTests {
     [Fact]
     public async Task TruncatedDeclaredFrame_DrawsNamedRefusal_NotSilentDisconnect() {
         using var fixture = Fixtures.FreshServer();
-        using var host = new WorldTcpHost(server: fixture.Server);
+        using var host = new WorldPeerHost(server: fixture.Server);
 
         host.Start(listen: "127.0.0.1:0");
 
         using var testCts = Laws.SocketDeadline();
         var testCt = testCts.Token;
 
-        using var client = new TcpClient();
+        using var client = new PeerTestClient();
         var reply = await SendTruncatedIdentityFrameAsync(actualBodyBytes: 4, client: client, ct: testCt, declaredBodyLength: 10, host: host);
-        var text = WorldTcpWireFormat.DecodeText(body: reply.Body.Span);
+        var text = WorldPeerWireFormat.DecodeText(body: reply.Body.Span);
 
-        Assert.Equal(actual: reply.Kind, expected: WorldTcpWireFormat.DownstreamKind.HelloRefused);
+        Assert.Equal(actual: reply.Kind, expected: WorldPeerWireFormat.DownstreamKind.HelloRefused);
         Assert.Contains(actualString: text, comparisonType: StringComparison.Ordinal, expectedSubstring: "identity-refused: the connection closed before the declared frame's body completed");
     }
     /// <summary>A policy-added grant becomes part of the next rebuild's revocation baseline. Otherwise a live revoke
@@ -292,7 +292,7 @@ public sealed class AdmissionSecurityLawTests {
             var initial = BuildAdmissionDocument(entry: BuildEntry(grants: [drive], identity: identity));
 
             using var fixture = Fixtures.FreshServer(definition: initial);
-            using var host = new WorldTcpHost(server: fixture.Server);
+            using var host = new WorldPeerHost(server: fixture.Server);
 
             host.Start(listen: "127.0.0.1:0");
 
@@ -349,7 +349,7 @@ public sealed class AdmissionSecurityLawTests {
             var document = BuildAdmissionDocument(entry: BuildEntry(grants: [observe], identity: identity));
 
             using var fixture = Fixtures.FreshServer(definition: document);
-            using var host = new WorldTcpHost(server: fixture.Server);
+            using var host = new WorldPeerHost(server: fixture.Server);
             var blocker = new WorldGrant(Principal: WorldPrincipal.Seat(slot: 0), Capability: WorldCapability.Observe, Subject: body, Exclusive: true);
 
             fixture.Server.Grant(grant: blocker, actor: WorldPrincipal.Console);
@@ -401,7 +401,7 @@ public sealed class AdmissionSecurityLawTests {
             using var fixture = Fixtures.FreshServer(definition: document);
             var transport = new LoopbackTransport(server: fixture.Server);
             var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], addonHostFactory: static (_, _) => new NullAddonHost());
-            using var host = new WorldTcpHost(server: fixture.Server);
+            using var host = new WorldPeerHost(server: fixture.Server);
 
             Assert.True(condition: tape.TryBeginRecording(name: name, refusal: out var refusal), userMessage: $"refused to arm admission replay: {refusal}");
 
@@ -458,7 +458,7 @@ public sealed class AdmissionSecurityLawTests {
             var document = BuildAdmissionDocument(entry: BuildEntry(grants: grants, identity: identity));
 
             using var fixture = Fixtures.FreshServer(definition: document);
-            using var host = new WorldTcpHost(server: fixture.Server);
+            using var host = new WorldPeerHost(server: fixture.Server);
 
             host.Start(listen: "127.0.0.1:0");
 
@@ -484,7 +484,7 @@ public sealed class AdmissionSecurityLawTests {
     /// <paramref name="body"/> as a raw length-prefixed HelloIdentity frame (bypassing
     /// <see cref="HandshakeWireFormat.WriteHelloIdentityAsync"/>'s own grammar so a deliberately malformed shape can
     /// be sent) and returns the door's downstream reply.</summary>
-    private static async Task<(WorldTcpWireFormat.DownstreamKind Kind, ReadOnlyMemory<byte> Body)> SendRawIdentityFrameAsync(WorldTcpHost host, TcpClient client, byte[] body, CancellationToken ct) {
+    private static async Task<(WorldPeerWireFormat.DownstreamKind Kind, ReadOnlyMemory<byte> Body)> SendRawIdentityFrameAsync(WorldPeerHost host, PeerTestClient client, byte[] body, CancellationToken ct) {
         var stream = await ConnectPastChallengeAsync(client: client, ct: ct, host: host);
         var frame = new byte[checked((sizeof(uint) + body.Length))];
 
@@ -494,7 +494,7 @@ public sealed class AdmissionSecurityLawTests {
         await stream.WriteAsync(buffer: frame, cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false);
         await stream.FlushAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false);
 
-        var reply = ((await WorldTcpWireFormat.TryReadDownstreamAsync(ct: ct, stream: stream).ConfigureAwait(continueOnCapturedContext: false))
+        var reply = ((await WorldPeerWireFormat.TryReadDownstreamAsync(ct: ct, stream: stream).ConfigureAwait(continueOnCapturedContext: false))
             ?? throw new InvalidOperationException(message: "connection closed with no reply to the malformed HelloIdentity frame"));
 
         return (reply.Kind, reply.Body);
@@ -503,7 +503,7 @@ public sealed class AdmissionSecurityLawTests {
     /// prefix declaring <paramref name="declaredBodyLength"/> bytes, writes only
     /// <paramref name="actualBodyBytes"/> of that body, and half-closes the send side — a peer that commits to a
     /// frame and then abandons it. Returns the door's downstream reply.</summary>
-    private static async Task<(WorldTcpWireFormat.DownstreamKind Kind, ReadOnlyMemory<byte> Body)> SendTruncatedIdentityFrameAsync(WorldTcpHost host, TcpClient client, int declaredBodyLength, int actualBodyBytes, CancellationToken ct) {
+    private static async Task<(WorldPeerWireFormat.DownstreamKind Kind, ReadOnlyMemory<byte> Body)> SendTruncatedIdentityFrameAsync(WorldPeerHost host, PeerTestClient client, int declaredBodyLength, int actualBodyBytes, CancellationToken ct) {
         var stream = await ConnectPastChallengeAsync(client: client, ct: ct, host: host);
         var prefix = new byte[sizeof(uint)];
 
@@ -515,9 +515,9 @@ public sealed class AdmissionSecurityLawTests {
         await stream.WriteAsync(buffer: partialBody, cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false);
         await stream.FlushAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false);
 
-        client.Client.Shutdown(how: SocketShutdown.Send);
+        await client.CompleteWritesAsync(ct);
 
-        var reply = ((await WorldTcpWireFormat.TryReadDownstreamAsync(ct: ct, stream: stream).ConfigureAwait(continueOnCapturedContext: false))
+        var reply = ((await WorldPeerWireFormat.TryReadDownstreamAsync(ct: ct, stream: stream).ConfigureAwait(continueOnCapturedContext: false))
             ?? throw new InvalidOperationException(message: "connection closed with no reply to the truncated HelloIdentity frame"));
 
         return (reply.Kind, reply.Body);
@@ -525,14 +525,14 @@ public sealed class AdmissionSecurityLawTests {
     /// <summary>Connects, completes the Hello version door, reads the identity challenge, then half-closes the send
     /// side without ever writing an identity frame — a genuine disconnect. Returns whether the server closed the
     /// connection with no bytes sent back.</summary>
-    private static async Task<bool> DisconnectAfterChallengeAsync(WorldTcpHost host, TcpClient client, CancellationToken ct) {
+    private static async Task<bool> DisconnectAfterChallengeAsync(WorldPeerHost host, PeerTestClient client, CancellationToken ct) {
         var stream = await ConnectPastChallengeAsync(client: client, ct: ct, host: host);
 
-        client.Client.Shutdown(how: SocketShutdown.Send);
+        await client.CompleteWritesAsync(ct);
 
         return await WaitForCloseAsync(ct: ct, stream: stream);
     }
-    private static async Task<NetworkStream> ConnectPastChallengeAsync(WorldTcpHost host, TcpClient client, CancellationToken ct) {
+    private static async Task<Stream> ConnectPastChallengeAsync(WorldPeerHost host, PeerTestClient client, CancellationToken ct) {
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
 
         await client.ConnectAsync(address: endpoint.Address, port: endpoint.Port, cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false);
@@ -541,14 +541,14 @@ public sealed class AdmissionSecurityLawTests {
 
         await HandshakeWireFormat.WriteHelloAsync(ct: ct, key: WorldProtocol.WireProtocolKey, stream: stream).ConfigureAwait(continueOnCapturedContext: false);
 
-        var challenge = ((await WorldTcpWireFormat.TryReadDownstreamAsync(ct: ct, stream: stream).ConfigureAwait(continueOnCapturedContext: false))
+        var challenge = ((await WorldPeerWireFormat.TryReadDownstreamAsync(ct: ct, stream: stream).ConfigureAwait(continueOnCapturedContext: false))
             ?? throw new InvalidOperationException(message: "connection closed before the Hello challenge arrived"));
 
-        Assert.Equal(actual: challenge.Kind, expected: WorldTcpWireFormat.DownstreamKind.HelloChallenge);
+        Assert.Equal(actual: challenge.Kind, expected: WorldPeerWireFormat.DownstreamKind.HelloChallenge);
 
         return stream;
     }
-    private static async Task<bool> WaitForCloseAsync(NetworkStream stream, CancellationToken ct) {
+    private static async Task<bool> WaitForCloseAsync(Stream stream, CancellationToken ct) {
         var probe = new byte[1];
 
         try {
@@ -602,7 +602,7 @@ public sealed class AdmissionSecurityLawTests {
             var document = BuildAdmissionDocument(entry: entry);
 
             using var fixture = Fixtures.FreshServer(definition: document);
-            using var host = new WorldTcpHost(server: fixture.Server);
+            using var host = new WorldPeerHost(server: fixture.Server);
 
             host.Start(listen: "127.0.0.1:0");
 

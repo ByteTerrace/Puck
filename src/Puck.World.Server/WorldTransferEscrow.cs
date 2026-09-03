@@ -14,7 +14,9 @@ namespace Puck.World.Server;
 /// <param name="CatalogRig">The source body's entity-owned procedural rig, preserved across ownership. Destination
 /// look authoring may deliberately override it; ordinary admission may not.</param>
 /// <param name="Mobility">The traveler's immutable incarnation and current committed ownership epoch.</param>
-public readonly record struct WorldTransferReservationMember(WorldPrincipal Principal, int PreferredSlot, WorldIdentity? Identity, IntentSource Source, Vector3 BodyColor, byte CatalogRig, WorldMobilityIdentity? Mobility = null);
+/// <param name="Social">The exact frozen observer export; null when the source has no social bank. It is private
+/// authority-transfer data, not a public creature observation.</param>
+public readonly record struct WorldTransferReservationMember(WorldPrincipal Principal, int PreferredSlot, WorldIdentity? Identity, IntentSource Source, Vector3 BodyColor, byte CatalogRig, WorldMobilityIdentity? Mobility = null, WorldSocialMemoryCheckpoint? Social = null);
 /// <summary>The destination's binding reservation request. The deadline is stated in the source authority's own
 /// simulation ticks; the destination converts the remaining interval through the exact 50400 engine-tick bridge.</summary>
 public sealed record WorldTransferReservationRequest(
@@ -103,10 +105,10 @@ public sealed record WorldTransferCommitMember(
     WorldTransferActionContinuity? ActionContinuity = null,
     WorldContinuumTrajectory? Continuum = null
 );
-/// <summary>The transfer escrow table shared by colocated and TCP authority transports. It owns destination capacity
+/// <summary>The transfer escrow table shared by colocated and QUIC authority transports. It owns destination capacity
 /// from reserve until commit, explicit abort, or deterministic deadline expiry; it never queues a full request.</summary>
-public sealed class WorldTransferEscrow {
-    private sealed record Lease(WorldTransferReservationRequest Request, ulong DeadlineTick, int[] Slots, WorldDefinition DestinationDefinition, WorldAdmissionVerdict? Arrival);
+public sealed partial class WorldTransferEscrow {
+    private sealed record Lease(WorldTransferReservationRequest Request, ulong DeadlineTick, int[] Slots, WorldDefinition DestinationDefinition, WorldAdmissionVerdict? Arrival, WorldSocialObserverImport[]? Social);
     private readonly record struct MobilityAdmission(ulong Epoch, WorldPrincipal Principal);
     private readonly record struct MobilityLease(WorldTransferKey Transfer, ulong ExpectedEpoch);
 
@@ -149,7 +151,7 @@ public sealed class WorldTransferEscrow {
         foreach (var (key, lease) in m_leases) {
             leases.Add(item: new WorldTransferLeaseCheckpoint(
                 Key: key,
-                Request: lease.Request,
+                Request: CopyOwnedReservation(lease.Request),
                 DeadlineTick: lease.DeadlineTick,
                 Slots: [.. lease.Slots],
                 DestinationDefinitionJson: WorldDefinitionSerialization.Serialize(definition: lease.DestinationDefinition),
@@ -166,7 +168,7 @@ public sealed class WorldTransferEscrow {
                     key: key,
                     value: out var members
                 )
-                    ? [.. members]
+                    ? members.Select(CopyCommitMember).ToArray()
                     : []
                 ),
                 Principals: (m_committedPrincipals.TryGetValue(
@@ -228,18 +230,23 @@ public sealed class WorldTransferEscrow {
                 : WorldDefinitionSerialization.Deserialize(utf8Json: lease.DestinationDefinitionJson)
             );
 
+            if (!TryCopyReservation(lease.Request, out var request, out var imported, out var socialReason) ||
+                !TryPrepareSocialReservation(m_server.SocialMemory, request, imported, out var social, out _, out socialReason)) {
+                throw new ArgumentException(socialReason, nameof(checkpoint));
+            }
             m_leases[lease.Key] = new Lease(
-                Request: lease.Request,
+                Request: request,
                 DeadlineTick: lease.DeadlineTick,
-                Slots: lease.Slots,
+                Slots: [.. lease.Slots],
                 DestinationDefinition: destinationDefinition,
-                Arrival: lease.Arrival
+                Arrival: lease.Arrival,
+                Social: social
             );
         }
 
         foreach (var row in checkpoint.Committed) {
             _ = m_committed.Add(item: row.Key);
-            m_committedMembers[row.Key] = row.Members;
+            m_committedMembers[row.Key] = row.Members.Select(CopyCommitMember).ToArray();
             m_committedPrincipals[row.Key] = row.Principals;
             m_committedIncarnations[row.Key] = [.. row.Incarnations];
         }
@@ -315,7 +322,8 @@ public sealed class WorldTransferEscrow {
                 (a.YawRadians != b.YawRadians) ||
                 (a.PlanarVelocity != b.PlanarVelocity) ||
                 (a.VerticalVelocity != b.VerticalVelocity) ||
-                (a.Continuum != b.Continuum)
+                (a.Continuum != b.Continuum) ||
+                !ActionContinuityMatches(a.ActionContinuity, b.ActionContinuity)
             ) {
                 return false;
             }
@@ -323,6 +331,17 @@ public sealed class WorldTransferEscrow {
 
         return true;
     }
+    private static bool ActionContinuityMatches(WorldTransferActionContinuity? left, WorldTransferActionContinuity? right) =>
+        ReferenceEquals(left, right) || (left is not null && right is not null &&
+        left.Channels is not null && right.Channels is not null && left.Registers is not null && right.Registers is not null &&
+        left.Channels.SequenceEqual(right.Channels) && left.Registers.SequenceEqual(right.Registers));
+
+    // IReadOnlyList does not imply immutable storage. Retain a value image of continuity, including at checkpoint
+    // capture/restore, so caller edits cannot rewrite which commit this idempotency receipt accepted.
+    private static WorldTransferCommitMember CopyCommitMember(WorldTransferCommitMember member) => member with {
+        ActionContinuity = member.ActionContinuity is { } continuity
+            ? new WorldTransferActionContinuity([.. continuity.Channels], [.. continuity.Registers]) : null,
+    };
     private static bool IdentityMatches(WorldIdentity? left, WorldIdentity? right) {
         if (ReferenceEquals(
             objA: left,
@@ -382,6 +401,7 @@ public sealed class WorldTransferEscrow {
         )) {
             return;
         }
+        m_server.SocialMemory?.CancelImportReservation(key);
         foreach (var member in lease.Request.Members) {
             var mobility = member.Mobility!.Value;
 
@@ -431,6 +451,7 @@ public sealed class WorldTransferEscrow {
                 (a.BodyColor != b.BodyColor) ||
                 (a.CatalogRig != b.CatalogRig) ||
                 (a.Mobility != b.Mobility) ||
+                !WorldSocialMemory.ObserverSnapshotMatches(a.Social, b.Social) ||
                 !IdentityMatches(
                 left: a.Identity,
                 right: b.Identity
@@ -573,7 +594,12 @@ public sealed class WorldTransferEscrow {
             }
         }
 
-        ReleaseLease(key: key);
+        try { return CommitLease(key, lease, members, out reason); }
+        finally { ReleaseLease(key); }
+    }
+
+    private bool CommitLease(WorldTransferKey key, Lease lease, IReadOnlyList<WorldTransferCommitMember> members, out string reason) {
+        var transferId = key.TransferId;
 
         if ((m_server.NextInputTick - 1UL) >= lease.DeadlineTick) {
             reason = $"transfer {transferId} reservation expired at destination tick {lease.DeadlineTick}";
@@ -611,6 +637,12 @@ public sealed class WorldTransferEscrow {
             return false;
         }
 
+        if (members.Any(static member => member.ActionContinuity is { } continuity && (continuity.Channels is null || continuity.Registers is null))) {
+            reason = $"transfer {transferId} carries invalid action continuity collections";
+            return false;
+        }
+        members = members.Select(CopyCommitMember).ToArray();
+
         for (var index = 0; (index < members.Count); index++) {
             var member = members[index];
 
@@ -640,6 +672,12 @@ public sealed class WorldTransferEscrow {
             }
         }
 
+        WorldSocialMemory.PreparedImport? preparedSocial = null;
+        var socialBank = m_server.SocialMemory;
+        if (lease.Social is { } socialImports) {
+            if (socialBank is null) { reason = "reserved social history has no destination bank"; return false; }
+            if (!socialBank.TryPrepareReservedImport(key, socialImports, out preparedSocial, out reason)) { return false; }
+        }
         var landed = new List<int>(capacity: members.Count);
 
         for (var index = 0; (index < members.Count); index++) {
@@ -734,6 +772,14 @@ public sealed class WorldTransferEscrow {
             m_borderAdmissions[slot] = lease.Request.Border;
         }
 
+        if (preparedSocial is not null && !socialBank!.TryCommitReservedImport(preparedSocial, out reason)) {
+            foreach (var slot in landed) {
+                if (lease.Request.PeerAdmission) { m_server.RollbackTransferredEntity(slot); }
+                else { m_server.Population.TryDetachSeatForTransfer(slot, out _); }
+                m_borderAdmissions.Remove(slot);
+            }
+            return false;
+        }
         m_committed.Add(item: key);
         m_committedMembers[key] = [.. members];
         m_committedPrincipals[key] = lease.Slots.Select(selector: slot => (lease.Request.PeerAdmission
@@ -798,6 +844,9 @@ public sealed class WorldTransferEscrow {
             return WorldTransferReservationReply.Refused(reason: $"transfer {request.TransferId} already committed");
         }
 
+        if (!TryCopyReservation(request, out request, out var importedSocial, out var socialReason)) {
+            return WorldTransferReservationReply.Refused(socialReason);
+        }
         if (m_leases.TryGetValue(
             key: key,
             value: out var existing
@@ -813,7 +862,7 @@ public sealed class WorldTransferEscrow {
                 Accepted: true,
                 Reason: string.Empty,
                 DeadlineDestinationTick: existing.DeadlineTick,
-                BodyIndices: existing.Slots,
+                BodyIndices: [.. existing.Slots],
                 DestinationDefinition: existing.DestinationDefinition
             );
         }
@@ -980,6 +1029,10 @@ public sealed class WorldTransferEscrow {
 
         var destinationDefinition = m_server.Definition;
 
+        if (!TryPrepareSocialReservation(m_server.SocialMemory, request, importedSocial, out var social, out var allowances, out socialReason) ||
+            (m_server.SocialMemory is { } bank && !bank.TryReserveImport(key, allowances!, out socialReason))) {
+            return WorldTransferReservationReply.Refused(socialReason);
+        }
         m_leases.Add(
             key: key,
             value: new Lease(
@@ -987,7 +1040,8 @@ public sealed class WorldTransferEscrow {
                 DeadlineTick: deadline,
                 DestinationDefinition: destinationDefinition,
                 Request: request,
-                Slots: slots
+                Slots: slots,
+                Social: social
             )
         );
         foreach (var member in request.Members) {
@@ -1004,7 +1058,7 @@ public sealed class WorldTransferEscrow {
 
         return new WorldTransferReservationReply(
             Accepted: true,
-            BodyIndices: slots,
+            BodyIndices: [.. slots],
             DeadlineDestinationTick: deadline,
             DestinationDefinition: destinationDefinition,
             Reason: string.Empty

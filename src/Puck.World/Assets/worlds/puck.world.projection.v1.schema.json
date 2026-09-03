@@ -4660,6 +4660,303 @@
                           "additionalProperties": false
                         },
                         {
+                          "description": "World-scope comparison of two bounded numeric expressions. Arithmetic failure makes this comparison false.",
+                          "properties": {
+                            "$type": {
+                              "const": "compareValue"
+                            },
+                            "left": {
+                              "description": "Left numeric expression.",
+                              "type": "object",
+                              "properties": {
+                                "tokens": {
+                                  "description": "The postfix tokens, in evaluation order.",
+                                  "type": "array",
+                                  "items": {
+                                    "description": "One authored token in a WorldValueExpression.",
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ],
+                                    "required": [
+                                      "$type"
+                                    ],
+                                    "anyOf": [
+                                      {
+                                        "description": "An exact authored decimal, converted to the destination row\u0027s numeric kind at compile time.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "constant"
+                                          },
+                                          "value": {
+                                            "description": "The exact decimal literal.",
+                                            "type": "number"
+                                          }
+                                        },
+                                        "required": [
+                                          "value"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "A live state cell or reserved world-rule channel.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "state"
+                                          },
+                                          "name": {
+                                            "description": "The state row or reserved-channel name.",
+                                            "type": "string"
+                                          },
+                                          "key": {
+                                            "description": "The optional keyed-row cell.",
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ],
+                                            "default": null
+                                          }
+                                        },
+                                        "required": [
+                                          "name"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "A directed impression query, with its facet\u0027s declared numeric kind.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "social"
+                                          },
+                                          "query": {
+                                            "type": "object",
+                                            "properties": {
+                                              "relationship": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "observer": {
+                                                    "description": "The individual whose belief is addressed.",
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "body": {
+                                                        "description": "The ordinary world-rule body-reference grammar, such as body:0, each, or cell:row:key.",
+                                                        "type": [
+                                                          "string",
+                                                          "null"
+                                                        ],
+                                                        "default": null
+                                                      },
+                                                      "identity": {
+                                                        "description": "An original authority/index/generation address, not a current transfer destination.",
+                                                        "type": [
+                                                          "object",
+                                                          "null"
+                                                        ],
+                                                        "properties": {
+                                                          "authority": {
+                                                            "type": "string"
+                                                          },
+                                                          "index": {
+                                                            "type": "integer"
+                                                          },
+                                                          "generation": {
+                                                            "type": "integer"
+                                                          }
+                                                        },
+                                                        "additionalProperties": false,
+                                                        "default": null
+                                                      }
+                                                    },
+                                                    "additionalProperties": false
+                                                  },
+                                                  "subject": {
+                                                    "description": "The individual the belief concerns.",
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "body": {
+                                                        "description": "The ordinary world-rule body-reference grammar, such as body:0, each, or cell:row:key.",
+                                                        "type": [
+                                                          "string",
+                                                          "null"
+                                                        ],
+                                                        "default": null
+                                                      },
+                                                      "identity": {
+                                                        "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/properties/tokens/items/anyOf/2/properties/query/properties/relationship/properties/observer/properties/identity",
+                                                        "default": null
+                                                      }
+                                                    },
+                                                    "additionalProperties": false
+                                                  },
+                                                  "dimension": {
+                                                    "description": "The exact dimension name declared in state.social.",
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "observer",
+                                                  "subject",
+                                                  "dimension"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              "facet": {
+                                                "enum": [
+                                                  "Value",
+                                                  "Confidence",
+                                                  "Uncertainty",
+                                                  "Weight",
+                                                  "Known",
+                                                  "EventCount",
+                                                  "Age"
+                                                ],
+                                                "default": "Value"
+                                              }
+                                            },
+                                            "required": [
+                                              "relationship"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "required": [
+                                          "query"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "The social bank\u0027s current engine tick, Int saturated at Int64.MaxValue.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "socialClock"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "The last social evidence result ordinal, Int; -1 before any attempt. Rule effects execute in document order.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "socialResult"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes two values and pushes their sum.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "add"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes two values and pushes left minus right.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "subtract"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes two values and pushes their product in the destination row\u0027s numeric domain.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "multiply"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes two values and pushes left divided by right; zero fails evaluation. The caller closes a gate, rejects an effect/decision candidate, or supplies zero affinity according to its own contract.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "divide"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes two values and pushes the lesser.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "min"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes two values and pushes the greater.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "max"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes value, minimum, maximum (in that authored order) and pushes the inclusive clamp.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "clamp"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      }
+                                    ]
+                                  }
+                                }
+                              },
+                              "required": [
+                                "tokens"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "comparison": {
+                              "description": "The comparison operation.",
+                              "enum": [
+                                "Equal",
+                                "NotEqual",
+                                "Less",
+                                "LessOrEqual",
+                                "Greater",
+                                "GreaterOrEqual"
+                              ]
+                            },
+                            "right": {
+                              "description": "Right numeric expression.",
+                              "type": "object",
+                              "properties": {
+                                "tokens": {
+                                  "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/properties/tokens"
+                                }
+                              },
+                              "required": [
+                                "tokens"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "kind": {
+                              "description": "The common Int or Fixed domain; no implicit conversion is performed.",
+                              "enum": [
+                                "Int",
+                                "Fixed",
+                                "Bool",
+                                "Text"
+                              ],
+                              "default": "Fixed"
+                            }
+                          },
+                          "required": [
+                            "left",
+                            "comparison",
+                            "right"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
                           "description": "Whether a named timer slot has drained.",
                           "properties": {
                             "$type": {
@@ -4807,6 +5104,47 @@
                                     "additionalProperties": false
                                   },
                                   {
+                                    "description": "World-scope comparison of two bounded numeric expressions. Arithmetic failure makes this comparison false.",
+                                    "properties": {
+                                      "$type": {
+                                        "const": "compareValue"
+                                      },
+                                      "left": {
+                                        "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left"
+                                      },
+                                      "comparison": {
+                                        "description": "The comparison operation.",
+                                        "enum": [
+                                          "Equal",
+                                          "NotEqual",
+                                          "Less",
+                                          "LessOrEqual",
+                                          "Greater",
+                                          "GreaterOrEqual"
+                                        ]
+                                      },
+                                      "right": {
+                                        "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/right"
+                                      },
+                                      "kind": {
+                                        "description": "The common Int or Fixed domain; no implicit conversion is performed.",
+                                        "enum": [
+                                          "Int",
+                                          "Fixed",
+                                          "Bool",
+                                          "Text"
+                                        ],
+                                        "default": "Fixed"
+                                      }
+                                    },
+                                    "required": [
+                                      "left",
+                                      "comparison",
+                                      "right"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
                                     "description": "Whether a named timer slot has drained.",
                                     "properties": {
                                       "$type": {
@@ -4828,7 +5166,7 @@
                                         "const": "all"
                                       },
                                       "predicates": {
-                                        "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/4/properties/predicates"
+                                        "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/5/properties/predicates"
                                       }
                                     },
                                     "required": [
@@ -4846,7 +5184,7 @@
                                         "description": "The non-empty child-predicate list.",
                                         "type": "array",
                                         "items": {
-                                          "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/4/properties/predicates/items"
+                                          "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/5/properties/predicates/items"
                                         }
                                       }
                                     },
@@ -4983,6 +5321,47 @@
                                             "additionalProperties": false
                                           },
                                           {
+                                            "description": "World-scope comparison of two bounded numeric expressions. Arithmetic failure makes this comparison false.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "compareValue"
+                                              },
+                                              "left": {
+                                                "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left"
+                                              },
+                                              "comparison": {
+                                                "description": "The comparison operation.",
+                                                "enum": [
+                                                  "Equal",
+                                                  "NotEqual",
+                                                  "Less",
+                                                  "LessOrEqual",
+                                                  "Greater",
+                                                  "GreaterOrEqual"
+                                                ]
+                                              },
+                                              "right": {
+                                                "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/right"
+                                              },
+                                              "kind": {
+                                                "description": "The common Int or Fixed domain; no implicit conversion is performed.",
+                                                "enum": [
+                                                  "Int",
+                                                  "Fixed",
+                                                  "Bool",
+                                                  "Text"
+                                                ],
+                                                "default": "Fixed"
+                                              }
+                                            },
+                                            "required": [
+                                              "left",
+                                              "comparison",
+                                              "right"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
                                             "description": "Whether a named timer slot has drained.",
                                             "properties": {
                                               "$type": {
@@ -5004,7 +5383,7 @@
                                                 "const": "all"
                                               },
                                               "predicates": {
-                                                "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/4/properties/predicates"
+                                                "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/5/properties/predicates"
                                               }
                                             },
                                             "required": [
@@ -5019,7 +5398,7 @@
                                                 "const": "any"
                                               },
                                               "predicates": {
-                                                "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/4/properties/predicates/items/anyOf/5/properties/predicates"
+                                                "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/5/properties/predicates/items/anyOf/6/properties/predicates"
                                               }
                                             },
                                             "required": [
@@ -5034,7 +5413,7 @@
                                                 "const": "not"
                                               },
                                               "predicate": {
-                                                "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/4/properties/predicates/items/anyOf/6/properties/predicate"
+                                                "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/5/properties/predicates/items/anyOf/7/properties/predicate"
                                               }
                                             },
                                             "required": [
@@ -5098,7 +5477,7 @@
                               "const": "any"
                             },
                             "predicates": {
-                              "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/4/properties/predicates/items/anyOf/5/properties/predicates"
+                              "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/5/properties/predicates/items/anyOf/6/properties/predicates"
                             }
                           },
                           "required": [
@@ -5113,7 +5492,7 @@
                               "const": "not"
                             },
                             "predicate": {
-                              "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/4/properties/predicates/items/anyOf/6/properties/predicate"
+                              "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/5/properties/predicates/items/anyOf/7/properties/predicate"
                             }
                           },
                           "required": [
@@ -10833,123 +11212,7 @@
                           ],
                           "properties": {
                             "tokens": {
-                              "description": "The postfix tokens, in evaluation order.",
-                              "type": "array",
-                              "items": {
-                                "description": "One authored token in a WorldValueExpression.",
-                                "type": [
-                                  "object",
-                                  "null"
-                                ],
-                                "required": [
-                                  "$type"
-                                ],
-                                "anyOf": [
-                                  {
-                                    "description": "An exact authored decimal, converted to the destination row\u0027s numeric kind at compile time.",
-                                    "properties": {
-                                      "$type": {
-                                        "const": "constant"
-                                      },
-                                      "value": {
-                                        "description": "The exact decimal literal.",
-                                        "type": "number"
-                                      }
-                                    },
-                                    "required": [
-                                      "value"
-                                    ],
-                                    "additionalProperties": false
-                                  },
-                                  {
-                                    "description": "A live state cell or reserved world-rule channel.",
-                                    "properties": {
-                                      "$type": {
-                                        "const": "state"
-                                      },
-                                      "name": {
-                                        "description": "The state row or reserved-channel name.",
-                                        "type": "string"
-                                      },
-                                      "key": {
-                                        "description": "The optional keyed-row cell.",
-                                        "type": [
-                                          "string",
-                                          "null"
-                                        ],
-                                        "default": null
-                                      }
-                                    },
-                                    "required": [
-                                      "name"
-                                    ],
-                                    "additionalProperties": false
-                                  },
-                                  {
-                                    "description": "Consumes two values and pushes their sum.",
-                                    "properties": {
-                                      "$type": {
-                                        "const": "add"
-                                      }
-                                    },
-                                    "additionalProperties": false
-                                  },
-                                  {
-                                    "description": "Consumes two values and pushes left minus right.",
-                                    "properties": {
-                                      "$type": {
-                                        "const": "subtract"
-                                      }
-                                    },
-                                    "additionalProperties": false
-                                  },
-                                  {
-                                    "description": "Consumes two values and pushes their product in the destination row\u0027s numeric domain.",
-                                    "properties": {
-                                      "$type": {
-                                        "const": "multiply"
-                                      }
-                                    },
-                                    "additionalProperties": false
-                                  },
-                                  {
-                                    "description": "Consumes two values and pushes left divided by right; zero fails the effect or transaction.",
-                                    "properties": {
-                                      "$type": {
-                                        "const": "divide"
-                                      }
-                                    },
-                                    "additionalProperties": false
-                                  },
-                                  {
-                                    "description": "Consumes two values and pushes the lesser.",
-                                    "properties": {
-                                      "$type": {
-                                        "const": "min"
-                                      }
-                                    },
-                                    "additionalProperties": false
-                                  },
-                                  {
-                                    "description": "Consumes two values and pushes the greater.",
-                                    "properties": {
-                                      "$type": {
-                                        "const": "max"
-                                      }
-                                    },
-                                    "additionalProperties": false
-                                  },
-                                  {
-                                    "description": "Consumes value, minimum, maximum (in that authored order) and pushes the inclusive clamp.",
-                                    "properties": {
-                                      "$type": {
-                                        "const": "clamp"
-                                      }
-                                    },
-                                    "additionalProperties": false
-                                  }
-                                ]
-                              }
+                              "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/properties/tokens"
                             }
                           },
                           "required": [
@@ -11031,7 +11294,7 @@
                           ],
                           "properties": {
                             "tokens": {
-                              "$ref": "#/properties/interactions/properties/interactions/items/properties/effects/items/anyOf/3/properties/expression/properties/tokens"
+                              "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/properties/tokens"
                             }
                           },
                           "required": [
@@ -11043,6 +11306,213 @@
                       },
                       "required": [
                         "state"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Applies a bounded state transform through the ordinary mutation pipeline.",
+                      "properties": {
+                        "$type": {
+                          "const": "transformState"
+                        },
+                        "transform": {
+                          "description": "The typed operation.",
+                          "type": "object",
+                          "required": [
+                            "$type"
+                          ],
+                          "anyOf": [
+                            {
+                              "description": "Moves one token, preserving identity. A random draw advances only when the whole transfer commits.",
+                              "properties": {
+                                "$type": {
+                                  "const": "transfer"
+                                },
+                                "from": {
+                                  "description": "The source zone.",
+                                  "type": "string"
+                                },
+                                "to": {
+                                  "description": "The destination zone.",
+                                  "type": "string"
+                                },
+                                "selector": {
+                                  "description": "The source selector.",
+                                  "enum": [
+                                    "Key",
+                                    "First",
+                                    "Last",
+                                    "Random"
+                                  ],
+                                  "default": "Key"
+                                },
+                                "key": {
+                                  "description": "The token key for key selection.",
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "default": null
+                                },
+                                "insertFirst": {
+                                  "description": "Insert at the first position rather than the last.",
+                                  "type": "boolean",
+                                  "default": false
+                                },
+                                "draw": {
+                                  "description": "A streamDraw site for random selection; absent for other selectors.",
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "default": null
+                                }
+                              },
+                              "required": [
+                                "from",
+                                "to"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "Writes only a nonempty run of matching cells closed by a required terminator; otherwise refuses.",
+                              "properties": {
+                                "$type": {
+                                  "const": "setRay"
+                                },
+                                "row": {
+                                  "description": "The board row.",
+                                  "type": "string"
+                                },
+                                "from": {
+                                  "description": "The origin key, excluded from the write.",
+                                  "type": "string"
+                                },
+                                "direction": {
+                                  "description": "A direction in the board\u0027s topology.",
+                                  "type": "string"
+                                },
+                                "through": {
+                                  "description": "Every intervening cell must have this value.",
+                                  "type": "integer"
+                                },
+                                "until": {
+                                  "description": "The closing value, excluded from the write.",
+                                  "type": "integer"
+                                },
+                                "value": {
+                                  "description": "The replacement value.",
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "row",
+                                "from",
+                                "direction",
+                                "through",
+                                "until",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "Completes the acting participant\u0027s activation or readiness, guarded against stale submissions.",
+                              "properties": {
+                                "$type": {
+                                  "const": "completePhase"
+                                },
+                                "row": {
+                                  "description": "The phase row.",
+                                  "type": "string"
+                                },
+                                "expectedSequence": {
+                                  "description": "The exact observed progression sequence; only the world program may omit it.",
+                                  "type": [
+                                    "integer",
+                                    "null"
+                                  ],
+                                  "default": null
+                                },
+                                "timeout": {
+                                  "description": "World-only completion after the current deadline.",
+                                  "type": "boolean",
+                                  "default": false
+                                },
+                                "participant": {
+                                  "description": "World-only named participant on whose completion the authored rule acts.",
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "default": null
+                                }
+                              },
+                              "required": [
+                                "row"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "Moves a token along an affordable route, debiting movement points in the same candidate.",
+                              "properties": {
+                                "$type": {
+                                  "const": "moveToken"
+                                },
+                                "positions": {
+                                  "description": "The token-keyed position row; valuesFrom names the terrain topology.",
+                                  "type": "string"
+                                },
+                                "token": {
+                                  "description": "The stable token key.",
+                                  "type": "string"
+                                },
+                                "destination": {
+                                  "description": "The destination cell ordinal.",
+                                  "type": "integer"
+                                },
+                                "terrain": {
+                                  "description": "The board row containing nonnegative entry costs; negative values are impassable.",
+                                  "type": "string"
+                                },
+                                "allowance": {
+                                  "description": "The token-keyed movement-points row.",
+                                  "type": "string"
+                                },
+                                "maxVisits": {
+                                  "description": "The route search\u0027s settled-node bound.",
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "positions",
+                                "token",
+                                "destination",
+                                "terrain",
+                                "allowance",
+                                "maxVisits"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "Refreshes a knowledge board from its declared source and visibility mask; authority only.",
+                              "properties": {
+                                "$type": {
+                                  "const": "observe"
+                                },
+                                "row": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "row"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "transform"
                       ],
                       "additionalProperties": false
                     },
@@ -11456,6 +11926,213 @@
                             ],
                             "anyOf": [
                               {
+                                "description": "One atomic state transform.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "transformState"
+                                  },
+                                  "transform": {
+                                    "description": "The bounded operation.",
+                                    "type": "object",
+                                    "required": [
+                                      "$type"
+                                    ],
+                                    "anyOf": [
+                                      {
+                                        "description": "Moves one token, preserving identity. A random draw advances only when the whole transfer commits.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "transfer"
+                                          },
+                                          "from": {
+                                            "description": "The source zone.",
+                                            "type": "string"
+                                          },
+                                          "to": {
+                                            "description": "The destination zone.",
+                                            "type": "string"
+                                          },
+                                          "selector": {
+                                            "description": "The source selector.",
+                                            "enum": [
+                                              "Key",
+                                              "First",
+                                              "Last",
+                                              "Random"
+                                            ],
+                                            "default": "Key"
+                                          },
+                                          "key": {
+                                            "description": "The token key for key selection.",
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ],
+                                            "default": null
+                                          },
+                                          "insertFirst": {
+                                            "description": "Insert at the first position rather than the last.",
+                                            "type": "boolean",
+                                            "default": false
+                                          },
+                                          "draw": {
+                                            "description": "A streamDraw site for random selection; absent for other selectors.",
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ],
+                                            "default": null
+                                          }
+                                        },
+                                        "required": [
+                                          "from",
+                                          "to"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Writes only a nonempty run of matching cells closed by a required terminator; otherwise refuses.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "setRay"
+                                          },
+                                          "row": {
+                                            "description": "The board row.",
+                                            "type": "string"
+                                          },
+                                          "from": {
+                                            "description": "The origin key, excluded from the write.",
+                                            "type": "string"
+                                          },
+                                          "direction": {
+                                            "description": "A direction in the board\u0027s topology.",
+                                            "type": "string"
+                                          },
+                                          "through": {
+                                            "description": "Every intervening cell must have this value.",
+                                            "type": "integer"
+                                          },
+                                          "until": {
+                                            "description": "The closing value, excluded from the write.",
+                                            "type": "integer"
+                                          },
+                                          "value": {
+                                            "description": "The replacement value.",
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "row",
+                                          "from",
+                                          "direction",
+                                          "through",
+                                          "until",
+                                          "value"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Completes the acting participant\u0027s activation or readiness, guarded against stale submissions.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "completePhase"
+                                          },
+                                          "row": {
+                                            "description": "The phase row.",
+                                            "type": "string"
+                                          },
+                                          "expectedSequence": {
+                                            "description": "The exact observed progression sequence; only the world program may omit it.",
+                                            "type": [
+                                              "integer",
+                                              "null"
+                                            ],
+                                            "default": null
+                                          },
+                                          "timeout": {
+                                            "description": "World-only completion after the current deadline.",
+                                            "type": "boolean",
+                                            "default": false
+                                          },
+                                          "participant": {
+                                            "description": "World-only named participant on whose completion the authored rule acts.",
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ],
+                                            "default": null
+                                          }
+                                        },
+                                        "required": [
+                                          "row"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Moves a token along an affordable route, debiting movement points in the same candidate.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "moveToken"
+                                          },
+                                          "positions": {
+                                            "description": "The token-keyed position row; valuesFrom names the terrain topology.",
+                                            "type": "string"
+                                          },
+                                          "token": {
+                                            "description": "The stable token key.",
+                                            "type": "string"
+                                          },
+                                          "destination": {
+                                            "description": "The destination cell ordinal.",
+                                            "type": "integer"
+                                          },
+                                          "terrain": {
+                                            "description": "The board row containing nonnegative entry costs; negative values are impassable.",
+                                            "type": "string"
+                                          },
+                                          "allowance": {
+                                            "description": "The token-keyed movement-points row.",
+                                            "type": "string"
+                                          },
+                                          "maxVisits": {
+                                            "description": "The route search\u0027s settled-node bound.",
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "positions",
+                                          "token",
+                                          "destination",
+                                          "terrain",
+                                          "allowance",
+                                          "maxVisits"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Refreshes a knowledge board from its declared source and visibility mask; authority only.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "observe"
+                                          },
+                                          "row": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "row"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "transform"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
                                 "description": "Sets one state cell from exactly one numeric source spelling.",
                                 "properties": {
                                   "$type": {
@@ -11513,7 +12190,7 @@
                                     ],
                                     "properties": {
                                       "tokens": {
-                                        "$ref": "#/properties/interactions/properties/interactions/items/properties/effects/items/anyOf/3/properties/expression/properties/tokens"
+                                        "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/properties/tokens"
                                       }
                                     },
                                     "required": [
@@ -11586,7 +12263,7 @@
                                     ],
                                     "properties": {
                                       "tokens": {
-                                        "$ref": "#/properties/interactions/properties/interactions/items/properties/effects/items/anyOf/3/properties/expression/properties/tokens"
+                                        "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/properties/tokens"
                                       }
                                     },
                                     "required": [
@@ -12080,7 +12757,7 @@
                             "null"
                           ],
                           "items": {
-                            "$ref": "#/properties/interactions/properties/interactions/items/properties/effects/items/anyOf/18/properties/effects/items"
+                            "$ref": "#/properties/interactions/properties/interactions/items/properties/effects/items/anyOf/19/properties/effects/items"
                           },
                           "default": null
                         }
@@ -12277,6 +12954,189 @@
                         "y",
                         "z",
                         "value"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Delivers explicitly perceived evidence through the world\u0027s bounded social-memory policy. World-scope only.",
+                      "properties": {
+                        "$type": {
+                          "const": "observeSocial"
+                        },
+                        "evidence": {
+                          "type": "object",
+                          "properties": {
+                            "relationship": {
+                              "description": "The directed belief to update.",
+                              "type": "object",
+                              "properties": {
+                                "observer": {
+                                  "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/properties/tokens/items/anyOf/2/properties/query/properties/relationship/properties/observer"
+                                },
+                                "subject": {
+                                  "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/properties/tokens/items/anyOf/2/properties/query/properties/relationship/properties/subject"
+                                },
+                                "dimension": {
+                                  "description": "The exact dimension name declared in state.social.",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "observer",
+                                "subject",
+                                "dimension"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "origin": {
+                              "description": "The stable identity that minted the underlying event, unchanged across relays.",
+                              "type": "object",
+                              "properties": {
+                                "body": {
+                                  "description": "The ordinary world-rule body-reference grammar, such as body:0, each, or cell:row:key.",
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "default": null
+                                },
+                                "identity": {
+                                  "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/properties/tokens/items/anyOf/2/properties/query/properties/relationship/properties/observer/properties/identity",
+                                  "default": null
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "aspect": {
+                              "description": "An authored event-aspect token of 1..64 characters, such as help.attempt or help.outcome.",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "description": "Non-negative Int event sequence; the minting rule must not reuse IDs for different events.",
+                              "type": "object",
+                              "properties": {
+                                "tokens": {
+                                  "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/properties/tokens"
+                                }
+                              },
+                              "required": [
+                                "tokens"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "occurredAt": {
+                              "description": "Non-negative Int original engine tick, not delivery time. socialClock supplies the current clock.",
+                              "type": "object",
+                              "properties": {
+                                "tokens": {
+                                  "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/properties/tokens"
+                                }
+                              },
+                              "required": [
+                                "tokens"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "value": {
+                              "description": "Fixed evidence value within the relationship dimension\u0027s bounds.",
+                              "type": "object",
+                              "properties": {
+                                "tokens": {
+                                  "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/properties/tokens"
+                                }
+                              },
+                              "required": [
+                                "tokens"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "quality": {
+                              "description": "Fixed [0,1] evidence quality; absent means one.",
+                              "type": [
+                                "object",
+                                "null"
+                              ],
+                              "properties": {
+                                "tokens": {
+                                  "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/properties/tokens"
+                                }
+                              },
+                              "required": [
+                                "tokens"
+                              ],
+                              "additionalProperties": false,
+                              "default": null
+                            },
+                            "source": {
+                              "description": "Report source, or null for direct observation. Private intent is never inferred or exposed by this effect.",
+                              "type": [
+                                "object",
+                                "null"
+                              ],
+                              "properties": {
+                                "body": {
+                                  "description": "The ordinary world-rule body-reference grammar, such as body:0, each, or cell:row:key.",
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "default": null
+                                },
+                                "identity": {
+                                  "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/properties/tokens/items/anyOf/2/properties/query/properties/relationship/properties/observer/properties/identity",
+                                  "default": null
+                                }
+                              },
+                              "additionalProperties": false,
+                              "default": null
+                            }
+                          },
+                          "required": [
+                            "relationship",
+                            "origin",
+                            "aspect",
+                            "sequence",
+                            "occurredAt",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "evidence"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Forgets one impression without clearing its unexpired evidence receipts. World-scope only.",
+                      "properties": {
+                        "$type": {
+                          "const": "forgetSocial"
+                        },
+                        "relationship": {
+                          "type": "object",
+                          "properties": {
+                            "observer": {
+                              "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/properties/tokens/items/anyOf/2/properties/query/properties/relationship/properties/observer"
+                            },
+                            "subject": {
+                              "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/properties/tokens/items/anyOf/2/properties/query/properties/relationship/properties/subject"
+                            },
+                            "dimension": {
+                              "description": "The exact dimension name declared in state.social.",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "observer",
+                            "subject",
+                            "dimension"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "relationship"
                       ],
                       "additionalProperties": false
                     }
@@ -12576,6 +13436,92 @@
         }
       },
       "additionalProperties": false,
+      "default": null
+    },
+    "observations": {
+      "description": "Explicitly disclosed literal state observations, without executable or draw bookkeeping traits.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "A presentation observation, without draw seeds, cursors, masks, grants, or executable traits.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "Int",
+              "Fixed",
+              "Bool",
+              "Text"
+            ]
+          },
+          "cells": {
+            "type": "array",
+            "items": {
+              "description": "A disclosed literal cell. Hidden cells have no entry; no identity or placeholder is sent.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "integer"
+                },
+                "text": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "observation": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "tick": {
+                      "description": "The last observation tick.",
+                      "type": "integer"
+                    },
+                    "visible": {
+                      "description": "Whether the latest explicit refresh sees this cell.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "tick",
+                    "visible"
+                  ],
+                  "additionalProperties": false,
+                  "default": null
+                }
+              },
+              "required": [
+                "key",
+                "value"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "cells"
+        ],
+        "additionalProperties": false
+      },
       "default": null
     },
     "schema": {

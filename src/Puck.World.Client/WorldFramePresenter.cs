@@ -292,7 +292,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             throw new WorldRenderCapacityRefusedException(
                 innerException: capacity,
                 message: (((((((string)$"the composed render scene exceeds the engine's {capacity.Limit}-{capacity.Capacity} ceiling — {definition.Placements.Count} placement row(s), {definition.Screens.Count} screen(s), ")
-                    + $"population {WorldRigCatalog.Capacity} rigs, and ")
+                    + $"population {WorldBodiesLimits.CapacityCeiling} body slots, and ")
                     + $"{WorldAdjacencyBands.ProjectionCapacity(definition: definition)} adjacency band(s) at ")
                     + $"{WorldAdjacencyGeometry.MaximumPlacementsPerBand} solid(s) + {WorldAdjacencyGeometry.MaximumEntitiesPerBand} ")
                     + $"body(ies) each. Author fewer rows, or fewer adjacency edges (a band is reserved for every direct ")
@@ -1590,7 +1590,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         );
     }
 
-    /// <summary>The frozen transform-slot count: every leaf in the all-128 avatar catalog plus the reserved
+    /// <summary>The frozen transform-slot count: maximum-sized catalog ranges for all body slots plus the reserved
     /// animated-placement replay pool.</summary>
     public int DynamicTransformCapacity { get; }
     /// <inheritdoc/>

@@ -9,7 +9,7 @@ namespace Puck.World.Protocol.Tests;
 /// <c>Client.PlayerRoster</c> reads through <see cref="IServerLink.Query"/> instead of a live
 /// <c>Server.WorldServer</c> reference, plus the one new <see cref="SessionRequest"/> leaf
 /// (<see cref="SessionRequest.RememberPreferredController"/>). Each round-trips through the SAME
-/// <see cref="WorldFrameCodec"/> encode-then-decode path the loopback transport and <c>WorldTcpHost</c> both use —
+/// <see cref="WorldFrameCodec"/> encode-then-decode path the loopback transport and <c>WorldPeerHost</c> both use —
 /// never a second, test-only codec — so a case dropped from <see cref="WorldSubmissionCodec"/>'s closed switch
 /// (query kind or type lookup) turns the matching law red rather than passing silently.
 /// </summary>

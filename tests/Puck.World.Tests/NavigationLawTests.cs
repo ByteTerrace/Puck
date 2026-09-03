@@ -12,7 +12,7 @@ namespace Puck.World.Tests;
 
 /// <summary>Pins authored surface, flight-volume, and live-medium navigation at the validation, deterministic
 /// execution, cache invalidation, and checkpoint boundaries.</summary>
-public sealed class NavigationLawTests {
+public sealed partial class NavigationLawTests {
     private const string DomainName = "air";
     private const string ProducerName = "navigate";
     private const string RegisterName = "goal";
@@ -178,7 +178,10 @@ public sealed class NavigationLawTests {
                 BodyMotionProgram = navigationMotion.Name,
                 // A full-thrust hold row is the "compatible vertical consumer" a Volume/Medium-domain producer
                 // needs: it consumes MoveUp unconditionally.
-                Motion = kit.Motion with { Holds = [kit.Motion.Holds![0] with { Thrust = 1f }] },
+                // The retired ApplyVerticalDrive ran in a program carrying no gravity op at all, so the row that
+                // replaces it holds nothing and only consumes MoveUp: a Gravity row here would sink a navigator
+                // out of its own volume domain between goals.
+                Motion = kit.Motion with { Holds = [kit.Motion.Holds![0] with { Gravity = null, Hold = BodyHoldKind.None, Thrust = 1f }] },
                 ProducersRaw = new Dictionary<string, BodyProgramParameters>(collection: kit.Producers) {
                     [ProducerName] = NavigationParameters(),
                 },
@@ -190,8 +193,8 @@ public sealed class NavigationLawTests {
         };
     }
 
-    private static WorldBody JoinNavigator(WorldFixture fixture, FixedVector3 goal) {
-        var actor = WorldPrincipal.Seat(slot: 0);
+    private static WorldBody JoinNavigator(WorldFixture fixture, FixedVector3 goal, int slot = 0) {
+        var actor = WorldPrincipal.Seat(slot: slot);
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,
             Slot: actor.Index,
@@ -387,6 +390,143 @@ public sealed class NavigationLawTests {
 
         Assert.Equal(expected: 0L, actual: fixture.Server.Population.NavigationFact(index: 0, facet: "hasPath"));
         Assert.Equal(expected: 1L, actual: fixture.Server.Population.NavigationFact(index: 0, facet: "unreachable"));
+    }
+
+    [Fact]
+    public void MediumSegmentCannotSkipABriefDryCornerCrossing() {
+        using var fixture = Fixtures.FreshServer(NavigationDocument(VolumeDomain("swim", WorldNavigationKind.Medium, "water"), withMedium: true));
+        var fields = fixture.Server.Population.Fields!;
+        var raw = Enumerable.Repeat(FixedQ4816.One.Value, fields.CellCount).ToArray();
+        var dry = new FixedVector3(FixedQ4816.One, FixedQ4816.Zero, FixedQ4816.Zero);
+        Assert.True(fields.TryCellOf(dry, out var dryCell));
+        raw[dryCell] = 0;
+        fields.Restore(new WorldFieldLattice.WorldFieldCheckpoint([raw]));
+        // Cross x=.5 before z=.5, briefly entering cell (1,0,0). Both endpoints and the old half-cell
+        // samples are wet: endpoint sampling alone incorrectly admitted this segment.
+        var from = new FixedVector3(FixedQ4816.FromDouble(.40), FixedQ4816.Zero, FixedQ4816.FromDouble(.38));
+        var to = new FixedVector3(FixedQ4816.FromDouble(.62), FixedQ4816.Zero, FixedQ4816.FromDouble(.60));
+        Assert.True(fields.IsInsideMedium(0, from));
+        Assert.True(fields.IsInsideMedium(0, to));
+        Assert.False(fields.IsSegmentInsideMedium(0, from, to, FixedQ4816.Zero, 32));
+        Assert.False(fields.IsSegmentInsideMedium(0, to, from, FixedQ4816.Zero, 32));
+        raw[dryCell] = FixedQ4816.One.Value;
+        fields.Restore(new WorldFieldLattice.WorldFieldCheckpoint([raw]));
+        Assert.True(fields.IsSegmentInsideMedium(0, from, to, FixedQ4816.Zero, 32));
+    }
+
+    [Fact]
+    public void MediumClearanceCannotHideADryCapBetweenWetLayers() {
+        using var fixture = Fixtures.FreshServer(NavigationDocument(VolumeDomain("swim", WorldNavigationKind.Medium, "water"), withMedium: true));
+        var fields = fixture.Server.Population.Fields!;
+        var raw = Enumerable.Repeat(FixedQ4816.One.Value, fields.CellCount).ToArray();
+        var center = new FixedVector3(FixedQ4816.Zero, FixedQ4816.FromDouble(.5), FixedQ4816.Zero);
+        Assert.True(fields.TryCellOf(center with { Y = FixedQ4816.FromDouble(.3) }, out var bottomCell));
+        // Origin=-.5, heightScale=8: the lower cell is wet only up to y=.375. Cube bottom=.25,
+        // center=.5 and top=.75 are all wet, but its interior between .375 and .5 is dry.
+        raw[bottomCell] = FixedQ4816.FromDouble(.875 / 8).Value;
+        fields.Restore(new WorldFieldLattice.WorldFieldCheckpoint([raw]));
+        Assert.True(fields.IsInsideMedium(0, center with { Y = FixedQ4816.FromDouble(.25) }));
+        Assert.True(fields.IsInsideMedium(0, center));
+        Assert.True(fields.IsInsideMedium(0, center with { Y = FixedQ4816.FromDouble(.75) }));
+        Assert.False(fields.IsInsideMedium(0, center, FixedQ4816.FromDouble(.25)));
+        Assert.False(fields.IsSegmentInsideMedium(0, center, center, FixedQ4816.FromDouble(.25), 32));
+    }
+
+    [Fact]
+    public void MediumSweepRejectsInvalidBoundsAndAllocatesNothingAfterWarmup() {
+        using var fixture = Fixtures.FreshServer(NavigationDocument(VolumeDomain("swim", WorldNavigationKind.Medium, "water"), withMedium: true));
+        var fields = fixture.Server.Population.Fields!;
+        var from = FixedVector3.Zero;
+        var to = new FixedVector3(FixedQ4816.FromInteger(4), FixedQ4816.FromInteger(3), FixedQ4816.One);
+        var clearance = FixedQ4816.FromDouble(.25);
+        Assert.False(fields.IsSegmentInsideMedium(0, from, to, clearance, 1));
+        Assert.False(fields.IsSegmentInsideMedium(-1, from, to, clearance, 32));
+        Assert.False(fields.IsSegmentInsideMedium(0, from, to, FixedQ4816.One, 32));
+        Assert.False(fields.IsSegmentInsideMedium(0, from, to with { X = FixedQ4816.MaxValue }, clearance, 32));
+        Assert.False(fields.IsInsideMedium(0, to with { X = FixedQ4816.MaxValue }, clearance));
+        for (var index = 0; index < 100; index++) { Assert.True(fields.IsSegmentInsideMedium(0, from, to, clearance, 32)); }
+        var allocated = GC.GetAllocatedBytesForCurrentThread();
+        var allWet = true;
+        for (var index = 0; index < 4096; index++) { allWet &= fields.IsSegmentInsideMedium(0, from, to, clearance, 32); }
+        var bytes = GC.GetAllocatedBytesForCurrentThread() - allocated;
+        Assert.True(allWet);
+        Assert.Equal(0, bytes);
+    }
+
+    private static WorldDefinition FlockMovementDocument(WorldNavigationKind kind, bool constrained) {
+        var domain = VolumeDomain("habitat", kind, kind == WorldNavigationKind.Medium ? "water" : null);
+        var definition = NavigationDocument(domain, withMedium: kind == WorldNavigationKind.Medium);
+        var kit = definition.Kits[0];
+        var flock = new WorldFlockProfile(20, 1, 4, 3, 60, WorldFlockSpace.Volume,
+            0, 0, 1, 0, 0, 0, 180, false, constrained ? "habitat" : null);
+        return definition with {
+            BodyMotionProgramsRaw = [.. definition.BodyMotionPrograms, new BodyMotionProgram("flock", BodyMotionProgram.CurrentVersion,
+                BodyProgramKind.Producer, [BodyMotionOp.ProduceFlockIntent])],
+            KitRowsRaw = [kit with { ProducersRaw = new Dictionary<string, BodyProgramParameters>(kit.Producers) {
+                ["flock"] = new(new Dictionary<string, float>(), new Dictionary<string, string>(), flock),
+            } }],
+        };
+    }
+
+    [Theory]
+    [InlineData(WorldNavigationKind.Volume)]
+    [InlineData(WorldNavigationKind.Medium)]
+    public void AuthoredMovementDomainConstrainsActualOffRouteFlockMotion(WorldNavigationKind kind) {
+        foreach (var constrained in new[] { true, false }) {
+            var definition = FlockMovementDocument(kind, constrained);
+            Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var reason), reason);
+            using var fixture = Fixtures.FreshServer(definition);
+            Assert.True(fixture.Server.ApplySession(new SessionRequest.Join(WorldPrincipal.Seat(0), 0, null, WorldProtocol.WireProtocolKey)).Accepted);
+            var body = fixture.Server.Body(0)!;
+            body.Pose(new FixedVector3(FixedQ4816.FromDouble(5.1), FixedQ4816.Zero, FixedQ4816.Zero),
+                FixedQ4816.Zero, FixedQ4816.Zero, FixedQ4816.Zero);
+            body.SetIntentSource(IntentSource.Producer("flock"));
+            Assert.True(fixture.Server.ApplySession(new SessionRequest.Join(WorldPrincipal.Seat(1), 1, null, WorldProtocol.WireProtocolKey)).Accepted);
+            var other = fixture.Server.Body(1)!;
+            other.Pose(new FixedVector3(FixedQ4816.FromInteger(8), FixedQ4816.Zero, FixedQ4816.Zero),
+                FixedQ4816.Zero, FixedQ4816.Zero, FixedQ4816.Zero);
+            other.SetIntentSource(IntentSource.Idle);
+            var refusals = 0;
+            for (var tick = 0; tick < 180; tick++) {
+                fixture.Step();
+                refusals += fixture.Server.Population.FlockStatistics.MotionRefusals;
+                if (constrained && kind == WorldNavigationKind.Medium) {
+                    Assert.True(fixture.Server.Population.Fields!.IsInsideMedium(0, body.FixedPosition, FixedQ4816.FromDouble(.25)));
+                }
+            }
+            Assert.Equal(constrained, refusals > 0);
+            Assert.Equal(constrained, body.FixedPosition.X < FixedQ4816.FromDouble(5.5));
+            if (constrained) {
+                // The authored constraint leaves with its producer; it is not a permanent invisible wall.
+                body.SetIntentSource(IntentSource.Live);
+                var strafe = definition.Channels.ToList().FindIndex(channel => channel.Role == ChannelRole.MoveStrafe);
+                for (var tick = 0; tick < 60; tick++) {
+                    body.SubmitIntent(default(PlayerIntent).WithChannel(strafe, FixedQ4816.One));
+                    fixture.Step();
+                }
+                Assert.True(body.FixedPosition.X > FixedQ4816.FromDouble(5.5));
+                Assert.Equal(0, fixture.Server.Population.FlockStatistics.MotionChecks);
+            }
+        }
+    }
+
+    [Fact]
+    public void MovementDomainMustExistAndEncloseOffsetColliderVolumes() {
+        var definition = FlockMovementDocument(WorldNavigationKind.Volume, constrained: true);
+        var kit = definition.Kits[0];
+        foreach (var collider in new WorldCollider[] { new WorldCollider.Sphere(.2f),
+            new WorldCollider.Capsule(new DocumentVector3(.3f, 0, 0), .1f),
+            new WorldCollider.Box(new DocumentVector3(.2f, .1f, .2f), new DocumentQuaternion(0, 0, 0, 1)) }) {
+            Assert.False(WorldDefinitionValidator.TryValidateLocally(definition with { KitRowsRaw = [kit with { Collider = collider }] }, out var reason));
+            Assert.Contains("agentRadius must enclose", reason);
+        }
+        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition with { KitRowsRaw = [kit with { Collider = new WorldCollider.Sphere(.1f) }] }, out var validReason), validReason);
+        var parameters = kit.Producers["flock"];
+        var missing = kit with { ProducersRaw = new Dictionary<string, BodyProgramParameters>(kit.Producers) {
+            ["flock"] = parameters with { Flock = parameters.Flock! with { MovementDomain = "missing" } },
+        } };
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(definition with { KitRowsRaw = [missing] }, out var missingReason));
+        Assert.Contains("movementDomain requires", missingReason);
     }
 
     [Fact]

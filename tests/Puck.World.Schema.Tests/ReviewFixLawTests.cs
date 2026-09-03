@@ -70,7 +70,7 @@ public sealed class ReviewFixLawTests {
     }
     [Fact]
     public void PersistedDecks_MustFitTheSitesSource() {
-        static WorldStateRow Site(WorldGenerator generator, IReadOnlyList<long>? decks) => new(
+        static WorldStateRow Site(WorldGenerator generator, IReadOnlyList<ClosedBitset256>? decks) => new(
             Name: WorldCellName.Parse(candidate: "loot"),
             Kind: CellKind.Int,
             Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 1)],
@@ -80,15 +80,15 @@ public sealed class ReviewFixLawTests {
         var bag = new WorldGenerator(Source: WorldGeneratorSource.WeightedNumeric, Mode: WorldGeneratorMode.ReshuffleOnExhaustion, Weighted: [new WorldGeneratorWeightedNumeric(Value: 1, Weight: 1UL), new WorldGeneratorWeightedNumeric(Value: 2, Weight: 1UL)]);
         var plain = new WorldGenerator(Source: WorldGeneratorSource.UniformRange, RangeMin: 0, RangeMax: 9);
 
-        Assert.Equal(expected: string.Empty, actual: Refusal(definition: Definition(rows: [Site(generator: bag, decks: [0b11L])])));
-        Assert.Contains(expectedSubstring: "exactly one", actualString: Refusal(definition: Definition(rows: [Site(generator: bag, decks: [5L, 0L, 0L])])));
-        Assert.Contains(expectedSubstring: "marks a card past the 2", actualString: Refusal(definition: Definition(rows: [Site(generator: bag, decks: [0b101L])])));
-        Assert.Contains(expectedSubstring: "never deals", actualString: Refusal(definition: Definition(rows: [Site(generator: plain, decks: [1L])])));
+        Assert.Equal(expected: string.Empty, actual: Refusal(definition: Definition(rows: [Site(generator: bag, decks: [new(Word0: 0b11UL)])])));
+        Assert.Contains(expectedSubstring: "exactly one", actualString: Refusal(definition: Definition(rows: [Site(generator: bag, decks: [new(Word0: 5UL), new(Word0: 0UL), new(Word0: 0UL)])])));
+        Assert.Contains(expectedSubstring: "marks a card past the 2", actualString: Refusal(definition: Definition(rows: [Site(generator: bag, decks: [new(Word0: 0b101UL)])])));
+        Assert.Contains(expectedSubstring: "never deals", actualString: Refusal(definition: Definition(rows: [Site(generator: plain, decks: [new(Word0: 1UL)])])));
 
         // The engine sheds masks a non-dealing source cannot own, so a re-authored site self-heals on its next draw.
-        Assert.Null(@object: WorldGeneratorEngine.DecksAfter(generator: plain, fired: null, previous: [1L]));
-        Assert.Equal(expected: new long[] { 3L }, actual: WorldGeneratorEngine.DecksAfter(generator: bag, fired: [3L], previous: [1L]));
-        Assert.Equal(expected: new long[] { 1L }, actual: WorldGeneratorEngine.DecksAfter(generator: bag, fired: null, previous: [1L]));
+        Assert.Null(@object: WorldGeneratorEngine.DecksAfter(generator: plain, fired: null, previous: [new(Word0: 1)]));
+        Assert.Equal(expected: new ClosedBitset256[] { new(Word0: 3) }, actual: WorldGeneratorEngine.DecksAfter(generator: bag, fired: [new(Word0: 3)], previous: [new(Word0: 1)]));
+        Assert.Equal(expected: new ClosedBitset256[] { new(Word0: 1) }, actual: WorldGeneratorEngine.DecksAfter(generator: bag, fired: null, previous: [new(Word0: 1)]));
     }
     [Fact]
     public void AFractionalComparand_LowersToTheExactIntegerGate() {

@@ -74,6 +74,17 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteInt64(value: entry.ProducerCurveArcRaw);
         writer.WriteNullableString(value: entry.ProducerActiveName);
         writer.WriteInt32(value: entry.ProducerActiveCurveIndex);
+        writer.WriteBoolean(entry.Flock.Seeded);
+        writer.WriteInt32(entry.Flock.Generation);
+        writer.WriteFixedVector(entry.Flock.Desired);
+        writer.WriteUInt64(entry.Flock.RemainingTicks);
+        writer.WriteUInt64(entry.Flock.SampleOrdinal);
+        writer.WriteBoolean(entry.Flock.Target is not null);
+        if (entry.Flock.Target is { } observed) {
+            writer.WriteInt32(observed.Index);
+            writer.WriteInt32(observed.Generation);
+            writer.WriteFixedVector(observed.Position);
+        }
         writer.WriteFixedVector(value: entry.Position);
         writer.WriteFixed(value: entry.Yaw);
         WriteTransferState(
@@ -167,6 +178,11 @@ public static partial class WorldAuthorityCheckpointCodec {
             maxBytes: MaxStringBytes
         );
         var producerActiveCurveIndex = reader.ReadInt32();
+        var flock = new WorldPopulation.WorldPopulationFlockCheckpoint(reader.ReadBoolean(), reader.ReadInt32(),
+            reader.ReadFixedVector(), reader.ReadUInt64(), reader.ReadUInt64());
+        if (reader.ReadBoolean()) {
+            flock = flock with { Target = new WorldFlockObservation(reader.ReadInt32(), reader.ReadInt32(), reader.ReadFixedVector()) };
+        }
         var position = reader.ReadFixedVector();
         var yaw = reader.ReadFixed();
         var dynamicState = ReadTransferState(reader: ref reader);
@@ -215,6 +231,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             Position: position,
             ProducerAcquiredTarget: producerAcquiredTarget,
             ProducerActiveCurveIndex: producerActiveCurveIndex,
+            Flock: flock,
             ProducerActiveName: producerActiveName,
             ProducerActivityPhase: producerActivityPhase,
             ProducerActivityRate: producerActivityRate,
@@ -236,6 +253,24 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteInt32(value: section.SimulatedCount);
         writer.WriteInt32(value: section.Revision);
         writer.WriteByte(value: section.SeatKit);
+        WriteArray(writer, section.Generations, static (w, generation) => w.WriteInt32(generation));
+        writer.WriteBoolean(section.SharedNavigation is not null);
+        if (section.SharedNavigation is { } domains) {
+            WriteArray(writer, domains, static (w, domain) => {
+                w.WriteInt32(domain.Cursor);
+                WriteArray(w, domain.Trees, static (treeWriter, tree) => {
+                    treeWriter.WriteInt32(tree.Goal);
+                    treeWriter.WriteInt32(tree.Age);
+                    WriteArray(treeWriter, tree.Nodes, static (nodeWriter, node) => {
+                        nodeWriter.WriteInt32(node.Node);
+                        nodeWriter.WriteInt32(node.Cost);
+                        nodeWriter.WriteInt32(node.Next);
+                        nodeWriter.WriteBoolean(node.Settled);
+                    });
+                    WriteArray(treeWriter, tree.Pending, static (pendingWriter, node) => pendingWriter.WriteInt32(node));
+                });
+            });
+        }
         WriteArray(
             writer: writer,
             items: section.Entries,
@@ -249,6 +284,21 @@ public static partial class WorldAuthorityCheckpointCodec {
         var simulatedCount = reader.ReadInt32();
         var revision = reader.ReadInt32();
         var seatKit = reader.ReadByte();
+        var generations = ReadArray(ref reader, "population slot generations", static (ref WireReader r) => r.ReadInt32(), maximum: WorldBodiesLimits.CapacityCeiling);
+        var shared = reader.ReadBoolean() ? ReadArray(ref reader, "shared navigation domains", static (ref WireReader domainReader) => {
+            var cursor = domainReader.ReadInt32();
+            var trees = ReadArray(ref domainReader, "shared navigation trees", static (ref WireReader treeReader) => {
+                var goal = treeReader.ReadInt32();
+                var age = treeReader.ReadInt32();
+                var nodes = ReadArray(ref treeReader, "shared navigation nodes", static (ref WireReader nodeReader) =>
+                    new WorldNavigationTreeNode(nodeReader.ReadInt32(), nodeReader.ReadInt32(), nodeReader.ReadInt32(), nodeReader.ReadBoolean()),
+                    maximum: WorldNavigationCapacity.MaxCellsPerDomain);
+                var pending = ReadArray(ref treeReader, "shared navigation pending starts", static (ref WireReader pendingReader) => pendingReader.ReadInt32(),
+                    maximum: WorldBodiesLimits.CapacityCeiling);
+                return new WorldNavigationTreeCheckpoint(goal, age, nodes, pending);
+            }, maximum: WorldNavigationCapacity.MaxSharedGoals);
+            return new WorldNavigationSharedCheckpoint(cursor, trees);
+        }, maximum: WorldNavigationCapacity.MaxDomains) : null;
         var entries = ReadArray(
             reader: ref reader,
             field: "population entries",
@@ -264,6 +314,8 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         section = new WorldPopulation.WorldPopulationCheckpoint(
             Entries: entries,
+            Generations: generations,
+            SharedNavigation: shared,
             Revision: revision,
             SeatKit: seatKit,
             SimulatedCount: simulatedCount

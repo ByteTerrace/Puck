@@ -22,7 +22,9 @@ public abstract record BodyTargetSource {
     private BodyTargetSource() {
     }
 
-    /// <summary>Selects the nearest member of <paramref name="Scope"/> inside a body-forward cone.</summary>
+    /// <summary>Selects the nearest perceived member of <paramref name="Scope"/> inside a body-forward cone.
+    /// A bounded-perception producer may consider a sample and retain its last observation between refreshes;
+    /// this declaration does not grant an exhaustive population scan or live tracking.</summary>
     /// <param name="Scope">The population subset considered.</param>
     /// <param name="Range">The cone's maximum world-space distance.</param>
     /// <param name="HalfAngleDegrees">The cone half-angle in degrees.</param>

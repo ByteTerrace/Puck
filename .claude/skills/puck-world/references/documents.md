@@ -95,7 +95,7 @@ below), `Identity`, `Groups`, `Properties`, `Interactions`, `Generation`,
 `Generators`, `References`, `Portals`,
 `Simulation`, `Destinations` (`WorldDestinations.cs`), `Admission`
 (`Protocol/WorldAdmission.cs`, the one trust list every ingress crosses —
-key-bearing rows for the TCP identity door, keyless `federatedAuthority` rows
+key-bearing rows for the QUIC identity door, keyless `federatedAuthority` rows
 for travellers an authenticated authority hands over; deny-by-default, an
 absent/empty section admits neither), `Market` (`WorldMarketSection`,
 `WorldMarket.cs` — the local auction house's config and live listing ledger;
@@ -300,6 +300,20 @@ gate-held latch (`held` = the gate held at the last evaluation, so an edge rule
 will not fire again until it lets go). Authored with `world.row.set rules`/
 `world.row.remove rules` (ordinals 52/53) under `Mutate`/`section:rules` — a hold
 UNTRUSTED principals are refused outright (see [authority.md](authority.md)).
+An optional `decision` facet requires Level mode and owns its own cadence,
+commitment, and rising-edge interruption instead of the ordinary latch.
+Options reuse predicates, typed expressions, and effects; common and selected
+effects run only on entry, not every held tick. `world.decisions` is its runtime
+read-back, and `WorldRuleWorkBudget` includes its conservative worst-case work.
+An option's `neighbors` expands a forEach body observer into bounded nearby
+individuals, binding left/each to the observer and right to the candidate only
+inside that option. Inspect candidateBudget as well as maxCandidates: rejected
+points and incumbent rechecks consume attention. Incarnation-addressed choices,
+not merely option ordinals, own commitment and entry transitions. Positions freeze
+before ordinary rules; social/state gates still read in normal document order.
+See the Schema README's `decision-policies` section for the complete authoring
+contract. Keep choice state, local random draws, and timers in checkpoint/hash
+coverage; refresh compiled handles while retaining unchanged policy episodes.
 Rules evaluate in DOCUMENT ORDER and their effects apply IMMEDIATELY, so a later
 rule's gate — AND a later rule's live `fromState` copy operand, which reads
 through the same walk — sees an earlier rule's SAME-TICK write; a rule ADDED by
@@ -520,13 +534,59 @@ body-motion program's `curve` target source
 arc-length follower feeding the SAME planar target-consuming op vocabulary a
 `designated`/`sensed` target does.
 
+### Kit producer `flock` — bounded local perception
+
+`ProduceFlockIntent` requires `producers.<name>.flock` on the assigned kit:
+range, separation radius, candidate budget, maximum retained neighbors,
+perception interval in seconds, tangent/volume space, cone/line-of-sight policy,
+and separation/alignment/cohesion/goal/inertia weights. It is mutually exclusive
+with wander/attend/facing producers. Target sources remain optional; when
+present they use the ordinary sensing/target-register vocabulary.
+
+The population freezes position/orientation/travel before any body advances.
+Cadence limits neighbor and sensed-target updates, not designation/route/frame
+blending. A sensed target shares the neighbor candidate budget over the larger
+range and retains its last observed position between updates. Sampling is bounded
+even in a coincident crowd; results are nearest within the inspected sample,
+not globally nearest.
+Use range-scaled grids independent of unrelated profiles; rebuild only levels
+needed by this step's samples. Preserve caches across unchanged bindings and
+invalidate them when the profile or target source changes. Checkpoint/hash the
+unclamped neighbor contribution, timing residue, local sample ordinal, observed
+target position/generation, and occupant generation. An optional `movementDomain` names a volume/medium domain
+whose root-centered agentRadius encloses the kit's offset collider volumes.
+Integrated locomotion is continuously checked; refused steps stop momentum.
+This ends with the producer and does not cancel later impulse/contact/tether or
+teleport operations, find an escape route, or implement a surface constraint.
+The steering kernel itself confers no friendship or collision safety. Read it back
+with `world.flock`; `world.budget` repeats the structural cost. Author changes
+still use the one document door, not a separate flock mutation API.
+
+Optional `cohesionAffinity`/`alignmentAffinity` use the ordinary Fixed postfix
+expression evaluator. Left is the observer, right the retained neighbor; only
+state-backed/social operands are admitted because body/channel/navigation reads
+change during the movement pass. Keep separate dimensions for companion
+attraction and heading expertise. Missing expressions read one, results clamp
+to [0,1], arithmetic failure reads zero with a counter. These are relative
+weighted-mean inputs, not separation filters or absolute term strength. They
+refresh with perception cadence, not on every social update. Rebind compiled
+state handles and dimension ordinals on every declaration installation; key
+bindings by authored kit/producer names, not object identity (wire restore
+deserializes fresh objects). Cached neighbor contributions already carry the
+result through checkpoint/hash. Charge both programs and all indirect scans for
+every retained neighbor in the worst-case simultaneous population refresh,
+under the shared rule work ceiling. See the
+[authoring example](../../../../src/Puck.World.Schema/README.md#social-flock-affinities).
+
 ### `navigation` — bounded surface, flight, and medium routes
 
 `WorldNavigation.cs` owns named finite domains. `surface` samples SDF ground,
 step/slope limits, a vertical capsule, and swept neighbour edges; `volume`
 uses swept-sphere cells and edges in three dimensions; `medium` adds a named
 `state.world` lattice row carrying `lattice.medium`, checked live at nodes and
-half-cell segment samples so field evolution can invalidate a cached edge.
+half-cell-or-shorter swept boxes so field evolution can invalidate a cached edge.
+Each piece checks every intersected voxel and its local free surface (at most 27),
+not just corners or point samples that can miss dry pockets.
 Volume connectivity is authored as 6/18/26 neighbours, with blocked-axis
 corner cutting refused. A `BodyTargetSource.Navigated(domain, register)` keeps
 the ordinary authority-checked designation as its goal and supplies bounded
@@ -538,6 +598,31 @@ use. Domain/cell/search/path ceilings are representation bounds, reported by
 is the rule operand. Routes are local runtime state: clear them on producer,
 designation, transfer, or domain-rebuild discontinuities; checkpoint and hash
 them wherever uninterrupted simulation continuity is promised.
+
+Optional domain `shared: { goalCapacity, expandedNodesPerTick }` replaces per-body
+A* searches with queued reverse-Dijkstra destination trees. Domain + goal cell
+is the sharing key; never bind cache ownership to a leader or body generation.
+Each body still owns its copied path and cursor, and uses its exact designated
+point at the end. Domain profiles partition clearance/topology/medium compatibility;
+shared volume/medium users must fit the domain's root-centered clearance sphere.
+Searches take deterministic round-robin turns under the domain's aggregate
+per-tick expansion budget, each visiting at most 26 predecessor edges. Pending
+requests pin resident trees; otherwise eviction is LRU using unique, contiguous
+recency ranks (never saturated counters). Full pinned capacity
+reports `$nav:<bodyRef>:capacity`, queued work reports `pending`, and neither
+means `unreachable` or permits an unbudgeted fallback. `maxPathNodes` still bounds
+extraction; a shared tree may settle the whole domain rather than stopping at the
+independent A* `maxExpandedNodes`. Hard totals bound cells × goals and per-tick work.
+Checkpoint/hash discovered costs, successors, settled flags, pending starts,
+ages, and scheduler cursor; derive heap layout and cached hashes. Node hashes
+use canonical 64-cell blocks with dirty-block invalidation, while pending hashes
+sort the bounded request list; never scan a settled domain every replay tick.
+Referenced-medium writes reset
+the affected trees (not writes to unrelated fields), and obsolete trees are
+canonical empty state at checkpoint/hash time. Restore field values before
+restoring navigation's derived invalidation stamps. This is not incremental
+repair, hierarchical routing, crowd collision avoidance, or group membership;
+see the server README's Navigation section for the current limits.
 
 ### `state.lattices` + the `lattice` row trait — the lattice (scalar rows, reactions, lattice-derived geometry)
 
@@ -617,7 +702,7 @@ refused against their declared defaults:
 - `weightedNumeric` — `weighted` (`{value, weight, count?}` rows) and `mode`. One
   numeric draw; under a deck `mode` the outcomes are dealt through the site's
   single `drawDecks` mask — the numeric shuffle bag. `count` (also on a Markov
-  alternative) is that many cards per pass; a set's cards total at most 64.
+  alternative) is that many cards per pass; a set's cards total at most 256.
 - `streamDraw` — no fields. One raw 32-bit draw; refuses a `mode`.
 
 The alias table over a source's full card set is compiled once per
@@ -924,7 +1009,7 @@ driver's do, blending the GOAL rather than the pose. `plant` holds the world tar
 when the named driver's phase entered `window` — a stance foot, a hand on a hold, one mechanism.
 Presentation-only on the same terms, pinned by `CreationEffectorLawTests`. `body.rig [body]` is the read-back (Immediate, client-local — the values live only on the stamp pool): per driver its phase and eased weight, per effector its weight, whether its latch is holding, and the WORLD point its tip is being asked for (`target=(x, y, z)` or `none`), so a piped run fences twice and asserts a planted foot's target is unchanged while `body.where` moved. A body-rooted part anchor (`WorldStampPool.TryBodyPartAuthoredPose`) reports the COMPOSED pose — drivers, parent chain, effector — so an anchor consumer and the rendered geometry never disagree. Everything else — the
 census, simulation (30 Hz), host (windowed, loopback-default — `--listen` binds
-TCP), collision, gravity, channels, the `walk` body-motion program, the `walker` kit
+QUIC), collision, gravity, channels, the `walk` body-motion program, the `walker` kit
 (`defaultSeatKit`), keyboard/gamepad bindings, the chase seat rig, the pip look, and grants — is the
 world document's own. A lattice trait's `color` speaks the same grammar (resolved live at
 emit — a state cell write recolors a height field on the next frame, no re-bake, bricks hold only
@@ -969,7 +1054,7 @@ An explicit path or the shipped default that cannot be loaded refuses the boot b
 reachable via `--world`, never extended, deleted on owner order — the worked examples this file cites
 from it (rules, lattice chemistry, regions) live there, and it is the ONLY document layering over the
 likewise-frozen `puck.basis.frozen.json`. The loader is
-`src/Puck.World/WorldDefinitionLoader.cs`.
+`src/Puck.World.Schema/WorldDefinitionLoader.cs`.
 
 ## Document composition (`basis`)
 
@@ -1684,7 +1769,7 @@ or overflow. `Save()` re-serializes the owner through
 
 The composer is N-ary (`Compose(params ReadOnlySpan<BindingProfileDocument?>)`,
 base-first, null layers skipped, mismatched `Version` throws). The four layer
-CLASSES are assembled by `src/Puck.World/WorldSeatBindings.cs`: engine
+CLASSES are assembled by `src/Puck.World.Client/WorldSeatBindings.cs`: engine
 default → every world `bindingOverlays` row in order → the seat profile's
 `bindings` → live session rebinds (freshest wins). A row's members are two
 lists: `held` (a SET — down in any order) and `chord` (a SEQUENCE — pressed in
@@ -1946,6 +2031,15 @@ zone, and neutral-grace duration.
   `MaxPopulation`/`MaxPopulationSimulated` constant; shipped worlds author
   `networkPlayers: 124` (128 minus the 4 local seats) as ordinary document
   data, not an engine ceiling.
+- `WorldLookSource.Catalog.RigCount` is the reusable appearance count, not
+  body capacity. `DefaultIndex` cycles fresh slot picks through that catalog;
+  an admitted occupant carries its pick across transfers. The client reserves
+  a maximum-sized transform range per body and probes the largest rig in every
+  range, so a repeated or transferred look is neither truncated nor duplicated.
+  Each catalog leaf retains a separate cull instance with a primitive-sized
+  bound plus its unscaled local offset. The instance ceiling remains distinct
+  from population capacity. Do not use live instance count to size reserved
+  bone storage.
 - `WorldHudCapacity` (`WorldHud.cs`): see [hud.md](hud.md).
 - `WorldStateCapacity` (`WorldState.cs`): `MaxRows = 128`,
   `MaxCellsPerRow = 128` (an authored `capacity` may only narrow it),
@@ -2024,3 +2118,30 @@ affected document over stdin (`world.status`, `world.save`, `world.load`).
 Proven in-process by `tests/Puck.World.Tests/StrictParseLawTests.cs`.
 Validate HUD document changes by running the app — see [hud.md](hud.md)'s
 "Verifying" section for the recipe.
+
+Discrete state shares `state.lattices`: only `Field` creates physical storage;
+`Grid`, `Ring`, and `Hex` compile bounded adjacency. Keep token identity domains,
+ordered zone membership, position attributes, phase progression, and knowledge
+stamps inside the canonical state row converter and authoritative hash. The
+closed transform union is shared by mutations and rule transactions. Readers,
+secret draws, and observation payloads have separate authority/presentation
+semantics; see the owning contract in
+[`Puck.World.Schema`](../../../../src/Puck.World.Schema/README.md#discrete-boards-cards-and-turns).
+Do not flatten restricted state into a public document value. Replica access
+remains full authority trust. Test socket observations using authenticated
+submission stamps, and check exact topology and query work bounds at preflight.
+
+`state.social` installs a `WorldSocialPolicy`/`CompiledWorldSocialPolicy` bank;
+`WorldSocialMemory` owns directed impressions and exact evidence receipts.
+World-only `observeSocial`/`forgetSocial` effects and numeric `social` queries
+use ordinary rule bindings; `compareValue` compares numeric expressions and
+closes on arithmetic failure. They are not sensor or transfer implementations.
+Preserve original mobility incarnation and event
+provenance; never replace stable IDs with current body slots or give relays fresh
+event IDs. Forgetting an impression must not clear its unexpired duplicate ledger.
+Keep ingestion attempts and expiry work separately bounded. Read the
+[component contract](../../../../src/Puck.World.Server/README.md#social-memory-component)
+before extending the seam. Authority checkpoints carry the bank and last outcome;
+changed policy content resets memory, unchanged recompilation retains it.
+The `world.social` read-back is operator inspection under Observe/all, not a
+per-creature disclosure API. Keep an actual-world read-back and replay proof.

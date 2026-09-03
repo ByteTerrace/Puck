@@ -7,6 +7,8 @@ public static partial class WorldDefinitionValidator {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
         var domains = definition.Navigation.Rows;
         var totalCells = 0L;
+        var sharedCells = 0L;
+        var sharedWork = 0L;
 
         if (domains.Count > WorldNavigationCapacity.MaxDomains) {
             errors.Add(item: $"navigation.domains declares {domains.Count} rows; the maximum is {WorldNavigationCapacity.MaxDomains}.");
@@ -15,6 +17,11 @@ public static partial class WorldDefinitionValidator {
         for (var index = 0; index < domains.Count; index++) {
             var domain = domains[index];
             var path = $"navigation.domains[{index}]";
+            if (domain.Shared is { } sharing) {
+                RequireRange(sharing.GoalCapacity, 1, WorldNavigationCapacity.MaxSharedGoals, $"{path}.shared.goalCapacity", errors);
+                RequireRange(sharing.ExpandedNodesPerTick, 1, WorldNavigationCapacity.MaxSharedExpandedPerTick, $"{path}.shared.expandedNodesPerTick", errors);
+                sharedWork += sharing.ExpandedNodesPerTick;
+            }
 
             if (!WorldSafeName.TryParse(candidate: domain.Name, name: out _, reason: out var nameReason)) {
                 errors.Add(item: $"{path}.name {nameReason}");
@@ -79,7 +86,7 @@ public static partial class WorldDefinitionValidator {
                             errors.Add(item: $"{path}.cellSize ({domain.CellSize}) cannot exceed {WorldNavigationCapacity.MaxMediumSegmentSubdivisions / 2} times medium lattice cellSize ({topology.CellSize}); that bounds live edge containment to {WorldNavigationCapacity.MaxMediumSegmentSubdivisions} subsegments.");
                         }
                         if (topology is not null && float.IsFinite(f: domain.AgentRadius) && float.IsFinite(f: topology.CellSize) && (2f * domain.AgentRadius) > topology.CellSize) {
-                            errors.Add(item: $"{path}.agentRadius ({domain.AgentRadius}) cannot exceed half medium lattice cellSize ({topology.CellSize}); that bounds whole-agent live medium containment to the center and adjacent voxel corners.");
+                            errors.Add(item: $"{path}.agentRadius ({domain.AgentRadius}) cannot exceed half medium lattice cellSize ({topology.CellSize}); that bounds whole-agent live medium containment to at most 27 voxel checks per swept subsegment.");
                         }
                     }
                 } else if (domain.Medium is not null) {
@@ -98,6 +105,9 @@ public static partial class WorldDefinitionValidator {
 
             var cells = ((long)domain.Width * domain.Depth * domain.Layers);
             totalCells += cells;
+            if (domain.Shared is { GoalCapacity: > 0 and <= WorldNavigationCapacity.MaxSharedGoals } shared) {
+                sharedCells += cells * shared.GoalCapacity;
+            }
             if (cells > WorldNavigationCapacity.MaxCellsPerDomain) {
                 errors.Add(item: $"{path} declares {cells} cells; the per-domain maximum is {WorldNavigationCapacity.MaxCellsPerDomain}.");
             }
@@ -122,6 +132,12 @@ public static partial class WorldDefinitionValidator {
 
         if (totalCells > WorldNavigationCapacity.MaxCellsPerWorld) {
             errors.Add(item: $"navigation.domains declares {totalCells} total cells; the world maximum is {WorldNavigationCapacity.MaxCellsPerWorld}.");
+        }
+        if (sharedCells > WorldNavigationCapacity.MaxSharedCellsPerWorld) {
+            errors.Add($"navigation shared trees require {sharedCells} cells; the world maximum is {WorldNavigationCapacity.MaxSharedCellsPerWorld}.");
+        }
+        if (sharedWork > WorldNavigationCapacity.MaxSharedExpandedPerTick) {
+            errors.Add($"navigation shared trees declare {sharedWork} expansions per tick; the world maximum is {WorldNavigationCapacity.MaxSharedExpandedPerTick}.");
         }
         return names;
     }

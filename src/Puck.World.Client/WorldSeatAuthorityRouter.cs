@@ -33,7 +33,8 @@ public sealed class WorldSeatAuthorityRouter {
     }
     /// <summary>
     /// Retargets a claim only if it is still the expected claim. This is the route-level CAS used when a federated
-    /// observation reports an onward handoff: a stale callback cannot overwrite a newer authority epoch.
+    /// observation reports an onward handoff or a local replay restores a timeline. Publishing the same entity
+    /// deliberately refreshes its epoch; a stale callback cannot overwrite a newer authority epoch.
     /// </summary>
     public bool CompareExchangeEntity(int slot, WorldAuthorityRoute expected, WorldEntityAddress entity, out WorldAuthorityRoute current) {
         ArgumentNullException.ThrowIfNull(argument: expected);

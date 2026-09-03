@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading.Channels;
 using Puck.Networking;
+using Puck.Networking.Peers;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -17,7 +18,7 @@ namespace Puck.World.Server;
 /// <param name="Tier">How much of this world's document the admitting entry authorized this connection to receive.</param>
 public readonly record struct WorldPeerConnectionInfo(int ConnectionId, int PeerIndex, int Generation, string RemoteEndpoint, string IdentityDomain, string IdentitySubject, WorldDisclosureTier Tier);
 /// <summary>
-/// The P7 socket door: a TCP listener admitting remote peers onto the same ordered domain a local script drives.
+/// The World admission and application-protocol endpoint over the networking library's authenticated QUIC peers.
 /// Per connection: the raw Hello handshake (<see cref="WorldHelloDoor"/>'s protocol-version check, then
 /// <see cref="WorldAdmissionDoor"/>'s challenge-response identity check) runs off the tick thread — neither touches
 /// server state beyond a read-only snapshot of the current document's admission entries — while admission
@@ -30,11 +31,11 @@ public readonly record struct WorldPeerConnectionInfo(int ConnectionId, int Peer
 /// <remarks>
 /// v1 is strictly request-then-response per connection: a connection's dedicated read loop decodes one upstream
 /// frame, awaits its tick-thread completion, writes the one downstream reply, then reads the next — so no
-/// correlation id needs to travel on the wire (see <see cref="WorldTcpWireFormat"/>). This is a deliberate
+/// correlation id needs to travel on the wire (see <see cref="WorldPeerWireFormat"/>). This is a deliberate
 /// simplification the design's own admission-budget/pipelining machinery is not part of; nothing here queues or
 /// retries a connection.
 /// </remarks>
-public sealed class WorldTcpHost : IDisposable {
+public sealed class WorldPeerHost : IDisposable {
     /// <summary>The ceiling on concurrent in-flight unauthenticated handshakes (a socket accepted but not yet
     /// admitted or refused). A safety representation constant, never a document knob (CLAUDE.md core rule 8's
     /// "legitimate constants" carve-out names capacity bounds that size memory or the wire — this sizes the
@@ -66,7 +67,8 @@ public sealed class WorldTcpHost : IDisposable {
     private Task? m_acceptLoop;
     private CancellationTokenSource? m_cts;
     private bool m_disposed;
-    private TcpListener? m_listener;
+    private readonly WorldPeerNetwork m_network;
+    private readonly bool m_ownsNetwork;
     private int m_nextConnectionId;
     private int m_pendingHandshakes;
 
@@ -75,27 +77,30 @@ public sealed class WorldTcpHost : IDisposable {
     private readonly int[] m_federationRefusals = new int[Enum.GetValues<WorldFederationRefusal>().Length];
     // Federation connections are long-lived and are not admitted bodies, so they are not in m_connections. They are
     // tracked here only so shutdown can half-close them; the value is unused.
-    private readonly ConcurrentDictionary<TcpClient, byte> m_federationConnections = new();
+    private readonly ConcurrentDictionary<PeerStream, byte> m_federationConnections = new();
     private readonly ConcurrentQueue<Action> m_pending = new();
     private readonly List<Connection> m_connections = [];
     private readonly Lock m_connectionsLock = new();
 
-    /// <summary>Initializes a new instance of the <see cref="WorldTcpHost"/> class over the server it admits into.</summary>
+    /// <summary>Initializes a new instance of the <see cref="WorldPeerHost"/> class over the server it admits into.</summary>
     /// <param name="server">The authoritative server.</param>
-    public WorldTcpHost(WorldServer server) : this(
+    public WorldPeerHost(WorldServer server) : this(
         server: server,
         authenticator: new WorldAttestedAuthenticator()
     ) { }
     /// <summary>Initializes a host with an explicit federation authentication policy.</summary>
     /// <param name="server">The authoritative server.</param>
     /// <param name="authenticator">The process-scoped federation authenticator; an unconfigured instance denies federation.</param>
+    /// <param name="network">The externally owned shared peer network, or null to own an ephemeral one.</param>
     /// <exception cref="ArgumentNullException"><paramref name="server"/> is <see langword="null"/>.</exception>
-    public WorldTcpHost(WorldServer server, IAuthenticator authenticator) {
+    public WorldPeerHost(WorldServer server, IAuthenticator authenticator, WorldPeerNetwork? network = null) {
         ArgumentNullException.ThrowIfNull(argument: server);
         ArgumentNullException.ThrowIfNull(argument: authenticator);
 
         m_server = server;
         m_authenticator = authenticator;
+        m_network = network ?? new WorldPeerNetwork();
+        m_ownsNetwork = network is null;
     }
 
     /// <summary>Gets a read-back snapshot of every currently admitted connection, oldest first.</summary>
@@ -131,19 +136,19 @@ public sealed class WorldTcpHost : IDisposable {
         }
     }
     /// <summary>Gets a value indicating whether the listener is currently bound.</summary>
-    public bool IsListening => (m_listener is not null);
+    public bool IsListening => ListenEndpoint is not null;
     /// <summary>Gets the bound endpoint, or <see langword="null"/> while not listening.</summary>
     public string? ListenEndpoint { get; private set; }
 
     private async Task AcceptLoopAsync(CancellationToken ct) {
-        var listener = m_listener!;
+        var incoming = m_network.Peer.IncomingLinks;
 
         while (!ct.IsCancellationRequested) {
-            TcpClient client;
+            PeerStream client;
 
             try {
-                client = await listener.AcceptTcpClientAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false);
-            } catch (Exception ex) when ((ex is OperationCanceledException or ObjectDisposedException or SocketException)) {
+                client = new PeerStream(await incoming.ReadAsync(ct).ConfigureAwait(false));
+            } catch (Exception ex) when ((ex is OperationCanceledException or ObjectDisposedException or ChannelClosedException)) {
                 break;
             }
 
@@ -194,7 +199,7 @@ public sealed class WorldTcpHost : IDisposable {
             try {
                 frame = await HandshakeWireFormat.TryReadLengthPrefixedFrameAsync(
                     stream: connection.Stream,
-                    maxTotalBytes: WorldTcpWireFormat.MaxUpstreamFrameBytes,
+                    maxTotalBytes: WorldPeerWireFormat.MaxUpstreamFrameBytes,
                     ct: ct
                 ).ConfigureAwait(continueOnCapturedContext: false);
             } catch (Exception ex) when ((ex is IOException or SocketException)) {
@@ -210,7 +215,7 @@ public sealed class WorldTcpHost : IDisposable {
                 frame: frame,
                 payload: out var payload
             )) {
-                await WorldTcpWireFormat.WriteRefusalAsync(
+                await WorldPeerWireFormat.WriteRefusalAsync(
                     stream: connection.Stream,
                     reason: $"{failure}",
                     ct: ct
@@ -248,13 +253,13 @@ public sealed class WorldTcpHost : IDisposable {
             }).ConfigureAwait(continueOnCapturedContext: false);
 
             if (result is null) {
-                await WorldTcpWireFormat.WriteRefusalAsync(
+                await WorldPeerWireFormat.WriteRefusalAsync(
                     stream: connection.Stream,
                     reason: "the envelope drained with no completion",
                     ct: ct
                 ).ConfigureAwait(continueOnCapturedContext: false);
             } else {
-                await WorldTcpWireFormat.WriteResultAsync(
+                await WorldPeerWireFormat.WriteResultAsync(
                     stream: connection.Stream,
                     result: result,
                     ct: ct
@@ -262,7 +267,7 @@ public sealed class WorldTcpHost : IDisposable {
             }
         }
     }
-    private async Task HandleConnectionAsync(TcpClient client, CancellationToken ct) {
+    private async Task HandleConnectionAsync(PeerStream client, CancellationToken ct) {
         // Ambient for the connection's whole lifetime — every downstream await runs under the same logical call
         // context, and Task.Run's caller (AcceptLoopAsync) never observes it (a fresh execution-context branch per
         // accepted socket).
@@ -277,11 +282,9 @@ public sealed class WorldTcpHost : IDisposable {
             WorldNarrationScope.Current = null;
         }
     }
-    private async Task HandleConnectionCoreAsync(TcpClient client, CancellationToken ct) {
-        client.NoDelay = true;
-
-        var remoteEndpoint = (client.Client.RemoteEndPoint?.ToString() ?? "unknown");
-        var stream = client.GetStream();
+    private async Task HandleConnectionCoreAsync(PeerStream client, CancellationToken ct) {
+        var remoteEndpoint = client.Link.RemoteEndpoint.ToString() ?? "unknown";
+        Stream stream = client;
 
         // The concurrent-handshake ceiling is checked before any byte crosses the wire for this connection, so a
         // flood of sockets that never speak still cannot itself grow past MaxConcurrentHandshakes. Refused cheaply
@@ -291,7 +294,7 @@ public sealed class WorldTcpHost : IDisposable {
             Console.Error.WriteLine(value: $"[world.listen: refused connection from {remoteEndpoint} — {MaxConcurrentHandshakes} concurrent unauthenticated handshakes already in flight]");
 
             try {
-                await WorldTcpWireFormat.WriteHelloRefusedAsync(
+                await WorldPeerWireFormat.WriteHelloRefusedAsync(
                     ct: ct,
                     reason: $"handshake-ceiling: {MaxConcurrentHandshakes} concurrent unauthenticated handshakes already in flight",
                     stream: stream
@@ -384,9 +387,9 @@ public sealed class WorldTcpHost : IDisposable {
                 }
 
                 await WorldFederationCodec.WriteResponseAsync(
-                    body: default,
+                    body: WorldFederationCodec.EncodeAuthorityIdentity(m_server.AuthorityIdentity),
                     ct: handshakeCt,
-                    kind: WorldFederationResponse.Ack,
+                    kind: WorldFederationResponse.Authenticated,
                     stream: stream
                 ).ConfigureAwait(continueOnCapturedContext: false);
                 handshakeSlotHeld = false;
@@ -417,7 +420,7 @@ public sealed class WorldTcpHost : IDisposable {
                 offeredKey: offeredKey,
                 refusal: out var helloRefusal
             )) {
-                await WorldTcpWireFormat.WriteHelloRefusedAsync(
+                await WorldPeerWireFormat.WriteHelloRefusedAsync(
                     ct: handshakeCt,
                     reason: $"version-mismatch: {helloRefusal}: wire key 0x{offeredKey:x16} != server 0x{WorldProtocol.WireProtocolKey:x16}",
                     stream: stream
@@ -433,7 +436,7 @@ public sealed class WorldTcpHost : IDisposable {
             // reply; once a prefix has declared a frame, an incomplete body is a named refusal instead.
             var challenge = WorldAdmissionDoor.NewChallenge();
 
-            await WorldTcpWireFormat.WriteHelloChallengeAsync(
+            await WorldPeerWireFormat.WriteHelloChallengeAsync(
                 challenge: challenge,
                 ct: handshakeCt,
                 stream: stream
@@ -451,7 +454,7 @@ public sealed class WorldTcpHost : IDisposable {
             if (identityRead is not HandshakeWireFormat.HelloIdentityReadResult.Ok identity) {
                 var malformed = ((HandshakeWireFormat.HelloIdentityReadResult.Malformed)identityRead);
 
-                await WorldTcpWireFormat.WriteHelloRefusedAsync(
+                await WorldPeerWireFormat.WriteHelloRefusedAsync(
                     stream: stream,
                     reason: $"identity-refused: {malformed.Reason}",
                     ct: handshakeCt
@@ -483,7 +486,7 @@ public sealed class WorldTcpHost : IDisposable {
                     now: DateTimeOffset.UtcNow
                 );
             } catch (FormatException exception) {
-                await WorldTcpWireFormat.WriteHelloRefusedAsync(
+                await WorldPeerWireFormat.WriteHelloRefusedAsync(
                     stream: stream,
                     reason: $"identity-refused: the presented claim or chain bytes do not decode — {exception.Message}",
                     ct: handshakeCt
@@ -493,7 +496,7 @@ public sealed class WorldTcpHost : IDisposable {
             }
 
             if (!outcome.Admitted) {
-                await WorldTcpWireFormat.WriteHelloRefusedAsync(
+                await WorldPeerWireFormat.WriteHelloRefusedAsync(
                     ct: handshakeCt,
                     reason: $"identity-refused: {outcome.Refusal}: {outcome.Detail}",
                     stream: stream
@@ -521,7 +524,7 @@ public sealed class WorldTcpHost : IDisposable {
             ).ConfigureAwait(continueOnCapturedContext: false);
 
             if (admissionRefusal is { } refusalReason) {
-                await WorldTcpWireFormat.WriteHelloRefusedAsync(
+                await WorldPeerWireFormat.WriteHelloRefusedAsync(
                     ct: handshakeCt,
                     reason: refusalReason,
                     stream: stream
@@ -555,7 +558,7 @@ public sealed class WorldTcpHost : IDisposable {
 
             try {
                 Console.Error.WriteLine(value: $"[world.listen: admitted connection {connectionId} as {connection.Principal.Describe()} identity domain:{connection.IdentityDomain} subject:{connection.IdentitySubject} grants:{(outcome.Grants?.Count ?? 0)} from {remoteEndpoint}]");
-                await WorldTcpWireFormat.WriteHelloAcceptedAsync(
+                await WorldPeerWireFormat.WriteHelloAcceptedAsync(
                     stream: stream,
                     peerIndex: connection.PeerIndex,
                     generation: connection.Generation,
@@ -590,6 +593,13 @@ public sealed class WorldTcpHost : IDisposable {
             // connection's own teardown finally above, which runs on every exit from that block — including
             // this exception unwinding through it.
         } finally {
+            // A completed QUIC write only hands bytes to the transport. Immediate connection disposal can
+            // discard the final refusal before the peer reads it. Keep the handshake slot while draining, using
+            // the networking library's same bounded refusal window; process shutdown still cancels immediately.
+            using (var drain = CancellationTokenSource.CreateLinkedTokenSource(ct)) {
+                drain.CancelAfter(PeerWireProtocol.RefusalDrainTimeout);
+                await StreamDrain.UntilClosedAsync(client, drain.Token).ConfigureAwait(false);
+            }
             if (handshakeSlotHeld) {
                 Interlocked.Decrement(location: ref m_pendingHandshakes);
             }
@@ -674,7 +684,7 @@ public sealed class WorldTcpHost : IDisposable {
             : tcs.Task
         );
     }
-    private async Task<bool> ServeCommitAsync(NetworkStream stream, string sourceAuthority, ReadOnlyMemory<byte> body, CancellationToken ct) {
+    private async Task<bool> ServeCommitAsync(Stream stream, string sourceAuthority, ReadOnlyMemory<byte> body, CancellationToken ct) {
         if (!WorldFederationCodec.TryDecodeCommit(
             body: body.Span,
             defaults: m_server.Definition.PlayerDefaults,
@@ -732,7 +742,7 @@ public sealed class WorldTcpHost : IDisposable {
     // A federation connection is a persistent authenticated lane. Requests ride it strictly request-then-response
     // and in order, which is what lets the peer omit a correlation id. Observe and IntentStream take the connection
     // over and stream on it until it closes.
-    private async Task ServeFederationAsync(NetworkStream stream, string sourceAuthority, WorldDisclosureTier tier, CancellationToken ct) {
+    private async Task ServeFederationAsync(Stream stream, string sourceAuthority, WorldDisclosureTier tier, CancellationToken ct) {
         while (!ct.IsCancellationRequested) {
             var frame = await WorldFederationCodec.ReadRequestAsync(
                 ct: ct,
@@ -765,7 +775,7 @@ public sealed class WorldTcpHost : IDisposable {
         }
     }
     // Returns whether the lane stays open for another request.
-    private async Task<bool> ServeFederationRequestAsync(NetworkStream stream, string sourceAuthority, WorldDisclosureTier tier, WorldFederationRequest kind, ReadOnlyMemory<byte> body, CancellationToken ct) {
+    private async Task<bool> ServeFederationRequestAsync(Stream stream, string sourceAuthority, WorldDisclosureTier tier, WorldFederationRequest kind, ReadOnlyMemory<byte> body, CancellationToken ct) {
         switch (kind) {
             case WorldFederationRequest.Reserve:
                 return await ServeReserveAsync(
@@ -812,6 +822,23 @@ public sealed class WorldTcpHost : IDisposable {
                     tier: tier
                 ).ConfigureAwait(continueOnCapturedContext: false);
 
+            case WorldFederationRequest.ObserveTraveler:
+                if (!WorldFederationCodec.TryDecodeTravelerObservation(body.Span, out var observation, out var failure)) {
+                    await WriteFederationRefusal(stream, WorldFederationRefusal.FrameMalformed, failure.ToString(), ct).ConfigureAwait(false);
+                    return false;
+                }
+                if (!string.Equals(sourceAuthority, observation.SourceAuthority, StringComparison.Ordinal)) {
+                    await WriteFederationRefusal(stream, WorldFederationRefusal.SourceAuthorityMismatch, "traveler observation source differs from its authenticated namespace", ct).ConfigureAwait(false);
+                    return false;
+                }
+                observation = observation with { Ceiling = (WorldDisclosureTier)Math.Min((byte)tier, (byte)observation.Ceiling) };
+                var refusal = await WorldTravelerProjection.StreamAsync(m_server, observation,
+                    m_server.Definition.Host.Authority ?? m_server.AuthorityIdentity, stream, ct).ConfigureAwait(false);
+                if (refusal is not null) {
+                    await WriteFederationRefusal(stream, WorldFederationRefusal.RouteUnknown, refusal, ct).ConfigureAwait(false);
+                }
+                return false;
+
             case WorldFederationRequest.Observe:
                 await StreamProjectionAsync(
                     ct: ct,
@@ -852,7 +879,7 @@ public sealed class WorldTcpHost : IDisposable {
                 return false;
         }
     }
-    private async Task<bool> ServeReserveAsync(NetworkStream stream, string sourceAuthority, WorldDisclosureTier tier, ReadOnlyMemory<byte> body, CancellationToken ct) {
+    private async Task<bool> ServeReserveAsync(Stream stream, string sourceAuthority, WorldDisclosureTier tier, ReadOnlyMemory<byte> body, CancellationToken ct) {
         if (
             !WorldFederationCodec.TryDecodeReservation(
             body: body.Span,
@@ -906,7 +933,7 @@ public sealed class WorldTcpHost : IDisposable {
 
         return true;
     }
-    private async Task<bool> ServeRouteAsync(NetworkStream stream, string sourceAuthority, WorldDisclosureTier tier, ReadOnlyMemory<byte> body, CancellationToken ct) {
+    private async Task<bool> ServeRouteAsync(Stream stream, string sourceAuthority, WorldDisclosureTier tier, ReadOnlyMemory<byte> body, CancellationToken ct) {
         if (!WorldFederationCodec.TryDecodeRouteCredential(
             body: body.Span,
             failure: out var failure,
@@ -1011,7 +1038,7 @@ public sealed class WorldTcpHost : IDisposable {
 
         return true;
     }
-    private async Task<bool> ServeSubmissionAsync(NetworkStream stream, string sourceAuthority, ReadOnlyMemory<byte> body, CancellationToken ct) {
+    private async Task<bool> ServeSubmissionAsync(Stream stream, string sourceAuthority, ReadOnlyMemory<byte> body, CancellationToken ct) {
         if (!WorldFederationCodec.TryDecodeSubmission(
             body: body.Span,
             failure: out var failure,
@@ -1103,7 +1130,7 @@ public sealed class WorldTcpHost : IDisposable {
 
         using var completion = new MemoryStream();
 
-        await WorldTcpWireFormat.WriteResultAsync(
+        await WorldPeerWireFormat.WriteResultAsync(
             ct: ct,
             result: result,
             stream: completion
@@ -1121,7 +1148,7 @@ public sealed class WorldTcpHost : IDisposable {
 
         return true;
     }
-    private async Task<bool> ServeTransferKeyAsync(NetworkStream stream, string sourceAuthority, WorldFederationRequest kind, ReadOnlyMemory<byte> body, CancellationToken ct) {
+    private async Task<bool> ServeTransferKeyAsync(Stream stream, string sourceAuthority, WorldFederationRequest kind, ReadOnlyMemory<byte> body, CancellationToken ct) {
         if (!WorldFederationCodec.TryDecodeTransferKey(
             body: body.Span,
             failure: out var failure,
@@ -1194,7 +1221,7 @@ public sealed class WorldTcpHost : IDisposable {
     // republishes the latest accepted image on every destination tick until another update or this connection's
     // finally releases its lease. Request/ack remains ordered, while connection setup and challenge authentication
     // are paid once rather than once per simulation tick.
-    private async Task StreamFederatedIntentsAsync(NetworkStream stream, string sourceAuthority, CancellationToken ct) {
+    private async Task StreamFederatedIntentsAsync(Stream stream, string sourceAuthority, CancellationToken ct) {
         var leaseId = WorldFederatedIntentLease.Next();
         var touched = new Dictionary<WorldMobilityIdentity, (WorldPrincipal Principal, IntentSubmission Submission)>();
         var forwardRelease = true;
@@ -1393,8 +1420,8 @@ public sealed class WorldTcpHost : IDisposable {
             }
         }
     }
-    private async Task StreamProjectionAsync(NetworkStream stream, WorldDisclosureTier tier, CancellationToken ct) {
-        var sink = new FederationProjectionSink(
+    private async Task StreamProjectionAsync(Stream stream, WorldDisclosureTier tier, CancellationToken ct) {
+        var sink = new WorldFederationProjectionSink(
             tier: tier,
             authority: m_server.AuthorityIdentity,
             revision: () => m_server.Population.Revision
@@ -1411,14 +1438,7 @@ public sealed class WorldTcpHost : IDisposable {
         ));
 
         try {
-            await foreach (var item in sink.Frames.ReadAllAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false)) {
-                await WorldFederationCodec.WriteResponseAsync(
-                    body: item.Body,
-                    ct: ct,
-                    kind: item.Kind,
-                    stream: stream
-                ).ConfigureAwait(continueOnCapturedContext: false);
-            }
+            await sink.StreamAsync(stream, ct).ConfigureAwait(false);
         } catch (Exception exception) when ((exception is IOException or SocketException or OperationCanceledException)) {
             // Observer lifetime is the socket lifetime.
         } finally {
@@ -1431,7 +1451,7 @@ public sealed class WorldTcpHost : IDisposable {
             });
         }
     }
-    private Task WriteFederationRefusal(NetworkStream stream, WorldFederationRefusal refusal, string detail, CancellationToken ct) {
+    private Task WriteFederationRefusal(Stream stream, WorldFederationRefusal refusal, string detail, CancellationToken ct) {
         Interlocked.Increment(location: ref m_federationRefusals[((int)refusal)]);
 
         return WorldFederationCodec.WriteRefusalAsync(
@@ -1450,21 +1470,17 @@ public sealed class WorldTcpHost : IDisposable {
 
         m_disposed = true;
 
-        // Half-close every federation lane BEFORE cancelling its read: cancelling a pending socket read closes the
-        // handle abortively, and a peer blocked on that lane reads the abort (WSAECONNABORTED) as an outage rather
-        // than as this authority ending an ordinary session. A FIN gives it a clean end-of-stream instead.
+        // Closing a peer link cancels pending reads and bounded event publication through the networking library.
         foreach (var federation in m_federationConnections.Keys) {
             try {
-                // A connection racing its own teardown has already dropped its socket: TcpClient.Client reads null
-                // once disposed, so this is a null-conditional call, not a defensive one.
-                federation.Client?.Shutdown(how: SocketShutdown.Send);
+                federation.Dispose();
             } catch (Exception ex) when ((ex is SocketException or ObjectDisposedException or InvalidOperationException)) {
                 // The lane is already gone; there is nothing left to end politely.
             }
         }
 
         m_cts?.Cancel();
-        m_listener?.Stop();
+        if (m_ownsNetwork) { m_network.Dispose(); }
 
         lock (m_connectionsLock) {
             foreach (var connection in m_connections) {
@@ -1491,6 +1507,8 @@ public sealed class WorldTcpHost : IDisposable {
     /// <exception cref="FormatException"><paramref name="listen"/> is not a parseable IP endpoint.</exception>
     public void Start(string listen) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: listen);
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        if (IsListening) { throw new InvalidOperationException("The World peer endpoint is already listening."); }
 
         if (!IPEndPoint.TryParse(
             result: out var endpoint,
@@ -1500,50 +1518,21 @@ public sealed class WorldTcpHost : IDisposable {
         }
 
         m_cts = new CancellationTokenSource();
-        m_listener = new TcpListener(localEP: endpoint);
-        m_listener.Start();
-        ListenEndpoint = m_listener.LocalEndpoint.ToString();
-        m_acceptLoop = Task.Run(function: () => AcceptLoopAsync(ct: m_cts.Token));
-        Console.Error.WriteLine(value: $"[world.listen: bound {ListenEndpoint}]");
+        var lifetime = m_cts.Token;
+        ListenEndpoint = m_network.Peer.ListenAsync(endpoint, lifetime).GetAwaiter().GetResult().ToString();
+        m_acceptLoop = Task.Run(function: () => AcceptLoopAsync(ct: lifetime));
+        Console.Error.WriteLine(value: $"[world.listen: bound {ListenEndpoint} transport=quic peer={m_network.Peer.Id.Domain}]");
     }
 
-    private sealed class FederationProjectionSink(WorldDisclosureTier tier, string authority, Func<int> revision) : IClientSink {
-        private readonly Channel<(WorldFederationResponse Kind, byte[] Body)> m_frames = Channel.CreateBounded<(WorldFederationResponse, byte[])>(options: new BoundedChannelOptions(capacity: 8) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true, SingleWriter = true });
-
-        public ChannelReader<(WorldFederationResponse Kind, byte[] Body)> Frames => m_frames.Reader;
-
-        private void Write(WorldFederationResponse kind, byte[] body) {
-            if (!m_frames.Writer.TryWrite(item: (kind, body))) {
-                _ = m_frames.Writer.TryComplete(error: new IOException(message: "federation observer exceeded its bounded projection backlog"));
-            }
-        }
-
-        public void DeliverAnswer(in QueryAnswer answer) { }
-        public void DeliverComposition(WorldComposition composition) { }
-        public void DeliverDefinition(WorldDefinition definition) => Write(
-            kind: WorldFederationResponse.Definition,
-            body: WorldFederationCodec.EncodeDocument(
-                definition: definition,
-                tier: tier,
-                authority: authority,
-                revision: revision()
-            )
-        );
-        public void DeliverSessionLever(WorldSessionLever lever) { }
-        public void DeliverSnapshot(in WorldSnapshot snapshot) => Write(
-            kind: WorldFederationResponse.Snapshot,
-            body: WorldFederationCodec.EncodeSnapshot(snapshot: in snapshot)
-        );
-    }
-    private sealed class Connection(int id, int peerIndex, int generation, TcpClient client, NetworkStream stream, string remoteEndpoint, string identityDomain, string identitySubject, WorldDisclosureTier tier) {
+    private sealed class Connection(int id, int peerIndex, int generation, PeerStream client, Stream stream, string remoteEndpoint, string identityDomain, string identitySubject, WorldDisclosureTier tier) {
         private long m_correlationId;
         private long m_sequence;
 
         public int Id { get; } = id;
         public int PeerIndex { get; } = peerIndex;
         public int Generation { get; } = generation;
-        public TcpClient Client { get; } = client;
-        public NetworkStream Stream { get; } = stream;
+        public PeerStream Client { get; } = client;
+        public Stream Stream { get; } = stream;
         public string RemoteEndpoint { get; } = remoteEndpoint;
         public string IdentityDomain { get; } = identityDomain;
         public string IdentitySubject { get; } = identitySubject;

@@ -144,8 +144,8 @@ public static partial class WorldDefinitionValidator {
 
         return names;
     }
-    // The admission section: which identities/issuers the TCP door admits (WorldAdmissionDoor, Puck.World.Server's
-    // WorldTcpHost), and what each is minted. Crypto-shape rules reuse Puck.Attestation's TrustListEntry.Validate()
+    // The admission section: which identities/issuers the QUIC door admits (WorldAdmissionDoor, Puck.World.Server's
+    // WorldPeerHost), and what each is minted. Crypto-shape rules reuse Puck.Attestation's TrustListEntry.Validate()
     // directly rather than re-deriving them. Grant TEMPLATE rows are checked against the same subject-bounds/
     // exclusive-over-all rules ValidateGrants applies; Budget/exclusivity legitimacy is WorldServer.Grant's decision
     // at admission time, not this pass's.

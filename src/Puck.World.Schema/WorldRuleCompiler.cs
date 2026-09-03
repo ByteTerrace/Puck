@@ -63,6 +63,10 @@ public static partial class WorldRuleCompiler {
         ruleName: ruleName,
         detail: "an effect row is null"
     ),
+        ActionEffect.TransformState transform => ResolveStateTransform(transform.Transform, ruleName, definition),
+        ActionEffect.ObserveSocial observe => ResolveSocialObservation(observe.Evidence, ruleName, definition),
+        ActionEffect.ForgetSocial forget => new CompiledWorldEffect(WorldRuleEffectKind.ForgetSocial, string.Empty, string.Empty, default, 0, null,
+            "forgetSocial", SocialRelationship: ResolveSocialRelationship(forget.Relationship, ruleName, definition)),
         ActionEffect.SetState set => ResolveWrite(
         rowName: set.State,
         key: set.Key,
@@ -434,6 +438,14 @@ public static partial class WorldRuleCompiler {
                 gate.Add(item: Logical(CompiledWorldPredicateKind.Not, 1, "not"));
 
                 break;
+            case ActionPredicate.CompareValue expression:
+                if (expression.Kind is not (CellKind.Int or CellKind.Fixed) || !Enum.IsDefined(expression.Comparison)) {
+                    throw new WorldRuleException(WorldRuleRefusal.PredicateKindInadmissible, ruleName, "compareValue requires Int or Fixed and a defined comparison");
+                }
+                gate.Add(new(default, expression.Comparison, 0, expression.Kind, null, $"compareValue {expression.Kind} {expression.Comparison}",
+                    LeftExpression: CompileExpression(expression.Left, expression.Kind, ruleName, "compareValue left", definition),
+                    RightExpression: CompileExpression(expression.Right, expression.Kind, ruleName, "compareValue right", definition)));
+                break;
             case ActionPredicate.CompareState compare:
                 gate.Add(item: ResolvePredicate(
                     compare: compare,
@@ -446,7 +458,7 @@ public static partial class WorldRuleCompiler {
                 throw new WorldRuleException(
                     refusal: WorldRuleRefusal.PredicateKindInadmissible,
                     ruleName: ruleName,
-                detail: $"'{predicate.GetType().Name}' has no world-scope meaning — world gates admit 'compareState', 'all', 'any', and 'not'"
+                detail: $"'{predicate.GetType().Name}' has no world-scope meaning — world gates admit 'compareState', 'compareValue', 'all', 'any', and 'not'"
                 );
         }
 
@@ -1132,6 +1144,12 @@ public static partial class WorldRuleCompiler {
         );
     }
     private static ResolvedOperand ResolveOperand(string name, string? key, string ruleName, WorldDefinition definition, string verb, string fieldLabel, string keyFieldLabel, bool allowText = false) {
+        if (name.StartsWith("$phase:", StringComparison.Ordinal)) {
+            return ResolvePhaseOperand(name, key, ruleName, definition);
+        }
+        if (name.StartsWith("$board:", StringComparison.Ordinal)) {
+            return ResolveBoardOperand(name, key, ruleName, definition);
+        }
         var describe = $"{name}{((key is { } spelledKey)
             ? $".{spelledKey}"
             : string.Empty)}";
@@ -1682,11 +1700,11 @@ public static partial class WorldRuleCompiler {
             RefuseKeyOnReservedChannel(key: key, keyFieldLabel: keyFieldLabel, name: name, ruleName: ruleName);
             var tokens = name[WorldRuleFacts.NavigationPrefix.Length..].Split(separator: ':');
             var width = BodyRefTokenWidth(start: 0, tokens: tokens);
-            if (tokens.Length != width + 1 || tokens[width] is not ("hasPath" or "active" or "arrived" or "unreachable" or "remaining")) {
+            if (tokens.Length != width + 1 || tokens[width] is not ("hasPath" or "active" or "arrived" or "unreachable" or "remaining" or "pending" or "capacity")) {
                 throw new WorldRuleException(
                     refusal: WorldRuleRefusal.SpatialChannelMalformed,
                     ruleName: ruleName,
-                    detail: $"'{name}' does not spell '{WorldRuleFacts.NavigationPrefix}<bodyRef>:<hasPath|active|arrived|unreachable|remaining>' ({s_bodyRefVocabulary})"
+                    detail: $"'{name}' does not spell '{WorldRuleFacts.NavigationPrefix}<bodyRef>:<hasPath|active|arrived|unreachable|remaining|pending|capacity>' ({s_bodyRefVocabulary})"
                 );
             }
             return new ResolvedOperand(
@@ -2174,16 +2192,18 @@ public static partial class WorldRuleCompiler {
                 Name: rule.Name,
                 Mode: rule.Mode,
                 Gate: gate.ToArray(),
-                Effects: CompileEffects(
+                Effects: rule.Decision is not null ? CompileDecisionEffects(rule.Effects, rule.Name, definition) : CompileEffects(
                     effects: rule.Effects,
                     ruleName: rule.Name,
                     definition: definition,
                     subject: "rule"
                 ),
-                ForEach: rule.ForEach
+                ForEach: rule.ForEach,
+                Decision: CompileDecision(rule, definition)
             );
         } finally {
             s_bindingScope = null;
+            s_socialPolicy = null;
         }
     }
     /// <summary>Compiles every rule in the definition's <c>rules</c> section, in document order.</summary>
@@ -2427,6 +2447,7 @@ public static partial class WorldRuleCompiler {
                 );
             } finally {
                 s_bindingScope = null;
+                s_socialPolicy = null;
             }
         }
 

@@ -24,7 +24,7 @@ public sealed class WorldGeneratorOrbitLawTests {
         Node: node,
         Word: word
     );
-    private static bool TryFire(WorldGenerator generator, long cursor, IReadOnlyList<long>? decks, out WorldGeneratorEngine.FireResult result, out string reason) =>
+    private static bool TryFire(WorldGenerator generator, long cursor, IReadOnlyList<ClosedBitset256>? decks, out WorldGeneratorEngine.FireResult result, out string reason) =>
         WorldGeneratorEngine.TryFire(
             generator: generator,
             targetKind: CellKind.Int,
@@ -35,7 +35,7 @@ public sealed class WorldGeneratorOrbitLawTests {
             result: out result,
             reason: out reason
         );
-    private static string Validate(WorldGenerator generator, CellKind kind = CellKind.Int, long? max = null, IReadOnlyList<long>? decks = null) {
+    private static string Validate(WorldGenerator generator, CellKind kind = CellKind.Int, long? max = null, IReadOnlyList<ClosedBitset256>? decks = null) {
         var definition = new WorldDefinition(
             Simulation: new WorldSimulationDefaults(RateHz: 240),
             StateRaw: new WorldStateSection(World: [
@@ -58,7 +58,7 @@ public sealed class WorldGeneratorOrbitLawTests {
     public void ARingSource_DealsEveryNodeOfTheRingOncePerPass() {
         var source = RingSource(ring: 2, mode: WorldGeneratorMode.WithoutReplacement);
         var cursor = 0L;
-        IReadOnlyList<long>? decks = null;
+        IReadOnlyList<ClosedBitset256>? decks = null;
         var dealt = new List<long>();
 
         Assert.True(condition: WorldGeneratorEngine.TryResolveOrbit(generator: source, nodes: out var nodes, reason: out var orbitReason), userMessage: orbitReason);
@@ -102,7 +102,7 @@ public sealed class WorldGeneratorOrbitLawTests {
         }
 
         var cursor = 0L;
-        IReadOnlyList<long>? decks = null;
+        IReadOnlyList<ClosedBitset256>? decks = null;
         var seen = new HashSet<long>();
 
         for (var deal = 0; (deal < (2 * nodes.Length)); deal++) {
@@ -137,10 +137,10 @@ public sealed class WorldGeneratorOrbitLawTests {
         Assert.Equal(expected: string.Empty, actual: Validate(generator: RingSource(ring: 0), max: 239L));
 
         // A persisted deck must fit the orbit, and a non-dealing mode carries none.
-        Assert.Equal(expected: string.Empty, actual: Validate(generator: RingSource(ring: 0, mode: WorldGeneratorMode.WithoutReplacement), decks: [0b101L]));
-        Assert.Contains(expectedSubstring: "marks a card past the 30", actualString: Validate(generator: RingSource(ring: 0, mode: WorldGeneratorMode.WithoutReplacement), decks: [(1L << 30)]));
-        Assert.Contains(expectedSubstring: "never deals", actualString: Validate(generator: RingSource(ring: 0), decks: [1L]));
-        Assert.Contains(expectedSubstring: "exactly one", actualString: Validate(generator: RingSource(ring: 0, mode: WorldGeneratorMode.WithoutReplacement), decks: [1L, 2L]));
+        Assert.Equal(expected: string.Empty, actual: Validate(generator: RingSource(ring: 0, mode: WorldGeneratorMode.WithoutReplacement), decks: [new(Word0: 0b101UL)]));
+        Assert.Contains(expectedSubstring: "marks a card past the 30", actualString: Validate(generator: RingSource(ring: 0, mode: WorldGeneratorMode.WithoutReplacement), decks: [new(Word0: (1UL << 30))]));
+        Assert.Contains(expectedSubstring: "never deals", actualString: Validate(generator: RingSource(ring: 0), decks: [new(Word0: 1UL)]));
+        Assert.Contains(expectedSubstring: "exactly one", actualString: Validate(generator: RingSource(ring: 0, mode: WorldGeneratorMode.WithoutReplacement), decks: [new(Word0: 1UL), new(Word0: 2UL)]));
     }
     [Fact]
     public void ALatticeFill_NeedsEnoughUndealtCards() {
@@ -149,8 +149,8 @@ public sealed class WorldGeneratorOrbitLawTests {
         Assert.True(condition: WorldGeneratorEngine.TryCheckBatchCapacity(generator: source, decks: null, sampleCount: 30L, reason: out _));
         Assert.False(condition: WorldGeneratorEngine.TryCheckBatchCapacity(generator: source, decks: null, sampleCount: 31L, reason: out var reason));
         Assert.Contains(expectedSubstring: "can supply only 30", actualString: reason);
-        Assert.False(condition: WorldGeneratorEngine.TryCheckBatchCapacity(generator: source, decks: [0b111L], sampleCount: 28L, reason: out _));
-        Assert.True(condition: WorldGeneratorEngine.TryCheckBatchCapacity(generator: source, decks: [0b111L], sampleCount: 27L, reason: out _));
+        Assert.False(condition: WorldGeneratorEngine.TryCheckBatchCapacity(generator: source, decks: [new(Word0: 0b111UL)], sampleCount: 28L, reason: out _));
+        Assert.True(condition: WorldGeneratorEngine.TryCheckBatchCapacity(generator: source, decks: [new(Word0: 0b111UL)], sampleCount: 27L, reason: out _));
         Assert.True(condition: WorldGeneratorEngine.TryCheckBatchCapacity(generator: RingSource(ring: 3, mode: WorldGeneratorMode.ReshuffleOnExhaustion), decks: null, sampleCount: 90L, reason: out _));
     }
 }

@@ -421,13 +421,23 @@ no live owner today; the doctrine waits for the next graph-building host.
 
 **The capacity probe (the envelope pattern, live in `Puck.World.Client.WorldFramePresenter`).**
 Composing `SdfCompositionFrameSource` runs ONE worst-case probe across its
-emitters — every diegetic screen lit, all 128 avatars, the reserved placement
+emitters — every diegetic screen lit, the largest catalog rig in every supported
+body slot (including repeated looks), the reserved placement
 instances, and the worst-case animated pool — measures it (the probe is never
 rendered), and feeds the result through `SdfWorldRenderSpec.ProgramWordCapacity` /
 `InstanceCapacity`, so live rebuilds vary freely BELOW the frozen envelope.
 Any NEW optional emission MUST also declare a `Probe` branch on its
 `ISdfSceneEmitter`, or a live rebuild can outgrow the buffers and
 `UploadProgram` throws loudly.
+
+Catalog bodies use one dynamic cull instance per leaf, tracking its bone slot.
+The bound encloses that primitive at the selected scale through any orientation
+and gait phase. Authored leaf offsets are unscaled, so their radius is added
+after scaling the primitive reach. Keep the catalog's `PrimitiveReach` paired
+with its emitted dimensions. Body-wide or multi-leaf grouping requires fresh
+GPU evidence: fewer mask entries can admit far more segments to each tile.
+Instance count and reserved dynamic-transform capacity are distinct resources;
+inactive bodies and smaller looks do not shrink their reserved bone ranges.
 
 ## Shader build mechanics
 

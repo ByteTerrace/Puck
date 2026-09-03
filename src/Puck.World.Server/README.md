@@ -1,7 +1,7 @@
 # Puck.World.Server — the authoritative world runtime
 
 This project is the server half of the world game: the entity table, the tick
-step, the capability-grant authority model, the P7 TCP network transport,
+step, the capability-grant authority model, the QUIC peer transport,
 the addon host seam, player profiles and their storage, and the deterministic
 replay codec. It consumes
 the document and protocol shapes from
@@ -52,6 +52,72 @@ barrier (see the console section of
 typed completions (`WorldSubmissionResult`), and deliveries fan out through
 `WorldOutputHub.cs`, which supports multiple subscribed sinks.
 
+## Local flock steering
+
+`ProduceFlockIntent` consumes the assigned kit's `producers.<name>.flock`
+profile. Range, cone, line of sight, candidate/neighbor limits, perception
+cadence, and separation/alignment/cohesion/goal/inertia weights are authored
+data. Tangent mode uses the body's support normal; volume mode requires a
+motion program that consumes vertical input.
+
+`WorldPopulation` freezes positions, orientations, and prior-step travel
+before any body advances. The deterministic spatial query limits inspected
+candidates, not only retained neighbors. A budget-limited result is nearest
+within a rotating sample, not a promise of globally nearest neighbors.
+Grids use power-of-two range levels and rebuild lazily from the frozen image;
+adding an unused long-range profile does not alter a short-range sample.
+Perception updates cache the unclamped neighbor contribution and any sensed
+target's observed position. Target selection and neighbors share one candidate
+budget over the larger sensing range, with their own scope/cone/sight filters.
+Between samples, sensed targets do not silently acquire live position updates.
+Explicit designations, route waypoints, headings, and tangent frames blend every
+simulation step. Checkpoints carry both caches, cadence residue, observer-local
+sample ordinal, and every slot's generation. Slot reuse cannot transfer an old
+observation to a new occupant.
+An unchanged producer binding keeps its perception cadence across rebuilds;
+changing its profile or target source refreshes perception on its next step.
+
+Optional `cohesionAffinity` and `alignmentAffinity` expressions assign independent
+relative weights to each retained neighbor: "stay near this companion" need not
+mean "follow its heading." Both use the ordinary Fixed postfix evaluator, with
+`left` bound to the observer and `right` to the neighbor (`$left`/`$right` for
+state-cell keys). Only state-backed and social facts are admitted; live body,
+channel, navigation, and machine facts could change midway through movement and
+make an observer depend on body iteration order. Social observations produced by
+world rules therefore affect the next eligible perception sample, not movement
+that already happened. State handles and dimension ordinals recompile on document
+installation even when the population does not rebuild.
+
+An omitted affinity is one. Results clamp to [0,1]; arithmetic failure supplies
+zero and increments the failure counter. The shared expression arithmetic refuses
+zero divisors and overflow without allocating exceptions; Fixed products and
+quotients retain nearest/ties-to-even rounding, and Int division truncates toward
+zero. Affinity zero excludes that neighbor
+from the corresponding weighted mean, never from separation or collision. All
+retained neighbors still spend the same perception budget; the engine does not
+scan farther until it finds a friend. Weighted means are normalized before the
+outer flock weights apply, so equally scaling every nonzero affinity does not
+reduce term strength. Unknown beliefs use the authored dimension baseline;
+confidence is a separate input, and nothing creates reciprocal friendship.
+See the [authoring example](../Puck.World.Schema/README.md#social-flock-affinities).
+
+`world.flock` describes profiles and work; `world.budget` repeats the structural
+cost, including movement-domain checks/refusals, affinity evaluations/failures,
+and conservatively charged affinity work. Affinity expressions share the world
+rule work ceiling, including indirect scans and the worst-case simultaneous
+initial sample of every body. No counter affects decisions.
+An optional `movementDomain` names a volume or medium navigation domain. Its
+root-centered `agentRadius` must enclose the kit's collider, including local
+offsets. Every integrated locomotion step is checked continuously against that
+domain, solid clearance, and live medium containment before it commits. A refused
+step stops translational momentum without teleporting; the constraint ends when
+the producer ends. It is not pathfinding or recovery: a displaced/outside creature
+may remain stranded. Later impulse overlays, body contacts, tethers, and authority
+teleports are separate physical/authority operations, not silently cancelled by
+this locomotion constraint. Surface-domain constraints are not implemented here.
+Flock weights alone imply no containment, social memory, shared routes, or
+obstacle avoidance.
+
 ## Gravity fields
 
 `WorldGravityField` is the one authoritative gravity evaluator. It gathers
@@ -77,11 +143,14 @@ limits; every admitted edge is proven with swept spheres and stored in one
 26-bit mask per cell. Free-volume and medium domains use the same swept-sphere
 edge proof in three dimensions. A medium additionally resolves its field name
 to an ordinal once and checks the agent clearance volume at each live node plus
-half-lattice-cell edge samples on search and before following the next cached
-edge. This is how underwater
+half-cell-or-shorter swept boxes on search and before following the next cached
+edge. Every intersected voxel's free surface is checked, including dry caps
+between wet layers; testing only point samples or cube corners is insufficient.
+Each swept piece visits at most 27 voxels, with a hard subdivision ceiling.
+This is how underwater
 routes react to field evolution without rebaking static solids.
 
-Search is bounded A* over reused arrays: integer costs (1000/1414/1732), stable
+Without `shared`, search is bounded A* over reused arrays: integer costs (1000/1414/1732), stable
 `(f, h, nodeOrdinal)` ties and authored expansion/path ceilings. Domain search
 workspace allocates once at compile; per-body route storage allocates lazily on
 first use, so steady-state searches allocate nothing. Changing a navigation definition,
@@ -92,6 +161,47 @@ state hash includes producer-domain and route state. `world.navigation`,
 `body.targets`, and `world.budget` expose occupancy, state, expansions, the
 current followers' simultaneous-replan ceiling, and fixed workspace bytes;
 `$nav:` rule facts read the same live status.
+
+A domain can instead declare `shared: { "goalCapacity": 4,
+"expandedNodesPerTick": 128 }`. This runs queued reverse Dijkstra searches,
+with stable `(cost, nodeOrdinal)` ties and one aggregate expansion allowance
+per domain per simulation tick. Each expansion inspects at most 26 edges.
+Resident goals take turns, one expansion at a time; unfinished requests continue
+on later ticks. The shared tree can eventually cover every cell in the domain;
+`maxExpandedNodes` remains the independent A* limit, while `maxPathNodes` also
+bounds paths extracted from shared trees. Boot allocation and checkpoint size
+are bounded by the world's sum of `cellCount * goalCapacity`.
+
+The cache key is the domain and destination cell—not a leader, friendship, or
+body slot. The domain fixes topology, clearance, and medium compatibility;
+shared volume/medium users must fit its root-centered clearance sphere.
+Each body retains its own waypoint array/cursor and exact designated final
+point. A body can leave, change goal, or reconnect from another in-domain cell
+without changing another body's route. Reconnection extends the same bounded
+tree if necessary; there is no straight-line teleport or unbounded connector.
+Completed trees are evicted least-recently-used using bounded, distinct recency
+ranks, so repeated requests cannot erase the order of other goals. Pending requests pin a tree
+for the next search step. If all slots are pinned, another goal reports
+`capacity` and can retry; no independent search bypasses the budget.
+`pending` is distinct from `unreachable`. These are ordinary `$nav:` facets,
+alongside `hasPath`, `active`, `arrived`, `remaining`, and `unreachable`.
+
+Checkpoint/hash state includes resident goals, discovered costs/successors,
+settled flags, pending starts, eviction ages, and the scheduler cursor. Heap
+layout is derived. Node digests are cached in 64-cell blocks; only changed blocks
+are rehashed, and unchanged trees contribute cached roots in constant time.
+Pending starts are hashed in sorted order from their bounded request list, not
+by scanning the domain. These digests are derived and rebuilt after restore.
+A change to the referenced medium field invalidates its trees;
+other fields do not. Rebuilds invalidate domain-local caches. This first shared
+implementation restarts affected trees rather than incrementally repairing them:
+rapidly changing water can delay a distant request indefinitely under a small
+budget. It does not provide crowd collision avoidance, bottleneck reservations,
+hierarchical long-distance routing, or social/group membership.
+
+The many-agents/one-destination approach is informed by
+[Emerson's crowd pathfinding chapter](https://www.gameaipro.com/GameAIPro/GameAIPro_Chapter23_Crowd_Pathfinding_and_Steering_Using_Flow_Field_Tiles.pdf).
+This implementation uses finite domain trees, not that chapter's tiled hierarchy.
 
 **Mutations, the journal, and undo.** A `WorldMutation` applies by composing a
 candidate document, revalidating the WHOLE document through
@@ -238,6 +348,326 @@ frame/reseat/turn fractions, and complete hold/grapple state through
 `IntegrationResidue`/`WorldAuthorityCheckpointCodec` (`SupportedVersion`,
 bumped whenever the fail-closed wire shape changes).
 
+World rules can carry [decision policies](../Puck.World.Schema/README.md#decision-policies).
+`WorldServer.Decisions.cs` owns each binding's selected option, local PCG state,
+reconsideration and commitment timers, and interrupt-edge memory. It reuses
+ordinary predicate/expression/effect evaluation and keeps state through an
+unchanged-policy recompile. The server checkpoint includes these bindings;
+restore validates them before changing authority state, and authoritative
+hashing visits their sorted keys without allocating a sorting buffer.
+`world.decisions` reads the choices back, including the raw last-evaluated score
+and consumed draw count. A policy edit starts a new decision episode rather
+than applying old option ordinals to a different policy.
+Parameterized neighbor options also retain the selected body's generation.
+`WorldServer.DecisionNeighbors.cs` freezes poses once before ordinary rules,
+shares lazily rebuilt power-of-two range grids, and uses the physics sampler's
+inspection bound even in a coincident crowd. Per-option reusable choice buffers
+avoid a population-sized stack or per-reconsideration allocation. The selected
+individual's gate is checked during commitment; physical perception refreshes
+only when deliberation runs. Diagnostic work counters are not simulation state.
+`world.budget` reports the shared pose-image and range-grid ceilings alongside
+query work, including how many grid points may be sorted in one tick. The
+static ceiling does not discount authored cadence because all policies can
+reconsider together. It is a structural work sheet, not a frame-time prediction.
+
+Committed journal entries use `WorldSubmissionCodec.TryEncodeCommittedMutation`
+and `TryDecodeCommittedMutation`: world-authored rule effects must survive a
+checkpoint. Pending external submissions and replayed external inputs retain
+the live mutation codec, which refuses a world actor on both encode and decode.
+The committed codec admits only the canonical world actor and does not relax
+nested grant or market-party validation.
+
+### Social memory component
+
+`WorldSocialMemory` stores what one individual has learned about another,
+separately for each named dimension. An optional `state.social` policy installs
+the bank in the server. World rules deliver explicitly perceived evidence through
+`observeSocial`, query beliefs through numeric `social` expressions, and remove
+impressions through `forgetSocial`. This is not a sensor: the author must gate
+who witnesses or receives an event. The component API also accepts authorized
+`WorldSocialEvidence` directly; `TryRead` returns the current impression and
+confidence, and `Capture` exposes stored receipts and work counters.
+
+The server advances the bank once per engine-clock boundary, before ordered
+mutations and rule evaluation. Effects execute in document order, so a later
+effect, gate, or decision can read an earlier observation in the same tick.
+Unchanged policy content retains memory through recompilation. A changed or
+removed policy resets it; old dimension ordinals are never reinterpreted. While
+source transfer holds or destination import reservations remain unresolved,
+mutation, load/reload/reset, and undo refuse a policy replacement before changing
+the live definition, journal, or derived state. Equal detached policy content and
+unrelated edits remain admissible. A full authority restore instead reinstates
+the checkpoint's validated memory and holds together.
+Authored rules have the same structural authority as other world effects:
+permission is checked at rule authorship, not through nonexistent World grant
+rows. These runtime-only writes do not broadcast private beliefs into the public
+world document, and are not admitted inside state-cell transactions.
+
+`world.social` is operator inspection, requiring the stamped caller's
+`Observe/all` grant. With no arguments it reports policy, clock, limits, and the
+last outcome. A query JSON argument reads one directed impression. This is not
+a per-creature network disclosure API. `world.budget` includes declared social
+storage and ingestion/expiry budgets; rule costs include numeric expressions
+and any row scans used to resolve their body references. The authoring syntax
+lives in [Schema](../Puck.World.Schema/README.md#social-evidence-and-belief-queries).
+
+The full authority checkpoint includes the social policy identity, impressions,
+receipts, frozen source observers, import reservations, work counters, clock, and last outcome. Restore validates detached
+records before allocating the new bank or changing live state. Social decoder row counts must fit their remaining
+wire bytes before allocating. The existing whole-checkpoint 64 MiB wire limit
+still applies; maximum component capacities are not a guarantee that a full
+authority checkpoint fits that envelope. Individual reservations carry private
+observer exports inside the federation protocol's separate 32 MiB frame limit.
+
+`CaptureObserver` copies one original incarnation's memory, including receipts
+whose impressions were forgotten and expired receipts awaiting reclamation.
+It traverses only that observer's entries, then sorts those entries into a
+canonical checkpoint; it does not scan the authority's other memories. Receipt
+ordinals are compacted without moving an old event across a forgetting boundary.
+Unrelated observers' event counts and authority work counters are not exported.
+The result is detached and retains the exact policy. Without a destination clock
+it retains the source clock; supplying `engineTick` rebases the stored aging
+anchors while preserving age, decay progress, and original event timestamps.
+An anchor may precede the destination's clock origin, so it is signed 128-bit
+engine time rather than an unsigned tick that could underflow. Rebasing models
+an instantaneous logical cutover; it does not guess transport delay from wall
+time. A rebase outside the signed representation refuses without changing the
+source. Restoring creates an independent bank with a fresh ingestion allowance;
+neither operation reserves destination capacity, removes source ownership, or
+by itself performs a transfer. Capturing many individuals at once still allocates
+and sorts all of their selected records.
+
+`RemoveObserver` retires one original incarnation's locally owned impressions
+and receipts, without touching what other individuals remember about it. It is
+not `Forget`: removing the receipts deliberately ends this bank's deduplication
+protection for that owner. Callers must secure any required durable copy and
+resolve ownership first; temporary separation or an ambiguous transfer must not
+call it. The operation allocates nothing, visits only that owner's records,
+and removes each receipt from the indexed expiry heap in logarithmic time.
+There are no deferred heap tombstones to accumulate during repeated crossings.
+It preserves the bank's clock, work counters, and next admission ordinal. This
+component operation is not the handoff's release operation: confirmed transfers
+use matching-key `RetireFrozenObserver` instead.
+
+`TryFreezeObserver` holds an incarnation's entire history for one exact transfer
+key, including empty and receipt-only histories. Equal retries retain the first
+freeze clock; competing keys and incoming reservations refuse. While held,
+`Observe` returns `ObserverFrozen`, `Forget` returns false, and ordinary
+`RemoveObserver` throws. Held receipts leave the expiry index, so they neither
+expire nor block other observers' bounded reclamation. Their storage remains
+occupied. The maximum number of simultaneous source holds is
+`WorldBodiesLimits.CapacityCeiling`; this includes empty histories.
+
+`CaptureFrozenObserver` copies the exact freeze-time history for its matching
+key. It remains logically identical across unrelated learning, clock advancement,
+and checkpoint restore. Ordinary reads still show current lazy age. No second
+full history is retained internally: freeze/thaw visit only the owner's receipts
+and allocate nothing, while capture remains an allocating cold path. The hold
+metadata is checkpointed and hashed, but is not carried inside an observer export.
+`world.social` reports whether a queried observer is frozen; the budget reports
+the total held observers.
+
+After a confirmed non-commit, `ThawObserver` releases only the matching hold and
+returns receipts to normal bounded expiry without refreshing their age. After a
+confirmed destination commit, `RetireFrozenObserver` removes the matching hold
+and all locally owned records, leaving others' memories about that creature intact.
+A deadline alone proves neither outcome; unresolved transfers must retain their
+source holds until ownership is established.
+
+`TryImportObserver` atomically adds an absent incarnation's exported memory to
+an existing bank. It validates the complete incoming history before writing,
+rebases age onto the destination clock, and assigns new local receipt ordinals
+without losing forgetting boundaries. It neither overwrites an existing owner
+nor evicts memories to fit. Malformed records, mixed observers, insufficient
+total/per-observer storage, and clock or ordinal overflow refuse without changing
+the destination. The source policy must exactly describe the checkpoint;
+destination capacity and work budgets may differ, but its dimension declarations
+(including order), learning coefficients, reliability rules, and evidence lifetime
+must have the same meaning. Differing semantics refuse rather than reinterpret
+the individual's memories. Validation copies and scratch scale with the incoming
+records, not the source policy's maximum capacities. The operation preserves
+destination work counters and is not ordinary evidence ingestion.
+
+`TryReserveImport` holds both storage and absent observer identities for an
+ordered group under one `WorldTransferKey`. Ordinary learning and unreserved
+intake cannot consume the held slots; even a zero-record arrival has an exclusive
+identity claim. Equal retries are idempotent, changed retries refuse, and the
+caller retains ownership of its original list. The total number of outstanding
+observer claims is bounded by `WorldBodiesLimits.CapacityCeiling`, including
+empty claims. Memory-entry quotas remain independently authored. Reservation
+counts and their cached logical digest enter checkpoints and state hashes;
+`world.social` and `world.budget` echo groups, observers, and held storage.
+
+`TryImportReserved` validates every incoming member, its source policy, its own
+allowance, and all clock/ordinal arithmetic before applying any member. Quotas
+are checked against detached records as well as caller-supplied collection counts.
+A late
+refusal leaves the whole group and reservation untouched. Success consumes the
+reservation and releases any unused allowance; it preserves ordinary work
+counters. Preparation allocates scratch proportional to the incoming records,
+not bank capacity. `CancelImportReservation` releases only a matching hold and
+does not remove memory. Clock advances never implicitly release holds: the
+enclosing transfer owns its deadline and must cancel an expired or aborted
+reservation explicitly. Checkpoint restore reconstructs the same holds before
+ordinary learning resumes, and rejects duplicate, overlapping, or over-capacity
+claims. `CaptureObserver` never exports the source authority's reservations.
+
+`TryPrepareReservedImport` returns an owned, single-use token without changing
+the bank. `TryCommitReservedImport` installs that token without allocating;
+changing the bank, reservation instance, clock, or admission ordinal invalidates
+it before any write. Updating an existing receipt without a new admission does
+not invalidate it. This split lets body admission follow complete memory validation.
+
+The host freezes each traveler's memory before requesting destination space.
+`WorldTransferEscrow` owns a detached copy of that export and reserves both its
+observer identity and exact storage quota alongside the body slots. No-source-bank
+arrivals receive empty identity claims when the destination has a social policy.
+A destination without a policy refuses any supplied social export, including an
+empty one; incompatible memory meanings also refuse. Transfer policy JSON is
+bounded to 65,536 UTF-16 characters before parsing. Capacity and work budgets may
+differ without changing memory meanings.
+
+Commit validates and prepares all histories before landing any body. Only after
+all bodies land does it install the prepared histories; a refusal releases the
+body and memory leases. Exact retries cannot replace the saved histories or
+rewrite reply slots. Authority restore checks that each saved body lease has its
+matching social quota before changing live state.
+
+The source retires its frozen records only after confirmed destination commit.
+A lost commit response retains body recovery and frozen memory for exact status
+reconciliation. Confirmed non-commit restores bodies before thawing their memories.
+An occupied source slot retains its pending recovery; a rollback-only checkpoint
+keeps only the remaining paired body/profile records and can never retry Commit.
+Restoration reinstalls the original mobility identity even if that slot was reused.
+A contradictory peer commit verdict after rollback leaves recovery held and
+reports once; it cannot create another body or stop unrelated worlds.
+Non-atomic parties split before reservation, so a parent lease cannot block its
+own children. Each child has its own capacity verdict and memory transaction.
+
+This protocol uses the freeze-time logical cutover described above, not an
+estimate of network delay. Component stress and replay MATCH alone do not prove
+federated delivery; transport and host recovery require their own checks. The
+host retains unresolved destination identities, remote endpoints, exact commit
+payloads, and frozen social histories through repeated capture and restore.
+`RestoreRow` validates all in-doubt and forwarding records before changing host state. A local
+destination can be admitted later: reconciliation matches its authority identity,
+not merely its registry name. Reinstalling a host slice replaces its transaction
+records without duplicating them. The original cohort and source boundary frame
+also survive partial rollback and restart, so a confirmed refusal can still clamp
+the traveler inside the source boundary. Resolver destination, scope, and generation
+remain available for outcome narration.
+
+A known destination commit is checkpointed as `CommitConfirmed` until every
+source-side route and roster publication succeeds. A publication failure reports
+`PUBLICATION-PENDING` once per running recovery record and retains its exact member
+payloads and frozen source histories. Retries, including after restart, finish
+publication without querying status, committing again, or restoring a second body
+at the source. The captured `FollowedSeatMask` keeps an already-moved participant
+occupied if a later member's publication fails. Only successful publication retires
+source histories and acknowledges the destination's exact commit receipt. Restore
+rejects contradictory commit/rollback phases and invalid or overlapping seat masks
+before replacing host state.
+
+Remote recovery reconnects through the networking library using the retained
+endpoint and expected authority identity. After a confirmed commit, forwarding
+and local seat routes derive their credential from the retained traveler and
+its next ownership epoch, never from a connection's reservation cache. A fresh
+connection did not perform the original reservation; a slot-keyed cache might
+also name a later occupant.
+
+Once a transfer is finished, the source keeps a forwarding route so input sent
+to the old authority can still reach the traveler. These routes survive restarts
+independently of pending transactions. Each captures the original source authority,
+destination identity, and mobility credential; remote routes also capture their
+endpoint and definition. A missing local destination produces a named unavailable
+result and remains saved until that exact authority is admitted, even under a
+different registry name. Remote routes reconnect lazily over QUIC and check the
+expected authority identity. No connection or held-input lease is stored in the
+checkpoint. Replacing a local route releases its old held-input lease, and that
+retired lease cannot publish again. An empty source authority with forwarding
+routes is not automatically reaped. Explicitly stopping a destination unbinds
+incoming routes; admitting the same authority later binds them again.
+
+The route follows later transfers whether a hop is local or reached over QUIC.
+Each hop checks its own source-scoped credential before following the next route,
+and a local call releases its authority lock before entering another authority.
+Synchronous local traversal refuses after 64 hops, bounding stack use when a
+broken route forms a cycle. An accepted leave retires the traveled credentials
+and every retained branch for that incarnation in each forwarding host, without
+removing another traveler's routes. The final body still follows the world's
+authored reconnect-grace policy.
+
+The console can move any active body through that same transfer path:
+`world.transfer <source-instance> body:<index> <target-instance>` uses a zero-based
+body index, including creature and network-peer slots. Bare numbers select the
+four local seats using their one-based display numbers; `party` selects the active
+local-seat cohort. Explicit body targets do not bypass Drive grants or destination
+admission, and an index outside the source world's actual capacity is refused at
+the transfer drain.
+
+Use `WorldMobilityIdentity.Incarnation` for observer, subject, source, and event
+origin identities. A current body index is not a durable individual: the next
+occupant of that slot must not inherit the previous occupant's relationships.
+The bank does not find bodies, disclose private intent, or certify an event's
+provenance. Its caller must enforce those boundaries before submitting evidence.
+An event's origin, aspect, sequence, and original occurrence tick must survive
+relaying. Giving a rumor a new identity every time it is repeated defeats exact
+deduplication and is a caller error.
+
+An event's original `OccurredAt` and its local aging anchor are separate. For a
+new event, the component caller may supply `LocalOccurredAt` to project the
+original instant into the receiving bank's clock; otherwise `OccurredAt` must
+already use that clock. The caller owns the projection's provenance, including
+after a receipt has expired and been reclaimed. A retained receipt uses its own
+anchor regardless of a relay's offered projection, so a repeated report cannot
+extend its admission window. World-rule observations currently use the local
+clock; the component does not infer an unknown foreign event's age from its
+timestamp alone.
+
+Dimensions have authored baselines, bounds, inertia, learning rates, and maximum
+per-event changes. Source reliability is an independent, optional [0,1] dimension,
+so liking someone is not the same as believing them. Quality and source reliability
+scale reports. Only a new direct event receives an uncertainty-driven follow-up
+boost. Repeated copies add no support; the first contradictory report about the
+same event may raise uncertainty once, and a later direct observation can correct
+that report once without counting as another independent event. The first direct
+observation then dominates later copies. This is bounded game logic, not a claim
+to infer objective truth or calibrated psychological probabilities.
+
+`Forget` removes an impression but keeps its unexpired receipt history, including
+across later relearning of the same individual. The exact ledger never evicts an
+unexpired receipt. Full storage returns `ReceiptCapacityLimited` or
+`ImpressionCapacityLimited`; the caller decides whether to defer or discard an
+attempt. Ingestion counts invalid and duplicate attempts against an authored
+per-boundary budget. Unfrozen receipt expiry uses a separately bounded oldest-first heap, ordered
+by projected occurrence time and admission ordinal. A large clock jump grants one
+budget, not an unbounded catch-up loop. Unprocessed expired entries may therefore
+temporarily keep the ledger full.
+
+Optional weight decay and recovery toward baseline are evaluated lazily from
+the last accepted update; reading never rebases the clock. Imported ages beyond
+the unsigned 64-bit read-back range saturate that read-back, without truncating
+the stored aging anchors or overflowing decay arithmetic. Simulation arithmetic
+uses Q48.16 values and widened integer intermediates, truncating toward zero at
+each narrowing. Storage is reserved at construction. The cached logical-state
+digest excludes dictionary layout, the per-observer ownership indexes, and the
+expiry heap's layout; checkpoint restore rebuilds those indexes and validates bounds, identity,
+duplicates, and capacity into a new bank before exposing it. The digest is for
+replay diagnostics, not cryptographic authentication. Component laws, numeric
+oracles, per-observer capture/forgetting/retirement laws, and the 4,096-observer
+allocation, capture, repeated ownership-replacement, and component round-trip probes live in
+[`WorldSocialMemoryLawTests`](../../tests/Puck.World.Tests/WorldSocialMemoryLawTests.cs).
+Reserved quota, empty-identity claims, late-failure atomicity, restart, and the
+4,096-observer reserved-group round trip are covered by
+[`WorldSocialImportReservationLawTests`](../../tests/Puck.World.Tests/WorldSocialImportReservationLawTests.cs).
+Source hold, stable export, thaw, retirement, malformed checkpoint, and allocation
+laws live in its [frozen-history partial](../../tests/Puck.World.Tests/WorldSocialImportReservationLawTests.Frozen.cs).
+World-rule, grant, checkpoint, and full-step allocation laws live in
+[`WorldSocialRuleLawTests`](../../tests/Puck.World.Tests/WorldSocialRuleLawTests.cs).
+Its [frozen-history partial](../../tests/Puck.World.Tests/WorldSocialRuleLawTests.Frozen.cs)
+checks wire continuation, rule-write refusals, and policy-replacement gates.
+Those probes do not measure physical population, rendering, or whole-game FPS.
+
 A disconnected seat or peer does not drop its body on the spot — it PARKS
 (`Entry.Parked`/`ParkedUntilTick`) for `bodies.reconnectGraceSeconds` (converted to ticks at compile),
 retained pose/state and all, before `ReclaimExpiredParks` tears it down; a
@@ -250,11 +680,25 @@ through the ordinary `PeerAdmitted` event.
 See [references/session-lifecycle.md](../../.claude/skills/puck-world/references/session-lifecycle.md)
 for the full contract.
 
-## Network transport (`WorldTcpHost.cs`, `WorldTcpWireFormat.cs`)
+## Network transport (`WorldPeerHost.cs`, `WorldPeerWireFormat.cs`)
 
-`WorldTcpHost` is the P7 socket door: a TCP listener bound from `host.listen`
+`WorldPeerHost` binds the networking library's QUIC peer listener from `host.listen`
 (a document field the composition root also lets `--listen` reflect for one
-run). Per connection, TWO doors run off the tick thread before any body is
+run). `WorldPeerNetwork` owns a shared, lazily created `Puck.Networking.Peers.Peer`.
+The desktop persists its key under the state directory's `Network/peer.pk8`, or
+uses the explicitly supplied federation key; a silo activation uses its configured
+key. Local-only worlds initialize neither QUIC nor a certificate. There is no TCP
+fallback. The library owns TLS, certificate-bound peer identity, message signatures,
+and bounded message queues. `PeerStream` supplies ordered bytes to the World codecs,
+segmenting large documents into bounded messages without changing their contents.
+Before closing a completed World exchange, the host uses the networking library's
+bounded stream drain (at most 500 ms, cancelled by shutdown). A completed QUIC write
+does not guarantee that immediate connection disposal preserves the final refusal;
+the drain gives the reader time to consume it. An unadmitted connection retains
+its handshake slot during this wait.
+
+World admission remains an application policy, separate from proving possession
+of a peer key. After the networking handshake, two World checks run off the tick thread before any body is
 admitted — neither touches server state beyond a read-only document snapshot:
 door 1 is the raw protocol-version handshake (`WorldProtocol.WireProtocolKey`
 via `WorldHelloDoor.TryAccept`, `Puck.World.Protocol`); door 2, once door 1
@@ -278,7 +722,7 @@ touch them from a connection's background reader directly. The LOOPBACK path
 `LoopbackTransport`) crosses door 1 only, by construction — see that method's
 own remarks on why the process boundary is the trust boundary there and no
 identity check applies.
-`WorldTcpHost.DrainPending`, called from `WorldServerStepShell.Step` before
+`WorldPeerHost.DrainPending`, called from `WorldServerStepShell.Step` before
 `WorldServer.Step`, is where that hand-off actually applies: one global FIFO
 for v1, no per-connection quotas or bounded-queue backpressure. A decoded
 payload's own embedded principal (Command/Session/Mutation each carry one,
@@ -288,7 +732,7 @@ the door resolved, never the one the client's bytes claimed.
 
 v1 is strictly request-then-response per connection, so no correlation id
 travels on the wire; the downstream reply is a small NEW grammar
-(`WorldTcpWireFormat`) carrying exactly the Completion lane
+(`WorldPeerWireFormat`) carrying exactly the Completion lane
 (`WorldSubmissionResult`, i.e. Ack/Session/Query) — never a streamed
 snapshot/definition/composition/lever (`WorldOutputHub`'s encoded lane stays
 a scaffold beyond this one lane). `--connect` does not speak this door as a
@@ -368,7 +812,7 @@ refusal vocabulary are the shared ones in
 `Puck.Networking/WireCodec.cs`, so this codec is not a second
 wire dialect: every leaf is Try-shaped and bounded before it allocates, and
 every refusal frame's text opens with a `WorldFederationRefusal` name.
-`WorldTcpHost.FederationRefusals` counts those names, so a refusal is read back
+`WorldPeerHost.FederationRefusals` counts those names, so a refusal is read back
 by name rather than by sentence.
 
 Two ingress disciplines meet in this class, and which one applies is decided by
@@ -431,9 +875,23 @@ unresolved identifier; a projection leaf that still names a state cell is
 refused as `PayloadMalformed`. The reservation leaf carries a
 `WorldIdentityProjection` instead of the traveler's owned document.
 
-`StreamProjectionAsync` attaches its sink with the world's authored
-`bodies.disclosure` and no observer body index, so a narrowed policy
-delivers a remote observer nothing until one of its travelers lands here.
+An ordinary `Observe` stream attaches with the world's authored
+`population.observerDisclosure` and no observer body index. A narrowed policy
+therefore cannot reveal embodied observations to that unembodied connection.
+
+A transferred seat instead opens `ObserveTraveler` with its source-scoped mobility
+credential. Its authenticated entry authority relays the current owner's
+projection through the committed forwarding chain, including local worlds with
+no network listener. At stream opening, every hop validates its own credential and
+caps the requested document tier by its arrival policy; the request carries a
+shared 64-hop limit. The final owner checks the traveler's Observe grant and
+applies body-relative snapshot disclosure. A route seed precedes the definition
+and snapshots. Ownership, definition, or final Observe-grant changes invalidate
+the stream, and the client reopens through its original authenticated entry rather
+than dialing a private world name. Projection queues are bounded; a slow consumer
+disconnects instead of blocking the simulation. Disposing the client lease cancels
+observation, and consumer disconnect detaches the server subscription even when
+the world is paused.
 
 A remote-admitted body is tagged `WorldPopulation.Entry.IsRemoteHuman`
 (`IsAdmittedPeer` reads it) so `world.population`'s census lever can never
@@ -739,9 +1197,18 @@ uses with its default namespace.
 ## Deterministic replay (`WorldReplayTape.cs`, `WorldReplayTape.Drive.cs`, `WorldReplaySnapshot.cs`)
 
 `replay.drive <name> [to <tick>]` re-drives a saved tape into the running
-session: a forced `world.load` of the embedded definition plus the boot
-population image (`WorldPopulation.Restore` from a shadow server the recorded
-seats joined) reset the live world, `WorldServerStepShell` feeds one recorded
+session: a forced `world.load` of the embedded definition plus the complete
+boot authority checkpoint from a shadow server the recorded seats joined reset
+the live world. This resets clocks, social memory, decisions, latches, fields,
+grants, held input, and population together. `WorldServer.Advance` continues
+from the restored clock; console waits retain a separate monotonic host-work
+count, and local route epochs refresh so input can resume immediately.
+Live replay refuses unresolved social ownership, transfer reservations or
+credentials, remote occupants, and host-owned transfer history. A tape owns
+one authority's inputs; it cannot rewind obligations held by another world.
+The ownership check and reset share the authority gate, so concurrent
+federation ingress cannot reserve between them.
+`WorldServerStepShell` feeds one recorded
 tick through `WorldReplaySnapshot.ApplyRecordedTick` ahead of each live step
 (the same apply the offline drive uses), `LoopbackTransport.InputMasked`
 drops local seat intents and commands for the drive's span, and the first
@@ -818,3 +1285,12 @@ headless host (`--headless --listen <ip:port> --state-dir <tmp>`) and a
 disconnect-driven revoke; the client's own query replies prove the Completion
 lane round-trips. No persisted battery exists for this yet (a live owner
 conversation about runner disposition); do not add one without asking.
+
+Discrete tabletop and tactics state is folded by `WorldStateTransforms` through
+the existing mutation journal and transaction preflight. `WorldBoardQueries`
+reads bounded topology scratch spans; physical fields remain a separate runtime
+allocation. `StateObservations(row)` passes `observe state:<row>` and then the
+row/cell audience policy for the authenticated submission stamp. Observation
+payloads carry literal cells only. See the
+[document contract](../Puck.World.Schema/README.md#discrete-boards-cards-and-turns)
+for topology addressing, phases, private draws, knowledge refresh, and limits.

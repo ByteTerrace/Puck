@@ -53,7 +53,7 @@ The exact per-tick order, transcribed from `Step`:
 14. `EmitSnapshot`: deliver the tick's `WorldSnapshot`.
 
 The shared shell is `src/Puck.World.Server/WorldServerStepShell.cs`: drain pending
-TCP work → replay `InjectDriveTick` (a no-op unless a live drive is in
+QUIC work → replay `InjectDriveTick` (a no-op unless a live drive is in
 progress — see [replay.md](replay.md)) → `WorldServer.Step` →
 `WorldConsoleWaitGate.PublishTick` (the `world.wait` clock counts completed
 simulation ticks) → replay `NoteTick` when armed, looping for a
@@ -104,6 +104,15 @@ journal → echo. Precisely:
 
 A mutation's visual effect is a side effect of the delivered definition —
 rendering derives from it on revision moves, never from a draw call.
+
+`CanInstallSocial` runs before install-side writes on mutation, rebuild, and
+the final undo candidate. A changed or removed social policy refuses while
+source ownership holds or destination import reservations remain unresolved;
+equal policy content and unrelated edits remain admissible. Do not move this
+check into `ReconcileSocial`, after the definition or solids have already been
+swapped. Full authority restore instead reinstates validated checkpoint state.
+The [Server memory contract](../../../../src/Puck.World.Server/README.md#social-memory-component)
+owns the hold and release semantics.
 
 **Timing classes.** Most kinds apply LIVE on delivery. `IsDocumentDefaults`
 (`SetRenderDefaults`, `SetPopulationDefaults`, `SetHostDefaults`) edit what

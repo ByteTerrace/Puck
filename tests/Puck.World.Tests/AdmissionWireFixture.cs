@@ -1,6 +1,5 @@
 using System.Buffers.Binary;
 using System.Net;
-using System.Net.Sockets;
 using System.Security.Cryptography;
 
 using Xunit;
@@ -17,11 +16,11 @@ namespace Puck.World.Tests;
 internal readonly record struct TestIdentity(ECDsa Key, string Domain, string Subject, byte[] Spki);
 /// <summary>A peer that completed the real wire door: the still-open socket plus the body index and generation
 /// <see cref="WorldAdmissionDoor"/> admitted it onto.</summary>
-internal readonly record struct AdmittedPeer(TcpClient Client, int PeerIndex, int Generation);
+internal readonly record struct AdmittedPeer(PeerTestClient Client, int PeerIndex, int Generation);
 /// <summary>
 /// The raw-TCP admission harness every wire-door suite drives: generate an identity, author the one-peer admission
 /// document, pump the host's tick-thread queue, complete the Hello/challenge/HelloIdentity/HelloAccepted exchange
-/// against a genuine <see cref="TcpClient"/>, and submit a <see cref="WorldQuery"/> over the socket. One home, the
+/// against a genuine <see cref="PeerTestClient"/>, and submit a <see cref="WorldQuery"/> over the socket. One home, the
 /// same pattern <see cref="Fixtures"/> and <see cref="MarketFixtures"/> already follow, so no suite re-implements
 /// the door.
 /// </summary>
@@ -56,14 +55,14 @@ internal static class AdmissionWireFixture {
 
         return (baseDocument with { PopulationRaw = population, Admission = [entry] });
     }
-    /// <summary>Drains <see cref="WorldTcpHost"/>'s tick-thread work queue and steps the fixture at a short, fixed
+    /// <summary>Drains <see cref="WorldPeerHost"/>'s tick-thread work queue and steps the fixture at a short, fixed
     /// cadence — the SAME pairing the composition root's own per-tick loop performs
-    /// (<see cref="WorldTcpHost.DrainPending"/>'s own remarks: "MUST run on the tick thread, before
+    /// (<see cref="WorldPeerHost.DrainPending"/>'s own remarks: "MUST run on the tick thread, before
     /// <c>WorldServer.Step</c>"), reproduced here since this test project has no composition-root loop to borrow.
     /// Callers MUST stop this (cancel, then await) before making any further direct <see cref="WorldFixture.Step"/>
     /// call themselves — <see cref="Server.WorldServer"/> carries no lock, so two threads stepping it concurrently
     /// is a real race, not a theoretical one.</summary>
-    public static async Task RunPumpAsync(WorldFixture fixture, WorldTcpHost host, CancellationToken ct, WorldReplayTape? tape = null) {
+    public static async Task RunPumpAsync(WorldFixture fixture, WorldPeerHost host, CancellationToken ct, WorldReplayTape? tape = null) {
         try {
             while (!ct.IsCancellationRequested) {
                 host.DrainPending();
@@ -76,15 +75,15 @@ internal static class AdmissionWireFixture {
             // Expected teardown — the caller cancelled ct once it no longer needs the pump.
         }
     }
-    /// <summary>Drives the REAL wire door end to end: connects a raw <see cref="TcpClient"/> to
+    /// <summary>Drives the REAL wire door end to end: connects a raw <see cref="PeerTestClient"/> to
     /// <paramref name="host"/>, completes <see cref="WorldHelloDoor"/>'s version check, answers
     /// <see cref="WorldAdmissionDoor"/>'s challenge with a genuine <see cref="AttestationSigner.SignClaim"/> claim
     /// signed by <paramref name="identity"/>'s own key, and returns the admitted peer's body index and generation.
     /// Throws <see cref="InvalidOperationException"/> naming the refusal on anything other than a clean admit — this
     /// helper is the "ordinary positive outcome" path, never itself a refusal probe.</summary>
-    public static async Task<AdmittedPeer> ConnectAndAdmitAsync(WorldTcpHost host, TestIdentity identity, CancellationToken ct) {
+    public static async Task<AdmittedPeer> ConnectAndAdmitAsync(WorldPeerHost host, TestIdentity identity, CancellationToken ct) {
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
-        var client = new TcpClient();
+        var client = new PeerTestClient();
 
         try {
             await client.ConnectAsync(address: endpoint.Address, port: endpoint.Port, cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false);
@@ -93,22 +92,22 @@ internal static class AdmissionWireFixture {
 
             await HandshakeWireFormat.WriteHelloAsync(ct: ct, key: WorldProtocol.WireProtocolKey, stream: stream).ConfigureAwait(continueOnCapturedContext: false);
 
-            var challengeFrame = ((await WorldTcpWireFormat.TryReadDownstreamAsync(ct: ct, stream: stream).ConfigureAwait(continueOnCapturedContext: false))
+            var challengeFrame = ((await WorldPeerWireFormat.TryReadDownstreamAsync(ct: ct, stream: stream).ConfigureAwait(continueOnCapturedContext: false))
                 ?? throw new InvalidOperationException(message: "connection closed before the Hello challenge arrived"));
 
-            if (challengeFrame.Kind != WorldTcpWireFormat.DownstreamKind.HelloChallenge) {
-                throw new InvalidOperationException(message: $"expected HelloChallenge, got {challengeFrame.Kind}: {WorldTcpWireFormat.DecodeText(body: challengeFrame.Body.Span)}");
+            if (challengeFrame.Kind != WorldPeerWireFormat.DownstreamKind.HelloChallenge) {
+                throw new InvalidOperationException(message: $"expected HelloChallenge, got {challengeFrame.Kind}: {WorldPeerWireFormat.DecodeText(body: challengeFrame.Body.Span)}");
             }
 
             var challenge = challengeFrame.Body;
 
             await WriteIdentityResponseAsync(challenge: challenge, ct: ct, identity: identity, stream: stream).ConfigureAwait(continueOnCapturedContext: false);
 
-            var acceptedFrame = ((await WorldTcpWireFormat.TryReadDownstreamAsync(ct: ct, stream: stream).ConfigureAwait(continueOnCapturedContext: false))
+            var acceptedFrame = ((await WorldPeerWireFormat.TryReadDownstreamAsync(ct: ct, stream: stream).ConfigureAwait(continueOnCapturedContext: false))
                 ?? throw new InvalidOperationException(message: "connection closed before the admission verdict arrived"));
 
-            if (acceptedFrame.Kind != WorldTcpWireFormat.DownstreamKind.HelloAccepted) {
-                throw new InvalidOperationException(message: $"admission refused: {WorldTcpWireFormat.DecodeText(body: acceptedFrame.Body.Span)}");
+            if (acceptedFrame.Kind != WorldPeerWireFormat.DownstreamKind.HelloAccepted) {
+                throw new InvalidOperationException(message: $"admission refused: {WorldPeerWireFormat.DecodeText(body: acceptedFrame.Body.Span)}");
             }
 
             var body = acceptedFrame.Body.Span;
@@ -123,7 +122,7 @@ internal static class AdmissionWireFixture {
             client?.Dispose();
         }
     }
-    public static Task WriteIdentityResponseAsync(NetworkStream stream, TestIdentity identity, ReadOnlyMemory<byte> challenge, CancellationToken ct) {
+    public static Task WriteIdentityResponseAsync(Stream stream, TestIdentity identity, ReadOnlyMemory<byte> challenge, CancellationToken ct) {
         var codec = new CborAttestationCodec();
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var claim = AttestationSigner.SignClaim(
@@ -144,18 +143,18 @@ internal static class AdmissionWireFixture {
     }
     /// <summary>Encodes <paramref name="query"/>, writes it over the admitted socket, and decodes the
     /// Completion-lane reply — the wire round trip itself, refusals included.</summary>
-    public static async Task<QueryAnswer> SubmitQueryAsync(NetworkStream stream, WorldQuery query, CancellationToken ct) {
+    public static async Task<QueryAnswer> SubmitQueryAsync(Stream stream, WorldQuery query, CancellationToken ct) {
         Assert.True(condition: WorldFrameCodec.TryEncode(payload: new WorldSubmissionPayload.Query(Value: query), frame: out var frame, failure: out var failure), userMessage: $"query codec refused: {failure}");
 
         await stream.WriteAsync(buffer: frame, cancellationToken: ct);
         await stream.FlushAsync(cancellationToken: ct);
 
-        var reply = ((await WorldTcpWireFormat.TryReadDownstreamAsync(ct: ct, stream: stream))
+        var reply = ((await WorldPeerWireFormat.TryReadDownstreamAsync(ct: ct, stream: stream))
             ?? throw new InvalidOperationException(message: "connection closed before the query reply"));
 
-        Assert.Equal(actual: reply.Kind, expected: WorldTcpWireFormat.DownstreamKind.Query);
+        Assert.Equal(actual: reply.Kind, expected: WorldPeerWireFormat.DownstreamKind.Query);
         Assert.True(
-            condition: WorldTcpWireFormat.TryReadResult(kind: reply.Kind, body: reply.Body.Span, result: out var result, reason: out var reason),
+            condition: WorldPeerWireFormat.TryReadResult(kind: reply.Kind, body: reply.Body.Span, result: out var result, reason: out var reason),
             userMessage: $"the query reply failed to decode: {reason}"
         );
 

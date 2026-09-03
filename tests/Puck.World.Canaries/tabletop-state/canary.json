@@ -1,0 +1,52 @@
+{
+  "id": "tabletop-state",
+  "title": "Atomic tabletop and tactics state with replay",
+  "binding": "A legal move spends two points, a bracketed ray flips discs, a stable card moves between ordered zones, and a phase advances. The occupied-destination control preserves position and allowance. The positive boot recording must MATCH.",
+  "bootShape": "headless",
+  "requirements": [], "seconds": 4, "timeoutSeconds": 35, "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/tabletop-state/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "replay.record", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.state.act", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.state.transform", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.state.transform", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "world.state.transform", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 5, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "replay.stop", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "replay.verify", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "moved", "stream": "stdout", "match": "contains", "text": "[world.state.cell 'positions'.'scout' value=2]", "present": true },
+      { "type": "line", "name": "spent", "stream": "stdout", "match": "contains", "text": "[world.state.cell 'moves'.'scout' value=1]", "present": true },
+      { "type": "line", "name": "flipped", "stream": "stdout", "match": "contains", "text": "[world.state.cell 'discs'.'1' value=1]", "present": true },
+      { "type": "line", "name": "identity", "stream": "stdout", "match": "contains", "text": "[world.state.cell 'hand'.'copyA' value=true]", "present": true },
+      { "type": "line", "name": "next-round", "stream": "stdout", "match": "contains", "text": "sequence=1 round=1", "present": true },
+      { "type": "line", "name": "replay-match", "stream": "stdout", "match": "contains", "text": "[replay.verify: 'tabletop-state' | MATCH", "present": true },
+      { "type": "line", "name": "clean-wire", "stream": "stdout", "match": "contains", "text": "[wire.errors: 0 rejected]", "present": true }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/tabletop-state/fixture.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "world.state.act", "occurrence": 1, "outcome": "refused" },
+      { "verb": "world.state", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "stayed", "stream": "stdout", "match": "contains", "text": "[world.state.cell 'positions'.'scout' value=0]", "present": true },
+      { "type": "line", "name": "unspent", "stream": "stdout", "match": "contains", "text": "[world.state.cell 'moves'.'scout' value=3]", "present": true },
+      { "type": "line", "name": "one-refusal", "stream": "stdout", "match": "contains", "text": "[wire.errors: 1 rejected]", "present": true }
+    ]
+  }
+}

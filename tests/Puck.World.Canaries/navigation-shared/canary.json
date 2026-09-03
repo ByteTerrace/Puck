@@ -1,0 +1,920 @@
+{
+  "id": "navigation-shared",
+  "title": "A dense underwater flock shares bounded destination searches and reproduces its boot recording",
+  "binding": "128 medium-constrained creatures share a destination tree with an aggregate 64-expansion-per-tick budget. Vertical movement distinguishes the designated-goal leg from the no-goal control; both expose live authoritative work. Boot replay must MATCH. This is headless integration evidence, not rendered FPS or a thousands-of-creatures claim.",
+  "bootShape": "headless",
+  "requirements": [],
+  "seconds": 5,
+  "timeoutSeconds": 30,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/navigation-shared/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "replay.record",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.population",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 11,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 12,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 13,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 14,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 15,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 16,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 17,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 18,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 19,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 20,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 21,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 22,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 23,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 24,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 25,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 26,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 27,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 28,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 29,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 30,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 31,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 32,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 33,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 34,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 35,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 36,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 37,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 38,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 39,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 40,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 41,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 42,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 43,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 44,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 45,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 46,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 47,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 48,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 49,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 50,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 51,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 52,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 53,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 54,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 55,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 56,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 57,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 58,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 59,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 60,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 61,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 62,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 63,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 64,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 65,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 66,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 67,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 68,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 69,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 70,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 71,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 72,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 73,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 74,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 75,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 76,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 77,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 78,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 79,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 80,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 81,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 82,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 83,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 84,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 85,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 86,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 87,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 88,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 89,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 90,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 91,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 92,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 93,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 94,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 95,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 96,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 97,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 98,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 99,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 100,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 101,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 102,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 103,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 104,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 105,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 106,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 107,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 108,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 109,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 110,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 111,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 112,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 113,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 114,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 115,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 116,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 117,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 118,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 119,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 120,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 121,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 122,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 123,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 124,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 125,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 126,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 127,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.designate",
+        "occurrence": 128,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.targets",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.navigation",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.flock",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.budget",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.state.hash",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "replay.stop",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "replay.verify",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "wire.errors",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "response",
+        "name": "before",
+        "stream": "stdout",
+        "verb": "body.where",
+        "occurrence": 1,
+        "count": 2,
+        "extract": [
+          {
+            "name": "y0",
+            "field": "pos",
+            "component": 1
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "after",
+        "stream": "stdout",
+        "verb": "body.where",
+        "occurrence": 2,
+        "count": 2,
+        "extract": [
+          {
+            "name": "y1",
+            "field": "pos",
+            "component": 1
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "vertical-goal-motion",
+        "operator": "notEqual",
+        "left": {
+          "value": "y0"
+        },
+        "right": {
+          "value": "y1"
+        }
+      },
+      {
+        "type": "line",
+        "name": "medium-domain",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "habitat:medium",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "shared-resident-goal",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "shared=1/2",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "movement-binding",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "movementDomain habitat",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "replay-match",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[replay.verify: 'navigation-shared' | MATCH |",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "clean-wire",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[wire.errors: 0 rejected]",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "no-crash",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "Unhandled exception",
+        "present": false
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/navigation-shared/fixture.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "world.population",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.navigation",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.budget",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "wire.errors",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "response",
+        "name": "before",
+        "stream": "stdout",
+        "verb": "body.where",
+        "occurrence": 1,
+        "count": 2,
+        "extract": [
+          {
+            "name": "y0",
+            "field": "pos",
+            "component": 1
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "after",
+        "stream": "stdout",
+        "verb": "body.where",
+        "occurrence": 2,
+        "count": 2,
+        "extract": [
+          {
+            "name": "y1",
+            "field": "pos",
+            "component": 1
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "vertical-goal-motion",
+        "operator": "equal",
+        "left": {
+          "value": "y0"
+        },
+        "right": {
+          "value": "y1"
+        }
+      },
+      {
+        "type": "line",
+        "name": "no-shared-goals",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "shared=0/2",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "clean-wire",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[wire.errors: 0 rejected]",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "no-crash",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "Unhandled exception",
+        "present": false
+      }
+    ]
+  }
+}

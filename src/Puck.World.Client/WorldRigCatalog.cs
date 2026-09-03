@@ -7,11 +7,11 @@ using Puck.SignedDistance;
 namespace Puck.World;
 
 /// <summary>
-/// The deterministic authored-avatar catalog used by the real World population. Avatar <c>i</c> owns a distinct
-/// 12..20-leaf humanoid rig (60..100 VM instructions), chosen through Puck.Maths low-discrepancy sequences so counts,
-/// shapes, dimensions, and poses cover their ranges without clones, clumps, RNG state, or modulo bands. Slot ranges
-/// are frozen across population rebuilds: activating/deactivating an avatar changes which ranges are emitted, never
-/// the dynamic-transform identity of an existing avatar.
+/// The deterministic appearance catalog used by the World population. Each catalog entry is a distinct
+/// 12..20-leaf humanoid rig (60..100 VM instructions), chosen through Puck.Maths low-discrepancy sequences.
+/// Appearance indices are independent of body indices: every body reserves the same maximum-sized transform range,
+/// so a carried look renders all its leaves in any destination slot. Activating or restyling one body never moves
+/// another body's transform slots.
 /// </summary>
 public static class WorldRigCatalog {
     private const int InstructionsPerLeaf = 5;
@@ -20,13 +20,11 @@ public static class WorldRigCatalog {
     private const int MinLeafCount = 12;
 
     // This procedural SDF look owns a fixed renderer catalog. Simulation population capacity is authored separately.
-    public const int Capacity = WorldLookSource.Catalog.RigCount;
+    public const int RigCount = WorldLookSource.Catalog.RigCount;
 
     private static readonly ulong[] IdentityHashes;
     private static readonly AvatarLeaf[] Leaves;
-    // Avatar indices ordered by descending leaf count, so the first N of them are the largest N rigs the catalog can
-    // produce — the supremum a bounded probe must reserve for ANY N-avatar subset.
-    private static readonly int[] ProbeOrder;
+    private static readonly int LargestRig;
     // The procedural humanoid's authored content. These identifiers are not an engine vocabulary: another look
     // publishes any part ids its own geometry needs against its own transform slots.
     private static readonly AuthoredPartTable Parts = new(slots: [
@@ -82,12 +80,12 @@ public static class WorldRigCatalog {
     private static readonly AvatarRange[] Ranges;
 
     static WorldRigCatalog() {
-        Ranges = new AvatarRange[Capacity];
-        IdentityHashes = new ulong[Capacity];
-        var leaves = new List<AvatarLeaf>(capacity: (Capacity * 24));
+        Ranges = new AvatarRange[RigCount];
+        IdentityHashes = new ulong[RigCount];
+        var leaves = new List<AvatarLeaf>(capacity: (RigCount * MaxLeafCount));
         var identities = new HashSet<ulong>();
 
-        for (var avatar = 0; (avatar < Capacity); avatar++) {
+        for (var avatar = 0; (avatar < RigCount); avatar++) {
             var first = leaves.Count;
             var count = LeafCountFor(avatar: avatar);
 
@@ -102,6 +100,7 @@ public static class WorldRigCatalog {
                 Count: count,
                 First: first
             );
+            if (count > Ranges[LargestRig].Count) { LargestRig = avatar; }
             var identity = IdentityHashFor(
                 avatar: avatar,
                 leafCount: count
@@ -115,12 +114,6 @@ public static class WorldRigCatalog {
         }
 
         Leaves = leaves.ToArray();
-        ProbeOrder = [.. Enumerable.Range(
-            count: Capacity,
-            start: 0
-        )
-            .OrderByDescending(keySelector: avatar => Ranges[avatar].Count)
-            .ThenBy(keySelector: avatar => avatar)];
         var reach = 0f;
 
         foreach (var leaf in Leaves) {
@@ -133,13 +126,15 @@ public static class WorldRigCatalog {
         Reach = reach;
     }
 
-    /// <summary>The all-128 rig's frozen dynamic-transform capacity (and leaf-instance count).</summary>
-    public static int DynamicTransformCapacity => Leaves.Length;
-    /// <summary>The all-128 authored VM instruction total, excluding the static world.</summary>
-    public static int InstructionCapacity => (Leaves.Length * InstructionsPerLeaf);
+    /// <summary>The frozen maximum-sized transform ranges for all supported body slots, independent of catalog size.</summary>
+    public static int DynamicTransformCapacity => checked(WorldBodiesLimits.CapacityCeiling * MaxLeafCount);
+    /// <summary>The maximum authored VM instruction total when every supported body wears the largest catalog rig.</summary>
+    public static int InstructionCapacity => checked(WorldBodiesLimits.CapacityCeiling * MaxInstructionCount);
     public static int MaxInstructionCount => (MaxLeafCount * InstructionsPerLeaf);
-    /// <summary>Gets the largest leaf — and therefore cull-instance — count any catalog rig emits.</summary>
+    /// <summary>Gets the maximum leaf-cull-instance count of one active catalog body.</summary>
     public static int MaxInstancesPerAvatar => MaxLeafCount;
+    /// <summary>Gets the frozen transform-range width reserved for one body's animated parts.</summary>
+    public static int TransformSlotsPerBody => MaxLeafCount;
     /// <summary>The minimum and maximum authored instruction counts of any catalog avatar.</summary>
     public static int MinInstructionCount => (MinLeafCount * InstructionsPerLeaf);
     /// <summary>Gets the avatar-local radius, in world units at unit render scale, enclosing every catalog rig's
@@ -157,7 +152,7 @@ public static class WorldRigCatalog {
         var anchor = HumanoidAnchor(role: role);
 
         // Extra leaves enrich the same recognizable skeleton with armor/joint/face detail, offset just enough that the
-        // 12-, 24-, and 36-leaf avatars are genuinely different programs rather than repeated coincident geometry.
+        // different leaf counts produce genuinely different programs rather than repeated coincident geometry.
         anchor += new Vector3(
             x: ((ux - 0.5f) * (0.025f + (0.015f * detailLayer))),
             y: ((uy - 0.5f) * 0.035f),
@@ -283,24 +278,18 @@ public static class WorldRigCatalog {
 
         return (MinLeafCount + ((int)((((ulong)fraction.Value) * ((uint)span)) >> 32)));
     }
-    // The geometry-source rig for an avatar (a WorldLook.Catalog(Index) pin), clamped to the built-in 128; a negative or
-    // out-of-range pin falls back to the avatar's own index.
+    // The geometry-source rig is never a population slot. An absent or invalid pin uses the catalog's default pick.
     private static int RigIndex(Func<int, int>? rigFor, int avatar) {
-        var rig = (rigFor?.Invoke(arg: avatar) ?? avatar);
+        var rig = (rigFor?.Invoke(arg: avatar) ?? -1);
 
-        return ((((uint)rig) < Capacity)
+        return ((((uint)rig) < RigCount)
             ? rig
-            : avatar
+            : WorldLookSource.Catalog.DefaultIndex(avatar)
         );
     }
-    // The rig leaf a slot offset reads: the pinned rig's leaf at the same relative offset, CLAMPED to the rig's last
-    // leaf when the entity's slot range is longer (so a pinned rig with fewer leaves fills the entity's slots safely and
-    // a longer one is truncated — the frozen per-entity slot capacity is never exceeded).
-    private static int RigLeaf(AvatarRange rigRange, int offset) {
-        return (rigRange.First + Math.Min(
-            val1: offset,
-            val2: (rigRange.Count - 1)
-        ));
+    private static int BodySlotBase(int avatar) {
+        ArgumentOutOfRangeException.ThrowIfNegative(avatar);
+        return checked(avatar * MaxLeafCount);
     }
     private static float ScaleFor(Func<int, float>? scaleFor, int avatar) {
         var scale = (scaleFor?.Invoke(arg: avatar) ?? 1f);
@@ -313,50 +302,43 @@ public static class WorldRigCatalog {
 
     /// <summary>Counts the active catalog leaves and their authored VM instructions for diagnostics.</summary>
     /// <param name="isActive">Whether the avatar at an index is active (a server-table or client-view read).</param>
-    /// <param name="capacity">The caller's own live table size — a client-view read is always fixed at the engine's
-    /// <see cref="Capacity"/> (128, its arrays are allocated at that width regardless of the authored document), but a
-    /// server-table read (<c>Puck.World.Server.WorldPopulation.IsActive</c>) is backed by an array sized to the AUTHORED
-    /// <c>population.capacity</c>, which is legally anywhere from 4 to 128. Querying <paramref name="isActive"/> past
-    /// that live width is undefined for a server-table delegate, so the scan never walks further than the honest
-    /// minimum of the two — mirroring the bound every other <c>WorldPopulation.IsActive</c> caller already applies
-    /// (<c>WorldServer.BuildSnapshot</c>, <c>WorldReplaySnapshot.HashState</c>, <c>WorldEventFeed</c>,
-    /// <c>WorldPlacementAttachment.TryResolve</c> all loop to <c>population.Capacity</c>, never a fixed 128).</param>
-    public static (int Leaves, int Instructions) ActiveWorkload(Func<int, bool> isActive, int capacity) {
+    /// <param name="capacity">The caller's live table size; never limited by the number of available looks.</param>
+    /// <param name="rigFor">The resolved appearance index for each body, or null for the default catalog pick.</param>
+    /// <returns>The catalog leaf, authored instruction, and leaf-cull-instance totals for active bodies.</returns>
+    /// <exception cref="ArgumentNullException">The activity predicate is null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The table capacity is negative.</exception>
+    /// <exception cref="OverflowException">The workload exceeds a signed 32-bit count.</exception>
+    public static (int Leaves, int Instructions, int Instances) ActiveWorkload(Func<int, bool> isActive, int capacity, Func<int, int>? rigFor = null) {
         ArgumentNullException.ThrowIfNull(isActive);
+        ArgumentOutOfRangeException.ThrowIfNegative(capacity);
 
         var leaves = 0;
-        var bound = Math.Min(
-            val1: capacity,
-            val2: Capacity
-        );
 
-        for (var avatar = 0; (avatar < bound); avatar++) {
+        for (var avatar = 0; (avatar < capacity); avatar++) {
             if (isActive(arg: avatar)) {
-                leaves += Ranges[avatar].Count;
+                leaves = checked(leaves + Ranges[RigIndex(rigFor, avatar)].Count);
             }
         }
 
-        return (Leaves: leaves, Instructions: (leaves * InstructionsPerLeaf));
+        return (Leaves: leaves, Instructions: checked(leaves * InstructionsPerLeaf), Instances: leaves);
     }
-    /// <summary>Emits every active avatar's distinct leaf chains. Each leaf is its own dynamic cull instance: a tile
-    /// touching one hand does not admit the other bones of that avatar or its neighbors.</summary>
+    /// <summary>Emits every active body's animated leaf chains. Each leaf has its own dynamic cull instance,
+    /// enclosing that primitive and its unscaled local offset through any root orientation and gait phase.</summary>
     /// <remarks>A <see cref="WorldLook"/> may pin a catalog rig (<paramref name="rigFor"/>) and a uniform render scale
-    /// (<paramref name="scaleFor"/>). Geometry is SOURCED from the pinned rig but WRITTEN to the entity's OWN frozen slot
-    /// range, clamped to that range's leaf count — so a pinned look never grows the frozen dynamic-transform capacity
-    /// (the probe emits the identity rig per slot). Defaults reproduce the pre-look behaviour: rig = avatar, scale = 1.</remarks>
+    /// (<paramref name="scaleFor"/>). The complete pinned rig is written into the body's maximum-sized transform range;
+    /// no leaf is duplicated or truncated to fit another appearance. The material spans determine the body count.
+    /// Probes reserve the largest catalog rig for every body, including repeated use of the same look.</remarks>
     /// <param name="builder">The program builder.</param>
     /// <param name="isActive">Whether the avatar at an index is active.</param>
     /// <param name="bodyMaterials">Each avatar's body material id.</param>
     /// <param name="accentMaterials">Each avatar's accent material id.</param>
-    /// <param name="probeWorstCase">Emit every catalog range at unit scale (the frozen worst case).</param>
+    /// <param name="probeWorstCase">Emit the largest rig in every reserved body range at unit scale.</param>
     /// <param name="slotBase">The owning emitter's first dynamic-transform slot
     /// (<see cref="Puck.SdfVm.SdfEmitContext.SlotBase"/>) — the catalog's own ranges start at 0 and are shifted by this
     /// when the absolute slot lane is baked into an instruction.</param>
-    /// <param name="rigFor">The catalog rig each avatar sources its leaves from, or <see langword="null"/> for its own.</param>
+    /// <param name="rigFor">The catalog rig each body sources its leaves from, or null for the default catalog pick.</param>
     /// <param name="scaleFor">Each avatar's uniform render scale, or <see langword="null"/> for 1.</param>
-    /// <param name="probeAvatarLimit">Bounds a worst-case probe to that many avatars — the largest rigs the catalog
-    /// carries, so the reservation covers any subset of that size a live emission may select. <see langword="null"/>
-    /// reserves the whole catalog.</param>
+    /// <param name="probeAvatarLimit">Bounds a worst-case probe to that many bodies. Null reserves every material-span entry.</param>
     public static void Emit(
         SdfProgramBuilder builder,
         Func<int, bool> isActive,
@@ -370,22 +352,20 @@ public static class WorldRigCatalog {
     ) {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(isActive);
+        if (bodyMaterials.Length != accentMaterials.Length) { throw new ArgumentException("Body and accent material spans must have equal lengths."); }
 
         var bounded = (probeWorstCase && (probeAvatarLimit is not null));
         var count = (bounded
             ? Math.Clamp(
-                max: Capacity,
+                max: bodyMaterials.Length,
                 min: 0,
                 value: probeAvatarLimit!.Value
             )
-            : Capacity
+            : bodyMaterials.Length
         );
 
         for (var position = 0; (position < count); position++) {
-            var avatar = (bounded
-                ? ProbeOrder[position]
-                : position
-            );
+            var avatar = position;
 
             if (
                 !probeWorstCase &&
@@ -394,11 +374,9 @@ public static class WorldRigCatalog {
                 continue;
             }
 
-            var range = Ranges[avatar];
-            // The probe sources every avatar's own rig at unit scale (the frozen worst case); a live build sources the
-            // pinned rig's leaves and the look's uniform scale.
+            var firstSlot = BodySlotBase(avatar);
             var rigRange = (probeWorstCase
-                ? range
+                ? Ranges[LargestRig]
                 : Ranges[RigIndex(
                     avatar: avatar,
                     rigFor: rigFor
@@ -412,11 +390,8 @@ public static class WorldRigCatalog {
                 )
             );
 
-            for (var slot = range.First; (slot < range.End); slot++) {
-                var leaf = Leaves[RigLeaf(
-                    rigRange: rigRange,
-                    offset: (slot - range.First)
-                )];
+            for (var offset = 0; offset < rigRange.Count; offset++) {
+                var leaf = Leaves[rigRange.First + offset];
                 var material = (leaf.UseAccent
                     ? accentMaterials[avatar]
                     : bodyMaterials[avatar]
@@ -425,13 +400,15 @@ public static class WorldRigCatalog {
 
                 // The catalog's slot ranges are relative to the OWNING emitter's assigned base; the baked instruction
                 // lanes are absolute indices into the composed buffer, so the base is added exactly here.
-                var packedSlot = (slotBase + slot);
+                var packedSlot = checked(slotBase + firstSlot + offset);
 
+                // The instance center follows the bone without rotating its bound offset. Enclose the local offset
+                // in the radius instead; it is unscaled even when the look shrinks. Keep PrimitiveReach paired with
+                // the shape dimensions below. A body-wide sphere admits every limb to too many screen tiles.
                 builder.BeginInstanceDynamic(
                     slot: packedSlot,
                     boundOffset: Vector3.Zero,
-                    boundRadius: (LeafBoundRadius * scale),
-                    active: true
+                    boundRadius: ((PrimitiveReach(leaf.Shape) * leafScale) + leaf.AuthoredOffset.Length())
                 );
                 var chain = builder
                     .ResetPoint()
@@ -473,8 +450,15 @@ public static class WorldRigCatalog {
             }
         }
     }
-    /// <summary>Returns the literal avatar-local eyeball attachment point for a first-person camera. It follows the
+    private static float PrimitiveReach(AvatarShape shape) => shape switch {
+        AvatarShape.Box => new Vector3(0.105f, 0.17f, 0.085f).Length() + 0.038f,
+        AvatarShape.Capsule => 0.27f + 0.068f,
+        AvatarShape.Cylinder => MathF.Sqrt((0.082f * 0.082f) + (0.155f * 0.155f)),
+        _ => 0.108f,
+    };
+    /// <summary>Returns the literal rig-local eyeball attachment point for a first-person camera. It follows the
     /// catalog's authored head leaf, so camera and morphology cannot silently drift apart.</summary>
+    /// <param name="avatar">The appearance catalog index, not a population slot.</param>
     public static Vector3 EyeOffset(int avatar) {
         var head = Leaves[(Ranges[avatar].First + 3)];
 
@@ -484,15 +468,18 @@ public static class WorldRigCatalog {
             z: -0.12f
         ));
     }
-    /// <summary>Returns the avatar's stable descriptor identity. The digest folds the Puck.Maths R1/R2 source samples
+    /// <summary>Returns the rig's stable descriptor identity. The digest folds the Puck.Maths R1/R2 source samples
     /// that author the rig, and catalog construction rejects a collision across the built-in 128.</summary>
+    /// <param name="avatar">The appearance catalog index, not a population slot.</param>
     public static ulong IdentityHash(int avatar) => IdentityHashes[avatar];
-    /// <summary>Returns the exact authored instruction count for an avatar.</summary>
+    /// <summary>Returns the exact authored instruction count for a catalog rig.</summary>
+    /// <param name="avatar">The appearance catalog index, not a population slot.</param>
     public static int InstructionCount(int avatar) => (Ranges[avatar].Count * InstructionsPerLeaf);
     /// <summary>Resolves the catalog rig a look's geometry sources from: an authored <c>Catalog(Index)</c> pin, or
     /// <paramref name="catalogRig"/> for an unpinned catalog look or a Creation look (the occupant-owned carried rig
-    /// — the same fallback <c>rig = -1</c> takes on <see cref="PackTransforms"/>/<see cref="TryPartOffset"/>/
-    /// <see cref="TryPartPose(int, string, int, System.ReadOnlySpan{DynamicTransform}, out SdfAnchor)"/>). The ONE
+    /// rather than the destination body's default pick). Pass this result explicitly to <see cref="PackTransforms"/>,
+    /// <see cref="TryPartOffset"/>, and
+    /// <see cref="TryPartPose(int, string, int, System.ReadOnlySpan{DynamicTransform}, out SdfAnchor)"/>. The ONE
     /// selector every consumer of a look's rig — emission and part-anchor resolution alike — must call, so a body's
     /// rendered geometry and its part anchors never disagree about which rig it carries.</summary>
     /// <param name="look">The entity's resolved look.</param>
@@ -501,9 +488,8 @@ public static class WorldRigCatalog {
         ? pinned
         : catalogRig
     );
-    /// <summary>Packs one avatar's root pose plus movement-driven gait into its frozen leaf slots. A pinned rig sources
-    /// the leaf poses (clamped to the entity's own slot range) and the look's uniform scale multiplies the anchor
-    /// offsets — rig = avatar, scale = 1 reproduce the pre-look behaviour.</summary>
+    /// <summary>Packs a body's complete catalog rig into its independent maximum-sized transform range.
+    /// The look's uniform scale multiplies anchor offsets; rig = -1 selects the body's default catalog pick.</summary>
     public static void PackTransforms(
         int avatar,
         Vector3 rootPosition,
@@ -514,23 +500,21 @@ public static class WorldRigCatalog {
         int rig = -1,
         float scale = 1f
     ) {
-        var range = Ranges[avatar];
+        var firstSlot = BodySlotBase(avatar);
         var rigRange = Ranges[((rig < 0)
-            ? avatar
+            ? WorldLookSource.Catalog.DefaultIndex(avatar)
             : rig)];
 
-        if (transforms.Length < range.End) {
+        var end = checked(firstSlot + rigRange.Count);
+        if (transforms.Length < end) {
             throw new ArgumentException(
-                message: $"The avatar transform span has {transforms.Length} slots; avatar {avatar} requires {range.End}.",
+                message: $"The avatar transform span has {transforms.Length} slots; avatar {avatar} requires {end}.",
                 paramName: nameof(transforms)
             );
         }
 
-        for (var slot = range.First; (slot < range.End); slot++) {
-            var leaf = Leaves[RigLeaf(
-                rigRange: rigRange,
-                offset: (slot - range.First)
-            )];
+        for (var slot = firstSlot; slot < end; slot++) {
+            var leaf = Leaves[rigRange.First + slot - firstSlot];
             var swing = ((leaf.GaitAmplitude <= 0f)
                 ? Quaternion.Identity
                 : Quaternion.CreateFromAxisAngle(
@@ -554,7 +538,7 @@ public static class WorldRigCatalog {
     /// <summary>Returns a published part's avatar-local authored rest offset.</summary>
     /// <param name="avatar">The avatar index.</param>
     /// <param name="partId">The ordinal, case-sensitive authored part identifier.</param>
-    /// <param name="rig">The pinned catalog rig, or -1 for the entity's own rig.</param>
+    /// <param name="rig">The resolved catalog rig, or -1 for the body's default catalog pick. Pass a carried rig explicitly.</param>
     /// <param name="scale">The look's uniform render scale.</param>
     /// <param name="offset">The authored rest offset, or zero when unresolved.</param>
     /// <returns><see langword="true"/> when the procedural look publishes <paramref name="partId"/>.</returns>
@@ -569,12 +553,9 @@ public static class WorldRigCatalog {
         }
 
         var rigRange = Ranges[((rig < 0)
-            ? avatar
+            ? WorldLookSource.Catalog.DefaultIndex(avatar)
             : rig)];
-        var leaf = Leaves[RigLeaf(
-            offset: relativeSlot,
-            rigRange: rigRange
-        )];
+        var leaf = Leaves[rigRange.First + relativeSlot];
 
         offset = ((leaf.Anchor * scale) + leaf.AuthoredOffset);
 
@@ -583,7 +564,7 @@ public static class WorldRigCatalog {
     /// <summary>Resolves a published part's live pose from the packed dynamic transforms.</summary>
     /// <param name="avatar">The avatar index.</param>
     /// <param name="partId">The ordinal, case-sensitive authored part identifier.</param>
-    /// <param name="rig">The pinned catalog rig, or -1 for the entity's own rig.</param>
+    /// <param name="rig">The resolved catalog rig, or -1 for the body's default catalog pick. Pass a carried rig explicitly.</param>
     /// <param name="transforms">The frame's packed dynamic-transform buffer.</param>
     /// <param name="pose">The live part pose, or default when unresolved.</param>
     /// <returns><see langword="true"/> when the procedural look publishes <paramref name="partId"/> and the slot is packed.</returns>
@@ -597,7 +578,7 @@ public static class WorldRigCatalog {
             return false;
         }
 
-        var transformSlot = (Ranges[avatar].First + relativeSlot);
+        var transformSlot = checked(BodySlotBase(avatar) + relativeSlot);
 
         if (((uint)transformSlot) >= ((uint)transforms.Length)) {
             pose = default;
@@ -607,12 +588,9 @@ public static class WorldRigCatalog {
 
         var packed = transforms[transformSlot];
         var rigRange = Ranges[((rig < 0)
-            ? avatar
+            ? WorldLookSource.Catalog.DefaultIndex(avatar)
             : rig)];
-        var leaf = Leaves[RigLeaf(
-            offset: relativeSlot,
-            rigRange: rigRange
-        )];
+        var leaf = Leaves[rigRange.First + relativeSlot];
 
         pose = new SdfAnchor(
             Position: (packed.Position + Vector3.Transform(
@@ -627,7 +605,7 @@ public static class WorldRigCatalog {
     /// <summary>Resolves a published part's live pose from a list-backed packed dynamic-transform buffer.</summary>
     /// <param name="avatar">The avatar index.</param>
     /// <param name="partId">The ordinal, case-sensitive authored part identifier.</param>
-    /// <param name="rig">The pinned catalog rig, or -1 for the entity's own rig.</param>
+    /// <param name="rig">The resolved catalog rig, or -1 for the body's default catalog pick. Pass a carried rig explicitly.</param>
     /// <param name="transforms">The frame's packed dynamic-transform buffer.</param>
     /// <param name="pose">The live part pose, or default when unresolved.</param>
     /// <returns><see langword="true"/> when the procedural look publishes <paramref name="partId"/> and the slot is packed.</returns>
@@ -643,7 +621,7 @@ public static class WorldRigCatalog {
             return false;
         }
 
-        var transformSlot = (Ranges[avatar].First + relativeSlot);
+        var transformSlot = checked(BodySlotBase(avatar) + relativeSlot);
 
         if (((uint)transformSlot) >= ((uint)transforms.Count)) {
             pose = default;
@@ -653,12 +631,9 @@ public static class WorldRigCatalog {
 
         var packed = transforms[transformSlot];
         var rigRange = Ranges[((rig < 0)
-            ? avatar
+            ? WorldLookSource.Catalog.DefaultIndex(avatar)
             : rig)];
-        var leaf = Leaves[RigLeaf(
-            offset: relativeSlot,
-            rigRange: rigRange
-        )];
+        var leaf = Leaves[rigRange.First + relativeSlot];
 
         pose = new SdfAnchor(
             Position: (packed.Position + Vector3.Transform(
@@ -673,7 +648,7 @@ public static class WorldRigCatalog {
     /// <summary>Resolves a published part id to the avatar's stable packed transform slot.</summary>
     /// <param name="avatar">The avatar index.</param>
     /// <param name="partId">The ordinal, case-sensitive authored part identifier.</param>
-    /// <param name="transformSlot">The catalog-relative packed transform slot, or -1 when unresolved.</param>
+    /// <param name="transformSlot">The emitter-relative packed transform slot, or -1 when unresolved.</param>
     /// <returns><see langword="true"/> when the procedural look publishes <paramref name="partId"/>.</returns>
     public static bool TryPartTransformSlot(int avatar, string partId, out int transformSlot) {
         if (!Parts.TryResolve(
@@ -685,7 +660,7 @@ public static class WorldRigCatalog {
             return false;
         }
 
-        transformSlot = (Ranges[avatar].First + relativeSlot);
+        transformSlot = checked(BodySlotBase(avatar) + relativeSlot);
 
         return true;
     }
@@ -696,9 +671,7 @@ public static class WorldRigCatalog {
         Cylinder,
         Sphere,
     }
-    private readonly record struct AvatarRange(int First, int Count) {
-        public int End => (First + Count);
-    }
+    private readonly record struct AvatarRange(int First, int Count);
     private readonly record struct AvatarLeaf(
         Vector3 Anchor,
         Vector3 AuthoredOffset,

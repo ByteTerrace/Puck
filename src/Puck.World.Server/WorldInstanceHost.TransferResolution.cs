@@ -7,34 +7,41 @@ public sealed partial class WorldInstanceHost {
     private void ReconcileInDoubtTransfers() {
         for (var index = 0; (index < m_inDoubtTransfers.Count);) {
             var pending = m_inDoubtTransfers[index];
+            if (!TryBindRecoveryDestination(ref pending)) {
+                index++;
+                continue;
+            }
+            m_inDoubtTransfers[index] = pending;
+            var targetAuthority = pending.TargetAuthority!.Value;
             var transfer = pending.Transfer;
 
             try {
                 // Every step below may answer "not yet". Leaving the entry exactly where it is and re-asking at the
                 // next drain is the whole reconciliation loop already does for an unresolved status.
-                if (!pending.TargetAuthority.TryStatus(
+                var status = WorldTransferStatus.Committed;
+                if (!pending.CommitConfirmed && !targetAuthority.TryStatus(
                     sourceAuthority: pending.SourceAuthority,
                     transferId: pending.Transfer.TransferId,
-                    status: out var status
+                    status: out status
                 )) {
                     index++;
                     continue;
                 }
 
                 if (status == WorldTransferStatus.Reserved) {
-                    if (
+                    if (pending.RollbackOnly || (
                         m_instances.TryGetValue(
                         key: pending.Transfer.SourceInstance,
                         value: out var source
                     ) &&
                         ((source.Server.NextInputTick - 1UL) >= pending.SourceDeadlineTick)
-                    ) {
-                        pending.TargetAuthority.Abort(
+                    )) {
+                        targetAuthority.Abort(
                             sourceAuthority: pending.SourceAuthority,
                             transferId: pending.Transfer.TransferId
                         );
 
-                        if (!pending.TargetAuthority.TryStatus(
+                        if (!targetAuthority.TryStatus(
                             sourceAuthority: pending.SourceAuthority,
                             transferId: pending.Transfer.TransferId,
                             status: out status
@@ -43,7 +50,7 @@ public sealed partial class WorldInstanceHost {
                             continue;
                         }
                     } else {
-                        var step = pending.TargetAuthority.Commit(
+                        var step = targetAuthority.PollCommit(
                             sourceAuthority: pending.SourceAuthority,
                             transferId: pending.Transfer.TransferId,
                             members: pending.CommitMembers,
@@ -56,7 +63,7 @@ public sealed partial class WorldInstanceHost {
                             committed
                         ) {
                             status = WorldTransferStatus.Committed;
-                        } else if (!pending.TargetAuthority.TryStatus(
+                        } else if (!targetAuthority.TryStatus(
                             sourceAuthority: pending.SourceAuthority,
                             transferId: pending.Transfer.TransferId,
                             status: out status
@@ -68,16 +75,23 @@ public sealed partial class WorldInstanceHost {
                 }
 
                 if (status == WorldTransferStatus.Committed) {
+                    if (pending.RollbackOnly) {
+                        // A contradictory peer verdict cannot authorize another body or crash unrelated worlds.
+                        // Keep recovery and report once; only an eventual consistent non-commit may restore it.
+                        if (!pending.ConflictingCommitReported) {
+                            Console.Error.WriteLine($"[world.transfer: transfer={transfer.TransferId} inconsistent destination status — commit reported after confirmed rollback; recovery retained]");
+                            m_inDoubtTransfers[index] = pending with { ConflictingCommitReported = true };
+                        }
+                        index++;
+                        continue;
+                    }
+                    if (!pending.CommitConfirmed) {
+                        pending = pending with { CommitConfirmed = true };
+                        m_inDoubtTransfers[index] = pending;
+                    }
+                    if (!TryPublishCommittedTransfer(pending)) { index++; continue; }
                     m_inDoubtTransfers.RemoveAt(index: index);
-                    Console.Error.WriteLine(value: $"[world.transfer: transfer={pending.Transfer.TransferId} RESOLVED committed at '{pending.TargetName}' after an ambiguous acknowledgement]");
-                    FinalizeCommittedTransfer(
-                        transfer: in transfer,
-                        targetAuthority: pending.TargetAuthority,
-                        targetName: pending.TargetName,
-                        spawned: pending.Spawned,
-                        landed: pending.Landed,
-                        memberCount: pending.MemberCount
-                    );
+                    CompleteCommittedTransfer(pending);
                     continue;
                 }
 
@@ -90,11 +104,12 @@ public sealed partial class WorldInstanceHost {
                         continue;
                     }
 
-                    foreach (var member in pending.Landed) {
-                        RestoreDetachedMember(
-                            member: member,
-                            source: source
-                        );
+                    // Once any member can return, never retry the cohort commit—even after a checkpoint.
+                    pending = pending with { RollbackOnly = true };
+                    m_inDoubtTransfers[index] = pending;
+                    if (!RestoreDetachedMembers(source, new(pending.SourceAuthority, transfer.TransferId), pending.Landed, pending.CommitMembers)) {
+                        index++;
+                        continue;
                     }
 
                     m_inDoubtTransfers.RemoveAt(index: index);
@@ -548,6 +563,7 @@ public sealed partial class WorldInstanceHost {
                             endpoint: endpoint,
                             placeholder: definition,
                             security: source.Federation.Authenticator,
+                            network: source.Federation.Network,
                             observerAuthority: source.Federation.Subject,
                             applicationStopping: m_applicationStopping
                         );
@@ -859,6 +875,7 @@ public sealed partial class WorldInstanceHost {
                     endpoint: endpoint,
                     placeholder: loaded,
                     security: source.Federation.Authenticator,
+                    network: source.Federation.Network,
                     observerAuthority: source.Federation.Subject,
                     applicationStopping: m_applicationStopping
                 );
@@ -895,7 +912,7 @@ public sealed partial class WorldInstanceHost {
     }
 
     // The transfer contract is authority-shaped. A local row invokes the same server escrow directly; a remote row
-    // serializes that contract over TCP. No transfer logic branches on colocation below this adapter. Fault
+    // serializes that contract over QUIC. No transfer logic branches on colocation below this adapter. Fault
     // substitutes every interface member below for a row SetPeerCallFault named — see that method's own remarks;
     // Local/Remote/Definition/IsRemote stay pointed at the real destination either way, since narration and
     // post-commit address resolution must still read the row a fault decorates, not the decorator.
@@ -968,6 +985,10 @@ public sealed partial class WorldInstanceHost {
                 transferId: transferId
             );
         }
+        public WorldTransferStep PollCommit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out bool accepted, out string reason) =>
+            Remote is not null && Fault is null
+                ? Remote.PollCommit(sourceAuthority, transferId, members, out accepted, out reason)
+                : Commit(sourceAuthority, transferId, members, out accepted, out reason);
         // A colocated row answers inline; a remote row answers over its persistent lane, and a lane that could not
         // deliver the step answers a named refusal rather than nothing. Every step here always answers: a caller
         // told "not yet" would leave this transfer queued while the adjacency scan minted a second crossing for the
@@ -995,7 +1016,7 @@ public sealed partial class WorldInstanceHost {
                 return true;
             }
 
-            return Remote!.TryStatus(
+            return Remote!.PollStatus(
                 sourceAuthority: sourceAuthority,
                 status: out status,
                 transferId: transferId

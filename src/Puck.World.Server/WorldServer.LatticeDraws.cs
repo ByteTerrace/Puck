@@ -96,7 +96,7 @@ public sealed partial class WorldServer {
             }
         }
     }
-    private static bool SameDecks(IReadOnlyList<long>? left, IReadOnlyList<long>? right) {
+    private static bool SameDecks(IReadOnlyList<ClosedBitset256>? left, IReadOnlyList<ClosedBitset256>? right) {
         var leftCount = (left?.Count ?? 0);
 
         if (leftCount != (right?.Count ?? 0)) {

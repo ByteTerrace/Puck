@@ -256,9 +256,8 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 /// <see cref="WorldDefinition.SimulationRateHz"/>, right after deserializing it, for the identical reason the mount
 /// pin does: a wrong step size re-drives a different trajectory that would otherwise report as an ordinary mismatch.
 /// There is exactly one tape shape: the leading
-/// magic is the opaque shape-identity value — re-keyed whenever the shape changes, never incremented — and the
-/// ShapeToken that follows it stays pinned at 1 permanently; a file carrying either the wrong magic or the wrong
-/// token is refused rather than read tolerantly.</para>
+/// magic identifies a World tape and ShapeToken identifies its first version. Both are checked strictly;
+/// the first version is still developed in place, with no compatibility reader for development builds.</para>
 /// <para><b>Public, not <c>internal</c> behind an <c>InternalsVisibleTo</c> grant</b> (widen the member, not the
 /// assembly) — every instance member here was already <c>public</c>; only the class declaration
 /// (and <see cref="WorldReplaySeat"/>/<see cref="WorldReplayProfilePin"/>/<see cref="WorldReplayTickInput"/>/the
@@ -267,16 +266,8 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 /// convention — can exercise <see cref="ResolveStepWidth"/> without a grant.</para>
 /// </remarks>
 public sealed class WorldReplaySnapshot {
-    // Opaque shape-identity value: re-keyed to a new opaque value whenever the tape's byte layout or hashed
-    // semantics change, never incremented as a counter. ShapeToken (below) is pinned at 1 permanently, so it cannot
-    // by itself distinguish an incompatible shape — Magic alone carries that distinction, and a file carrying either
-    // the wrong Magic or the wrong ShapeToken is refused rather than read tolerantly.
-    //
-    // This is one of two independent re-key boundaries, never one key covering both. The other is the guest ABI's
-    // artifact pins (Puck.Scripting.AddonAbi). A tape-shape change does not re-key the ABI, and an ABI break does
-    // not re-key this constant — MountedAddons below records what actually mounted, so an ABI break invalidates an
-    // existing tape through receipt mismatch without a byte-offset change here.
-    private const uint Magic = 0x504B_4155u; // "PKAU" — puck replay tape; re-keyed for the authoritative hash trace. Retired: 0x504B_464B ("PKFK"), 0x504B_4146 ("PKAF"), 0x504B_4C4B ("PKLK"), 0x504B_4341 ("PKCA"), 0x504B_5754 ("PKWT").
+    // The format is still at version 1. Change its definition directly, without development re-key histories.
+    private const uint Magic = 0x5052_4C57u; // "WLRP" in little-endian wire order.
     // A shape-identity token, not a version sequence, pinned at 1 permanently: this build writes and reads exactly
     // one tape shape, so there is no older shape to be newer than. A token that disagrees refuses the file by name
     // (found vs. expected) instead of decoding it as nonsense.
@@ -410,13 +401,6 @@ public sealed class WorldReplaySnapshot {
         }
 
         return null;
-    }
-    private static void ReadAddonLanePlaceholder(BinaryReader reader) {
-        var wire = reader.ReadByte();
-
-        if (wire != Wire.AddonLaneReceiptConstant) {
-            throw new InvalidDataException(message: $"unknown .puckreplay mounted-addon lane-slot wire value {wire} — the lane axis is deleted and this slot is now a pinned constant ({Wire.AddonLaneReceiptConstant}), carried only so the tape shape does not move ahead of its own re-key.");
-        }
     }
     private static WorldCommand ReadCommandLeaf(BinaryReader reader) => ReadLeaf<WorldCommand>(
         reader: reader,
@@ -908,11 +892,6 @@ public sealed class WorldReplaySnapshot {
                 throw ReplayRefusal.AddonFuelMismatch.Raise(message: $"Addon '{pin.Name}' fuel mismatch: this .puckreplay recording was made at {pin.Fuel} fuel/tick, the replay would re-run at {mounted.Fuel} — a different budget is a different guest execution.");
             }
         }
-    }
-    // The receipt's former lane byte. The tape shape must not move for this alone, so this slot keeps emitting and
-    // validating a byte even though WorldAddonReceipt no longer carries a Lane to encode.
-    private static void WriteAddonLanePlaceholder(BinaryWriter writer) {
-        writer.Write(value: Wire.AddonLaneReceiptConstant);
     }
     private static void WriteCommandLeaf(BinaryWriter writer, WorldCommand command) => WriteLeaf(
         tryEncode: WorldSubmissionCodec.TryEncodeCommand,
@@ -1451,13 +1430,7 @@ public sealed class WorldReplaySnapshot {
                 server: server
             );
 
-            var context = new FixedStepContext(
-                ElapsedTicks: (((ulong)(tick + 1)) * stepTicks),
-                StepTicks: stepTicks,
-                Tick: ((ulong)tick)
-            );
-
-            server.Step(context: in context);
+            server.Advance(stepTicks: stepTicks);
             VerifyRecordedMutationOutcomes(
                 expected: expectedMutationOutcomes,
                 replayed: replayedMutationOutcomes,
@@ -1839,8 +1812,6 @@ public sealed class WorldReplaySnapshot {
                 var hash = reader.ReadString();
                 var fuel = reader.ReadUInt64();
 
-                ReadAddonLanePlaceholder(reader: reader);
-
                 // The set is compared BY NAME at re-drive, so two receipts under one name make the pin ambiguous: whichever
                 // the comparison happened to reach first would decide, and the other would be silently unenforced.
                 if (Find(
@@ -2080,7 +2051,6 @@ public sealed class WorldReplaySnapshot {
             writer.Write(value: receipt.Name);
             writer.Write(value: receipt.Hash);
             writer.Write(value: receipt.Fuel);
-            WriteAddonLanePlaceholder(writer: writer);
         }
 
         writer.Write(value: recording.Seats.Count);
@@ -2153,13 +2123,10 @@ public sealed class WorldReplaySnapshot {
     // by a cast, since a cast pins whatever ordinals the enum happens to have and a reorder/insert/delete would
     // silently change every saved tape's meaning.
     //
-    // Frozen wire values: changing one invalidates every saved tape. The write side throws by name on a member the
+    // Version-1 wire values: after a layout change, re-record tapes. The write side throws by name on a member the
     // set does not cover; the read side throws InvalidDataException naming the value it found, so a doctored or
     // drifted tape is refused rather than decoded as garbage.
     private static class Wire {
-        // A fixed placeholder byte in the receipt's (now-unused) lane slot, kept constant so the receipt shape does
-        // not move: the writer always emits it and the reader validates it as this constant.
-        public const byte AddonLaneReceiptConstant = 1;
         public const byte RebuildKindLoad = 1;
         public const byte RebuildKindReload = 2;
         // WorldRebuildKind — this codec's OWN discriminant set, independent of WorldSubmissionCodec's identically-

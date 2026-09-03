@@ -15,7 +15,7 @@
         "type": "string"
       },
       "effects": {
-        "description": "The effects applied in order when the rule fires.",
+        "description": "The effects applied in order when the rule fires. With a Decision, these are common entry effects and may be empty.",
         "type": "array",
         "items": {
           "$ref": "./common.schema.json#/$defs/ActionEffect"
@@ -27,7 +27,7 @@
         "default": null
       },
       "mode": {
-        "description": "Whether the rule fires every tick the gate holds (Level, the default) or once per crossing (Edge). A rule that writes a row almost always wants Edge: level-firing an addState is what wrote 503 journal entries in 500 ticks.",
+        "description": "Without a Decision, whether the rule fires every tick the gate holds (Level, the default) or once per crossing (Edge). A rule that writes a row almost always wants Edge: level-firing an addState is what wrote 503 journal entries in 500 ticks.",
         "enum": [
           "Level",
           "Edge"
@@ -40,6 +40,156 @@
           "string",
           "null"
         ],
+        "default": null
+      },
+      "decision": {
+        "description": "Optional choice policy; requires Level mode. Common effects run only when entering a selected option.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "options": {
+            "description": "One to 32 uniquely named options, in deterministic tie-break order.",
+            "type": "array",
+            "items": {
+              "description": "One candidate in a decision; its score is read only when its gate holds.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "name": {
+                  "description": "The stable, non-empty option name.",
+                  "type": "string"
+                },
+                "score": {
+                  "$ref": "./common.schema.json#/$defs/WorldValueExpression",
+                  "description": "A numeric expression in the decision\u0027s score kind. Arithmetic failure makes this option ineligible for that reconsideration."
+                },
+                "effects": {
+                  "description": "Effects fired when entering this option; may be empty for an inspection-only choice.",
+                  "type": "array",
+                  "items": {
+                    "$ref": "./common.schema.json#/$defs/ActionEffect"
+                  }
+                },
+                "gate": {
+                  "$ref": "./common.schema.json#/$defs/ActionPredicateNullable",
+                  "description": "Eligibility predicate, or null for always eligible.",
+                  "default": null
+                },
+                "neighbors": {
+                  "description": "Optional bounded nearby-body expansion. Requires rule forEach; each and left identify the observer, right the candidate, only inside this option\u0027s gate, score, and effects. A different individual is a selection transition.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "range": {
+                      "description": "Inclusive spherical radius, in world units, from one Q48.16 unit through 1,000,000.",
+                      "type": "number"
+                    },
+                    "candidateBudget": {
+                      "description": "Maximum inspected points per reconsideration, including self, rejected points, and an incumbent recheck.",
+                      "type": "integer"
+                    },
+                    "maxCandidates": {
+                      "description": "Maximum candidates scored, from 1 through 32 and no greater than CandidateBudget.",
+                      "type": "integer"
+                    },
+                    "halfAngleDegrees": {
+                      "description": "Forward cone half-angle in (0,180]; coincident points are perceptible.",
+                      "type": "number",
+                      "default": 180
+                    },
+                    "requiresLineOfSight": {
+                      "description": "Whether candidates must pass the world\u0027s solid-field sight query.",
+                      "type": "boolean",
+                      "default": false
+                    },
+                    "retainCurrent": {
+                      "description": "Spend one inspection on the current individual first. If still perceptible and eligible, reserve one retained slot for it. A budget of one can spend all attention on the incumbent.",
+                      "type": "boolean",
+                      "default": true
+                    }
+                  },
+                  "required": [
+                    "range",
+                    "candidateBudget",
+                    "maxCandidates"
+                  ],
+                  "additionalProperties": false,
+                  "default": null
+                }
+              },
+              "required": [
+                "name",
+                "score",
+                "effects"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "periodSeconds": {
+            "description": "Positive exact engine-tick duration between reconsiderations. First evaluation is immediate.",
+            "type": "number"
+          },
+          "mode": {
+            "description": "Highest score or weighted choice.",
+            "enum": [
+              "HighestScore",
+              "Weighted"
+            ],
+            "default": "HighestScore"
+          },
+          "scoreKind": {
+            "description": "The common numeric kind, Int or Fixed; operands must match it.",
+            "enum": [
+              "Int",
+              "Fixed",
+              "Bool",
+              "Text"
+            ],
+            "default": "Fixed"
+          },
+          "commitmentSeconds": {
+            "description": "Non-negative exact duration protecting a newly selected option from ordinary reconsideration.",
+            "type": "number",
+            "default": 0
+          },
+          "incumbentBonus": {
+            "description": "Non-negative score bonus for retaining the current eligible option and individual. In weighted mode it cannot revive a non-positive weight.",
+            "type": "number",
+            "default": 0
+          },
+          "seed": {
+            "description": "Authored seed combined with the world seed, rule name, binding key, and body generation.",
+            "type": "integer",
+            "default": 0
+          },
+          "interrupt": {
+            "$ref": "./common.schema.json#/$defs/ActionPredicateNullable",
+            "description": "An optional rising-edge predicate that bypasses period and commitment. Losing eligibility also bypasses both.",
+            "default": null
+          },
+          "onNoChoice": {
+            "description": "Effects fired when an enabled decision first finds no choice, loses its choice, or its enclosing gate closes while a choice is held.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "./common.schema.json#/$defs/ActionEffect"
+            },
+            "default": null
+          }
+        },
+        "required": [
+          "options",
+          "periodSeconds"
+        ],
+        "additionalProperties": false,
         "default": null
       }
     },

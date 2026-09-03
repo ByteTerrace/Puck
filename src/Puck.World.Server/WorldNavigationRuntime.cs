@@ -12,9 +12,11 @@ public enum WorldNavigationStatus : byte {
     Unreachable,
     SearchLimit,
     PathLimit,
+    Pending,
+    CapacityLimited,
 }
 
-internal sealed class WorldNavigationRuntime {
+internal sealed partial class WorldNavigationRuntime {
     private readonly Domain[] m_domains;
 
     public WorldNavigationRuntime(WorldDefinition definition, IWorldQuery? query, WorldFieldLattice? fields) {
@@ -36,7 +38,7 @@ internal sealed class WorldNavigationRuntime {
     public long WorkspaceBytes => m_domains.Sum(selector: static domain => domain.WorkspaceBytes);
     public Domain this[int index] => m_domains[index];
 
-    internal sealed class Domain {
+    internal sealed partial class Domain {
         private const int StraightCost = 1_000;
         private const int DiagonalCost = 1_414;
         private const int SpaceDiagonalCost = 1_732;
@@ -134,13 +136,28 @@ internal sealed class WorldNavigationRuntime {
             }
 
             BuildEdges();
+            Sharing = row.Shared;
+            InitializeSharing();
         }
 
         public int CellCount => m_walkable.Length;
         public string Name { get; }
         public FixedWorldNavigationDomain Tuning { get; }
         public int WalkableCellCount { get; }
-        public long WorkspaceBytes => checked((long)CellCount * ((6L * sizeof(int)) + sizeof(long) + sizeof(uint) + sizeof(byte)));
+        public long WorkspaceBytes => checked((long)CellCount * ((6L * sizeof(int)) + sizeof(long) + sizeof(uint) + sizeof(byte)) + SharedWorkspaceBytes);
+
+        // Actual off-center locomotion needs a continuous proof: a cached grid edge certifies only the line
+        // between its cell centers. Surface locomotion has a different support/clearance contract.
+        public bool AdmitsLocomotion(in FixedVector3 from, in FixedVector3 to) {
+            if (Tuning.Kind == WorldNavigationKind.Surface || !TryCell(from, out _) || !TryCell(to, out _)) { return false; }
+            if (Tuning.Kind == WorldNavigationKind.Medium && (m_fields is null || !m_fields.IsSegmentInsideMedium(
+                m_mediumField, from, to, Tuning.AgentRadius, WorldNavigationCapacity.MaxMediumSegmentSubdivisions))) { return false; }
+            if (m_query.Overlap(FixedPosition.FromLocal(from), Tuning.AgentRadius) ||
+                m_query.Overlap(FixedPosition.FromLocal(to), Tuning.AgentRadius)) { return false; }
+            var delta = to - from;
+            return delta == FixedVector3.Zero || !m_query.SphereCast(FixedPosition.FromLocal(from), delta,
+                Tuning.AgentRadius, delta.Length, out _);
+        }
 
         public FixedVector3 Position(int node) {
             Coordinates(node: node, x: out var x, y: out var y, z: out var z);
@@ -152,14 +169,14 @@ internal sealed class WorldNavigationRuntime {
         }
 
         public bool TryCell(in FixedVector3 position, out int node) {
-            var x = RoundedCell(value: (position.X - Tuning.Origin.X), cellSize: Tuning.CellSize);
-            var z = RoundedCell(value: (position.Z - Tuning.Origin.Z), cellSize: Tuning.CellSize);
-            var y = (Tuning.Kind == WorldNavigationKind.Surface ? 0 : RoundedCell(value: (position.Y - Tuning.Origin.Y), cellSize: Tuning.CellSize));
-            if ((uint)x >= (uint)Tuning.Width || (uint)y >= (uint)Tuning.Layers || (uint)z >= (uint)Tuning.Depth) {
+            var x = RoundedCell(value: (Int128)position.X.Value - Tuning.Origin.X.Value, cellSize: Tuning.CellSize.Value);
+            var z = RoundedCell(value: (Int128)position.Z.Value - Tuning.Origin.Z.Value, cellSize: Tuning.CellSize.Value);
+            var y = (Tuning.Kind == WorldNavigationKind.Surface ? 0 : RoundedCell(value: (Int128)position.Y.Value - Tuning.Origin.Y.Value, cellSize: Tuning.CellSize.Value));
+            if (x < 0 || x >= Tuning.Width || y < 0 || y >= Tuning.Layers || z < 0 || z >= Tuning.Depth) {
                 node = -1;
                 return false;
             }
-            node = Index(x: x, y: y, z: z);
+            node = Index(x: (int)x, y: (int)y, z: (int)z);
             return IsWalkable(node: node);
         }
 
@@ -439,9 +456,9 @@ internal sealed class WorldNavigationRuntime {
             path[..pathLength].Reverse();
             return WorldNavigationStatus.Active;
         }
-        private static int RoundedCell(FixedQ4816 value, FixedQ4816 cellSize) {
-            var numerator = value.Value;
-            var denominator = cellSize.Value;
+        private static Int128 RoundedCell(Int128 value, long cellSize) {
+            var numerator = value;
+            var denominator = cellSize;
             var quotient = numerator / denominator;
             var remainder = numerator % denominator;
             if (remainder < 0) {
@@ -451,7 +468,7 @@ internal sealed class WorldNavigationRuntime {
             if ((remainder * 2L) >= denominator) {
                 quotient++;
             }
-            return checked((int)quotient);
+            return quotient;
         }
         private void SiftUp(int index, int goal) {
             while (index > 0) {

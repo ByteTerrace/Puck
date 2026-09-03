@@ -1,0 +1,236 @@
+{
+  "schema": "puck.world.def.v1",
+  "documentId": "navigation-shared-canary",
+  "simulation": {
+    "rateHz": 240
+  },
+  "collision": {
+    "contactSkin": 0.02,
+    "gradientProbe": 0,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60,
+    "requirements": []
+  },
+  "views": {
+    "seatControl": {
+      "minPitch": -0.35,
+      "maxPitch": 1.2,
+      "yawReference": "World"
+    },
+    "seatRig": {
+      "name": "flock-view",
+      "version": "puck.camera.v1",
+      "operations": [
+        {
+          "$type": "orbit",
+          "distance": 16,
+          "pitch": 0.6,
+          "yaw": 0,
+          "pivotOffset": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "$type": "lookAt",
+          "subject": {
+            "$type": "reference"
+          },
+          "targetOffset": [
+            0,
+            0,
+            0
+          ],
+          "worldAxes": true
+        },
+        {
+          "$type": "fov",
+          "fieldOfViewRadians": 0.96
+        }
+      ]
+    },
+    "layouts": []
+  },
+  "bodies": {
+    "localSeats": 0,
+    "networkPlayers": 128,
+    "capacity": 128,
+    "defaultPeerSource": {
+      "$type": "producer",
+      "name": "flock"
+    },
+    "distribution": {
+      "region": {
+        "$type": "disc",
+        "radius": 4,
+        "sampleCount": 128
+      },
+      "fill": {
+        "name": "additive",
+        "offset": 0,
+        "step": 0.38196602
+      }
+    }
+  },
+  "channels": [
+    {
+      "name": "forward",
+      "shape": "Bipolar",
+      "role": "MoveAdvance"
+    },
+    {
+      "name": "strafe",
+      "shape": "Bipolar",
+      "role": "MoveStrafe"
+    },
+    {
+      "name": "turn",
+      "shape": "Bipolar",
+      "role": "Turn"
+    },
+    {
+      "name": "up",
+      "shape": "Bipolar",
+      "role": "MoveUp"
+    }
+  ],
+  "bodyMotionPrograms": [
+    {
+      "name": "flock",
+      "version": "puck.body-motion.v1",
+      "kind": "Producer",
+      "operations": [
+        "SenseNearestInCone",
+        "ProduceFlockIntent"
+      ],
+      "target": {
+        "$type": "navigated",
+        "domain": "habitat",
+        "register": "goal"
+      }
+    },
+    {
+      "name": "flock-motion",
+      "version": "puck.body-motion.v1",
+      "kind": "Motion",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ComputePlanarTargetVelocity",
+        "ShapePlanarVelocity",
+        "SnapYawToPlanarIntent",
+        "RunActionTriggers",
+        "ApplyVerticalDrive",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ]
+    }
+  ],
+  "kits": {
+    "rows": [
+      {
+        "name": "defaultKit",
+        "bodyMotionProgram": "flock-motion",
+        "motion": {
+          "$type": "grounded",
+          "moveSpeed": 2,
+          "turnSpeed": 2.5,
+          "riseGravity": 14,
+          "fallGravity": 23,
+          "maxFallSpeed": 20,
+          "response": [],
+          "sprintMultiplier": 1
+        },
+        "producers": {
+          "flock": {
+            "scalars": {},
+            "channels": {},
+            "flock": {
+              "range": 10,
+              "separationRadius": 0.5,
+              "candidateBudget": 16,
+              "maxNeighbors": 8,
+              "updateSeconds": 0.05,
+              "space": "Volume",
+              "separation": 0,
+              "alignment": 0,
+              "cohesion": 0,
+              "goal": 1,
+              "inertia": 0,
+              "arrivalDistance": 0.1,
+              "halfAngleDegrees": 180,
+              "requiresLineOfSight": false,
+              "movementDomain": "habitat"
+            }
+          }
+        }
+      }
+    ]
+  },
+  "targetRegisters": [
+    {
+      "name": "goal",
+      "maximumRange": 100,
+      "maximumHalfAngleDegrees": 180,
+      "requiresLineOfSight": false
+    }
+  ],
+  "navigation": {
+    "domains": [
+      {
+        "name": "habitat",
+        "kind": "Medium",
+        "origin": [
+          -5,
+          0,
+          -5
+        ],
+        "cellSize": 1,
+        "width": 16,
+        "depth": 16,
+        "layers": 8,
+        "agentRadius": 0.25,
+        "arrivalDistance": 0.2,
+        "maxExpandedNodes": 2048,
+        "maxPathNodes": 128,
+        "medium": "water",
+        "shared": {
+          "goalCapacity": 2,
+          "expandedNodesPerTick": 64
+        }
+      }
+    ]
+  },
+  "state": {
+    "world": [
+      {
+        "name": "water",
+        "kind": "fixed",
+        "lattice": {
+          "topology": "pool",
+          "initial": 1,
+          "min": 0,
+          "max": 1,
+          "heightScale": 8,
+          "color": "#3B7BD6",
+          "medium": {}
+        }
+      }
+    ],
+    "lattices": [
+      {
+        "name": "pool",
+        "origin": [
+          -5.5,
+          -0.5,
+          -5.5
+        ],
+        "cellSize": 1,
+        "width": 16,
+        "depth": 16,
+        "layers": 8,
+        "stepEveryTicks": 8
+      }
+    ]
+  }
+}

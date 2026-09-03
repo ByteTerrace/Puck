@@ -1,4 +1,3 @@
-using System.Net.Sockets;
 
 using Xunit;
 
@@ -13,7 +12,7 @@ namespace Puck.World.Tests;
 /// <summary>
 /// Proves the seven <see cref="WorldQuery"/> leaves the link-query seam added (<c>Client.PlayerRoster</c>'s replacement
 /// for a live <c>Server.WorldServer</c> reference) reach an admitted peer over the REAL wire door
-/// (<see cref="WorldTcpHost"/>, a genuine <see cref="TcpClient"/>): each query's Completion-lane answer arrives over
+/// (<see cref="WorldPeerHost"/>, a genuine <see cref="PeerTestClient"/>): each query's Completion-lane answer arrives over
 /// the socket, not merely in-process. Follows the same real-wire-over-server-internals discipline as
 /// <see cref="AdmissionSecurityLawTests"/>.
 /// </summary>
@@ -106,7 +105,7 @@ public sealed class LinkQuerySeamWireLawTests {
             var document = BuildAdmissionDocument(entry: BuildEntry(grants: grants, identity: identity));
 
             using var fixture = Fixtures.FreshServer(definition: document);
-            using var host = new WorldTcpHost(server: fixture.Server);
+            using var host = new WorldPeerHost(server: fixture.Server);
 
             host.Start(listen: "127.0.0.1:0");
 

@@ -14,7 +14,7 @@ Every non-intent submission crosses the client/server boundary as ONE
 - The payload union
 - Completions, not return values
 - Drain timing
-- TCP transport onto this same domain
+- QUIC transport onto this same domain
 - Echo routing
 - The link
 - Intents — the separate buffer
@@ -27,7 +27,7 @@ Every non-intent submission crosses the client/server boundary as ONE
 long CorrelationId, WorldPrincipal Principal, WorldSubmissionPayload Payload)`.
 
 - `SubmissionEnvelope.LocalConnectionId = 0` — the local stdin/loopback
-  connection. `WorldTcpHost` assigns positive connection ids to admitted
+  connection. `WorldPeerHost` assigns positive connection ids to admitted
   remote peers.
 - `Sequence` is a per-connection monotonic counter minted by the transport;
   `CorrelationId` is the completion-correlation token (independent of
@@ -35,7 +35,7 @@ long CorrelationId, WorldPrincipal Principal, WorldSubmissionPayload Payload)`.
 - `Principal` is the acting identity — stamped by the transport from what its
   ingress door resolved, validated against the connection's admitted set once
   a wire exists. `LoopbackTransport.Query` stamps `WorldPrincipal.Console`;
-  `WorldTcpHost` stamps its admitted peer on the envelope.
+  `WorldPeerHost` stamps its admitted peer on the envelope.
 
 ## The payload union: exactly 12 kinds
 
@@ -111,9 +111,9 @@ revoked at the point of effect. Application goes through the ordinary
 population and grant doors; the replay tape observes the applied event in
 drain order. A client can never submit one.
 
-## TCP transport onto this same domain
+## QUIC transport onto this same domain
 
-`src/Puck.World.Server/WorldTcpHost.cs` is a TCP listener bound from
+`src/Puck.World.Server/WorldPeerHost.cs` is a QUIC listener bound from
 `host.listen`/`--listen` (a document field; a document with no `listen` never
 opens a socket). Per connection: the raw Hello handshake
 (`WorldHelloDoor.TryAccept`) runs off the tick thread — it touches no server
@@ -123,7 +123,7 @@ grant rows), every subsequent frame
 decoded via `WorldFrameCodec`/`WorldSubmissionCodec`, and disconnect
 (`WorldServer.DisconnectPeerConnection`) are marshaled onto the tick thread —
 `WorldServer`/`WorldPopulation`/`WorldGrants` carry no lock, so nothing here
-may touch them from a background thread directly. `WorldTcpHost.DrainPending`
+may touch them from a background thread directly. `WorldPeerHost.DrainPending`
 runs at the top of every fixed step (`WorldServerStepShell.Step`, before
 `WorldServer.Step`), applying everything a connection's background reader
 queued since the last tick — the "deterministic fair merge" window is, for
@@ -136,7 +136,7 @@ door resolved, never the one the client's bytes claimed.
 
 v1 is strictly request-then-response per connection (no correlation id on the
 wire); the downstream reply is a NEW small grammar
-(`Server/WorldTcpWireFormat.cs`) carrying exactly the Completion lane
+(`Server/WorldPeerWireFormat.cs`) carrying exactly the Completion lane
 (`WorldSubmissionResult`), not one of `WorldSubmissionCodec`'s twelve leaves,
 and not the streamed snapshot/definition/composition/lever lanes `WorldOutputHub`
 scaffolds. `--connect <host:port>` does not speak this door as a client: it

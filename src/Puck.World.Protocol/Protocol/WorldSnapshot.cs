@@ -3,12 +3,6 @@ using Puck.Physics.Motion;
 
 namespace Puck.World.Protocol;
 
-/// <summary>A durable entity address: authority identity, population slot, and that slot's activation generation.
-/// Slot reuse therefore never aliases an entity that has already left or died.</summary>
-public readonly record struct WorldEntityAddress(string Authority, int Index, int Generation) {
-    /// <inheritdoc/>
-    public override string ToString() => $"{Authority}/{Index}:{Generation}";
-}
 /// <summary>How an entity's pose changed across the tick a <see cref="WorldSnapshot"/> reports — the presentation hint
 /// the client reads to interpolate, snap, or ease the on-screen pose toward the new authoritative one.</summary>
 public enum EntityContinuityKind : byte {

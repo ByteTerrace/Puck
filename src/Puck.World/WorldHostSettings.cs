@@ -30,7 +30,7 @@ namespace Puck.World;
 /// <param name="RayQuery">Whether the SDF renderer may use the ray-query hardware path.</param>
 /// <param name="Timing">Whether GPU per-pass timing boots armed.</param>
 /// <param name="Genlock">The external-clock election policy (shape-only validation; the registry interprets the id), or <see langword="null"/> for automatic election.</param>
-/// <param name="Listen">The effective TCP listen endpoint (<c>host:port</c>), or <see langword="null"/> to stay
+/// <param name="Listen">The effective QUIC listen endpoint (<c>host:port</c>), or <see langword="null"/> to stay
 /// loopback-only.</param>
 internal sealed record WorldHostSettings(
     WorldHostPresentation Presentation,

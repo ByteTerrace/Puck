@@ -235,11 +235,11 @@ a guest's COMPUTE, never its authority.
 mounted, never the row; only guests that reached the admitted set get one.
 The replay tape pins the receipts at record-start (and Drive re-checks them
 before tick zero on every re-drive) and refuses a re-drive whose fresh
-mounts disagree (see [replay.md](replay.md)). The ABI's `AbiVersion`
-(permanently `1`, a shape-identity token) and the tape magic are the two
-independent re-key boundaries, coupled one-way: an ABI break invalidates
-existing tapes through receipt mismatch even when the tape layout is
-untouched. A live `world.row.set addons`/`world.row.remove addons` mutation
+mounts disagree (see [replay.md](replay.md)). The ABI and replay format are
+still version 1 and develop in place. Re-record tapes after changing their
+layout or execution semantics; do not preserve obsolete fields or add
+development version histories. A changed guest hash is independently
+refused by the receipt comparison. A live `world.row.set addons`/`world.row.remove addons` mutation
 is captured and re-executed on replay through the ordinary tape-covered
 mutation leaf (see [replay.md](replay.md)'s mutation-outcome pin) — there is
 no separate lifecycle leaf left to reason about arming against.

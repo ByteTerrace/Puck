@@ -58,7 +58,7 @@ public sealed partial class WorldPopulation {
         entry.PlacementId = placement.Id;
         entry.KitIndex = kitIndex;
         entry.LookIndex = ResolveInhabitLook(placement: placement);
-        entry.CatalogRig = checked((byte)index);
+        entry.CatalogRig = WorldLookSource.Catalog.DefaultIndex(index);
         entry.ProducerState.PreferredAltitude = altitude;
         entry.ProducerState.AcquiredTarget = -1;
         entry.ProducerState.CurveArcRaw = 0L;
@@ -71,7 +71,7 @@ public sealed partial class WorldPopulation {
     // its kit row (tuning + primary-action binding) spawned at that pose with the stored peer-source default. The
     // Warp/Face is a server-authoritative spawn (a one-time write into the sim); from here the pose flows only out.
     private void ActivateSimulated(int index, int? generation = null, IntentSource? source = null) {
-        m_entries[index].CatalogRig = checked((byte)index);
+        m_entries[index].CatalogRig = WorldLookSource.Catalog.DefaultIndex(index);
         SeedSimulated(index: index);
 
         var entry = m_entries[index];
@@ -284,7 +284,7 @@ public sealed partial class WorldPopulation {
         SeedSeatWander(slot: slot);
         entry.Body = body;
         entry.BodyColor = (profile?.Color ?? Vector3.Zero);
-        entry.CatalogRig = checked((byte)slot);
+        entry.CatalogRig = WorldLookSource.Catalog.DefaultIndex(slot);
         entry.Generation = checked((entry.Generation + 1));
         entry.Active = true;
         m_revision++;

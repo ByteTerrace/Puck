@@ -25,8 +25,9 @@ public readonly record struct WorldSinkDisclosure(WorldObserverDisclosure Policy
 /// server-owned array — see <see cref="WorldServer"/>'s own remarks) and must fully consume or copy it before its
 /// <see cref="IClientSink.DeliverSnapshot"/> call returns, because the next tick's snapshot overwrites the same
 /// backing array. <see cref="WorldServer.EmitSnapshot"/> only returns once every typed subscriber has done exactly
-/// that. The TCP transport (<see cref="Server.WorldTcpHost"/>) uses its own strictly request-then-response wire
-/// instead (<see cref="Server.WorldTcpWireFormat"/>) and never subscribes here.
+/// that. Interactive QUIC traffic uses a request-then-response wire
+/// (<see cref="Server.WorldPeerWireFormat"/>); continuous federation projections subscribe here and copy each
+/// borrowed snapshot into a bounded wire queue before returning.
 /// </summary>
 /// <remarks><para>Play-and-host (a local sink plus N future connections, plus the tape) is first-class here: every
 /// <see cref="Subscribe(IClientSink)"/> call adds a subscriber; it never displaces one already attached.</para>

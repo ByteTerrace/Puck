@@ -135,7 +135,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "body.designate",
-            description: "Proposes a target for one authored target register: body.designate <register> <body:n|nearest|at:x,y,z> [body]. 'nearest' resolves client-side from the latest snapshot inside the body's clamped forward cone; 'at:x,y,z' proposes a world-space point (the seek target a Designated-source producer steers to). The server re-resolves activity, authority, range, cone, targetability, and line of sight (a point checks the same envelope, minus body activity) before writing. Returns body.targets read-back, including the latest refusal.",
+            description: "Proposes a target for one authored target register: body.designate <register> <body:n|nearest|at:x,y,z> [body]. 'nearest' resolves client-side from the latest snapshot inside the body's clamped forward cone; 'at:x,y,z' proposes a world-space point (the seek target a Designated-source producer steers to). The server re-resolves activity, authority, range, cone, targetability, and line of sight (a point checks the same envelope, minus body activity) before writing. Returns target read-back under the body.designate prefix, including the latest refusal.",
             handler: DesignateHandler
         );
         yield return CommandDefinition.WithWireArgs(
@@ -238,7 +238,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     }
     // Whether a drive verb's resolved target is a local seat — seats carry client-side device state (held keys/lanes,
     // the possession latch copy) that some commands must also touch.
-    private static bool IsSeat(int index) => (index < PlayerRoster.MaxSlots);
+    private bool IsSeat(int index) => ((uint)index < (uint)m_population.LocalSeatCount);
     // A pending local seat (1..3) is choosing a profile — its inputs drive the picker, not locomotion — so a tape
     // enqueued now would sit dormant and burst the instant the seat confirms. The tape verbs (run/fly) refuse it; the
     // teleport verbs (warp/face/pose/where/stop) stay allowed. Population entries (4..127) are never pending. Returns
@@ -335,9 +335,8 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             return (Player: null, Index: 0, Error: $"[{verb}: body index must be an integer 0..{(m_population.Capacity - 1)}]");
         }
 
-        // 0..3 are the local seats, addressed by the SAME 0-based index as the entity itself — no display-number
-        // conversion; 4..127 are population entries, addressed by their identical 0-based entity index. Both resolve
-        // to the server's authoritative body.
+        // Only the world's authored local-seat prefix is reserved. In a zero-seat world even body 0 is a peer;
+        // the host's split-screen slot ceiling must not turn low-index peers into unjoined seats.
         if (IsSeat(index: index)) {
             return ((m_roster.IsJoined(slot: index) && (m_server.Body(index: index) is { } seat))
                 ? (Player: seat, Index: index, Error: null)

@@ -67,12 +67,12 @@ var headlessOption = new Option<bool?>(name: "--headless") {
     DefaultValueFactory = static _ => null,
     Description = "Override the world's boot shape: a bare flag (or 'true') boots headless (no window/GPU/swapchain/audio device — the authoritative server, console, and tape only); 'false' forces windowed. Absent uses the world document's host.presentation.",
 };
-// A DEVELOPER REFLECTION of the document's host.listen field (the TCP socket door), not a separate product: absent
-// lets the document decide (null = loopback-only, never opens a socket); an explicit value binds a TCP listener for
+// A DEVELOPER REFLECTION of the document's host.listen field (the QUIC socket door), not a separate product: absent
+// lets the document decide (null = loopback-only, never opens a socket); an explicit value binds a QUIC listener for
 // this run only.
 var listenOption = new Option<string?>(name: "--listen") {
     DefaultValueFactory = static _ => null,
-    Description = "Override the TCP listen endpoint (an \"ip:port\" pair, e.g. 127.0.0.1:7777). Absent uses the world document's host.listen (null = loopback-only, never opens a socket).",
+    Description = "Override the QUIC listen endpoint (an \"ip:port\" pair, e.g. 127.0.0.1:7777). Absent uses the world document's host.listen (null = loopback-only, never opens a socket).",
 };
 // NOT a host.* reflection — connecting is inherently this one run's initial transport target. It selects the
 // remote authority beneath the normal boot composition; rendering, commands, input, and routing remain unchanged.
@@ -180,7 +180,7 @@ if (!WorldDefinitionLoader.TryResolve(
     return 1;
 }
 // The federation identity door — deny-by-default, mirroring --listen's own absent-means-closed posture: an
-// unconfigured authenticator refuses the federation dialect outright at WorldTcpHost's IsConfigured gate, leaving
+// unconfigured authenticator refuses the federation dialect outright at WorldPeerHost's IsConfigured gate, leaving
 // ordinary admitted-peer listening (the interactive attestation door) untouched. A configured one signs
 // SignsDirectly claims under this run's own pinned key, naming this document's host.authority as the subject a
 // peer's own admission entries pin against; verification reads the CURRENT document's admission rows fresh on
@@ -257,6 +257,9 @@ var services = builder.Services;
 services.AddSingleton(implementationInstance: worldSource);
 services.AddSingleton(implementationInstance: worldSource.Definition);
 services.AddSingleton<Puck.Networking.IAuthenticator>(implementationInstance: authenticator);
+services.AddSingleton(_ => new Puck.World.Server.WorldPeerNetwork(
+    identityFile: parseResult.GetValue(option: federationKeyFileOption) ??
+        Path.Combine(Puck.World.Server.WorldStateRoot.Resolve(), "Network", "peer.pk8")));
 // The resolved host settings — read by the composition modules below and the world.host verb.
 services.AddSingleton(implementationInstance: hostSettings);
 // Registered before the launcher terminal block (AddLauncherTerminal/AddLauncherHeadlessTerminal, reached through

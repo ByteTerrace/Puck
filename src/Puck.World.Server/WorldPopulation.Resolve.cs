@@ -73,6 +73,8 @@ public sealed partial class WorldPopulation {
             );
         }
 
+        CompileFlocks();
+
         // Derive the contact field the definition selects — the ONE derivation both a fresh activation and a live body
         // read. The field provider's program is handed in pre-built at runtime; at boot it is compiled here.
         m_contactCensus = WorldColliderSet.Measure(definition: definition);

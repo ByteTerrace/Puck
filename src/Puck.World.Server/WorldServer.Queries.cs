@@ -109,8 +109,12 @@ public sealed partial class WorldServer {
         );
     }
     // The public Answer surface remains the trusted in-process read-back composer. An envelope, however, may have
-    // arrived over WorldTcpHost, so it crosses Observe before reaching that composer. Loopback queries are stamped as
+    // arrived over WorldPeerHost, so it crosses Observe before reaching that composer. Loopback queries are stamped as
     // Console and pass through the same check using the permissive local seed rather than a separate bypass.
+    private QueryAnswer AnswerStateObservations(WorldPrincipal? principal, string? row = null) {
+        var rows = (WorldStateDisclosure.Compose(m_definition, principal) ?? []).Where(r => row is null || r.Name == row).ToArray();
+        return new QueryAnswer(System.Text.Json.JsonSerializer.Serialize(rows, WorldJsonContext.Default.WorldObservedRowArray), Payload: rows);
+    }
     private QueryAnswer AnswerSubmittedQuery(WorldQuery query, WorldPrincipal principal) {
         var subject = query.ObservationSubject();
         var verdict = m_grants.Allows(
@@ -130,6 +134,7 @@ public sealed partial class WorldServer {
             );
         }
 
+        if (query is WorldQuery.StateObservations observation) { return AnswerStateObservations(principal, observation.Row); }
         return Answer(query: query);
     }
     // Compile-time kind matching proves the source and destination encodings agree. WorldFact carries that raw value
@@ -380,6 +385,11 @@ public sealed partial class WorldServer {
     // Shared by both sides of a compareState conjunct — the primary operand and, when present, the comparand — so
     // the two reads can never diverge in how a reserved channel or a declared row resolves to a live fact.
     private WorldFact ReadWorldFact(CompiledWorldOperand operand, ulong tick) => operand.Kind switch {
+        WorldRuleFactKind.Social => Finite(ReadSocialFact(operand.Social!.Value, tick), operand.ValueKind),
+        WorldRuleFactKind.SocialClock => Finite(SocialInteger(m_social?.EngineTick ?? 0), CellKind.Int),
+        WorldRuleFactKind.SocialResult => Finite(m_lastSocialResult, CellKind.Int),
+        WorldRuleFactKind.Phase => Finite(ReadPhaseFact(operand), CellKind.Int),
+        WorldRuleFactKind.Board => Finite(ReadBoardFact(operand, tick), CellKind.Int),
         WorldRuleFactKind.Tick => Finite(value: unchecked((long)tick), kind: CellKind.Int),
         WorldRuleFactKind.Population => Finite(value: m_population.ActiveCount(), kind: CellKind.Int),
         WorldRuleFactKind.RegionOccupancy => Finite(value: m_events.OccupantCount(placementId: operand.Row!), kind: CellKind.Int),
@@ -708,6 +718,7 @@ public sealed partial class WorldServer {
             Text: $"[body.state: body:{state.Index} is not an active population entry — see world.population]",
             Refused: true
         ),
+            WorldQuery.StateObservations observation => AnswerStateObservations(null, observation.Row),
             WorldQuery.InputHolds => new QueryAnswer(Text: m_inputHold.Describe()),
             WorldQuery.Rules => new QueryAnswer(Text: DescribeRules()),
             WorldQuery.PlayerTargets targets when (Body(index: targets.Index) is not null) => new QueryAnswer(Text: m_population.DescribeTargets(bodyIndex: targets.Index)),
@@ -758,4 +769,19 @@ public sealed partial class WorldServer {
     // whose magnitude can exceed every number — $parked: on a forever-parked body. Infinity participates in
     // comparisons through the ActionStateComparisons overload and is never encoded as a numeric stand-in.
     private readonly record struct WorldFact(long Value, CellKind Kind, bool IsForever);
+    private long ReadPhaseFact(CompiledWorldOperand operand) {
+        var phase = WorldDefinitionRows.FindStateRow(m_definition.State, operand.Row!)?.Phase;
+        if (phase is null) {
+            return -1;
+        }
+        return operand.Key switch {
+            "current" => phase.Current,
+            "active" => phase.Phases[phase.Current].Mode == WorldPhaseMode.Sequential ? phase.Active : -1,
+            "ready" => phase.Ready,
+            "sequence" => phase.Sequence,
+            "round" => phase.Round,
+            "deadline" => WorldStateTransforms.Deadline(phase, m_definition.SimulationRateHz),
+            _ => -1,
+        };
+    }
 }

@@ -69,11 +69,11 @@ internal static class WorldPostBuildWiring {
 
         var consoleRegistry = services.GetRequiredService<CommandRegistry>();
 
-        // The TCP socket door: bound ONLY when host.listen/--listen names an endpoint — a world with no Listen field
+        // The QUIC socket door: bound ONLY when host.listen/--listen names an endpoint — a world with no Listen field
         // never opens a socket, exactly like a headless flag never opening a window. Started here (not a factory)
         // so it observes the fully-built container's WorldHostSettings singleton.
         if (services.GetRequiredService<WorldHostSettings>().Listen is { } listen) {
-            services.GetRequiredService<WorldTcpHost>().Start(listen: listen);
+            services.GetRequiredService<WorldPeerHost>().Start(listen: listen);
         }
 
         // The affordance vocabulary goes live here — the first post-container point on the boot path where the built
@@ -122,6 +122,15 @@ internal static class WorldPostBuildWiring {
         // ordinary NotEngaged no-op.
         var cameraRoster = services.GetRequiredService<PlayerRoster>();
         var cameraLink = services.GetRequiredService<IServerLink>();
+
+        services.GetRequiredService<WorldReplayTape>().TimelineRestored += () => {
+            for (var slot = 0; slot < WorldSeatBindings.SeatCount; slot++) {
+                if (seatRouter.TryRoute(slot) is { } route && route.Endpoint.ClockOwnedHere &&
+                    route.Endpoint.Identity == WorldInstanceHost.BootInstanceName) {
+                    _ = seatRouter.CompareExchangeEntity(slot, route, route.Entity, out _);
+                }
+            }
+        };
 
         seatBindings.CameraApplicationDropped += slot => WorldCameraApplication.Deactivate(
             actingPrincipal: cameraRoster.PrincipalOf(slot: slot),

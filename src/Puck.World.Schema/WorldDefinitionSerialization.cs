@@ -175,6 +175,7 @@ namespace Puck.World;
 // name rather than defaulting.
 [JsonSerializable(typeof(WorldStateRow))]
 [JsonSerializable(typeof(WorldStateSection))]
+[JsonSerializable(typeof(WorldSocialPolicy))]
 // The stochastic SOURCE family — reachable both as a document `generators` row and inline inside a site's draw
 // facet. Registered on its own so WorldStateRowJsonConverter can read/write the facet through a typed accessor (the
 // row converter is hand-written; its nested objects are ordinary strict-parsed STJ).
@@ -183,6 +184,15 @@ namespace Puck.World;
 // (bodies.capacityRow reading a boot-drawn row), or the host section (WorldHostDefaults.BackendDraw) may declare.
 [JsonSerializable(typeof(WorldDraw))]
 [JsonSerializable(typeof(WorldStateLatticeTrait))]
+[JsonSerializable(typeof(WorldStateBoard))]
+[JsonSerializable(typeof(WorldStateTransform))]
+[JsonSerializable(typeof(WorldObservedRow[]))]
+[JsonSerializable(typeof(WorldStatePhase))]
+[JsonSerializable(typeof(WorldStateVisibility))]
+[JsonSerializable(typeof(WorldStateKnowledge))]
+[JsonSerializable(typeof(WorldStateObservation))]
+[JsonSerializable(typeof(WorldStateZone))]
+[JsonSerializable(typeof(WorldStateTokens))]
 [JsonSerializable(typeof(WorldStateLatticeTopology))]
 // The continuous-accumulation trait a state row's SLOT cell, or (independently) any of a keyed row's OWN cells, may
 // declare — read/written by WorldStateRowJsonConverter through this typed accessor, the same "hand-written row,
@@ -511,7 +521,7 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
             JsonElement? cellValue = null;
             JsonElement? cellAdvance = null;
             JsonElement? cellDynamics = null;
-            JsonElement? cellCycle = null;
+            JsonElement? cellCycle = null, cellVisibility = null, cellObservation = null;
             string? provenance = null;
 
             foreach (var member in entry.EnumerateObject()) {
@@ -534,6 +544,8 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
                     case "cycle":
                         cellCycle = member.Value;
                         break;
+                    case "visibility": cellVisibility = member.Value; break;
+                    case "observation": cellObservation = member.Value; break;
                     case "provenance":
                         provenance = ((member.Value.ValueKind == JsonValueKind.String)
                             ? member.Value.GetString()
@@ -588,7 +600,10 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
                 provenance: provenance,
                 dynamics: dynamics,
                 cycle: cycle
-            ));
+            ) with {
+                Visibility = cellVisibility is { } cv ? cv.Deserialize(WorldJsonContext.Default.WorldStateVisibility) ?? throw new JsonException("visibility must be an object") : null,
+                Observation = cellObservation is { } co ? co.Deserialize(WorldJsonContext.Default.WorldStateObservation) ?? throw new JsonException("observation must be an object") : null
+            });
             index++;
         }
 
@@ -596,18 +611,18 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
     }
     // Engine-minted per-context dealt masks, by the source's context declaration ordinal. Refused off-shape rather
     // than coerced: these are the one part of a draw site's position the cursor cannot express.
-    private static List<long> ReadDrawDecks(string name, JsonElement element) {
+    private static List<ClosedBitset256> ReadDrawDecks(string name, JsonElement element) {
         if (element.ValueKind != JsonValueKind.Array) {
             throw new JsonException(message: $"state row '{name}'.drawDecks must be an array of per-context dealt masks.");
         }
 
-        var masks = new List<long>(capacity: element.GetArrayLength());
+        var masks = new List<ClosedBitset256>(capacity: element.GetArrayLength());
 
         foreach (var entry in element.EnumerateArray()) {
-            masks.Add(item: RequireInt64(
-                element: entry,
-                context: $"state row '{name}'.drawDecks[{masks.Count}]"
-            ));
+            if (entry.ValueKind != JsonValueKind.String || !ClosedBitset256.TryParse(entry.GetString(), out var mask)) {
+                throw new JsonException($"state row '{name}'.drawDecks[{masks.Count}] must be a 64-digit hexadecimal string.");
+            }
+            masks.Add(mask);
         }
 
         return masks;
@@ -773,6 +788,13 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
         JsonElement? draw = null;
         JsonElement? drawCursor = null;
         JsonElement? drawDecks = null;
+        JsonElement? board = null;
+        string? keysFrom = null;
+        string? phaseOf = null;
+        string? valuesFrom = null;
+        JsonElement? phase = null, visibility = null, knowledge = null;
+        JsonElement? zone = null;
+        JsonElement? tokens = null;
         JsonElement? advance = null;
         JsonElement? dynamics = null;
         JsonElement? lattice = null;
@@ -831,6 +853,27 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
                     break;
                 case "drawCursor":
                     drawCursor = JsonElement.ParseValue(reader: ref reader);
+                    break;
+                case "tokens":
+                    tokens = JsonElement.ParseValue(reader: ref reader);
+                    break;
+                case "zone":
+                    zone = JsonElement.ParseValue(reader: ref reader);
+                    break;
+                case "visibility": visibility = JsonElement.ParseValue(reader: ref reader); break;
+                case "knowledge": knowledge = JsonElement.ParseValue(reader: ref reader); break;
+                case "phase":
+                    phase = JsonElement.ParseValue(reader: ref reader);
+                    break;
+                case "valuesFrom":
+                    valuesFrom = reader.GetString();
+                    break;
+                case "keysFrom":
+                    keysFrom = reader.GetString();
+                    break;
+                case "phaseOf": phaseOf = reader.GetString(); break;
+                case "board":
+                    board = JsonElement.ParseValue(reader: ref reader);
                     break;
                 case "drawDecks":
                     drawDecks = JsonElement.ParseValue(reader: ref reader);
@@ -1054,6 +1097,15 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
                     element: drawCursorElement
                 )
             : 0L),
+            Tokens: tokens is { } tokensElement ? (tokensElement.Deserialize(WorldJsonContext.Default.WorldStateTokens) ?? throw new JsonException("tokens must be an object")) : null,
+            Zone: zone is { } zoneElement ? (zoneElement.Deserialize(WorldJsonContext.Default.WorldStateZone) ?? throw new JsonException("zone must be an object")) : null,
+            Visibility: visibility is { } visibilityElement ? (visibilityElement.Deserialize(WorldJsonContext.Default.WorldStateVisibility) ?? throw new JsonException("visibility must be an object")) : null,
+            Knowledge: knowledge is { } knowledgeElement ? (knowledgeElement.Deserialize(WorldJsonContext.Default.WorldStateKnowledge) ?? throw new JsonException("knowledge must be an object")) : null,
+            Phase: phase is { } phaseElement ? (phaseElement.Deserialize(WorldJsonContext.Default.WorldStatePhase) ?? throw new JsonException("phase must be an object")) : null,
+            PhaseOf: phaseOf,
+            KeysFrom: keysFrom,
+            ValuesFrom: valuesFrom,
+            Board: board is { } boardElement ? (boardElement.Deserialize(WorldJsonContext.Default.WorldStateBoard) ?? throw new JsonException("board must be an object")) : null,
             DrawDecks: ((drawDecks is { } drawDecksElement)
             ? ReadDrawDecks(
                     element: drawDecksElement,
@@ -1181,6 +1233,8 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
                     );
                 }
 
+                if (cell.Visibility is { } cellVisibility) { writer.WritePropertyName("visibility"); JsonSerializer.Serialize(writer, cellVisibility, WorldJsonContext.Default.WorldStateVisibility); }
+                if (cell.Observation is { } observation) { writer.WritePropertyName("observation"); JsonSerializer.Serialize(writer, observation, WorldJsonContext.Default.WorldStateObservation); }
                 if (cell.Provenance is { } provenance) {
                     writer.WriteString(
                         propertyName: "provenance",
@@ -1248,12 +1302,37 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
             );
         }
 
+        if (value.Visibility is { } visibility) { writer.WritePropertyName("visibility"); JsonSerializer.Serialize(writer, visibility, WorldJsonContext.Default.WorldStateVisibility); }
+        if (value.Knowledge is { } knowledge) { writer.WritePropertyName("knowledge"); JsonSerializer.Serialize(writer, knowledge, WorldJsonContext.Default.WorldStateKnowledge); }
+        if (value.Tokens is { } tokens) {
+            writer.WritePropertyName("tokens");
+            JsonSerializer.Serialize(writer, tokens, WorldJsonContext.Default.WorldStateTokens);
+        }
+        if (value.Zone is { } zone) {
+            writer.WritePropertyName("zone");
+            JsonSerializer.Serialize(writer, zone, WorldJsonContext.Default.WorldStateZone);
+        }
+        if (value.Phase is { } phase) {
+            writer.WritePropertyName("phase");
+            JsonSerializer.Serialize(writer, phase, WorldJsonContext.Default.WorldStatePhase);
+        }
+        if (value.PhaseOf is { } phaseOf) { writer.WriteString("phaseOf", phaseOf); }
+        if (value.ValuesFrom is { } valuesFrom) {
+            writer.WriteString("valuesFrom", valuesFrom);
+        }
+        if (value.KeysFrom is { } keysFrom) {
+            writer.WriteString("keysFrom", keysFrom);
+        }
+        if (value.Board is { } board) {
+            writer.WritePropertyName("board");
+            JsonSerializer.Serialize(writer, board, WorldJsonContext.Default.WorldStateBoard);
+        }
         if (value.DrawDecks is { Count: > 0 } drawDecks) {
             writer.WritePropertyName(propertyName: "drawDecks");
             writer.WriteStartArray();
 
             foreach (var mask in drawDecks) {
-                writer.WriteNumberValue(value: mask);
+                writer.WriteStringValue(value: mask.ToString());
             }
 
             writer.WriteEndArray();

@@ -31,13 +31,13 @@ public enum WorldAdmissionRefusal : byte {
     NoArrivalAuthority,
 }
 /// <summary>
-/// The identity door a remote TCP peer crosses after <c>WorldHelloDoor</c>'s protocol-version check succeeds
-/// — a challenge-response over <c>Puck.Attestation</c>'s signed attestations. <c>Server.WorldTcpHost</c> is the
+/// The identity door a remote QUIC peer crosses after <c>WorldHelloDoor</c>'s protocol-version check succeeds
+/// — a challenge-response over <c>Puck.Attestation</c>'s signed attestations. <c>Server.WorldPeerHost</c> is the
 /// one caller: it mints a fresh challenge per connection attempt, reads back a claim (and, for a
 /// <see cref="WorldAdmissionTrustMode.Vouches"/> entry, its two-hop chain) over the socket, and calls
 /// <see cref="TryAdmit"/> off the tick thread — this door touches no server state beyond a snapshot of the current
 /// document's <see cref="WorldAdmissionEntry"/> rows, which is why it is safe to run there (mirrors
-/// <c>WorldHelloDoor</c>'s own off-tick-thread reasoning; see <c>WorldTcpHost</c>'s class remarks).
+/// <c>WorldHelloDoor</c>'s own off-tick-thread reasoning; see <c>WorldPeerHost</c>'s class remarks).
 /// <para><b>Freshness is the challenge nonce, not attestation's own audience/sequence machinery.</b> The claim is
 /// directed (<see cref="Audience"/>-bound) and carries no sequence, which <see cref="AttestationProfile"/>'s
 /// own docs call "replayable at its own audience" for a durable carried claim. That is fine here because this is

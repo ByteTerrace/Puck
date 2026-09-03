@@ -76,7 +76,7 @@ directory, and clustering. The generated schema is
 Every mutation `WorldServer` applies fires `WorldServer.MutationJournalTap`
 (wired once per row, right after activation's own tail replay so a replayed
 entry is never re-appended as a duplicate). `WorldSiloHost.ScheduleJournalAppend`
-re-encodes it (`WorldSubmissionCodec.TryEncodeMutation`) and schedules the
+re-encodes it (`WorldSubmissionCodec.TryEncodeCommittedMutation`) and schedules the
 store write as a continuation of that row's own append chain
 (`RowBookkeeping.JournalTail`) — never two appends racing concurrently for one
 row, since `WorldAuthorityBlobStore.AppendJournalAsync` rewrites the whole
@@ -84,6 +84,8 @@ journal blob if-match per append and a race would drop one. Appends are
 acknowledged **asynchronously with a bounded lag**, never a block on the tick
 thread: `silo.grains`' `journalPending`/`journalOutcome` columns read the
 count of outstanding appends and the most recently acknowledged one back.
+Recovery uses `TryDecodeCommittedMutation`. These trusted-storage leaves admit
+the world's own authored effects; live submissions still refuse a world actor.
 
 ## Document validation
 

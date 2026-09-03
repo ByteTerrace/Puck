@@ -47,7 +47,7 @@ public sealed class WorldServerMutationJournalTapLawTests {
         fixture.Server.MutationJournalTap = (tick, mutation) => {
             Assert.Null(@object: captured);
             Assert.True(
-                condition: WorldSubmissionCodec.TryEncodeMutation(
+                condition: WorldSubmissionCodec.TryEncodeCommittedMutation(
                 bytes: out var encoded,
                 failure: out var failure,
                 mutation: mutation
@@ -85,7 +85,7 @@ public sealed class WorldServerMutationJournalTapLawTests {
             profiles: FreshProfiles(definition: definition)
         );
 
-        Assert.True(condition: WorldSubmissionCodec.TryDecodeMutation(
+        Assert.True(condition: WorldSubmissionCodec.TryDecodeCommittedMutation(
             bytes: captured!.Value.Encoded,
             failure: out var decodeFailure,
             mutation: out var decoded
