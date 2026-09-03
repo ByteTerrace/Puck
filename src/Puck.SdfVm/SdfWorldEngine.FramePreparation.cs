@@ -532,6 +532,7 @@ public sealed partial class SdfWorldEngine {
 
             ValidateInstanceGridCapacity(words: frameGrid);
             m_instanceGridBuffers[slot].Write<uint>(data: frameGrid);
+            m_instanceGridWordsWritten = frameGrid.Length;
             m_lastInstanceGridRebuildMilliseconds = rebuildStopwatch.Elapsed.TotalMilliseconds;
         } else {
             m_lastInstanceGridRebuildMilliseconds = null;

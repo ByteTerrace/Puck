@@ -164,6 +164,24 @@ public sealed partial class SdfWorldEngine {
             );
         }
 
+        // The per-frame table upload runs on EVERY frame, skipped ones included (the tables are this frame's inputs
+        // whatever the passes do with them), and closes the first timing mark as the "upload" pass. The barrier makes
+        // the device-local twins' UAV writes visible to every pass that reads them as SRVs.
+        RecordFrameUpload(commandBuffer: commandBuffer);
+        WriteTimingMark(
+            commandBuffer: commandBuffer,
+            queryIndex: 1,
+            timingPool: timingPool
+        ); // close: per-frame table upload
+        recorder.MemoryBarrier(
+            commandBufferHandle: commandBuffer,
+            destinationAccessMask: GpuComputeAccess.ShaderRead,
+            destinationStageMask: GpuComputeStage.ComputeShader,
+            deviceHandle: m_deviceHandle,
+            sourceAccessMask: GpuComputeAccess.ShaderWrite,
+            sourceStageMask: GpuComputeStage.ComputeShader
+        );
+
         // Cadence gate: when this frame's inputs are byte-identical to the last RENDERED frame's
         // (DecideCadenceSkip proved it), SKIP the four render passes and fall straight through to the composite below —
         // which re-reads the RETAINED (single, ring-shared) views source textures + tile buffer the previous frame wrote
@@ -215,7 +233,7 @@ public sealed partial class SdfWorldEngine {
 
             WriteTimingMark(
                 commandBuffer: commandBuffer,
-                queryIndex: 1,
+                queryIndex: 2,
                 timingPool: timingPool
             ); // close: sky pre-pass
 
@@ -271,7 +289,7 @@ public sealed partial class SdfWorldEngine {
 
             WriteTimingMark(
                 commandBuffer: commandBuffer,
-                queryIndex: 2,
+                queryIndex: 3,
                 timingPool: timingPool
             ); // close: instance-mask cull
 
@@ -324,7 +342,7 @@ public sealed partial class SdfWorldEngine {
 
             WriteTimingMark(
                 commandBuffer: commandBuffer,
-                queryIndex: 3,
+                queryIndex: 4,
                 timingPool: timingPool
             ); // close: beam prepass
 
@@ -390,7 +408,7 @@ public sealed partial class SdfWorldEngine {
 
             WriteTimingMark(
                 commandBuffer: commandBuffer,
-                queryIndex: 4,
+                queryIndex: 5,
                 timingPool: timingPool
             ); // close: cull-args reduction
 
@@ -455,7 +473,7 @@ public sealed partial class SdfWorldEngine {
 
             WriteTimingMark(
                 commandBuffer: commandBuffer,
-                queryIndex: 5,
+                queryIndex: 6,
                 timingPool: timingPool
             ); // close: Stage 1 views
 
@@ -469,7 +487,7 @@ public sealed partial class SdfWorldEngine {
                 sourceStageMask: GpuComputeStage.ComputeShader
             );
         } else {
-            // SKIPPED FRAME: no render passes ran, so close their five timing marks (queries 1..5) back-to-back — each
+            // SKIPPED FRAME: no render passes ran, so close their five timing marks (queries 2..6) back-to-back — each
             // reports ~0 ms, the honest cost of a skipped pass — and fall through to the composite. The retained tile
             // buffer + source textures (single, ring-shared, left in General by the previous rendered frame) are ordered
             // for this frame's composite reads by the top-of-frame cross-frame barrier, so no extra barrier is needed.
@@ -477,27 +495,27 @@ public sealed partial class SdfWorldEngine {
             // signature that proved this frame identical to the last rendered one, so its retained output is still correct.
             WriteTimingMark(
                 commandBuffer: commandBuffer,
-                queryIndex: 1,
+                queryIndex: 2,
                 timingPool: timingPool
             ); // close: sky pre-pass (skipped)
             WriteTimingMark(
                 commandBuffer: commandBuffer,
-                queryIndex: 2,
+                queryIndex: 3,
                 timingPool: timingPool
             ); // close: instance-mask cull (skipped)
             WriteTimingMark(
                 commandBuffer: commandBuffer,
-                queryIndex: 3,
+                queryIndex: 4,
                 timingPool: timingPool
             ); // close: beam prepass (skipped)
             WriteTimingMark(
                 commandBuffer: commandBuffer,
-                queryIndex: 4,
+                queryIndex: 5,
                 timingPool: timingPool
             ); // close: cull-args reduction (skipped)
             WriteTimingMark(
                 commandBuffer: commandBuffer,
-                queryIndex: 5,
+                queryIndex: 6,
                 timingPool: timingPool
             ); // close: Stage 1 views (skipped)
         }
@@ -552,7 +570,7 @@ public sealed partial class SdfWorldEngine {
 
         WriteTimingMark(
             commandBuffer: commandBuffer,
-            queryIndex: 6,
+            queryIndex: 7,
             timingPool: timingPool
         ); // close: Stage 2 composite
 
@@ -601,6 +619,65 @@ public sealed partial class SdfWorldEngine {
     // the bake writes are made visible to the render marches by the barrier Record adds after this returns true.
     // One queued host-baked brick per produced frame: its voxels go into this ring slot's staging buffer and one
     // dispatch copies them to the pool; the caller's barrier after this returns true makes the pool writes visible.
+    // The per-frame table upload: one copy dispatch per table (viewports, dynamic transforms, the frame instance grid)
+    // from this ring slot's host-visible buffer into its device-local twin — see m_frameUploadPipeline. The push
+    // constant array is reused across the three dispatches because both backends copy push data at record time.
+    private void RecordFrameUpload(nint commandBuffer) {
+        var recorder = m_gpu.ComputeRecorder;
+        var push = MemoryMarshal.Cast<byte, uint>(span: m_frameUploadPush.AsSpan());
+        ReadOnlySpan<int> wordCounts = [
+            (m_viewportScratch.Length / sizeof(uint)),
+            (m_dynamicTransformScratch.Length / sizeof(uint)),
+            m_instanceGridWordsWritten,
+        ];
+
+        recorder.BeginDebugGroup(
+            commandBufferHandle: commandBuffer,
+            deviceHandle: m_deviceHandle,
+            label: "upload"
+        );
+        recorder.BindComputePipeline(
+            commandBufferHandle: commandBuffer,
+            deviceHandle: m_deviceHandle,
+            pipelineHandle: m_frameUploadPipeline.Handle
+        );
+
+        for (var table = 0; (table < FrameUploadTableCount); table++) {
+            var count = wordCounts[table];
+
+            if (count <= 0) {
+                continue;
+            }
+
+            recorder.BindComputeDescriptorSet(
+                commandBufferHandle: commandBuffer,
+                descriptorSetHandle: m_frameUploadSets[((m_currentSlot * FrameUploadTableCount) + table)],
+                deviceHandle: m_deviceHandle,
+                pipelineLayoutHandle: m_frameUploadPipeline.LayoutHandle
+            );
+            push[0] = ((uint)count); push[1] = 0u; push[2] = 0u; push[3] = 0u;
+            recorder.PushConstants(
+                commandBufferHandle: commandBuffer,
+                data: m_frameUploadPush,
+                deviceHandle: m_deviceHandle,
+                offset: 0,
+                pipelineLayoutHandle: m_frameUploadPipeline.LayoutHandle,
+                stageFlags: GpuShaderStage.Compute
+            );
+            recorder.Dispatch(
+                commandBufferHandle: commandBuffer,
+                deviceHandle: m_deviceHandle,
+                groupCountX: ((((uint)count) + (FrameUploadWorkgroupSize - 1)) / FrameUploadWorkgroupSize),
+                groupCountY: 1,
+                groupCountZ: 1
+            );
+        }
+
+        recorder.EndDebugGroup(
+            commandBufferHandle: commandBuffer,
+            deviceHandle: m_deviceHandle
+        );
+    }
     private bool RecordBrickUpload(nint commandBuffer) {
         if (
             (m_brickUploadPipeline is null) ||

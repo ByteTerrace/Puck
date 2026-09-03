@@ -42,9 +42,6 @@ namespace Puck.World.Client;
 /// thread, like every editor/render type here.</remarks>
 public sealed partial class WorldStampPool {
     private const float GroupBoundMargin = 0.4f;
-    // Per-shape dynamic-instance bound at unit scale — a cull contract, not a policy: too tight clips a shape at
-    // its own tile boundary.
-    private const float InstanceRadiusUnitScale = 0.9f;
 
     private readonly Registration?[] m_pool = new Registration?[WorldPlacementPolicy.MaxStampRegistrations];
     private int m_packedSlotBase = -1;
@@ -338,7 +335,16 @@ public sealed partial class WorldStampPool {
                 boundOffset: Vector3.Zero,
                 boundRadius: (hasDomain
                 ? (reach + GroupBoundMargin)
-                : (InstanceRadiusUnitScale * MaxComponent(scale: scale))),
+                // The per-shape bound is the primitive's TRUE reach at this scale (SdfSolidGeometry.Reach — the same
+                // measure the static stamper's ShapeStampBound takes) plus the shape's own outward field ops; the
+                // packer adds the smooth halo. It is an INFLUENCE sphere by contract, read per tile cone by the cull
+                // and per SAMPLE by the interpreter's influence skip: until 2026-09-03 it was 0.9 x max(scale), which
+                // does not cover a unit sphere, let alone a box's corners — the halo hid the deficit at tile
+                // granularity, and the per-sample skip exposed it on every shape of the avatar.
+                : ((SdfSolidGeometry.Reach(
+                    type: (placed?.Type ?? SdfSolidPrimitive.Sphere),
+                    scale: scale
+                ) + (placed?.Dilate ?? 0f)) + (placed?.Onion ?? 0f))),
                 active: active
             );
             EmitShape(
@@ -445,7 +451,7 @@ public sealed partial class WorldStampPool {
     }
     // One shape's emission: ResetPoint + TransformDynamic + [domain ops + static local pose, OR the per-shape slot's
     // own pre-composed pose] + [twist/bend point ops] + the scaled primitive + [dilate/onion field ops, scoped
-    // outside a group] — the fixed op sequence over the canonical CreationGeometry dimensions. probeWorstCase emits
+    // outside a group; an eccentric primitive takes the same scope for its Lipschitz factor] — the fixed op sequence over the canonical CreationGeometry dimensions. probeWorstCase emits
     // EVERY op unconditionally (the probe binding rule).
     //
     // A domain-bearing shape cannot ride its own per-shape slot: PackTransforms bakes that slot's dynamic transform
@@ -492,9 +498,17 @@ public sealed partial class WorldStampPool {
 
         var wantsDilate = (probeWorstCase || (dilate != 0f));
         var wantsOnion = (probeWorstCase || (onion != 0f));
+        // An eccentric primitive (SdfSolidGeometry.StepFactor > 1: a non-uniformly scaled sphere baked as an ellipsoid)
+        // takes the same per-shape scope the field ops do, so its Lipschitz factor clamps its own candidate at the pop
+        // instead of the whole program's step scale. Inside a group the group's scope already covers it
+        // (GroupNeedsScope); the probe always emits the scope, so the envelope is unchanged.
+        var eccentric = (SdfSolidGeometry.StepFactor(
+            scale: scale,
+            type: type
+        ) > 1f);
 
         if (
-            (wantsDilate || wantsOnion) &&
+            (wantsDilate || wantsOnion || eccentric) &&
             !inGroupScope
         ) {
             var scoped = SdfSolidGeometry.AppendScaledPrimitive(
@@ -622,9 +636,11 @@ public sealed partial class WorldStampPool {
         for (var member = fromIndex; (member < shapes.Count); member++) {
             var shape = shapes[member];
 
+            // An eccentric member (a squashed sphere) taxes every march in the frame unless its chain sits inside a
+            // scope, whose pop clamps the group's own 1/L onto its candidate instead (SdfProgram.AnalyzeLipschitz).
             if (
                 ((shape.Group ?? 0) == groupId) &&
-                (((shape.Blend ?? SdfBlendOp.Union) != SdfBlendOp.Union) || ((shape.Onion ?? 0f) != 0f) || ((shape.Dilate ?? 0f) != 0f))
+                (((shape.Blend ?? SdfBlendOp.Union) != SdfBlendOp.Union) || ((shape.Onion ?? 0f) != 0f) || ((shape.Dilate ?? 0f) != 0f) || (SdfSolidGeometry.StepFactor(type: shape.Type, scale: shape.Scale) > 1f))
             ) {
                 return true;
             }
@@ -632,13 +648,6 @@ public sealed partial class WorldStampPool {
 
         return false;
     }
-    private static float MaxComponent(Vector3 scale) => MathF.Max(
-        x: scale.X,
-        y: MathF.Max(
-            x: scale.Y,
-            y: scale.Z
-        )
-    );
     // Whether a placement row renders through THIS pool rather than as a static stamp: an animated creation (a replayed
     // timeline) or an attached row (a live body root). The exact complement of WorldPlacementStamper.IsStaticStamp for a
     // non-inhabited row — an inhabited row roots through the body-stamp census instead.

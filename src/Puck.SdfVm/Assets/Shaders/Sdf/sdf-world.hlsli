@@ -681,14 +681,15 @@ static const uint ShadowAccumulationOne = 255u;    // full visibility in the eig
 static const float ShadowMaxDistance = 9.0;
 static const float ShadowBias = 0.02;
 static const float ShadowStepMin = 0.02;  // an occluder thinner than this can be stepped through
-static const float ShadowStepMax = 0.6;   // the NEAR-field ceiling; far-field it grows with distance (ShadowStepFarSlope)
-// Distance-proportional far-field step ceiling: past ~4 units of reach the ceiling relaxes to traveled*this, so an
-// unoccluded ray marching open space toward the sun clears the far field in fewer, bigger steps (~20 -> ~12 tape evals
-// on a spread scene) while the near field — where contact/self shadows live and every step matters — is untouched
-// (traveled*0.15 < ShadowStepMax until traveled > 4). Sound because the advance still takes min(clearance, boundBound)
-// FIRST: the ceiling only bites in genuinely open space where the true clearance is already large, and a far occluder's
-// tiny angular penumbra tolerates the coarser sampling.
-static const float ShadowStepFarSlope = 0.15;
+// The EXACT march has NO step ceiling (2026-09-03; it carried a 0.6-unit near-field ceiling relaxing to 0.15*t far out).
+// The ceiling was the retired closest-approach parabola's need — that estimator refined a running minimum and had to
+// sample densely — but the estimator is BINARY now: sphere tracing never advances past the field's own clearance, so a
+// ray that meets an occluder converges onto it whatever the earlier steps were, and a ray that does not takes the
+// exactly-sound escape exit. Capping the advance below the clearance therefore bought nothing but samples: on the
+// shipped world's open ground every lit pixel marched ~15 ceiling-sized steps toward the sun where the clearance alone
+// clears the reach in four or five. The one observable change is on the good side — a grazing ray no longer spends its
+// budget in the open and reaches the surface it grazes with steps to spare. The FAST path keeps its own ceiling: its
+// wider stride is a soundness trade (it can step through thin occluders), and the ceiling bounds that trade.
 // Fleet-scale presentation path: sphere tracing still never advances past the conservative field/boundary clearance,
 // but strides harder through open space and gives up sooner. Under a BINARY visibility test the coarser stride is a
 // soundness question only in one direction — it can step THROUGH a thin occluder and report light where there is
@@ -1517,31 +1518,91 @@ bool worldShadowCullEnabled() {
     return (sdfScreenLights[SdfGridObjParams].w < 0.5);
 }
 
-// Build the shadow-ray candidate mask into sdfShadowMaskWords for a soft-shadow march from `origin` toward `direction`
-// out to `reach` (ShadowMaxDistance). Returns true when the mask is COMPLETE (the program fits SDF_SHADOW_MASK_WORDS and
-// packs an enabled grid) — areaShadowVisibility then marches it under sdfShadowMaskActive; false => the caller marches the flat
-// all-instances field. SUPERSET-PRESERVING: it sets a bit for every instance whose bound falls within the shadow ray's
-// PENUMBRA CONE (chord ShadowPenumbraChord = 1/ShadowSharpness — see that constant: an occluder softens the shadow out
-// to perpendicular distance boundRadius + traveled/ShadowSharpness, so the exact ray is NOT enough), so mapMasked over
-// this mask equals the flat map() soft shadow TO THE BIT — a wider-than-direct-penumbra cone so the parabola coupling
-// occluder is caught too (see ShadowPenumbraChord); an omitted instance can neither lower a sample's clearance below
-// full light nor perturb a shadowing sample's parabola, so it cannot change the result min. The walk is collectInstanceGridMask's
-// SAME robust-slabs cone rasterization, the cone here being the penumbra cone about the shadow ray, capped at the march
-// reach + footprintPad (samples past `reach` are never taken). KEEP THE WALK IN SYNC with sdf-instance-cull.comp.hlsl's
-// collectInstanceGridMask (the device-buffer twin — a hand-maintained near-clone, like the EmitShape pair): same cell
-// rasterization, same footprintPad contract; only the bit TARGET (this static array), the chord (the penumbra
-// aperture), and the tExit cap (the shadow reach) differ. World segments need no bit — mapCore always evaluates them.
-// Returns the fallback DECISION so the caller marches correctly whether or not the mask was built:
-//   2 = mask BUILT into sdfShadowMaskWords — march it (the cull);
+#ifdef SDF_GROUP_SHADOW_GATHER
+// Build the shadow-ray candidate mask into sdfShadowMaskWords for the soft-shadow marches of ONE 8x8 WORKGROUP — the
+// per-tile gather (2026-09-03) that replaced the per-lit-pixel gather. Every lane publishes its hit hitPoint (or none),
+// lane 0 reduces the group's lit points to a apex and the radius R that encloses them, and the 64 lanes then walk
+// the instance grid COOPERATIVELY along the penumbra cone apexed at the apex, testing every bound INFLATED by R
+// (+ ShadowBias, the march origin's normal offset). SUPERSET-PRESERVING for every pixel in the group: a pixel's own
+// gather cone is the apex cone translated by at most R, so an instance meeting the pixel cone lies within R of
+// the apex cone and the inflated test admits it; and an admitted instance the pixel's ray never reaches composes
+// as the accumulator to the bit (the bound-sizing contract mapMasked already rides), so the masked march of every
+// lane equals the flat map() soft shadow TO THE BIT — the same argument the per-pixel gather made, widened by R. What
+// changed is cost: one grid walk per 64 pixels instead of 64 divergent walks, the walk spread across the lanes, and
+// the 32-word mask living in groupshared memory instead of 32 per-thread registers. The penumbra cone (chord
+// ShadowPenumbraChord — see that constant) is unchanged. The walk is collectInstanceGridMask's SAME robust-slabs cone
+// rasterization, capped at the march reach + R + footprintPad. KEEP THE WALK IN SYNC with
+// sdf-instance-cull.comp.hlsl's collectInstanceGridMask (the device-buffer twin — a hand-maintained near-clone): same
+// cell rasterization, same footprintPad contract; only the bit TARGET (the groupshared mask, InterlockedOr), the
+// chord, the inflation, the lane striding, and the tExit cap differ. World segments need no bit — mapCore always
+// evaluates them.
+//
+// UNIFORM CONTROL FLOW: every lane of the group calls this exactly once per frame with the same `direction`/`reach`
+// (the lit lanes with their hitPoint, the rest with lit = false) — it carries group barriers, so no caller may skip it
+// or call it under a per-lane branch. Returns the fallback DECISION (uniform across the group) so the caller marches
+// correctly whether or not the mask was built:
+//   2 = mask BUILT into sdfShadowMaskWords — march it (the cull); also the answer when no lane in the group is lit
+//       (an empty mask nothing marches);
 //   1 = a grid is packed but the program has MORE instances than the local mask can address — march the CAMERA-TILE
 //       mask (the pre-cull shipped fallback, cheap; NOT the ~20x-slower flat all-instances march);
 //   0 = NO grid packed (a grid-suppressed or few-instance program) — march the FLAT all-instances field, which for a
 //       few-instance program is cheap AND, for a deliberately grid-suppressed program, MATCHES the grid-present gather
 //       so the grid toggle stays render-invariant (the world-grid-cull grid==flat contract).
-uint sdfShadowGather(float3 origin, float3 direction, float reach) {
+groupshared float4 sdfShadowGatherPoints[SDF_GROUP_SHADOW_LANES];
+groupshared float4 sdfShadowGatherCone; // xyz = the lit points' apex, w = the enclosing radius + ShadowBias
+groupshared uint sdfShadowGatherLitCount;
+
+uint sdfShadowGatherGroup(bool lit, float3 hitPoint, float3 direction, float reach, uint lane) {
+    // Phase 0 — clear the group mask and publish this lane's hitPoint.
+    if (lane < SDF_SHADOW_MASK_WORDS) {
+        sdfShadowMaskWords[lane] = 0u;
+    }
+
+    sdfShadowGatherPoints[lane] = float4(hitPoint, (lit ? 1.0 : 0.0));
+    GroupMemoryBarrierWithGroupSync();
+
+    // Phase 1 — lane 0 reduces the lit points to the cone apex and its enclosing radius.
+    if (lane == 0u) {
+        float3 sum = float3(0.0, 0.0, 0.0);
+        float count = 0.0;
+
+        [loop]
+        for (uint i = 0u; (i < SDF_GROUP_SHADOW_LANES); i++) {
+            float4 entry = sdfShadowGatherPoints[i];
+
+            if (entry.w > 0.5) {
+                sum += entry.xyz;
+                count += 1.0;
+            }
+        }
+
+        float3 apex = ((count > 0.0) ? (sum / count) : float3(0.0, 0.0, 0.0));
+        float radius = 0.0;
+
+        [loop]
+        for (uint j = 0u; (j < SDF_GROUP_SHADOW_LANES); j++) {
+            float4 entry = sdfShadowGatherPoints[j];
+
+            if (entry.w > 0.5) {
+                radius = max(radius, length(entry.xyz - apex));
+            }
+        }
+
+        sdfShadowGatherCone = float4(apex, (radius + ShadowBias));
+        sdfShadowGatherLitCount = ((uint)count);
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    float4 cone = sdfShadowGatherCone;
+    uint litCount = sdfShadowGatherLitCount;
+    float3 origin = cone.xyz;
+    float inflate = cone.w;
+
+    // The decisions below are uniform (program-level facts and the group's own count), so an early return here leaves
+    // no lane behind at a later barrier.
     uint packedInstanceCount = sdfInstanceCount();
     uint instanceCount = min(packedInstanceCount, SDF_MAX_INSTANCES);
-
     uint instanceOffset = sdfInstanceDirectoryOffset();
     SdfInstanceGridHeader grid = sdfLoadInstanceGridHeader(instanceOffset, packedInstanceCount);
 
@@ -1555,39 +1616,42 @@ uint sdfShadowGather(float3 origin, float3 direction, float reach) {
         return 1u; // grid packed but too many instances to address the local mask — the camera-tile fallback (no flat catastrophe)
     }
 
-    [loop]
-    for (uint z = 0u; (z < wordCount); z++) {
-        sdfShadowMaskWords[z] = 0u;
+    if (litCount == 0u) {
+        return 2u; // nothing in this group marches a shadow; the cleared mask is complete
     }
 
     float chord = ShadowPenumbraChord; // the soft penumbra cone's half-slope, NOT a bare ray (see ShadowPenumbraChord)
     float inverseAperture = rsqrt(max((1.0 - (chord * chord)), 1.0e-6));
+    float groupReach = (reach + inflate);
 
-    // PATH B — the shadow proxy (sdf.shadow-proxy): when enabled, a SHADOW-TRANSPARENT instance (a host-flagged pure
-    // Subtraction-family carve) is NOT added to the mask, so the soft-shadow march evaluates the pre-carve union hull.
-    // SOUNDNESS: the mask IS the candidate set the march reads, so the gather's skip set and the march's field are the
-    // SAME field by construction (the cull-set/march-agreement rule, the same shape sdf.shadow-distance's shared reach
-    // follows) — a skipped carve is simply never composed, and a Subtraction only ever removes material, so the shadow
-    // is conservatively darker, never light-leaked. Default OFF, so an unset frame gathers the full set as before.
+    // PATH B — the shadow proxy (sdf.shadow-proxy): a SHADOW-TRANSPARENT instance (a host-flagged pure Subtraction-family
+    // carve) is NOT added to the mask, so the soft-shadow march evaluates the pre-carve union hull. SOUNDNESS: the mask
+    // IS the candidate set the march reads, so a skipped carve is simply never composed, and a Subtraction only ever
+    // removes material, so the shadow is conservatively darker, never light-leaked. Default OFF.
     bool shadowProxy = worldShadowProxyEnabled();
 
-    // (1) The ALWAYS-tested list — dynamic + unmaskable instances the frozen grid cannot bin — against the penumbra cone.
+    // Phase 2 — the cooperative walk. (1) The ALWAYS-tested list — dynamic + unmaskable instances the frozen grid cannot
+    // bin — strided across the lanes, each bound inflated by R against the penumbra cone.
     [loop]
-    for (uint a = 0u; (a < grid.alwaysCount); a++) {
+    for (uint a = lane; (a < grid.alwaysCount); a += SDF_GROUP_SHADOW_LANES) {
         uint index = sdfGridWordAt(grid, grid.alwaysWord + a);
         float4 bound = sdfInstanceBoundAt(instanceOffset, index);
+
+        if (bound.w >= 0.0) {
+            bound.w += inflate;
+        }
 
         // Per-instance shadow-participation skip (the cheaper-mask twin of sdfNextVisibleInstanceRange's enumeration
         // skip): a shadow-suppressed dynamic instance never enters the mask, so it costs no mask bit and mode-2's march
         // stays consistent with the enumerate-skip. Gated on the raw condition — the gather is inherently shadow-scoped.
         if (sdfInstancePassesTileCone(bound, origin, direction, chord, inverseAperture) && !(shadowProxy && sdfInstanceShadowTransparent(instanceOffset, index)) && !sdfInstanceShadowSuppressed(instanceOffset, index)) {
-            sdfShadowMaskWords[index >> 5u] |= (1u << (index & 31u));
+            InterlockedOr(sdfShadowMaskWords[index >> 5u], (1u << (index & 31u)));
         }
     }
 
-    // (2) The grid cells the penumbra cone sweeps, far bound capped at the shadow reach + the query pad — the same
-    // robust-slabs clip + cell rasterization the beam cull uses (see collectInstanceGridMask), the cone here being the
-    // penumbra cone about the shadow ray.
+    // (2) The grid cells the inflated penumbra cone sweeps, far bound capped at the group reach + the query pad — the
+    // same robust-slabs clip + cell rasterization the beam cull uses (see collectInstanceGridMask). The slab walk is
+    // uniform across the lanes; each slab's cell box is linearized and strided across them.
     float3 gridMin = grid.origin;
     float3 gridMax = (grid.origin + (float3(grid.dims) * grid.cellSize));
     float3 farCorner = float3(
@@ -1596,13 +1660,15 @@ uint sdfShadowGather(float3 origin, float3 direction, float reach) {
         ((direction.z > 0.0) ? gridMax.z : gridMin.z)
     );
     float projection = max(dot((farCorner - origin), direction), 0.0);
-    float tFar = min(((projection + grid.footprintPad) / max((1.0 - chord), 0.01)), (reach + grid.footprintPad));
+    float tFar = min(((projection + grid.footprintPad + inflate) / max((1.0 - chord), 0.01)), (groupReach + grid.footprintPad));
 
-    float inflate = ((chord * tFar) + grid.footprintPad); // the widest query radius any slab uses (chord grows it with t)
-    float3 clipMin = (gridMin - inflate);
-    float3 clipMax = (gridMax + inflate);
+    float pad = (grid.footprintPad + inflate); // the query pad, widened by the group's enclosing radius
+    float inflateBox = ((chord * tFar) + pad);  // the widest query radius any slab uses (chord grows it with t)
+    float3 clipMin = (gridMin - inflateBox);
+    float3 clipMax = (gridMax + inflateBox);
     float tEnter = 0.0;
     float tExit = tFar;
+    bool missesGrid = false;
 
     [unroll]
     for (int axis = 0; (axis < 3); axis++) {
@@ -1617,66 +1683,71 @@ uint sdfShadowGather(float3 origin, float3 direction, float reach) {
             tExit = min(tExit, max(tA, tB));
         }
         else if ((ori < clipMin[axis]) || (ori > clipMax[axis])) {
-            return 2u; // the cone provably misses the grid on this axis — only the always-list bits (set above) matter
+            missesGrid = true; // the cone provably misses the grid on this axis — only the always-list bits matter
         }
     }
 
-    if (tEnter > tExit) {
-        return 2u; // the cone never overlaps the grid — always-list only
-    }
+    if (!missesGrid && (tEnter <= tExit)) {
+        int3 dimensionsMinusOne = (int3(grid.dims) - int3(1, 1, 1));
+        float slabStep = (grid.cellSize * SDF_GRID_SLAB_CELLS);
+        float t0 = tEnter;
 
-    int3 dimensionsMinusOne = (int3(grid.dims) - int3(1, 1, 1));
-    float slabStep = (grid.cellSize * SDF_GRID_SLAB_CELLS);
-    float t0 = tEnter;
+        [loop]
+        for (uint slab = 0u; (slab < SDF_GRID_MAX_SLABS); slab++) {
+            float t1 = (((slab + 1u) < SDF_GRID_MAX_SLABS) ? min((t0 + slabStep), tExit) : tExit);
+            float3 c0 = (origin + (direction * t0));
+            float3 c1 = (origin + (direction * t1));
+            float radius = ((chord * t1) + pad);
+            float3 low = (min(c0, c1) - radius);
+            float3 high = (max(c0, c1) + radius);
 
-    [loop]
-    for (uint slab = 0u; (slab < SDF_GRID_MAX_SLABS); slab++) {
-        float t1 = (((slab + 1u) < SDF_GRID_MAX_SLABS) ? min((t0 + slabStep), tExit) : tExit);
-        float3 c0 = (origin + (direction * t0));
-        float3 c1 = (origin + (direction * t1));
-        float radius = ((chord * t1) + grid.footprintPad);
-        float3 low = (min(c0, c1) - radius);
-        float3 high = (max(c0, c1) + radius);
+            if (all(high >= gridMin) && all(low <= gridMax)) {
+                int3 cellLow = clamp(int3(floor((low - grid.origin) * grid.invCellSize)), int3(0, 0, 0), dimensionsMinusOne);
+                int3 cellHigh = clamp(int3(floor((high - grid.origin) * grid.invCellSize)), int3(0, 0, 0), dimensionsMinusOne);
+                uint3 span = uint3(cellHigh - cellLow) + uint3(1u, 1u, 1u);
+                uint cellCount = ((span.x * span.y) * span.z);
 
-        if (all(high >= gridMin) && all(low <= gridMax)) {
-            int3 cellLow = clamp(int3(floor((low - grid.origin) * grid.invCellSize)), int3(0, 0, 0), dimensionsMinusOne);
-            int3 cellHigh = clamp(int3(floor((high - grid.origin) * grid.invCellSize)), int3(0, 0, 0), dimensionsMinusOne);
-
-            [loop]
-            for (int cz = cellLow.z; (cz <= cellHigh.z); cz++) {
                 [loop]
-                for (int cy = cellLow.y; (cy <= cellHigh.y); cy++) {
+                for (uint c = lane; (c < cellCount); c += SDF_GROUP_SHADOW_LANES) {
+                    uint cx = (c % span.x);
+                    uint rest = (c / span.x);
+                    uint cy = (rest % span.y);
+                    uint cz = (rest / span.y);
+                    uint cell = (((((uint)cellLow.z + cz) * grid.dims.y) + ((uint)cellLow.y + cy)) * grid.dims.x) + ((uint)cellLow.x + cx);
+                    uint entryStart = sdfGridWordAt(grid, grid.cellStartWord + cell);
+                    uint entryEnd = sdfGridWordAt(grid, grid.cellStartWord + cell + 1u);
+
                     [loop]
-                    for (int cx = cellLow.x; (cx <= cellHigh.x); cx++) {
-                        uint cell = ((((uint)cz * grid.dims.y) + (uint)cy) * grid.dims.x) + (uint)cx;
-                        uint entryStart = sdfGridWordAt(grid, grid.cellStartWord + cell);
-                        uint entryEnd = sdfGridWordAt(grid, grid.cellStartWord + cell + 1u);
+                    for (uint k = entryStart; (k < entryEnd); k++) {
+                        uint index = sdfGridWordAt(grid, grid.entryWord + k);
+                        float4 bound = sdfInstanceBoundAt(instanceOffset, index);
 
-                        [loop]
-                        for (uint k = entryStart; (k < entryEnd); k++) {
-                            uint index = sdfGridWordAt(grid, grid.entryWord + k);
-                            float4 bound = sdfInstanceBoundAt(instanceOffset, index);
+                        if (bound.w >= 0.0) {
+                            bound.w += inflate;
+                        }
 
-                            // Per-instance shadow-participation skip — same raw-condition test as the always-list loop
-                            // above: a shadow-suppressed dynamic instance is kept out of the shadow mask.
-                            if (sdfInstancePassesTileCone(bound, origin, direction, chord, inverseAperture) && !(shadowProxy && sdfInstanceShadowTransparent(instanceOffset, index)) && !sdfInstanceShadowSuppressed(instanceOffset, index)) {
-                                sdfShadowMaskWords[index >> 5u] |= (1u << (index & 31u));
-                            }
+                        // Per-instance shadow-participation skip — same raw-condition test as the always-list loop above.
+                        if (sdfInstancePassesTileCone(bound, origin, direction, chord, inverseAperture) && !(shadowProxy && sdfInstanceShadowTransparent(instanceOffset, index)) && !sdfInstanceShadowSuppressed(instanceOffset, index)) {
+                            InterlockedOr(sdfShadowMaskWords[index >> 5u], (1u << (index & 31u)));
                         }
                     }
                 }
             }
-        }
 
-        if (t1 >= tExit) {
-            break;
-        }
+            if (t1 >= tExit) {
+                break;
+            }
 
-        t0 = t1;
+            t0 = t1;
+        }
     }
+
+    // Every lane's bits are visible to every lane's march after this.
+    GroupMemoryBarrierWithGroupSync();
 
     return 2u;
 }
+#endif
 #endif
 
 // De-scale a Lipschitz-CLAMPED field sample back to WORLD units — the ONE primitive genuinely shared by the three
@@ -1770,8 +1841,8 @@ float areaShadowVisibility(float3 surfacePoint, float3 surfaceNormal, uint insta
     bool escapeExit = !worldShadowEscapeExitDisabled(); // light-side early exit (default ON; A/B lever = off)
     reach = (fastMarch ? min(reach, FastShadowMaxDistance) : reach);
     int stepBudget = (fastMarch ? FastShadowSteps : ShadowSteps);
-    float stepCeiling = (fastMarch ? FastShadowStepMax : ShadowStepMax);
-    float farSlope = (fastMarch ? FastShadowStepFarSlope : ShadowStepFarSlope);
+    float stepCeiling = FastShadowStepMax;      // fast path only — the exact march advances by the clearance itself
+    float farSlope = FastShadowStepFarSlope;    // fast path only
     // The per-pixel decorrelation. The key packs the lattice site and mixes it with the view index; the packing is
     // injective within sixteen bits and the mix is a bijection, so no two sites in one view share a key — and
     // therefore no two share a digital shift. Both derivations are named bijections with closed-form inverses that
@@ -1791,6 +1862,20 @@ float areaShadowVisibility(float3 surfacePoint, float3 surfaceNormal, uint insta
         float3 origin = (surfacePoint + (surfaceNormal * ShadowBias));
         float traveled = ShadowBias;
         bool occluded = false;
+        // AUTO-RELAXED sphere tracing on the exact path (2026-09-03), the primary march's Bán & Valasek scheme
+        // transplanted: a per-ray slope EMA `slopeM` drives omega = max(1, 2/(1 - m)), so a ray receding from the
+        // surface it starts on (clearances growing linearly — the geometric climb every lit ground/ramp pixel paid
+        // ~12 steps for) over-relaxes up to 10x, and the disjoint-sphere test validates every relaxed step: an advance
+        // longer than the two unbounding spheres it spans is retaken plain from the previous sample. Hit and escape
+        // decisions are taken only on validated samples, and the reach exit is validated the same way the primary
+        // march validates its far exit (a relaxed step that crosses the reach is retaken plain first), so a binary
+        // visibility result never rests on an unproven segment. A step the ShadowStepMin floor lengthened is NEVER
+        // treated as relaxed (the floor deliberately steps through thin occluders; validating it would ping-pong).
+        // The fast path keeps its plain clamped stride.
+        float previousRadius = 0.0;
+        float stepLength = 0.0;
+        float slopeM = -1.0;      // slope EMA, init -1 => the first step is plain (omega = 1)
+        bool relaxedStep = false; // whether the step that reached the current sample was over-relaxed
 
         [loop]
         for (int step = 0; (step < stepBudget); step++) {
@@ -1798,31 +1883,77 @@ float areaShadowVisibility(float3 surfacePoint, float3 surfaceNormal, uint insta
 
             sdfEvalCount += 1.0; // one march sample, regular or fast — both variants share this call site
 
-            // KEPT VERBATIM from the retired march, in CLAMPED units on BOTH sides: the threshold is scaled up rather
-            // than the sample scaled down, so an isometric program (stepScale == 1) compares exactly as before.
-            if (clearance < (SurfaceEpsilon * stepScale)) {
-                occluded = true;
-
-                break;
-            }
-
-            // LIGHT-SIDE ESCAPE EXIT. The field is 1-Lipschitz along the ray, so the TRUE (de-scaled) clearance here
-            // bounds the whole remaining march from below: no point within (reach - traveled) of this sample can be a
-            // surface. For a BINARY test that is EXACTLY SOUND — the remaining march provably cannot find an occluder,
-            // so skipping it changes nothing. (The retired parabola's version of this exit was only MARCH-PATH sound:
-            // its running minimum could still be lowered by an undershoot the exit skipped. Replacing an estimator
-            // that has a continuum of outputs with one that has two upgrades the classification.) This is the ONLY
-            // sdfDeScaleField call in the shadow path, and it is comparing against a world-space DIFFERENCE.
-            if (escapeExit && (sdfDeScaleField(clearance, stepScale) > (reach - traveled))) {
-                break;
-            }
-
-            // KEPT VERBATIM. The floor keeps a near-tangent march from stalling (at the cost of stepping through
-            // occluders thinner than it), the ceiling keeps the march from striding past a grazing silhouette, and it
-            // is DISTANCE-PROPORTIONAL past ~4 units so a far unoccluded ray clears open space in fewer steps.
             // FOLD-SAFE: the advance honors the published boundary gap (min) so a shadow ray cannot stride across a
-            // fold boundary the raw value lies about.
-            traveled += clamp(min(clearance, sdfMapStepBound), ShadowStepMin, max(stepCeiling, (traveled * farSlope)));
+            // fold boundary the raw value lies about; the occlusion test below reads the RAW value.
+            float radius = min(clearance, sdfMapStepBound);
+            precise float sphereReach = (abs(radius) + previousRadius);
+            bool overshoot = (relaxedStep && (stepLength > sphereReach));
+
+            if (overshoot) {
+                traveled -= stepLength; // undo the unsafe step — back to the previous accepted sample
+                radius = previousRadius;
+                slopeM = -1.0;          // next step is plain (omega = 1)
+            } else {
+                // KEPT VERBATIM from the retired march, in CLAMPED units on BOTH sides: the threshold is scaled up rather
+                // than the sample scaled down, so an isometric program (stepScale == 1) compares exactly as before.
+                if (clearance < (SurfaceEpsilon * stepScale)) {
+                    occluded = true;
+
+                    break;
+                }
+
+                // LIGHT-SIDE ESCAPE EXIT. The field is 1-Lipschitz along the ray, so the TRUE (de-scaled) clearance here
+                // bounds the whole remaining march from below: no point within (reach - traveled) of this sample can be a
+                // surface. For a BINARY test that is EXACTLY SOUND — the remaining march provably cannot find an occluder,
+                // so skipping it changes nothing. (The retired parabola's version of this exit was only MARCH-PATH sound:
+                // its running minimum could still be lowered by an undershoot the exit skipped. Replacing an estimator
+                // that has a continuum of outputs with one that has two upgrades the classification.) This is the ONLY
+                // sdfDeScaleField call in the shadow path, and it is comparing against a world-space DIFFERENCE. Taken on
+                // a VALIDATED sample only: the segment behind it is proven clear by the disjoint-sphere test above.
+                if (escapeExit && (sdfDeScaleField(clearance, stepScale) > (reach - traveled))) {
+                    break;
+                }
+
+                if (stepLength > 0.0) {
+                    precise float slope = ((radius - previousRadius) / stepLength);
+                    slopeM = lerp(slopeM, slope, SlopeBeta);
+                }
+            }
+
+            float stepFrom = traveled;
+            float advance;
+
+            if (fastMarch) {
+                // The fast path's plain clamped stride: the floor keeps a near-tangent march from stalling (at the
+                // cost of stepping through occluders thinner than it), the ceiling bounds the wider stride that is
+                // this path's deliberate soundness trade.
+                advance = clamp(radius, ShadowStepMin, max(stepCeiling, (traveled * farSlope)));
+                relaxedStep = false;
+            } else {
+                precise float denominator = (1.0 - min(slopeM, SlopeCap));
+                precise float omega = max(1.0, (2.0 / denominator));
+
+                advance = (radius * omega);
+                relaxedStep = (omega > 1.0);
+
+                if (advance < ShadowStepMin) {
+                    advance = ShadowStepMin;
+                    relaxedStep = false;
+                }
+            }
+
+            previousRadius = radius;
+            stepLength = advance;
+            traveled += advance;
+
+            // The validated reach exit: a RELAXED step that crosses the reach is retaken plain (the segment it vaulted
+            // was never proven clear), and the ray leaves only if the plain step crosses too.
+            if ((traveled > reach) && relaxedStep) {
+                stepLength = max(radius, ShadowStepMin);
+                traveled = (stepFrom + stepLength);
+                relaxedStep = false;
+                slopeM = -1.0;
+            }
 
             if (traveled > reach) {
                 break;
@@ -1897,7 +2028,10 @@ float worldAccumulateShadowVisibility(float sampled) {
 // re-spaced to span the SAME 0.01..0.13 reach at double pitch, the per-rung falloff squared (0.95^2 = 0.9025) to hold
 // the same spatial decay, and the gain re-tuned 3.0 -> 5.07 so the fully-occluded floor matches the 5-tap value to
 // ~0.01 (verified analytically over constant-factor and constant-gap occluder models) — a same-look AO at 60% of the
-// taps, and because calcAO is [unroll]ed the two dropped taps also relieve the views kernel's register pressure. Paid
+// taps. The rung loop is a [loop], NOT [unroll] (2026-09-03): every mapDistanceMasked call site inlines a full copy of
+// the tape interpreter, so three unrolled rungs were three interpreter copies in the hottest kernel — measured on the
+// RTX 2060 shipped world as a 60 ms AO term for three evaluations per lit pixel, ten times the primary march's cost per
+// evaluation; one rolled call site is the fix, not fewer taps. Paid
 // ONLY on lit hits and tile-masked exactly like areaShadowVisibility (a masked-out instance is as absent from a nearby tap as it
 // is from the hit itself). Purely local — no cones, no hemisphere, no history — but reads convincingly as contact
 // shadowing in creases and under overhangs.
@@ -1913,7 +2047,7 @@ float calcAO(float3 surfacePoint, float3 surfaceNormal, uint instanceMaskBase, f
     float occlusion = 0.0;
     float scale = 1.0;
 
-    [unroll]
+    [loop]
     for (int i = 0; (i < 3); i++) {
         float h = (0.01 + ((0.12 * float(i)) / 2.0));
         float d = sdfDeScaleField(mapDistanceMasked(surfacePoint + (surfaceNormal * h), instanceMaskBase), stepScale);
@@ -2073,7 +2207,10 @@ float marchOvershootDepth(float3 rayOrigin, float3 rayDirection, float marchStar
     return traveled;
 }
 
-float3 renderView(ViewportData view, float2 localUv, float marchStart, float firstExit, float secondEntry, float farBound, uint instanceMaskBase, float pixelFootprint, uint2 pixel, uint viewIndex) {
+// `lane` is the caller's index within its 8x8 workgroup and `active` whether this lane owns a rendered pixel: an
+// inactive lane (past the render extent) still runs the march-free prologue and the group shadow gather's barriers
+// (UNIFORM control flow — see sdfShadowGatherGroup) and then returns black, which the caller never stores.
+float3 renderView(ViewportData view, float2 localUv, float marchStart, float firstExit, float secondEntry, float farBound, uint instanceMaskBase, float pixelFootprint, uint2 pixel, uint viewIndex, uint lane, bool active) {
     float3 rayOrigin = view.position.xyz;
     float3 rayDirection = cameraRayDirection(view, localUv);
     int viewMode = (int)round(view.forward.w);
@@ -2308,6 +2445,32 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
         }
     }
 
+    // THE GROUP SHADOW GATHER — at the one seam every lane of the workgroup reaches (the march loops above carry no
+    // barrier; the epilogue below is per-lane divergent): reduce the group's hit points and build ONE shadow candidate
+    // mask for all of them (sdfShadowGatherGroup, uniform control flow). The decisions feeding it are uniform: the
+    // view's mode, the engine levers, the reach. A lane that is not lit still publishes (as unlit) and still walks its
+    // share of the grid — its own epilogue never marches a shadow, so nothing it gathered is wasted on itself.
+#ifdef SDF_SCREEN_SOURCES
+    bool cullOn = worldShadowCullEnabled();
+    uint groupGather = (cullOn ? 1u : 0u); // without the group gather: the camera-tile mask (1) or the flat field (0)
+#ifdef SDF_GROUP_SHADOW_GATHER
+    {
+        bool finalShadingMode = ((viewMode <= 0) || (viewMode >= DebugViewModeCount) || (viewMode == DebugViewModeEvals));
+        bool groupGatherWanted = (finalShadingMode && cullOn && !worldUseCameraTileShadowMask() && !worldSoftShadowsDisabled());
+
+        if (groupGatherWanted) {
+            float groupShadowReach = (ShadowMaxDistance * worldShadowDistanceScale());
+
+            groupGather = sdfShadowGatherGroup(hitSurface, (rayOrigin + (rayDirection * traveled)), worldSunDirection(), groupShadowReach, lane);
+        }
+    }
+#endif
+#endif
+
+    if (!active) {
+        return float3(0.0, 0.0, 0.0); // past the render extent: the caller stores nothing (no barrier follows)
+    }
+
     float3 normal = float3(0.0, 0.0, 0.0);
     float3 color = skyColor(rayDirection);
 
@@ -2370,17 +2533,15 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 // lever) — they MUST use the same length or the gathered occluder set is unsound for the shadow ray.
                 float shadowReach = (ShadowMaxDistance * worldShadowDistanceScale());
 #ifdef SDF_SCREEN_SOURCES
-                // The shadow GRID CULL (default ON). Gather this lit pixel's shadow-ray grid neighbourhood into the local
-                // mask (sdfShadowMaskWords) and march THAT — bit-identical to the flat all-instances march (proven by the
-                // world-shadow-cull gate) but restricted to the instances the shadow ray can actually reach, so the
-                // shadow walks neither the camera-tile mask (the wrong occluder set for a ray that leaves the camera
-                // cone) NOR every instance. sdfShadowGather returns 2 (mask BUILT — the cull), 1 (a grid is packed but
-                // the program overflows the local mask → the camera-tile fallback, the cheap pre-cull behaviour, NOT the
-                // ~20x-slower all-instances flat), or 0 (NO grid → the flat all-instances fallback, which is cheap for a
-                // few-instance program and keeps the grid toggle render-invariant). The cull OFF marches flat
+                // The shadow GRID CULL (default ON). The group phase above built this workgroup's shadow candidate mask
+                // (sdfShadowMaskWords, groupshared) and decided the fallback for every lane: 2 = mask BUILT — march it
+                // (the cull, bit-identical to the flat all-instances march, restricted to the instances the group's
+                // shadow rays can reach); 1 = a grid is packed but the program overflows the local mask, or the
+                // camera-tile lever is set → the camera-tile mask (the cheap pre-cull behaviour, NOT the ~20x-slower
+                // all-instances flat); 0 = NO grid → the flat all-instances fallback, which is cheap for a
+                // few-instance program and keeps the grid toggle render-invariant. The cull OFF marches flat
                 // all-instances — the ground-truth reference the A/B lever and the world-shadow-cull gate use.
-                bool cullOn = worldShadowCullEnabled();
-                uint gather = (cullOn ? (worldUseCameraTileShadowMask() ? 1u : sdfShadowGather((surfacePoint + (normal * ShadowBias)), worldSunDirection(), shadowReach)) : 0u);
+                uint gather = groupGather;
                 bool culled = (gather == 2u);
                 uint shadowFallbackMask = ((cullOn && (gather == 1u)) ? instanceMaskBase : SDF_INSTANCE_MASK_ALL);
 

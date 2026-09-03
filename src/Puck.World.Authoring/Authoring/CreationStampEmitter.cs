@@ -216,7 +216,10 @@ public static class CreationStampEmitter {
     /// <param name="materialFor">Resolves each shape's material id.</param>
     /// <param name="contactMargin">An optional per-shape signed contact margin. Null emits the raw render stream;
     /// a nonzero value scopes each primitive so dilation applies before its authored blend.</param>
-    public static void Emit(SdfProgramBuilder builder, CreationDocument document, CreationStampTransform transform, Func<ShapeDocument, int> materialFor, float? contactMargin = null) {
+    /// <param name="inScope">Whether the caller already holds an open field scope around this emission (the
+    /// whole-creation stamp of <see cref="RequiresScope"/>). A scope nests at most one deep, so an eccentric shape
+    /// then rides the caller's scope instead of opening its own.</param>
+    public static void Emit(SdfProgramBuilder builder, CreationDocument document, CreationStampTransform transform, Func<ShapeDocument, int> materialFor, float? contactMargin = null, bool inScope = false) {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(materialFor);
@@ -225,6 +228,7 @@ public static class CreationStampEmitter {
             EmitShapeChain(
                 builder: builder,
                 contactMargin: contactMargin,
+                inScope: inScope,
                 material: materialFor(arg: shape),
                 shape: shape,
                 transform: transform
@@ -232,7 +236,7 @@ public static class CreationStampEmitter {
         }
     }
 
-    private static void EmitShapeChain(SdfProgramBuilder builder, ShapeDocument shape, CreationStampTransform transform, int material, float? contactMargin) {
+    private static void EmitShapeChain(SdfProgramBuilder builder, ShapeDocument shape, CreationStampTransform transform, int material, float? contactMargin, bool inScope = false) {
         var (shapePosition, shapeRotation) = ReflectedShapeTransform(
             shape: shape,
             normal: transform.ReflectionNormal
@@ -256,6 +260,33 @@ public static class CreationStampEmitter {
             (contactMargin is not { } margin) ||
             (margin == 0f)
         ) {
+            // An eccentric primitive (a non-uniformly scaled sphere baked as an ellipsoid) outside any scope would fold
+            // its Lipschitz factor into the whole program's step scale, and every march in the frame would pay it. Its
+            // own scope clamps that factor onto its candidate at the pop instead (SdfProgram.AnalyzeLipschitz); inside
+            // a caller's scope (one-deep by contract) the caller's pop already does. KEEP IN SYNC with the static
+            // stamper's per-shape probe reservation (Client.WorldPlacementStamper.EmitProbe), which reserves the pair.
+            var ownScope = (
+                !inScope &&
+                (SdfSolidGeometry.StepFactor(
+                    scale: shapeScale,
+                    type: shape.Type
+                ) > 1f)
+            );
+
+            if (ownScope) {
+                _ = SdfSolidGeometry.AppendScaledPrimitive(
+                    chain: chain.PushField(
+                        compose: blend,
+                        smooth: smooth
+                    ),
+                    type: shape.Type,
+                    scale: shapeScale,
+                    material: material
+                ).PopField();
+
+                return;
+            }
+
             _ = SdfSolidGeometry.AppendScaledPrimitive(
                 chain: chain,
                 type: shape.Type,

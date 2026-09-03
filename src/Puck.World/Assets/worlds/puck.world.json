@@ -5709,7 +5709,7 @@
     }
   ],
   "render": {
-    "farDistance": 400
+    "farDistance": 160
   },
   "schema": "puck.world.def.v1",
   "seatDefaults": {

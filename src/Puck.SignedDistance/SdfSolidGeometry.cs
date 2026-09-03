@@ -357,6 +357,55 @@ public static class SdfSolidGeometry {
         ),
         };
     }
+    /// <summary>The march step factor <see cref="AppendScaledPrimitive"/>'s emission carries for a primitive at a scale:
+    /// the eccentricity (largest radius over smallest) of the ellipsoid a non-uniformly scaled
+    /// <see cref="SdfSolidPrimitive.Sphere"/> or an <see cref="SdfSolidPrimitive.Ellipsoid"/> bakes, and exactly 1 for
+    /// every other arm. <c>SdfProgram.AnalyzeLipschitz</c> folds this same ratio into the program's step scale, so a
+    /// stamper reads it here to decide whether a shape's chain needs its own field scope: a scoped eccentricity taxes
+    /// only its own candidate's march, an unscoped one taxes every march in the frame.</summary>
+    /// <param name="type">The primitive.</param>
+    /// <param name="scale">The authored per-axis scale.</param>
+    /// <returns>The step factor, at least 1.</returns>
+    /// <remarks>KEEP IN SYNC with <see cref="AppendScaledPrimitive"/>'s Sphere and Ellipsoid arms and with
+    /// <c>SdfProgram.EllipsoidEccentricity</c>: the radii read here are the ones those arms bake.</remarks>
+    public static float StepFactor(SdfSolidPrimitive type, Vector3 scale) {
+        var effectiveScale = EffectiveScale(scale: scale);
+        Vector3 radii;
+
+        switch (type) {
+            case SdfSolidPrimitive.Sphere when !IsUniform(scale: effectiveScale): {
+                    radii = (new Vector3(value: SphereRadius) * effectiveScale);
+                    break;
+                }
+            case SdfSolidPrimitive.Ellipsoid: {
+                    radii = (EllipsoidRadii * effectiveScale);
+                    break;
+                }
+            default: {
+                    return 1f;
+                }
+        }
+
+        var largest = MathF.Max(
+            x: radii.X,
+            y: MathF.Max(
+                x: radii.Y,
+                y: radii.Z
+            )
+        );
+        var smallest = MathF.Min(
+            x: radii.X,
+            y: MathF.Min(
+                x: radii.Y,
+                y: radii.Z
+            )
+        );
+
+        return ((smallest > 0f)
+            ? (largest / smallest)
+            : 1f
+        );
+    }
     /// <summary>A primitive's worst-case reach from its local origin at a given scale — the largest scale component's
     /// magnitude times the primitive's farthest surface point.</summary>
     /// <param name="type">The primitive.</param>

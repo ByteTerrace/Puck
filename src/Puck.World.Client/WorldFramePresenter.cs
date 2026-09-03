@@ -1517,7 +1517,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             ShadowDistanceScale = ((m_settings.ShadowReach >= 1f)
             ? 0f
             : m_settings.ShadowReach),
-            // At the machine-fleet tiers the correctness-complete per-pixel shadow-grid gather is the dominant frame
+            // At the machine-fleet tiers the correctness-complete per-tile shadow-grid gather is the dominant frame
             // cost (measured 64.5 ms views at 124 stand-ins versus 16.5 ms with the existing camera-tile fallback).
             // Small sessions keep exact off-camera shadow candidates; 16/64/128-player sessions take the explicit crowd
             // approximation, while the independent crowd-radius policy still controls which avatars cast at all.

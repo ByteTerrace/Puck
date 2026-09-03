@@ -65,6 +65,9 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
     /// <summary>Gets the last uploaded program's Lipschitz step scale (1 = no clamp), or 0 before the first
     /// upload.</summary>
     public float LiveProgramStepScale { get; private set; }
+    /// <summary>Gets the last uploaded program's step-scale binder (see <see cref="SdfProgram.StepScaleBinder"/>), or
+    /// <see langword="null"/> before the first upload and whenever nothing unscoped binds the step scale.</summary>
+    public SdfStepScaleBinder? LiveProgramStepScaleBinder { get; private set; }
     /// <summary>Gets the frozen program-word envelope this node was constructed with.</summary>
     public int ProgramWordCapacity => m_programWordCapacity;
 
@@ -709,6 +712,7 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
             LiveProgramWords = frame.Program.Words.Length;
             LiveProgramInstances = frame.Program.Instances.Count;
             LiveProgramStepScale = frame.Program.StepScale;
+            LiveProgramStepScaleBinder = frame.Program.StepScaleBinder;
         }
 
         var bindingsTicks = cpuPhaseTimer.Stop();

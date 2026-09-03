@@ -36,6 +36,11 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private const uint BrickBakeRequestBindingIndex = 0; // sdf-brick-bake.comp: bakeRequest (register t0)
     private const int BrickBakeRequestHeaderFloat4Count = 3; // (boxMin+cellSize), (dims+carveCount), (destWordOffset+invLambda) — KEEP IN SYNC with sdf-brick-bake.comp
     private const uint BrickBakeWorkgroupSize = 64; // sdf-brick-bake.comp's [numthreads(64, 1, 1)]
+    private const uint FrameUploadDestinationBindingIndex = 1; // sdf-frame-upload.comp: uploadDestination RW (register u0)
+    private const int FrameUploadPushByteLength = (sizeof(uint) * 4); // FrameUploadPush { uint count, 3x pad }
+    private const uint FrameUploadSourceBindingIndex = 0;      // sdf-frame-upload.comp: uploadSource (register t0)
+    private const int FrameUploadTableCount = 3; // the per-frame tables with a device-local twin: viewports, dynamic transforms, the frame instance grid
+    private const uint FrameUploadWorkgroupSize = 64; // sdf-frame-upload.comp's [numthreads(64, 1, 1)]
     // The sdfBrickPool binding number (sdf-vm.hlsli's [[vk::binding(46, 0)]]); the per-consumer Direct3D 12 register is
     // POSITIONAL (views append it LAST -> t41, the beam after its instance mask -> t4). KEEP IN SYNC with sdf-vm.hlsli.
     private const uint BrickPoolBindingIndex = 46;
@@ -157,6 +162,23 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly nint[] m_brickUploadSets = new nint[FrameRingSize];
     private readonly Queue<(int Slot, int Count, float[] Voxels)> m_brickUploads = new();
     private readonly byte[] m_brickUploadPush = new byte[BrickBakePushByteLength];
+
+    // The per-frame table uploader: at the top of every frame one tiny copy dispatch per table moves this ring slot's
+    // host-written viewport rows, dynamic transforms, and frame instance grid into DEVICE-LOCAL twins, and every march
+    // kernel binds the twins. The host-visible ring buffers stay the CPU's write target (the ring's fence still proves a
+    // slot idle before it is rewritten); the kernels no longer fetch across PCIe per sample — the instance-cull walk,
+    // the soft-shadow gather, and every dynamic-instance evaluation read device memory. One set per (slot, table),
+    // FrameUploadTableCount per slot, in table order.
+    private readonly IGpuComputePipeline m_frameUploadPipeline;
+    private readonly IGpuShaderModule m_frameUploadShaderModule;
+    private readonly nint[] m_frameUploadSets = new nint[(FrameRingSize * FrameUploadTableCount)];
+    private readonly byte[] m_frameUploadPush = new byte[FrameUploadPushByteLength];
+    private readonly IGpuBuffer m_viewportDeviceBuffer;
+    private readonly IGpuBuffer m_dynamicTransformDeviceBuffer;
+    private readonly IGpuBuffer m_instanceGridDeviceBuffer;
+    // The frame instance grid's written word count — the copy window (UploadProgram seeds it for an invariant grid,
+    // PrepareFrame for a per-frame rebuild).
+    private int m_instanceGridWordsWritten;
 
     // The carve-bake brick pool: one persistent device-local f32 buffer the sliced bake writes and
     // the beam + views kernels sample. Always allocated (a 1-float filler when the pool is disabled), always bound to
@@ -317,7 +339,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // sdf.info verb, the [world-timing] line, and the bench's per-pass feed all surface it with no further change (each
     // reads PassTimingLabels / TryReadPassTimings, never a hardcoded tuple). TimingCapacity (8) is the pool ceiling, so
     // at most 7 passes fit before the pools must be resized.
-    private static readonly string[] PassLabels = ["sky", "mask", "beam", "cull-args", "views", "composite"];
+    private static readonly string[] PassLabels = ["upload", "sky", "mask", "beam", "cull-args", "views", "composite"];
     private static readonly uint TimingMarkCount = ((uint)(PassLabels.Length + 1));
     private readonly nint[] m_beamSets = new nint[FrameRingSize];
     // The change-detected descriptor caches are PER RING SLOT: each slot's sets are only rewritten once that slot's
@@ -615,6 +637,23 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             sizeBytes: ((((((ulong)m_viewportCapacity) * m_tileGridX) * m_tileGridY) * ((uint)instanceMaskStorageWordCount)) * sizeof(uint))
         );
 
+        // The device-local twins of the three per-frame host tables (see m_frameUploadPipeline): sized exactly like the
+        // ring-slot staging buffers they are copied from, UAV-written by the upload dispatch, SRV-read by every march
+        // kernel. Single, not per slot: the top-of-frame cross-frame barrier orders this frame's copy after the previous
+        // frame's last read, exactly as it orders the other ring-shared device-local scratch.
+        m_viewportDeviceBuffer = gpu.StorageBufferFactory.CreateDeviceLocal(
+            deviceContext: device,
+            sizeBytes: ((ulong)m_viewportScratch.Length)
+        );
+        m_dynamicTransformDeviceBuffer = gpu.StorageBufferFactory.CreateDeviceLocal(
+            deviceContext: device,
+            sizeBytes: ((ulong)m_dynamicTransformScratch.Length)
+        );
+        m_instanceGridDeviceBuffer = gpu.StorageBufferFactory.CreateDeviceLocal(
+            deviceContext: device,
+            sizeBytes: (((ulong)m_instanceGridWordCapacity) * sizeof(uint))
+        );
+
         // The carve-bake brick pool: one persistent DEVICE-LOCAL f32 buffer — device-local so the
         // bake kernel can write it as a UAV (an upload heap forbids UAVs on Direct3D 12) and the beam/views sample it as
         // an SRV. Frozen at the constructed capacity. When the pool is disabled (capacity 0) a single-float filler keeps
@@ -648,6 +687,11 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
                 bytecode: kernels.BrickUpload
             )
             : null
+        );
+        m_frameUploadShaderModule = gpu.ShaderModuleFactory.Create(
+            deviceContext: device,
+            stage: GpuShaderStage.Compute,
+            bytecode: kernels.FrameUpload
         );
 
         // GPU-driven cull: the cull-args pass reduces the cull buffer to the Stage-1 INDIRECT dispatch args (the
@@ -1006,6 +1050,33 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             : null
         );
 
+        // The per-frame table uploader (sdf-frame-upload.comp): t0 a ring slot's host-visible table, u0 its device-local
+        // twin. Direct3D 12 assigns registers from THIS order.
+        GpuComputeBinding[] frameUploadBindings = [
+            new GpuComputeBinding(
+                Binding: FrameUploadSourceBindingIndex,
+                Kind: GpuComputeBindingKind.StorageBufferRead
+            ),
+            new GpuComputeBinding(
+                Binding: FrameUploadDestinationBindingIndex,
+                Kind: GpuComputeBindingKind.StorageBufferReadWrite
+            ),
+        ];
+
+        m_frameUploadPipeline = gpu.ComputePipelineFactory.Create(
+            computeShaderModule: m_frameUploadShaderModule,
+            description: new GpuComputePipelineDescription(
+                Name: "sdf-frame-upload",
+                Bindings: frameUploadBindings,
+                PushConstantBinding: new GpuPushConstantBinding(
+                    data: m_frameUploadPush,
+                    offset: 0,
+                    stageFlags: GpuShaderStage.Compute
+                )
+            ),
+            deviceContext: device
+        );
+
         // One pool, one CULL-ARGS set (its bindings are all shared device-local buffers, never rewritten after
         // construction) plus FrameRingSize copies of the other four sets (they bind the per-slot host-visible buffers,
         // and the views/composite copies take per-frame descriptor rewrites) — the Direct3D 12 allocator bump-allocates
@@ -1019,6 +1090,10 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             poolSetBindings.Add(item: instanceCullBindings);
             poolSetBindings.Add(item: viewsBindings);
             poolSetBindings.Add(item: compositeBindings);
+
+            for (var table = 0; (table < FrameUploadTableCount); table++) {
+                poolSetBindings.Add(item: frameUploadBindings);
+            }
         }
 
         // One bake set per brick slot (all static — bound once below), when the pool is enabled.
@@ -1086,12 +1161,12 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             WriteStorageBuffer(
                 set: beamSet,
                 binding: ViewportBindingIndex,
-                buffer: m_viewportBuffers[slot]
+                buffer: m_viewportDeviceBuffer
             );
             WriteStorageBuffer(
                 set: beamSet,
                 binding: DynamicTransformBindingIndex,
-                buffer: m_dynamicTransformBuffers[slot]
+                buffer: m_dynamicTransformDeviceBuffer
             );
             WriteStorageBufferReadWrite(
                 binding: TileBindingIndex,
@@ -1126,12 +1201,12 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             WriteStorageBuffer(
                 set: instanceCullSet,
                 binding: ViewportBindingIndex,
-                buffer: m_viewportBuffers[slot]
+                buffer: m_viewportDeviceBuffer
             );
             WriteStorageBuffer(
                 set: instanceCullSet,
                 binding: DynamicTransformBindingIndex,
-                buffer: m_dynamicTransformBuffers[slot]
+                buffer: m_dynamicTransformDeviceBuffer
             );
             WriteStorageBufferReadWrite(
                 binding: InstanceMaskBindingIndex,
@@ -1141,7 +1216,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             WriteStorageBufferReadOnly(
                 set: instanceCullSet,
                 binding: FrameInstanceGridBindingIndex,
-                buffer: m_instanceGridBuffers[slot]
+                buffer: m_instanceGridDeviceBuffer
             );
 
             var viewsSet = m_descriptorAllocator.AllocateSet(
@@ -1159,12 +1234,12 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             WriteStorageBuffer(
                 set: viewsSet,
                 binding: ViewportBindingIndex,
-                buffer: m_viewportBuffers[slot]
+                buffer: m_viewportDeviceBuffer
             );
             WriteStorageBuffer(
                 set: viewsSet,
                 binding: DynamicTransformBindingIndex,
-                buffer: m_dynamicTransformBuffers[slot]
+                buffer: m_dynamicTransformDeviceBuffer
             );
             WriteStorageBufferReadWrite(
                 binding: TileBindingIndex,
@@ -1208,7 +1283,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             WriteStorageBufferReadOnly(
                 set: viewsSet,
                 binding: FrameInstanceGridBindingIndex,
-                buffer: m_instanceGridBuffers[slot]
+                buffer: m_instanceGridDeviceBuffer
             );
             WriteStorageBufferReadOnly(
                 binding: SamplerTableBindingIndex,
@@ -1302,6 +1377,33 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
                         set: uploadSet
                     );
                 }
+            }
+        }
+
+        // The upload sets: per ring slot, one (host table -> device twin) pair per table, in FrameUploadTableCount order
+        // (viewports, dynamic transforms, frame instance grid) — RecordFrameUpload dispatches them in that order.
+        for (var slot = 0; (slot < FrameRingSize); slot++) {
+            IGpuBuffer[] uploadSources = [m_viewportBuffers[slot], m_dynamicTransformBuffers[slot], m_instanceGridBuffers[slot]];
+            IGpuBuffer[] uploadDestinations = [m_viewportDeviceBuffer, m_dynamicTransformDeviceBuffer, m_instanceGridDeviceBuffer];
+
+            for (var table = 0; (table < FrameUploadTableCount); table++) {
+                var uploadSet = m_descriptorAllocator.AllocateSet(
+                    descriptorSetLayoutHandle: m_frameUploadPipeline.DescriptorSetLayoutHandle,
+                    deviceHandle: m_deviceHandle,
+                    poolHandle: m_pool
+                );
+
+                m_frameUploadSets[((slot * FrameUploadTableCount) + table)] = uploadSet;
+                WriteStorageBufferReadOnly(
+                    binding: FrameUploadSourceBindingIndex,
+                    buffer: uploadSources[table],
+                    set: uploadSet
+                );
+                WriteStorageBufferReadWrite(
+                    binding: FrameUploadDestinationBindingIndex,
+                    buffer: uploadDestinations[table],
+                    set: uploadSet
+                );
             }
         }
 
@@ -1475,6 +1577,11 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         m_brickBakeShaderModule?.Dispose();
         m_brickUploadPipeline?.Dispose();
         m_brickUploadShaderModule?.Dispose();
+        m_frameUploadPipeline.Dispose();
+        m_frameUploadShaderModule.Dispose();
+        m_viewportDeviceBuffer.Dispose();
+        m_dynamicTransformDeviceBuffer.Dispose();
+        m_instanceGridDeviceBuffer.Dispose();
         m_beamPipeline.Dispose();
         m_instanceCullPipeline.Dispose();
         m_cullArgsPipeline.Dispose();

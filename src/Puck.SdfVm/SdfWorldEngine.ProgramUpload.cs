@@ -84,6 +84,8 @@ public sealed partial class SdfWorldEngine {
             foreach (var instanceGridBuffer in m_instanceGridBuffers) {
                 instanceGridBuffer.Write<uint>(data: invariantInstanceGrid);
             }
+
+            m_instanceGridWordsWritten = invariantInstanceGrid.Length;
         }
 
         m_liveInstanceMaskWordCount = program.InstanceMaskWordCount;

@@ -202,6 +202,11 @@ public sealed partial class SdfProgram {
         // byte-identical; a factor-1 scope stays unpatched (Data1.y = 0 reads as no scale in the shader).
         var stepScale = AnalyzeLipschitz(instructions: m_instructions);
 
+        StepScaleBinder = AnalyzeStepScaleBinder(
+            instances: m_instances,
+            instructions: m_instructions
+        );
+
         // ALWAYS the full MaxScreenSurfaces capacity, indexed by ScreenIndex (not declaration order): the shader
         // resolves a hit's surface with a direct index, no search, so an undeclared slot's all-zero entry is simply
         // never addressed (no material id in a consistent program points at it).
@@ -413,6 +418,10 @@ public sealed partial class SdfProgram {
     /// past the supplied per-frame transform table. Equals one plus the highest <see cref="SdfOp.TransformDynamic"/>
     /// or dynamic-instance slot, or 0 for a static program.</summary>
     public int RequiredDynamicTransformCapacity { get; }
+    /// <summary>Gets the unscoped shape chain that binds <see cref="StepScale"/> below 1 (the largest-factor chain outside
+    /// every field scope), or <see langword="null"/> when no unscoped chain carries a factor above 1. The cost-sheet
+    /// read-back behind <c>world.budget</c>: a frame-wide march tax names the instance and shape that levy it.</summary>
+    public SdfStepScaleBinder? StepScaleBinder { get; }
     /// <summary>Gets a value indicating whether this program's ring-local cull grid depends on a per-frame dynamic
     /// transform. Static, unmaskable, parked, and grid-disabled programs have an invariant side table that the engine
     /// uploads once with the program; an active maskable dynamic instance requires the existing per-frame rebuild.</summary>

@@ -30,6 +30,10 @@
 // away to fully-lit rather than carrying a descriptor it would never read. The core-ops variant inherits this define
 // through its verbatim include, so BOTH Stage 1 pipelines bind the table.
 #define SDF_SHADOW_SAMPLER
+// The per-tile shadow gather (sdf-world.hlsli's sdfShadowGatherGroup): one groupshared shadow candidate mask per 8x8
+// workgroup, built cooperatively at the uniform seam inside renderView. Every lane — rendered pixel or not — must
+// reach renderView, so CSMain below turns its per-pixel extent test into an `active` flag instead of a return.
+#define SDF_GROUP_SHADOW_GATHER
 #include "sdf-world.hlsli"
 
 // The program is at binding 1 (sdf-vm.hlsli, register t0), the viewport table at binding 2 (sdf-world.hlsli,
@@ -83,15 +87,18 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // over fewer pixels; Stage 2 upsamples the reduced source back into the full region. q = 255 renders native.
     uint2 rectDims = worldRenderDims((uint2)(view.region.zw * float2(params.imageExtent)), view.renderScale.x);
 
-    // Pixels past this viewport's RENDER extent fall outside its rendered source area.
-    if ((pixel.x >= rectDims.x) || (pixel.y >= rectDims.y)) {
-        return;
-    }
+    // Pixels past this viewport's RENDER extent fall outside its rendered source area. NOT a return: the lane still
+    // has to reach the group shadow gather's barriers inside renderView (uniform control flow), so it runs the
+    // march-free prologue as an inactive lane and stores nothing. Its tile reads are clamped onto the extent so no
+    // index leaves the tile grid.
+    bool active = ((pixel.x < rectDims.x) && (pixel.y < rectDims.y));
+    uint lane = (((pixel.y & 7u) * 8u) + (pixel.x & 7u)); // == SV_GroupThreadID: the bbox origin is group-aligned
+    uint2 clampedPixel = min(pixel, (rectDims - uint2(1u, 1u)));
 
     float2 localUv = ((float2(pixel) + 0.5) / float2(rectDims));
-    uint2 tileCoord = (pixel / WorldTileSize);
+    uint2 tileCoord = (clampedPixel / WorldTileSize);
     uint tileIndex = worldTileIndex(id.z, tileCoord, params.tileGrid);
-    float marchStart = tiles[worldTileMarchStartIndex(tileIndex)];
+    float marchStart = (active ? tiles[worldTileMarchStartIndex(tileIndex)] : TileEmpty);
     // The four-bound teleport's proven-empty gap for this tile (planes 1/2; sdf-beam wrote them). firstExit = the
     // far distance when no gap was proven — the teleport in renderView is then a dead branch.
     float firstExit = tiles[worldTileFirstExitIndex(tileIndex)];
@@ -116,10 +123,14 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // source texture is the only Stage-1-owned surface whose cross-frame persistence the engine already depends on (the
     // cadence gate re-composites from it), Stage 2 reads only .rgb, and a hosted child slot returned above — so the
     // lane is free, private, and never observed by anything downstream.
-    sdfShadowHistoryIn = sources[id.z][pixel].a;
+    sdfShadowHistoryIn = (active ? sources[id.z][pixel].a : 1.0);
     sdfShadowHistoryOut = 1.0;
 
-    float3 color = renderView(view, localUv, marchStart, firstExit, secondEntry, farBound, instanceMaskBase, pixelFootprint, pixel, id.z);
+    float3 color = renderView(view, localUv, marchStart, firstExit, secondEntry, farBound, instanceMaskBase, pixelFootprint, pixel, id.z, lane, active);
+
+    if (!active) {
+        return;
+    }
 
     // Dither before the 8-bit store to break gradient banding (sky, distance fog) into blue-ish high-frequency noise:
     // +-0.5 LSB from the integer R2 dither, so BOTH backends add the identical pattern and cross-backend parity holds.

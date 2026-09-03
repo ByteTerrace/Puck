@@ -212,7 +212,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
     }
     private string DescribeBudget() {
         var render = ((renderProbe?.Node is { } node)
-            ? $"program {node.LiveProgramWords}/{node.ProgramWordCapacity} word(s), {node.LiveProgramInstances} instance(s), stepScale {node.LiveProgramStepScale.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)}{((node.LiveProgramStepScale is > 0f and < 1f) ? $" (march ~{(1f / node.LiveProgramStepScale).ToString(format: "0.#", provider: CultureInfo.InvariantCulture)}x baseline)" : string.Empty)}"
+            ? $"program {node.LiveProgramWords}/{node.ProgramWordCapacity} word(s), {node.LiveProgramInstances} instance(s), stepScale {node.LiveProgramStepScale.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)}{((node.LiveProgramStepScale is > 0f and < 1f) ? $" (march ~{(1f / node.LiveProgramStepScale).ToString(format: "0.#", provider: CultureInfo.InvariantCulture)}x baseline)" : string.Empty)}{((node.LiveProgramStepScaleBinder is { } binder) ? $" bound by instance {binder.InstanceIndex} ({binder.Shape} x{binder.Factor.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)} at instruction {binder.InstructionIndex}, unscoped)" : string.Empty)}"
             : "renderer not built yet"
         );
         var farDistance = WorldRenderFarDistance.Resolve(defaults: server.Definition.Render);

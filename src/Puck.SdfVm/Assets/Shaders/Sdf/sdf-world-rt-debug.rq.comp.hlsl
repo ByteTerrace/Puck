@@ -49,9 +49,12 @@ static const float ShadowMaxDistance = 24.0;
 static const float ShadowBias = 0.02;
 static const float ShadowSharpness = 9.0;
 static const float ShadowAmbient = 0.30;    // residual light in shadow (ambient term keeps shadows from going black)
-// The soft-shadow march's per-step advance clamp — MIRRORS sdf-world.hlsli's ShadowStepMin / ShadowStepMax (same values,
-// same semantics: the floor keeps a near-tangent march from stalling, the ceiling keeps the penumbra from
-// over-marching a grazing silhouette). Declared locally because this ray-query kernel cannot include sdf-world.hlsli.
+// The soft-shadow march's per-step advance clamp for THIS probe's closest-approach penumbra estimator: the floor keeps a
+// near-tangent march from stalling, the ceiling keeps the penumbra from over-marching a grazing silhouette. The floor
+// mirrors sdf-world.hlsli's ShadowStepMin; the ceiling is this kernel's own — the world path's exact march dropped its
+// ceiling on 2026-09-03 (its estimator is binary and advances by the clearance itself), while this deliberate parity
+// probe keeps the parabola it was calibrated with. Declared locally because this ray-query kernel cannot include
+// sdf-world.hlsli.
 static const float ShadowStepMin = 0.02;
 static const float ShadowStepMax = 0.6;
 // The gradient probe's finite-difference offset.

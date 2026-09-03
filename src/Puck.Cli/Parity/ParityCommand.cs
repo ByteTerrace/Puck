@@ -114,6 +114,8 @@ internal static class ParityCommand {
         script.AppendLine(value: $"world.sdf.load {Path.Combine(path1: repositoryRoot, path2: SdfDocumentPath).Replace(newChar: '\\', oldChar: '/')}");
         script.AppendLine(value: "world.wait 1050");
         script.AppendLine(value: "wire.errors");
+        // quit ends the leg the moment the script has run instead of idling out the exit budget below.
+        script.AppendLine(value: "quit");
 
         var remaining = CliProcess.RemainingBudget(budget: SuiteBudget, clock: suiteClock);
 
@@ -134,10 +136,11 @@ internal static class ParityCommand {
                     artifact,
                     "--world", Path.Combine(path1: repositoryRoot, path2: WorldPath),
                     "--backend", backend,
-                    // Generous relative to the ~4.5 simulated seconds of scheduled captures: a cold boot spends
-                    // several seconds compiling shaders before the first tick, and the closing wire.errors must
-                    // still land inside the window.
-                    "--exit-after-seconds", "40",
+                    // A SAFETY NET, not the leg length: the script closes with quit, so a healthy leg ends as soon as
+                    // its 1050-tick wait releases. The net only has to outlast a slow machine — an offscreen leg on the
+                    // RTX 2060 desktop paces one produced frame per tick and needs ~40 s for the wait alone, so 40 s
+                    // (the old value) cut legs off before wire.errors on every other run there.
+                    "--exit-after-seconds", "150",
                     "--state-dir", Path.Combine(path1: runDirectory, path2: $"state-{backend}"),
                     "--capture-dir", captureDirectory,
                 ],

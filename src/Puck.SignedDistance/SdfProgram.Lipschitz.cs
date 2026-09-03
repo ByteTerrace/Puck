@@ -38,6 +38,78 @@ public sealed partial class SdfProgram {
     //   * A chamfer PopField is this same composition, not a program-wide multiply. For one pop against an accumulator
     //     dominating both operands the recurrence gives max(L, L, 2L/√2) = √2·L; it additionally counts repeated pops,
     //     which MaxFieldScopeDepth = 1 forbids nesting but not sequencing.
+    // The depth-0 chain with the largest factor: the chain that binds the global step scale below 1 (a scoped chain's
+    // factor is clamped to 1 at its pop, see AnalyzeLipschitz). Null when no unscoped chain carries a factor above 1,
+    // which is every isometric program. A diagnostic, never an input to the packed words.
+    private static SdfStepScaleBinder? AnalyzeStepScaleBinder(SdfInstruction[] instructions, SdfInstanceRange[] instances) {
+        var chainFactors = AnalyzeChainLipschitz(
+            chainHasShape: out _,
+            instructions: instructions
+        );
+        SdfStepScaleBinder? best = null;
+        var chainIndex = 0;
+        var depth = 0;
+
+        for (var index = 0; (index < instructions.Length); index++) {
+            var instruction = instructions[index];
+
+            if (
+                (instruction.Op == SdfOp.ResetPoint) &&
+                (index != 0)
+            ) {
+                chainIndex++;
+            }
+
+            switch (instruction.Op) {
+                case SdfOp.PushField: {
+                        depth++;
+                        break;
+                    }
+                case SdfOp.PopField: {
+                        depth--;
+                        break;
+                    }
+                case SdfOp.ShapeBlend: {
+                        var factor = chainFactors[chainIndex];
+
+                        if (
+                            (depth == 0) &&
+                            (factor > 1.0f) &&
+                            ((best is not { } current) || (factor > current.Factor))
+                        ) {
+                            best = new SdfStepScaleBinder(
+                                Factor: factor,
+                                InstanceIndex: InstanceOwning(
+                                    instances: instances,
+                                    instructionIndex: index
+                                ),
+                                InstructionIndex: index,
+                                Shape: ((SdfShapeType)instruction.Shape)
+                            );
+                        }
+
+                        break;
+                    }
+                default: {
+                        break;
+                    }
+            }
+        }
+
+        return best;
+    }
+    private static int InstanceOwning(SdfInstanceRange[] instances, int instructionIndex) {
+        for (var index = 0; (index < instances.Length); index++) {
+            if (
+                (instructionIndex >= instances[index].First) &&
+                (instructionIndex < instances[index].End)
+            ) {
+                return index;
+            }
+        }
+
+        return -1;
+    }
     private static float AnalyzeLipschitz(SdfInstruction[] instructions) {
         var chainFactors = AnalyzeChainLipschitz(
             chainHasShape: out var chainHasShape,

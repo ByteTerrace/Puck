@@ -85,7 +85,15 @@
 // shades, so only it pays the static array's per-invocation footprint (the beam/cull/rt kernels never see it).
 #ifdef SDF_SCREEN_SOURCES
 #define SDF_SHADOW_MASK_WORDS 32u  // <= 1024 addressable instances (room 284, town, carve ladders fit; larger => flat fallback)
+// GROUPSHARED under SDF_GROUP_SHADOW_GATHER (the Stage 1 kernels): the per-tile gather (sdf-world.hlsli's
+// sdfShadowGatherGroup) fills ONE mask per 8x8 workgroup that every lane's march reads, so the 32 words leave the
+// register file. Other kernels keep the per-thread static (nothing in them builds a mask).
+#ifdef SDF_GROUP_SHADOW_GATHER
+#define SDF_GROUP_SHADOW_LANES 64u // the Stage 1 workgroup: [numthreads(8, 8, 1)]
+groupshared uint sdfShadowMaskWords[SDF_SHADOW_MASK_WORDS];
+#else
 static uint sdfShadowMaskWords[SDF_SHADOW_MASK_WORDS];
+#endif
 static bool sdfShadowMaskActive = false;
 #endif
 

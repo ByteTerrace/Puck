@@ -25,6 +25,9 @@ namespace Puck.SdfVm;
 /// the engine provisions a brick pool.</param>
 /// <param name="BrickUpload">The host-baked brick uploader (<c>sdf-brick-upload.comp</c>) — a staging-to-pool copy, dispatched
 /// only when the engine provisions a brick pool.</param>
+/// <param name="FrameUpload">The per-frame table uploader (<c>sdf-frame-upload.comp</c>) — copies this frame's host-written
+/// viewport rows, dynamic transforms, and frame instance grid into their device-local twins at the top of every frame,
+/// so no march kernel reads a host-visible buffer per sample.</param>
 public readonly record struct SdfWorldKernels(
     ReadOnlyMemory<byte> Sky,
     ReadOnlyMemory<byte> Beam,
@@ -35,7 +38,8 @@ public readonly record struct SdfWorldKernels(
     ReadOnlyMemory<byte> ViewsFolds,
     ReadOnlyMemory<byte> Composite,
     ReadOnlyMemory<byte> BrickBake,
-    ReadOnlyMemory<byte> BrickUpload
+    ReadOnlyMemory<byte> BrickUpload,
+    ReadOnlyMemory<byte> FrameUpload
 ) {
     /// <summary>The standard deploy location (<c>Assets/Shaders/Sdf</c> next to the application, where the
     /// <c>Puck.SdfVm</c> reference copies its committed bytecode) — <see cref="Load(string)"/>'s default directory,
@@ -62,6 +66,7 @@ public readonly record struct SdfWorldKernels(
             BrickUpload: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-brick-upload.comp{bytecodeExtension}")),
             Composite: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-world-composite.comp{bytecodeExtension}")),
             CullArgs: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-cull-args.comp{bytecodeExtension}")),
+            FrameUpload: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-frame-upload.comp{bytecodeExtension}")),
             InstanceCull: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-instance-cull.comp{bytecodeExtension}")),
             Sky: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-sky.comp{bytecodeExtension}")),
             Views: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-world-views.comp{bytecodeExtension}")),

@@ -71,10 +71,11 @@ public static class WorldPlacementStamper {
     // Emits the creation's shapes, EACH its own segment carrying the FULL placement prefix — the shader splits the
     // stream at each ResetPoint and a segment's transforms are local to it, so a shared prefix segment would be dead.
     // Uniform placement scale commutes with the per-shape rotations (shear-free).
-    private static void EmitPlacedShapes(SdfProgramBuilder builder, CreationDocument creation, int[] paletteIds, WorldPlacement placement, Vector3 placementOrigin, Quaternion placementRotation, Vector3? reflectionNormal) {
+    private static void EmitPlacedShapes(SdfProgramBuilder builder, CreationDocument creation, int[] paletteIds, WorldPlacement placement, Vector3 placementOrigin, Quaternion placementRotation, Vector3? reflectionNormal, bool inScope) {
         CreationStampEmitter.Emit(
             builder: builder,
             document: creation,
+            inScope: inScope,
             transform: new CreationStampTransform(
                 Origin: placementOrigin,
                 Rotation: placementRotation,
@@ -190,6 +191,7 @@ public static class WorldPlacementStamper {
                 EmitPlacedShapes(
                     builder: builder,
                     creation: creation,
+                    inScope: scoped,
                     paletteIds: paletteIds,
                     placement: placement,
                     placementOrigin: instance.Origin,
@@ -331,13 +333,16 @@ public static class WorldPlacementStamper {
                 chain = chain.SymmetryPlane(normal: Vector3.UnitX);
             }
 
+            // The per-shape field scope an eccentric primitive opens around itself (CreationStampEmitter.EmitShapeChain),
+            // reserved for every shape since any shape may be authored eccentric.
             _ = SdfSolidGeometry.AppendPrimitive(
                 chain: chain
                     .Translate(offset: Vector3.Zero)
-                    .Rotate(rotation: Quaternion.Identity),
+                    .Rotate(rotation: Quaternion.Identity)
+                    .PushField(compose: SdfBlendOp.Union),
                 type: SdfSolidPrimitive.Sphere,
                 material: material
-            );
+            ).PopField();
             _ = builder.EndInstance();
         }
     }
