@@ -501,11 +501,12 @@
       "kind": "Motion",
       "operations": [
         "ResolveYawAttitudeAndPlanarFrame",
+        "ResolveHold",
         "ComputePlanarTargetVelocity",
         "ShapePlanarVelocity",
         "SnapYawToPlanarIntent",
         "RunActionTriggers",
-        "ApplyVerticalGravity",
+        "ApplyHold",
         "IntegratePlanarAndVerticalVelocity",
         "CommitPose"
       ]
@@ -516,9 +517,10 @@
       "kind": "Motion",
       "operations": [
         "IntegrateLocalAttitude",
+        "ResolveHold",
         "ComputeLocalTargetVelocity",
         "RunActionTriggers",
-        "ApplyVerticalDecay",
+        "ApplyHold",
         "IntegrateScratchVelocity",
         "CommitPose"
       ]
@@ -572,11 +574,21 @@
         "motion": {
           "moveSpeed": 4,
           "turnSpeed": 2.5,
-          "riseGravity": 14,
-          "fallGravity": 23,
-          "maxFallSpeed": 20,
           "sprintMultiplier": 1,
-          "response": []
+          "response": [],
+          "holds": [
+            {
+              "name": "air",
+              "bond": "Free",
+              "hold": "Lift",
+              "lift": 1,
+              "gravity": {
+                "rise": 14,
+                "fall": 23,
+                "terminal": 20
+              }
+            }
+          ]
         },
         "producers": {
           "wander": {
@@ -633,11 +645,21 @@
         "motion": {
           "moveSpeed": 4,
           "turnSpeed": 2.5,
-          "riseGravity": 14,
-          "fallGravity": 23,
-          "maxFallSpeed": 20,
           "sprintMultiplier": 1,
-          "response": []
+          "response": [],
+          "holds": [
+            {
+              "name": "air",
+              "bond": "Free",
+              "hold": "Lift",
+              "lift": 1,
+              "gravity": {
+                "rise": 14,
+                "fall": 23,
+                "terminal": 20
+              }
+            }
+          ]
         },
         "producers": {
           "wander": {
@@ -694,9 +716,6 @@
         "motion": {
           "moveSpeed": 4,
           "turnSpeed": 2.5,
-          "riseGravity": 14,
-          "fallGravity": 23,
-          "maxFallSpeed": 20,
           "sprintMultiplier": 1,
           "response": [
             {
@@ -719,6 +738,33 @@
             {
               "engageRate": 30,
               "releaseRate": 17
+            }
+          ],
+          "holds": [
+            {
+              "name": "ground",
+              "bond": "Surface",
+              "cone": [
+                0,
+                60
+              ],
+              "hold": "Gravity",
+              "reach": 1.2,
+              "gravity": {
+                "rise": 14,
+                "fall": 23,
+                "terminal": 20
+              }
+            },
+            {
+              "name": "air",
+              "bond": "Free",
+              "hold": "Gravity",
+              "gravity": {
+                "rise": 14,
+                "fall": 23,
+                "terminal": 20
+              }
             }
           ]
         },
@@ -848,9 +894,6 @@
         "motion": {
           "moveSpeed": 4,
           "turnSpeed": 2.5,
-          "riseGravity": 14,
-          "fallGravity": 23,
-          "maxFallSpeed": 20,
           "sprintMultiplier": 1,
           "response": [
             {
@@ -873,6 +916,33 @@
             {
               "engageRate": 30,
               "releaseRate": 17
+            }
+          ],
+          "holds": [
+            {
+              "name": "ground",
+              "bond": "Surface",
+              "cone": [
+                0,
+                60
+              ],
+              "hold": "Gravity",
+              "reach": 1.2,
+              "gravity": {
+                "rise": 14,
+                "fall": 23,
+                "terminal": 20
+              }
+            },
+            {
+              "name": "air",
+              "bond": "Free",
+              "hold": "Gravity",
+              "gravity": {
+                "rise": 14,
+                "fall": 23,
+                "terminal": 20
+              }
             }
           ]
         },
@@ -1016,9 +1086,6 @@
         "motion": {
           "moveSpeed": 4,
           "turnSpeed": 2.5,
-          "riseGravity": 14,
-          "fallGravity": 23,
-          "maxFallSpeed": 20,
           "sprintMultiplier": 1,
           "response": [
             {
@@ -1041,6 +1108,33 @@
             {
               "engageRate": 30,
               "releaseRate": 17
+            }
+          ],
+          "holds": [
+            {
+              "name": "ground",
+              "bond": "Surface",
+              "cone": [
+                0,
+                60
+              ],
+              "hold": "Gravity",
+              "reach": 1.2,
+              "gravity": {
+                "rise": 14,
+                "fall": 23,
+                "terminal": 20
+              }
+            },
+            {
+              "name": "air",
+              "bond": "Free",
+              "hold": "Gravity",
+              "gravity": {
+                "rise": 14,
+                "fall": 23,
+                "terminal": 20
+              }
             }
           ]
         },

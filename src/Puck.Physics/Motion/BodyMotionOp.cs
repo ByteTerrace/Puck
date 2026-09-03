@@ -25,18 +25,12 @@ public enum BodyMotionOp : byte {
     ResolveHold,
     ShapeDriveVelocity,
     RunActionTriggers,
-    ApplyVerticalGravity,
-    ApplyVerticalDecay,
 
-    /// <summary>Applies the current hold's vertical law: gravity for a hold gravity keeps, a rate-limited inward
-    /// standoff for a grip, a fraction of gravity cancelled for a lift, nothing for a hold that holds by itself.
-    /// Replaces <see cref="ApplyVerticalGravity"/> in a program authoring holds; a program selecting both is
-    /// refused.</summary>
+    /// <summary>Applies the current hold's vertical law: the row's own arc for a hold gravity keeps, a rate-limited
+    /// inward standoff for a grip, a fraction of that arc cancelled for a lift, nothing for a hold that holds by
+    /// itself — plus the row's own thrust, in every bond, while MoveUp is non-zero. A kit authoring no holds has no
+    /// vertical channel operation at all, so a Motion-kind program requires this op and the holds facet it reads.</summary>
     ApplyHold,
-    /// <summary>While MoveUp is non-zero, drives vertical velocity directly at MoveSpeed and suspends the ballistic
-    /// channel. Releasing MoveUp returns vertical ownership to gravity, so authored jump actions and ordinary ground
-    /// contact remain coherent in the same program.</summary>
-    ApplyVerticalDrive,
     IntegratePlanarAndVerticalVelocity,
     IntegrateScratchVelocity,
     CommitPose,

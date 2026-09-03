@@ -708,9 +708,33 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
     )
         : string.Empty
     );
+    // The ordered hold list's own kind/gravity/thrust per row — the vertical channel's whole authoring surface now
+    // that no kit-level gravity trio exists to echo instead.
+    private static string DescribeHolds(WorldMotion motion) {
+        if (motion.Holds is not { Count: > 0 } holds) {
+            return "holds=none";
+        }
+
+        var builder = new StringBuilder(value: "holds=(");
+
+        for (var index = 0; (index < holds.Count); index++) {
+            var hold = holds[index];
+
+            _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"{((index == 0) ? "" : ",")}{hold.Name}:{hold.Hold}");
+
+            if (hold.Gravity is { } gravity) {
+                _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"(rise={gravity.Rise:0.###} fall={gravity.Fall:0.###} terminal={gravity.Terminal:0.###})");
+            }
+            if (hold.Thrust > 0f) {
+                _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"[thrust={hold.Thrust:0.###}]");
+            }
+        }
+
+        return builder.Append(value: ')').ToString();
+    }
     private static string DescribeMotion(WorldMotion motion) => string.Create(
         provider: CultureInfo.InvariantCulture,
-        handler: $"moveSpeed={motion.MoveSpeed:0.###} turnSpeed={motion.TurnSpeed:0.###} riseGravity={motion.RiseGravity:0.###} fallGravity={motion.FallGravity:0.###} maxFallSpeed={motion.MaxFallSpeed:0.###} {DescribeShaping(motion: motion)}{DescribeDrive(motion: motion)}"
+        handler: $"moveSpeed={motion.MoveSpeed:0.###} turnSpeed={motion.TurnSpeed:0.###} {DescribeHolds(motion: motion)} {DescribeShaping(motion: motion)}{DescribeDrive(motion: motion)}"
     );
     private CommandResult HandleAssign(CommandContext context, WireArgs args) {
         if (args.Count < 2) {

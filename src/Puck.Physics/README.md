@@ -31,9 +31,12 @@ already compiled into the tuning's velocity-shaping facet — never both. A kit
 carrying a `FixedBodyDrive` shapes it anisotropically instead, through
 `ResolveDriveFrame`/`ShapeDriveVelocity`, which decompose the carried velocity
 into body-frame longitudinal/lateral/residual lanes and converge each at its own
-rate; the forward target, the steering rate, and the gravity trio those
-operations read are the tuning's own `MoveSpeed`/`TurnSpeed`/gravity fields, not
-a second spelling.
+rate; the forward target and the steering rate those operations read are the
+tuning's own `MoveSpeed`/`TurnSpeed`, not a second spelling. The vertical
+channel is a hold row's own concern (`FixedBodyHold.Gravity`/`.Thrust`,
+`ResolveHold`/`ApplyHold` in `BodyHold.cs`) — every Motion-kind kit authors at
+least one, so a drive kit's own gravity and MoveUp thrust ride its hold list
+exactly as any other kit's do.
 
 The translation from an authored world row into these shapes lives with the
 authoring vocabulary, in `Puck.World.Schema` (`BodyMotionProgramFactory`,

@@ -43,23 +43,24 @@ public static partial class WorldDefinitionValidator {
             }
 
             facets |= op switch {
-                BodyMotionOp.ApplyVerticalGravity => MotionTuningFacet.GravityArc,
-                BodyMotionOp.ApplyVerticalDecay => MotionTuningFacet.GravityBleed,
                 BodyMotionOp.ShapePlanarVelocity => MotionTuningFacet.PlanarResponse,
                 BodyMotionOp.ComputePlanarTargetVelocity => MotionTuningFacet.Sprint,
                 BodyMotionOp.ResolveYawAttitudeAndPlanarFrame or BodyMotionOp.SnapYawToPlanarIntent => MotionTuningFacet.WorldFrame,
                 BodyMotionOp.ResolveDriveFrame or BodyMotionOp.ShapeDriveVelocity => MotionTuningFacet.Drive,
-                BodyMotionOp.ResolveHold or BodyMotionOp.ApplyHold => (MotionTuningFacet.GravityArc | MotionTuningFacet.Holds),
+                BodyMotionOp.ResolveHold or BodyMotionOp.ApplyHold => MotionTuningFacet.Holds,
                 _ => MotionTuningFacet.None,
             };
         }
 
         return facets;
     }
-    // What a kit's motion row supplies. Its own fields supply every facet unconditionally; Drive is the one an
-    // OPTIONAL row carries, so a kit authoring none refuses a drive program by facet name.
-    private static MotionTuningFacet SuppliedMotionTuningFacets(WorldMotion motion) => (MotionTuningFacet.Speed | MotionTuningFacet.GravityArc | MotionTuningFacet.GravityBleed
-        | MotionTuningFacet.PlanarResponse | MotionTuningFacet.Sprint | MotionTuningFacet.WorldFrame | MotionTuningFacet.Holds
+    // What a kit's motion row supplies. Its own fields supply every facet unconditionally except the two OPTIONAL
+    // rows: Holds and Drive, each refusing its own program by facet name when the kit authors none.
+    private static MotionTuningFacet SuppliedMotionTuningFacets(WorldMotion motion) => (MotionTuningFacet.Speed
+        | MotionTuningFacet.PlanarResponse | MotionTuningFacet.Sprint | MotionTuningFacet.WorldFrame
+        | ((motion.Holds is { Count: > 0 })
+        ? MotionTuningFacet.Holds
+        : MotionTuningFacet.None)
         | ((motion.Drive is not null)
         ? MotionTuningFacet.Drive
         : MotionTuningFacet.None));
@@ -226,7 +227,7 @@ public static partial class WorldDefinitionValidator {
 
         return true;
     }
-    // A kit's full locomotion tuning: speeds, gravity, and the velocity-response table every body integrates under.
+    // A kit's full locomotion tuning: speeds, holds, and the velocity-response table every body integrates under.
     private static void ValidateMotion(WorldMotion tuning, string path, ISet<string> channelNames, ISet<string> dynamicsNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, bool shapesPlanarVelocity, int simulationRateHz, List<string> errors) {
         RequirePositive(
             value: tuning.MoveSpeed,
@@ -236,21 +237,6 @@ public static partial class WorldDefinitionValidator {
         RequirePositive(
             value: tuning.TurnSpeed,
             name: $"{path}.turnSpeed",
-            errors: errors
-        );
-        RequirePositive(
-            value: tuning.RiseGravity,
-            name: $"{path}.riseGravity",
-            errors: errors
-        );
-        RequirePositive(
-            value: tuning.FallGravity,
-            name: $"{path}.fallGravity",
-            errors: errors
-        );
-        RequirePositive(
-            value: tuning.MaxFallSpeed,
-            name: $"{path}.maxFallSpeed",
             errors: errors
         );
         RequirePositive(
@@ -313,8 +299,9 @@ public static partial class WorldDefinitionValidator {
         }
     }
     // The ordered hold list: a unique name per row, a cone inside [0, 180] with min < max for a surface row (and no
-    // cone at all for a free one), the kind's own operands, and every named channel/state slot resolvable. Absent (a
-    // kit authoring none) validates nothing: the vertical channel is ApplyVerticalGravity's alone there.
+    // cone at all for a free one), the kind's own operands, and every named channel/state slot resolvable. Absence
+    // itself is checked by the caller (ValidateMotionRow) against the compiled program's kind, since a Motion-kind
+    // kit must always author at least one row now that the hold list is the only spelling of a vertical channel.
     private static void ValidateHolds(IReadOnlyList<WorldHold>? holds, string path, ISet<string> channelNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, List<string> errors) {
         if (holds is not { Count: > 0 }) {
             return;
@@ -398,7 +385,7 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{rowPath}.bond 'Medium' requires a medium lattice row (state.world[].lattice.medium) — a medium hold implies a medium to stand in.");
                 }
                 if (hold.Medium is not { } medium) {
-                    errors.Add(item: $"{rowPath}.medium is required for a medium hold — buoyancy, the terminal speeds, the settle rate, the float depth and the thrust fraction are its whole law.");
+                    errors.Add(item: $"{rowPath}.medium is required for a medium hold — buoyancy, the terminal speeds, the settle rate and the float depth are its whole law.");
                 } else {
                     RequirePositive(
                         errors: errors,
@@ -420,11 +407,6 @@ public static partial class WorldDefinitionValidator {
                         name: $"{rowPath}.medium.floatDepth",
                         value: medium.FloatDepth
                     );
-                    RequirePositive(
-                        errors: errors,
-                        name: $"{rowPath}.medium.thrustFraction",
-                        value: medium.ThrustFraction
-                    );
                     RequireFinite(
                         errors: errors,
                         name: $"{rowPath}.medium.buoyancy",
@@ -434,6 +416,38 @@ public static partial class WorldDefinitionValidator {
             } else if (hold.Medium is not null) {
                 errors.Add(item: $"{rowPath}.medium is refused for a {hold.Bond} hold — only a medium hold has a medium to be displaced by.");
             }
+            if (
+                (hold.Hold is BodyHoldKind.Gravity or BodyHoldKind.Lift)
+            ) {
+                if (hold.Gravity is not { } gravity) {
+                    errors.Add(item: $"{rowPath}.gravity is required for a {hold.Hold} hold — the rise, fall and terminal speed are its whole vertical arc.");
+                } else {
+                    RequirePositive(
+                        errors: errors,
+                        name: $"{rowPath}.gravity.rise",
+                        value: gravity.Rise
+                    );
+                    RequirePositive(
+                        errors: errors,
+                        name: $"{rowPath}.gravity.fall",
+                        value: gravity.Fall
+                    );
+                    RequirePositive(
+                        errors: errors,
+                        name: $"{rowPath}.gravity.terminal",
+                        value: gravity.Terminal
+                    );
+                }
+            } else if (hold.Gravity is not null) {
+                errors.Add(item: $"{rowPath}.gravity is refused for a {hold.Hold} hold on a {hold.Bond} bond — only a Gravity or Lift hold falls under an arc.");
+            }
+            RequireRange(
+                errors: errors,
+                max: 1f,
+                min: 0f,
+                name: $"{rowPath}.thrust",
+                value: hold.Thrust
+            );
             if (hold.Hold == BodyHoldKind.Grip) {
                 RequirePositive(
                     errors: errors,
@@ -524,6 +538,15 @@ public static partial class WorldDefinitionValidator {
         )
         ) {
             errors.Add(item: $"{path} {reason}");
+        }
+        // The hold list is the only spelling of a vertical channel now, so a Motion-kind program requires one
+        // regardless of which facets its own selected operations happen to read — a kit with no vertical law of its
+        // own still authors a single row of kind None rather than omitting the list.
+        if (
+            (program is { Kind: BodyProgramKind.Motion }) &&
+            (motion.Holds is not { Count: > 0 })
+        ) {
+            errors.Add(item: $"{path}.holds is required for a Motion-kind body motion program ('{program.Name}') — the hold list is the only spelling of a vertical channel.");
         }
 
         ValidateMotion(
@@ -780,11 +803,11 @@ public static partial class WorldDefinitionValidator {
             RequirePositiveScalar(errors: errors, name: "altitudeGain", parameters: parameters, path: producerPath);
             var directVertical = motionProgram is not null && (
                 motionProgram.Contains(operation: BodyMotionOp.ComputeLocalTargetVelocity) ||
-                motionProgram.Contains(operation: BodyMotionOp.ApplyVerticalDrive)
+                (motionProgram.Contains(operation: BodyMotionOp.ApplyHold) && (kit.Motion.Holds?.Any(predicate: hold => hold.Thrust > 0f) ?? false))
             );
             var mediumVertical = domain.Kind == WorldNavigationKind.Medium && motionProgram?.Contains(operation: BodyMotionOp.ApplyHold) == true && (kit.Motion.Holds?.Any(predicate: hold => hold.Bond == BodyHoldBond.Medium) ?? false);
             if (!directVertical && !mediumVertical) {
-                errors.Add(item: $"{producerPath} targets {domain.Kind.ToString().ToLowerInvariant()} navigation domain '{domain.Name}', but kit '{kit.Name}' bodyMotionProgram has no compatible vertical consumer (ComputeLocalTargetVelocity, ApplyVerticalDrive, or a medium ApplyHold).");
+                errors.Add(item: $"{producerPath} targets {domain.Kind.ToString().ToLowerInvariant()} navigation domain '{domain.Name}', but kit '{kit.Name}' bodyMotionProgram has no compatible vertical consumer (ComputeLocalTargetVelocity, an ApplyHold row's own thrust, or a medium ApplyHold).");
             }
             if (!definition.Channels.Any(predicate: channel => channel.Role == ChannelRole.MoveUp)) {
                 errors.Add(item: $"{producerPath} targets {domain.Kind.ToString().ToLowerInvariant()} navigation domain '{domain.Name}', but the world declares no MoveUp channel.");
@@ -981,14 +1004,6 @@ public static partial class WorldDefinitionValidator {
         /// <summary>MoveSpeed/TurnSpeed — read unconditionally by every Motion-kind body motion program.</summary>
         Speed = 1,
 
-        /// <summary>RiseGravity/FallGravity/MaxFallSpeed, the full gravity arc (<see cref="BodyMotionOp.ApplyVerticalGravity"/>) —
-        /// the same op <see cref="CompiledBodyMotionProgram.OwnsVerticalContactState"/> keys off, at runtime, to decide
-        /// whether contact resolution may write back into a body's vertical channel.</summary>
-        GravityArc = 2,
-
-        /// <summary>RiseGravity alone, read as a symmetric bleed rate (<see cref="BodyMotionOp.ApplyVerticalDecay"/>).</summary>
-        GravityBleed = 4,
-
         /// <summary>The response table OR the dynamics follower (<see cref="BodyMotionOp.ShapePlanarVelocity"/>) —
         /// whichever the exactly-one authoring rule admitted.</summary>
         PlanarResponse = 8,
@@ -1005,9 +1020,10 @@ public static partial class WorldDefinitionValidator {
         /// <see cref="BodyMotionOp.ShapeDriveVelocity"/>). Supplied only by a kit that authors one.</summary>
         Drive = 64,
 
-        /// <summary>The ordered hold list (<see cref="BodyMotionOp.ResolveHold"/>/
-        /// <see cref="BodyMotionOp.ApplyHold"/>), plus the gravity arc a hold's own gravity and lift laws
-        /// integrate.</summary>
+        /// <summary>The ordered hold list (<see cref="BodyMotionOp.ResolveHold"/>/<see cref="BodyMotionOp.ApplyHold"/>)
+        /// — the only spelling of a vertical channel, so every Motion-kind kit authors at least one row (see
+        /// <see cref="ValidateMotionRow"/>'s own unconditional check, which does not route through this facet
+        /// mechanism since the requirement holds whether or not a program even selects the two ops).</summary>
         Holds = 512,
     }
 }

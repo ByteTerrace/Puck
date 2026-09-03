@@ -9,20 +9,14 @@ namespace Puck.World;
 /// each tick. These float values are compiled once into <see cref="FixedMotionTuning"/> before simulation and never
 /// become runtime simulation state.
 /// </summary>
-/// <remarks>Contact-solved locomotion: vertical velocity integrates gravity and is resolved against the world
-/// contact field, planar velocity is response-shaped toward the commanded target, and sprint/frame/facing read as
-/// described below — the ops family <c>WorldBody</c>'s grounded operations (<c>ResolveYawAttitudeAndPlanarFrame</c>,
-/// <c>ComputePlanarTargetVelocity</c>, <c>ShapePlanarVelocity</c>, <c>SnapYawToPlanarIntent</c>,
-/// <c>ApplyVerticalGravity</c>) read. The world's <c>free</c> body motion program (full 6DOF, no ground pin) also
-/// advances under this row: its ops read only <see cref="MoveSpeed"/>/<see cref="TurnSpeed"/>/<see cref="RiseGravity"/>
-/// (as a symmetric bleed rate, via <c>ApplyVerticalDecay</c>) — a strict subset — so the fields a program's ops
-/// don't touch stay authored-but-inert for that kit.</remarks>
+/// <remarks>Contact-solved locomotion: vertical velocity is the current <see cref="WorldHold"/> row's own arc,
+/// integrated by <c>ApplyHold</c> and resolved against the world contact field; planar velocity is
+/// response-shaped toward the commanded target; sprint/frame/facing read as described below. Gravity, lift, and
+/// MoveUp thrust are <see cref="Holds"/> facets, not this row's own — every Motion-kind kit authors at least one
+/// hold row, so a kit with no vertical law of its own still authors a row of kind <c>None</c>.</remarks>
 /// <param name="MoveSpeed">Locomotion speed in world units per second — the profileless fallback a stand-in advances on
 /// (a seated player reads its live profile's speed instead, so <c>identity.motion</c> stays real-time).</param>
 /// <param name="TurnSpeed">Turn speed in radians per second (the profileless fallback counterpart to <paramref name="MoveSpeed"/>).</param>
-/// <param name="RiseGravity">The downward acceleration while rising (u/s²) — the floaty top of the arc.</param>
-/// <param name="FallGravity">The downward acceleration while falling (u/s²) — the snappy descent (heavier than the rise).</param>
-/// <param name="MaxFallSpeed">The terminal fall speed the descent is clamped to (u/s).</param>
 /// <param name="SprintMultiplier">The held-sprint speed multiplier, applied while
 /// <paramref name="SprintChannel"/> reads held; <c>1</c> is a no-op.</param>
 /// <param name="Response">The velocity-response table (see <see cref="MotionResponse"/>) planar velocity converges
@@ -57,8 +51,9 @@ namespace Puck.World;
 /// <c>Min == Max</c> pins the effective speed outright; a narrower-than-wide-open range still admits a bounded
 /// profile override. See <see cref="MotionScalarEnvelope"/>.</param>
 /// <param name="Holds">The ordered list of what may hold this body — see <see cref="WorldHold"/> — read by the
-/// <c>ResolveHold</c>/<c>ApplyHold</c> operations, or <see langword="null"/> (the default) for a kit whose
-/// vertical channel is <c>ApplyVerticalGravity</c>'s alone.</param>
+/// <c>ResolveHold</c>/<c>ApplyHold</c> operations. A Motion-kind kit authoring none refuses validation by name: the
+/// hold list is the only spelling of a vertical channel now, so a kit with no vertical law of its own still authors
+/// one row of kind <see cref="BodyHoldKind.None"/>.</param>
 /// <param name="Drive">The anisotropic drive row — see <see cref="WorldDrive"/> — read by the
 /// <c>ResolveDriveFrame</c>/<c>ShapeDriveVelocity</c> operations, or <see langword="null"/> (the default) for a
 /// kit whose planar velocity is the isotropic shaping's alone. A program selecting either drive operation
@@ -66,9 +61,6 @@ namespace Puck.World;
 public sealed record WorldMotion(
     float MoveSpeed,
     float TurnSpeed,
-    float RiseGravity,
-    float FallGravity,
-    float MaxFallSpeed,
     float SprintMultiplier,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<MotionResponse>? Response = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Dynamics = null,
@@ -158,12 +150,11 @@ public sealed record WorldDriveDrift(
 /// <remarks>The forward speed full throttle converges on is the kit's own
 /// <see cref="WorldMotion.MoveSpeed"/> (bounded by its
 /// <see cref="WorldMotion.MoveSpeedEnvelope"/>, scaled by its
-/// <see cref="WorldMotion.SprintMultiplier"/> while the sprint channel reads held), the steering rate
-/// at full authority is its <see cref="WorldMotion.TurnSpeed"/>, and the gravity trio is the motion row's own
-/// — one name each, never a second spelling. One row serves the ground, hover, and air variants: a contact-pinned
-/// variant pairs the drive operations with a program keeping <c>ApplyVerticalGravity</c>, a flying variant with
-/// <c>ApplyVerticalDecay</c> and a positive <paramref name="PitchRate"/> so climb emerges from the pitched
-/// facing.</remarks>
+/// <see cref="WorldMotion.SprintMultiplier"/> while the sprint channel reads held), and the steering rate
+/// at full authority is its <see cref="WorldMotion.TurnSpeed"/> — one name each, never a second spelling. The
+/// vertical channel is the kit's own hold row, as for any other kit: one row serves the ground and hover variants
+/// (a Surface Gravity row), the flying variant a Free row with a positive <paramref name="PitchRate"/> so climb
+/// emerges from the pitched facing.</remarks>
 /// <param name="Accel">The longitudinal convergence rate (u/s²) while throttle commands more speed.</param>
 /// <param name="Brake">The longitudinal convergence rate (u/s²) while back-throttle opposes forward travel.</param>
 /// <param name="Coast">The longitudinal convergence rate (u/s²) toward rest with throttle centered, and the decay
@@ -194,7 +185,7 @@ public sealed record WorldDrive(
 /// <summary>The document intake for the engine's compiled motion tunings — the one place an authored
 /// <see cref="WorldMotion"/> row becomes the fixed-point form simulation reads.</summary>
 public static class WorldMotionTuningFactory {
-    private static FixedMotionTuning Compile(float moveSpeed, float turnSpeed, float riseGravity, float fallGravity, float maxFallSpeed, IReadOnlyList<MotionResponse> response, float sprintMultiplier, MotionMoveFrame moveFrame, bool facingSnap, MotionScalarEnvelope? moveSpeedEnvelope, FixedMotionDynamics? dynamics, WorldDrive? drive) {
+    private static FixedMotionTuning Compile(float moveSpeed, float turnSpeed, IReadOnlyList<MotionResponse> response, float sprintMultiplier, MotionMoveFrame moveFrame, bool facingSnap, MotionScalarEnvelope? moveSpeedEnvelope, FixedMotionDynamics? dynamics, WorldDrive? drive) {
         var rows = response;
         var compiled = new FixedMotionResponse[rows.Count];
         var recencyFacts = new List<ActionFact>();
@@ -222,9 +213,6 @@ public static class WorldMotionTuningFactory {
         return new(
             MoveSpeed: FixedQ4816.FromDouble(value: moveSpeed),
             TurnSpeed: FixedQ4816.FromDouble(value: turnSpeed),
-            RiseGravity: FixedQ4816.FromDouble(value: riseGravity),
-            FallGravity: FixedQ4816.FromDouble(value: fallGravity),
-            MaxFallSpeed: FixedQ4816.FromDouble(value: maxFallSpeed),
             Response: compiled,
             ResponseRecencyFacts: recencyFacts.ToArray(),
             ResponseRecencyWindows: recencyWindows.ToArray(),
@@ -286,9 +274,6 @@ public static class WorldMotionTuningFactory {
     public static FixedMotionTuning Compile(WorldMotion tuning, FixedMotionDynamics? dynamics = null) => Compile(
         moveSpeed: tuning.MoveSpeed,
         turnSpeed: tuning.TurnSpeed,
-        riseGravity: tuning.RiseGravity,
-        fallGravity: tuning.FallGravity,
-        maxFallSpeed: tuning.MaxFallSpeed,
         response: (tuning.Response ?? []),
         sprintMultiplier: tuning.SprintMultiplier,
         moveFrame: tuning.MoveFrame,

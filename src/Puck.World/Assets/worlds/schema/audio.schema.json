@@ -25,7 +25,7 @@
       "type": "string"
     },
     "cues": {
-      "description": "Gets the cue table. The absence-coalesce lives in the accessor for the same reason Response\u0027s does.",
+      "description": "Gets the cue table. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
       "type": "array",
       "items": {
         "description": "One world-event \u2192 sound binding \u2014 a row of the Audio section\u0027s cue table: when the named engine event fires, the referenced patch voices through a short-lived transient emitter placed per Placement. Event tokens are either a published engine mechanism (EventTokens) or a cue name emitted by one of the same world\u0027s rules. A genre can therefore bind authored rule events without widening the engine vocabulary.",

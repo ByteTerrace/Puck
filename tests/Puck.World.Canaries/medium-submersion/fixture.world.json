@@ -1,16 +1,51 @@
 {
   "schema": "puck.world.def.v1",
   "documentId": "medium-submersion-canary",
-  "bodies": { "localSeats": 1 },
-  "simulation": { "rateHz": 240 },
-  "spawnPoints": [{ "id": "origin", "position": [0, 6, 0] }],
-  "channels": [
-    { "name": "forward", "shape": "Bipolar", "role": "MoveAdvance" },
-    { "name": "strafe", "shape": "Bipolar", "role": "MoveStrafe" },
-    { "name": "turn", "shape": "Bipolar", "role": "Turn" },
-    { "name": "up", "shape": "Bipolar", "role": "MoveUp" }
+  "bodies": {
+    "localSeats": 1
+  },
+  "simulation": {
+    "rateHz": 240
+  },
+  "spawnPoints": [
+    {
+      "id": "origin",
+      "position": [
+        0,
+        6,
+        0
+      ]
+    }
   ],
-  "collision": { "requirements": [], "contactSkin": 0.02, "maxIterations": 4, "maxSlopeDegrees": 60, "gradientProbe": 0 },
+  "channels": [
+    {
+      "name": "forward",
+      "shape": "Bipolar",
+      "role": "MoveAdvance"
+    },
+    {
+      "name": "strafe",
+      "shape": "Bipolar",
+      "role": "MoveStrafe"
+    },
+    {
+      "name": "turn",
+      "shape": "Bipolar",
+      "role": "Turn"
+    },
+    {
+      "name": "up",
+      "shape": "Bipolar",
+      "role": "MoveUp"
+    }
+  ],
+  "collision": {
+    "requirements": [],
+    "contactSkin": 0.02,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60,
+    "gradientProbe": 0
+  },
   "state": {
     "world": [
       {
@@ -30,7 +65,11 @@
     "lattices": [
       {
         "name": "pool",
-        "origin": [0, 0, 0],
+        "origin": [
+          0,
+          0,
+          0
+        ],
         "cellSize": 1,
         "width": 4,
         "depth": 4,
@@ -40,14 +79,42 @@
   },
   "views": {
     "layouts": [],
-    "seatControl": { "yawReference": "World", "minPitch": -0.35, "maxPitch": 1.2 },
+    "seatControl": {
+      "yawReference": "World",
+      "minPitch": -0.35,
+      "maxPitch": 1.2
+    },
     "seatRig": {
       "name": "seatChase",
       "version": "puck.camera.v1",
       "operations": [
-        { "$type": "orbit", "distance": 5.4626001, "yaw": 0, "pitch": 0.4145069, "pivotOffset": [0, 0, 0] },
-        { "$type": "lookAt", "subject": { "$type": "reference" }, "targetOffset": [0, 1, 0], "worldAxes": false },
-        { "$type": "fov", "fieldOfViewRadians": 0.9599311 }
+        {
+          "$type": "orbit",
+          "distance": 5.4626001,
+          "yaw": 0,
+          "pitch": 0.4145069,
+          "pivotOffset": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "$type": "lookAt",
+          "subject": {
+            "$type": "reference"
+          },
+          "targetOffset": [
+            0,
+            1,
+            0
+          ],
+          "worldAxes": false
+        },
+        {
+          "$type": "fov",
+          "fieldOfViewRadians": 0.9599311
+        }
       ]
     }
   },
@@ -75,9 +142,6 @@
         "motion": {
           "moveSpeed": 3.2,
           "turnSpeed": 2.2,
-          "riseGravity": 1,
-          "fallGravity": 1,
-          "maxFallSpeed": 1,
           "response": [],
           "sprintMultiplier": 1,
           "holds": [
@@ -90,13 +154,16 @@
                 "maxRiseSpeed": 2.4,
                 "maxSinkSpeed": 3,
                 "surfaceSettleRate": 6,
-                "floatDepth": 1,
-                "thrustFraction": 0.75
-              }
+                "floatDepth": 1
+              },
+              "thrust": 0.75
             }
           ]
         },
-        "collider": { "$type": "sphere", "radius": 0.5 },
+        "collider": {
+          "$type": "sphere",
+          "radius": 0.5
+        },
         "bodyContact": "Solid"
       }
     ]

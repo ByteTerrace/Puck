@@ -41,8 +41,14 @@ public sealed class BodyUpPolicyLawTests {
         AssertNotYawOnly(body: body, context: "ambient frame under tilted solved gravity");
     }
 
+    // Holds own the vertical channel now: every Motion-kind kit's attitude is composed through ResolveHold, whose
+    // Free-bond row turns the DRAWN axis toward ambient over the body's own span rather than snapping it, exactly as
+    // a grip's lean does (see WorldBody.Hold.cs's SteerAttitudeToward). A live rebuild that swaps ambient direction
+    // outright is therefore a bounded turn, not an instant pop, however few ticks that turn takes.
+    private const int ReseatBudgetTicks = 240;
+
     [Fact]
-    public void LiveRebuildFromSurfaceFollowingToAmbient_ReseatsUpOnTheNextStep() {
+    public void LiveRebuildFromSurfaceFollowingToAmbient_ReseatsUpWithinABoundedTurn() {
         using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildGradientUpDocument(gradientUp: true));
         var actor = JoinSeat(fixture: fixture);
         var body = fixture.Server.Body(index: actor.Index)!;
@@ -80,7 +86,24 @@ public sealed class BodyUpPolicyLawTests {
             expected: WorldContactRequirement.GradientDerivedUp,
             collection: fixture.Server.Definition.Collision.Requirements
         );
-        AssertYawOnly(body: body, context: "first Ambient step after the live rebuild");
+
+        var reseated = false;
+
+        for (var tick = 0; (tick < ReseatBudgetTicks); tick++) {
+            var orientation = body.FixedOrientation;
+
+            if (
+                (orientation.X == FixedQ4816.Zero) &&
+                (orientation.Z == FixedQ4816.Zero)
+            ) {
+                reseated = true;
+                break;
+            }
+
+            fixture.Step();
+        }
+
+        Assert.True(condition: reseated, userMessage: $"the body never reseated to yaw-only within {ReseatBudgetTicks} ticks of the live rebuild");
     }
 
     private static WorldPrincipal JoinSeat(WorldFixture fixture) {

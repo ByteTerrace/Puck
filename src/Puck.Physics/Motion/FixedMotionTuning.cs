@@ -48,9 +48,6 @@ public readonly record struct FixedMotionScalarEnvelope(FixedQ4816 Min, FixedQ48
 public readonly record struct FixedMotionTuning(
     FixedQ4816 MoveSpeed,
     FixedQ4816 TurnSpeed,
-    FixedQ4816 RiseGravity,
-    FixedQ4816 FallGravity,
-    FixedQ4816 MaxFallSpeed,
     FixedMotionResponse[] Response,
     ActionFact[] ResponseRecencyFacts,
     ulong[] ResponseRecencyWindows,

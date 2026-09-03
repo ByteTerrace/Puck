@@ -53,8 +53,8 @@ public static class WorldFacePortalPolicy {
     /// <summary>The fastest travel a document declares, in world units per second — the maximum over the world's
     /// profileless motion default and, per kit, its motion row's ceiling (the authored <c>moveSpeedEnvelope</c>
     /// upper bound where one is declared, its own <c>moveSpeed</c> otherwise, scaled by its
-    /// <c>sprintMultiplier</c>), its <c>maxFallSpeed</c>, and a drive row's <c>reverseSpeed</c> where one is
-    /// authored.</summary>
+    /// <c>sprintMultiplier</c>), its holds' fastest authored terminal fall speed, and a drive row's
+    /// <c>reverseSpeed</c> where one is authored.</summary>
     /// <param name="definition">The document to read.</param>
     /// <returns>The declared speed ceiling.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
@@ -79,7 +79,7 @@ public static class WorldFacePortalPolicy {
             );
             ceiling = FixedQ4816.Max(
                 x: ceiling,
-                y: Magnitude(value: motion.MaxFallSpeed)
+                y: Magnitude(value: WorldHoldFactory.MaxTerminalFallSpeed(holds: motion.Holds))
             );
 
             // A drive row travels backwards at its own rate, which no forward bound covers.

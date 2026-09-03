@@ -20,15 +20,27 @@ public sealed record WorldHoldSpend(
 /// <param name="MaxSinkSpeed">The terminal descent speed (u/s).</param>
 /// <param name="SurfaceSettleRate">The proportional settle gain toward the float line (1/s).</param>
 /// <param name="FloatDepth">The float line's depth below the medium surface, and the bob band's half-width (u).</param>
-/// <param name="ThrustFraction">The fraction of the hold's travel speed the MoveUp role commands vertically —
-/// a body climbs and dives slower than it cruises. <c>1</c> is fully isotropic thrust.</param>
 public sealed record WorldHoldMedium(
     float Buoyancy,
     float MaxRiseSpeed,
     float MaxSinkSpeed,
     float SurfaceSettleRate,
-    float FloatDepth,
-    float ThrustFraction
+    float FloatDepth
+);
+/// <summary>The vertical arc a <see cref="BodyHoldKind.Gravity"/> or <see cref="BodyHoldKind.Lift"/> row falls
+/// under — the same asymmetric arc <c>ApplyHold</c> used to read off the kit as a single flat trio, now carried per
+/// row so a kit's ground, wall, and air rows may each fall differently. Required on those two kinds; refused on
+/// <see cref="BodyHoldKind.Grip"/> (gravity is suspended while a grip holds) and on a <see cref="BodyHoldBond.Medium"/>
+/// row (a medium displaces by its own law).</summary>
+/// <param name="Rise">The downward acceleration while rising (u/s²) — the floaty top of the arc.</param>
+/// <param name="Fall">The downward acceleration while falling (u/s²) — the snappy descent (heavier than the rise).
+/// The world's own solved gravity field, where one is authored, overrides the MAGNITUDE but keeps this row's
+/// rise-to-fall ratio as the arc's asymmetry.</param>
+/// <param name="Terminal">The terminal fall speed the descent is clamped to (u/s).</param>
+public sealed record WorldHoldGravity(
+    float Rise,
+    float Fall,
+    float Terminal
 );
 /// <summary>
 /// One authored hold row of a kit's ordered <see cref="WorldMotion.Holds"/> list — what may
@@ -63,6 +75,14 @@ public sealed record WorldHoldMedium(
 /// nothing.</param>
 /// <param name="Medium">The medium's own displacement law. Required for <see cref="BodyHoldBond.Medium"/> and
 /// refused on every other bond.</param>
+/// <param name="Gravity">The vertical arc this row falls under. Required for <see cref="BodyHoldKind.Gravity"/> and
+/// <see cref="BodyHoldKind.Lift"/>; refused for <see cref="BodyHoldKind.Grip"/>, <see cref="BodyHoldKind.None"/>,
+/// and every <see cref="BodyHoldBond.Medium"/> row.</param>
+/// <param name="Thrust">The fraction of the kit's resolved move speed the <c>MoveUp</c> role commands vertically
+/// while this row holds, in every bond — <c>0</c> (the default) is no vertical thrust at all, <c>1</c> is fully
+/// isotropic. A non-<see cref="BodyHoldBond.Medium"/> row commanding thrust takes the vertical channel outright for
+/// the tick, clearing the ballistic carry; a medium row folds it into the medium's own displacement before that
+/// law's convergence runs.</param>
 public sealed record WorldHold(
     string Name,
     BodyHoldBond Bond,
@@ -78,7 +98,9 @@ public sealed record WorldHold(
     float DriveAlignment = 0f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Release = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHoldSpend? Spend = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHoldMedium? Medium = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHoldMedium? Medium = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHoldGravity? Gravity = null,
+    float Thrust = 0f
 );
 /// <summary>The one-time compilation of an authored hold list into the fixed-point form simulation reads. Channel
 /// names resolve through the world's compiled channel table here, the same resolved-outside/consumed-as-ordinal
@@ -95,8 +117,18 @@ public static class WorldHoldFactory {
             FloatDepth: FixedQ4816.FromDouble(value: law.FloatDepth),
             MaxRiseSpeed: FixedQ4816.FromDouble(value: law.MaxRiseSpeed),
             MaxSinkSpeed: FixedQ4816.FromDouble(value: law.MaxSinkSpeed),
-            SurfaceSettleRate: FixedQ4816.FromDouble(value: law.SurfaceSettleRate),
-            ThrustFraction: FixedQ4816.FromDouble(value: law.ThrustFraction)
+            SurfaceSettleRate: FixedQ4816.FromDouble(value: law.SurfaceSettleRate)
+        )
+        : default
+    );
+    /// <summary>Compiles a row's vertical arc, or the inert zeroed arc for a row that carries none.</summary>
+    /// <param name="gravity">The authored arc, or <see langword="null"/>.</param>
+    /// <returns>The compiled arc.</returns>
+    public static FixedBodyHoldGravity CompileGravity(WorldHoldGravity? gravity) => ((gravity is { } arc)
+        ? new FixedBodyHoldGravity(
+            Fall: FixedQ4816.FromDouble(value: arc.Fall),
+            Rise: FixedQ4816.FromDouble(value: arc.Rise),
+            Terminal: FixedQ4816.FromDouble(value: arc.Terminal)
         )
         : default
     );
@@ -134,6 +166,7 @@ public static class WorldHoldFactory {
                 ConeCosNear: FixedQ4816.FromDouble(value: Math.Cos(d: (((double)cone.X) * DegreesToRadians))),
                 DriveAlignment: FixedQ4816.FromDouble(value: hold.DriveAlignment),
                 Forward: hold.Forward,
+                Gravity: CompileGravity(gravity: hold.Gravity),
                 Grip: FixedQ4816.FromDouble(value: hold.Grip),
                 Kind: hold.Hold,
                 Lift: FixedQ4816.FromDouble(value: hold.Lift),
@@ -149,10 +182,44 @@ public static class WorldHoldFactory {
                 Speed: FixedQ4816.FromDouble(value: (hold.Speed ?? 0f)),
                 SpendPerSecond: FixedQ4816.FromDouble(value: (hold.Spend?.RatePerSecond ?? 0f)),
                 SpendState: hold.Spend?.State,
+                Thrust: FixedQ4816.FromDouble(value: hold.Thrust),
                 UpLean: FixedQ4816.FromDouble(value: hold.UpLean)
             );
         }
 
         return compiled;
+    }
+    /// <summary>Gets the fastest terminal fall speed any <see cref="BodyHoldKind.Gravity"/> or
+    /// <see cref="BodyHoldKind.Lift"/> row in a kit's hold list authors, or zero for a kit authoring none of
+    /// either — the per-row generalization of the retired kit-level <c>maxFallSpeed</c> a document-wide speed
+    /// ceiling reads.</summary>
+    /// <param name="holds">The authored rows, or <see langword="null"/>.</param>
+    /// <returns>The fastest authored terminal speed.</returns>
+    public static float MaxTerminalFallSpeed(IReadOnlyList<WorldHold>? holds) {
+        var terminal = 0f;
+
+        foreach (var hold in (holds ?? [])) {
+            if (hold?.Gravity is { } gravity) {
+                terminal = Math.Max(val1: terminal, val2: gravity.Terminal);
+            }
+        }
+
+        return terminal;
+    }
+    /// <summary>Gets the steepest fall acceleration any <see cref="BodyHoldKind.Gravity"/> or
+    /// <see cref="BodyHoldKind.Lift"/> row in a kit's hold list authors, or zero for a kit authoring none of
+    /// either.</summary>
+    /// <param name="holds">The authored rows, or <see langword="null"/>.</param>
+    /// <returns>The steepest authored fall acceleration.</returns>
+    public static float MaxFallAcceleration(IReadOnlyList<WorldHold>? holds) {
+        var fall = 0f;
+
+        foreach (var hold in (holds ?? [])) {
+            if (hold?.Gravity is { } gravity) {
+                fall = Math.Max(val1: fall, val2: gravity.Fall);
+            }
+        }
+
+        return fall;
     }
 }

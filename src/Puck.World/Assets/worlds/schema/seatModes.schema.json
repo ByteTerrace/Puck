@@ -19,7 +19,7 @@
         "type": "string"
       },
       "states": {
-        "description": "Gets the family\u0027s admitted states. The absence-coalesce lives in the accessor for the same reason Response\u0027s does.",
+        "description": "Gets the family\u0027s admitted states. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
         "type": "array",
         "items": {
           "description": "One state of a WorldSeatModeFamily.",

@@ -3645,7 +3645,7 @@
         },
         "elements": {
           "$ref": "#/$defs/WorldHudElementList",
-          "description": "Gets the panel\u0027s child elements. The absence-coalesce lives in the accessor for the same reason Response\u0027s does."
+          "description": "Gets the panel\u0027s child elements. Absent and empty read identically to every consumer, and the coalesce lives in the accessor so no caller grows its own; every other list-valued row member that reads absent as empty cites this one."
         }
       },
       "required": [
@@ -5136,7 +5136,7 @@
         },
         "rows": {
           "$ref": "#/$defs/DocumentIdentifierList",
-          "description": "Gets the authored row-name view. The absence-coalesce lives in the accessor for the same reason Response\u0027s does."
+          "description": "Gets the authored row-name view. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does."
         }
       },
       "required": [

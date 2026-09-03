@@ -232,9 +232,6 @@ public sealed class WorldMediumLawTests {
             Motion: new WorldMotion(
                 MoveSpeed: 3.2f,
                 TurnSpeed: 2.2f,
-                RiseGravity: 1f,
-                FallGravity: 1f,
-                MaxFallSpeed: 1f,
                 SprintMultiplier: 1f,
                 Response: [],
                 Holds: [
@@ -246,10 +243,10 @@ public sealed class WorldMediumLawTests {
                             FloatDepth: 1f,
                             MaxRiseSpeed: 2.4f,
                             MaxSinkSpeed: 3f,
-                            SurfaceSettleRate: 6f,
-                            ThrustFraction: 0.75f
+                            SurfaceSettleRate: 6f
                         ),
-                        Name: "water"
+                        Name: "water",
+                        Thrust: 0.75f
                     ),
                 ]
             ),
@@ -349,17 +346,18 @@ public sealed class WorldMediumLawTests {
         var misplaced = WithHolds(new WorldHold(
             Bond: BodyHoldBond.Surface,
             Cone: new Vector2(x: 0f, y: 60f),
+            Gravity: new WorldHoldGravity(Fall: 1f, Rise: 1f, Terminal: 1f),
             Hold: BodyHoldKind.Gravity,
             Medium: new WorldHoldMedium(
                 Buoyancy: 0.5f,
                 FloatDepth: 1f,
                 MaxRiseSpeed: 2.4f,
                 MaxSinkSpeed: 3f,
-                SurfaceSettleRate: 6f,
-                ThrustFraction: 0.75f
+                SurfaceSettleRate: 6f
             ),
             Name: "floor",
-            Reach: 1f
+            Reach: 1f,
+            Thrust: 0.75f
         ));
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: misplaced, reason: out var misplacedReason));

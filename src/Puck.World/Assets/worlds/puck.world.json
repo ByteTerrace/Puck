@@ -124,23 +124,6 @@
         "CommitPose"
       ],
       "version": "puck.body-motion.v1"
-    },
-    {
-      "kind": "Motion",
-      "name": "fly",
-      "operations": [
-        "ResolveYawAttitudeAndPlanarFrame",
-        "ResolveHold",
-        "ComputePlanarTargetVelocity",
-        "ShapePlanarVelocity",
-        "SnapYawToPlanarIntent",
-        "RunActionTriggers",
-        "ApplyHold",
-        "ApplyVerticalDrive",
-        "IntegratePlanarAndVerticalVelocity",
-        "CommitPose"
-      ],
-      "version": "puck.body-motion.v1"
     }
   ],
   "channels": [
@@ -416,7 +399,6 @@
         },
         "motion": {
           "facingSnap": false,
-          "fallGravity": 46,
           "holds": [
             {
               "bond": "Surface",
@@ -447,18 +429,26 @@
               ],
               "hold": "Gravity",
               "name": "ground",
-              "reach": 1.2
+              "reach": 1.2,
+              "gravity": {
+                "rise": 28,
+                "fall": 46,
+                "terminal": 40
+              }
             },
             {
               "bond": "Free",
               "hold": "Gravity",
-              "name": "air"
+              "name": "air",
+              "gravity": {
+                "rise": 28,
+                "fall": 46,
+                "terminal": 40
+              }
             }
           ],
-          "maxFallSpeed": 40,
           "moveSpeed": 4,
           "response": [],
-          "riseGravity": 28,
           "sprintMultiplier": 1.0,
           "turnSpeed": 2.5
         },
@@ -478,7 +468,6 @@
         },
         "motion": {
           "facingSnap": true,
-          "fallGravity": 46,
           "holds": [
             {
               "bond": "Surface",
@@ -520,18 +509,26 @@
               ],
               "hold": "Gravity",
               "name": "ground",
-              "reach": 0.6
+              "reach": 0.6,
+              "gravity": {
+                "rise": 28,
+                "fall": 46,
+                "terminal": 40
+              }
             },
             {
               "bond": "Free",
               "hold": "Gravity",
-              "name": "air"
+              "name": "air",
+              "gravity": {
+                "rise": 28,
+                "fall": 46,
+                "terminal": 40
+              }
             }
           ],
-          "maxFallSpeed": 40,
           "moveSpeed": 1.6,
           "response": [],
-          "riseGravity": 28,
           "sprintMultiplier": 1,
           "turnSpeed": 2.5
         },
@@ -564,7 +561,7 @@
       },
       {
         "bodyContact": "Solid",
-        "bodyMotionProgram": "fly",
+        "bodyMotionProgram": "walk",
         "collider": {
           "$type": "capsule",
           "endpoint": [
@@ -576,7 +573,6 @@
         },
         "motion": {
           "facingSnap": true,
-          "fallGravity": 46,
           "holds": [
             {
               "bond": "Free",
@@ -585,7 +581,13 @@
               "lift": 1.0,
               "name": "air",
               "speed": 3.0,
-              "upLean": 0.0
+              "upLean": 0.0,
+              "gravity": {
+                "rise": 28,
+                "fall": 46,
+                "terminal": 40
+              },
+              "thrust": 1
             },
             {
               "bond": "Surface",
@@ -595,13 +597,17 @@
               ],
               "hold": "Gravity",
               "name": "ground",
-              "reach": 0.4
+              "reach": 0.4,
+              "gravity": {
+                "rise": 28,
+                "fall": 46,
+                "terminal": 40
+              },
+              "thrust": 1
             }
           ],
-          "maxFallSpeed": 40,
           "moveSpeed": 3.0,
           "response": [],
-          "riseGravity": 28,
           "sprintMultiplier": 1,
           "turnSpeed": 2.5
         },
@@ -646,7 +652,6 @@
         },
         "motion": {
           "facingSnap": true,
-          "fallGravity": 46,
           "holds": [
             {
               "bond": "Surface",
@@ -656,18 +661,26 @@
               ],
               "hold": "Gravity",
               "name": "ground",
-              "reach": 0.8
+              "reach": 0.8,
+              "gravity": {
+                "rise": 28,
+                "fall": 46,
+                "terminal": 40
+              }
             },
             {
               "bond": "Free",
               "hold": "Gravity",
-              "name": "air"
+              "name": "air",
+              "gravity": {
+                "rise": 28,
+                "fall": 46,
+                "terminal": 40
+              }
             }
           ],
-          "maxFallSpeed": 40,
           "moveSpeed": 3.2,
           "response": [],
-          "riseGravity": 28,
           "sprintMultiplier": 1,
           "turnSpeed": 2.5
         },

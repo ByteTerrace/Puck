@@ -168,7 +168,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "body.fly",
-            description: "Enqueues a six-role timed segment on a body's tape: body.fly <forward> <strafe> <up> <yaw> <pitch> <roll> <seconds> [body] — each channel a float clamped to [-1,1], held for <seconds>. The body's authored motion program decides which roles it reads: ApplyVerticalDrive consumes up alongside a gravity/jump arc, while IntegrateLocalAttitude + ComputeLocalTargetVelocity provide body-frame 6DOF. This is the ONE scripted-tape verb: a planar segment is this verb with up/pitch/roll zeroed — body.fly <forward> <strafe> 0 <turn> 0 0 <seconds>. The optional trailing body index is 0..127 (default 0) — 0..3 local seats, 4..127 simulated entries.",
+            description: "Enqueues a six-role timed segment on a body's tape: body.fly <forward> <strafe> <up> <yaw> <pitch> <roll> <seconds> [body] — each channel a float clamped to [-1,1], held for <seconds>. The body's authored motion program decides which roles it reads: ApplyHold consumes up through a hold row's own thrust alongside its gravity arc, while IntegrateLocalAttitude + ComputeLocalTargetVelocity provide body-frame 6DOF. This is the ONE scripted-tape verb: a planar segment is this verb with up/pitch/roll zeroed — body.fly <forward> <strafe> 0 <turn> 0 0 <seconds>. The optional trailing body index is 0..127 (default 0) — 0..3 local seats, 4..127 simulated entries.",
             handler: FlyHandler,
             ackOnly: true
         );

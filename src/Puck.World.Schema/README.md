@@ -346,7 +346,7 @@ The `gravitationalConstant` may remain zero for a uniform-only field, but must
 be positive when `points` is nonempty. A positive constant also activates the
 global body-to-body solve when no static source is authored: bodies remain both
 sources and targets, and a lone body participates with the solver's zero answer
-rather than silently falling back to kit gravity. A placement may appear in only one source
+rather than silently falling back to the held row's own gravity. A placement may appear in only one source
 row across both spellings. Point authoring never reads a placement's solid or
 SDF: its transform locates the source, while geometry and acceleration remain
 separate decisions. `world.gravity` reads authored values, derived point masses,
@@ -368,8 +368,8 @@ then folds matching areas in ascending `(priority, authored row index)` order.
 `Combine` adds; `Replace` assigns, so a higher-priority or later equal-priority
 Replace wins. A zero directional Replace deliberately authors a zero-G pocket,
 and exact cancellation or the center of a radial area remains an authored zero
-answer rather than falling back to kit gravity. In an areas-only world, a body
-outside every area does not participate and retains the kit fallback. The cap is
+answer rather than falling back to the held row's own gravity. In an areas-only world, a body
+outside every area does not participate and retains that same fallback. The cap is
 64 areas; `world.gravity` echoes the compiled order and last area checks/matches,
 and `world.budget` reports declared areas per target plus those live counters.
 Every global/uniform/area addition saturates componentwise at the Q48.16 extrema

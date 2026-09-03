@@ -286,100 +286,6 @@ public sealed partial class WorldBody {
             }
         }
     }
-    private void ApplyVerticalDecay(ref BodyMotionScratch scratch) {
-        if (m_verticalVelocity != FixedQ4816.Zero) {
-            scratch.Velocity = scratch.Velocity with { Y = (scratch.Velocity.Y + m_verticalVelocity) };
-
-            if (m_verticalVelocity > FixedQ4816.Zero) {
-                var bleed = m_verticalVelocityAccumulator.Integrate(
-                    ratePerSecond: -m_tuning.RiseGravity,
-                    elapsedTicks: scratch.StepTicks
-                );
-                var next = (m_verticalVelocity + bleed);
-
-                m_verticalVelocity = ((next < FixedQ4816.Zero)
-                    ? FixedQ4816.Zero
-                    : next
-                );
-            } else {
-                var bleed = m_verticalVelocityAccumulator.Integrate(
-                    ratePerSecond: m_tuning.RiseGravity,
-                    elapsedTicks: scratch.StepTicks
-                );
-                var next = (m_verticalVelocity + bleed);
-
-                m_verticalVelocity = ((next > FixedQ4816.Zero)
-                    ? FixedQ4816.Zero
-                    : next
-                );
-            }
-
-            if (m_verticalVelocity == FixedQ4816.Zero) {
-                m_verticalVelocityAccumulator.Reset();
-            }
-        }
-    }
-    // Direct vertical traversal and ballistic motion are separate channels. While MoveUp is held, direct drive is
-    // the complete vertical request and the jump/fall accumulator is cleared; on release, the direct term vanishes
-    // in this same tick and gravity resumes from rest. A trigger therefore cannot become stored upward velocity,
-    // while the same authored program can still jump, land, and fly.
-    private void ApplyVerticalDrive(ref BodyMotionScratch scratch) {
-        var drive = Role(
-            intent: in scratch.Intent,
-            role: ChannelRole.MoveUp
-        );
-
-        if (drive == FixedQ4816.Zero) {
-            return;
-        }
-
-        m_verticalVelocity = FixedQ4816.Zero;
-        m_verticalVelocityAccumulator.Reset();
-        scratch.DirectVerticalVelocity = (drive * scratch.MoveSpeed);
-    }
-    // The op integrates ONE gravity channel whatever sources it: the world's solved field when it authors one, the
-    // kit's authored fall rate otherwise. The rise/fall asymmetry is SHAPING, not a source — under a solved field it
-    // rides as the authored Rise:Fall ratio so a floaty top of the arc survives on a planetoid, and MaxFallSpeed
-    // clamps either way.
-    private void ApplyVerticalGravity(ulong stepTicks) => ApplyVerticalGravity(
-        scale: FixedQ4816.One,
-        stepTicks: stepTicks
-    );
-    // scale is the fraction of gravity that still reaches the body — a hold's lift cancels the rest. One is the
-    // unscaled arc; zero holds the ballistic channel where it is.
-    private void ApplyVerticalGravity(ulong stepTicks, FixedQ4816 scale) {
-        var rising = (m_verticalVelocity > FixedQ4816.Zero);
-        var gravity = (rising
-            ? m_tuning.RiseGravity
-            : m_tuning.FallGravity
-        );
-
-        if (TrySolvedGravityMagnitude(magnitude: out var solved)) {
-            gravity = solved;
-
-            if (
-                rising &&
-                (m_tuning.FallGravity > FixedQ4816.Zero)
-            ) {
-                gravity = ((gravity * m_tuning.RiseGravity) / m_tuning.FallGravity);
-            }
-        }
-
-        var gravityStep = m_verticalVelocityAccumulator.Integrate(
-            elapsedTicks: stepTicks,
-            ratePerSecond: -(gravity * scale)
-        );
-        var terminalVelocity = -m_tuning.MaxFallSpeed;
-        var acceleratedVelocity = (m_verticalVelocity + gravityStep);
-
-        if (acceleratedVelocity < terminalVelocity) {
-            m_verticalVelocity = terminalVelocity;
-            m_verticalVelocityAccumulator.Reset();
-        } else {
-            m_verticalVelocity = acceleratedVelocity;
-        }
-
-    }
     // The shared hard-teleport commit: clear the affected integration carries. Face only resets rotation; Warp resets
     // position and vertical state but preserves rotation; full Pose/Reconcile operations reset every carry. SetBodyMotionProgram
     // resets the pose carries and only resets vertical state when switching to grounded.
@@ -629,17 +535,8 @@ public sealed partial class WorldBody {
             case BodyMotionOp.RunActionTriggers:
                 ProcessLaneActions(scratch: ref scratch);
                 break;
-            case BodyMotionOp.ApplyVerticalGravity:
-                ApplyVerticalGravity(stepTicks: scratch.StepTicks);
-                break;
-            case BodyMotionOp.ApplyVerticalDecay:
-                ApplyVerticalDecay(scratch: ref scratch);
-                break;
             case BodyMotionOp.ApplyHold:
                 ApplyHold(scratch: ref scratch);
-                break;
-            case BodyMotionOp.ApplyVerticalDrive:
-                ApplyVerticalDrive(scratch: ref scratch);
                 break;
             case BodyMotionOp.IntegratePlanarAndVerticalVelocity:
                 IntegratePlanarAndVerticalVelocity(scratch: ref scratch);
@@ -1178,12 +1075,13 @@ public sealed partial class WorldBody {
     // Position/planar contact response applies to ANY collider-bearing body regardless of body motion program — a flying
     // body still shouldn't clip through a wall. The vertical WRITE-BACK (m_verticalVelocity, m_planarVelocity, the
     // grounded position-accumulator reset) is gated on CompiledBodyMotionProgram.OwnsVerticalContactState: only a
-    // program that itself integrates gravity (ApplyVerticalGravity) has ceded its vertical channel to contact
-    // resolution. A program that instead owns that channel directly (free's ApplyVerticalDecay bleed) must keep it
-    // — folding the resolved velocity back in every tick regardless would feed a decay
-    // channel's own prior value back into itself, an unbounded loop rather than a correction (the defect this
-    // gate exists to close). m_grounded/m_lastContactCount stay informational for every model (RunActionTriggers'
-    // ActionFact.Grounded/Airborne reads them under any program), since they never feed back into an integration.
+    // program that runs ApplyHold has ceded its vertical channel to contact resolution. A program with no vertical
+    // channel operation at all owns whatever channel it carries directly (a full-lift row's own decay, or a
+    // body-frame 6DOF flight program's own scratch velocity) and must keep it — folding the resolved velocity back
+    // in every tick regardless would feed such a channel's own prior value back into itself, an unbounded loop
+    // rather than a correction (the defect this gate exists to close). m_grounded/m_lastContactCount stay
+    // informational for every model (RunActionTriggers' ActionFact.Grounded/Airborne reads them under any program),
+    // since they never feed back into an integration.
     private void ResolveProgramContacts(ref BodyMotionScratch scratch) {
         if (
             (m_contactField is { } field) &&

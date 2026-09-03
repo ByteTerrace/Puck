@@ -152,10 +152,11 @@ public sealed class NavigationLawTests {
             Kind: BodyProgramKind.Motion,
             Operations: [
                 BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
+                BodyMotionOp.ResolveHold,
                 BodyMotionOp.ComputePlanarTargetVelocity,
                 BodyMotionOp.ShapePlanarVelocity,
                 BodyMotionOp.RunActionTriggers,
-                BodyMotionOp.ApplyVerticalDrive,
+                BodyMotionOp.ApplyHold,
                 BodyMotionOp.IntegratePlanarAndVerticalVelocity,
                 BodyMotionOp.CommitPose,
             ]
@@ -175,6 +176,9 @@ public sealed class NavigationLawTests {
             BodyMotionProgramsRaw = [.. document.BodyMotionPrograms, navigationMotion, producer],
             KitRowsRaw = [kit with {
                 BodyMotionProgram = navigationMotion.Name,
+                // A full-thrust hold row reproduces the retired ApplyVerticalDrive's unconditional MoveUp
+                // consumption — the "compatible vertical consumer" a Volume/Medium-domain producer needs.
+                Motion = kit.Motion with { Holds = [kit.Motion.Holds![0] with { Thrust = 1f }] },
                 ProducersRaw = new Dictionary<string, BodyProgramParameters>(collection: kit.Producers) {
                     [ProducerName] = NavigationParameters(),
                 },
@@ -247,11 +251,13 @@ public sealed class NavigationLawTests {
         Assert.Contains(expectedSubstring: "dimensions necessarily exceed", actualString: reason, comparisonType: StringComparison.Ordinal);
 
         var flight = NavigationDocument(domain: VolumeDomain());
+        var flightKits = flight.Kits.ToArray();
         var noVerticalConsumer = flight with {
-            BodyMotionProgramsRaw = flight.BodyMotionPrograms.Select(program => (program.Name == "navigation-motion")
-                ? program with { Operations = program.Operations.Where(operation => operation != BodyMotionOp.ApplyVerticalDrive).ToArray() }
-                : program
-            ).ToArray(),
+            // Zeroing the hold row's own thrust is the new "no compatible vertical consumer" shape — thrust replaced
+            // the retired ApplyVerticalDrive op, so dropping the op itself no longer names the right facet.
+            KitRowsRaw = [flightKits[0] with {
+                Motion = flightKits[0].Motion with { Holds = [flightKits[0].Motion.Holds![0] with { Thrust = 0f }] },
+            }],
         };
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: noVerticalConsumer, reason: out reason));
         Assert.Contains(expectedSubstring: "no compatible vertical consumer", actualString: reason, comparisonType: StringComparison.Ordinal);

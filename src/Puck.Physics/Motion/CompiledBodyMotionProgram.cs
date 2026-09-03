@@ -66,12 +66,12 @@ public sealed class CompiledBodyMotionProgram {
     /// <summary>Gets the program name.</summary>
     public string Name { get; }
     /// <summary>Gets a value indicating whether this program's selected operations cede the vertical channel to a
-    /// host's contact resolution — <see cref="BodyMotionOp.ApplyVerticalGravity"/>, or
-    /// <see cref="BodyMotionOp.ApplyHold"/>, whose gravity and lift laws integrate the same channel. A program that
-    /// instead owns that channel directly (<see cref="BodyMotionOp.ApplyVerticalDecay"/>'s bleed) must keep it:
-    /// folding the resolved velocity back in every tick feeds a decay channel's own prior value into itself, which
-    /// is an unbounded loop rather than a correction.</summary>
-    public bool OwnsVerticalContactState => (Contains(operation: BodyMotionOp.ApplyVerticalGravity) || Contains(operation: BodyMotionOp.ApplyHold));
+    /// host's contact resolution — <see cref="BodyMotionOp.ApplyHold"/>, whose gravity and lift laws integrate it.
+    /// A program with no vertical channel operation at all owns whatever channel it carries directly (a body-frame
+    /// 6DOF flight program shaping <see cref="BodyMotionOp.ComputeLocalTargetVelocity"/> into
+    /// <see cref="BodyMotionOp.IntegrateScratchVelocity"/>): folding the resolved velocity back in every tick would
+    /// feed such a channel's own prior value into itself, an unbounded loop rather than a correction.</summary>
+    public bool OwnsVerticalContactState => Contains(operation: BodyMotionOp.ApplyHold);
     /// <summary>Gets the operations grouped by their intrinsic host phase.</summary>
     public BodyMotionOp[][] Phases { get; }
 
@@ -93,8 +93,7 @@ public sealed class CompiledBodyMotionProgram {
         BodyMotionOp.ComputePlanarTargetVelocity or BodyMotionOp.ComputeLocalTargetVelocity => 1,
         BodyMotionOp.ShapePlanarVelocity or BodyMotionOp.SnapYawToPlanarIntent or BodyMotionOp.ShapeDriveVelocity => 2,
         BodyMotionOp.RunActionTriggers => 3,
-        BodyMotionOp.ApplyVerticalGravity or BodyMotionOp.ApplyVerticalDecay or BodyMotionOp.ApplyHold
-            or BodyMotionOp.ApplyVerticalDrive => 4,
+        BodyMotionOp.ApplyHold => 4,
         BodyMotionOp.IntegratePlanarAndVerticalVelocity or BodyMotionOp.IntegrateScratchVelocity => 5,
         BodyMotionOp.CommitPose => 7,
         _ => throw Refuse(
@@ -120,8 +119,7 @@ public sealed class CompiledBodyMotionProgram {
         // family a motion program owns.
         BodyMotionOp.ResolveHold => (BodyProgramAdmission.Channels | BodyProgramAdmission.Pose | BodyProgramAdmission.Velocity | BodyProgramAdmission.ActionState),
         BodyMotionOp.RunActionTriggers => (BodyProgramAdmission.Channels | BodyProgramAdmission.Velocity | BodyProgramAdmission.ActionState),
-        BodyMotionOp.ApplyVerticalGravity or BodyMotionOp.ApplyVerticalDecay or BodyMotionOp.ApplyHold
-            or BodyMotionOp.ApplyVerticalDrive
+        BodyMotionOp.ApplyHold
             or BodyMotionOp.IntegratePlanarAndVerticalVelocity
             or BodyMotionOp.IntegrateScratchVelocity => (BodyProgramAdmission.Pose | BodyProgramAdmission.Velocity),
         BodyMotionOp.CommitPose => BodyProgramAdmission.Pose,

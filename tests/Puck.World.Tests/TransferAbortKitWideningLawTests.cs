@@ -44,9 +44,10 @@ public sealed class TransferAbortKitWideningLawTests {
             Kind: BodyProgramKind.Motion,
             Operations: [
                 BodyMotionOp.ResolveDriveFrame,
+                BodyMotionOp.ResolveHold,
                 BodyMotionOp.ShapeDriveVelocity,
                 BodyMotionOp.RunActionTriggers,
-                BodyMotionOp.ApplyVerticalGravity,
+                BodyMotionOp.ApplyHold,
                 BodyMotionOp.IntegratePlanarAndVerticalVelocity,
                 BodyMotionOp.CommitPose,
             ]
@@ -63,9 +64,14 @@ public sealed class TransferAbortKitWideningLawTests {
             Motion: new WorldMotion(
                 MoveSpeed: 16f,
                 TurnSpeed: 2.4f,
-                RiseGravity: 14f,
-                FallGravity: 26f,
-                MaxFallSpeed: 30f,
+                Holds: [
+                    new WorldHold(
+                        Bond: BodyHoldBond.Free,
+                        Gravity: new WorldHoldGravity(Fall: 26f, Rise: 14f, Terminal: 30f),
+                        Hold: BodyHoldKind.Gravity,
+                        Name: "air"
+                    ),
+                ],
                 SprintMultiplier: 1f,
                 MoveSpeedEnvelope: new MotionScalarEnvelope(Max: 16f, Min: 16f),
                 Drive: new WorldDrive(
@@ -142,9 +148,6 @@ public sealed class TransferAbortKitWideningLawTests {
             Motion: new WorldMotion(
                 MoveSpeed: 3.2f,
                 TurnSpeed: 2.2f,
-                RiseGravity: 1f,
-                FallGravity: 1f,
-                MaxFallSpeed: 1f,
                 SprintMultiplier: 1f,
                 // Row 0 gates on "Recently Rising" — driving the Up channel positive for a few ticks makes Rising
                 // hold, which THIS row's own Recently clock then reflects (WorldBody.MotionRecency's own capture).
@@ -162,10 +165,10 @@ public sealed class TransferAbortKitWideningLawTests {
                             FloatDepth: 1f,
                             MaxRiseSpeed: 2.4f,
                             MaxSinkSpeed: 3f,
-                            SurfaceSettleRate: 6f,
-                            ThrustFraction: 0.75f
+                            SurfaceSettleRate: 6f
                         ),
-                        Name: "water"
+                        Name: "water",
+                        Thrust: 0.75f
                     ),
                 ]
             ),

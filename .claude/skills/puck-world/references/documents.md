@@ -957,7 +957,8 @@ geometry instead. The chase rig's orbit yaw is `state.look.behind`, world-refere
 `yawDegrees` turns the body, never the camera. Three population creatures live on the platform as
 `inhabit` rows with `wander` producers (`spiderDen`, `dragonflyPerch`, `houndRun`), each a different
 hold list over the same primitives: the spider (`spiderKit`) grips any face in a `[0, 180]` cone,
-the dragonfly (`dragonflyKit`, the `fly` program) holds the air on full lift and keeps its altitude
+the dragonfly (`dragonflyKit`, the same `walk` program every kit here shares) holds the air on full
+lift with its own row's `thrust` climbing, and keeps its altitude
 through the producer's `altitudeGain`, the hound (`houndKit`) walks the ground hold with a four-beat
 gait and planted paws; Wren's own hold list is `wall` (grip, `spend` against the `stamina` body slot,
 `jump` releases), `ground`, `air`, and her hands and feet are `effectors` on surface targets. Their
@@ -1025,11 +1026,13 @@ tick) — a flat record (`WorldMotionTuning.cs`), authored under `motion` — e.
 `jump.world.json`'s `vaulter` kit.
 
 The row carries the movement platform every kit reads — `MoveSpeed`,
-`TurnSpeed`, the gravity trio, `SprintMultiplier`/`SprintChannel`,
-`MoveFrame`/`FacingSnap`, `MoveSpeedEnvelope` — plus two OPTIONAL rows beside
+`TurnSpeed`, `SprintMultiplier`/`SprintChannel`,
+`MoveFrame`/`FacingSnap`, `MoveSpeedEnvelope` — plus two rows beside
 it, each supplying its own tuning facet and each read by its own operations:
-`Holds` (below, `ResolveHold`/`ApplyHold`) and `Drive`
-(`ResolveDriveFrame`/`ShapeDriveVelocity`). Submerged locomotion is a kit
+`Holds` (below, `ResolveHold`/`ApplyHold`, mandatory — the hold list is the
+only spelling of a vertical channel, so a Motion-kind kit authoring none
+refuses by name) and `Drive` (optional,
+`ResolveDriveFrame`/`ShapeDriveVelocity`). Submerged locomotion is a kit
 authoring a `bond: "Medium"` hold row; a kart is a kit authoring a `drive` row.
 
 **`drive` (`WorldDrive`) — anisotropic body-frame drive.** Velocity decomposes
@@ -1039,19 +1042,20 @@ authored rate: `accel`/`brake`/`coast` longitudinally, `grip` laterally, with
 resolved speed, `reverseSpeed` the rate full back-throttle converges on from
 rest, `pitchRate` selecting the flying variant, and a nullable
 `drift { channel, grip, steerScale }` — the held low-traction state. What the
-drive does NOT carry is what the motion row already names: the forward speed
-full throttle converges on is `moveSpeed` (bounded by `moveSpeedEnvelope`,
-scaled by `sprintMultiplier` while `sprintChannel` reads held — a kart's
-"boost"), the steering rate at full authority is `turnSpeed`, and the gravity
-trio is the motion row's. One row serves the ground, hover, and air variants: a contact-pinned
-variant pairs the drive ops with a program keeping `ApplyVerticalGravity`, a
-flying variant with `ApplyVerticalDecay` and a positive `pitchRate`, which is
-what decides vertical contact ownership per the seam's rule. Validation
-(`WorldDefinitionValidator.ValidateDriveMotion`): every convergence rate
-positive, `steerFalloff` in `[0, 1]`, `reverseSpeed`/`pitchRate` non-negative,
-and a declared `drift` naming a resolvable channel with a positive `grip` and
-`steerScale`. `DriveLawTests` pins the whole family to a recorded 240-tick
-fixed-point trace whose discriminating control perturbs one facet.
+drive does NOT carry is what the motion row and its holds already name: the
+forward speed full throttle converges on is `moveSpeed` (bounded by
+`moveSpeedEnvelope`, scaled by `sprintMultiplier` while `sprintChannel` reads
+held — a kart's "boost"), the steering rate at full authority is `turnSpeed`,
+and gravity is the held row's own `gravity` arc. One row serves the ground,
+hover, and air variants: a contact-pinned variant pairs the drive ops with a
+Surface `Gravity` hold row, a flying variant a Free `Lift` row (`lift: 1`) and
+a positive `pitchRate`, which is what decides vertical contact ownership per
+the seam's rule. Validation (`WorldDefinitionValidator.ValidateDriveMotion`):
+every convergence rate positive, `steerFalloff` in `[0, 1]`,
+`reverseSpeed`/`pitchRate` non-negative, and a declared `drift` naming a
+resolvable channel with a positive `grip` and `steerScale`. `DriveLawTests`
+pins the whole family to a recorded 240-tick fixed-point trace whose
+discriminating control perturbs one facet.
 
 A worked kart:
 
@@ -1065,12 +1069,9 @@ A worked kart:
     "turnSpeed": 2.4,
     "sprintMultiplier": 1.5,
     "sprintChannel": "boost",
-    "riseGravity": 14.0,
-    "fallGravity": 26.0,
-    "maxFallSpeed": 30.0,
     "holds": [
-      { "name": "ground", "bond": "Surface", "cone": [0, 60], "hold": "Gravity", "reach": 1.2 },
-      { "name": "air", "bond": "Free", "hold": "Gravity" }
+      { "name": "ground", "bond": "Surface", "cone": [0, 60], "hold": "Gravity", "reach": 1.2, "gravity": { "rise": 14.0, "fall": 26.0, "terminal": 30.0 } },
+      { "name": "air", "bond": "Free", "hold": "Gravity", "gravity": { "rise": 14.0, "fall": 26.0, "terminal": 30.0 } }
     ],
     "drive": {
       "accel": 7.0, "brake": 18.0, "coast": 4.0, "grip": 22.0,
@@ -1085,8 +1086,8 @@ A worked kart:
 with the program `[ResolveDriveFrame, ResolveHold, ShapeDriveVelocity,
 RunActionTriggers, ApplyHold, IntegratePlanarAndVerticalVelocity, CommitPose]`
 (op ORDER in the authored list is inert — `CompiledBodyMotionProgram` groups the
-selected set into its intrinsic phases). Dropping the two hold ops and running
-`ApplyVerticalGravity` instead is the row-less contact-pinned variant.
+selected set into its intrinsic phases) — the same op list every grounded kit
+runs, since the hold list is where a kart's gravity now lives.
 
 A kit whose program selects `ShapePlanarVelocity` shapes its planar velocity
 through exactly ONE of two mechanisms — the engage/release `Response` table
@@ -1135,13 +1136,17 @@ corrected order, with the measured arc numbers in its motion row.
 `WorldDefinitionValidator` cross-checks the kit's `BodyMotionProgram`
 against its declared motion row: an operation the program selects that reads a
 tuning facet (`MotionTuningFacet`) the row doesn't supply refuses
-BY NAME. The row supplies every facet the `grounded` and `free` programs
-read (the `free` program's facets are a strict subset), so the world's
-`free`-program kits also author a motion row. `Drive` is the one
-facet supplied CONDITIONALLY — only when a kit's `drive` row is present
-— so a program selecting `ResolveDriveFrame`/`ShapeDriveVelocity` against a kit
-authoring none refuses by that facet's name. A world whose kit authors a `Medium` hold row
-with no medium lattice row (`state.world[].lattice.medium`) refuses at boot.
+BY NAME. The row supplies `Speed`/`PlanarResponse`/`Sprint`/`WorldFrame`
+unconditionally; `Holds` and `Drive` are each supplied CONDITIONALLY — only
+when the kit's `holds` list is non-empty, or its `drive` row is present — so a
+program selecting `ResolveHold`/`ApplyHold` or
+`ResolveDriveFrame`/`ShapeDriveVelocity` against a kit authoring none refuses
+by that facet's name. Separately, and unconditionally: a Motion-kind kit
+authoring no holds at all refuses by name outright, whatever operations its
+program selects — the hold list is the only spelling of a vertical channel
+now, so even a kit with no vertical law of its own still authors one row of
+kind `None`. A world whose kit authors a `Medium` hold row with no medium
+lattice row (`state.world[].lattice.medium`) refuses at boot.
 A `BodyMotionOp` reading a further facet owes `RequiredMotionTuningFacets` and
 `SuppliedMotionTuningFacets` an entry — never a hunt.
 
@@ -1176,11 +1181,13 @@ a live `world.row.set kits …` retune past the cap refuses instead of clamping
 silently.
 
 **Holds (`WorldMotion.Holds`, a list of `WorldHold` rows →
-`FixedBodyHold[]`) — what may hold a body, in preference order.** A kit
-authors an ordered list; the `ResolveHold` operation takes the first row
-the world offers and `ApplyHold` applies that row's vertical law. A kit
-authoring none is unchanged: its vertical channel is `ApplyVerticalGravity`'s
-alone, and the two operations are simply absent from its program.
+`FixedBodyHold[]`) — what may hold a body, in preference order, and the only
+spelling of a vertical channel.** A kit authors an ordered list; the
+`ResolveHold` operation takes the first row the world offers and `ApplyHold`
+applies that row's vertical law and its own `thrust`. A Motion-kind kit
+authoring none refuses validation by name — even a kit with no vertical law of
+its own still authors one row of kind `None`, since the two operations are
+mandatory, never simply absent.
 
 ```json
 "holds": [
@@ -1188,8 +1195,10 @@ alone, and the two operations are simply absent from its program.
     "reach": 0.8, "speed": 2.0, "upLean": 0.0, "forward": "Heading",
     "onDrive": true, "driveAlignment": 0.5, "release": "jump",
     "spend": { "state": "stamina", "ratePerSecond": 1.0 } },
-  { "name": "ground", "bond": "Surface", "cone": [0, 60], "hold": "Gravity", "reach": 1.2 },
-  { "name": "air", "bond": "Free", "hold": "Gravity" }
+  { "name": "ground", "bond": "Surface", "cone": [0, 60], "hold": "Gravity", "reach": 1.2,
+    "gravity": { "rise": 28.0, "fall": 46.0, "terminal": 40.0 } },
+  { "name": "air", "bond": "Free", "hold": "Gravity",
+    "gravity": { "rise": 28.0, "fall": 46.0, "terminal": 40.0 } }
 ]
 ```
 
@@ -1199,23 +1208,32 @@ is measured against gravity-up, never the body's own leaned up), `Free` (no
 surface at all), or `Medium` (the world's own field-lattice column — the world
 either offers a medium where the body is or it does not, so the bond carries no
 cone and no reach, and takes a `medium` law instead:
-`{ buoyancy, maxRiseSpeed, maxSinkSpeed, surfaceSettleRate, floatDepth,
-thrustFraction }`. The medium's drift and the body's own MoveUp thrust are
-summed BEFORE the convergence runs, so nothing writes the vertical channel
-twice, and it publishes `Submerged`/`AtSurface`). `hold` is `Gravity` (gravity holds the body against the face —
-the walkable case, integrating exactly as `ApplyVerticalGravity` does), `Grip`
-(a pull of `grip` u/s toward the face applied as a POSITIONAL standoff, gravity
-suspended while it holds), `Lift` (a fraction `lift` of gravity cancelled — 1
-hovers, and the `MoveUp` role drives vertical through the ordinary
-`ApplyVerticalDrive` op rather than a second implementation), or `None`.
-`speed` (u/s along the row's tangent plane, absent rides the kit's own resolved
-move speed), `reach` (how far a surface row's probes search; required positive),
-`onDrive` + `driveAlignment` (take the row by driving into a face in its cone),
-`release` (a declared channel whose HELD read drops the row — no latch, so
-holding it down keeps the body off the face), and `spend` (drain a body-lane
-Counter slot at a rate; the row becomes ineligible the tick the slot cannot
-pay, and a world's own rules refill it or trade for it — the engine has no
-stamina concept of its own).
+`{ buoyancy, maxRiseSpeed, maxSinkSpeed, surfaceSettleRate, floatDepth }`).
+`hold` is `Gravity` (gravity holds the body against the face — the walkable
+case, integrating the row's own `gravity` arc), `Grip` (a pull of `grip` u/s
+toward the face applied as a POSITIONAL standoff, gravity suspended while it
+holds), `Lift` (a fraction `lift` of gravity cancelled — 1 hovers, bleeding
+whatever the vertical channel carries back to rest at the row's own `gravity.rise`
+rate rather than integrating the arc), or `None`. `gravity` (`{ rise, fall,
+terminal }`, u/s², u/s², u/s) is the row's own vertical arc — required on a
+`Gravity` or `Lift` row, refused on a `Grip` row and on a `Medium` bond (a
+medium displaces by its own law); the world's own solved gravity field, where
+one is authored, overrides the MAGNITUDE but keeps the row's `rise:fall` ratio
+as the arc's asymmetry. `thrust` (a fraction of the kit's resolved move speed
+the `MoveUp` role commands vertically, `[0, 1]`, default `0`) applies in EVERY
+bond: a non-`Medium` row commanding thrust takes the vertical channel outright
+for the tick, clearing the ballistic carry, while a `Medium` row's own thrust
+folds into its displacement law's convergence instead — the medium's drift and
+the body's own MoveUp thrust are summed BEFORE that convergence runs, so
+nothing writes the vertical channel twice, and it publishes
+`Submerged`/`AtSurface`. `speed` (u/s along the row's tangent plane, absent
+rides the kit's own resolved move speed), `reach` (how far a surface row's
+probes search; required positive), `onDrive` + `driveAlignment` (take the row
+by driving into a face in its cone), `release` (a declared channel whose HELD
+read drops the row — no latch, so holding it down keeps the body off the
+face), and `spend` (drain a body-lane Counter slot at a rate; the row becomes
+ineligible the tick the slot cannot pay, and a world's own rules refill it or
+trade for it — the engine has no stamina concept of its own).
 
 A grip owns the whole tangent-plane velocity, rise included; the tick it ends
 (released, spent out, or its face lost) that rise is split against gravity-up
@@ -1275,18 +1293,23 @@ Validation (`WorldDefinitionValidator.ValidateHolds`): unique row names; a cone
 required for a `Surface` row and refused for a `Free` one, finite, inside
 `[0, 180]`, increasing; a positive `reach` on a `Surface` row; `upLean` and
 `driveAlignment` in `[0, 1]`; a positive `grip` on a `Grip` row and `Grip`/
-`onDrive` requiring `Surface`; `lift` in `[0, 1]`; `release` naming a declared
+`onDrive` requiring `Surface`; `lift` in `[0, 1]`; `gravity` required with a
+positive `rise`/`fall`/`terminal` on a `Gravity` or `Lift` row and refused
+elsewhere; `thrust` in `[0, 1]`; `release` naming a declared
 composition channel; `spend.state` naming a declared body/identity Counter slot
-and a positive `spend.ratePerSecond`. The row supplies the `Holds` facet unconditionally, so a hold program is
-admitted whatever the list holds; `Drive` is the conditionally-supplied facet,
-and a drive program against a kit authoring no row is what the
+and a positive `spend.ratePerSecond`. Both `Holds` and `Drive` are
+CONDITIONALLY-supplied facets — a kit authoring an empty or absent `holds` list
+refuses a Motion-kind program outright (a fact checked ahead of the facet
+mechanism, since it holds whatever operations the program selects), and a
+drive program against a kit authoring no `drive` row is what the
 `MotionTuningFacet` gate refuses by name.
 
 A `Medium` row is the ONLY spelling of the medium law — `ApplyHold` runs it
 against the row `ResolveHold` took, and `WorldMediumLawTests` pins it to a
 recorded 240-tick fixed-point trace. `puck.world.frozen.json`'s `fishKit` is
 the worked example: a kit whose `fishMotion` program runs
-`ResolveHold`/`ApplyHold`, with one `water` row carrying the six medium facets.
+`ResolveHold`/`ApplyHold`, with one `water` row carrying the five medium
+facets plus its own `thrust`.
 
 Read back with `body.hold` (`[body.hold: body:<n> hold=<name|none>
 normal=(x, y, z) spend=<left|n/a>]`). The current row index, its anchor and

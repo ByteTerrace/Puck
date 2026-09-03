@@ -142,9 +142,9 @@ public struct FixedTetherConstraint {
 
         if (next < MinLength) {
             next = MinLength;
-            // Mirrors WorldBody.ApplyVerticalGravity's clamp-then-reset: once the floor absorbs the remainder, keeping
-            // it banked would let a held reel-in bury an ever-growing debt that a later reel-out has to pay down
-            // before the rope visibly lengthens.
+            // Mirrors a Gravity hold's own clamp-then-reset (WorldBody.Hold.cs's ApplyHoldGravity): once the floor
+            // absorbs the remainder, keeping it banked would let a held reel-in bury an ever-growing debt that a
+            // later reel-out has to pay down before the rope visibly lengthens.
             m_lengthAccumulator.Reset();
         }
 

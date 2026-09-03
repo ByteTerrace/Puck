@@ -137,9 +137,17 @@ internal static class Fixtures {
             Motion: new WorldMotion(
                 MoveSpeed: 4f,
                 TurnSpeed: 2.5f,
-                RiseGravity: 14f,
-                FallGravity: 23f,
-                MaxFallSpeed: 20f,
+                // The one row a Motion-kind kit must always author now — a Free bond takes it unconditionally every
+                // tick, reproducing the retired kit-level gravity trio exactly (no collider here for a Surface row
+                // to probe against anyway).
+                Holds: [
+                    new WorldHold(
+                        Bond: BodyHoldBond.Free,
+                        Gravity: new WorldHoldGravity(Fall: 23f, Rise: 14f, Terminal: 20f),
+                        Hold: BodyHoldKind.Gravity,
+                        Name: "air"
+                    ),
+                ],
                 // The empty response table snaps planar velocity instantly — a legitimate, minimal table
                 // (WorldDefinitionValidator.ValidateResponse loops zero times over it).
                 Response: [],
@@ -177,11 +185,12 @@ internal static class Fixtures {
                 Kind: BodyProgramKind.Motion,
                 Operations: [
                     BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
+                    BodyMotionOp.ResolveHold,
                     BodyMotionOp.ComputePlanarTargetVelocity,
                     BodyMotionOp.ShapePlanarVelocity,
                     BodyMotionOp.SnapYawToPlanarIntent,
                     BodyMotionOp.RunActionTriggers,
-                    BodyMotionOp.ApplyVerticalGravity,
+                    BodyMotionOp.ApplyHold,
                     BodyMotionOp.IntegratePlanarAndVerticalVelocity,
                     BodyMotionOp.CommitPose,
                 ]

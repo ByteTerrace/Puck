@@ -295,9 +295,10 @@ public sealed class DriveLawTests {
             Kind: BodyProgramKind.Motion,
             Operations: [
                 BodyMotionOp.ResolveDriveFrame,
+                BodyMotionOp.ResolveHold,
                 BodyMotionOp.ShapeDriveVelocity,
                 BodyMotionOp.RunActionTriggers,
-                BodyMotionOp.ApplyVerticalGravity,
+                BodyMotionOp.ApplyHold,
                 BodyMotionOp.IntegratePlanarAndVerticalVelocity,
                 BodyMotionOp.CommitPose,
             ]
@@ -306,15 +307,20 @@ public sealed class DriveLawTests {
         var kit = new WorldKit(
             Name: "kart-test",
             BodyMotionProgram: "drive",
-            // The kart spelling: the motion row carries the forward speed, the steering rate, the gravity trio and the
-            // held sprint (the boost); moveSpeedEnvelope pins that speed against any seated profile with min == max;
-            // the drive row carries what only a drive has.
+            // The kart spelling: the motion row carries the forward speed, the steering rate, and the held sprint
+            // (the boost); moveSpeedEnvelope pins that speed against any seated profile with min == max; the gravity
+            // trio is the one authored hold row's own now, and the drive row carries what only a drive has.
             Motion: new WorldMotion(
                 MoveSpeed: 16f,
                 TurnSpeed: 2.4f,
-                RiseGravity: 14f,
-                FallGravity: 26f,
-                MaxFallSpeed: 30f,
+                Holds: [
+                    new WorldHold(
+                        Bond: BodyHoldBond.Free,
+                        Gravity: new WorldHoldGravity(Fall: 26f, Rise: 14f, Terminal: 30f),
+                        Hold: BodyHoldKind.Gravity,
+                        Name: "air"
+                    ),
+                ],
                 SprintMultiplier: 1.5f,
                 SprintChannel: "boost",
                 MoveSpeedEnvelope: new MotionScalarEnvelope(Max: 16f, Min: 16f),

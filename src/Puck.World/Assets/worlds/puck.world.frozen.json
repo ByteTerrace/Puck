@@ -491,7 +491,6 @@
         "SnapYawToPlanarIntent",
         "RunActionTriggers",
         "ApplyHold",
-        "ApplyVerticalDrive",
         "IntegratePlanarAndVerticalVelocity",
         "CommitPose"
       ],
@@ -863,13 +862,39 @@
         },
         "motion": {
           "facingSnap": true,
-          "fallGravity": 46,
-          "maxFallSpeed": 40,
           "moveSpeed": 1.4,
           "response": [],
-          "riseGravity": 28,
           "sprintMultiplier": 1,
-          "turnSpeed": 2.0
+          "turnSpeed": 2.0,
+          "holds": [
+            {
+              "name": "ground",
+              "bond": "Surface",
+              "cone": [
+                0,
+                60
+              ],
+              "hold": "Gravity",
+              "reach": 1.2,
+              "gravity": {
+                "rise": 28,
+                "fall": 46,
+                "terminal": 40
+              },
+              "thrust": 1
+            },
+            {
+              "name": "air",
+              "bond": "Free",
+              "hold": "Gravity",
+              "gravity": {
+                "rise": 28,
+                "fall": 46,
+                "terminal": 40
+              },
+              "thrust": 1
+            }
+          ]
         },
         "name": "critterKit",
         "producers": {
@@ -907,7 +932,6 @@
         },
         "motion": {
           "facingSnap": true,
-          "fallGravity": 1,
           "holds": [
             {
               "bond": "Medium",
@@ -917,16 +941,14 @@
                 "floatDepth": 0.6,
                 "maxRiseSpeed": 1.0,
                 "maxSinkSpeed": 1.0,
-                "surfaceSettleRate": 0.8,
-                "thrustFraction": 0.4
+                "surfaceSettleRate": 0.8
               },
-              "name": "water"
+              "name": "water",
+              "thrust": 0.4
             }
           ],
-          "maxFallSpeed": 1,
           "moveSpeed": 1.0,
           "response": [],
-          "riseGravity": 1,
           "sprintMultiplier": 1,
           "turnSpeed": 1.5
         },

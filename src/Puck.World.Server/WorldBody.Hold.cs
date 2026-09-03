@@ -912,27 +912,34 @@ public sealed partial class WorldBody {
 
         return (twist * arc).Normalize();
     }
-    // The ApplyHold operation: the current row's vertical law. Nothing holding the body is gravity — the same law an
-    // unheld body falls under.
+    // The ApplyHold operation: the current row's vertical law, plus its own MoveUp thrust in every bond. A body no
+    // row holds this tick (every candidate ineligible) keeps whatever vertical channel it carried in, exactly as
+    // BodyHoldKind.None does when a row IS held.
     private void ApplyHold(ref BodyMotionScratch scratch) {
         if (!TryCurrentHold(hold: out var hold)) {
-            ApplyVerticalGravity(stepTicks: scratch.StepTicks);
-
             return;
         }
 
         switch (hold.Kind) {
             case BodyHoldKind.Gravity:
-                ApplyVerticalGravity(stepTicks: scratch.StepTicks);
+                ApplyHoldGravity(
+                    hold: in hold,
+                    scale: FixedQ4816.One,
+                    stepTicks: scratch.StepTicks
+                );
 
                 break;
             case BodyHoldKind.Lift:
                 if (hold.Lift >= FixedQ4816.One) {
                     // Full lift owns the vertical channel: whatever contact folded into it (a glance off a walkable
                     // face) bleeds back to rest instead of carrying the body away forever.
-                    ApplyVerticalDecay(scratch: ref scratch);
+                    ApplyHoldGravityDecay(
+                        hold: in hold,
+                        scratch: ref scratch
+                    );
                 } else {
-                    ApplyVerticalGravity(
+                    ApplyHoldGravity(
+                        hold: in hold,
                         scale: (FixedQ4816.One - hold.Lift),
                         stepTicks: scratch.StepTicks
                     );
@@ -953,18 +960,122 @@ public sealed partial class WorldBody {
         }
         if (hold.Bond == BodyHoldBond.Medium) {
             // A medium holds by displacement whatever its kind says about gravity, so its law runs alongside rather
-            // than instead of the kind switch above (a medium row ordinarily authors kind None).
+            // than instead of the kind switch above (a medium row ordinarily authors kind None), and folds the
+            // row's own thrust into its drift before the convergence runs rather than through ApplyHoldThrust below.
             ApplyMedium(
-                medium: hold.Medium,
+                hold: in hold,
+                scratch: ref scratch
+            );
+        } else {
+            ApplyHoldThrust(
+                hold: in hold,
                 scratch: ref scratch
             );
         }
+    }
+    // Integrates ONE gravity channel whatever sources it — the world's solved field when it authors one, the row's
+    // own arc otherwise. The rise/fall asymmetry is SHAPING, not a source — under a solved field it rides as the
+    // row's authored Rise:Fall ratio so a floaty top of the arc survives on a planetoid, and the row's own Terminal
+    // clamps either way. scale is the fraction of the arc still reaching the body — a lift row's own fraction
+    // cancels the rest; one is the unscaled arc.
+    private void ApplyHoldGravity(in FixedBodyHold hold, FixedQ4816 scale, ulong stepTicks) {
+        var rising = (m_verticalVelocity > FixedQ4816.Zero);
+        var gravity = (rising
+            ? hold.Gravity.Rise
+            : hold.Gravity.Fall
+        );
+
+        if (TrySolvedGravityMagnitude(magnitude: out var solved)) {
+            gravity = solved;
+
+            if (
+                rising &&
+                (hold.Gravity.Fall > FixedQ4816.Zero)
+            ) {
+                gravity = ((gravity * hold.Gravity.Rise) / hold.Gravity.Fall);
+            }
+        }
+
+        var gravityStep = m_verticalVelocityAccumulator.Integrate(
+            elapsedTicks: stepTicks,
+            ratePerSecond: -(gravity * scale)
+        );
+        var terminalVelocity = -hold.Gravity.Terminal;
+        var acceleratedVelocity = (m_verticalVelocity + gravityStep);
+
+        if (acceleratedVelocity < terminalVelocity) {
+            m_verticalVelocity = terminalVelocity;
+            m_verticalVelocityAccumulator.Reset();
+        } else {
+            m_verticalVelocity = acceleratedVelocity;
+        }
+    }
+    // A full-lift row owns the vertical channel outright, bleeding whatever it carries back toward rest at the
+    // row's own Rise rate (a symmetric bleed, not the asymmetric arc) rather than integrating gravity onto it.
+    private void ApplyHoldGravityDecay(in FixedBodyHold hold, ref BodyMotionScratch scratch) {
+        if (m_verticalVelocity == FixedQ4816.Zero) {
+            return;
+        }
+
+        scratch.Velocity = scratch.Velocity with { Y = (scratch.Velocity.Y + m_verticalVelocity) };
+
+        if (m_verticalVelocity > FixedQ4816.Zero) {
+            var bleed = m_verticalVelocityAccumulator.Integrate(
+                ratePerSecond: -hold.Gravity.Rise,
+                elapsedTicks: scratch.StepTicks
+            );
+            var next = (m_verticalVelocity + bleed);
+
+            m_verticalVelocity = ((next < FixedQ4816.Zero)
+                ? FixedQ4816.Zero
+                : next
+            );
+        } else {
+            var bleed = m_verticalVelocityAccumulator.Integrate(
+                ratePerSecond: hold.Gravity.Rise,
+                elapsedTicks: scratch.StepTicks
+            );
+            var next = (m_verticalVelocity + bleed);
+
+            m_verticalVelocity = ((next > FixedQ4816.Zero)
+                ? FixedQ4816.Zero
+                : next
+            );
+        }
+
+        if (m_verticalVelocity == FixedQ4816.Zero) {
+            m_verticalVelocityAccumulator.Reset();
+        }
+    }
+    // A row's own thrust, applied to every non-Medium bond: while MoveUp is non-zero, drives vertical velocity
+    // directly at the row's thrust fraction of the resolved move speed and suspends the ballistic channel; releasing
+    // MoveUp returns vertical ownership to the row's own kind this same tick. A Medium bond's own thrust folds into
+    // ApplyMedium's convergence instead, so this never runs for one.
+    private void ApplyHoldThrust(in FixedBodyHold hold, ref BodyMotionScratch scratch) {
+        if (hold.Thrust <= FixedQ4816.Zero) {
+            return;
+        }
+
+        var drive = Role(
+            intent: in scratch.Intent,
+            role: ChannelRole.MoveUp
+        );
+
+        if (drive == FixedQ4816.Zero) {
+            return;
+        }
+
+        m_verticalVelocity = FixedQ4816.Zero;
+        m_verticalVelocityAccumulator.Reset();
+        scratch.DirectVerticalVelocity = ((drive * scratch.MoveSpeed) * hold.Thrust);
     }
     // The one medium law. The body's own commanded thrust is folded into the medium's drift BEFORE the convergence
     // runs, so nothing writes the vertical channel twice: below the bob band the medium drifts the body at its
     // buoyancy, inside the band (and above it, recovering a breach) it settles proportionally toward the float line,
     // and the sum is clamped to the medium's own terminal speeds.
-    private void ApplyMedium(in FixedBodyMedium medium, ref BodyMotionScratch scratch) {
+    private void ApplyMedium(in FixedBodyHold hold, ref BodyMotionScratch scratch) {
+        var medium = hold.Medium;
+
         if (m_mediumSurface is not { } mediumSurface) {
             return;
         }
@@ -994,7 +1105,7 @@ public sealed partial class WorldBody {
 
         var target = FixedQ4816.Clamp(
             value: (MediumThrust(
-                medium: in medium,
+                hold: in hold,
                 scratch: ref scratch
             ) + drift),
             minimum: -medium.MaxSinkSpeed,
@@ -1068,9 +1179,9 @@ public sealed partial class WorldBody {
             surface: mediumSurface
         );
     }
-    // The vertical half of the commanded thrust: the MoveUp role scaled by the hold's travel speed and the medium's
-    // own thrust fraction, with the same held-sprint multiplier the planar half applies.
-    private FixedQ4816 MediumThrust(in FixedBodyMedium medium, ref BodyMotionScratch scratch) {
+    // The vertical half of the commanded thrust: the MoveUp role scaled by the hold's travel speed and the row's own
+    // thrust, with the same held-sprint multiplier the planar half applies.
+    private FixedQ4816 MediumThrust(in FixedBodyHold hold, ref BodyMotionScratch scratch) {
         var speed = (((m_sprintChannelOrdinal >= 0) && (scratch.Intent[m_sprintChannelOrdinal] >= m_channelThresholds[m_sprintChannelOrdinal]))
             ? (scratch.MoveSpeed * m_tuning.SprintMultiplier)
             : scratch.MoveSpeed
@@ -1079,7 +1190,7 @@ public sealed partial class WorldBody {
         return ((Role(
             intent: in scratch.Intent,
             role: ChannelRole.MoveUp
-        ) * speed) * medium.ThrustFraction);
+        ) * speed) * hold.Thrust);
     }
     // The two medium facts, on the same one-tick-behind terms every other body fact is published under.
     private void WriteMediumFacts(FixedQ4816 surface, FixedQ4816 error, in FixedBodyMedium medium) {
