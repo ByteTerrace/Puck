@@ -804,7 +804,7 @@ public static partial class WorldDefinitionValidator {
                 errors: errors
             );
 
-            // Resolved only when the program name is defined AND Motion-kind — ValidateMotionModel's coherence check
+            // Resolved only when the program name is defined AND Motion-kind — ValidateMotionRow's coherence check
             // needs a real program to walk; a bad bodyMotionProgram is already refused above, so it skips coherence
             // rather than compounding the refusal with a second, derived one.
             CompiledBodyMotionProgram? motionProgram = null;
@@ -823,8 +823,8 @@ public static partial class WorldDefinitionValidator {
                 motionProgram = resolvedProgram;
             }
 
-            ValidateMotionModel(
-                model: kit.Motion,
+            ValidateMotionRow(
+                motion: kit.Motion,
                 program: motionProgram,
                 path: $"{path}.motion",
                 channelNames: compositionChannelNames,

@@ -58,9 +58,9 @@ public static partial class WorldDefinitionValidator {
     }
     // What a kit's motion row supplies. Its own fields supply every facet unconditionally; Drive is the one an
     // OPTIONAL row carries, so a kit authoring none refuses a drive program by facet name.
-    private static MotionTuningFacet SuppliedMotionTuningFacets(WorldMotion model) => (MotionTuningFacet.Speed | MotionTuningFacet.GravityArc | MotionTuningFacet.GravityBleed
+    private static MotionTuningFacet SuppliedMotionTuningFacets(WorldMotion motion) => (MotionTuningFacet.Speed | MotionTuningFacet.GravityArc | MotionTuningFacet.GravityBleed
         | MotionTuningFacet.PlanarResponse | MotionTuningFacet.Sprint | MotionTuningFacet.WorldFrame | MotionTuningFacet.Holds
-        | ((model.Drive is not null)
+        | ((motion.Drive is not null)
         ? MotionTuningFacet.Drive
         : MotionTuningFacet.None));
     private static bool TryScalar(BodyProgramParameters parameters, string name, out float value) => parameters.Scalars.TryGetValue(
@@ -508,8 +508,8 @@ public static partial class WorldDefinitionValidator {
     // The kit.motion gate: required (a kit with no declared row is a dead kit), coherent with its body motion
     // program's selected operations (program is null when ValidateKits already refused bodyMotionProgram, in which
     // case coherence has nothing sound to check against), and its own fields valid.
-    private static void ValidateMotionModel(WorldMotion? model, CompiledBodyMotionProgram? program, string path, ISet<string> channelNames, ISet<string> dynamicsNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, int simulationRateHz, List<string> errors) {
-        if (model is null) {
+    private static void ValidateMotionRow(WorldMotion? motion, CompiledBodyMotionProgram? program, string path, ISet<string> channelNames, ISet<string> dynamicsNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, int simulationRateHz, List<string> errors) {
+        if (motion is null) {
             errors.Add(item: $"{path} is required.");
 
             return;
@@ -518,7 +518,7 @@ public static partial class WorldDefinitionValidator {
         if (
             (program is not null) &&
             !TryValidateProgramCoherence(
-            model: model,
+            motion: motion,
             program: program,
             reason: out var reason
         )
@@ -539,7 +539,7 @@ public static partial class WorldDefinitionValidator {
             shapesPlanarVelocity: ((program is null) || program.Contains(operation: BodyMotionOp.ShapePlanarVelocity)),
             simulationRateHz: simulationRateHz,
             stateSlots: stateSlots,
-            tuning: model
+            tuning: motion
         );
     }
     private static void ValidateProducerParameters(IReadOnlyDictionary<string, BodyProgramParameters> producers, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, IReadOnlyDictionary<string, BodyMotionProgram> programRows, ISet<string> channelNames, string path, List<string> errors) {

@@ -2902,7 +2902,7 @@
       ]
     },
     "ActionEffectSetVerticalVelocity": {
-      "description": "Writes the body\u0027s vertical-velocity channel (the jump launch / the surge). Under the grounded model gravity owns its decay; under the free model it bleeds to zero at the tuning\u0027s rise gravity (no fall phase).",
+      "description": "Writes the body\u0027s vertical-velocity channel (the jump launch / the surge). Under the grounded program gravity owns its decay; under the free program it bleeds to zero at the tuning\u0027s rise gravity (no fall phase).",
       "properties": {
         "$type": {
           "const": "setVerticalVelocity"

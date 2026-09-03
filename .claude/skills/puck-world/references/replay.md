@@ -217,7 +217,7 @@ armed-recording refusal remains for any of the three verbs.
 `WorldReplaySnapshot.HashState(population)`: FNV-1a over active bodies in
 index order — per body the index, the raw `FixedPosition.X/Y/Z` lanes, ALL
 FOUR raw `FixedOrientation` quaternion lanes, and the raw `FixedYaw` scalar
-(authoritative under the grounded model; the quaternion is built from it).
+(authoritative under the grounded program; the quaternion is built from it).
 So a MATCH proves the authoritative 6DOF pose trajectory and NOTHING about
 document state, the grant table, the journal, the HUD, or any presentation. A
 kit's `dynamics`-shaped planar follower state rides ALONGSIDE the hashed pose

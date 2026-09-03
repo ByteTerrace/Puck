@@ -285,8 +285,8 @@ public abstract record WorldTransactionStep {
 [JsonDerivedType(typeof(ActionEffect.PaintField), typeDiscriminator: "paintField")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record ActionEffect {
-    /// <summary>Writes the body's vertical-velocity channel (the jump launch / the surge). Under the grounded model
-    /// gravity owns its decay; under the free model it bleeds to zero at the tuning's rise gravity (no fall phase).</summary>
+    /// <summary>Writes the body's vertical-velocity channel (the jump launch / the surge). Under the grounded program
+    /// gravity owns its decay; under the free program it bleeds to zero at the tuning's rise gravity (no fall phase).</summary>
     public sealed record SetVerticalVelocity(float Velocity, ActionTarget Target = ActionTarget.Self) : ActionEffect;
     /// <summary>Multiplies the body's vertical velocity (the jump cut; gate on <see cref="ActionFact.Rising"/>).</summary>
     public sealed record ScaleVerticalVelocity(float Factor, ActionTarget Target = ActionTarget.Self) : ActionEffect;

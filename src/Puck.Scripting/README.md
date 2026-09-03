@@ -445,9 +445,9 @@ declares:
 | `forward` | `Bipolar` | `PlayerIntent.MoveAdvance = A` (role `MoveAdvance`) |
 | `strafe` | `Bipolar` | `PlayerIntent.MoveStrafe = A` (role `MoveStrafe`) |
 | `turn` | `Bipolar` | `PlayerIntent.Turn = A` (role `Turn`) — no host-side sign flip; the channel's documented convention IS the wire convention |
-| `up` | `Bipolar` | `PlayerIntent.MoveUp = A` (role `MoveUp`, free model only) |
-| `pitch` | `Bipolar` | `PlayerIntent.Pitch = A` (role `Pitch`, free model only) |
-| `roll` | `Bipolar` | `PlayerIntent.Roll = A` (role `Roll`, free model only) |
+| `up` | `Bipolar` | `PlayerIntent.MoveUp = A` (role `MoveUp`, free program only) |
+| `pitch` | `Bipolar` | `PlayerIntent.Pitch = A` (role `Pitch`, free program only) |
+| `roll` | `Bipolar` | `PlayerIntent.Roll = A` (role `Roll`, free program only) |
 | `jump` | `Binary` | composition ordinal `6`; play's grounded kit binds it to the vertical impulse, pressed iff `A == One` THIS tick |
 | `dash` | `Binary` | composition ordinal `7`; per-kit binding (declared, unbound by play's own kit), pressed iff `A == One` THIS tick |
 | `run` | `Binary` | composition ordinal `8`; the `promenader` kit's `sprintChannel` — scales commanded planar speed by `sprintMultiplier` (`1.3`) while held (a HELD, not edge-triggered, read) |

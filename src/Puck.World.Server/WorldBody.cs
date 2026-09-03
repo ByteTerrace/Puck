@@ -137,7 +137,7 @@ public sealed partial class WorldBody {
     // the model's motion for a bounded tick budget — integration itself is untouched. Cleared by hard teleports.
     private FixedVector3 m_overlayVelocity;
     private WorldContinuumTrajectory? m_pendingContinuum;
-    // The response-shaped planar velocity — the ramped horizontal velocity the grounded model integrates. With an empty
+    // The response-shaped planar velocity — the ramped horizontal velocity the grounded program integrates. With an empty
     // response table it equals the commanded target every tick (today's instant snap, byte-identical); with a table it
     // converges on the target at the matching row's engage/release rate through m_planarRampAccumulator. SURVIVES a live
     // kit recompile (a retune must not jerk the crowd) but is dropped alongside the vertical velocity in ResetVertical,
@@ -198,8 +198,8 @@ public sealed partial class WorldBody {
     // alongside m_yaw and clamped so the facing can never flip past vertical. Inert (held zero) while the drive row's
     // pitchRate is zero. Levelled by Face, written by Pose, like m_yaw.
     private FixedQ4816 m_drivePitch;
-    // The vertical channel — the axis the bound vertical effects write. Under the grounded model gravity integrates it
-    // and m_grounded gates/refreshes the composition facts; under the free model a written impulse bleeds to zero at
+    // The vertical channel — the axis the bound vertical effects write. Under the grounded program gravity integrates it
+    // and m_grounded gates/refreshes the composition facts; under the free program a written impulse bleeds to zero at
     // the tuning's rise gravity (no fall phase). Reset to a clean grounded rest (in ResetVertical) only by a hard
     // teleport that resets vertical state — Warp/Pose/Reconcile — but NOT by Face (resetVertical: false, the jump arc
     // keeps running), and by SetBodyMotionProgram only when the new program integrates vertical gravity.
@@ -208,7 +208,7 @@ public sealed partial class WorldBody {
     // coupled cell — never captured/restored (see WorldBody.Transfer.cs's own remarks): a pure function of this
     // body's position and the live lattice, re-derived identically the very next tick regardless of any teleport.
     private FixedQ4816? m_mediumSurface;
-    // The grounded model's authoritative heading scalar (radians): integrated from the Turn rate, with m_orientation
+    // The grounded program's authoritative heading scalar (radians): integrated from the Turn rate, with m_orientation
     // derived from it each step (a pure yaw rotation). Under free it is inert (orientation is authoritative and Yaw is
     // read back out of it).
     private FixedQ4816 m_yaw;

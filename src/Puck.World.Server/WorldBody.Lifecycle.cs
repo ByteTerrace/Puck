@@ -211,7 +211,7 @@ public sealed partial class WorldBody {
     /// pitch about the body right, roll about the body forward). A hard teleport pops: the previous-pose anchor is reset to the new pose so the renderer never
     /// interpolates across the jump, and any in-flight <see cref="Reconcile"/> smoothing offset is dropped. The pose is
     /// written as-is regardless of model; a grounded entity's next <see cref="Advance"/> re-pins Y and levels the
-    /// attitude to its yaw, so a full pose only persists under the free model.</summary>
+    /// attitude to its yaw, so a full pose only persists under the free program.</summary>
     /// <param name="x">The world X coordinate.</param>
     /// <param name="y">The world Y coordinate.</param>
     /// <param name="z">The world Z coordinate.</param>
@@ -789,7 +789,7 @@ public sealed partial class WorldBody {
     /// solve. A continuum-fenced body is immutable until a non-overlapping ordinary step admits it.</summary>
     public bool OrdinaryAdvanceAdmitted => m_ordinaryAdvanceAdmitted;
     /// <summary>Gets the avatar's full 6DOF attitude — the canonical orientation a camera rig or a dynamic transform rides.
-    /// Pure yaw about world up under the grounded model; an arbitrary body attitude under the free model.</summary>
+    /// Pure yaw about world up under the grounded program; an arbitrary body attitude under the free program.</summary>
     public Quaternion Orientation => m_orientation.ToQuaternion();
     /// <summary>The already-evaluated source-step trajectory awaiting ownership resolution before this body may
     /// advance normally on its destination authority.</summary>
@@ -797,7 +797,7 @@ public sealed partial class WorldBody {
     /// <summary>Gets the body's response-shaped planar speed (world units/second) — the coast/momentum witness the
     /// <c>world.contacts</c> read reports.</summary>
     public float PlanarSpeed => ((float)((double)m_planarVelocity.Length));
-    /// <summary>Gets the avatar's current world-space position (the ground foot point under the grounded model, where Y is
+    /// <summary>Gets the avatar's current world-space position (the ground foot point under the grounded program, where Y is
     /// pinned to the plane; a free craft's position is unconstrained in all three axes).</summary>
     public Vector3 Position => m_position.ToVector3();
     /// <summary>Gets the profile this player is seated on — the live source of its move/turn speeds and look-invert (read
@@ -813,9 +813,9 @@ public sealed partial class WorldBody {
     /// <see langword="false"/> for a kit authoring no medium hold.</summary>
     public bool Submerged => m_submerged;
     /// <summary>Gets the avatar's current heading in radians (0 = facing -Z; increases turning left / counter-clockwise).
-    /// Under the grounded model this returns the authoritative heading scalar <c>m_yaw</c> directly (the orientation is a
+    /// Under the grounded program this returns the authoritative heading scalar <c>m_yaw</c> directly (the orientation is a
     /// pure yaw rotation built from it, so decomposing it back out would be a redundant round-trip on the hot wander
-    /// path). Under the free model, where the full attitude is authoritative and <c>m_yaw</c> is inert, it is the yaw
+    /// path). Under the free program, where the full attitude is authoritative and <c>m_yaw</c> is inert, it is the yaw
     /// component of <see cref="Orientation"/>. The <c>body.where</c> read-back and <see cref="DescribePose"/> decompose
     /// the canonical orientation directly, bypassing this property.</summary>
     public float Yaw => ((float)((double)FixedYaw));

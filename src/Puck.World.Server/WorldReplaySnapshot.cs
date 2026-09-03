@@ -1735,8 +1735,8 @@ public sealed class WorldReplaySnapshot {
             hash.Add(value: orientation.Z.Value);
             hash.Add(value: orientation.W.Value);
             // The heading scalar rides beside the quaternion rather than being replaced by it: under the grounded
-            // model m_yaw is authoritative and the quaternion is built from it, so an edit too small to survive that
-            // construction would otherwise go unhashed. Under the free model this lane is redundant with the
+            // program m_yaw is authoritative and the quaternion is built from it, so an edit too small to survive that
+            // construction would otherwise go unhashed. Under the free program this lane is redundant with the
             // quaternion's own extracted yaw, but deterministically so, and costs only one fold.
             hash.Add(value: body.FixedYaw.Value);
         }

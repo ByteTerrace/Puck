@@ -568,7 +568,7 @@ public sealed partial class WorldBody {
     /// layer directly (see those methods' own remarks) — named here so a reviewer checking this struct's own
     /// completeness does not read their absence as an oversight.</para>
     /// </remarks>
-    /// <param name="PlanarVelocity">The ramped horizontal velocity the grounded model integrates.</param>
+    /// <param name="PlanarVelocity">The ramped horizontal velocity the grounded program integrates.</param>
     /// <param name="VerticalVelocity">The vertical (gravity/jump) velocity.</param>
     /// <param name="Orientation">The full attitude — captured directly rather than re-derived from yaw alone, so a
     /// future driven seat kit's pitch/roll survives too (today's seat kits author no drive row, where this always

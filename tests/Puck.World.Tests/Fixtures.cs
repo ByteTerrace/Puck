@@ -66,7 +66,7 @@ internal static class Fixtures {
     /// <see cref="TestPatternScreenIndex"/> — <see cref="EngageAuthorityLawTests"/>'s target.</description></item>
     /// </list>
     /// Every other section is the smallest legal value <c>WorldDefinitionValidator</c> accepts: one locomotion kit
-    /// ("traveler", a bare-bones grounded model with an empty response table — "the empty table snaps planar
+    /// ("traveler", a bare-bones grounded program with an empty response table — "the empty table snaps planar
     /// velocity instantly"), the three channels its body motion program's selected operations require
     /// (<c>MoveAdvance</c>/<c>MoveStrafe</c>/<c>Turn</c>), and <see cref="IntentSource.Idle"/> as the population's
     /// default peer source so no producer program (wander/attend/designated) is needed at all. This kit carries NO

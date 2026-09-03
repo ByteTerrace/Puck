@@ -1673,7 +1673,7 @@ public sealed partial class WorldServer {
                         CorrelationId: correlationId
                     ));
                 } else if (!WorldDefinitionValidator.TryValidateProgramCoherence(
-                    model: m_population.KitMotion(index: motion.EntityIndex),
+                    motion: m_population.KitMotion(index: motion.EntityIndex),
                     program: resolvedMotionProgram,
                     reason: out var coherenceReason
                 )) {

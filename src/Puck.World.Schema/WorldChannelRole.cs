@@ -14,8 +14,8 @@ public enum ChannelRole : byte {
     /// <summary>Motion along the body's right, +1 right / -1 left.</summary>
     MoveStrafe,
 
-    /// <summary>The heading turn rate, +1 left (counter-clockwise about the body's up) / -1 right. Grounded models
-    /// integrate it into the heading scalar the attitude derives from; the free model reads it as the yaw rate
+    /// <summary>The heading turn rate, +1 left (counter-clockwise about the body's up) / -1 right. The grounded program
+    /// integrates it into the heading scalar the attitude derives from; the free program reads it as the yaw rate
     /// beside <see cref="Pitch"/>/<see cref="Roll"/>.</summary>
     Turn,
 
