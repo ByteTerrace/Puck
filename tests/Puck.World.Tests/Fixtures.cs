@@ -137,9 +137,8 @@ internal static class Fixtures {
             Motion: new WorldMotion(
                 MoveSpeed: 4f,
                 TurnSpeed: 2.5f,
-                // The one row a Motion-kind kit must always author now — a Free bond takes it unconditionally every
-                // tick, reproducing the retired kit-level gravity trio exactly (no collider here for a Surface row
-                // to probe against anyway).
+                // The one row every Motion-kind kit must author: a Free bond takes it unconditionally every tick
+                // (no collider here for a Surface row to probe against anyway).
                 Holds: [
                     new WorldHold(
                         Bond: BodyHoldBond.Free,

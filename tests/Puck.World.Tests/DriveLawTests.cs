@@ -308,8 +308,8 @@ public sealed class DriveLawTests {
             Name: "kart-test",
             BodyMotionProgram: "drive",
             // The kart spelling: the motion row carries the forward speed, the steering rate, and the held sprint
-            // (the boost); moveSpeedEnvelope pins that speed against any seated profile with min == max; the gravity
-            // trio is the one authored hold row's own now, and the drive row carries what only a drive has.
+            // (the boost); moveSpeedEnvelope pins that speed against any seated profile with min == max; gravity is
+            // the one authored hold row's own field, and the drive row carries what only a drive has.
             Motion: new WorldMotion(
                 MoveSpeed: 16f,
                 TurnSpeed: 2.4f,

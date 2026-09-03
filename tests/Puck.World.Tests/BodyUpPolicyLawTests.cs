@@ -41,7 +41,7 @@ public sealed class BodyUpPolicyLawTests {
         AssertNotYawOnly(body: body, context: "ambient frame under tilted solved gravity");
     }
 
-    // Holds own the vertical channel now: every Motion-kind kit's attitude is composed through ResolveHold, whose
+    // Holds own the vertical channel: every Motion-kind kit's attitude is composed through ResolveHold, whose
     // Free-bond row turns the DRAWN axis toward ambient over the body's own span rather than snapping it, exactly as
     // a grip's lean does (see WorldBody.Hold.cs's SteerAttitudeToward). A live rebuild that swaps ambient direction
     // outright is therefore a bounded turn, not an instant pop, however few ticks that turn takes.

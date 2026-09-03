@@ -1076,8 +1076,8 @@ public sealed partial class WorldBody {
     // body still shouldn't clip through a wall. The vertical WRITE-BACK (m_verticalVelocity, m_planarVelocity, the
     // grounded position-accumulator reset) is gated on CompiledBodyMotionProgram.OwnsVerticalContactState: only a
     // program that runs ApplyHold has ceded its vertical channel to contact resolution. A program with no vertical
-    // channel operation at all owns whatever channel it carries directly (a full-lift row's own decay, or a
-    // body-frame 6DOF flight program's own scratch velocity) and must keep it — folding the resolved velocity back
+    // channel operation at all owns whatever channel it carries directly (a body-frame 6DOF flight program's own
+    // scratch velocity) and must keep it — folding the resolved velocity back
     // in every tick regardless would feed such a channel's own prior value back into itself, an unbounded loop
     // rather than a correction (the defect this gate exists to close). m_grounded/m_lastContactCount stay
     // informational for every model (RunActionTriggers' ActionFact.Grounded/Airborne reads them under any program),

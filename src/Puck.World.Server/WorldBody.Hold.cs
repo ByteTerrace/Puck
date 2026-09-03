@@ -912,9 +912,10 @@ public sealed partial class WorldBody {
 
         return (twist * arc).Normalize();
     }
-    // The ApplyHold operation: the current row's vertical law, plus its own MoveUp thrust in every bond. A body no
-    // row holds this tick (every candidate ineligible) keeps whatever vertical channel it carried in, exactly as
-    // BodyHoldKind.None does when a row IS held.
+    // The ApplyHold operation: the current row's vertical law, plus its own MoveUp thrust in every bond. Pairing
+    // this with ResolveHold, and authoring a hold list with one row nothing can drop, are both required for a
+    // Motion-kind program (see ValidateMotionRow/ValidateHolds), so TryCurrentHold always succeeds against a
+    // validated document; the guard exists because this method itself has no document to check that against.
     private void ApplyHold(ref BodyMotionScratch scratch) {
         if (!TryCurrentHold(hold: out var hold)) {
             return;

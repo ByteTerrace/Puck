@@ -1029,11 +1029,12 @@ The row carries the movement platform every kit reads — `MoveSpeed`,
 `TurnSpeed`, `SprintMultiplier`/`SprintChannel`,
 `MoveFrame`/`FacingSnap`, `MoveSpeedEnvelope` — plus two rows beside
 it, each supplying its own tuning facet and each read by its own operations:
-`Holds` (below, `ResolveHold`/`ApplyHold`, mandatory — the hold list is the
-only spelling of a vertical channel, so a Motion-kind kit authoring none
-refuses by name) and `Drive` (optional,
-`ResolveDriveFrame`/`ShapeDriveVelocity`). Submerged locomotion is a kit
-authoring a `bond: "Medium"` hold row; a kart is a kit authoring a `drive` row.
+`Holds` (below; the hold LIST is mandatory — the hold list is the only
+spelling of a vertical channel, so a Motion-kind kit authoring none refuses by
+name — while `ResolveHold`/`ApplyHold` are selected like any other op) and
+`Drive` (optional, `ResolveDriveFrame`/`ShapeDriveVelocity`). Submerged
+locomotion is a kit authoring a `bond: "Medium"` hold row; a kart is a kit
+authoring a `drive` row.
 
 **`drive` (`WorldDrive`) — anisotropic body-frame drive.** Velocity decomposes
 into body-frame longitudinal/lateral/residual lanes, each converging at its own
@@ -1087,7 +1088,7 @@ with the program `[ResolveDriveFrame, ResolveHold, ShapeDriveVelocity,
 RunActionTriggers, ApplyHold, IntegratePlanarAndVerticalVelocity, CommitPose]`
 (op ORDER in the authored list is inert — `CompiledBodyMotionProgram` groups the
 selected set into its intrinsic phases) — the same op list every grounded kit
-runs, since the hold list is where a kart's gravity now lives.
+runs, since the hold list is where a kart's gravity lives.
 
 A kit whose program selects `ShapePlanarVelocity` shapes its planar velocity
 through exactly ONE of two mechanisms — the engage/release `Response` table
@@ -1186,8 +1187,9 @@ spelling of a vertical channel.** A kit authors an ordered list; the
 `ResolveHold` operation takes the first row the world offers and `ApplyHold`
 applies that row's vertical law and its own `thrust`. A Motion-kind kit
 authoring none refuses validation by name — even a kit with no vertical law of
-its own still authors one row of kind `None`, since the two operations are
-mandatory, never simply absent.
+its own still authors one row of kind `None`, since the hold list is the only
+spelling of a vertical channel, never simply absent, whatever operations the
+program selects.
 
 ```json
 "holds": [
@@ -1302,7 +1304,13 @@ CONDITIONALLY-supplied facets — a kit authoring an empty or absent `holds` lis
 refuses a Motion-kind program outright (a fact checked ahead of the facet
 mechanism, since it holds whatever operations the program selects), and a
 drive program against a kit authoring no `drive` row is what the
-`MotionTuningFacet` gate refuses by name.
+`MotionTuningFacet` gate refuses by name. A Motion-kind kit's `holds` list must
+also author at least one UNCONDITIONAL row — a `Free` or `Medium` bond with no
+`release` and no `spend` — so `ResolveHold` always has a row it can fall to
+once every earlier candidate goes ineligible and `ApplyHold` is never left with
+no current hold to read; and a program selecting `ApplyHold` without
+`ResolveHold` refuses by name, since `ApplyHold` applies whatever row
+`ResolveHold` selected.
 
 A `Medium` row is the ONLY spelling of the medium law — `ApplyHold` runs it
 against the row `ResolveHold` took, and `WorldMediumLawTests` pins it to a

@@ -28,8 +28,8 @@ public sealed record WorldHoldMedium(
     float FloatDepth
 );
 /// <summary>The vertical arc a <see cref="BodyHoldKind.Gravity"/> or <see cref="BodyHoldKind.Lift"/> row falls
-/// under — the same asymmetric arc <c>ApplyHold</c> used to read off the kit as a single flat trio, now carried per
-/// row so a kit's ground, wall, and air rows may each fall differently. Required on those two kinds; refused on
+/// under, carried per row so a kit's ground, wall, and air rows may each fall differently. Required on those two
+/// kinds; refused on
 /// <see cref="BodyHoldKind.Grip"/> (gravity is suspended while a grip holds) and on a <see cref="BodyHoldBond.Medium"/>
 /// row (a medium displaces by its own law).</summary>
 /// <param name="Rise">The downward acceleration while rising (u/s²) — the floaty top of the arc.</param>
@@ -189,10 +189,10 @@ public static class WorldHoldFactory {
 
         return compiled;
     }
-    /// <summary>Gets the fastest terminal fall speed any <see cref="BodyHoldKind.Gravity"/> or
-    /// <see cref="BodyHoldKind.Lift"/> row in a kit's hold list authors, or zero for a kit authoring none of
-    /// either — the per-row generalization of the retired kit-level <c>maxFallSpeed</c> a document-wide speed
-    /// ceiling reads.</summary>
+    /// <summary>Gets the fastest vertical speed any hold row in a kit's hold list can reach — a
+    /// <see cref="BodyHoldKind.Gravity"/> or <see cref="BodyHoldKind.Lift"/> row's own terminal fall speed, or a
+    /// <see cref="BodyHoldBond.Medium"/> row's faster of its rise/sink terminal speeds — or zero for a kit authoring
+    /// neither. What a document-wide speed ceiling reads.</summary>
     /// <param name="holds">The authored rows, or <see langword="null"/>.</param>
     /// <returns>The fastest authored terminal speed.</returns>
     public static float MaxTerminalFallSpeed(IReadOnlyList<WorldHold>? holds) {
@@ -201,6 +201,9 @@ public static class WorldHoldFactory {
         foreach (var hold in (holds ?? [])) {
             if (hold?.Gravity is { } gravity) {
                 terminal = Math.Max(val1: terminal, val2: gravity.Terminal);
+            }
+            if (hold?.Medium is { } medium) {
+                terminal = Math.Max(val1: terminal, val2: Math.Max(val1: medium.MaxRiseSpeed, val2: medium.MaxSinkSpeed));
             }
         }
 

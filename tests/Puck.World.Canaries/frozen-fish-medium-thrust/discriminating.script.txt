@@ -1,0 +1,2 @@
+world.wait 480
+world.state.hash

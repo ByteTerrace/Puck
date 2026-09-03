@@ -10,10 +10,10 @@ using Puck.World.Server;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// CONTRACT UNDER TEST: a Motion-kind kit's hold list is the only spelling of a vertical channel now — a kit that
-/// authors no vertical law of its own still authors a Surface/Free `Gravity` pair carrying what a retired
-/// kit-level gravity trio used to (the frozen world's own `defaultKit`/`critterKit` fold). This trace pins that
-/// no-collider free-fall arc for 240 ticks, discriminated by a change to the row's own `fall` rate.
+/// CONTRACT UNDER TEST: a Motion-kind kit's hold list is the only spelling of a vertical channel — a kit that
+/// authors no vertical law of its own still authors a Surface/Free `Gravity` pair (the frozen world's own
+/// `defaultKit`/`critterKit` fold). This trace pins that no-collider free-fall arc for 240 ticks, discriminated by
+/// a change to the row's own `fall` rate.
 /// </summary>
 public sealed class HoldGravityFallbackLawTests {
     private static string Hex(FixedQ4816 value) => value.Value.ToString(format: "x16", provider: CultureInfo.InvariantCulture);

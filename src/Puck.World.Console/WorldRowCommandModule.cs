@@ -708,8 +708,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
     )
         : string.Empty
     );
-    // The ordered hold list's own kind/gravity/thrust per row — the vertical channel's whole authoring surface now
-    // that no kit-level gravity trio exists to echo instead.
+    // The ordered hold list's own kind/gravity/thrust per row — the vertical channel's whole authoring surface.
     private static string DescribeHolds(WorldMotion motion) {
         if (motion.Holds is not { Count: > 0 } holds) {
             return "holds=none";

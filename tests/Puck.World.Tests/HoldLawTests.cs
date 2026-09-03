@@ -30,7 +30,7 @@ public sealed class HoldLawTests {
     // under it and out of reach of the floor.
     private const float CeilingY = 6f;
 
-    // The fixture's shared vertical arc — the retired kit-level gravity trio, now every Gravity/Lift row's own field.
+    // The fixture's shared vertical arc: every Gravity/Lift row's own field.
     private static readonly WorldHoldGravity DefaultGravity = new(Fall: 23f, Rise: 14f, Terminal: 20f);
 
     private static WorldHold Air(BodyHoldKind kind = BodyHoldKind.Gravity, float lift = 0f, float thrust = 0f, WorldHoldGravity? gravity = null) => new(
@@ -1565,8 +1565,7 @@ public sealed class HoldLawTests {
     }
 
     // The Free Lift row's own hover-then-climb arc: full lift holds altitude, then MoveUp climbs at the row's
-    // thrust fraction of the resolved move speed — the byte-for-byte reproduction of the retired ApplyVerticalDrive
-    // this fold folds into every hold row.
+    // thrust fraction of the resolved move speed.
     private static readonly string[] FreeLiftHoverTrace240 = [
         "0000000000000000 0000000000060000 00000000000a0000 0000000000000000 0000000000000000 0000000000000000 0000000000000000 0000000000000000",
         "0000000000000000 0000000000060000 00000000000a0000 0000000000000000 0000000000000000 0000000000000000 0000000000000000 0000000000000000",
@@ -1879,5 +1878,34 @@ public sealed class HoldLawTests {
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: denied, reason: out var deniedReason));
         Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "holds is required for a Motion-kind body motion program");
+    }
+    [Fact]
+    public void AHoldListWithOnlyASurfaceRow_RefusesValidation_WhereTheSameListWithAFreeRowIsAdmitted() {
+        var admitted = BuildHoldDocument(holds: [Ground(), Air()]);
+
+        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: admitted, reason: out var admittedReason), userMessage: admittedReason);
+
+        var denied = BuildHoldDocument(holds: [Ground()]);
+
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: denied, reason: out var deniedReason));
+        Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "authors no unconditional row");
+    }
+    [Fact]
+    public void AProgramSelectingApplyHoldWithoutResolveHold_RefusesValidation() {
+        var admitted = BuildHoldDocument(holds: [Air()]);
+
+        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: admitted, reason: out var admittedReason), userMessage: admittedReason);
+
+        var programs = admitted.BodyMotionPrograms.ToList();
+        var index = programs.FindIndex(match: program => string.Equals(a: program.Name, b: "hold", comparisonType: StringComparison.Ordinal));
+
+        programs[index] = programs[index] with {
+            Operations = [.. programs[index].Operations.Where(predicate: op => (op != BodyMotionOp.ResolveHold))],
+        };
+
+        var denied = admitted with { BodyMotionProgramsRaw = programs };
+
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: denied, reason: out var deniedReason));
+        Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "selects 'ApplyHold' without 'ResolveHold'");
     }
 }

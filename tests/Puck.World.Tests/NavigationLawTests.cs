@@ -176,8 +176,8 @@ public sealed class NavigationLawTests {
             BodyMotionProgramsRaw = [.. document.BodyMotionPrograms, navigationMotion, producer],
             KitRowsRaw = [kit with {
                 BodyMotionProgram = navigationMotion.Name,
-                // A full-thrust hold row reproduces the retired ApplyVerticalDrive's unconditional MoveUp
-                // consumption — the "compatible vertical consumer" a Volume/Medium-domain producer needs.
+                // A full-thrust hold row is the "compatible vertical consumer" a Volume/Medium-domain producer
+                // needs: it consumes MoveUp unconditionally.
                 Motion = kit.Motion with { Holds = [kit.Motion.Holds![0] with { Thrust = 1f }] },
                 ProducersRaw = new Dictionary<string, BodyProgramParameters>(collection: kit.Producers) {
                     [ProducerName] = NavigationParameters(),
@@ -253,8 +253,7 @@ public sealed class NavigationLawTests {
         var flight = NavigationDocument(domain: VolumeDomain());
         var flightKits = flight.Kits.ToArray();
         var noVerticalConsumer = flight with {
-            // Zeroing the hold row's own thrust is the new "no compatible vertical consumer" shape — thrust replaced
-            // the retired ApplyVerticalDrive op, so dropping the op itself no longer names the right facet.
+            // Zeroing the hold row's own thrust is the "no compatible vertical consumer" shape.
             KitRowsRaw = [flightKits[0] with {
                 Motion = flightKits[0].Motion with { Holds = [flightKits[0].Motion.Holds![0] with { Thrust = 0f }] },
             }],

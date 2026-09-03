@@ -28,8 +28,8 @@ public enum BodyMotionOp : byte {
 
     /// <summary>Applies the current hold's vertical law: the row's own arc for a hold gravity keeps, a rate-limited
     /// inward standoff for a grip, a fraction of that arc cancelled for a lift, nothing for a hold that holds by
-    /// itself — plus the row's own thrust, in every bond, while MoveUp is non-zero. A kit authoring no holds has no
-    /// vertical channel operation at all, so a Motion-kind program requires this op and the holds facet it reads.</summary>
+    /// itself — plus the row's own thrust, in every bond, while MoveUp is non-zero. A program selecting this op
+    /// without <see cref="ResolveHold"/> refuses by name, since it applies whatever row that op selected.</summary>
     ApplyHold,
     IntegratePlanarAndVerticalVelocity,
     IntegrateScratchVelocity,

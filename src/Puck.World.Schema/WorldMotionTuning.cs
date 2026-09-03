@@ -52,7 +52,7 @@ namespace Puck.World;
 /// profile override. See <see cref="MotionScalarEnvelope"/>.</param>
 /// <param name="Holds">The ordered list of what may hold this body — see <see cref="WorldHold"/> — read by the
 /// <c>ResolveHold</c>/<c>ApplyHold</c> operations. A Motion-kind kit authoring none refuses validation by name: the
-/// hold list is the only spelling of a vertical channel now, so a kit with no vertical law of its own still authors
+/// hold list is the only spelling of a vertical channel, so a kit with no vertical law of its own still authors
 /// one row of kind <see cref="BodyHoldKind.None"/>.</param>
 /// <param name="Drive">The anisotropic drive row — see <see cref="WorldDrive"/> — read by the
 /// <c>ResolveDriveFrame</c>/<c>ShapeDriveVelocity</c> operations, or <see langword="null"/> (the default) for a

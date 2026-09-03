@@ -298,10 +298,15 @@ public static partial class WorldDefinitionValidator {
             );
         }
     }
+    // A row nothing can ever make ineligible: bonded to no surface (Free) or to a medium column (Medium), authoring
+    // neither a release channel nor a spend. ResolveHold always takes such a row once every earlier candidate is
+    // ineligible, so a hold list authoring one guarantees ApplyHold always has a current hold to read.
+    private static bool HoldIsUnconditional(WorldHold hold) => ((hold is not null) && ((hold.Bond == BodyHoldBond.Free) || (hold.Bond == BodyHoldBond.Medium)) && (hold.Release is null) && (hold.Spend is null));
     // The ordered hold list: a unique name per row, a cone inside [0, 180] with min < max for a surface row (and no
-    // cone at all for a free one), the kind's own operands, and every named channel/state slot resolvable. Absence
-    // itself is checked by the caller (ValidateMotionRow) against the compiled program's kind, since a Motion-kind
-    // kit must always author at least one row now that the hold list is the only spelling of a vertical channel.
+    // cone at all for a free one), the kind's own operands, and every named channel/state slot resolvable. Absence,
+    // and the presence of an unconditional row, are checked by the caller (ValidateMotionRow) against the compiled
+    // program's kind — the hold list is the only spelling of a vertical channel, so a Motion-kind kit must always
+    // author at least one row, including an unconditional one.
     private static void ValidateHolds(IReadOnlyList<WorldHold>? holds, string path, ISet<string> channelNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, List<string> errors) {
         if (holds is not { Count: > 0 }) {
             return;
@@ -539,14 +544,21 @@ public static partial class WorldDefinitionValidator {
         ) {
             errors.Add(item: $"{path} {reason}");
         }
-        // The hold list is the only spelling of a vertical channel now, so a Motion-kind program requires one
-        // regardless of which facets its own selected operations happen to read — a kit with no vertical law of its
-        // own still authors a single row of kind None rather than omitting the list.
-        if (
-            (program is { Kind: BodyProgramKind.Motion }) &&
-            (motion.Holds is not { Count: > 0 })
-        ) {
-            errors.Add(item: $"{path}.holds is required for a Motion-kind body motion program ('{program.Name}') — the hold list is the only spelling of a vertical channel.");
+        // The hold list is the only spelling of a vertical channel, so a Motion-kind program requires one regardless
+        // of which facets its own selected operations happen to read — a kit with no vertical law of its own still
+        // authors a single row of kind None rather than omitting the list.
+        if (program is { Kind: BodyProgramKind.Motion }) {
+            if (motion.Holds is not { Count: > 0 } holds) {
+                errors.Add(item: $"{path}.holds is required for a Motion-kind body motion program ('{program.Name}') — the hold list is the only spelling of a vertical channel.");
+            } else if (!holds.Any(predicate: HoldIsUnconditional)) {
+                errors.Add(item: $"{path}.holds authors no unconditional row (a Free or Medium bond authoring neither release nor spend) for a Motion-kind body motion program ('{program.Name}') — ApplyHold keeps whatever vertical channel the body carried in the tick every row goes ineligible, so a hold list must always leave one row nothing can drop.");
+            }
+            if (
+                program.Contains(operation: BodyMotionOp.ApplyHold) &&
+                !program.Contains(operation: BodyMotionOp.ResolveHold)
+            ) {
+                errors.Add(item: $"{path} body motion program '{program.Name}' selects '{BodyMotionOp.ApplyHold}' without '{BodyMotionOp.ResolveHold}' — ApplyHold applies whatever row ResolveHold selected, and never runs paired with a selector of its own.");
+            }
         }
 
         ValidateMotion(

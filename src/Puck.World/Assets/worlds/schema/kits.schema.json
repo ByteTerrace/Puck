@@ -122,7 +122,7 @@
                 "default": null
               },
               "holds": {
-                "description": "The ordered list of what may hold this body \u2014 see WorldHold \u2014 read by the ResolveHold/ApplyHold operations. A Motion-kind kit authoring none refuses validation by name: the hold list is the only spelling of a vertical channel now, so a kit with no vertical law of its own still authors one row of kind None.",
+                "description": "The ordered list of what may hold this body \u2014 see WorldHold \u2014 read by the ResolveHold/ApplyHold operations. A Motion-kind kit authoring none refuses validation by name: the hold list is the only spelling of a vertical channel, so a kit with no vertical law of its own still authors one row of kind None.",
                 "type": [
                   "array",
                   "null"
