@@ -227,8 +227,8 @@ floor is a ceiling and a released body falls through it; a producer's inward pul
 body's own HOME (its activation position, echoed by `body.where`'s `home=`) rather than the world
 origin, so a population spread over placements keeps to its own ground instead of congregating; and
 `bond: "medium"` carries buoyancy and the surface band in the hold vocabulary — the one spelling of that
-law, pinned by `WorldMediumLawTests` to a recorded fixed-point trace. The drive facets fold the other way: they shape a velocity
-rather than hold a body, so they are a `drive` row beside the kit's motion row, not a hold —
+law, pinned by `WorldMediumLawTests` to a recorded fixed-point trace. The anisotropic shaping facets fold the other way:
+they shape velocity rather than hold a body, so they are an `along` + `across` row in the same motion row, not a hold —
 `DriveLawTests` pins that fold to the row's recorded 240-tick trace. The pip carries two arms and
 two legs on `stride` (contralateral, about X) and `reach` (diagonal pairs, in the wall plane). The
 checks: `body.pose spawn:wall`, `body.fly 0 1 0 0 0 0 2.5` (drive into the wall), then
@@ -287,7 +287,7 @@ body reads live, and refuses by name for an identity not owned here). An identit
 before the reshape still carries its seeded 0.01 rows and reads as an explicit 0.01 claim — cure it
 with `identity.motion`, or delete the state dir.
 
-**The foundation is complete and overshot.** One flat motion row, with `holds` and `drive` rows beside it; the portal
+**The foundation is complete and overshot.** One flat motion row containing its `holds` and `shaping` rows; the portal
 lane end to end — step into a frame and the whole party transfers, all-or-nothing across capacity
 *and* authorization; input vocabulary with ordered chord activators; the radial wheel; roster sync;
 durations authored in seconds with ticks derived at compile; per-world clocks; the market/auction

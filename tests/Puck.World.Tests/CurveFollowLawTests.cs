@@ -23,8 +23,8 @@ public sealed class CurveFollowLawTests {
     // Matches Fixtures' own WorldSimulationDefaults.RateHz (240) — every fixed-tick-count loop in this file already
     // assumes it (the "2 s" remarks below); named here only for the elapsed-seconds arithmetic the tracking law adds.
     private const float SimulationRateHz = 240f;
-    // Fixtures' own SeatKitName kit: WorldMotion.MoveSpeed, with an EMPTY Response table (see
-    // Fixtures.BuildKits' own remarks), so commanded planar velocity snaps to it instantly — no spring/damper
+    // Fixtures' own SeatKitName kit: WorldMotion.Speed.Value, with one instant whole-vector shaping row (see
+    // Fixtures.BuildKits' own remarks), so commanded planar velocity snaps to it exactly — no spring/damper
     // settling lag to account for in the tracking-tolerance derivation below.
     private const float MoveSpeed = 4f;
 

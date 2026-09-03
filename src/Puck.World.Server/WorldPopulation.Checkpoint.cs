@@ -43,7 +43,8 @@ public sealed partial class WorldPopulation {
         WorldBody.IntegrationResidue Residue,
         WorldIdentityProjection? Profile,
         WorldPopulationNavigationCheckpoint? Navigation = null,
-        WorldPopulationFlockCheckpoint Flock = default
+        WorldPopulationFlockCheckpoint Flock = default,
+        WorldPopulationAutonomyCheckpoint Autonomy = default
     );
     /// <summary>Cached local perception, timing residue, and observer-local attention stream.</summary>
     /// <param name="Seeded">Whether the neighbor contribution has been sampled for this producer.</param>
@@ -54,6 +55,17 @@ public sealed partial class WorldPopulation {
     /// <param name="Target">Last bounded sensed-target observation; never a live target-pose reference.</param>
     public readonly record struct WorldPopulationFlockCheckpoint(bool Seeded, int Generation, FixedVector3 Desired,
         ulong RemainingTicks, ulong SampleOrdinal, WorldFlockObservation? Target = null);
+    /// <summary>One non-human body's phased motion/steering cadence and reusable producer image.</summary>
+    public readonly record struct WorldPopulationAutonomyCheckpoint(
+        ulong MotionPeriodTicks,
+        ulong MotionElapsedTicks,
+        ulong MotionRemainingTicks,
+        ulong SteeringPeriodTicks,
+        ulong SteeringElapsedTicks,
+        ulong SteeringRemainingTicks,
+        PlayerIntent SteeringIntent,
+        bool SteeringSeeded
+    );
     /// <summary>One body's cached deterministic route and producer binding.</summary>
     public readonly record struct WorldPopulationNavigationCheckpoint(
         int ActiveProducerDomainIndex,
@@ -133,6 +145,16 @@ public sealed partial class WorldPopulation {
                 Flock: new WorldPopulationFlockCheckpoint(entry.ProducerState.FlockSeeded, entry.ProducerState.FlockGeneration,
                     entry.ProducerState.FlockDesired, entry.ProducerState.FlockRemainingTicks, entry.ProducerState.FlockSampleOrdinal,
                     entry.ProducerState.FlockTarget),
+                Autonomy: new WorldPopulationAutonomyCheckpoint(
+                    MotionPeriodTicks: entry.AutonomyState.MotionPeriodTicks,
+                    MotionElapsedTicks: entry.AutonomyState.MotionElapsedTicks,
+                    MotionRemainingTicks: entry.AutonomyState.MotionRemainingTicks,
+                    SteeringPeriodTicks: entry.AutonomyState.SteeringPeriodTicks,
+                    SteeringElapsedTicks: entry.AutonomyState.SteeringElapsedTicks,
+                    SteeringRemainingTicks: entry.AutonomyState.SteeringRemainingTicks,
+                    SteeringIntent: entry.AutonomyState.SteeringIntent,
+                    SteeringSeeded: entry.AutonomyState.SteeringSeeded
+                ),
                 Position: body.FixedPosition,
                 Yaw: body.FixedYaw,
                 DynamicState: body.CaptureTransferState(),
@@ -191,6 +213,7 @@ public sealed partial class WorldPopulation {
                 ActiveProducerCurveIndex = -1,
                 ActiveProducerNavigationDomainIndex = -1,
             };
+            entry.AutonomyState.Clear();
             entry.Body = null;
             entry.Parked = false;
             entry.ParkedUntilTick = null;
@@ -283,6 +306,16 @@ public sealed partial class WorldPopulation {
                 FlockSampleOrdinal = captured.Flock.SampleOrdinal,
                 FlockTarget = captured.Flock.Target,
             };
+            entry.AutonomyState = new BodyAutonomyState {
+                MotionPeriodTicks = captured.Autonomy.MotionPeriodTicks,
+                MotionElapsedTicks = captured.Autonomy.MotionElapsedTicks,
+                MotionRemainingTicks = captured.Autonomy.MotionRemainingTicks,
+                SteeringPeriodTicks = captured.Autonomy.SteeringPeriodTicks,
+                SteeringElapsedTicks = captured.Autonomy.SteeringElapsedTicks,
+                SteeringRemainingTicks = captured.Autonomy.SteeringRemainingTicks,
+                SteeringIntent = captured.Autonomy.SteeringIntent,
+                SteeringSeeded = captured.Autonomy.SteeringSeeded,
+            };
             var producerKit = captured.Index < LocalSeatCount ? checkpoint.SeatKit : captured.KitIndex;
             if (captured.ProducerActiveName is { } activeName && m_kits[producerKit].Producers.TryGetValue(activeName, out var binding)) {
                 entry.ProducerState.FlockBinding = binding;
@@ -328,9 +361,18 @@ public sealed partial class WorldPopulation {
         m_revision = checkpoint.Revision;
     }
 
-    /// <summary>Preflights caller-controlled population and route addresses without mutating live state.</summary>
+    /// <summary>Preflights caller-controlled population shape, counts, kits, cadence, and route addresses without mutating live state.</summary>
     internal void ValidateCheckpoint(WorldPopulationCheckpoint checkpoint) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
+        if (checkpoint.Entries is null) {
+            throw new InvalidOperationException("population checkpoint entries are null.");
+        }
+        if ((uint)checkpoint.SeatKit >= (uint)m_kits.Length) {
+            throw new InvalidOperationException($"population checkpoint seat kit {checkpoint.SeatKit} lies outside {m_kits.Length} compiled kits.");
+        }
+        if (checkpoint.SimulatedCount < 0 || checkpoint.SimulatedCount > PeerCapacity) {
+            throw new InvalidOperationException($"population checkpoint simulated count {checkpoint.SimulatedCount} lies outside 0..{PeerCapacity}.");
+        }
         m_navigation.ValidateShared(checkpoint.SharedNavigation);
         if (checkpoint.Generations is null || checkpoint.Generations.Length != Capacity || checkpoint.Generations.Any(generation => generation < 0)) {
             throw new InvalidOperationException("population checkpoint must carry every slot's nonnegative generation.");
@@ -345,6 +387,9 @@ public sealed partial class WorldPopulation {
                 throw new InvalidOperationException(message: $"population checkpoint repeats entry index {captured.Index}.");
             }
             restored[captured.Index] = true;
+            if ((uint)captured.KitIndex >= (uint)m_kits.Length) {
+                throw new InvalidOperationException($"population checkpoint entry {captured.Index} names kit {captured.KitIndex} outside {m_kits.Length} compiled kits.");
+            }
             if (captured.Generation != checkpoint.Generations[captured.Index]) {
                 throw new InvalidOperationException("population checkpoint entry generation disagrees with the slot image.");
             }
@@ -358,7 +403,40 @@ public sealed partial class WorldPopulation {
                  observed.Generation > checkpoint.Generations[observed.Index])) {
                 throw new InvalidOperationException("population checkpoint carries an invalid flock target observation.");
             }
+            ValidateAutonomyCheckpoint(captured.Autonomy, m_kits[captured.KitIndex]);
             ValidateNavigationCheckpoint(navigation: captured.Navigation);
+        }
+    }
+
+    private static void ValidateAutonomyCheckpoint(WorldPopulationAutonomyCheckpoint state, in FixedWorldKit kit) {
+        var maximum = FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.One);
+
+        static bool ValidCadence(ulong period, ulong elapsed, ulong remaining, ulong maximum) => ((period == 0UL)
+            ? ((elapsed == 0UL) && (remaining == 0UL))
+            : ((period <= maximum) && (elapsed < period) && (remaining >= 1UL) && (remaining <= period))
+        );
+
+        if (
+            !ValidCadence(state.MotionPeriodTicks, state.MotionElapsedTicks, state.MotionRemainingTicks, maximum) ||
+            !ValidCadence(state.SteeringPeriodTicks, state.SteeringElapsedTicks, state.SteeringRemainingTicks, maximum)
+        ) {
+            throw new InvalidOperationException("population checkpoint carries invalid autonomous cadence state.");
+        }
+        if (
+            (state.MotionPeriodTicks != 0UL && state.MotionPeriodTicks != kit.AutonomousMotionTicks) ||
+            (state.SteeringPeriodTicks != 0UL && state.SteeringPeriodTicks != kit.AutonomousSteeringTicks)
+        ) {
+            throw new InvalidOperationException("population checkpoint autonomous cadence does not match its compiled kit.");
+        }
+        if (
+            state.SteeringSeeded &&
+            (state.MotionPeriodTicks == 0UL) &&
+            (state.SteeringPeriodTicks == 0UL)
+        ) {
+            throw new InvalidOperationException("population checkpoint carries cached autonomous steering without an authored cadence.");
+        }
+        if (!state.SteeringSeeded && (state.SteeringIntent != default)) {
+            throw new InvalidOperationException("population checkpoint carries an unseeded autonomous steering image.");
         }
     }
 

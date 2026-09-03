@@ -66,8 +66,8 @@ internal static class Fixtures {
     /// <see cref="TestPatternScreenIndex"/> — <see cref="EngageAuthorityLawTests"/>'s target.</description></item>
     /// </list>
     /// Every other section is the smallest legal value <c>WorldDefinitionValidator</c> accepts: one locomotion kit
-    /// ("traveler", a bare-bones grounded program with an empty response table — "the empty table snaps planar
-    /// velocity instantly"), the three channels its body motion program's selected operations require
+    /// ("traveler", a bare-bones grounded program with one exact instant-convergence shaping row), the three
+    /// channels its body motion program's selected operations require
     /// (<c>MoveAdvance</c>/<c>MoveStrafe</c>/<c>Turn</c>), and <see cref="IntentSource.Idle"/> as the population's
     /// default peer source so no producer program (wander/attend/designated) is needed at all. This kit carries NO
     /// collider — no law here needs one — so <see cref="BuildDocumentCore"/> is the shared shape
@@ -146,11 +146,10 @@ internal static class Fixtures {
                         Name: "air"
                     ),
                 ],
-                // One unconditional row at engage/release rates far above anything a tick could need to converge —
-                // MoveToward returns the target exactly whenever maxDelta exceeds the distance, so this snaps planar
-                // velocity instantly, byte-identical to the retired empty-response-table fixture.
+                // One unconditional row using the exact authored spelling: absent engage/release rates snap planar
+                // velocity to its target instead of approximating "instant" with a large finite rate.
                 Shaping: [
-                    new WorldShaping(Along: new WorldShapingAlong(Engage: 1_000_000f, Brake: 0f, Release: 1_000_000f)),
+                    new WorldShaping(Along: new WorldShapingAlong()),
                 ]
             ),
             // The full parameter set ValidateProducerParameters requires for a kit naming the "wander"

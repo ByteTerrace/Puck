@@ -28,7 +28,8 @@ public sealed record WorldKit(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCollider? Collider = null,
     WorldBodyContactMode BodyContact = WorldBodyContactMode.Overlap,
     float Mass = 0f,
-    [property: JsonPropertyName("pad"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, WorldPadElement>? PadRaw = null
+    [property: JsonPropertyName("pad"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, WorldPadElement>? PadRaw = null,
+    [property: JsonPropertyName("autonomy"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldAutonomyCadence? AutonomyRaw = null
 ) {
     /// <summary>Gets the kit's composition bindings, keyed by declared channel name (validated against the world's
     /// channel table — a kit naming an undeclared channel is a dead name; a declared composition channel with no
@@ -47,10 +48,29 @@ public sealed record WorldKit(
     /// none.</summary>
     [JsonIgnore]
     public IReadOnlyDictionary<string, BodyProgramParameters> Producers => (ProducersRaw ?? EmptyProducers);
+    /// <summary>Gets the cadence policy for locally simulated, non-human bodies wearing this kit. ABSENT preserves
+    /// full-rate motion and producer steering.</summary>
+    [JsonIgnore]
+    public WorldAutonomyCadence Autonomy => (AutonomyRaw ?? WorldAutonomyCadence.FullRate);
 
     private static readonly IReadOnlyDictionary<string, BodyProgramParameters> EmptyProducers = new Dictionary<string, BodyProgramParameters>(comparer: StringComparer.Ordinal);
     private static readonly IReadOnlyDictionary<string, ActionSpec> EmptyActions = new Dictionary<string, ActionSpec>(comparer: StringComparer.Ordinal);
     private static readonly IReadOnlyDictionary<string, WorldPadElement> EmptyPad = new Dictionary<string, WorldPadElement>(comparer: StringComparer.Ordinal);
+}
+/// <summary>Independent deterministic update cadences for non-human bodies. Human-occupied peers and local seats
+/// always run at the authority's full rate. A zero value means every authority tick; a positive interval batches
+/// elapsed engine time and phases bodies across that interval, preserving rates while trading response granularity
+/// for crowd scale. Submitted input and command-side channel presses immediately promote a body to full-rate steps,
+/// and a timed press keeps it there through release. Motion batching is only valid for overlap bodies; solid-body
+/// kits must advance every authority tick so dynamic contact remains exact.</summary>
+/// <param name="MotionSeconds">How often the body's physics/motion program advances.</param>
+/// <param name="SteeringSeconds">How often its selected producer refreshes steering. The most recent image is reused
+/// between refreshes.</param>
+public sealed record WorldAutonomyCadence(float MotionSeconds = 0f, float SteeringSeconds = 0f) {
+    /// <summary>The greatest supported autonomous update interval.</summary>
+    public const float MaximumSeconds = 1f;
+    /// <summary>Full authority-rate motion and steering.</summary>
+    public static WorldAutonomyCadence FullRate { get; } = new();
 }
 /// <summary>Declares how a kit responds to other dynamic bodies. Interactions and targeting remain available in
 /// both modes; only <see cref="Solid"/> authorizes physical depenetration.</summary>
@@ -83,6 +103,8 @@ public enum WorldBodyContactMode : byte {
 /// for a kit authoring none.</param>
 /// <param name="Tuning">The kit's compiled locomotion tuning — speed, turn, and the shaping table — resolved
 /// against the world's channel table and <c>dynamics</c> rows here, once, rather than per body.</param>
+/// <param name="AutonomousMotionTicks">The non-human motion cadence in engine ticks; zero means every authority tick.</param>
+/// <param name="AutonomousSteeringTicks">The non-human producer cadence in engine ticks; zero means every authority tick.</param>
 public readonly record struct FixedWorldKit(
     CompiledBodyMotionProgram BodyMotionProgram,
     IReadOnlyDictionary<string, CompiledBodyProducer> Producers,
@@ -96,7 +118,9 @@ public readonly record struct FixedWorldKit(
     bool[] RoleMask,
     CompiledActionStateSlot[] ActionState,
     FixedBodyHold[] Holds,
-    FixedMotionTuning Tuning
+    FixedMotionTuning Tuning,
+    ulong AutonomousMotionTicks,
+    ulong AutonomousSteeringTicks
 ) {
     private static (CompiledActionStateSlot[] Slots, Dictionary<string, int> ByName) CompileActionState(IReadOnlyList<ActionStateSlot> bodyState, IReadOnlyList<ActionStateSlot> identityState) {
         var slots = new List<CompiledActionStateSlot>();
@@ -303,7 +327,13 @@ public readonly record struct FixedWorldKit(
                 channels: channels,
                 holds: kit.Motion.Holds
             ),
-            Tuning: tuning
+            Tuning: tuning,
+            AutonomousMotionTicks: ((kit.Autonomy.MotionSeconds > 0f)
+                ? FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: kit.Autonomy.MotionSeconds))
+                : 0UL),
+            AutonomousSteeringTicks: ((kit.Autonomy.SteeringSeconds > 0f)
+                ? FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: kit.Autonomy.SteeringSeconds))
+                : 0UL)
         );
     }
 }

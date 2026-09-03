@@ -402,7 +402,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
                 // INLINE over loopback, so the echo below (built AFTER both Submit calls return) still reads the
                 // applied state — it is just assembled from the completion payloads rather than a live read taken
                 // after a discarded synchronous return. An explicit idle/producer token sets the peer-source DEFAULT and
-                // sweeps ALL peers (4..127) to it — last-writer-wins, so a per-entity body.control does not survive
+                // sweeps ALL peers (4..4095) to it — last-writer-wins, so a per-entity body.control does not survive
                 // the global flip; a count alone leaves existing peers' sources be. A census beyond the live ceiling is
                 // CLAMPED, not refused — the ceiling is the tighter of the authored networkPlayers admission cap and
                 // the inhabitant floor, and shrinking to fit is the right behavior. The echo leads with

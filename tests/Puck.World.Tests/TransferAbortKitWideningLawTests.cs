@@ -146,8 +146,8 @@ public sealed class TransferAbortKitWideningLawTests {
                 // hold, which THIS row's own Recently clock then reflects (WorldBody.MotionRecency's own capture).
                 // Row 1 is the unconditional row (no gate), required last.
                 Shaping: [
-                    new WorldShaping(When: new ActionPredicate.Recently(Fact: ActionFact.Rising, WindowSeconds: 1f), Along: new WorldShapingAlong(Engage: 9f, Brake: 0f, Release: 5f)),
-                    new WorldShaping(Along: new WorldShapingAlong(Engage: 7f, Brake: 0f, Release: 3.5f)),
+                    new WorldShaping(When: new ActionPredicate.Recently(Fact: ActionFact.Rising, WindowSeconds: 1f), Along: new WorldShapingAlong(Engage: 9f, Release: 5f)),
+                    new WorldShaping(Along: new WorldShapingAlong(Engage: 7f, Release: 3.5f)),
                 ],
                 Holds: [
                     new WorldHold(
@@ -253,7 +253,7 @@ public sealed class TransferAbortKitWideningLawTests {
             fixture.Step(); // drive longitudinal/lateral/residual accumulators ramp; gravity falls (no collider); the "surge" OnFact action fires once on the Falling edge.
         }
 
-        // A live timed press (existing coverage, re-proven under a drive row) and an UNTIMED tap staged but not
+        // A live timed press (existing coverage, re-proven under an anisotropic shaping row) and an UNTIMED tap staged but not
         // yet materialized (MaterializeDefaultLanePresses only runs at the NEXT Advance) — captured with NO Step in
         // between, so the pending-tap fields are genuinely still pending at capture time.
         var pressOutcome = body.PressChannel(ordinal: TimedPressOrdinal, value: FixedQ4816.One, holdSeconds: 5f, authoredMaximum: FixedQ4816.FromInteger(value: 60));

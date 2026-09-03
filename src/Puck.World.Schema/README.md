@@ -216,7 +216,9 @@ speed-scaled steering authority, optional pitched flight) `ShapeVelocity` reads
 alongside `ResolveDriveFrame`. A kart is the same motion row plus an `across`
 shaping row exactly as a swimmer is the same motion row plus a `Medium` hold
 row; a program selecting `ShapeVelocity` against a kit authoring no shaping row
-refuses by the `Shaping` tuning facet's name. The retired `arcade` world's
+refuses by the `Shaping` tuning facet's name. An omitted engage/release/brake/
+grip rate means exact convergence, while an explicit rate must be positive;
+drive-only brake/reverse values are refused on a whole-vector row. The retired `arcade` world's
 `gaming-brick`-cabinet + region-gated prompt/prize + `rules`-driven `state`
 reaction ladder (originally a document-mounted addon, ported to a world rule
 before the world itself was retired) survives only in git history; no shipped world exercises the `rules` section
@@ -1482,6 +1484,29 @@ their conservative cost in the shared 1,000,000-unit admission ceiling.
 Runtime sampling and checkpoint semantics live in the
 [server reference](../Puck.World.Server/README.md#local-flock-steering).
 
+### Crowd scale policies
+
+The engine admits at most 4096 bodies. A kit's optional `autonomy` row gives
+locally simulated non-human bodies independent `motionSeconds` and
+`steeringSeconds` cadences (0..1 seconds; zero means every authority tick).
+Bodies are deterministically phased and integrate the complete elapsed
+engine-tick duration when due. Human bodies, live sources, tapes, and pending
+external input remain full-rate. `bodyContact: solid` requires full-rate motion;
+large crowds that batch motion use the default `overlap` contact mode.
+
+`collision.events` bounds overlap-event sensing without changing physical world
+contact. `candidateBudget` limits inspected broadphase candidates per body,
+`maxPairsPerBody` limits retained degree, and `beginBudget` limits new pairs per
+tick. Established relationships are considered first. Setting
+`maxPairsPerBody` to zero disables body-pair begin/end events.
+
+`collision.bodyContacts` independently bounds physical depenetration between
+two `solid` kits. Its `candidateBudget` caps inspected x-overlapping sweep
+pairs per body (default 16, maximum 32); `maxPairsPerBody` caps corrections
+incident to one body per tick (default 8, maximum 16). Saturation omits later
+stable-index pairs, so even a fully coincident 4096-body stadium has linear,
+authored work rather than an accidental all-pairs frame.
+
 ## The `probes` section — probe and binding rows
 
 `WorldProbesSection` (`WorldProbes.cs`) declares two lists: `probes`
@@ -1632,7 +1657,10 @@ when it walks into another authority: id, name, colour, and the two motion
 rates. `WorldObserverDisclosure` (`bodies.disclosure`) is the per-observer
 snapshot policy — the record lives here (document data); the evaluation over a
 live `EntitySnapshot` (`WorldObserverDisclosureEvaluation.Discloses`) lives in
-`Puck.World.Protocol`, since it operates on the wire snapshot shape.
+`Puck.World.Protocol`, since it operates on the wire snapshot shape. Its
+`updateSeconds` member controls remote QUIC projection cadence only (default
+0.03 s, zero for every authority tick); skipped field writes and continuity
+hints are coalesced by the server sampler before delivery.
 
 ## Verifying a change here
 

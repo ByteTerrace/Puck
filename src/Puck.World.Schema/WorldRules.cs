@@ -263,11 +263,11 @@ public static class WorldRuleFacts {
     /// <remarks><b>Does not collapse into <see cref="DistancePrefix"/>.</b> A <c>WorldPlacementRegion</c> is
     /// geometrically a sphere (<c>Radius</c> from the placement's own position), so "is body N inside the region"
     /// alone would in fact reduce to a distance test the distance primitive can express. The count this channel reads
-    /// does not: it is an aggregate over the whole active population (however many of up to 128 bodies currently sit
+    /// does not: it is an aggregate over the whole active population (however many of up to 4096 bodies currently sit
     /// inside), while <see cref="DistancePrefix"/>/<see cref="LineOfSightPrefix"/> only ever name two fixed bodies —
     /// there is no "for every active body" quantifier in the rule vocabulary, and this channel's O(1) read is a cached
     /// counter <c>Server.WorldEventFeed</c> already maintains incrementally as bodies cross the boundary, never
-    /// recomputed. Replacing it with the distance primitive would mean scanning up to 128 bodies' distances per rule
+    /// recomputed. Replacing it with the distance primitive would mean scanning up to 4096 bodies' distances per rule
     /// per tick to recover a number the engine already tracks for free — a real regression for the one consumer that
     /// exists today. Kept as its own case, deliberately.</remarks>
     public const string RegionPrefix = "$region:";

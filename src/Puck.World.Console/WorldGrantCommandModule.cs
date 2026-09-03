@@ -20,7 +20,7 @@ namespace Puck.World;
 /// <remarks>Principal tokens: <c>seat1</c>..<c>seat4</c> | <c>console</c> | <c>addon:&lt;name&gt;</c> |
 /// <c>peer:&lt;n&gt;:&lt;generation&gt;</c> (a population entity index and its current admission generation). Capability
 /// tokens: <c>drive</c> | <c>observe</c> | <c>control</c> |
-/// <c>mutate</c> | <c>edit</c>. Subject tokens: <c>body:&lt;n&gt;</c> (0..127, the population ceiling) |
+/// <c>mutate</c> | <c>edit</c>. Subject tokens: <c>body:&lt;n&gt;</c> (0..4095, the population ceiling) |
 /// <c>screen:&lt;n&gt;</c> | <c>section:&lt;name&gt;</c> | <c>state:&lt;name&gt;</c> | <c>region:&lt;name&gt;</c>
 /// (a placement's volume facet) | <c>seat:&lt;n&gt;</c> (0..3, local seats) | <c>creation:&lt;id&gt;</c> |
 /// <c>placement:&lt;id&gt;</c> (one creations/placements row apiece) | <c>all</c>. Trailing

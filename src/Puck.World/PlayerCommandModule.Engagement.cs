@@ -270,7 +270,7 @@ internal sealed partial class PlayerCommandModule {
         );
     // The identity an engagement route is recorded under for a 0-based body index — the seat's own claimed
     // identity (PlayerRoster.PrincipalOf, falling back to WorldPrincipal.Seat) for 0..3, or the population's current
-    // peer identity for 4..127. Passed explicitly because only the client's roster knows about a claim override;
+    // peer identity for 4..4095. Passed explicitly because only the client's roster knows about a claim override;
     // Server.WorldEngagement resolves a body's own principal by index arithmetic alone and has no roster to ask.
     private WorldPrincipal TargetPrincipalFor(int index) {
         return (IsSeat(index: index)

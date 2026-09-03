@@ -5,7 +5,7 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>Pins a kit's <c>dynamics</c>-row planar shaping against the response table's own contract: critical
+/// <summary>Pins a kit's <c>dynamics</c>-row planar shaping against the whole-vector <c>along</c> law's contract: critical
 /// damping rises monotonically to the resolved move speed and coasts back down monotonically on release, never
 /// overshoots the speed envelope, and a follower's coefficients are bound to the world's own simulation rate.</summary>
 public sealed class BodyDynamicsLawTests {

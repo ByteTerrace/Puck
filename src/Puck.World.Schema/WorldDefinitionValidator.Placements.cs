@@ -853,6 +853,26 @@ public static partial class WorldDefinitionValidator {
                 errors: errors
             );
             ValidateFlockMotion(definition, kit, motionProgram, path, errors);
+            RequireRange(
+                value: kit.Autonomy.MotionSeconds,
+                min: 0f,
+                max: WorldAutonomyCadence.MaximumSeconds,
+                name: $"{path}.autonomy.motionSeconds",
+                errors: errors
+            );
+            RequireRange(
+                value: kit.Autonomy.SteeringSeconds,
+                min: 0f,
+                max: WorldAutonomyCadence.MaximumSeconds,
+                name: $"{path}.autonomy.steeringSeconds",
+                errors: errors
+            );
+            if (
+                (kit.BodyContact == WorldBodyContactMode.Solid) &&
+                (kit.Autonomy.MotionSeconds > 0f)
+            ) {
+                errors.Add(item: $"{path}.autonomy.motionSeconds must be 0 when bodyContact is Solid; a deferred body cannot preserve per-tick dynamic-contact semantics.");
+            }
 
             // Actions is a channel-NAME-keyed map now (never a fixed Primary/Secondary pair): a kit naming an
             // undeclared or non-composition channel is a dead reference; a declared composition channel with no

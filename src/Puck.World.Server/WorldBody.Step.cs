@@ -233,6 +233,7 @@ public sealed partial class WorldBody {
     }
     internal void ExecuteProducer(CompiledBodyProducer producer, ref BodyProducerState state, in BodyProducerSensors sensors, ulong stepTicks) {
         var scratch = new BodyMotionScratch {
+            GoverningShapingRow = -1,
             Producer = producer,
             ProducerSensors = sensors,
             ProducerState = state,
@@ -640,6 +641,7 @@ public sealed partial class WorldBody {
             EffectTargets = effectTargets,
             EntityIndex = entityIndex,
             GeneratorInvocations = generatorInvocations,
+            GoverningShapingRow = -1,
             Intent = intent,
             JudgeInvocations = judgeInvocations,
             MoveSpeed = moveSpeed,
@@ -663,6 +665,12 @@ public sealed partial class WorldBody {
                 )
             );
         }
+
+        // Gate evaluation is a once-per-body, once-per-tick decision. Besides avoiding up to three repeated
+        // predicate walks, this snapshots facts before any operation can mutate them (an action may set vertical
+        // velocity later in the program), so turn, planar shaping, and a medium's vertical lane cannot disagree on
+        // which row governed the same tick.
+        scratch.GoverningShapingRow = ResolveGoverningShapingRow(intent: in intent);
 
         for (var phase = 0; (phase < m_bodyMotionProgram.Phases.Length); phase++) {
             foreach (var op in m_bodyMotionProgram.Phases[phase]) {
@@ -731,7 +739,7 @@ public sealed partial class WorldBody {
     // gravity (no fall phase).
     private void IntegrateLocalAttitude(ref BodyMotionScratch scratch) {
         var authority = ResolveTurnAuthority(
-            intent: in scratch.Intent,
+            governingRow: scratch.GoverningShapingRow,
             moveSpeed: scratch.MoveSpeed
         );
         var angularStep = m_rotationAccumulator.Integrate(
@@ -1065,7 +1073,7 @@ public sealed partial class WorldBody {
         m_verticalVelocityAccumulator.Reset();
 
         // A teleport must not carry momentum: drop the ramped planar velocity, its accumulator carries (the
-        // isotropic ramp and a drive row's decomposed channels alike), the response table's recency clocks, and the
+        // isotropic ramp and an anisotropic row's decomposed channels alike), the shaping table's recency clocks, and the
         // dynamics followers' own state and previous-target carries.
         m_planarVelocity = default;
         m_planarRampAccumulator.Reset();
@@ -1449,7 +1457,7 @@ public sealed partial class WorldBody {
 
         return m_up;
     }
-    // --- The drive row (the ResolveDriveFrame op, and ShapeVelocity's across-decomposition branch). ---
+    // --- The anisotropic shaping row (ResolveDriveFrame plus ShapeVelocity's across-decomposition branch). ---
 
     // The turn tuning's speed-scaled authority curve, shared by every yaw-writing frame op: rises linearly from zero
     // at standstill to full at turn.referenceSpeed, falls linearly to turn.falloff× at the RESOLVED
@@ -1458,9 +1466,8 @@ public sealed partial class WorldBody {
     // authoring no reference speed reads full authority at every speed (the compiled sentinel: ReferenceSpeed <= 0).
     // The governing shaping row's own turnScale multiplies the result — the tightened drift arc's spelling, and 1
     // for every ordinary row.
-    private FixedQ4816 ResolveTurnAuthority(in PlayerIntent intent, FixedQ4816 moveSpeed) {
+    private FixedQ4816 ResolveTurnAuthority(int governingRow, FixedQ4816 moveSpeed) {
         var turn = m_tuning.Turn;
-        var governingRow = ResolveGoverningShapingRow(intent: in intent);
         var turnScale = ((governingRow >= 0)
             ? m_tuning.Shaping[governingRow].TurnScale
             : FixedQ4816.One
@@ -1511,7 +1518,7 @@ public sealed partial class WorldBody {
         scratch.AttitudeUp = scratch.Up;
 
         var authority = ResolveTurnAuthority(
-            intent: in scratch.Intent,
+            governingRow: scratch.GoverningShapingRow,
             moveSpeed: scratch.MoveSpeed
         );
         var yawRate = ((Role(
@@ -1575,7 +1582,7 @@ public sealed partial class WorldBody {
         scratch.AttitudeUp = scratch.Up;
 
         var authority = ResolveTurnAuthority(
-            intent: in scratch.Intent,
+            governingRow: scratch.GoverningShapingRow,
             moveSpeed: scratch.MoveSpeed
         );
 
@@ -1708,7 +1715,7 @@ public sealed partial class WorldBody {
     // governs. No row matching (an empty/absent table, or every gated row closed) snaps instantly — the built-in
     // fallback every ApplyMedium vertical lane shares, and the only path a kit declaring no table at all takes.
     private void ShapeVelocity(ref BodyMotionScratch scratch) {
-        var governingRow = ResolveGoverningShapingRow(intent: in scratch.Intent);
+        var governingRow = scratch.GoverningShapingRow;
 
         if (governingRow < 0) {
             m_planarVelocity = scratch.TargetVelocity;
@@ -1737,7 +1744,7 @@ public sealed partial class WorldBody {
         }
 
         if (row.Across is { } across) {
-            ShapeDriveVelocityRow(
+            ShapeAnisotropicVelocityRow(
                 across: in across,
                 along: row.Along!.Value,
                 scratch: ref scratch
@@ -1762,20 +1769,30 @@ public sealed partial class WorldBody {
             intent: in scratch.Intent,
             role: ChannelRole.MoveStrafe
         ) != FixedQ4816.Zero));
-        var rate = (hasInput
-            ? along.Engage
-            : along.Release
-        );
-        var maxDelta = m_planarRampAccumulator.Integrate(
-            elapsedTicks: scratch.StepTicks,
-            ratePerSecond: rate
+        var instant = (hasInput
+            ? ShapingInstant.Engage
+            : ShapingInstant.Release
         );
 
-        m_planarVelocity = FixedVector3.MoveToward(
-            current: m_planarVelocity,
-            maxDelta: maxDelta,
-            target: scratch.TargetVelocity
-        );
+        if ((along.Instant & instant) != 0) {
+            m_planarRampAccumulator.Reset();
+            m_planarVelocity = scratch.TargetVelocity;
+        } else {
+            var rate = (hasInput
+                ? along.Engage
+                : along.Release
+            );
+            var maxDelta = m_planarRampAccumulator.Integrate(
+                elapsedTicks: scratch.StepTicks,
+                ratePerSecond: rate
+            );
+
+            m_planarVelocity = FixedVector3.MoveToward(
+                current: m_planarVelocity,
+                maxDelta: maxDelta,
+                target: scratch.TargetVelocity
+            );
+        }
         scratch.Velocity = m_planarVelocity;
     }
     // The drive decomposition: split the carried velocity into body-frame longitudinal/lateral/residual components,
@@ -1786,10 +1803,10 @@ public sealed partial class WorldBody {
     // over-speed excess bleeds at release, which is also the centered-throttle coast). A held speed multiplier
     // applies to scratch.MoveSpeed AFTER the clamp, on top of the resolved base rate, never inside it — the envelope
     // pins the base, the boost rides on top. Lateral and residual slip converge to zero at the row's own grip — a
-    // held-gated drift row authored ahead of the ordinary drive row is how a kart's grip swaps while held. A
+    // held-gated drift row authored ahead of the ordinary anisotropic row is how a kart's grip swaps while held. A
     // contact-pinned variant (turn.pitchRate zero) has no drive or grip authority while airborne: a launched kart
     // holds its velocity and gravity owns the arc.
-    private void ShapeDriveVelocityRow(in FixedShapingAlong along, in FixedShapingAcross across, ref BodyMotionScratch scratch) {
+    private void ShapeAnisotropicVelocityRow(in FixedShapingAlong along, in FixedShapingAcross across, ref BodyMotionScratch scratch) {
         var throttle = Role(
             intent: in scratch.Intent,
             role: ChannelRole.MoveAdvance
@@ -1808,6 +1825,7 @@ public sealed partial class WorldBody {
 
         if (hasAuthority) {
             FixedQ4816 target, rate;
+            ShapingInstant instant;
 
             if (throttle > FixedQ4816.Zero) {
                 var commanded = ApplySpeedHeld(
@@ -1820,44 +1838,63 @@ public sealed partial class WorldBody {
                     ? along.Engage
                     : along.Release
                 );
+                instant = ((longitudinal <= target)
+                    ? ShapingInstant.Engage
+                    : ShapingInstant.Release
+                );
             } else if (throttle < FixedQ4816.Zero) {
                 if (longitudinal > FixedQ4816.Zero) {
                     target = FixedQ4816.Zero;
                     rate = along.Brake;
+                    instant = ShapingInstant.Brake;
                 } else {
                     target = (throttle * along.Reverse);
                     rate = along.Engage;
+                    instant = ShapingInstant.Engage;
                 }
             } else {
                 target = FixedQ4816.Zero;
                 rate = along.Release;
+                instant = ShapingInstant.Release;
             }
 
-            longitudinal = FixedQ4816.MoveToward(
-                current: longitudinal,
-                target: target,
-                maxDelta: m_driveLongAccumulator.Integrate(
-                    elapsedTicks: scratch.StepTicks,
-                    ratePerSecond: rate
-                )
-            );
+            if ((along.Instant & instant) != 0) {
+                m_driveLongAccumulator.Reset();
+                longitudinal = target;
+            } else {
+                longitudinal = FixedQ4816.MoveToward(
+                    current: longitudinal,
+                    target: target,
+                    maxDelta: m_driveLongAccumulator.Integrate(
+                        elapsedTicks: scratch.StepTicks,
+                        ratePerSecond: rate
+                    )
+                );
+            }
 
-            lateral = FixedQ4816.MoveToward(
-                current: lateral,
-                target: FixedQ4816.Zero,
-                maxDelta: m_driveLatAccumulator.Integrate(
-                    elapsedTicks: scratch.StepTicks,
-                    ratePerSecond: across.Grip
-                )
-            );
-            residual = FixedVector3.MoveToward(
-                current: residual,
-                target: default,
-                maxDelta: m_driveResidualAccumulator.Integrate(
-                    elapsedTicks: scratch.StepTicks,
-                    ratePerSecond: across.Grip
-                )
-            );
+            if (across.Instant) {
+                m_driveLatAccumulator.Reset();
+                m_driveResidualAccumulator.Reset();
+                lateral = FixedQ4816.Zero;
+                residual = default;
+            } else {
+                lateral = FixedQ4816.MoveToward(
+                    current: lateral,
+                    target: FixedQ4816.Zero,
+                    maxDelta: m_driveLatAccumulator.Integrate(
+                        elapsedTicks: scratch.StepTicks,
+                        ratePerSecond: across.Grip
+                    )
+                );
+                residual = FixedVector3.MoveToward(
+                    current: residual,
+                    target: default,
+                    maxDelta: m_driveResidualAccumulator.Integrate(
+                        elapsedTicks: scratch.StepTicks,
+                        ratePerSecond: across.Grip
+                    )
+                );
+            }
         }
 
         m_planarVelocity = (((scratch.Facing * longitudinal) + (scratch.Right * lateral)) + residual);
@@ -2048,5 +2085,6 @@ public sealed partial class WorldBody {
         public List<WorldDesignation>? DesignationOutputs;
         public List<WorldGeneratorInvocation>? GeneratorInvocations;
         public List<WorldJudgeInvocation>? JudgeInvocations;
+        public int GoverningShapingRow;
     }
 }

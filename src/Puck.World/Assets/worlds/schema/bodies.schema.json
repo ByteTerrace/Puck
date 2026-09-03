@@ -88,6 +88,11 @@
             "null"
           ],
           "default": null
+        },
+        "updateSeconds": {
+          "description": "The minimum interval between remote projection snapshots. Zero requests every authority tick; the default is 0.03 seconds (30 Hz on the standard 240 Hz authority after whole-step quantization). Local in-process sinks are unaffected.",
+          "type": "number",
+          "default": 0.03
         }
       },
       "additionalProperties": false

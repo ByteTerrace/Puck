@@ -421,11 +421,15 @@ no live owner today; the doctrine waits for the next graph-building host.
 
 **The capacity probe (the envelope pattern, live in `Puck.World.Client.WorldFramePresenter`).**
 Composing `SdfCompositionFrameSource` runs ONE worst-case probe across its
-emitters — every diegetic screen lit, the largest catalog rig in every supported
-body slot (including repeated looks), the reserved placement
-instances, and the worst-case animated pool — measures it (the probe is never
-rendered), and feeds the result through `SdfWorldRenderSpec.ProgramWordCapacity` /
+emitters — every diegetic screen lit, the largest catalog rig in each detailed
+body slot, one coarse capsule in each remaining supported body slot, the
+reserved placement instances, and the worst-case animated pool — measures it
+(the probe is never rendered), and feeds the result through
+`SdfWorldRenderSpec.ProgramWordCapacity` /
 `InstanceCapacity`, so live rebuilds vary freely BELOW the frozen envelope.
+The hybrid body probe is a storage and SDF-input bound, not evidence of a
+dense-crowd frame-rate target; that target requires rendered GPU evidence and,
+where per-creature SDF instances miss it, a different presentation lane.
 Any NEW optional emission MUST also declare a `Probe` branch on its
 `ISdfSceneEmitter`, or a live rebuild can outgrow the buffers and
 `UploadProgram` throws loudly.

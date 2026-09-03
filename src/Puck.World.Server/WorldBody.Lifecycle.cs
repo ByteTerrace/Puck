@@ -600,7 +600,7 @@ public sealed partial class WorldBody {
     /// by <see cref="PressChannel(int, FixedQ4816)"/> (see <see cref="MaterializeDefaultLanePresses"/>) — on role and
     /// composition ordinals alike, in every one of these three forms. Not an instantaneous halt — an in-flight jump
     /// arc still resolves under gravity and lands, and the ramped planar velocity decays to rest through the
-    /// response table rather than snapping to zero. This is the <c>body.stop</c> panic verb's server half; the
+    /// shaping row rather than snapping to zero. This is the <c>body.stop</c> panic verb's server half; the
     /// client seat drops its held device state in the same command. Unlike <see cref="SetIntentSource"/>/
     /// <see cref="SetEngaged"/>'s shared <see cref="ClearTransientInput"/> call, which deliberately leaves a timed
     /// press running across a source/engagement transition (that hold still belongs to whichever target now owns
@@ -680,6 +680,29 @@ public sealed partial class WorldBody {
         m_ordinaryAdvanceAdmitted = true;
         return true;
     }
+    /// <summary>Marks this body as deliberately deferred by its authored autonomous cadence. Late population passes
+    /// must not mistake a prior tick's admission latch for an advance on this tick.</summary>
+    internal void DeferOrdinaryAdvance() => m_ordinaryAdvanceAdmitted = false;
+
+    /// <summary>Gets whether externally staged work must be consumed on this authority tick rather than waiting for
+    /// an autonomous motion cadence. A live submitted image, transferred held image, or command-side channel press
+    /// (pending or timed and already in flight) is latency-sensitive even when the body normally runs batched
+    /// producer motion.</summary>
+    internal bool RequiresFullRateAutonomy {
+        get {
+            if (m_hasSubmittedIntent || m_hasTransferHeldChannels) {
+                return true;
+            }
+
+            for (var ordinal = 0; ordinal < m_pendingDefaultChannelPress.Length; ordinal++) {
+                if (m_pendingDefaultChannelPress[ordinal] || (m_laneTimers[ordinal] > 0UL)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
 
     /// <summary>Gets the body that applied the latest targeted effect, held for one recipient advance.</summary>
     internal int AffectingSubject => m_affectingSubject;
@@ -706,7 +729,7 @@ public sealed partial class WorldBody {
     public int ContactCount => m_lastContactCount;
     /// <summary>Gets the base move speed the sim integrates under right now: <see cref="Profile"/>'s requested rate
     /// (or the tuning's profileless fallback) after the kit's
-    /// <see cref="WorldSpeed.Envelope"/> clamp. A held speed multiplier — a drive row's boost
+    /// <see cref="WorldSpeed.Envelope"/> clamp. A held speed multiplier — a shaping row's boost
     /// included — scales this after the clamp, so the envelope pins the base rate and not the boosted one; a kit
     /// that means to pin its speed against any profile authors <c>min == max</c>. This is the same resolve
     /// <see cref="Advance"/> performs every tick. A read-only echo: querying this never mutates state, and an
@@ -798,6 +821,11 @@ public sealed partial class WorldBody {
     /// <c>body.control</c> verb's read/write). <see cref="IntentSource.Live"/> by default; see
     /// <see cref="IntentSource"/> for the merge rule.</summary>
     public IntentSource Source => m_source;
+    /// <summary>Gets whether a scripted tape currently owns or awaits motion. Tapes retain full authority cadence even
+    /// on an autonomously throttled kit because one batched advance consumes only one segment.</summary>
+    internal bool HasMotionTape => (m_tapeCount > 0);
+    /// <summary>Gets the most recently staged producer image for population-owned cadence reuse.</summary>
+    internal PlayerIntent StagedProducerIntent => m_producerIntent;
     /// <summary>Gets a value indicating whether the body's origin is below the medium surface as of the medium
     /// hold's last evaluation — the <c>world.contacts</c> read-back's medium witness. Always
     /// <see langword="false"/> for a kit authoring no medium hold.</summary>

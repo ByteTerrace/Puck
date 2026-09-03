@@ -8,10 +8,10 @@ public static class WorldBodiesLimits {
     /// <c>Puck.World.Client.WorldClient.EntityCapacity</c>, the client's own fixed per-entity view arrays
     /// (<c>Puck.World.Schema</c> cannot name that type, so the reference runs the other way: the client's constant
     /// reads this one). <c>population.capacity</c> is bounded to the client's real array size, so an over-capacity
-    /// document refuses at load (<c>WorldDefinitionValidator</c>) rather than booting into a latent throw. This is
-    /// the current representation limit, not the intended crowd scale. Raising it requires auditing protocol and
-    /// state indices, population work, and the renderer's independent capacities, not just widening this constant.</summary>
-    public const int CapacityCeiling = 128;
+    /// document refuses at load (<c>WorldDefinitionValidator</c>) rather than booting into a latent throw. Render
+    /// detail is independently bounded: bodies beyond the detailed-avatar lane retain an individual coarse instance
+    /// instead of multiplying this simulation limit by a full humanoid rig.</summary>
+    public const int CapacityCeiling = 4096;
     /// <summary>The maximum local-seat count. Each document reserves only its authored
     /// <see cref="WorldBodiesDefaults.LocalSeats"/>; remaining slots may host inhabitants or peers.</summary>
     public const int LocalSeatCount = 4;

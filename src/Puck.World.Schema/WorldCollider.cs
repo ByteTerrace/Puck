@@ -55,8 +55,21 @@ public abstract record WorldCollider {
 /// <param name="DefaultHold">Whether a body's surface hold may take any solid surface by default. A placement's own
 /// <see cref="WorldPlacementGrip"/> overrides this for the colliders it compiles; the field lattice's own terrain,
 /// which no placement row owns, has only this. <see langword="false"/> (the default) holds nothing.</param>
+/// <param name="EventsRaw">The bounded body-overlap event policy. ABSENT takes
+/// <see cref="WorldCollisionEvents.Default"/>; author <c>maxPairsPerBody: 0</c> to disable body-pair events while
+/// retaining ordinary world contact.</param>
+/// <param name="BodyContactsRaw">The bounded dynamic-body depenetration policy. ABSENT takes
+/// <see cref="WorldBodyContactPolicy.Default"/>. This is independent of overlap events.</param>
 public sealed record WorldCollision(IReadOnlyList<WorldContactRequirement> Requirements, float ContactSkin,
-    int MaxIterations, float MaxSlopeDegrees, float GradientProbe, bool DefaultHold = false) {
+    int MaxIterations, float MaxSlopeDegrees, float GradientProbe, bool DefaultHold = false,
+    [property: JsonPropertyName("events"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCollisionEvents? EventsRaw = null,
+    [property: JsonPropertyName("bodyContacts"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldBodyContactPolicy? BodyContactsRaw = null) {
+    /// <summary>Gets the effective bounded body-overlap event policy.</summary>
+    [JsonIgnore]
+    public WorldCollisionEvents Events => (EventsRaw ?? WorldCollisionEvents.Default);
+    /// <summary>Gets the effective bounded dynamic-body contact policy.</summary>
+    [JsonIgnore]
+    public WorldBodyContactPolicy BodyContacts => (BodyContactsRaw ?? WorldBodyContactPolicy.Default);
     /// <summary>Gets the inert absence — no requirements, zero skin, zero iterations, a solver that never relaxes.
     /// The engine holds no contact tuning of its own: the standard tuning is AUTHORED, in
     /// <c>Assets/worlds/standard.world.json</c>, and a world inherits it by naming that document as its basis. A
@@ -65,11 +78,48 @@ public sealed record WorldCollision(IReadOnlyList<WorldContactRequirement> Requi
     public static WorldCollision Absent { get; } = new(
         ContactSkin: 0f,
         DefaultHold: false,
+        EventsRaw: null,
         GradientProbe: 0f,
         MaxIterations: 0,
         MaxSlopeDegrees: 0f,
         Requirements: []
     );
+}
+/// <summary>Bounds body-pair overlap sensing independently of physical contact. The event feed retains established
+/// overlaps first, then considers at most <see cref="CandidateBudget"/> broadphase candidates per body, starts at
+/// most <see cref="BeginBudget"/> relationships per tick, and admits at most <see cref="MaxPairsPerBody"/>
+/// simultaneous pairs incident to any body. All choices are deterministic; a
+/// saturated crowd therefore degrades by omitting lower-priority new pairs rather than by missing its frame budget.</summary>
+/// <param name="CandidateBudget">The most sweep-and-prune candidates inspected for one body while discovering new
+/// overlaps. Must be at least <paramref name="MaxPairsPerBody"/>.</param>
+/// <param name="MaxPairsPerBody">The maximum retained overlap-event degree of one body; zero disables collision
+/// begin/end sensing.</param>
+/// <param name="BeginBudget">The maximum collision-begin relationships admitted in one authority tick. Existing
+/// relationships and their ends are not delayed.</param>
+public sealed record WorldCollisionEvents(int CandidateBudget = 32, int MaxPairsPerBody = 8, int BeginBudget = 1024) {
+    /// <summary>The largest accepted per-body candidate budget.</summary>
+    public const int MaximumCandidateBudget = 256;
+    /// <summary>The largest accepted retained overlap degree per body.</summary>
+    public const int MaximumPairsPerBody = 64;
+    /// <summary>The largest accepted per-tick begin budget.</summary>
+    public const int MaximumBeginBudget = 8192;
+    /// <summary>The policy used when <c>collision.events</c> is absent.</summary>
+    public static WorldCollisionEvents Default { get; } = new();
+}
+/// <summary>Bounds physical depenetration between kits that both author <see cref="WorldBodyContactMode.Solid"/>.
+/// The sweep inspects at most <see cref="CandidateBudget"/> x-overlapping candidates for each solid body and resolves
+/// at most <see cref="MaxPairsPerBody"/> contacts incident to one body in a tick. Choices are stable population order;
+/// a saturated crowd omits lower-priority pairs instead of turning one authority tick into quadratic work.</summary>
+/// <param name="CandidateBudget">The most sweep candidates inspected for one solid body. Must be at least
+/// <paramref name="MaxPairsPerBody"/>.</param>
+/// <param name="MaxPairsPerBody">The most physical pair corrections incident to one body in a tick.</param>
+public sealed record WorldBodyContactPolicy(int CandidateBudget = 16, int MaxPairsPerBody = 8) {
+    /// <summary>The largest accepted candidate budget per solid body.</summary>
+    public const int MaximumCandidateBudget = 32;
+    /// <summary>The largest accepted resolved-contact degree per solid body.</summary>
+    public const int MaximumPairsPerBody = 16;
+    /// <summary>The policy used when <c>collision.bodyContacts</c> is absent.</summary>
+    public static WorldBodyContactPolicy Default { get; } = new();
 }
 /// <summary>A contact quality authored by the world, independent of the engine implementation that supplies it.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldContactRequirement>))]

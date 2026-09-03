@@ -639,11 +639,9 @@ public sealed partial class WorldBody {
 
         return ((top == 1) && stack[0]);
     }
-    // The first shaping row whose gate opens, or -1 when none does (an unmatched tick, or an empty/absent table) —
-    // shared by ShapeVelocity, ApplyMedium's vertical lane, and every yaw-writing frame op's turnScale read, so all
-    // four agree on which row governs this tick. Facts and channels are fixed for the whole tick and the shared
-    // recency clocks are refreshed once before phase 0 (see ExecuteProgram), so every caller sees the same answer
-    // regardless of which phase it runs in.
+    // The first shaping row whose gate opens, or -1 when none does (an unmatched tick, or an empty/absent table).
+    // ExecuteProgram calls this exactly once after refreshing recency clocks and stores the result in its scratch,
+    // so turn, ShapeVelocity, and ApplyMedium share one pre-operation fact/channel snapshot for the whole tick.
     private int ResolveGoverningShapingRow(in PlayerIntent intent) {
         var shaping = m_tuning.Shaping;
 

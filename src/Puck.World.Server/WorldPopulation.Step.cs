@@ -5,6 +5,8 @@ using Puck.Physics.Motion;
 namespace Puck.World.Server;
 
 public sealed partial class WorldPopulation {
+    /// <summary>Gets the latest peer-advance cadence work. Counts only bodies whose kit authors a nonzero cadence.</summary>
+    public WorldAutonomyStatistics AutonomyStatistics { get; private set; }
     private static void ApplyVariation(Entry entry, CompiledBodyProducer producer, FixedQ4816 phase, FixedQ4816 weaveUnit, FixedQ4816 activityUnit, bool resetPhase) {
         entry.ProducerState.WeaveFrequency = (producer.Scalar(name: "weaveFrequencyBase") + (producer.Scalar(name: "weaveFrequencyRange") * weaveUnit));
 
@@ -495,6 +497,7 @@ Replan:
                 entry.NavigationState.Clear(status: WorldNavigationStatus.NoTarget);
                 entry.ProducerState.FlockSeeded = false;
             }
+            body.StageProducerIntent(intent: default);
             return;
         }
 
@@ -664,6 +667,40 @@ Replan:
         gravity.Solve(targets: m_gravityTargets);
     }
 
+    private static void BindCadence(ulong period, int ordinal, int count, ref ulong boundPeriod, ref ulong elapsed, ref ulong remaining) {
+        if (boundPeriod == period) {
+            return;
+        }
+
+        boundPeriod = period;
+        elapsed = 0UL;
+        remaining = ((period == 0UL)
+            ? 0UL
+            : Math.Max(
+                val1: 1UL,
+                val2: (((checked((ulong)(ordinal + 1)) * period) + checked((ulong)count - 1UL)) / checked((ulong)count))
+            )
+        );
+    }
+    private static bool CadenceDue(ulong period, ulong stepTicks, ref ulong elapsed, ref ulong remaining, out ulong elapsedTicks) {
+        if (period == 0UL) {
+            elapsedTicks = stepTicks;
+            return true;
+        }
+
+        elapsed = checked(elapsed + stepTicks);
+        remaining = ((remaining > stepTicks) ? (remaining - stepTicks) : 0UL);
+        if (remaining > 0UL) {
+            elapsedTicks = 0UL;
+            return false;
+        }
+
+        elapsedTicks = elapsed;
+        elapsed = 0UL;
+        remaining = period;
+        return true;
+    }
+
     /// <summary>Advances every active simulated stand-in by one sub-step: a named producer runs before motion, then
     /// every peer body integrates. A live <c>body.fly</c> tape or
     /// a submitted intent overrides the producer per the merge rule; an <see cref="IntentSource.Idle"/> peer holds
@@ -677,6 +714,8 @@ Replan:
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> is zero.</exception>
     public void AdvanceSimulated(ulong tick, ulong stepTicks, ulong stepStartEngineTick) {
         ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
+
+        AutonomyStatistics = default;
 
         (m_contactField as WorldColliderSet)?.RefreshAttached(population: this);
         SolveGravity();
@@ -696,16 +735,74 @@ Replan:
                 continue;
             }
 
-            if (!player.TryBeginOrdinaryAdvance(stepStartEngineTick: stepStartEngineTick)) {
+            var kit = m_kits[entry.KitIndex];
+            var locallyAutonomous = (
+                !entry.IsRemoteHuman &&
+                !player.Source.IsLive &&
+                !player.HasMotionTape &&
+                !player.RequiresFullRateAutonomy
+            );
+            var motionPeriod = (locallyAutonomous ? kit.AutonomousMotionTicks : 0UL);
+            var steeringPeriod = ((!entry.IsRemoteHuman && player.Source.IsProducer) ? kit.AutonomousSteeringTicks : 0UL);
+            ref var autonomy = ref entry.AutonomyState;
+            var ordinal = (index - LocalSeatCount);
+            BindCadence(motionPeriod, ordinal, PeerCapacity, ref autonomy.MotionPeriodTicks, ref autonomy.MotionElapsedTicks, ref autonomy.MotionRemainingTicks);
+            BindCadence(steeringPeriod, ordinal, PeerCapacity, ref autonomy.SteeringPeriodTicks, ref autonomy.SteeringElapsedTicks, ref autonomy.SteeringRemainingTicks);
+
+            var steeringDue = CadenceDue(
+                period: steeringPeriod,
+                stepTicks: stepTicks,
+                elapsed: ref autonomy.SteeringElapsedTicks,
+                remaining: ref autonomy.SteeringRemainingTicks,
+                elapsedTicks: out var steeringTicks
+            );
+            if (steeringDue) {
+                StageProducer(
+                    body: player,
+                    entry: entry,
+                    index: index,
+                    stepTicks: steeringTicks
+                );
+                if (player.Source.IsProducer && ((steeringPeriod != 0UL) || (motionPeriod != 0UL))) {
+                    autonomy.SteeringIntent = player.StagedProducerIntent;
+                    autonomy.SteeringSeeded = true;
+                } else {
+                    autonomy.SteeringIntent = default;
+                    autonomy.SteeringSeeded = false;
+                }
+                if (steeringPeriod != 0UL) {
+                    AutonomyStatistics = AutonomyStatistics with { SteeringUpdates = AutonomyStatistics.SteeringUpdates + 1 };
+                }
+            }
+
+            if (!CadenceDue(
+                period: motionPeriod,
+                stepTicks: stepTicks,
+                elapsed: ref autonomy.MotionElapsedTicks,
+                remaining: ref autonomy.MotionRemainingTicks,
+                elapsedTicks: out var motionTicks
+            )) {
+                player.DeferOrdinaryAdvance();
+                if (motionPeriod != 0UL) {
+                    AutonomyStatistics = AutonomyStatistics with { MotionDeferred = AutonomyStatistics.MotionDeferred + 1 };
+                }
                 continue;
             }
 
-            StageProducer(
-                body: player,
-                entry: entry,
-                index: index,
-                stepTicks: stepTicks
-            );
+            if (motionPeriod != 0UL) {
+                AutonomyStatistics = AutonomyStatistics with { MotionUpdates = AutonomyStatistics.MotionUpdates + 1 };
+            }
+
+            var accumulatedStart = checked(stepStartEngineTick + stepTicks - motionTicks);
+            if (!player.TryBeginOrdinaryAdvance(stepStartEngineTick: accumulatedStart)) {
+                autonomy.MotionElapsedTicks = 0UL;
+                autonomy.MotionRemainingTicks = motionPeriod;
+                continue;
+            }
+
+            if (!steeringDue && autonomy.SteeringSeeded) {
+                player.StageProducerIntent(intent: in autonomy.SteeringIntent);
+            }
             var targets = ReadEffectTargets(
                 selfIndex: index,
                 entry: entry,
@@ -714,7 +811,7 @@ Replan:
 
             player.Advance(
                 tick: tick,
-                stepTicks: stepTicks,
+                stepTicks: motionTicks,
                 entityIndex: index,
                 effectTargets: targets,
                 effectOutputs: m_effectOutputs,

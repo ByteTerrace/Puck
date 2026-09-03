@@ -40,7 +40,7 @@ public abstract record WorldAnchor {
     /// <see cref="WorldCameraProgramOp.Offset.SpreadPullback"/>. A group has no facing, so its orientation resolves to
     /// identity.</summary>
     /// <param name="Indices">The 0-based entity indices in the set, or <see langword="null"/> for the whole live
-    /// population (every active entity). Each index is validated 0..127.</param>
+    /// population (every active entity). Each index is validated against the authored population capacity.</param>
     /// <param name="SmoothRate">The exponential smoothing rate (per second) the centroid/spread ease at (validated
     /// positive and finite) — seeded un-smoothed on first resolve so a camera does not fly in from the origin.</param>
     public sealed record Group(IReadOnlyList<int>? Indices, float SmoothRate) : WorldAnchor;

@@ -1,6 +1,10 @@
 using Puck.Maths;
+using Puck.World.Protocol;
 
 namespace Puck.World.Server;
+
+/// <summary>Latest deterministic workload of authored non-human update cadences.</summary>
+public readonly record struct WorldAutonomyStatistics(int MotionUpdates, int MotionDeferred, int SteeringUpdates);
 
 internal readonly record struct BodySensorTarget(int Index, FixedVector3 Position, FixedQ4816 DistanceSquared) {
     public bool Exists => ((Index >= 0) || (Index == WorldTargetDesignation.PointIndex));
@@ -52,4 +56,16 @@ internal struct BodyProducerState {
     public WorldFlockObservation? FlockTarget;
     // Derived binding, restored from the checkpoint's kit/producer names. Not independent simulation state.
     public CompiledBodyProducer? FlockBinding;
+}
+internal struct BodyAutonomyState {
+    public ulong MotionPeriodTicks;
+    public ulong MotionElapsedTicks;
+    public ulong MotionRemainingTicks;
+    public ulong SteeringPeriodTicks;
+    public ulong SteeringElapsedTicks;
+    public ulong SteeringRemainingTicks;
+    public PlayerIntent SteeringIntent;
+    public bool SteeringSeeded;
+
+    public void Clear() => this = default;
 }

@@ -93,4 +93,40 @@ public sealed class MotionShapingValidationLawTests {
         Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "cannot compile — the world authors no simulation rate (simulation.rateHz)");
         Assert.True(condition: TryValidate(definition: admitted, reason: out var controlReason), userMessage: controlReason);
     }
+    [Fact]
+    public void WholeVectorRowsRefuseDriveOnlyFacetsWhileTheirAbsencePasses() {
+        var document = Fixtures.BuildDocument();
+        var kit = document.Kits[0];
+        var motion = kit.Motion;
+        var row = motion.Shaping![0];
+        var clean = row with { Along = new WorldShapingAlong(Engage: 8f, Release: 8f), Across = null };
+        var withBrake = clean with { Along = clean.Along! with { Brake = 0f } };
+        var withReverse = clean with { Along = clean.Along! with { Reverse = 0f } };
+
+        WorldDefinition With(WorldShaping shaping) => document with {
+            KitRowsRaw = [kit with { Motion = motion with { Shaping = [shaping] } }],
+        };
+
+        Assert.False(condition: TryValidate(definition: With(shaping: withBrake), reason: out var brakeReason));
+        Assert.Contains(actualString: brakeReason, comparisonType: StringComparison.Ordinal, expectedSubstring: ".along.brake is authored without across");
+        Assert.False(condition: TryValidate(definition: With(shaping: withReverse), reason: out var reverseReason));
+        Assert.Contains(actualString: reverseReason, comparisonType: StringComparison.Ordinal, expectedSubstring: ".along.reverse is authored without across");
+        Assert.True(condition: TryValidate(definition: With(shaping: clean), reason: out var cleanReason), userMessage: cleanReason);
+    }
+    [Fact]
+    public void AbsentRatesMeanInstantWhileExplicitZeroStillRefuses() {
+        var document = Fixtures.BuildDocument();
+        var kit = document.Kits[0];
+        var motion = kit.Motion;
+        var instant = new WorldShaping(Along: new WorldShapingAlong());
+        var zero = instant with { Along = instant.Along! with { Engage = 0f } };
+
+        WorldDefinition With(WorldShaping shaping) => document with {
+            KitRowsRaw = [kit with { Motion = motion with { Shaping = [shaping] } }],
+        };
+
+        Assert.True(condition: TryValidate(definition: With(shaping: instant), reason: out var instantReason), userMessage: instantReason);
+        Assert.False(condition: TryValidate(definition: With(shaping: zero), reason: out var zeroReason));
+        Assert.Contains(actualString: zeroReason, comparisonType: StringComparison.Ordinal, expectedSubstring: ".along.engage must be finite and positive.");
+    }
 }

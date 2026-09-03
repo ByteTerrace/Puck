@@ -42,6 +42,22 @@ public sealed class DynamicBodyContactLawTests {
         Assert.Equal(expected: 0, actual: fixture.Server.Population.DynamicContactNarrowPairs);
         Assert.Equal(expected: 0, actual: fixture.Server.Population.DynamicContactResolvedPairs);
     }
+    [Fact]
+    public void PhysicalContactBudgetsAreValidatedIndependentlyOfOverlapEvents() {
+        var source = Fixtures.BuildDocument();
+        foreach (var (policy, expected) in new[] {
+            (new WorldBodyContactPolicy(CandidateBudget: 0), "candidateBudget"),
+            (new WorldBodyContactPolicy(MaxPairsPerBody: 0), "maxPairsPerBody"),
+            (new WorldBodyContactPolicy(CandidateBudget: 2, MaxPairsPerBody: 3), "must be >= maxPairsPerBody"),
+            (new WorldBodyContactPolicy(CandidateBudget: WorldBodyContactPolicy.MaximumCandidateBudget + 1), "candidateBudget"),
+        }) {
+            var definition = source with {
+                CollisionRaw = source.Collision with { BodyContactsRaw = policy },
+            };
+            Assert.False(WorldDefinitionValidator.TryValidateLocally(definition, out var reason));
+            Assert.Contains(expected, reason, StringComparison.Ordinal);
+        }
+    }
 
     private static (Vector3 Left, Vector3 Right) ResolveCoincidentPair() {
         using var fixture = TwoBodies(mode: WorldBodyContactMode.Solid);

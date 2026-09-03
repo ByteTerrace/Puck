@@ -40,7 +40,7 @@ public sealed class WorldPeerHost : IDisposable {
     /// admitted or refused). A safety representation constant, never a document knob (CLAUDE.md core rule 8's
     /// "legitimate constants" carve-out names capacity bounds that size memory or the wire — this sizes the
     /// pre-admission connection table, not a per-world tunable Play/Dive/Kart/Jump would ever want different).
-    /// Sized independently of <see cref="WorldBodiesLimits.CapacityCeiling"/> (128, the admitted population
+    /// Sized independently of <see cref="WorldBodiesLimits.CapacityCeiling"/> (4096, the admitted population
     /// bound) — a stalled handshake never reaches the population table at all, so it needs its own,
     /// smaller ceiling. 64 is chosen against this class's own documented design target ("a trusted-LAN connection
     /// count small enough that fairness never needs more" — this type's remarks above): generous headroom for that
@@ -1424,18 +1424,15 @@ public sealed class WorldPeerHost : IDisposable {
         var sink = new WorldFederationProjectionSink(
             tier: tier,
             authority: m_server.AuthorityIdentity,
-            revision: () => m_server.Population.Revision
+            revision: () => m_server.Population.Revision,
+            disclosure: () => new WorldSinkDisclosure(
+                Policy: m_server.Definition.Population.ObserverDisclosure,
+                ObserverBodyIndex: -1
+            )
         );
-        // A remote observer is not embodied here, so a policy narrower than disclose-all delivers it nothing until
-        // one of its travelers lands. That is the safe direction for an authored perception limit.
-        var disclosure = new WorldSinkDisclosure(
-            Policy: m_server.Definition.Population.ObserverDisclosure,
-            ObserverBodyIndex: -1
-        );
-        var lease = m_server.ExecuteAuthorityOperation(operation: () => m_server.AttachSink(
-            disclosure: in disclosure,
-            sink: sink
-        ));
+        // The sink resolves the live policy and redacts only a sampled frame. Attaching it unfiltered here avoids
+        // copying a 4,096-body radius view on every authority tick merely to discard seven out of eight copies.
+        var lease = m_server.ExecuteAuthorityOperation(operation: () => m_server.AttachSink(sink: sink));
 
         try {
             await sink.StreamAsync(stream, ct).ConfigureAwait(false);

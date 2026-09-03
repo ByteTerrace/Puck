@@ -137,9 +137,9 @@ public sealed partial class WorldBody {
     // the body's compiled motion for a bounded tick budget — integration itself is untouched. Cleared by hard teleports.
     private FixedVector3 m_overlayVelocity;
     private WorldContinuumTrajectory? m_pendingContinuum;
-    // The response-shaped planar velocity — the ramped horizontal velocity the grounded program integrates. With an empty
-    // response table it equals the commanded target every tick (today's instant snap, byte-identical); with a table it
-    // converges on the target at the matching row's engage/release rate through m_planarRampAccumulator. SURVIVES a live
+    // The shaping-row planar velocity — the horizontal velocity the motion program integrates. With an instant
+    // whole-vector row it equals the commanded target every tick; with finite rates it converges on that target through
+    // m_planarRampAccumulator. SURVIVES a live
     // kit recompile (a retune must not jerk the crowd) but is dropped alongside the vertical velocity in ResetVertical,
     // so only a hard teleport that resets vertical state clears it (Warp/Pose/Reconcile) — Face keeps it (resetVertical:
     // false, no momentum lost across a heading snap).
@@ -195,7 +195,7 @@ public sealed partial class WorldBody {
     // RecompileKit when the body's kit row is retuned live (pose survives; only the compiled feel changes).
     private FixedMotionTuning m_tuning;
     // The drive frame's authoritative pitch scalar (radians) — the flying variant's climb attitude, integrated
-    // alongside m_yaw and clamped so the facing can never flip past vertical. Inert (held zero) while the drive row's
+    // alongside m_yaw and clamped so the facing can never flip past vertical. Inert (held zero) while the motion row's
     // pitchRate is zero. Levelled by Face, written by Pose, like m_yaw.
     private FixedQ4816 m_drivePitch;
     // The vertical channel — the axis the bound vertical effects write. Under the grounded program gravity integrates it
@@ -213,7 +213,7 @@ public sealed partial class WorldBody {
     // read back out of it).
     private FixedQ4816 m_yaw;
 
-    // The drive row's longitudinal/lateral/residual convergence remainders — one accumulator per decomposed
+    // The anisotropic shaping row's longitudinal/lateral/residual convergence remainders — one accumulator per decomposed
     // channel so each rate's sub-tick tail carries independently (the body-frame twin of m_planarRampAccumulator).
     private FixedRateAccumulator m_driveLongAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
     private FixedRateAccumulator m_driveLatAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
@@ -255,7 +255,7 @@ public sealed partial class WorldBody {
     private readonly FixedQ4816[] m_channelTimerValues = new FixedQ4816[ActionLaneCount];
     private bool m_grounded = true;
     private FixedRateAccumulator m_planarRampAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
-    // The response table's shared recency clocks — one per Recently gate across the whole table (allocated to match the
+    // The shaping table's shared recency clocks — one per Recently gate across the whole table (allocated to match the
     // compiled tuning's RecencySlots), refreshed while the fact holds and decaying otherwise. Reset by a teleport and a
     // recompile (the clocks are bound to the OLD table shape).
     private ulong[] m_motionRecency = [];

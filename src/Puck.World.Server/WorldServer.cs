@@ -614,7 +614,7 @@ public sealed partial class WorldServer : IWorldServerHost {
         m_contended = new bool[population.Capacity];
         m_federatedIntents = new FederatedIntentState[population.Capacity];
         m_snapshotEntries = new EntitySnapshot[population.Capacity];
-        m_events = new WorldEventFeed();
+        m_events = new WorldEventFeed(capacity: population.Capacity);
 
         if ((definition.Music is { Count: > 0 } music) && (music[0] is { } row)) {
             // The row's Source/Hash were already proven to load, canonicalize, and pin-verify by

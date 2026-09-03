@@ -7,6 +7,95 @@ namespace Puck.World.Tests;
 
 public sealed class WorldAuthorityCheckpointLawTests {
     [Fact]
+    public void EventFeedCheckpointRefusesBeforeMutatingAuthority() {
+        using var fixture = Fixtures.FreshServer();
+        fixture.Step();
+        Assert.True(fixture.Server.TryCaptureCheckpoint(
+            hostRow: EmptyHostRow(),
+            checkpoint: out var captured,
+            reason: out var reason
+        ), reason);
+        var beforeHash = WorldRuntimeStateHash.HashAuthoritative(fixture.Server, tick: 0UL);
+        var beforeDefinition = fixture.DefinitionBytes();
+        var malformed = captured! with {
+            EventFeed = captured.EventFeed with { SeatOccupied = [false] },
+        };
+
+        Assert.Throws<InvalidOperationException>(() => fixture.Server.RestoreCheckpoint(malformed));
+        Assert.Equal(beforeHash, WorldRuntimeStateHash.HashAuthoritative(fixture.Server, tick: 0UL));
+        Assert.Equal(beforeDefinition, fixture.DefinitionBytes());
+
+    }
+
+    [Fact]
+    public void AutonomousCadenceCheckpointRefusesBeforeMutatingAuthority() {
+        var source = Fixtures.BuildDocument();
+        var definition = source with {
+            PopulationRaw = source.Population with {
+                CapacityRaw = 5,
+                NetworkPlayers = 1,
+                DefaultPeerSourceRaw = IntentSource.Producer(name: "wander"),
+            },
+            KitRowsRaw = [source.Kits[0] with {
+                AutonomyRaw = new WorldAutonomyCadence(MotionSeconds: 0.1f, SteeringSeconds: 0.1f),
+            }],
+        };
+        using var fixture = Fixtures.FreshServer(definition);
+        Assert.Equal(1, fixture.Server.Population.SetSimulatedCount(count: 1));
+        fixture.Step();
+        Assert.True(fixture.Server.TryCaptureCheckpoint(
+            hostRow: EmptyHostRow(),
+            checkpoint: out var captured,
+            reason: out var reason
+        ), reason);
+        var entries = captured!.Population.Entries.ToArray();
+        var peer = Array.FindIndex(entries, entry => entry.Index == 4);
+        Assert.InRange(peer, 0, entries.Length - 1);
+        entries[peer] = entries[peer] with {
+            Autonomy = new WorldPopulation.WorldPopulationAutonomyCheckpoint(
+                MotionPeriodTicks: 1UL,
+                MotionElapsedTicks: 1UL,
+                MotionRemainingTicks: 1UL,
+                SteeringPeriodTicks: 0UL,
+                SteeringElapsedTicks: 0UL,
+                SteeringRemainingTicks: 0UL,
+                SteeringIntent: default,
+                SteeringSeeded: false
+            ),
+        };
+        var malformed = captured with { Population = captured.Population with { Entries = entries } };
+        var beforeHash = WorldRuntimeStateHash.HashAuthoritative(fixture.Server, tick: 0UL);
+        var beforeDefinition = fixture.DefinitionBytes();
+
+        Assert.Throws<InvalidOperationException>(() => fixture.Server.RestoreCheckpoint(malformed));
+        Assert.Equal(beforeHash, WorldRuntimeStateHash.HashAuthoritative(fixture.Server, tick: 0UL));
+        Assert.Equal(beforeDefinition, fixture.DefinitionBytes());
+
+        entries[peer] = entries[peer] with {
+            Autonomy = entries[peer].Autonomy with {
+                MotionPeriodTicks = 2UL,
+                MotionElapsedTicks = 0UL,
+                MotionRemainingTicks = 1UL,
+            },
+        };
+        malformed = captured with { Population = captured.Population with { Entries = entries } };
+        Assert.Throws<InvalidOperationException>(() => fixture.Server.RestoreCheckpoint(malformed));
+        Assert.Equal(beforeHash, WorldRuntimeStateHash.HashAuthoritative(fixture.Server, tick: 0UL));
+
+        entries = captured.Population.Entries.ToArray();
+        entries[peer] = entries[peer] with { KitIndex = byte.MaxValue };
+        malformed = captured with { Population = captured.Population with { Entries = entries } };
+        Assert.Throws<InvalidOperationException>(() => fixture.Server.RestoreCheckpoint(malformed));
+        Assert.Equal(beforeHash, WorldRuntimeStateHash.HashAuthoritative(fixture.Server, tick: 0UL));
+
+        malformed = captured with {
+            Population = captured.Population with { SimulatedCount = fixture.Server.Population.PeerCapacity + 1 },
+        };
+        Assert.Throws<InvalidOperationException>(() => fixture.Server.RestoreCheckpoint(malformed));
+        Assert.Equal(beforeHash, WorldRuntimeStateHash.HashAuthoritative(fixture.Server, tick: 0UL));
+    }
+
+    [Fact]
     public void CurrentContractsRemainVersionOneAndRejectAnotherCheckpointVersion() {
         using var fixture = Fixtures.FreshServer();
         Assert.True(fixture.Server.TryCaptureCheckpoint(checkpoint: out var checkpoint, reason: out var reason, hostRow: EmptyHostRow()), reason);

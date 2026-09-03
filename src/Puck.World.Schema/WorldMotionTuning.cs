@@ -127,29 +127,40 @@ public sealed record WorldTurn(
     float PitchRate = 0f
 );
 /// <summary>The along-the-target (whole vector) or along-the-heading (drive longitudinal) facet of one
-/// <see cref="WorldShaping"/> row. <see cref="Brake"/> and <see cref="Reverse"/> are read only when the row also
-/// carries <see cref="WorldShaping.Across"/>.</summary>
+/// <see cref="WorldShaping"/> row. An absent convergence rate means exact, immediate convergence; zero is never a
+/// hidden spelling of either "instant" or "disabled". <see cref="Brake"/> and <see cref="Reverse"/> are admitted
+/// only when the row also carries <see cref="WorldShaping.Across"/>.</summary>
 /// <param name="Engage">The whole-vector engage rate (u/s²) while the commanded target exceeds the body's current
 /// magnitude, or — paired with <see cref="WorldShaping.Across"/> — the drive's longitudinal accel rate while
-/// throttle commands more speed.</param>
+/// throttle commands more speed. <see langword="null"/> means converge immediately.</param>
 /// <param name="Brake">The drive's sign-reversal (brake) rate (u/s²) while back-throttle opposes forward travel.
-/// Refused without a paired <see cref="WorldShaping.Across"/>.</param>
+/// <see langword="null"/> means brake immediately. Refused without a paired
+/// <see cref="WorldShaping.Across"/>.</param>
 /// <param name="Release">The whole-vector release rate (u/s²) while the target does not exceed the current
 /// magnitude, or — paired with <see cref="WorldShaping.Across"/> — the drive's coast rate toward rest with
-/// throttle centered, and the decay rate while over the commanded speed.</param>
-/// <param name="Reverse">The reverse speed (u/s) full back-throttle converges on from rest; <c>0</c> (the default)
-/// forbids reversing. Refused (non-zero) without a paired <see cref="WorldShaping.Across"/>.</param>
-public sealed record WorldShapingAlong(float Engage, float Brake, float Release, float Reverse = 0f);
+/// throttle centered, and the decay rate while over the commanded speed. <see langword="null"/> means converge
+/// immediately.</param>
+/// <param name="Reverse">The reverse speed (u/s) full back-throttle converges on from rest; absence forbids
+/// reversing. Refused whenever authored without a paired <see cref="WorldShaping.Across"/>.</param>
+public sealed record WorldShapingAlong(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Engage = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Brake = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Release = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Reverse = null
+);
 /// <summary>The across-the-heading (lateral) facet of one <see cref="WorldShaping"/> row — its presence is what
 /// selects the anisotropic drive decomposition over the whole-vector response law.</summary>
-/// <param name="Grip">The lateral convergence rate (u/s²) toward zero slip while this row governs.</param>
-public sealed record WorldShapingAcross(float Grip);
+/// <param name="Grip">The lateral convergence rate (u/s²) toward zero slip while this row governs, or
+/// <see langword="null"/> to remove slip immediately.</param>
+public sealed record WorldShapingAcross(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Grip = null
+);
 /// <summary>One row of a kit's ordered <c>shaping</c> table: how velocity converges on the commanded intent while
-/// <see cref="When"/> holds. Rows evaluate in order, first match wins; the table must carry exactly one
-/// unconditional (<see cref="When"/> omitted) row, and it must be last. Exactly one of <see cref="Along"/> or
+/// <see cref="When"/> holds. Rows evaluate in order, first match wins; the table may carry one unconditional
+/// (<see cref="When"/> omitted) row, and when present it must be last. Exactly one of <see cref="Along"/> or
 /// <see cref="Dynamics"/> is authored per row; <see cref="Across"/> is legitimate only beside <see cref="Along"/>.
 /// A drift/boost row is authored as an ordinary row gated on a <c>held</c> predicate: the FIRST open row governs,
-/// so a drift row belongs ahead of the kit's ordinary drive row.</summary>
+/// so a drift row belongs ahead of the kit's ordinary anisotropic row.</summary>
 /// <param name="When">The gate that must hold for this row to win, or <see langword="null"/> for the unconditional
 /// row (permitted only as the final row). The gate reuses the action-lane predicate vocabulary, admitting
 /// body-fact kinds (<c>now</c>/<c>recently</c>/<c>all</c>/<c>any</c>/<c>not</c>) and <c>held</c> (a composition
@@ -239,14 +250,20 @@ public static class WorldMotionTuningFactory {
                 When: gate.ToArray(),
                 Along: ((row.Along is { } along)
                 ? new FixedShapingAlong(
-                    Engage: FixedQ4816.FromDouble(value: along.Engage),
-                    Brake: FixedQ4816.FromDouble(value: along.Brake),
-                    Release: FixedQ4816.FromDouble(value: along.Release),
-                    Reverse: FixedQ4816.FromDouble(value: along.Reverse)
+                    Engage: FixedQ4816.FromDouble(value: (along.Engage ?? 0f)),
+                    Brake: FixedQ4816.FromDouble(value: (along.Brake ?? 0f)),
+                    Release: FixedQ4816.FromDouble(value: (along.Release ?? 0f)),
+                    Reverse: FixedQ4816.FromDouble(value: (along.Reverse ?? 0f)),
+                    Instant: ((along.Engage is null ? ShapingInstant.Engage : ShapingInstant.None)
+                        | (along.Brake is null ? ShapingInstant.Brake : ShapingInstant.None)
+                        | (along.Release is null ? ShapingInstant.Release : ShapingInstant.None))
                 )
                 : null),
                 Across: ((row.Across is { } across)
-                ? new FixedShapingAcross(Grip: FixedQ4816.FromDouble(value: across.Grip))
+                ? new FixedShapingAcross(
+                    Grip: FixedQ4816.FromDouble(value: (across.Grip ?? 0f)),
+                    Instant: (across.Grip is null)
+                )
                 : null),
                 Dynamics: CompileDynamics(
                     name: row.Dynamics,

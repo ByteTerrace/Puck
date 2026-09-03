@@ -121,7 +121,7 @@
                   "null"
                 ],
                 "items": {
-                  "description": "One row of a kit\u0027s ordered shaping table: how velocity converges on the commanded intent while When holds. Rows evaluate in order, first match wins; the table must carry exactly one unconditional (When omitted) row, and it must be last. Exactly one of Along or Dynamics is authored per row; Across is legitimate only beside Along. A drift/boost row is authored as an ordinary row gated on a held predicate: the FIRST open row governs, so a drift row belongs ahead of the kit\u0027s ordinary drive row.",
+                  "description": "One row of a kit\u0027s ordered shaping table: how velocity converges on the commanded intent while When holds. Rows evaluate in order, first match wins; the table may carry one unconditional (When omitted) row, and when present it must be last. Exactly one of Along or Dynamics is authored per row; Across is legitimate only beside Along. A drift/boost row is authored as an ordinary row gated on a held predicate: the FIRST open row governs, so a drift row belongs ahead of the kit\u0027s ordinary anisotropic row.",
                   "type": [
                     "object",
                     "null"
@@ -140,28 +140,38 @@
                       ],
                       "properties": {
                         "engage": {
-                          "description": "The whole-vector engage rate (u/s\u00B2) while the commanded target exceeds the body\u0027s current magnitude, or \u2014 paired with Across \u2014 the drive\u0027s longitudinal accel rate while throttle commands more speed.",
-                          "type": "number"
+                          "description": "The whole-vector engage rate (u/s\u00B2) while the commanded target exceeds the body\u0027s current magnitude, or \u2014 paired with Across \u2014 the drive\u0027s longitudinal accel rate while throttle commands more speed. null means converge immediately.",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
                         },
                         "brake": {
-                          "description": "The drive\u0027s sign-reversal (brake) rate (u/s\u00B2) while back-throttle opposes forward travel. Refused without a paired Across.",
-                          "type": "number"
+                          "description": "The drive\u0027s sign-reversal (brake) rate (u/s\u00B2) while back-throttle opposes forward travel. null means brake immediately. Refused without a paired Across.",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
                         },
                         "release": {
-                          "description": "The whole-vector release rate (u/s\u00B2) while the target does not exceed the current magnitude, or \u2014 paired with Across \u2014 the drive\u0027s coast rate toward rest with throttle centered, and the decay rate while over the commanded speed.",
-                          "type": "number"
+                          "description": "The whole-vector release rate (u/s\u00B2) while the target does not exceed the current magnitude, or \u2014 paired with Across \u2014 the drive\u0027s coast rate toward rest with throttle centered, and the decay rate while over the commanded speed. null means converge immediately.",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
                         },
                         "reverse": {
-                          "description": "The reverse speed (u/s) full back-throttle converges on from rest; 0 (the default) forbids reversing. Refused (non-zero) without a paired Across.",
-                          "type": "number",
-                          "default": 0
+                          "description": "The reverse speed (u/s) full back-throttle converges on from rest; absence forbids reversing. Refused whenever authored without a paired Across.",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
                         }
                       },
-                      "required": [
-                        "engage",
-                        "brake",
-                        "release"
-                      ],
                       "additionalProperties": false,
                       "default": null
                     },
@@ -173,13 +183,14 @@
                       ],
                       "properties": {
                         "grip": {
-                          "description": "The lateral convergence rate (u/s\u00B2) toward zero slip while this row governs.",
-                          "type": "number"
+                          "description": "The lateral convergence rate (u/s\u00B2) toward zero slip while this row governs, or null to remove slip immediately.",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
                         }
                       },
-                      "required": [
-                        "grip"
-                      ],
                       "additionalProperties": false,
                       "default": null
                     },
@@ -755,6 +766,26 @@
                 "Back"
               ]
             },
+            "default": null
+          },
+          "autonomy": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "motionSeconds": {
+                "description": "How often the body\u0027s physics/motion program advances.",
+                "type": "number",
+                "default": 0
+              },
+              "steeringSeconds": {
+                "description": "How often its selected producer refreshes steering. The most recent image is reused between refreshes.",
+                "type": "number",
+                "default": 0
+              }
+            },
+            "additionalProperties": false,
             "default": null
           }
         },

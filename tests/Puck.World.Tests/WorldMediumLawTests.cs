@@ -232,12 +232,11 @@ public sealed class WorldMediumLawTests {
             Motion: new WorldMotion(
                 Speed: new WorldSpeed(Value: 3.2f),
                 Turn: new WorldTurn(Rate: 2.2f),
-                // One unconditional row at engage/release rates far above anything a tick could need to converge —
-                // MoveToward returns the target exactly whenever maxDelta exceeds the distance, so this snaps both
-                // the planar velocity and (through ApplyMedium's own vertical lane) the medium's own commanded
-                // vertical target instantly, byte-identical to the retired empty-response-table fixture.
+                // One unconditional row using the exact authored spelling: absent engage/release rates snap both
+                // the planar velocity and (through ApplyMedium's own vertical lane) the medium's commanded vertical
+                // target instead of approximating "instant" with a large finite rate.
                 Shaping: [
-                    new WorldShaping(Along: new WorldShapingAlong(Engage: 1_000_000f, Brake: 0f, Release: 1_000_000f)),
+                    new WorldShaping(Along: new WorldShapingAlong()),
                 ],
                 Holds: [
                     new WorldHold(

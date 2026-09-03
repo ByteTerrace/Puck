@@ -1036,7 +1036,7 @@ internal sealed partial class PlayerCommandModule {
     // index ALL of that seat's presentation derives from (camera eye, audio listener, seat.<n>.position.* HUD
     // bindings; see Client.WorldPerceptionAnchor) — spliced inside the server's bracketed echo CLIENT-side, because
     // the anchor is client presentation state the server never holds and the wire answer must stay untouched.
-    // Refusals and non-seat targets (4..127 own no seat, hence no anchor) pass through verbatim.
+    // Refusals and non-seat targets (4..4095 own no seat, hence no anchor) pass through verbatim.
     private string WithPerceptionAnchor(string text, int index, bool refused) {
         if (
             refused ||

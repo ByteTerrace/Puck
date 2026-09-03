@@ -979,7 +979,7 @@
         },
         "indices": {
           "$ref": "#/$defs/Int32List",
-          "description": "The 0-based entity indices in the set, or null for the whole live population (every active entity). Each index is validated 0..127."
+          "description": "The 0-based entity indices in the set, or null for the whole live population (every active entity). Each index is validated against the authored population capacity."
         },
         "smoothRate": {
           "description": "The exponential smoothing rate (per second) the centroid/spread ease at (validated positive and finite) \u2014 seeded un-smoothed on first resolve so a camera does not fly in from the origin.",

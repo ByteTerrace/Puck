@@ -686,7 +686,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
 
         return builder.Append(value: ']').ToString();
     }
-    // A kit's shaping table: each row's mechanism in order — a named dynamics follower, the drive decomposition (with
+    // A kit's shaping table: each row's mechanism in order — a named dynamics follower, the anisotropic decomposition (with
     // its own key scalars), or the whole-vector response law — echoed alongside the motion row so world.kits answers
     // "how does this kit feel" without a separate lookup.
     private static string DescribeShaping(WorldMotion motion) {
@@ -710,15 +710,28 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             } else if ((row?.Across is { } across) && (row.Along is { } along)) {
                 _ = builder.Append(
                     provider: CultureInfo.InvariantCulture,
-                    handler: $"drive(engage={along.Engage:0.###} brake={along.Brake:0.###} release={along.Release:0.###} reverse={along.Reverse:0.###} grip={across.Grip:0.###})"
+                    handler: $"drive(engage={DescribeConvergence(value: along.Engage)} brake={DescribeConvergence(value: along.Brake)} release={DescribeConvergence(value: along.Release)} reverse={DescribeReverse(value: along.Reverse)} grip={DescribeConvergence(value: across.Grip)})"
+                );
+            } else if (row?.Along is { } responseAlong) {
+                _ = builder.Append(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $"response(engage={DescribeConvergence(value: responseAlong.Engage)} release={DescribeConvergence(value: responseAlong.Release)})"
                 );
             } else {
-                _ = builder.Append(value: "response");
+                _ = builder.Append(value: "invalid");
             }
         }
 
         return builder.ToString();
     }
+    private static string DescribeConvergence(float? value) => (value is { } finite
+        ? finite.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)
+        : "instant"
+    );
+    private static string DescribeReverse(float? value) => (value is { } finite
+        ? finite.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)
+        : "none"
+    );
     // The ordered hold list's own kind/gravity/thrust per row — the vertical channel's whole authoring surface.
     private static string DescribeHolds(WorldMotion motion) {
         if (motion.Holds is not { Count: > 0 } holds) {
@@ -1121,7 +1134,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.kits",
-            description: "Reports the kit census (Immediate): one segment per declared kit row — name, body motion program, the motion row's key movement scalars and planar shaping, and the drive row's own scalars for a kit authoring one. The kits section's own read-back (world.row.set kits/world.row.remove kits has no listing of its own otherwise).",
+            description: "Reports the kit census (Immediate): one segment per declared kit row — name, body motion program, and the motion row's key movement scalars, holds, and planar shaping. The kits section's own read-back (world.row.set kits/world.row.remove kits has no listing of its own otherwise).",
             handler: (context, args) => {
                 if (args.Count != 0) {
                     return CommandResult.Error(output: "[world.kits: no arguments — reports the kit census]");

@@ -52,7 +52,10 @@ once per tier change on stderr. A traveler's reservation carries a
 `WorldIdentityProjection` (id, name, colour, move/turn rate), never its owned
 document. `population.disclosure` (`WorldObserverDisclosure` — `all` (the
 unauthored default), `radius`, `selfOnly`) redacts snapshot ENTRIES per sink at
-`WorldOutputHub`, never inside the tick. Read back with `world.projection`,
+`WorldOutputHub`, never inside the tick. `updateSeconds` samples remote QUIC
+projections (default 0.03 s; zero means every authority tick) while coalescing
+skipped field writes and pose-discontinuity hints. Local sinks remain full-rate.
+Read back with `world.projection`,
 `world.peers`' tier column, and `world.admission`'s disclosure column.
 
 ## Contents
@@ -490,9 +493,9 @@ constants through the SAME fixed-point derivation
 (`Puck.Maths.SecondOrderDynamics.Create`) the simulation compiles from, and a
 live reference count across cameras, looks, look parts, kits, and state.
 Consumers: a look's `motion.dynamics`/`motion.partDynamics` (root and per-part
-followers), a camera program's `dynamics` op (the boom ease), a grounded
-kit's `motion.dynamics` (planar velocity shaping — exactly one of `dynamics`
-or the engage/release `response` table, never both, never neither), and a
+followers), a camera program's `dynamics` op (the boom ease), a kit shaping
+row's `dynamics` facet (planar velocity shaping — exactly one of `dynamics`
+or `along` on that row, never both, never neither), and a
 `state` row/cell's `dynamics` trait (the eased read, above).
 
 ### `curves` — the curvature-first spline table
@@ -577,6 +580,27 @@ result through checkpoint/hash. Charge both programs and all indirect scans for
 every retained neighbor in the worst-case simultaneous population refresh,
 under the shared rule work ceiling. See the
 [authoring example](../../../../src/Puck.World.Schema/README.md#social-flock-affinities).
+
+### Crowd scale policies
+
+`WorldBodiesLimits.CapacityCeiling` is 4096. `kits.rows[].autonomy` independently
+batches non-human `motionSeconds` and producer `steeringSeconds` (0..1; zero is
+full authority rate), with deterministic per-body phasing and exact elapsed
+engine-tick batches. Live/human/tape/pending-input bodies stay full-rate. Refuse
+positive motion cadence with `bodyContact: solid`; deferred bodies cannot claim
+per-tick dynamic contact. Large flocks use overlap contact.
+
+`collision.events` bounds body-pair proximity events separately:
+`candidateBudget` per body, `maxPairsPerBody` retained degree, and `beginBudget`
+per tick. Existing pairs win continuity priority. `maxPairsPerBody: 0` disables
+pair events while ordinary world contact remains live. Preserve these policies,
+cadence phase, cached steering, and overlap latches through checkpoint/hash.
+
+`collision.bodyContacts` separately bounds physical depenetration between
+`solid` kits: at most 32 inspected candidates and 16 resolved pairs per body
+(defaults 16/8). Dense saturation omits later stable-index pairs. Do not couple
+these budgets to `collision.events`; sensing and physical correction are
+independent authored costs.
 
 ### `navigation` — bounded surface, flight, and medium routes
 
@@ -774,12 +798,13 @@ authored `value` is a deliberate override. `host.backendDraw` draws its backend
 BY NAME from a weighted TEXT source over the backend tokens (never an unnamed
 ordinal) and is XOR-by-presence against `host.backend`;
 `population.capacityDraw` cannot be (its record is a STRUCT, so an authored
-`capacity: 128` is indistinguishable from the default) — there the draw wins.
+an explicitly authored default-valued `capacity` is indistinguishable from the
+record default) — there the draw wins.
 
 **Domains narrow STATICALLY** against the site's own envelope, the census
 coherence sum, and every reachable backend token — so a roll can never decide
 whether the world boots. `population.capacityDraw` is TEMPORARILY floored at
-`WorldBodiesLimits.CapacityCeiling` (128) because `world.population` crashes
+`WorldBodiesLimits.CapacityCeiling` (4096) because `world.population` crashes
 below it; that collapses its domain to a single value until the population lane
 lifts the floor.
 
@@ -1125,14 +1150,18 @@ is a kit whose shaping table carries an `across` row.
 **`shaping` (`WorldShaping[]`) — the unified velocity-shaping table.** One
 row shape serves the whole-vector response law, the anisotropic drive
 decomposition, and a named second-order follower: `{ "when": <predicate,
-optional>, "along": { "engage", "brake", "release", "reverse" }, "across":
-{ "grip" }, "dynamics": "<row>", "turnScale": 1 }`. Rows evaluate in order,
+optional>, "along": { "engage"?, "brake"?, "release"?, "reverse"? }, "across":
+{ "grip"? }, "dynamics": "<row>", "turnScale": 1 }`. Rows evaluate in order,
 first open gate wins; `when` admits the shaping-gate predicate vocabulary —
 body-fact kinds (`now`/`recently`/`all`/`any`/`not`) plus `held` (`{ "held":
 "<channel>" }` — the named composition channel's own live read at or above
 its declared threshold, resolved against the world's channel table at
 kit-compile time; legitimate only here). Exactly one of `along` or `dynamics`
-is authored per row; `across` is legitimate only beside `along`.
+is authored per row; `across` is legitimate only beside `along`. An omitted
+convergence rate means exact, immediate convergence. An explicit rate must be
+positive; zero is never a hidden spelling of "instant" or "disabled". `brake`
+and any authored `reverse` are refused on a whole-vector row because that law
+does not read drive-only facets.
 
 A row without `across` shapes the whole vector through the engage/release
 response law — `engage` while the stick is deflected, `release` while
@@ -1158,7 +1187,7 @@ row, is expected to change replay hashes. A drift/boost row is authored as
 an ordinary row gated on `held` — never a bespoke mechanism — so it must sit
 AHEAD of the row it overrides.
 
-What a drive row does NOT carry is what the motion row and its holds already
+What an anisotropic shaping row does NOT carry is what the motion row and its holds already
 name: the forward speed full throttle converges on is `speed.value` (bounded
 by `speed.envelope`, scaled by `speed.held.multiplier` while its channel
 reads held), the steering rate at full authority is `turn.rate`, and gravity
@@ -1167,11 +1196,11 @@ hover, and air variants: a contact-pinned variant pairs an `across` row with
 a Surface `Gravity` hold row, a flying variant a Free `Lift` row (`lift: 1`)
 and a positive `turn.pitchRate`, which is what decides vertical contact
 ownership per the seam's rule. Validation
-(`WorldDefinitionValidator.ValidateShaping`): every convergence rate
-positive (`along.reverse` non-negative), `across` refused without `along`,
+(`WorldDefinitionValidator.ValidateShaping`): every authored convergence rate
+positive; `along.reverse`, when present, non-negative; `across` refused without `along`,
 `turn.falloff` in `[0, 1]`, `turn.pitchRate` non-negative, and a `held` gate
 naming a resolvable channel. `DriveLawTests` pins the drive family, and
-`ShapingRowLawTests` the response-table and dynamics-row families, to
+`ShapingRowLawTests` the whole-vector and dynamics-row families, to
 recorded 240-tick fixed-point traces whose discriminating controls perturb
 one facet each.
 
@@ -1208,7 +1237,7 @@ does for `ResolveHold`/`ApplyHold`; a kit whose program never selects it (a
 free-flight kit that owns its whole velocity channel directly) may author
 none. `Speed.Held` is a HELD (not edge-triggered) channel that scales the
 resolved planar speed while it reads held, default `null` (no held
-multiplier) — a drive row's boost is this seam under that name, never a
+multiplier) — a shaping row's boost is this seam under that name, never a
 second channel; resolved to `FixedSpeed.HeldOrdinal` the same way
 `WanderFlavor.PressChannel` resolves its own ordinal, since a channel name
 needs the world's compiled channel table and a body's own compile step has
@@ -1272,7 +1301,7 @@ bound.
 else the kit's own, clamped by `Speed.Envelope` — shared by the sim and every
 read-back so the two can never disagree. A kit that means to pin its speed
 against any profile authors `min == max` rather than opting out of the profile
-read, and a held speed multiplier (a drive row's boost) multiplies AFTER the
+read, and a held speed multiplier (a shaping row's boost) multiplies AFTER the
 clamp, on the resolved value: the envelope pins the base rate, the boost
 rides on top. `ResolveTurnAuthority`'s falloff anchor and every shaping
 row's own commanded speed both read the SAME resolved value
@@ -2024,13 +2053,17 @@ zone, and neutral-grace duration.
 
 ## Capacity constants
 
-- `WorldBodiesLimits` (`Puck.World.Schema`): `CapacityCeiling = 128`,
+- `WorldBodiesLimits` (`Puck.World.Schema`): `CapacityCeiling = 4096`,
   `LocalSeatCount = 4` (indices 0–3) — single-sourced against
   `WorldClient.EntityCapacity` (the F3 reconciliation, 2026-08-06; see
   [SKILL.md](../SKILL.md)'s "Boundaries" section). There is no
-  `MaxPopulation`/`MaxPopulationSimulated` constant; shipped worlds author
-  `networkPlayers: 124` (128 minus the 4 local seats) as ordinary document
-  data, not an engine ceiling.
+  `MaxPopulation`/`MaxPopulationSimulated` constant. The client reserves full
+  catalog detail for the first 128 indices and emits later active bodies as
+  one-instance coarse capsules. That hybrid bounds storage and SDF inputs; it
+  does not establish dense-crowd frame time. Hard presentation targets require
+  a non-per-creature SDF lane (for example raster impostors or an authored
+  aggregate). Existing shipped worlds may still author
+  `networkPlayers: 124` as ordinary document data, not an engine ceiling.
 - `WorldLookSource.Catalog.RigCount` is the reusable appearance count, not
   body capacity. `DefaultIndex` cycles fresh slot picks through that catalog;
   an admitted occupant carries its pick across transfers. The client reserves

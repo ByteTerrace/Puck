@@ -210,7 +210,7 @@ public sealed partial class WorldServer {
     private string DescribeChannels(int bodyIndex, WorldBody body) {
         // The fold — and this read-back — only ever exists over a HUMAN-OCCUPIED LOCAL SEAT
         // (WorldPopulation.IsHumanOccupied; the whole per-seat retention above is sized WorldPopulation.LocalSeatCount).
-        // A population entry (4..127) or an unoccupied local seat is a bot at full authority by construction — there
+        // A peer-slice population entry (4 through capacity minus one) or an unoccupied local seat is a bot at full authority by construction — there
         // is no base/pool/contributor to report, so say that rather than fabricating one.
         if (!m_population.IsHumanOccupied(bodyIndex: bodyIndex)) {
             return $"[body.channels: body:{bodyIndex} is not human-occupied — the co-driving pool only ever exists over an occupied local seat (see world.population); nothing folds here]";

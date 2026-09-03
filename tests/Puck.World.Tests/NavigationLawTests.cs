@@ -178,8 +178,8 @@ public sealed partial class NavigationLawTests {
                 BodyMotionProgram = navigationMotion.Name,
                 // A full-thrust hold row is the "compatible vertical consumer" a Volume/Medium-domain producer
                 // needs: it consumes MoveUp unconditionally.
-                // The retired ApplyVerticalDrive ran in a program carrying no gravity op at all, so the row that
-                // replaces it holds nothing and only consumes MoveUp: a Gravity row here would sink a navigator
+                // This navigation program carries no gravity law, so its hold row holds nothing and only consumes
+                // MoveUp: a Gravity row here would sink a navigator
                 // out of its own volume domain between goals.
                 Motion = kit.Motion with { Holds = [kit.Motion.Holds![0] with { Gravity = null, Hold = BodyHoldKind.None, Thrust = 1f }] },
                 ProducersRaw = new Dictionary<string, BodyProgramParameters>(collection: kit.Producers) {

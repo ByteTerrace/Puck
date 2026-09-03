@@ -233,7 +233,6 @@
               },
               "along": {
                 "engage": 45,
-                "brake": 0,
                 "release": 55
               }
             },
@@ -244,14 +243,12 @@
               },
               "along": {
                 "engage": 34,
-                "brake": 0,
                 "release": 18
               }
             },
             {
               "along": {
                 "engage": 30,
-                "brake": 0,
                 "release": 17
               }
             }

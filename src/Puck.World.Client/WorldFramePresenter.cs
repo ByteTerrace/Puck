@@ -273,7 +273,8 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         );
         m_audio.ReconcileSpeakers(definition: definition);
         m_fields = new WorldFieldEmitter(client: client);
-        // Composing the emitter runs the ONE capacity probe (its worst-case branch: all 128 avatars, the reserved
+        // Composing the emitter runs the ONE capacity probe (its worst-case branch: 128 detailed avatars plus the
+        // remaining coarse crowd bodies, the reserved
         // placement instances, the worst-case animated pool, and the authoring headroom), freezing the word, instance,
         // and dynamic-transform envelopes every live rebuild fits inside by construction.
         try {
@@ -1590,8 +1591,8 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         );
     }
 
-    /// <summary>The frozen transform-slot count: maximum-sized catalog ranges for all body slots plus the reserved
-    /// animated-placement replay pool.</summary>
+    /// <summary>The frozen transform-slot count: maximum-sized catalog ranges for the detailed body band, one root
+    /// slot per remaining crowd body, plus the reserved animated-placement replay pool.</summary>
     public int DynamicTransformCapacity { get; }
     /// <inheritdoc/>
     public SdfGlyphAtlas? GlyphAtlas => m_text.GlyphAtlas;

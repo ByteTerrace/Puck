@@ -475,10 +475,10 @@ public sealed partial class WorldBody {
     /// on top of the same reset, extended to their integration carries.
     /// <see cref="PlanarRampRemainder"/>/<see cref="DriveLongRemainder"/>/<see cref="DriveLatRemainder"/>/
     /// <see cref="DriveResidualRemainder"/>/<see cref="MediumThrustRampRemainder"/>/<see cref="OverlayRemainderX"/>,Y,Z —
-    /// the response/drive/medium/overlay rate accumulators' own <see cref="Puck.Maths.FixedRateAccumulator.Remainder"/>s.
+    /// the isotropic/anisotropic/medium/overlay rate accumulators' own <see cref="Puck.Maths.FixedRateAccumulator.Remainder"/>s.
     /// These are frame-independent (a rate of convergence, not a position), unlike the position/rotation/vertical
     /// accumulators excluded below — see this list's own "deliberately re-derived" entry for exactly why that
-    /// distinction holds. A drive row makes the drive trio live for an ordinary seat; a medium hold makes the medium
+    /// distinction holds. An anisotropic shaping row makes the decomposed trio live; a medium hold makes the medium
     /// one live.
     /// <see cref="PlanarFollowerPositionRawX"/>,Y,Z/<see cref="PlanarFollowerVelocityRawX"/>,Y,Z/
     /// <see cref="PlanarFollowerPreviousTarget"/>/<see cref="VerticalFollowerPositionRaw"/>/
@@ -570,11 +570,11 @@ public sealed partial class WorldBody {
     /// <param name="PlanarVelocity">The ramped horizontal velocity the grounded program integrates.</param>
     /// <param name="VerticalVelocity">The vertical (gravity/jump) velocity.</param>
     /// <param name="Orientation">The full attitude — captured directly rather than re-derived from yaw alone, so a
-    /// future driven seat kit's pitch/roll survives too (today's seat kits author no drive row, where this always
+    /// future driven seat kit's pitch/roll survives too (today's seat kits author no anisotropic shaping row, where this always
     /// agrees with the yaw already carried alongside it — see <see cref="Puck.World.Server.WorldPopulation.RestoreDetachedSeat"/>'s
     /// own remarks on the exact case).</param>
     /// <param name="DrivePitch">The drive frame's own climb-attitude scalar (inert, always zero, for a kit authoring
-    /// no drive row — carried for the same forward-compatibility reason as <paramref name="Orientation"/>).</param>
+    /// no anisotropic shaping row — carried for the same forward-compatibility reason as <paramref name="Orientation"/>).</param>
     /// <param name="OverlayVelocity">The timed impulse overlay's (the dash) world-space velocity, if one is live.</param>
     /// <param name="OverlayRemainingTicks">Engine ticks remaining on the live overlay — a duration, not a deadline.</param>
     /// <param name="ChannelTimerTicks">Per-ordinal remaining ticks on an in-flight timed <c>body.press</c> — a
@@ -593,10 +593,10 @@ public sealed partial class WorldBody {
     /// <param name="PendingDefaultChannelValue">The value each pending tap in <paramref name="PendingDefaultChannelPress"/>
     /// holds, copied defensively.</param>
     /// <param name="MotionRecency">The body-motion program's own Recently-gate clocks, copied defensively.</param>
-    /// <param name="PlanarRampRemainder">The response table's ramp accumulator's own signed remainder.</param>
-    /// <param name="DriveLongRemainder">The drive row's longitudinal convergence accumulator's own remainder.</param>
-    /// <param name="DriveLatRemainder">The drive row's lateral convergence accumulator's own remainder.</param>
-    /// <param name="DriveResidualRemainder">The drive row's residual convergence accumulator's own remainder.</param>
+    /// <param name="PlanarRampRemainder">The whole-vector shaping lane's ramp accumulator remainder.</param>
+    /// <param name="DriveLongRemainder">The anisotropic row's longitudinal convergence accumulator remainder.</param>
+    /// <param name="DriveLatRemainder">The anisotropic row's lateral convergence accumulator remainder.</param>
+    /// <param name="DriveResidualRemainder">The anisotropic row's residual convergence accumulator remainder.</param>
     /// <param name="MediumThrustRampRemainder">The medium law's thrust convergence accumulator's own remainder.</param>
     /// <param name="PlanarFollowerPositionRawX">The planar dynamics follower's X-lane Q32 position raw.</param>
     /// <param name="PlanarFollowerPositionRawY">The planar dynamics follower's Y-lane Q32 position raw.</param>

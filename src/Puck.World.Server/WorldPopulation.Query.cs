@@ -77,7 +77,7 @@ public sealed partial class WorldPopulation {
 
         return null;
     }
-    // The highest slot (127 downward) not currently claimed by an active seat/census peer or an inhabited peer — where a
+    // The highest slot (capacity minus one downward) not currently claimed by an active seat/census peer or an inhabited peer — where a
     // new inhabited body lands, so inhabitants cluster at the top and never renumber an existing peer. A free slot is one
     // that holds no placement back-reference and no active census body.
     private int HighestFreeSlot() {

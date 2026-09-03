@@ -508,6 +508,7 @@ public sealed partial class WorldServer {
         m_population.ValidateCheckpoint(checkpoint: checkpoint.Population);
 
         var restoredDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: server.DefinitionJson);
+        m_events.ValidateCheckpoint(checkpoint: checkpoint.EventFeed);
         ValidateDecisionCheckpoint(server, restoredDefinition);
         var restoredSocial = RestoreSocialCheckpoint(server, restoredDefinition);
         WorldTransferEscrow.ValidateSocialCheckpoint(checkpoint.Escrow, restoredSocial);

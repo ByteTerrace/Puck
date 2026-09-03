@@ -2,6 +2,7 @@ using System.Numerics;
 using Puck.Maths;
 using Puck.Physics;
 using Puck.Physics.Motion;
+using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
@@ -229,6 +230,28 @@ public sealed partial class WorldPopulation {
                 hash.Add(observed.Position.X.Value);
                 hash.Add(observed.Position.Y.Value);
                 hash.Add(observed.Position.Z.Value);
+            }
+            ref var autonomy = ref entry.AutonomyState;
+            if (
+                (autonomy.MotionPeriodTicks != 0UL) ||
+                (autonomy.MotionElapsedTicks != 0UL) ||
+                (autonomy.MotionRemainingTicks != 0UL) ||
+                (autonomy.SteeringPeriodTicks != 0UL) ||
+                (autonomy.SteeringElapsedTicks != 0UL) ||
+                (autonomy.SteeringRemainingTicks != 0UL) ||
+                autonomy.SteeringSeeded
+            ) {
+                hash.Add(0x4155544FUL); // "AUTO" — absent full-rate cadence contributes no legacy-hash bytes.
+                hash.Add(autonomy.MotionPeriodTicks);
+                hash.Add(autonomy.MotionElapsedTicks);
+                hash.Add(autonomy.MotionRemainingTicks);
+                hash.Add(autonomy.SteeringPeriodTicks);
+                hash.Add(autonomy.SteeringElapsedTicks);
+                hash.Add(autonomy.SteeringRemainingTicks);
+                hash.Add((byte)(autonomy.SteeringSeeded ? 1 : 0));
+                for (var ordinal = 0; ordinal < ChannelLimits.MaxChannels; ordinal++) {
+                    hash.Add(autonomy.SteeringIntent[ordinal].Value);
+                }
             }
             hash.Add(body.FixedPreviousPosition.X.Value);
             hash.Add(body.FixedPreviousPosition.Y.Value);

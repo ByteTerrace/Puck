@@ -62,6 +62,7 @@ public sealed partial class WorldPopulation {
         entry.ProducerState.PreferredAltitude = altitude;
         entry.ProducerState.AcquiredTarget = -1;
         entry.ProducerState.CurveArcRaw = 0L;
+        entry.AutonomyState.Clear();
         entry.NavigationState.Clear();
         ClearDesignations(entry: entry);
         entry.Generation = checked((entry.Generation + 1));
@@ -110,6 +111,7 @@ public sealed partial class WorldPopulation {
 
         player.SetIntentSource(source: (source ?? m_defaultPeerSource));
         entry.Body = player;
+        entry.AutonomyState.Clear();
         ClearDesignations(entry: entry);
         entry.Generation = (generation ?? checked((entry.Generation + 1)));
     }
@@ -168,6 +170,7 @@ public sealed partial class WorldPopulation {
         entry.Active = false;
         entry.ProducerState.AcquiredTarget = -1;
         entry.ProducerState.CurveArcRaw = 0L;
+        entry.AutonomyState.Clear();
         entry.NavigationState.Clear();
         ClearDesignations(entry: entry);
     }
@@ -636,7 +639,7 @@ public sealed partial class WorldPopulation {
     /// Install after <see cref="Rebuild(WorldDefinition, WorldSolidField?)"/>): a placement's inhabit facet joins bodies
     /// into the peer slice over the loopback link — an inhabitant is a <see cref="PopulationKind.NetworkPeer"/> whose entry
     /// carries a placement back-reference, holding a normal <see cref="WorldBody"/> under the resolved kit and driven by
-    /// its kit's attend producer. Bodies claim the highest free slots (127 downward) so an existing inhabitant never
+    /// its kit's attend producer. Bodies claim the highest free slots (capacity minus one downward) so an existing inhabitant never
     /// renumbers; admission is bounded only by the table itself and rejects loudly when it is genuinely full — there is no
     /// census-fit reservation. Diff-by-placement: retire an entry whose row vanished, lost its facet, or changed
     /// creation/kit; keep a matching one (its pose survives an unrelated placement edit); admit new bodies at the highest
@@ -964,7 +967,7 @@ public sealed partial class WorldPopulation {
     }
     /// <summary>Admits one remote-human peer body at the point of effect — the P7 socket door's own primitive,
     /// parallel to <see cref="ReconcileInhabitants"/>'s inhabited-body admission: the body claims the highest free
-    /// slot (127 downward, via <see cref="HighestFreeSlot"/>) so it never renumbers an existing peer and never
+    /// slot (capacity minus one downward, via <see cref="HighestFreeSlot"/>) so it never renumbers an existing peer and never
     /// collides with the census's own upward allocation (<see cref="SetSimulatedCount"/> now skips any slot this
     /// method marks <see cref="Entry.IsRemoteHuman"/>). Refused by name on whichever bound fails: no free slot in the
     /// 128-body table, or the document's <c>networkPlayers</c> admission cap already met (census bots and admitted
@@ -1223,7 +1226,7 @@ public sealed partial class WorldPopulation {
 
         return false;
     }
-    /// <summary>Sets the peer intent-source default and sweeps every peer (4..127) to it — last-writer-wins, so a
+    /// <summary>Sets the peer intent-source default and sweeps every peer (indices 4 through capacity minus one) to it — last-writer-wins, so a
     /// per-entity source (a possession, an earlier flip) does not survive the global. Seats are never touched.
     /// Render-inert: it reshapes only the intent producers, so it does not bump the revision. A live
     /// <c>body.fly</c> tape still drives regardless.</summary>

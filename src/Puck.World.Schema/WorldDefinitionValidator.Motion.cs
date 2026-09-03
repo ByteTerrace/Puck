@@ -958,36 +958,53 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{rowPath}.across is authored without along — the drive decomposition needs a longitudinal facet to pair with.");
                 }
 
-                RequirePositive(
-                    value: row.Across.Grip,
-                    name: $"{rowPath}.across.grip",
-                    errors: errors
-                );
+                if (row.Across.Grip is { } grip) {
+                    RequirePositive(
+                        value: grip,
+                        name: $"{rowPath}.across.grip",
+                        errors: errors
+                    );
+                }
             }
 
             if (row.Along is { } along) {
-                RequirePositive(
-                    value: along.Engage,
-                    name: $"{rowPath}.along.engage",
-                    errors: errors
-                );
-                RequirePositive(
-                    value: along.Release,
-                    name: $"{rowPath}.along.release",
-                    errors: errors
-                );
+                if (along.Engage is { } engage) {
+                    RequirePositive(
+                        value: engage,
+                        name: $"{rowPath}.along.engage",
+                        errors: errors
+                    );
+                }
+                if (along.Release is { } release) {
+                    RequirePositive(
+                        value: release,
+                        name: $"{rowPath}.along.release",
+                        errors: errors
+                    );
+                }
 
                 if (row.Across is not null) {
-                    RequirePositive(
-                        value: along.Brake,
-                        name: $"{rowPath}.along.brake",
-                        errors: errors
-                    );
-                    RequireNonNegative(
-                        value: along.Reverse,
-                        name: $"{rowPath}.along.reverse",
-                        errors: errors
-                    );
+                    if (along.Brake is { } brake) {
+                        RequirePositive(
+                            value: brake,
+                            name: $"{rowPath}.along.brake",
+                            errors: errors
+                        );
+                    }
+                    if (along.Reverse is { } reverse) {
+                        RequireNonNegative(
+                            value: reverse,
+                            name: $"{rowPath}.along.reverse",
+                            errors: errors
+                        );
+                    }
+                } else {
+                    if (along.Brake is not null) {
+                        errors.Add(item: $"{rowPath}.along.brake is authored without across — whole-vector shaping never reads a drive brake rate; omit it.");
+                    }
+                    if (along.Reverse is not null) {
+                        errors.Add(item: $"{rowPath}.along.reverse is authored without across — whole-vector shaping never reads a drive reverse speed; omit it.");
+                    }
                 }
             }
 

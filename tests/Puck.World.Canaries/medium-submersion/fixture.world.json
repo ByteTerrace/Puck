@@ -148,11 +148,7 @@
           },
           "shaping": [
             {
-              "along": {
-                "engage": 1000000,
-                "brake": 0,
-                "release": 1000000
-              }
+              "along": {}
             }
           ],
           "holds": [

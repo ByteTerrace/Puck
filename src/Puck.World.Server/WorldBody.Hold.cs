@@ -1145,9 +1145,9 @@ public sealed partial class WorldBody {
             maximum: medium.MaxRiseSpeed
         );
 
-        // ShapeVelocity already ticked the recency clocks this step (the refresh runs once, before phase 0), so
-        // this reads the SAME shaping row it governs under (first open row wins, same rule the planar half follows).
-        var governingRow = ResolveGoverningShapingRow(intent: in scratch.Intent);
+        // ExecuteProgram already refreshed the recency clocks and selected the row once before phase 0, so this
+        // reads the SAME shaping row the planar and turn lanes govern under even if an earlier action changed a fact.
+        var governingRow = scratch.GoverningShapingRow;
         var row = ((governingRow >= 0)
             ? m_tuning.Shaping[governingRow]
             : default
@@ -1177,20 +1177,30 @@ public sealed partial class WorldBody {
                 intent: in scratch.Intent,
                 role: ChannelRole.MoveUp
             ) != FixedQ4816.Zero);
-            var rate = (hasVerticalInput
-                ? along.Engage
-                : along.Release
-            );
-            var maxDelta = m_mediumThrustRampAccumulator.Integrate(
-                elapsedTicks: scratch.StepTicks,
-                ratePerSecond: rate
+            var instant = (hasVerticalInput
+                ? ShapingInstant.Engage
+                : ShapingInstant.Release
             );
 
-            m_verticalVelocity = FixedQ4816.MoveToward(
-                current: m_verticalVelocity,
-                maxDelta: maxDelta,
-                target: target
-            );
+            if ((along.Instant & instant) != 0) {
+                m_mediumThrustRampAccumulator.Reset();
+                m_verticalVelocity = target;
+            } else {
+                var rate = (hasVerticalInput
+                    ? along.Engage
+                    : along.Release
+                );
+                var maxDelta = m_mediumThrustRampAccumulator.Integrate(
+                    elapsedTicks: scratch.StepTicks,
+                    ratePerSecond: rate
+                );
+
+                m_verticalVelocity = FixedQ4816.MoveToward(
+                    current: m_verticalVelocity,
+                    maxDelta: maxDelta,
+                    target: target
+                );
+            }
         } else {
             m_verticalVelocity = target;
         }

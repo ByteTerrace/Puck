@@ -16,8 +16,9 @@ namespace Puck.World.Client;
 /// <remarks>
 /// <para>
 /// The probe branch (the contract in <see cref="ISdfSceneEmitter"/>): <see cref="Emit"/> under
-/// <see cref="SdfEmitContext.Probe"/> emits the largest rig in every supported body slot, the worst-case animated pool, the reserved
-/// placement instances, and the authoring headroom (screens and placement stamps) that reserves live editing
+/// <see cref="SdfEmitContext.Probe"/> emits the largest rig in every detailed body slot and one coarse capsule in
+/// every remaining crowd slot, plus the worst-case animated pool, reserved placement instances, and authoring
+/// headroom (screens and placement stamps) that reserves live editing
 /// room. The headroom padding lives here, inside the worst case, rather than being applied to the emitter's inputs by
 /// a caller — the capacity-probe doctrine's rule that an emitter's probe branch must dominate its own live branch on
 /// its own.
@@ -187,8 +188,8 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         m_placementReservation += m_authoringHeadroomPlacements;
     }
 
-    /// <summary>The frozen transform-slot count this emitter declares: a maximum-sized catalog rig per body slot plus
-    /// the reserved creation-stamp pool, in that order.</summary>
+    /// <summary>The frozen transform-slot count this emitter declares: maximum-sized rigs for the detailed body band,
+    /// one root slot per remaining crowd body, then the reserved creation-stamp pool.</summary>
     public int DynamicSlotCount => (WorldRigCatalog.DynamicTransformCapacity + WorldStampPool.DynamicSlotCount);
     /// <summary>Always <see langword="true"/>: this emitter's material palette is its own. Sole tenancy makes this
     /// true; the scope makes it structural, so a positional stride this
@@ -203,7 +204,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // instances riding frozen catalog slots. Active-only, never declared-but-parked: the per-tile instance mask width
     // derives from the program's total declared instance count (SdfProgram.InstanceMaskWordCount), so parked avatar
     // declarations widen every shadow-gather pixel's mask walk. Instead the program is rebuilt on population change
-    // (the revision watch), and the 128-avatar worst case is held by the probed capacity floors. Every avatar keeps its
+    // (the revision watch), and the hybrid population worst case is held by the probed capacity floors. Every avatar keeps its
     // own body + accent material (cheap constant words), so a recolor is data, not a resize. `placementProbe` replaces
     // the static stamps with the reserved worst case (the construction probe only); the animated pool and the avatars
     // follow `probeWorstCase` (worst case for both the construction probe AND the apply-time measure).
@@ -299,9 +300,9 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
             textCatalog: m_text.Catalog
         );
 
-        // The view's active avatars: 12..20 independently animated leaves and 60..100 authored VM instructions
-        // each. The probe emits the largest rig per body slot; a live build emits each active body's complete
-        // selected look inside its own maximum-sized transform range.
+        // The view's active avatars: 12..20 independently animated leaves and 60..100 authored VM instructions in
+        // the detailed band, one coarse capsule thereafter. The probe emits the largest detailed rigs plus the full
+        // coarse band; a live build emits each active body in the representation fixed by its stable body index.
         if (!probeWorstCase) {
             for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
                 var hasPresented = TryPresentedAppearance(
@@ -613,7 +614,8 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         m_slotBase = context.SlotBase;
 
         if (context.Probe) {
-            // The ONE construction-time worst case (never rendered): all 128 avatars, the reserved placement instances,
+            // The ONE construction-time worst case (never rendered): 128 detailed avatars plus every remaining
+            // coarse crowd body, the reserved placement instances,
             // the worst-case animated pool, and the authoring headroom (screens and placement stamps) so a
             // live editor can add rows up to the reserved ceilings. Reads the client's definition live because the
             // probe runs exactly once, inside the composition host's constructor, before any delivery can land.

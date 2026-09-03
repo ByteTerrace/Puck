@@ -110,11 +110,13 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         var seatOccupied = ReadBoolArray(
             field: "event feed seat occupied",
+            maximum: WorldBodiesLimits.LocalSeatCount,
             reader: ref reader
         );
         var overlapping = ReadArray(
             reader: ref reader,
             field: "event feed overlapping",
+            maximum: WorldEventFeed.MaximumTrackedPairsForCapacity(WorldBodiesLimits.CapacityCeiling),
             readItem: static (ref WireReader r) => {
                 var a = r.ReadInt32();
                 var b = r.ReadInt32();
@@ -132,6 +134,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 );
                 var occupancy = ReadBoolArray(
                     field: "event feed region occupancy cells",
+                    maximum: WorldBodiesLimits.CapacityCeiling,
                     reader: ref r
                 );
 

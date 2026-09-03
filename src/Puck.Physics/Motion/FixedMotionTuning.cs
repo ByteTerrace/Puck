@@ -38,6 +38,21 @@ public readonly record struct FixedMotionScalarEnvelope(FixedQ4816 Min, FixedQ48
         maximum: Max
     );
 }
+/// <summary>Identifies the along-axis rates whose absent authored value compiles to exact convergence.</summary>
+[Flags]
+public enum ShapingInstant : byte {
+    /// <summary>Every rate is finite.</summary>
+    None = 0,
+
+    /// <summary>The engage lane converges immediately.</summary>
+    Engage = 1 << 0,
+
+    /// <summary>The brake lane converges immediately.</summary>
+    Brake = 1 << 1,
+
+    /// <summary>The release lane converges immediately.</summary>
+    Release = 1 << 2,
+}
 /// <summary>The compiled form of a <c>shaping</c> row's <c>along</c> facet: the whole-vector response law's
 /// engage/release rates (read when the row carries no <see cref="FixedShapingAcross"/>), and the drive
 /// decomposition's longitudinal accel/brake/coast/reverse rates (read when it does).</summary>
@@ -47,11 +62,14 @@ public readonly record struct FixedMotionScalarEnvelope(FixedQ4816 Min, FixedQ48
 /// <param name="Release">The whole-vector release rate (u/s²), or the drive's coast rate.</param>
 /// <param name="Reverse">Unread without a paired <see cref="FixedShapingAcross"/>: the reverse target speed
 /// (u/s) full back-throttle converges on from rest.</param>
-public readonly record struct FixedShapingAlong(FixedQ4816 Engage, FixedQ4816 Brake, FixedQ4816 Release, FixedQ4816 Reverse);
+/// <param name="Instant">The explicit absence-derived immediate-convergence lanes. Rate fields are zero where
+/// their corresponding flag is set and are never interpreted without that flag.</param>
+public readonly record struct FixedShapingAlong(FixedQ4816 Engage, FixedQ4816 Brake, FixedQ4816 Release, FixedQ4816 Reverse, ShapingInstant Instant);
 /// <summary>The compiled form of a <c>shaping</c> row's <c>across</c> facet — present only on a row that runs the
 /// drive decomposition.</summary>
 /// <param name="Grip">The lateral convergence rate (u/s²) toward zero slip while this row governs.</param>
-public readonly record struct FixedShapingAcross(FixedQ4816 Grip);
+/// <param name="Instant">Whether lateral and residual slip are removed immediately.</param>
+public readonly record struct FixedShapingAcross(FixedQ4816 Grip, bool Instant);
 /// <summary>One compiled row of a kit's <c>shaping</c> table — the unified velocity-shaping law
 /// <see cref="BodyMotionOp.ShapeVelocity"/> reads. The first row whose <see cref="When"/> gate opens governs the
 /// whole tick; a row carries exactly one of <see cref="Along"/> (used alone for the whole-vector response law, or

@@ -40,7 +40,7 @@ public readonly record struct EntityContinuity(EntityContinuityKind Kind, float 
 /// <summary>One entity's authoritative render state for a tick — the server's outbound currency for a single body. The
 /// client draws from a run of these, interpolating (or snapping/easing per <see cref="Continuity"/>) between consecutive
 /// snapshots. Poses flow OUT only: this is the sole channel a body's pose leaves the server on.</summary>
-/// <param name="Index">The 0-based entity index (0..3 local seats, 4..127 peers).</param>
+/// <param name="Index">The 0-based entity index (0..3 local seats, 4..4095 peers at the engine ceiling).</param>
 /// <param name="Position">The authoritative world-space position.</param>
 /// <param name="Orientation">The authoritative full 6DOF attitude.</param>
 /// <param name="BodyColor">The avatar's material albedo (a pending seat's is already gray-lerped).</param>

@@ -85,8 +85,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         m_fieldOfViewRadians = fieldOfViewRadians;
     }
 
-    // Registers the avatar palette and emits the catalog range — the probe branch (worst-case, every rig at unit
-    // scale) and the live branch (only mirrored-active avatars, each sourcing its LOOK's pinned rig and uniform
+    // Registers the avatar palette and emits the hybrid catalog range — the probe branch (largest detailed rigs plus
+    // the full coarse band at unit scale) and the live branch (only mirrored-active avatars, each sourcing its look's pinned rig and uniform
     // scale) both flow through the ONE WorldRigCatalog.Emit call, exactly like Client.WorldSceneEmitter.Compose's
     // own avatar block.
     private void EmitAvatars(SdfProgramBuilder builder, bool probeWorstCase, int slotBase) {
@@ -435,10 +435,10 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         destination[1] = m_mirror.SnapshotRevision;
     }
 
-    /// <summary>The frozen transform-slot count this emitter declares: maximum-sized catalog ranges for all body slots
-    /// — the same frozen worst case <c>WorldSceneEmitter.DynamicSlotCount</c> reserves for its own
-    /// avatar range, sized off the engine-wide <see cref="WorldBodiesLimits.CapacityCeiling"/>, so a full destination can never
-    /// outgrow this emitter's own probe.</summary>
+    /// <summary>The frozen transform-slot count this emitter declares: maximum-sized catalog ranges for the detailed
+    /// band and one root slot per remaining crowd body — the same hybrid worst case
+    /// <c>WorldSceneEmitter.DynamicSlotCount</c> reserves for its own avatar range, sized off the engine-wide
+    /// <see cref="WorldBodiesLimits.CapacityCeiling"/>, so a full destination can never outgrow this emitter's probe.</summary>
     public int DynamicSlotCount => WorldRigCatalog.DynamicTransformCapacity;
     /// <inheritdoc/>
     public int RevisionComponentCount => 2;
