@@ -2948,7 +2948,7 @@
       "additionalProperties": false
     },
     "ActionEffectPlanarImpulse": {
-      "description": "A timed planar velocity overlay (the dash): BodyDirection is rotated by the body\u0027s attitude at fire time and ridden at Speed for DurationSeconds, integrated through its own accumulator on top of the model\u0027s motion \u2014 integration itself is untouched.",
+      "description": "A timed planar velocity overlay (the dash): BodyDirection is rotated by the body\u0027s attitude at fire time and ridden at Speed for DurationSeconds, integrated through its own accumulator on top of the body\u0027s compiled motion \u2014 integration itself is untouched.",
       "properties": {
         "$type": {
           "const": "planarImpulse"

@@ -86,7 +86,7 @@ public sealed class TransferAbortKitWideningLawTests {
                 // ONE authored action, bound OnFact only (no OnPress/OnRelease needed) — exercises the lane action
                 // runtime's own edge-latch/FactHeld (LaneLatch/LaneFactHeld) AND a DURABLE action-state write
                 // (ActionStateValues/Dirty/DirtyKind/DirtyOperand) through the SAME RunActionTriggers path real
-                // gameplay drives. Gated on Falling (vertical velocity < 0, arm-agnostic — see WorldBody.FactHolds)
+                // gameplay drives. Gated on Falling (vertical velocity < 0, program-agnostic — see WorldBody.FactHolds)
                 // rather than Grounded: this fixture's kit carries no collider, so gravity alone free-falls the body
                 // from tick 1 (the SAME reason PortalSweepOriginLawTests' own fixture never grounds), making Falling
                 // the reliable, immediately-true fact to gate on.

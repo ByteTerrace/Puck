@@ -8,8 +8,8 @@ using Puck.World.Protocol;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// CONTRACT UNDER TEST: the <c>drive</c> row — the anisotropic drive facets a kit authors beside the one motion
-/// arm, read by <c>ResolveDriveFrame</c>/<c>ShapeDriveVelocity</c>. The trace law drives one body 240 ticks through
+/// CONTRACT UNDER TEST: the <c>drive</c> row — the anisotropic drive facets a kit authors beside the motion
+/// row, read by <c>ResolveDriveFrame</c>/<c>ShapeDriveVelocity</c>. The trace law drives one body 240 ticks through
 /// every drive facet (throttle, speed-scaled steering, brake, reverse, a held drift stretch, a held sprint stretch,
 /// a pitched frame) and pins the fixed-point result raw value for raw value; its discriminating control perturbs a
 /// single drive facet and requires the trace to move. The facet law proves a drive program refuses by name against a

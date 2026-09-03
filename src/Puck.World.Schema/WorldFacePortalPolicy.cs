@@ -51,9 +51,10 @@ public static class WorldFacePortalPolicy {
         return ((SpeedCeiling(definition: definition) * step) + FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: definition.Collision.ContactSkin)));
     }
     /// <summary>The fastest travel a document declares, in world units per second — the maximum over the world's
-    /// profileless motion default and every kit's own arm ceiling (an authored envelope's upper bound where one is
-    /// declared, the arm's own base speed otherwise, scaled by its held sprint/boost multiplier) together with the
-    /// arm's terminal vertical speeds.</summary>
+    /// profileless motion default and, per kit, its motion row's ceiling (the authored <c>moveSpeedEnvelope</c>
+    /// upper bound where one is declared, its own <c>moveSpeed</c> otherwise, scaled by its
+    /// <c>sprintMultiplier</c>), its <c>maxFallSpeed</c>, and a drive row's <c>reverseSpeed</c> where one is
+    /// authored.</summary>
     /// <param name="definition">The document to read.</param>
     /// <returns>The declared speed ceiling.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>

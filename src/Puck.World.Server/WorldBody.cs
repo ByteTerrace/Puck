@@ -134,7 +134,7 @@ public sealed partial class WorldBody {
     private bool m_ordinaryAdvanceAdmitted;
     private ulong m_overlayRemaining;
     // The timed impulse overlay (the dash): a world-space velocity integrated through its own accumulator on top of
-    // the model's motion for a bounded tick budget — integration itself is untouched. Cleared by hard teleports.
+    // the body's compiled motion for a bounded tick budget — integration itself is untouched. Cleared by hard teleports.
     private FixedVector3 m_overlayVelocity;
     private WorldContinuumTrajectory? m_pendingContinuum;
     // The response-shaped planar velocity — the ramped horizontal velocity the grounded program integrates. With an empty
