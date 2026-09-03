@@ -193,7 +193,7 @@ public readonly record struct FixedWorldKit(
     /// <param name="bodyState">The world's body-owned ephemeral state declarations.</param>
     /// <param name="identityState">The world's identity-owned durable state declarations.</param>
     /// <param name="dynamics">The world's declared <c>dynamics</c> rows, resolved against <paramref name="kit"/>'s
-    /// motion model's own declared row name (validation has already refused a dangling name).</param>
+    /// motion row's own declared dynamics row name (validation has already refused a dangling name).</param>
     /// <param name="simulationRateHz">The world's own simulation rate — the step width a resolved dynamics row's
     /// propagator compiles against (validation has already refused a resolved name at rate 0), and a curve-follow
     /// producer's per-tick arc step divisor.</param>

@@ -1175,7 +1175,7 @@ public sealed partial class WorldBody {
 
         return (m_tuning.MoveSpeedEnvelope?.Clamp(value: resolved) ?? resolved);
     }
-    // Position/planar contact response applies to ANY collider-bearing body regardless of motion model — a flying
+    // Position/planar contact response applies to ANY collider-bearing body regardless of body motion program — a flying
     // body still shouldn't clip through a wall. The vertical WRITE-BACK (m_verticalVelocity, m_planarVelocity, the
     // grounded position-accumulator reset) is gated on CompiledBodyMotionProgram.OwnsVerticalContactState: only a
     // program that itself integrates gravity (ApplyVerticalGravity) has ceded its vertical channel to contact

@@ -189,7 +189,7 @@ determinism is a design contract verified by running and by the replay verbs
 below; no build gate enforces it for this game (see `CLAUDE.md` rule 3).
 
 A body's pose is always six-degrees-of-freedom (a `Vector3` position and a
-quaternion attitude); its motion model (`grounded` or `free`) decides how an
+quaternion attitude); its body motion program (`grounded` or `free`) decides how an
 intent integrates. Ways of moving are DATA: a `WorldKit` row in the world
 document names a motion program, tuning, producer parameter maps, and action bindings, and
 entities distribute across kit rows by the document's assignment policy. A new
@@ -205,7 +205,7 @@ tape > submitted > producer > zero.
 Capacities are single-sourced in `WorldPopulationLimits`
 (`Puck.World.Schema`): up to 128 authoritative bodies, of which indices 0–3 are
 the reserved local seats and the rest host simulated stand-ins and network
-peers. `WorldBody` owns one entry's integration, pose, tape, motion model, and
+peers. `WorldBody` owns one entry's integration, pose, tape, motion row, and
 action state. Bodies advance against the one contact-resolution seam
 `IContactField.cs`, which has two providers: the analytic `WorldColliderSet`
 (document-derived convex colliders) and the SDF-backed `WorldSolidField.cs`.

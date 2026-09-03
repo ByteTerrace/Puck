@@ -1955,7 +1955,7 @@ public static partial class WorldDefinitionValidator {
     /// selected operations read — the one check <see cref="ValidateMotionModel"/> (at boot) and the runtime
     /// body-motion-program switch (the <c>body.motion</c> door) share, so a document-legal kit can never
     /// runtime-switch into a program its declared model cannot back.</summary>
-    /// <param name="model">The kit's declared locomotion model.</param>
+    /// <param name="model">The kit's declared motion row.</param>
     /// <param name="program">The compiled body motion program the switch targets.</param>
     /// <param name="reason">On failure, the refusal detail naming the missing facet(s) and the program; <c>""</c> on success.</param>
     /// <returns><see langword="true"/> when <paramref name="model"/> supplies every facet <paramref name="program"/> requires.</returns>

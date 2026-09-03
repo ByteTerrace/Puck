@@ -72,7 +72,7 @@ public readonly record struct FixedBodyMedium(
     FixedQ4816 ThrustFraction
 );
 /// <summary>
-/// One compiled hold: the fixed-point form of an authored hold row, in the ordered list a kit's motion model
+/// One compiled hold: the fixed-point form of an authored hold row, in the ordered list a kit's motion row
 /// declares. <see cref="BodyMotionOp.ResolveHold"/> walks the list in order and takes the first hold the world
 /// offers; <see cref="BodyMotionOp.ApplyHold"/> applies <see cref="Kind"/>.
 /// </summary>

@@ -378,7 +378,7 @@ public sealed partial class WorldBody {
     /// changes. The action runtime resets because it is bound to the old binding and named-state shapes, and an
     /// incompatible program switch re-pins the pose exactly as
     /// <c>body.motion</c> does (a no-op when unchanged).</summary>
-    /// <param name="motion">The kit's authored motion model.</param>
+    /// <param name="motion">The kit's authored motion row.</param>
     /// <param name="actions">The kit's compiled per-ordinal action bindings.</param>
     /// <param name="actionThresholds">The kit's per-ordinal binary crossing thresholds, parallel to <paramref name="actions"/>.</param>
     /// <param name="actionShapes">The world's per-ordinal declared channel shapes (every ordinal, not just bound ones).</param>

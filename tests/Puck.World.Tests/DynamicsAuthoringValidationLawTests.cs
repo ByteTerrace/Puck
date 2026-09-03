@@ -104,10 +104,10 @@ public sealed class DynamicsAuthoringValidationLawTests {
     public void KitDynamicsDanglingReferenceRefusesWhileResolvingPasses() {
         var document = WithDynamics(rows: [Chase]);
         var kit = document.Kits[0];
-        var grounded = kit.Motion;
+        var motion = kit.Motion;
 
-        var dangling = document with { KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "missing" } }] };
-        var resolving = document with { KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "chase" } }] };
+        var dangling = document with { KitRowsRaw = [kit with { Motion = motion with { Response = null, Dynamics = "missing" } }] };
+        var resolving = document with { KitRowsRaw = [kit with { Motion = motion with { Response = null, Dynamics = "chase" } }] };
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: dangling, neighbours: null, reason: out var deniedReason));
         Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "kits[0].motion.dynamics 'missing' names no dynamics row.");

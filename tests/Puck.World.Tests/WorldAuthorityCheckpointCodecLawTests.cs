@@ -255,11 +255,11 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
     public void Dynamics_kit_body_with_nonzero_follower_state_round_trips_structurally() {
         var document = Fixtures.BuildDocument();
         var kit = document.Kits[0];
-        var grounded = kit.Motion;
+        var motion = kit.Motion;
 
         document = document with {
             DynamicsRaw = [.. Fixtures.StandardDynamics, new WorldDynamicsRow(Damping: 1f, Frequency: 2f, Name: "settle", Response: 0f)],
-            KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "settle" } }],
+            KitRowsRaw = [kit with { Motion = motion with { Response = null, Dynamics = "settle" } }],
         };
 
         using var fixture = Fixtures.FreshServer(definition: document);

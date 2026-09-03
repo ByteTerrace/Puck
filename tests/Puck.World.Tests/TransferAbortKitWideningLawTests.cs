@@ -439,11 +439,11 @@ public sealed class TransferAbortKitWideningLawTests {
     public void DetachThenRestore_GroundedDynamicsKitBody_PlanarFollowerStateRoundTripsExactly() {
         var document = Fixtures.BuildDocument();
         var kit = document.Kits[0];
-        var grounded = kit.Motion;
+        var motion = kit.Motion;
 
         document = document with {
             DynamicsRaw = [.. Fixtures.StandardDynamics, Settle],
-            KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "settle" } }],
+            KitRowsRaw = [kit with { Motion = motion with { Response = null, Dynamics = "settle" } }],
         };
 
         using var fixture = Fixtures.FreshServer(definition: document);
@@ -488,11 +488,11 @@ public sealed class TransferAbortKitWideningLawTests {
     public void DetachThenRestore_MediumDynamicsKitBody_VerticalFollowerStateRoundTripsExactly() {
         var document = BuildMediumKitDocument();
         var kit = document.Kits[0];
-        var grounded = kit.Motion;
+        var motion = kit.Motion;
 
         document = document with {
             DynamicsRaw = [.. Fixtures.StandardDynamics, Settle],
-            KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "settle" } }],
+            KitRowsRaw = [kit with { Motion = motion with { Response = null, Dynamics = "settle" } }],
         };
 
         using var fixture = Fixtures.FreshServer(definition: document);

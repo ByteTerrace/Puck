@@ -144,7 +144,7 @@ public sealed partial class WorldBody {
     // so only a hard teleport that resets vertical state clears it (Warp/Pose/Reconcile) — Face keeps it (resetVertical:
     // false, no momentum lost across a heading snap).
     private FixedVector3 m_planarVelocity;
-    // The planar dynamics follower's own Q32 state — meaningful only under a kit whose motion model names a
+    // The planar dynamics follower's own Q32 state — meaningful only under a kit whose motion row names a
     // dynamics row (m_tuning.PlanarDynamics is non-null); read/written exclusively by WorldBody.Dynamics.cs. Its
     // Position lane tracks m_planarVelocity: StepPlanarFollower re-seeds it (keeping the velocity raw) whenever a
     // contact write-back, an up-axis transport, or a continuum arrival moved m_planarVelocity out from under it, and
@@ -335,7 +335,7 @@ public sealed partial class WorldBody {
     // through it stays exact, with no separate accumulator per stage.
     private FixedRateAccumulator m_mediumThrustRampAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
 
-    /// <summary>Initializes a new instance of the <see cref="WorldBody"/> class under a motion model, its kit's
+    /// <summary>Initializes a new instance of the <see cref="WorldBody"/> class under a motion row, its kit's
     /// per-channel action bindings, and its kit's body motion program. A <see langword="null"/> binding leaves that ordinal
     /// inert.</summary>
     /// <param name="motion">The motion tuning to integrate under (the body's kit's declared <see cref="WorldMotion"/>).</param>

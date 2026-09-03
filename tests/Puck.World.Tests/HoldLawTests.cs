@@ -121,11 +121,11 @@ public sealed class HoldLawTests {
         channels.Add(item: new WorldChannel(Name: "up", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveUp));
 
         var kits = document.Kits.ToList();
-        var grounded = kits[0].Motion!;
+        var motion = kits[0].Motion!;
 
         kits[0] = (kits[0] with {
             Collider = new WorldCollider.Capsule(Endpoint: new Vector3(x: 0f, y: 1f, z: 0f), Radius: 0.35f),
-            Motion = (grounded with { Holds = holds }),
+            Motion = (motion with { Holds = holds }),
             BodyMotionProgram = "hold",
         });
 

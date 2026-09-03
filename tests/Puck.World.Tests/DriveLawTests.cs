@@ -306,7 +306,7 @@ public sealed class DriveLawTests {
         var kit = new WorldKit(
             Name: "kart-test",
             BodyMotionProgram: "drive",
-            // The kart spelling: the one arm carries the forward speed, the steering rate, the gravity trio and the
+            // The kart spelling: the motion row carries the forward speed, the steering rate, the gravity trio and the
             // held sprint (the boost); moveSpeedEnvelope pins that speed against any seated profile with min == max;
             // the drive row carries what only a drive has.
             Motion: new WorldMotion(

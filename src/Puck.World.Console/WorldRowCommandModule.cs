@@ -1087,7 +1087,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.kits",
-            description: "Reports the kit census (Immediate): one segment per declared kit row — name, body motion program, the motion model arm it compiles, that arm's key movement scalars and planar shaping, and the drive row's own scalars for a kit authoring one. The kits section's own read-back (world.row.set kits/world.row.remove kits has no listing of its own otherwise).",
+            description: "Reports the kit census (Immediate): one segment per declared kit row — name, body motion program, the motion row's key movement scalars and planar shaping, and the drive row's own scalars for a kit authoring one. The kits section's own read-back (world.row.set kits/world.row.remove kits has no listing of its own otherwise).",
             handler: (context, args) => {
                 if (args.Count != 0) {
                     return CommandResult.Error(output: "[world.kits: no arguments — reports the kit census]");

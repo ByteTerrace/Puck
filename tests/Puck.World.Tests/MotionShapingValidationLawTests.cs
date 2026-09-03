@@ -26,11 +26,11 @@ public sealed class MotionShapingValidationLawTests {
     public void BothResponseAndDynamicsRefusesWhileEitherAlonePasses() {
         var document = WithDynamics(rows: [Chase]);
         var kit = document.Kits[0];
-        var grounded = kit.Motion;
+        var motion = kit.Motion;
 
-        var denied = document with { KitRowsRaw = [kit with { Motion = grounded with { Dynamics = "chase" } }] }; // Response already authored by Fixtures.BuildKits
-        var responseOnly = document with { KitRowsRaw = [kit with { Motion = grounded with { Dynamics = null } }] };
-        var dynamicsOnly = document with { KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "chase" } }] };
+        var denied = document with { KitRowsRaw = [kit with { Motion = motion with { Dynamics = "chase" } }] }; // Response already authored by Fixtures.BuildKits
+        var responseOnly = document with { KitRowsRaw = [kit with { Motion = motion with { Dynamics = null } }] };
+        var dynamicsOnly = document with { KitRowsRaw = [kit with { Motion = motion with { Response = null, Dynamics = "chase" } }] };
 
         Assert.False(condition: TryValidate(definition: denied, reason: out var deniedReason));
         Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "authors both response and dynamics 'chase' — a kit shapes planar velocity through exactly one.");
@@ -41,11 +41,11 @@ public sealed class MotionShapingValidationLawTests {
     public void NeitherResponseNorDynamicsRefusesWhileEitherAlonePasses() {
         var document = WithDynamics(rows: [Chase]);
         var kit = document.Kits[0];
-        var grounded = kit.Motion;
+        var motion = kit.Motion;
 
-        var denied = document with { KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = null } }] };
-        var responseOnly = document with { KitRowsRaw = [kit with { Motion = grounded with { Dynamics = null } }] };
-        var dynamicsOnly = document with { KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "chase" } }] };
+        var denied = document with { KitRowsRaw = [kit with { Motion = motion with { Response = null, Dynamics = null } }] };
+        var responseOnly = document with { KitRowsRaw = [kit with { Motion = motion with { Dynamics = null } }] };
+        var dynamicsOnly = document with { KitRowsRaw = [kit with { Motion = motion with { Response = null, Dynamics = "chase" } }] };
 
         Assert.False(condition: TryValidate(definition: denied, reason: out var deniedReason));
         Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "requires exactly one of response or dynamics (neither is authored).");
@@ -56,10 +56,10 @@ public sealed class MotionShapingValidationLawTests {
     public void EmptyDynamicsNameRefusesWhileANamedRowPasses() {
         var document = WithDynamics(rows: [Chase]);
         var kit = document.Kits[0];
-        var grounded = kit.Motion;
+        var motion = kit.Motion;
 
-        var denied = document with { KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "" } }] };
-        var admitted = document with { KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "chase" } }] };
+        var denied = document with { KitRowsRaw = [kit with { Motion = motion with { Response = null, Dynamics = "" } }] };
+        var admitted = document with { KitRowsRaw = [kit with { Motion = motion with { Response = null, Dynamics = "chase" } }] };
 
         Assert.False(condition: TryValidate(definition: denied, reason: out var deniedReason));
         Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: ".dynamics is empty — name a dynamics row or omit it.");
@@ -69,10 +69,10 @@ public sealed class MotionShapingValidationLawTests {
     public void DanglingDynamicsNameRefusesWhileResolvingPasses() {
         var document = WithDynamics(rows: [Chase]);
         var kit = document.Kits[0];
-        var grounded = kit.Motion;
+        var motion = kit.Motion;
 
-        var denied = document with { KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "missing" } }] };
-        var admitted = document with { KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "chase" } }] };
+        var denied = document with { KitRowsRaw = [kit with { Motion = motion with { Response = null, Dynamics = "missing" } }] };
+        var admitted = document with { KitRowsRaw = [kit with { Motion = motion with { Response = null, Dynamics = "chase" } }] };
 
         Assert.False(condition: TryValidate(definition: denied, reason: out var deniedReason));
         Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "'missing' names no dynamics row.");
@@ -82,8 +82,8 @@ public sealed class MotionShapingValidationLawTests {
     public void DynamicsAtResidentSimulationRateRefusesWhileASteppingRatePasses() {
         var document = WithDynamics(rows: [Chase]);
         var kit = document.Kits[0];
-        var grounded = kit.Motion;
-        var withDynamics = document with { KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = "chase" } }] };
+        var motion = kit.Motion;
+        var withDynamics = document with { KitRowsRaw = [kit with { Motion = motion with { Response = null, Dynamics = "chase" } }] };
 
         var denied = withDynamics with { Simulation = null }; // rate-0, resident, non-stepping
         var admitted = withDynamics;

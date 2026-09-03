@@ -1019,7 +1019,7 @@ the standard set by naming `standard.world.json` as its `basis`;
 `null.world.json` does, authoring only its own `layouts` and
 other prototype-specific sections over it.
 
-**Kit motion model (`WorldKit.Motion`, a `WorldMotion` row).** A kit declares
+**Kit motion row (`WorldKit.Motion`, a `WorldMotion` row).** A kit declares
 its motion tuning, alongside `BodyMotionProgram` (which operations run each
 tick) — a flat record (`WorldMotionTuning.cs`), authored under `motion` — e.g.
 `jump.world.json`'s `vaulter` kit.
@@ -1109,9 +1109,9 @@ under that name, never a second channel; resolved to
 `FixedWorldKit.SprintChannelOrdinal` the same way
 `WanderFlavor.PressChannel` resolves its own ordinal, since a channel name
 needs the world's compiled channel table and a body's own compile step has
-none. `MoveFrame` (`MotionMoveFrame.Heading` default / `.World`) and
-`FacingSnap` — `Heading` is tank controls (the historical default, every
-kit that never sets this field); `World` treats `MoveAdvance`/`MoveStrafe`
+none. `MoveFrame` (`MotionMoveFrame.Heading` / `.World` default) and
+`FacingSnap` — `Heading` is tank controls; `World` (every kit that never
+sets this field) treats `MoveAdvance`/`MoveStrafe`
 as ALREADY-WORLD-FRAME axes (the seat's client resolves its camera yaw into
 the submitted intent BEFORE the wire — determinism: the sim never reads a
 camera pose) and, with `FacingSnap` on, snaps the body's facing to

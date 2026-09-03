@@ -331,10 +331,10 @@ public sealed class WorldMediumLawTests {
     public void AMediumHoldWithNoLaw_AndASurfaceHoldCarryingOne_BothRefuseByName() {
         var topology = Topology();
         var admitted = BuildMediumHoldDocument(topology: topology);
-        var grounded = admitted.Kits[0].Motion!;
+        var motion = admitted.Kits[0].Motion!;
 
         WorldDefinition WithHolds(params WorldHold[] holds) => (admitted with {
-            KitRowsRaw = [(admitted.Kits[0] with { Motion = (grounded with { Holds = holds }) })],
+            KitRowsRaw = [(admitted.Kits[0] with { Motion = (motion with { Holds = holds }) })],
         });
 
         var lawless = WithHolds(new WorldHold(

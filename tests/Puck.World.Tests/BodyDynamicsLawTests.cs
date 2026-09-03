@@ -14,11 +14,11 @@ public sealed class BodyDynamicsLawTests {
     private static WorldDefinition WithKitDynamics(string dynamicsRow, float damping) {
         var document = Fixtures.BuildDocument();
         var kit = document.Kits[0];
-        var grounded = kit.Motion;
+        var motion = kit.Motion;
 
         return document with {
             DynamicsRaw = [.. Fixtures.StandardDynamics, new WorldDynamicsRow(Damping: damping, Frequency: 2f, Name: dynamicsRow, Response: 0f)],
-            KitRowsRaw = [kit with { Motion = grounded with { Response = null, Dynamics = dynamicsRow } }],
+            KitRowsRaw = [kit with { Motion = motion with { Response = null, Dynamics = dynamicsRow } }],
         };
     }
     private static WorldBody JoinBody(WorldFixture fixture) {
