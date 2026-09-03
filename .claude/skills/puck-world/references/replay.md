@@ -16,7 +16,7 @@ from there into a standalone child. Files (all in
 
 ## Contents
 
-- Format and re-key posture
+- Format and development version
 - What the tape records — and does not
 - The pose hash — what a MATCH proves
 - Lifecycle
@@ -25,21 +25,75 @@ from there into a standalone child. Files (all in
 - The live drive and forking
 - Rules for changes
 
-## Format and re-key posture
+## Format and development version
 
 - Extension `.puckreplay`, stored under `<WorldStateRoot.Resolve()>/Replays`
   (so `--state-dir` isolates replays too).
-- `Magic = 0x504B_464B` ("PKFK") + `ShapeToken = 1` (pinned permanently).
-  The current key covers the fork-provenance header slot: `(bool present,
+- `Magic = 0x5052_4C57` ("WLRP" in wire byte order) + `ShapeToken = 1`.
+  The current key includes authoritative state-system hashes, local flock
+  perception state, full slot generations, and shared navigation trees/pending work.
+  Shared tree nodes fold through canonical 64-cell block digests and a cached
+  root; pending starts fold in sorted order. Cache layout and warmth are derived,
+  never persisted or part of the state identity.
+  Tree eviction ages are unique, contiguous recency ranks, not saturated counters.
+  Decision policies additionally hash their sorted binding keys, generations,
+  selected options/body incarnations, cadence/commitment timers, interrupt latches, and local PCG
+  states/counters. The authority checkpoint codec carries these rows as well
+  (version 1), together with social policy identity, clock, impressions, exact
+  evidence receipts, import identity/storage reservations, bounded-work counters,
+  and last outcome. Reservations carry the complete transfer key and ordered
+  observer allowances, are included in the cached logical hash, and survive clock
+  advancement and restore until explicit cancellation or successful group intake.
+  The decoder bounds both group count and aggregate observer claims before
+  allocating. Frozen source observers additionally carry their exact transfer
+  key and freeze clock, survive restore, and keep their receipts outside the
+  expiry index. Frozen exports remain pinned to that clock; ordinary reads age
+  against the current authority clock. Matching-key thaw reinstates original
+  expiry anchors; matching-key retirement removes the held history. Both source
+  holds and destination reservations refuse live policy replacement through
+  mutation, rebuild, or undo before install writes. Escrow leases carry detached
+  observer exports and must match their bank's import allowances on restore.
+  Host recovery rows persist rollback-only and commit-confirmed phases; the two
+  cannot coexist. Partial rollback removes paired body/profile rows without
+  allowing a partial commit retry. Confirmed commits retain source histories and
+  followed-seat masks until route/roster publication succeeds; retries never
+  query status, recommit, or restore a second source body. They also
+  preserve the original cohort, source boundary frame/intersection, and resolver
+  outcome context. Missing destinations remain checkpointed and bind a later local
+  row only by authority identity. Remote recovery reconnects through QUIC using
+  its retained endpoint and expected identity. Finalized forwarding routes also
+  persist without a pending transaction: source namespace and mobility remain
+  unchanged, absent local destinations bind on later exact-identity admission,
+  and remote routes reconnect lazily from endpoint/definition seeds. No live
+  streams or held-input lease IDs are captured. These are checkpointed routing
+  and transaction facts, not taped transfer handshakes.
+  Malformed social
+  state refuses before authority restore changes live state. Social row counts
+  must fit the remaining wire bytes before allocation. Social observer indexes
+  and the indexed expiry heap are rebuilt from logical records, excluded from
+  hashes and checkpoint bytes. Receipt retirement removes the exact heap node;
+  no tombstone or allocation-history state survives a checkpoint.
+  Social aging anchors are signed 128-bit times, encoded low 64-bit limb first;
+  receipts retain their immutable original event timestamp separately. Both
+  limbs enter the logical hash. `CaptureObserver` can rebase those anchors onto
+  an explicitly supplied destination clock without resetting age; it returns a
+  detached subset with compacted receipt ordinals and fresh work counters, not
+  a transfer or full-authority checkpoint;
+  see the [Server memory contract](../../../../src/Puck.World.Server/README.md#social-memory-component).
+  Rule-latch hashing sorts
+  into reusable scratch; storage layout is not part of the hash. Neighbor decision
+  grids and diagnostic counters are derived, not persisted. The reconsideration
+  count derives bit-reversed neighbor sample phases; the shared spatial sampler
+  separates cell and occupant rotation. Checkpoint journals
+  use the committed-mutation codec so internal world-authored state writes persist;
+  pending submissions and replay inputs retain the live codec's world-actor refusal.
+  The fork-provenance slot remains `(bool present,
   string parentName, int32 tick)` right behind `SimulationRate`, read back as
   `WorldReplaySnapshot.ForkedFrom` (`WorldReplayForkProvenance`), refused by
   name when it claims more copied ticks than the tape holds.
-  A tape with any retired magic refuses by name (`ShapeMismatch`, no tolerant
-  reader; re-record it). The full retirement
-  chain (each value opaque, never a sequence) lives in the comment above
-  `WorldReplaySnapshot.Magic` — read it before picking the next value.
-  The magic is an opaque shape-identity value, RE-KEYED (never incremented)
-  on any byte-layout or semantic change; retired values are never reused.
+  World remains at version 1 during development (owner instruction). Change the
+  current format directly; do not bump versions or accumulate retired magic values
+  for development edits. Re-record verification tapes against the current code.
   `Read` refuses a mismatch loudly (`ReplayRefusal.ShapeMismatch`, naming
   found vs expected) — there is NO tolerant reader, no version negotiation,
   no legacy branch. That is the contract: never write one.
@@ -55,7 +109,7 @@ from there into a standalone child. Files (all in
   canonical `WorldSubmissionCodec` leaves used by the frame grammar and
   loopback. That leaf owns exhaustive two-direction wire maps and preserves
   the retired capability value 2. Tape-only metadata retains its own pinned
-  maps (`Wire.AddonLaneReceiptConstant = 1` remains written and validated).
+  maps. Mounted-addon receipts contain name, hash, and fuel; no obsolete lane placeholder is stored.
 - `WriteFile` encodes to memory first and writes one complete buffer — a
   codec throw never truncates the destination. Read-side: every untrusted
   length prefix is validated against bytes remaining before sizing an
@@ -212,15 +266,24 @@ than silently reproduced from a stored copy) and refuses BY NAME,
 found vs expected, before installing anything, on any disagreement. No
 armed-recording refusal remains for any of the three verbs.
 
-## The pose hash — what a MATCH proves
+## The hash boundaries — what a MATCH proves
 
 `WorldReplaySnapshot.HashState(population)`: FNV-1a over active bodies in
 index order — per body the index, the raw `FixedPosition.X/Y/Z` lanes, ALL
 FOUR raw `FixedOrientation` quaternion lanes, and the raw `FixedYaw` scalar
 (authoritative under the grounded model; the quaternion is built from it).
-So a MATCH proves the authoritative 6DOF pose trajectory and NOTHING about
-document state, the grant table, the journal, the HUD, or any presentation. A
-kit's `dynamics`-shaped planar follower state rides ALONGSIDE the hashed pose
+This pose digest is diagnostic; the replay verdict instead compares
+`RecordedAuthoritativeHashes` against `WorldRuntimeStateHash.HashAuthoritative`.
+That scope includes poses, stored/resolved world-state rows and traits, live
+field cells, rule/interaction latches, body action state, cached navigation and
+shared destination-tree/scheduler/pending-request state,
+flock perception/cadence/sample state (including the cached result of social/state
+affinity expressions), slot generations, and previous positions. Affinity programs
+are derived again from authored kit/producer names and current state handles on
+restore; their diagnostic evaluation/failure counters do not enter the hash.
+It excludes the rest of the document, grants, journal, HUD/presentation,
+pending transport work, and screen-machine cores. It is not a whole-world
+checkpoint comparison. A kit's `dynamics`-shaped planar follower state rides alongside the hashed pose
 (`WorldBody`'s own Q32 follower raws feed `m_planarVelocity`, which the
 tracked pose derives from every tick), so a follower divergence still surfaces
 as a hash MISMATCH on the very next tick it moves the pose — but the follower
@@ -234,18 +297,14 @@ hash before it changes a later pose.
 Across a session request, MATCH proves that re-executing the request reproduced
 the same hashed pose trajectory. It does not directly prove the request's reply,
 roster echo, profile document, population metadata, or any other unhashed effect.
-Seat occupancy is observed only because active body indices and poses determine
-which rows enter the hash. Say that plainly when a verification leans on
-`replay.verify`.
+Seat occupancy and slot generations also enter the authoritative fold. Say
+which scope was checked when a verification leans on `replay.verify`.
 
-The mutation path is CAPTURED but still UNHASHED: a re-drive re-applies each
-recorded mutation through the ordinary pipeline, so a divergence in the apply
-path can move a later pose and surface as a MISMATCH — but a mutation whose only
-effect is document state the pose never reads still leaves the trace identical.
-A MATCH is therefore evidence that the mutation stream re-executed without
-disturbing the pose trajectory, never that the resulting document matched. For a
-document-state determinism claim, run the identical stdin script in TWO
-independent fresh boots and diff the streams instead.
+The mutation path is captured and reapplied through the ordinary pipeline;
+the authoritative trace checks its effects only inside the boundary above.
+A state-row change is covered even before it moves a body; an unrelated
+document edit is not. For a whole-document determinism claim, compare
+canonical documents from independent fresh boots in addition to replay.
 
 ## Lifecycle
 
@@ -392,23 +451,30 @@ from child tick 30. Omitted, a drive runs to the tape's end.
   when the tape's world declares screens and a machine has stepped or a
   screen op applied, when the tape pins addons and a guest has pumped (the
   rebuild door reuses an unchanged row's guest with its state), or when an
-  engagement is in flight. Then the boot image is installed through the
+  engagement is in flight. Social ownership holds, import reservations,
+  transfer transactions or mobility credentials, remote occupants, and
+  host-owned queued/in-doubt transfers or forwarding history also refuse:
+  a single-authority tape cannot rewind another authority's obligations.
+  The ownership check and reset hold the same authority gate, preventing a
+  network reservation between them. Then the boot image is installed through the
   server's own doors: a forced `world.load` of the embedded definition
   (`EnqueueRebuild` + `DrainAdministrative`, synchronous — solids, machines
   reconcile, addon plan, document grants, journal clear, base replace; the
   `[world.definition: world.load applied …]` line is the evidence, and the
   boot document's path is the path hint so relative machine content keeps
-  resolving), then the population image a fresh server of that definition
-  reaches once `SeatRecordedSeats` joins the recorded seats on their pinned
-  rates — captured off that shadow population and installed with
-  `WorldPopulation.Restore` (a rebuild alone keeps every live pose, and a
-  seat leave/rejoin resumes the parked body). The shadow's event feed is
-  restored too. `VerifyMountedAddons` then pins the live receipts. On
+  resolving), then the complete authority checkpoint a fresh server reaches
+  after `SeatRecordedSeats` joins the recorded seats on their pinned rates.
+  `WorldServer.RestoreCheckpoint` resets clocks, social memory, decisions,
+  rule latches, fields, grants, held input, events, and population together.
+  `VerifyMountedAddons` then pins the live receipts. On
   success `LoopbackTransport.InputMasked = true` and the mode is
-  `Replaying`. The tick coordinate is NOT rebased: the live clock keeps
-  counting, so `world.wait`, captures, and peers see monotonic ticks; a
-  tape's own numbering is relative anyway.
-- **Stepping (`WorldServerStepShell.Step`).** Right before `server.Step`,
+  `Replaying`. The authority clock rewinds to the boot image. Hosts call
+  `WorldServer.Advance` with a step width, so the restored clock controls
+  subsequent simulation instead of inheriting old host pacing coordinates.
+  Console waits count completed host work monotonically; captures and frame
+  time read the authority clock. `TimelineRestored` refreshes local route
+  epochs so input deduplication does not retain the old timeline's cursor.
+- **Stepping (`WorldServerStepShell.Step`).** Right before `server.Advance`,
   `tape.InjectDriveTick()` feeds tape tick `cursor` through
   `ApplyRecordedTick` — the identical apply the offline drive uses (authority
   entries in order, then intents into the buffer). The one difference: the
@@ -425,9 +491,8 @@ from child tick 30. Omitted, a drive runs to the tape's end.
   every read-back answers mid-drive; a fork sets `FastForward` and the shell
   loops `WantsFastForwardStep` up to `FastForwardBurst` (two seconds of the
   tape's rate) recorded ticks per shell call, so sibling instances and
-  rendering lag but the boot shape's `Tick`/`ElapsedTicks` stay contiguous
-  (both shapes derive elapsed time from the ticks the shell actually
-  completed).
+  rendering lag. Host pacing counters stay monotonic across a rewind;
+  public `Tick`/`ElapsedTicks` follow the restored authority timeline.
 - **Masking.** `LoopbackTransport.InputMasked` drops every `SubmitIntent`
   and every `Command` payload before any tap or the server sees it — device
   sticks and the `body.*` drive verbs alike; grants, sessions, mutations,
@@ -465,11 +530,17 @@ from child tick 30. Omitted, a drive runs to the tape's end.
 - A change that moves simulation math is EXPECTED to change replay hashes;
   re-record any persisted tape it invalidates in the same change
   (`CLAUDE.md` rule 4).
-- Any tape byte-layout or semantic change re-keys `Magic` to a fresh value
-  in the same change; old tapes then refuse loudly — correct, not a bug.
+- Tape byte-layout and semantic changes update the first format in place. Regenerate
+  relevant verification recordings; do not add compatibility readers or version bumps.
 - The authored float fields in commands round-trip bit-exactly through the
   shared command leaf; keep its explicit two-direction discriminant map and
   the command apply sites current together when touching a command shape.
-- A new `WorldReplayEntry`/command discriminant needs both switch sides and
-  a re-key; the drive's `default:` arm throws `WorldReplayCodecException`
+- A new `WorldReplayEntry`/command discriminant needs both switch sides;
+  the drive's `default:` arm throws `WorldReplayCodecException`
   rather than dropping an unhandled kind.
+
+Discrete state authority replay includes all four words of every 256-bit dealt
+mask, phase readiness/generation/deadlines, ordered zone cells, movement
+allowances, and knowledge last-seen stamps. Private `streamDraw` keys persist
+in authority documents and tapes; presentation observations omit keys and draw
+bookkeeping. Restrict authority tapes and Replica-tier access accordingly.

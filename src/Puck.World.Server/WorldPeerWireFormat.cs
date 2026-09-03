@@ -5,17 +5,17 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 /// <summary>
-/// The remote socket's downstream reply grammar — shared by <see cref="WorldTcpHost"/> (the server door) and the
+/// The remote socket's downstream reply grammar — shared by <see cref="WorldPeerHost"/> (the server door) and the
 /// <c>--connect</c> peer clients, so both sides frame bytes identically without a second definition drifting from
 /// the first. Upstream (client → server, after Hello) rides the existing <see cref="WorldFrameCodec"/> grammar over
 /// <see cref="HandshakeWireFormat.TryReadLengthPrefixedFrameAsync"/>'s raw read; Hello and identity ride
 /// <see cref="HandshakeWireFormat"/> directly. Downstream (server → client) is this type's own, deliberately small
 /// v1 grammar: a Hello verdict once, then one completion per submitted frame (this v1 socket is strictly
-/// request-then-response per connection, so no correlation id travels on the wire; see <see cref="WorldTcpHost"/>'s
+/// request-then-response per connection, so no correlation id travels on the wire; see <see cref="WorldPeerHost"/>'s
 /// own remarks) — not one of <see cref="WorldSubmissionCodec"/>'s twelve leaf kinds, since v1 carries only the
 /// Completion lane (streamed snapshots/definitions/compositions/levers are not carried here).
 /// </summary>
-public static class WorldTcpWireFormat {
+public static class WorldPeerWireFormat {
     /// <summary>The hard cap on a downstream frame's total bytes — every v1 downstream case is a short status/text
     /// reply, never a bulk payload.</summary>
     public const int MaxDownstreamFrameBytes = (64 * 1024);

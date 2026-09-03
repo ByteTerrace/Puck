@@ -1,0 +1,7 @@
+world.population 128
+body.where 4
+world.wait 240
+body.where 4
+world.navigation
+world.budget
+wire.errors

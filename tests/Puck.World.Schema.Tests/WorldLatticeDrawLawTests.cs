@@ -26,7 +26,7 @@ public sealed class WorldLatticeDrawLawTests {
         WorldGeneratorEngine.ComputeSeedState(instanceIdentity: Instance, site: Site, worldSeed: WorldSeed),
         WorldGeneratorEngine.ComputeStreamId(site: Site)
     );
-    private static WorldGeneratorEngine.FireResult Fire(WorldGenerator generator, long cursor, IReadOnlyList<long>? decks) {
+    private static WorldGeneratorEngine.FireResult Fire(WorldGenerator generator, long cursor, IReadOnlyList<ClosedBitset256>? decks) {
         var (seed, stream) = Keys();
 
         Assert.True(condition: WorldGeneratorEngine.TryFire(generator: generator, targetKind: CellKind.Fixed, seedState: seed, stream: stream, cursor: cursor, decks: decks, result: out var result, reason: out var reason), userMessage: reason);
@@ -42,7 +42,7 @@ public sealed class WorldLatticeDrawLawTests {
 
         return (WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var reason) ? string.Empty : reason);
     }
-    private static WorldStateSection LatticeState(WorldLatticeFill? fill, long cursor = 0L, IReadOnlyList<long>? decks = null, WorldLatticeFill? second = null) {
+    private static WorldStateSection LatticeState(WorldLatticeFill? fill, long cursor = 0L, IReadOnlyList<ClosedBitset256>? decks = null, WorldLatticeFill? second = null) {
         var paint = new List<WorldLatticeFill>();
 
         if (fill is not null) { paint.Add(item: fill); }
@@ -68,7 +68,7 @@ public sealed class WorldLatticeDrawLawTests {
     public void ACount_IsExactlyThatManyCardsPerPass() {
         var bag = CountedBag(mode: WorldGeneratorMode.ReshuffleOnExhaustion);
         var cursor = 0L;
-        IReadOnlyList<long>? decks = null;
+        IReadOnlyList<ClosedBitset256>? decks = null;
 
         for (var pass = 0; (pass < 4); pass++) {
             var dealt = new List<long>();
@@ -115,7 +115,7 @@ public sealed class WorldLatticeDrawLawTests {
         );
         var (seed, stream) = Keys();
         var cursor = 0L;
-        IReadOnlyList<long>? decks = null;
+        IReadOnlyList<ClosedBitset256>? decks = null;
         var dealt = new List<string>();
 
         for (var deal = 0; (deal < 4); deal++) {
@@ -140,7 +140,7 @@ public sealed class WorldLatticeDrawLawTests {
             Assert.True(condition: WorldGeneratorEngine.TryAdvanceBatch(generator: generator, targetKind: CellKind.Fixed, seedState: seed, stream: stream, cursor: 7L, decks: null, sampleCount: cells.Length, decksAfter: out var advancedDecks, reason: out var advanceReason), userMessage: advanceReason);
 
             var cursor = 7L;
-            IReadOnlyList<long>? decks = null;
+            IReadOnlyList<ClosedBitset256>? decks = null;
 
             for (var cell = 0; (cell < cells.Length); cell++) {
                 var single = Fire(generator: generator, cursor: cursor, decks: decks);
@@ -167,7 +167,7 @@ public sealed class WorldLatticeDrawLawTests {
         var generators = new[] { new WorldGeneratorRow(Name: WorldCellName.Parse(candidate: "loot"), Generator: CountedBag(mode: WorldGeneratorMode.WithoutReplacement)) };
 
         Assert.Equal(expected: string.Empty, actual: Validate(state: LatticeState(fill: numeric)));
-        Assert.Equal(expected: string.Empty, actual: Validate(state: LatticeState(fill: named, cursor: 8L, decks: [0b101L]), generators: generators));
+        Assert.Equal(expected: string.Empty, actual: Validate(state: LatticeState(fill: named, cursor: 8L, decks: [new(Word0: 0b101UL)]), generators: generators));
         Assert.Contains(expectedSubstring: "writes text", actualString: Validate(state: LatticeState(fill: markov)));
         Assert.Contains(expectedSubstring: "names no declared generator", actualString: Validate(state: LatticeState(fill: named)));
         Assert.Contains(expectedSubstring: "second draw fill", actualString: Validate(state: LatticeState(fill: numeric, second: numeric)));
@@ -180,8 +180,8 @@ public sealed class WorldLatticeDrawLawTests {
         ]));
 
         Assert.Contains(expectedSubstring: ".count 0 must be at least 1", actualString: Refusal(new WorldGenerator(Source: WorldGeneratorSource.WeightedNumeric, Weighted: [new WorldGeneratorWeightedNumeric(Value: 1, Weight: 1UL, Count: 0)])));
-        Assert.Contains(expectedSubstring: "holds 65 cards", actualString: Refusal(new WorldGenerator(Source: WorldGeneratorSource.WeightedNumeric, Weighted: [new WorldGeneratorWeightedNumeric(Value: 1, Weight: 1UL, Count: 65)])));
-        Assert.Equal(expected: string.Empty, actual: Refusal(new WorldGenerator(Source: WorldGeneratorSource.WeightedNumeric, Weighted: [new WorldGeneratorWeightedNumeric(Value: 1, Weight: 1UL, Count: 64)])));
+        Assert.Contains(expectedSubstring: "holds 257 cards", actualString: Refusal(new WorldGenerator(Source: WorldGeneratorSource.WeightedNumeric, Weighted: [new WorldGeneratorWeightedNumeric(Value: 1, Weight: 1UL, Count: 257)])));
+        Assert.Equal(expected: string.Empty, actual: Refusal(new WorldGenerator(Source: WorldGeneratorSource.WeightedNumeric, Weighted: [new WorldGeneratorWeightedNumeric(Value: 1, Weight: 1UL, Count: 256)])));
         var oversized = new WorldGenerator(Source: WorldGeneratorSource.WeightedNumeric, Weighted: [
             new WorldGeneratorWeightedNumeric(Value: 1, Weight: 1UL, Count: int.MaxValue),
             new WorldGeneratorWeightedNumeric(Value: 2, Weight: 1UL, Count: int.MaxValue),

@@ -4,7 +4,7 @@
     "null"
   ],
   "items": {
-    "description": "One row of the admission section \u2014 durable configuration naming one identity or issuer this world admits over its TCP socket, and what a peer verified under it is minted (see Grants). Never a live grant row itself: WorldAdmissionDoor is the only consumer, and only at the pre-population Hello handshake, off the tick thread \u2014 this section carries no WorldSection axis and nothing mutates it live, exactly like WorldReference/WorldPortalsSection. Absent (the default) admits no remote peer at all \u2014 deny by default, the same posture an empty Puck.Attestation.TrustList already carries.",
+    "description": "One row of the admission section \u2014 durable configuration naming one identity or issuer this world admits over its QUIC socket, and what a peer verified under it is minted (see Grants). Never a live grant row itself: WorldAdmissionDoor is the only consumer, and only at the pre-population Hello handshake, off the tick thread \u2014 this section carries no WorldSection axis and nothing mutates it live, exactly like WorldReference/WorldPortalsSection. Absent (the default) admits no remote peer at all \u2014 deny by default, the same posture an empty Puck.Attestation.TrustList already carries.",
     "type": [
       "object",
       "null"

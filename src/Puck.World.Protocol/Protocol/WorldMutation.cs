@@ -692,4 +692,10 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Name">The curves row name to remove.</param>
     [MutationKind(ordinal: 74, section: WorldSection.Curves)]
     public sealed record RemoveCurve(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+    /// <summary>Applies one bounded state transform atomically, checking edit reach over every touched row.</summary>
+    /// <param name="Principal">The stamped acting identity.</param>
+    /// <param name="Transform">The typed operation.</param>
+    /// <param name="Guard">Optional admission against a phase generation and the stamped actor.</param>
+    [MutationKind(ordinal: 75, section: WorldSection.State)]
+    public sealed record TransformState(WorldPrincipal Principal, WorldStateTransform Transform, WorldPhaseGuard? Guard = null) : WorldMutation(Principal);
 }

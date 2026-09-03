@@ -24,13 +24,12 @@ public sealed record WorldFieldsSection(
     /// <summary>Determines without allocation whether an authored state section still compiles to a cached
     /// composite.</summary>
     internal static bool MatchesState(WorldFieldsSection? composite, WorldStateSection? state) {
-        if (state?.Lattices is not { Count: > 0 } topologies) {
+        if (WorldTopologyCompilation.FindPhysical(state) is not { } topology) {
             return (composite is null);
         }
 
         if (
             (composite is null) ||
-            (topologies[0] is not { } topology) ||
             (composite.Lattice.Origin != topology.Origin) ||
             (composite.Lattice.CellSize != topology.CellSize) ||
             (composite.Lattice.Width != topology.Width) ||
@@ -45,7 +44,7 @@ public sealed record WorldFieldsSection(
         var fieldIndex = 0;
         var paintIndex = 0;
         var paint = (composite.Paint ?? []);
-        var worldRows = (state.World ?? []);
+        var worldRows = (state?.World ?? []);
 
         for (var rowIndex = 0; (rowIndex < worldRows.Count); rowIndex++) {
             if (worldRows[rowIndex] is not { } row) {
@@ -121,15 +120,14 @@ public sealed record WorldFieldsSection(
     /// <param name="state">The state section.</param>
     /// <returns>The composite, or <see langword="null"/>.</returns>
     public static WorldFieldsSection? Compile(WorldStateSection? state) {
-        if (state?.Lattices is not { Count: > 0 } topologies) {
+        if (WorldTopologyCompilation.FindPhysical(state) is not { } topology) {
             return null;
         }
 
-        var topology = topologies[0];
         var rows = new List<WorldFieldRow>();
         var paint = new List<WorldLatticeFill>();
 
-        foreach (var row in (state.World ?? [])) {
+        foreach (var row in (state?.World ?? [])) {
             if (row.Lattice is not { } trait) {
                 continue;
             }
@@ -301,8 +299,7 @@ public sealed record WorldFieldsSection(
     }
 }
 /// <summary>One <c>state.lattices</c> topology -- the footprint, cadence, and reactions every lattice-shaped state
-/// row referencing it shares. Exactly one topology may be declared today (the wire frame and checkpoint key off a
-/// single lattice); the list spelling is the growth seam, not a live capacity.</summary>
+/// row referencing it shares. At most one physical field topology and bounded discrete topologies may coexist.</summary>
 /// <param name="Name">The topology's name -- what a row's <c>lattice.topology</c> references.</param>
 /// <param name="Origin">The minimum corner, world units.</param>
 /// <param name="CellSize">The cubic cell edge, world units.</param>
@@ -310,7 +307,10 @@ public sealed record WorldFieldsSection(
 /// <param name="Depth">Cells along +Z.</param>
 /// <param name="Layers">Cells along +Y -- 1 is a ground lattice.</param>
 /// <param name="StepEveryTicks">Simulation ticks between reaction steps.</param>
-/// <param name="Reactions">The per-step reactions over this topology's rows, applied in document order.</param>
+/// <param name="Reactions">The per-step reactions over a physical field topology, applied in document order.</param>
+/// <param name="Kind">Physical fields or a discrete grid, ring, or axial hexagon.</param>
+/// <param name="Wrap">Wrapped axes for a discrete grid; rings always wrap.</param>
+/// <param name="Radius">The axial hexagon radius; zero for other kinds.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldStateLatticeTopology(
     string Name,
@@ -320,7 +320,10 @@ public sealed record WorldStateLatticeTopology(
     int Depth,
     int Layers = 1,
     int StepEveryTicks = 8,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldReaction>? Reactions = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldReaction>? Reactions = null,
+    WorldTopologyKind Kind = WorldTopologyKind.Field,
+    WorldTopologyWrap Wrap = WorldTopologyWrap.None,
+    int Radius = 0
 );
 /// <summary>A state row's <c>lattice</c> trait -- the row holds one <see cref="CellKind.Fixed"/> scalar per cell of
 /// the named topology instead of slot/keyed cells. Values are authored DECIMAL (like every lattice quantity), not

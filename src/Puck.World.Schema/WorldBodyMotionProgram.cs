@@ -562,17 +562,20 @@ public sealed class CompiledBodyProducer {
     private readonly IReadOnlyDictionary<string, int> m_channels;
     private readonly IReadOnlyDictionary<string, FixedQ4816> m_scalars;
 
-    private CompiledBodyProducer(CompiledBodyMotionProgram program, IReadOnlyDictionary<string, FixedQ4816> scalars, IReadOnlyDictionary<string, int> channels, FixedBodyTargetSource? target) {
+    private CompiledBodyProducer(CompiledBodyMotionProgram program, IReadOnlyDictionary<string, FixedQ4816> scalars, IReadOnlyDictionary<string, int> channels, FixedBodyTargetSource? target, FixedWorldFlockProfile? flock) {
         Program = program;
         m_scalars = scalars;
         m_channels = channels;
         Target = target;
+        Flock = flock;
     }
 
     /// <summary>Gets the compiled producer program.</summary>
     public CompiledBodyMotionProgram Program { get; }
     /// <summary>Gets the compiled target source, when this producer senses a target.</summary>
     public FixedBodyTargetSource? Target { get; }
+    /// <summary>Gets bounded local-perception and steering parameters, when authored.</summary>
+    public FixedWorldFlockProfile? Flock { get; }
 
     /// <summary>Reads one validated channel ordinal by name, or <c>-1</c> when omitted.</summary>
     public int Channel(string name) => (m_channels.TryGetValue(
@@ -625,6 +628,7 @@ public sealed class CompiledBodyProducer {
 
         return new CompiledBodyProducer(
             program: program,
+            flock: parameters.Flock is { } flock ? new FixedWorldFlockProfile(flock, navigation) : null,
             scalars: scalars,
             channels: channelOrdinals,
             target: ((source is { } target)

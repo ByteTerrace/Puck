@@ -16,7 +16,7 @@ namespace Puck.World.Client;
 /// <remarks>
 /// <para>
 /// The probe branch (the contract in <see cref="ISdfSceneEmitter"/>): <see cref="Emit"/> under
-/// <see cref="SdfEmitContext.Probe"/> emits the complete 128-rig catalog, the worst-case animated pool, the reserved
+/// <see cref="SdfEmitContext.Probe"/> emits the largest rig in every supported body slot, the worst-case animated pool, the reserved
 /// placement instances, and the authoring headroom (screens and placement stamps) that reserves live editing
 /// room. The headroom padding lives here, inside the worst case, rather than being applied to the emitter's inputs by
 /// a caller — the capacity-probe doctrine's rule that an emitter's probe branch must dominate its own live branch on
@@ -86,27 +86,27 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     private int m_slotBase;
 
     // Per-frame scratch reused to keep packing allocation-free: movement-driven gait state per avatar.
-    private readonly float[] m_avatarGaitPhases = new float[WorldRigCatalog.Capacity];
-    private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldRigCatalog.Capacity];
-    private readonly bool[] m_avatarPoseSeeded = new bool[WorldRigCatalog.Capacity];
-    private readonly WorldEntityAddress[] m_avatarMotionAddresses = new WorldEntityAddress[WorldRigCatalog.Capacity];
+    private readonly float[] m_avatarGaitPhases = new float[WorldBodiesLimits.CapacityCeiling];
+    private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldBodiesLimits.CapacityCeiling];
+    private readonly bool[] m_avatarPoseSeeded = new bool[WorldBodiesLimits.CapacityCeiling];
+    private readonly WorldEntityAddress[] m_avatarMotionAddresses = new WorldEntityAddress[WorldBodiesLimits.CapacityCeiling];
     // The live program's avatar geometry and its transform pack share this rebuild-latched appearance image. This
     // closes the delivery-thread gap where a reused slot could otherwise pack a new rig into old compiled geometry.
-    private readonly int[] m_emittedAvatarRigs = new int[WorldRigCatalog.Capacity];
-    private readonly float[] m_emittedAvatarScales = new float[WorldRigCatalog.Capacity];
-    private readonly float[] m_emittedAvatarGaitAmplitudes = new float[WorldRigCatalog.Capacity];
+    private readonly int[] m_emittedAvatarRigs = new int[WorldBodiesLimits.CapacityCeiling];
+    private readonly float[] m_emittedAvatarScales = new float[WorldBodiesLimits.CapacityCeiling];
+    private readonly float[] m_emittedAvatarGaitAmplitudes = new float[WorldBodiesLimits.CapacityCeiling];
     // The creation-STAMP census, refreshed at each rebuild: the body-rooted stamps handed to the pool, plus the
     // per-entity flag the pack/emit path reads to skip the catalog avatar (the body renders its creation instead).
     private readonly List<WorldStampPool.BodyStamp> m_bodyStamps = new();
-    private readonly bool[] m_rendersAsStamp = new bool[WorldRigCatalog.Capacity];
+    private readonly bool[] m_rendersAsStamp = new bool[WorldBodiesLimits.CapacityCeiling];
     // The catalog-look root follower: a NON-stamp-rendered avatar (a Catalog-sourced look, or a Creation look the
     // stamp pool had no free slot for) whose look names a root Motion.Dynamics row lags the whole avatar toward its
     // raw interpolated pose instead of drawing it directly — resolved once per rebuild (Compose, beside the rig/scale/
     // gait arrays above), stepped once per produced frame (PackDynamicTransforms) from the Tick-latched delta.
-    private readonly bool[] m_avatarFollows = new bool[WorldRigCatalog.Capacity];
-    private readonly SecondOrderResponse[] m_avatarResponse = new SecondOrderResponse[WorldRigCatalog.Capacity];
-    private readonly SecondOrderFollower3[] m_avatarPositionFollower = new SecondOrderFollower3[WorldRigCatalog.Capacity];
-    private readonly SecondOrderFollower4[] m_avatarOrientationFollower = new SecondOrderFollower4[WorldRigCatalog.Capacity];
+    private readonly bool[] m_avatarFollows = new bool[WorldBodiesLimits.CapacityCeiling];
+    private readonly SecondOrderResponse[] m_avatarResponse = new SecondOrderResponse[WorldBodiesLimits.CapacityCeiling];
+    private readonly SecondOrderFollower3[] m_avatarPositionFollower = new SecondOrderFollower3[WorldBodiesLimits.CapacityCeiling];
+    private readonly SecondOrderFollower4[] m_avatarOrientationFollower = new SecondOrderFollower4[WorldBodiesLimits.CapacityCeiling];
     // The last PoseEpoch(index) this emitter observed, per avatar — a jump within the same entity address (a
     // teleport, an over-threshold correction) reseeds the follower exactly like an address change does, so the boom
     // never streaks the follower across the jump. -1 (never observed) reseeds on the first frame.
@@ -115,7 +115,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     private float m_pendingDeltaSeconds;
 
     private static int[] NewPoseEpochs() {
-        var epochs = new int[WorldRigCatalog.Capacity];
+        var epochs = new int[WorldBodiesLimits.CapacityCeiling];
 
         Array.Fill(array: epochs, value: -1);
 
@@ -187,7 +187,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         m_placementReservation += m_authoringHeadroomPlacements;
     }
 
-    /// <summary>The frozen transform-slot count this emitter declares: every leaf in the all-128 avatar catalog plus
+    /// <summary>The frozen transform-slot count this emitter declares: a maximum-sized catalog rig per body slot plus
     /// the reserved creation-stamp pool, in that order.</summary>
     public int DynamicSlotCount => (WorldRigCatalog.DynamicTransformCapacity + WorldStampPool.DynamicSlotCount);
     /// <summary>Always <see langword="true"/>: this emitter's material palette is its own. Sole tenancy makes this
@@ -212,10 +212,10 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         // The per-avatar body + accent materials, allocated up front so the catalog emitter is a straight builder chain.
         // A local seat's colors come from its seated profile (a pending seat renders a desaturated candidate); a stand-in's
         // from its snapshot palette. A color change bumps the revision and rebuilds; a settings-only edit does not.
-        var avatarBodyMaterials = new int[WorldRigCatalog.Capacity];
-        var avatarAccentMaterials = new int[WorldRigCatalog.Capacity];
+        var avatarBodyMaterials = new int[WorldBodiesLimits.CapacityCeiling];
+        var avatarAccentMaterials = new int[WorldBodiesLimits.CapacityCeiling];
 
-        for (var index = 0; (index < WorldRigCatalog.Capacity); index++) {
+        for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
             var bodyColor = (TryPresentedAppearance(
                 bodyColor: out var presentedColor,
                 catalogRig: out _,
@@ -300,11 +300,10 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         );
 
         // The view's active avatars: 12..20 independently animated leaves and 60..100 authored VM instructions
-        // each. The probe emits every catalog range at unit scale (the frozen worst case); a live build emits only
-        // active ranges, each sourcing its LOOK's pinned rig and uniform scale (both clamped so the frozen per-entity
-        // slot capacity is never exceeded — see WorldRigCatalog.Emit's remarks).
+        // each. The probe emits the largest rig per body slot; a live build emits each active body's complete
+        // selected look inside its own maximum-sized transform range.
         if (!probeWorstCase) {
-            for (var index = 0; (index < WorldRigCatalog.Capacity); index++) {
+            for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
                 var hasPresented = TryPresentedAppearance(
                     bodyColor: out _,
                     catalogRig: out var presentedRig,
@@ -389,7 +388,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
         var definition = m_client.Definition;
 
-        for (var index = 0; (index < WorldRigCatalog.Capacity); index++) {
+        for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
             if (
                 !m_client.IsActive(index: index) ||
                 (ResolveStampCreation(
@@ -725,7 +724,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
         var crowdRadiusSquared = (m_settings.ShadowCrowdRadius * m_settings.ShadowCrowdRadius);
 
-        for (var index = 0; (index < WorldRigCatalog.Capacity); index++) {
+        for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
             if (!TryPresentedPose(
                 address: out var address,
                 index: index,

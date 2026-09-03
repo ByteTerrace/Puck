@@ -18,6 +18,16 @@ public abstract record WorldLookSource {
     public sealed record Catalog(int? Index) : WorldLookSource {
         /// <summary>The procedural renderer's fixed rig count.</summary>
         public const int RigCount = 128;
+
+        /// <summary>Selects a fresh occupant's catalog look independently of population-table capacity.
+        /// Slots cycle through the finite appearance catalog; this is not an entity identity.</summary>
+        /// <param name="entityIndex">A nonnegative population slot.</param>
+        /// <returns>The catalog index, carried with the occupant across later transfers.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">The entity index is negative.</exception>
+        public static byte DefaultIndex(int entityIndex) {
+            ArgumentOutOfRangeException.ThrowIfNegative(entityIndex);
+            return checked((byte)(entityIndex % RigCount));
+        }
     }
     /// <summary>A sculpted creation worn by the body — resolved against the world's <see cref="WorldPrototype"/> rows.</summary>
     /// <param name="PrototypeId">The referenced <see cref="WorldPrototype.Id"/>, authored literally or through a Text

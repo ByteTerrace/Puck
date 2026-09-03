@@ -141,7 +141,7 @@ internal static class HostRoundtripFixture {
         host.Admit(row: rowB.Instance);
 
         // A local seat that never leaves — otherwise the peer's own departure below empties row-a entirely and the
-        // host reaps it (FinalizeCommittedTransfer's own ReapIfEmpty), which stops StepInstances from advancing it
+        // host reaps it (CompleteCommittedTransfer's own ReapIfEmpty), which stops StepInstances from advancing it
         // any further and would make the identical-tail comparison meaningless (BuildCommittedScenario's own
         // remarks name the identical reason for keeping row-a a second occupant).
         Assert.True(condition: rowA.Server.ApplySession(request: new SessionRequest.Join(

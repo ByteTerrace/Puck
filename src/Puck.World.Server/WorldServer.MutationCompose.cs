@@ -555,7 +555,7 @@ public sealed partial class WorldServer {
         // Generate's OBSERVABLE effect is a state write, so it shares the state section's coarse hold; its narrower
         // authority is the SAME row-scoped Edit/state:<row> hold every other state write takes, never a second
         // section.
-        WorldMutation.UpsertStateRow or WorldMutation.RemoveStateRow or WorldMutation.UpsertStateCell or WorldMutation.RemoveStateCell or WorldMutation.Generate => WorldSection.State,
+        WorldMutation.UpsertStateRow or WorldMutation.RemoveStateRow or WorldMutation.UpsertStateCell or WorldMutation.RemoveStateCell or WorldMutation.Generate or WorldMutation.TransformState => WorldSection.State,
         WorldMutation.SetInputHold => WorldSection.InputHold,
         WorldMutation.UpsertWorldRule or WorldMutation.RemoveWorldRule => WorldSection.Rules,
         WorldMutation.UpsertGroupKind or WorldMutation.RemoveGroupKind or WorldMutation.FormGroup or WorldMutation.JoinGroup or WorldMutation.LeaveGroup or WorldMutation.KickMember
@@ -1392,6 +1392,19 @@ public sealed partial class WorldServer {
                 candidate = (current with { HudRaw = (current.Hud with { Defaults = m.Defaults }) });
 
                 return true;
+            case WorldMutation.TransformState m:
+                if (m.Principal != WorldPrincipal.World && WorldStateTransforms.Subjects(m.Transform).Any(name =>
+                    WorldDefinitionRows.FindStateRow(current.State, name)?.PhaseOf is { } required && m.Guard?.Row != required)) {
+                    candidate = current;
+                    reason = "operation requires its declared phase guard";
+                    return false;
+                }
+                if (m.Guard is { } guard && !WorldStateTransforms.CanAct(current, guard, m.Principal, tick)) {
+                    candidate = current;
+                    reason = "phase admission refused";
+                    return false;
+                }
+                return WorldStateTransforms.TryApply(current, m.Transform, m.Principal, tick, instanceIdentity, out candidate, out reason);
             case WorldMutation.UpsertStateRow m:
                 candidate = current.WithWorldState(rows: Upsert(
                     list: current.State,
@@ -1684,7 +1697,9 @@ public sealed partial class WorldServer {
                             Value: value,
                             Advance: existingAdvance,
                             Dynamics: existingDynamics,
-                            Cycle: existingCycle
+                            Cycle: existingCycle,
+                            Visibility: existingCell?.Visibility,
+                            Observation: existingCell?.Observation
                         ),
                         keyOf: static (WorldStateCell cell) => cell.Key
                     );

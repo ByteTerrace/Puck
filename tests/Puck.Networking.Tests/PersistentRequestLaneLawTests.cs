@@ -91,6 +91,15 @@ file sealed class FakeLaneProtocol : ILaneProtocol<FakeRequestKind, FakeResponse
 /// loopback socket; nothing pokes its private fields.
 /// </summary>
 public sealed class PersistentRequestLaneLawTests {
+    // The lane is transport-neutral. This fixture deliberately injects a socket stream to isolate retry and
+    // deadline behavior; production World callers inject the shared authenticated QUIC peer network.
+    private static async ValueTask<Stream> ConnectTestStreamAsync(IPEndPoint endpoint, CancellationToken ct) {
+        var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+        try {
+            await socket.ConnectAsync(endpoint, ct);
+            return new NetworkStream(socket, ownsSocket: true);
+        } catch { socket.Dispose(); throw; }
+    }
     private static IPEndPoint UnreachableEndpoint() {
         using var probe = new TcpListener(
             localaddr: IPAddress.Loopback,
@@ -181,6 +190,7 @@ public sealed class PersistentRequestLaneLawTests {
         );
 
         using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
+            connect: ConnectTestStreamAsync,
             connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
             lifetime: deadline.Token,
             protocol: new FakeLaneProtocol(),
@@ -287,6 +297,7 @@ public sealed class PersistentRequestLaneLawTests {
         );
 
         using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
+            connect: ConnectTestStreamAsync,
             connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
             lifetime: deadline.Token,
             protocol: new FakeLaneProtocol(),
@@ -345,6 +356,7 @@ public sealed class PersistentRequestLaneLawTests {
 
         using var deadline = Laws.SocketDeadline();
         using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
+            connect: ConnectTestStreamAsync,
             connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
             lifetime: deadline.Token,
             protocol: new FakeLaneProtocol(),
@@ -442,6 +454,7 @@ public sealed class PersistentRequestLaneLawTests {
         );
 
         using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
+            connect: ConnectTestStreamAsync,
             connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
             lifetime: deadline.Token,
             protocol: new FakeLaneProtocol(),
@@ -530,6 +543,7 @@ public sealed class PersistentRequestLaneLawTests {
         );
 
         using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
+            connect: ConnectTestStreamAsync,
             connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
             lifetime: deadline.Token,
             protocol: new FakeLaneProtocol(),
@@ -575,6 +589,7 @@ public sealed class PersistentRequestLaneLawTests {
         using var deadline = Laws.SocketDeadline();
 
         PersistentRequestLane<FakeRequestKind, FakeResponseKind> Build(TimeSpan connectRetryDelay, TimeSpan requestTimeout) => new(
+            connect: ConnectTestStreamAsync,
             connectRetryDelay: connectRetryDelay,
             lifetime: deadline.Token,
             protocol: new FakeLaneProtocol(),
@@ -649,6 +664,7 @@ public sealed class PersistentRequestLaneLawTests {
         using var deadline = Laws.SocketDeadline();
 
         lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
+            connect: ConnectTestStreamAsync,
             connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
             lifetime: deadline.Token,
             onUnavailable: exception => {
@@ -697,6 +713,7 @@ public sealed class PersistentRequestLaneLawTests {
 
         using var deadline = Laws.SocketDeadline();
         var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
+            connect: ConnectTestStreamAsync,
             connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
             lifetime: deadline.Token,
             protocol: new FakeLaneProtocol(),
@@ -757,6 +774,7 @@ public sealed class PersistentRequestLaneLawTests {
         );
 
         var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
+            connect: ConnectTestStreamAsync,
             connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
             lifetime: deadline.Token,
             protocol: new FakeLaneProtocol(),
@@ -851,6 +869,7 @@ public sealed class PersistentRequestLaneLawTests {
         );
 
         using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
+            connect: ConnectTestStreamAsync,
             connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
             lifetime: lifetime.Token,
             protocol: new FakeLaneProtocol(),
@@ -955,6 +974,7 @@ public sealed class PersistentRequestLaneLawTests {
         );
 
         using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
+            connect: ConnectTestStreamAsync,
             connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
             lifetime: lifetime.Token,
             protocol: new FakeLaneProtocol(),
@@ -1053,6 +1073,7 @@ public sealed class PersistentRequestLaneLawTests {
         );
 
         using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
+            connect: ConnectTestStreamAsync,
             connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
             lifetime: deadline.Token,
             protocol: new FakeLaneProtocol { ReadResponseFaultsRemaining = 1 },
@@ -1153,6 +1174,7 @@ public sealed class PersistentRequestLaneLawTests {
         );
 
         using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
+            connect: ConnectTestStreamAsync,
             connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
             lifetime: deadline.Token,
             protocol: new FakeLaneProtocol(),
@@ -1257,6 +1279,7 @@ public sealed class PersistentRequestLaneLawTests {
         );
 
         using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
+            connect: ConnectTestStreamAsync,
             connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
             lifetime: deadline.Token,
             protocol: new FakeLaneProtocol(),
@@ -1363,6 +1386,7 @@ public sealed class PersistentRequestLaneLawTests {
         );
 
         using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
+            connect: ConnectTestStreamAsync,
             connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
             lifetime: deadline.Token,
             protocol: new FakeLaneProtocol(),
@@ -1468,6 +1492,7 @@ public sealed class PersistentRequestLaneLawTests {
         );
 
         using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
+            connect: ConnectTestStreamAsync,
             connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
             lifetime: deadline.Token,
             protocol: new FakeLaneProtocol { StallsRequestWrite = true },
@@ -1555,6 +1580,7 @@ public sealed class PersistentRequestLaneLawTests {
         );
 
         using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
+            connect: ConnectTestStreamAsync,
             connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
             lifetime: deadline.Token,
             protocol: new FakeLaneProtocol { StallsAuthentication = true },
@@ -1616,6 +1642,7 @@ public sealed class PersistentRequestLaneLawTests {
 
         using var deadline = Laws.SocketDeadline();
         using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
+            connect: ConnectTestStreamAsync,
             connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
             lifetime: deadline.Token,
             onUnavailable: _ => throw new InvalidOperationException(message: "the callback itself is broken"),
@@ -1666,6 +1693,7 @@ public sealed class PersistentRequestLaneLawTests {
 
         using var deadline = Laws.SocketDeadline();
         using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
+            connect: ConnectTestStreamAsync,
             connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
             lifetime: deadline.Token,
             protocol: new FakeLaneProtocol(),

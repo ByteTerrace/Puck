@@ -56,6 +56,8 @@ public enum WorldNavigationConnectivity : byte {
 /// <param name="MaxStepHeight">For a surface domain, the greatest adjacent height delta.</param>
 /// <param name="MaxSlopeDegrees">For a surface domain, the greatest adjacent slope.</param>
 /// <param name="Medium">For a medium domain, the named lattice field that cells must remain inside.</param>
+/// <param name="Shared">Optional shared reverse-search policy. Absent uses independent bounded A* searches.
+/// Shared searches are queued and advanced on subsequent simulation ticks, independently of any leader.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldNavigationDomain(
     string Name,
@@ -75,8 +77,18 @@ public sealed record WorldNavigationDomain(
     float AgentHeight = 0f,
     float MaxStepHeight = 0f,
     float MaxSlopeDegrees = 0f,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Medium = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Medium = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldNavigationSharing? Shared = null
 );
+
+/// <summary>Bounds reusable destination trees and their aggregate expansion work in one navigation domain.</summary>
+/// <param name="GoalCapacity">Resident destination-cell trees. A full cache with pending work refuses another
+/// destination as capacity-limited; it never launches an unbudgeted independent search.</param>
+/// <param name="ExpandedNodesPerTick">Total reverse-Dijkstra expansions per simulation tick, shared fairly between
+/// pending resident goals. Each expansion inspects at most 26 edges. A tree can eventually settle every domain cell;
+/// the independent A* MaxExpandedNodes bound does not truncate a shared tree.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldNavigationSharing(int GoalCapacity, int ExpandedNodesPerTick);
 
 /// <summary>Hard representation ceilings for authored navigation work and memory.</summary>
 public static class WorldNavigationCapacity {
@@ -92,6 +104,12 @@ public static class WorldNavigationCapacity {
     public const int MaxSurfaceClearanceSweeps = 16;
     /// <summary>The greatest number of equal subsegments checked along one live medium edge.</summary>
     public const int MaxMediumSegmentSubdivisions = 32;
+    /// <summary>The greatest resident destination-tree count per shared domain.</summary>
+    public const int MaxSharedGoals = 16;
+    /// <summary>The greatest sum of domain cells times resident shared goals; bounds boot workspace and checkpoints.</summary>
+    public const int MaxSharedCellsPerWorld = 1_048_576;
+    /// <summary>The greatest aggregate authored shared-tree expansion budget per simulation tick.</summary>
+    public const int MaxSharedExpandedPerTick = 65_536;
 }
 
 /// <summary>The stable authored-name to navigation-domain ordinal table.</summary>

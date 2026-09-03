@@ -126,7 +126,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // moves the seat's device live through the per-frame service path.
     private Dictionary<int, WorldCameraControls?> m_seatCameraControls = new();
 
-    private long m_nextCameraDeviceScanTimestamp;
+    private readonly CameraDeviceScanner m_cameraDeviceScanner;
     // Narrates a scan failure once per failure episode (ServiceCameraDevices) rather than every ~2s retry; cleared
     // the moment a scan succeeds again.
     private bool m_cameraDeviceScanFailed;
@@ -218,6 +218,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
 
         m_machines = machines;
         m_cameraCapture = cameraCapture;
+        m_cameraDeviceScanner = new CameraDeviceScanner(cameraCapture, TimeSpan.FromSeconds(2));
         m_surfaceTransfers = surfaceTransfers;
         m_windowCapture = windowCapture;
         m_cameras = cameras;

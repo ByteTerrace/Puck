@@ -154,9 +154,9 @@ public sealed class WorldGeneratorEngineLawTests {
         var generator = DealGenerator(mode: WorldGeneratorMode.WithoutReplacement);
         var site = "state.card";
         var cursor = 0L;
-        IReadOnlyList<long>? decks = null;
+        IReadOnlyList<ClosedBitset256>? decks = null;
         var dealt = new List<string>();
-        var snapshots = new List<(long Cursor, IReadOnlyList<long>? Decks)>();
+        var snapshots = new List<(long Cursor, IReadOnlyList<ClosedBitset256>? Decks)>();
 
         for (var deal = 0; (deal < 3); deal++) {
             snapshots.Add(item: (cursor, decks?.ToArray()));
@@ -191,7 +191,7 @@ public sealed class WorldGeneratorEngineLawTests {
         var generator = DealGenerator(mode: WorldGeneratorMode.ReshuffleOnExhaustion);
         var site = "state.card";
         var cursor = 0L;
-        IReadOnlyList<long>? decks = null;
+        IReadOnlyList<ClosedBitset256>? decks = null;
 
         for (var deal = 0; (deal < 3); deal++) {
             var fired = Fire(generator: generator, site: site, cursor: cursor, decks: decks);
@@ -208,7 +208,7 @@ public sealed class WorldGeneratorEngineLawTests {
         Assert.Equal(expected: reshuffled.Samples, actual: replayed.Samples);
         Assert.Equal(expected: reshuffled.Decks, actual: replayed.Decks);
         Assert.NotNull(@object: reshuffled.Decks);
-        Assert.Equal(expected: 1, actual: System.Numerics.BitOperations.PopCount(value: unchecked((ulong)reshuffled.Decks![0])));
+        Assert.Equal(expected: 1, actual: reshuffled.Decks![0].Count);
     }
 
     private static WorldCellName Name(string value) => WorldCellName.Parse(candidate: value);
@@ -232,7 +232,7 @@ public sealed class WorldGeneratorEngineLawTests {
         WorldGenerator generator,
         string site,
         long cursor,
-        IReadOnlyList<long>? decks = null,
+        IReadOnlyList<ClosedBitset256>? decks = null,
         ulong worldSeed = WorldSeed,
         string instance = Instance
     ) {
@@ -253,7 +253,7 @@ public sealed class WorldGeneratorEngineLawTests {
         WorldGenerator generator,
         string site,
         long cursor,
-        IReadOnlyList<long>? decks,
+        IReadOnlyList<ClosedBitset256>? decks,
         out WorldGeneratorEngine.FireResult result,
         out string reason,
         ulong worldSeed = WorldSeed,

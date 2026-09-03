@@ -1,0 +1,277 @@
+{
+  "id": "flock-local",
+  "title": "Bounded local flock steering moves a dense population while idle is a discriminating control",
+  "binding": "128 live bodies use frozen-image steering with at most 16 inspected candidates and 8 retained neighbors per perception update. Authored cadence staggers later updates; an asynchronous console read need not observe the first tick's work counters. The read-back confirms the live follower count and profile limits, and a one-second fence observes movement. A recording started at boot must replay with MATCH. The same world with an idle source has no followers and no movement. Exact candidate-work bounds are pinned by kernel and server laws. This is headless integration evidence, not a rendering or thousand-body performance claim.",
+  "bootShape": "headless",
+  "requirements": [],
+  "seconds": 4,
+  "timeoutSeconds": 20,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/flock-local/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "replay.record",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.population",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.flock",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.flock",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.budget",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.state.hash",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "replay.stop",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "replay.verify",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "wire.errors",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "response",
+        "name": "body-0",
+        "stream": "stdout",
+        "verb": "body.where",
+        "occurrence": 1,
+        "count": 2,
+        "extract": [
+          {
+            "name": "x0",
+            "field": "pos",
+            "component": 0
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "body-1",
+        "stream": "stdout",
+        "verb": "body.where",
+        "occurrence": 2,
+        "count": 2,
+        "extract": [
+          {
+            "name": "x1",
+            "field": "pos",
+            "component": 0
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "flock-moves",
+        "operator": "notEqual",
+        "left": {
+          "value": "x0"
+        },
+        "right": {
+          "value": "x1"
+        }
+      },
+      {
+        "type": "line",
+        "name": "real-follower-count",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "last 128 follower(s),",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "authored-attention-bounds",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "candidates 16, neighbors 8, period 2521 engine ticks",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "boot-recording-replays",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[replay.verify: 'flock-local' | MATCH |",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "clean-wire",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[wire.errors: 0 rejected]",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "no-crash",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "Unhandled exception",
+        "present": false
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/flock-local/fixture.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "world.population",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.flock",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.flock",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.budget",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.state.hash",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "wire.errors",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "response",
+        "name": "body-0",
+        "stream": "stdout",
+        "verb": "body.where",
+        "occurrence": 1,
+        "count": 2,
+        "extract": [
+          {
+            "name": "x0",
+            "field": "pos",
+            "component": 0
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "body-1",
+        "stream": "stdout",
+        "verb": "body.where",
+        "occurrence": 2,
+        "count": 2,
+        "extract": [
+          {
+            "name": "x1",
+            "field": "pos",
+            "component": 0
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "idle-does-not-move",
+        "operator": "equal",
+        "left": {
+          "value": "x0"
+        },
+        "right": {
+          "value": "x1"
+        }
+      },
+      {
+        "type": "line",
+        "name": "real-follower-count",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "last 0 follower(s), 0 update(s)",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "clean-wire",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[wire.errors: 0 rejected]",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "no-crash",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "Unhandled exception",
+        "present": false
+      }
+    ]
+  }
+}

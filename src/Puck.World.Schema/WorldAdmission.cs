@@ -108,7 +108,7 @@ public sealed record WorldAdmissionVerdict {
     );
 }
 /// <summary>One row of the <c>admission</c> section — durable configuration naming one identity or issuer this world
-/// admits over its TCP socket, and what a peer verified under it is minted (see <see cref="Grants"/>). Never a live
+/// admits over its QUIC socket, and what a peer verified under it is minted (see <see cref="Grants"/>). Never a live
 /// grant row itself: <see cref="WorldAdmissionDoor"/> is the only consumer, and only at the pre-population Hello
 /// handshake, off the tick thread — this section carries no <see cref="WorldSection"/> axis and nothing mutates it
 /// live, exactly like <see cref="WorldReference"/>/<see cref="WorldPortalsSection"/>. Absent (the default) admits no

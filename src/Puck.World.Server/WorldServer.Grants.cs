@@ -218,7 +218,7 @@ public sealed partial class WorldServer {
     /// Mutate/section row outright), which is what makes an unmasked untrusted row unreachable rather than
     /// permissive.</para>
     /// <para>Every mutating ingress passes this: <see cref="TryApplyMutation"/> for the ordered domain (loopback,
-    /// console, and the <c>WorldTcpHost</c> peer door, which converge there), and the addon mutation seam's
+    /// console, and the <c>WorldPeerHost</c> peer door, which converge there), and the addon mutation seam's
     /// pre-flight (<c>WorldAddonRuntime.ResolveMutations</c>), which keeps its own earlier call site — it refuses
     /// before decode so a guest cannot probe the decoder for free — but as a call to this rule, never a second copy
     /// of it. Call-site duplication is fine; rule reimplementation is the defect class this predicate exists to

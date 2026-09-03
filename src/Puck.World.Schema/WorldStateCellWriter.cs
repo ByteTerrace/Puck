@@ -33,7 +33,7 @@ public static class WorldStateCellWriter {
         }
 
         var effectiveCapacity = Math.Clamp(
-            max: WorldStateCapacity.MaxCellsPerRow,
+            max: row.CellCeiling,
             min: 1,
             value: capacity
         );
@@ -117,7 +117,8 @@ public static class WorldStateCellWriter {
             ) {
                 next.Add(item: new WorldStateCell(
                     Key: key,
-                    Text: text
+                    Text: text,
+                    Visibility: cell.Visibility
                 ));
                 replaced = true;
             } else {

@@ -19,7 +19,7 @@ public enum PrincipalKind : byte {
     /// through a seat's input path.</summary>
     Addon,
 
-    /// <summary>A network/population body — <see cref="WorldPrincipal.Index"/> is its 0-based entity index (4..127).
+    /// <summary>A network/population body — <see cref="WorldPrincipal.Index"/> is its 0-based population index.
     /// The engagement route of a population entry rides this identity; a socket transport reuses it for remote clients.</summary>
     Peer,
 
@@ -127,7 +127,8 @@ public readonly record struct WorldPrincipal(PrincipalKind Kind, int Index, stri
         Kind: PrincipalKind.Group,
         Name: id
     );
-    /// <summary>Returns the peer principal for a 0-based entity index (4..127).</summary>
+    /// <summary>Returns the peer principal for a 0-based population index. Its authority's authored local-seat
+    /// reservation determines the first admissible peer slot; codecs check only the representation bound.</summary>
     /// <param name="index">The 0-based population entity index.</param>
     /// <param name="generation">The positive admission generation.</param>
     public static WorldPrincipal Peer(int index, int generation) => new(
@@ -239,7 +240,7 @@ public readonly record struct WorldPrincipal(PrincipalKind Kind, int Index, stri
                 provider: CultureInfo.InvariantCulture,
                 result: out var peer
             ) ||
-                !WorldBodiesLimits.IsPeerIndex(index: peer) ||
+                !WorldBodiesLimits.IsBodyIndex(index: peer) ||
                 !int.TryParse(
                 s: remainder[(separator + 1)..],
                 style: NumberStyles.Integer,

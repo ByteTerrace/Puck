@@ -27,7 +27,7 @@ or the `$parked:` reserved rule channel.
 - **Peers** (indices `4..Capacity-1`): `WorldServer.TryAdmitPeerConnection`/
   `DisconnectPeerConnection` → the ordered-domain `WorldServerEvent.PeerAdmitted`/
   `PeerDisconnected` → `ApplyServerEvent` → `WorldPopulation.ApplyPeerAdmitted`/
-  `ApplyPeerDisconnected`. `Server.WorldTcpHost`'s Hello door is the one live
+  `ApplyPeerDisconnected`. `Server.WorldPeerHost`'s Hello door is the one live
   caller, and the admission door's verified attestation identity
   (`identityDomain`/`identitySubject`) is what a reconnecting peer is matched
   against for body-resume (below).

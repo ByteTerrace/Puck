@@ -28,7 +28,7 @@ namespace Puck.World;
 /// (<see cref="Server.WorldOwnedWorlds.TryReadDurableState"/>) the boot row's own session-join already stages with —
 /// a snapshot taken once at entry; the instance then advances its own copy. <see cref="ReapIfEmpty"/> is the
 /// lifetime rule over that occupancy: a caller that just vacated an instance's last active entry reaps it through
-/// the same door <see cref="TryStop"/> already exposes by name. A live TCP peer entering a spawned instance
+/// the same door <see cref="TryStop"/> already exposes by name. A live QUIC peer entering a spawned instance
 /// (composing the existing peer-admission door with this same seating seam) remains an unbuilt stretch — see
 /// <c>WorldInstanceCommandModule</c>'s own remarks.</para>
 /// <para>The 24 lines this engine used to call directly into a desktop's client/roster/seat-router/input-router now
@@ -98,6 +98,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
     private readonly Dictionary<string, WorldInstance> m_instances = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, WorldRemoteAuthority> m_remoteAuthorities = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<(string Source, string Destination, string Endpoint), WorldRemoteAuthority> m_recoveredRemoteAuthorities = new();
     private readonly Dictionary<string, WorldAuthorityEndpoint> m_authorityEndpoints = new(comparer: StringComparer.Ordinal);
     // Socket ingress reads onward routes while the tick thread publishes a just-committed handoff. The table itself
     // must therefore be concurrent even though every mutation still comes from the host's ordinary commit path.
@@ -315,6 +316,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <summary>Disposes every instance this host owns. The boot instance's own graph belongs to the container and
     /// is untouched.</summary>
     public void Dispose() {
+        foreach (var forwarded in m_forwardedBodies.Values) { (forwarded.Authority as IDisposable)?.Dispose(); }
+        m_forwardedBodies.Clear();
         foreach (var endpoint in m_authorityEndpoints.Values) {
             endpoint.Dispose();
         }
@@ -326,9 +329,11 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         foreach (var authority in m_remoteAuthorities.Values) {
             authority.Dispose();
         }
+        foreach (var authority in m_recoveredRemoteAuthorities.Values) { authority.Dispose(); }
 
         m_instances.Clear();
         m_remoteAuthorities.Clear();
+        m_recoveredRemoteAuthorities.Clear();
         m_authorityEndpoints.Clear();
     }
     /// <summary>Closes the shared boot-input lifecycle after every host call. Raw analog samples are tick-local;
@@ -390,7 +395,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <c>world.instance.stop</c> uses, applied by rule instead of by name. A no-op — never a refusal — for the boot
     /// instance (which <see cref="TryStop"/> refuses outright), a retained instance (see <see cref="m_retainedInstances"/>
     /// — a <c>persistent</c>-lifetime transfer destination stays up through an occupancy dip to zero, by design), an
-    /// unknown name, or an instance that still holds an active entry.</summary>
+    /// unknown name, an instance that still holds an active entry, or an authority that still forwards departed
+    /// travelers. Forwarding authorities remain available until explicitly stopped.</summary>
     /// <param name="name">The instance name to reap if now empty.</param>
     /// <returns><see langword="true"/> when the instance was reaped.</returns>
     public bool ReapIfEmpty(string name) {
@@ -415,6 +421,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         ) {
             return false;
         }
+
+        if (HasForwardingFrom(instance.Server)) { return false; }
 
         return TryStop(
             name: name,
@@ -605,7 +613,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                         publishTick: instance.PublishTick,
                         server: instance.Server,
                         tape: instance.Tape,
-                        tcpHost: instance.Door
+                        peerHost: instance.Door
                     );
                 } finally {
                     WorldNarrationScope.Current = null;
@@ -1031,6 +1039,13 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         }
 
         _ = m_instances.Remove(key: name);
+        RemoveSourceForwarding(instance.Server);
+        foreach (var forwarded in m_forwardedBodies.Values) {
+            if (forwarded.Authority is WorldDeferredForwardedAuthority deferred &&
+                deferred.DescribeForCheckpoint().DestinationAuthority == instance.Server.AuthorityIdentity) {
+                deferred.Invalidate();
+            }
+        }
         if (m_authorityEndpoints.Remove(
             key: name,
             value: out var retiredEndpoint
@@ -1105,6 +1120,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         row.Server.TransferForwarder = this;
         m_instances[row.Name] = row;
         _ = EndpointFor(instance: row);
+        ResolveForwardedRecoveries();
     }
     /// <summary>Admits <paramref name="row"/> as this host's one boot row and seeds every embodied local seat's
     /// route to it — a desktop's one-time boot admission, never called by a boot-free host.</summary>
@@ -1205,13 +1221,15 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 continue;
             }
 
-            var isRemote = (pending.TargetAuthority.Remote is not null);
-            var targetAuthority = (pending.TargetAuthority.Local?.Server.AuthorityIdentity
-                ?? (pending.TargetAuthority.Remote?.Authority
-                ?? string.Empty)
-            );
+            var targetAuthority = pending.TargetAuthority?.Local?.Server.AuthorityIdentity
+                ?? pending.TargetAuthority?.Remote?.PeerAuthority ?? pending.RecoveryAuthority ?? string.Empty;
 
             inDoubt.Add(item: new WorldInDoubtTransferCheckpoint(
+                RollbackOnly: pending.RollbackOnly,
+                CommitConfirmed: pending.CommitConfirmed,
+                Continuation: CaptureTransferContinuation(pending.Transfer, pending.Landed),
+                TargetDefinitionJson: (pending.TargetAuthority?.Remote?.Definition ?? pending.RecoveryDefinition) is { } remoteDefinition
+                    ? WorldDefinitionSerialization.Serialize(remoteDefinition) : null,
                 CommitMembers: [.. pending.CommitMembers],
                 Landed: [.. pending.Landed.Select(selector: static member => new WorldLandedMemberCheckpoint(
                     AdmissionGrants: member.AdmissionGrants,
@@ -1219,6 +1237,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                     Designations: member.Designations,
                     DynamicState: member.DynamicState,
                     Mobility: member.Mobility,
+                    FollowedSeatMask: member.FollowedSeatMask,
                     Peer: member.Peer,
                     Position: member.Position,
                     SourceGrants: member.SourceGrants,
@@ -1231,26 +1250,13 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 SourceInstance: pending.Transfer.SourceInstance,
                 Spawned: pending.Spawned,
                 TargetAuthority: targetAuthority,
-                // A co-hosted target's endpoint is re-derivable from its own row on restore (EndpointFor); a remote
-                // target's endpoint is live connection state a restore cannot ask anyone for, so it is captured here
-                // and TargetName stays null — the doc contract this record has always stated.
-                TargetEndpoint: (isRemote
-                    ? pending.TargetAuthority.Remote!.Endpoint
-                    : null
-                ),
-                TargetName: (isRemote
-                    ? null
-                    : pending.TargetName
-                ),
+                TargetEndpoint: pending.TargetAuthority?.Remote?.Endpoint ?? pending.RecoveryEndpoint,
+                TargetName: pending.TargetName,
                 TransferId: pending.Transfer.TransferId
             ));
         }
 
-        // Captured as data through IWorldForwardedAuthority.DescribeForCheckpoint — never the live lease/lane.
-        // RestoreRow does not yet re-materialize a fresh arm from this data (that needs a per-world-id authority
-        // directory this lane does not build), so a departed traveler's onward route still re-resolves the ordinary
-        // way (TryFindRunningInstanceByOrigin/TryResolveObservedProjection) the next time something forwards to it —
-        // the capture no longer silently drops the row, but the restore-side gap this replaced stays open, named.
+        // Unbound destinations remain in this table as data, so admission order cannot erase a durable route.
         var forwarded = new List<WorldForwardedBodyCheckpoint>();
 
         foreach (var pair in m_forwardedBodies) {
@@ -1258,19 +1264,19 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 continue;
             }
 
-            pair.Value.Authority.DescribeForCheckpoint(
-                destinationAuthority: out var destinationAuthority,
-                mobility: out var mobility
-            );
+            var destination = pair.Value.Authority.DescribeForCheckpoint();
             forwarded.Add(item: new WorldForwardedBodyCheckpoint(
                 SourceIncarnation: pair.Key.Incarnation,
                 DestinationAddress: new WorldEntityAddress(
-                    Authority: destinationAuthority,
+                    Authority: destination.DestinationAuthority,
                     Index: pair.Value.BodyIndex,
                     Generation: 0
                 ),
                 DestinationBodyIndex: pair.Value.BodyIndex,
-                Mobility: mobility
+                Mobility: destination.Mobility,
+                SourceAuthority: destination.SourceAuthority,
+                DestinationEndpoint: destination.Endpoint,
+                DestinationDefinitionJson: destination.Definition is { } definition ? WorldDefinitionSerialization.Serialize(definition) : null
             ));
         }
 
@@ -1309,20 +1315,24 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         );
     }
     /// <summary>Restores this row's own slice of the host engine's cross-instance tables from a previously captured
-    /// checkpoint — the reciprocal of <see cref="CaptureRow"/>. A forwarded body or an in-doubt transfer whose
-    /// destination is ALREADY admitted on this host (the co-hosted case) re-materializes a live, resolvable arm from
-    /// the captured address — a fresh <see cref="WorldLocalForwardedAuthority"/> for a forwarded body,
-    /// <see cref="LocalPeerCall"/> over the admitted destination row for an in-doubt transfer — so every row this
-    /// restore admits must already be in the registry before this is called for any of them (see
-    /// <see cref="CaptureRow"/>'s own remarks: a forwarded body's mobility credential is already the post-commit
-    /// epoch, exactly what a live arm's constructor stores). A REMOTE destination's arm re-materializes lazily
-    /// instead in both cases — nothing here dials a live peer call for one; not built by this lane.</summary>
+    /// checkpoint — the reciprocal of <see cref="CaptureRow"/>. In-doubt transfers retain their destination address,
+    /// exact member pairs, and source boundary context even while the destination is unavailable. Reconciliation
+    /// binds a later-admitted local destination by authority identity, never by registry name alone. Finalized
+    /// forwarding routes retain their original source credential and remain capturable while a destination is
+    /// unavailable. Remote destinations reconnect lazily through QUIC using their captured endpoint, definition,
+    /// and expected authority identity; no network I/O is required to install this slice.</summary>
     /// <param name="row">The row to restore onto — already admitted (<see cref="Admit"/>), not yet stepped.</param>
     /// <param name="slice">The captured host-engine slice to restore.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">An in-doubt or forwarding record has mismatched ownership, duplicate
+    /// identities, invalid slots or endpoints, or inconsistent member, definition, or continuation data.
+    /// No host slice is installed.</exception>
     public void RestoreRow(WorldInstance row, WorldAuthorityHostRowCheckpoint slice) {
         ArgumentNullException.ThrowIfNull(argument: row);
         ArgumentNullException.ThrowIfNull(argument: slice);
+
+        var restoredTransfers = PrepareInDoubtTransfers(row, slice.InDoubtTransfers);
+        var restoredForwarding = PrepareForwardedBodies(row, slice.ForwardedBodies);
 
         row.ScheduleAccumulatorTicks = slice.ScheduleAccumulatorTicks;
         row.ElapsedEngineTicks = slice.ElapsedEngineTicks;
@@ -1352,143 +1362,12 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             m_seededArrivals[(row.Name, row2.Seat)] = row2.Border;
         }
 
-        foreach (var forwarded in slice.ForwardedBodies) {
-            WorldInstance? destination = null;
+        RemoveSourceForwarding(row.Server);
+        foreach (var forwarded in restoredForwarding) { m_forwardedBodies[(row.Server, forwarded.Incarnation)] = forwarded.Body; }
 
-            foreach (var candidate in m_instances.Values) {
-                if (string.Equals(
-                    a: candidate.Server.AuthorityIdentity,
-                    b: forwarded.DestinationAddress.Authority,
-                    comparisonType: StringComparison.Ordinal
-                )) {
-                    destination = candidate;
-                    break;
-                }
-            }
-
-            if (destination is null) {
-                // A remote (not co-hosted) destination: nothing here mints a live peer call for it — the traveler's
-                // onward route re-resolves the ordinary way (TryFindRunningInstanceByOrigin/
-                // TryResolveObservedProjection) the next time something forwards to it, exactly as an unresolved
-                // forwarded body already behaves today outside a restore.
-                continue;
-            }
-
-            m_forwardedBodies[(row.Server, forwarded.SourceIncarnation)] = new ForwardedBody(
-                Authority: new WorldLocalForwardedAuthority(
-                    server: destination.Server,
-                    endpoint: (destination.Server.Definition.Host.Authority ?? EndpointFor(instance: destination).Identity),
-                    sourceAuthority: $"{m_machineId:N}/{row.Name}",
-                    mobility: forwarded.Mobility
-                ),
-                BodyIndex: forwarded.DestinationBodyIndex
-            );
-        }
-
-        foreach (var pending in slice.InDoubtTransfers) {
-            WorldInstance? target = null;
-
-            foreach (var candidate in m_instances.Values) {
-                if (string.Equals(
-                    a: candidate.Server.AuthorityIdentity,
-                    b: pending.TargetAuthority,
-                    comparisonType: StringComparison.Ordinal
-                )) {
-                    target = candidate;
-                    break;
-                }
-            }
-
-            if (target is null) {
-                // A remote target (TargetEndpoint captured at capture time) has no live WorldRemoteAuthority arm
-                // this restore dials — the same gap ForwardedBodies names above, for the identical reason (no
-                // per-world-id authority directory this lane builds). A co-hosted target this host has not (yet)
-                // admitted alongside this row is the same outcome: the entry is dropped rather than retried against
-                // nothing, and ReconcileInDoubtTransfers therefore never resolves it — named, not silently wrong.
-                continue;
-            }
-
-            if (pending.CommitMembers.Count != pending.MemberCount) {
-                // A retried Commit's own member-count check releases the destination's lease as a SIDE EFFECT of
-                // refusing (WorldTransferEscrow.Commit compares against the reservation before it validates the
-                // members it was handed), so letting a malformed capture through would not merely refuse the retry —
-                // it would silently roll the whole transfer back as though the destination had lost the reservation.
-                // Refused here, before any live call, so the checkpoint itself is what is named as wrong.
-                Console.Error.WriteLine(value: $"[world.transfer: restore refused in-doubt transfer={pending.TransferId} for '{row.Name}' — commit member count {pending.CommitMembers.Count} does not match member count {pending.MemberCount}]");
-
-                continue;
-            }
-
-            var landed = new List<LandedMember>(capacity: pending.Landed.Count);
-
-            for (var ordinal = 0; (ordinal < pending.Landed.Count); ordinal++) {
-                var member = pending.Landed[ordinal];
-                // Profile is not part of the checkpointed landed-member shape — it is re-derived here from the
-                // corresponding commit member at the SAME ordinal (see WorldLandedMemberCheckpoint's own remarks).
-                var profile = ((ordinal < pending.CommitMembers.Count)
-                    ? pending.CommitMembers[ordinal].Profile
-                    : null
-                );
-
-                landed.Add(item: new LandedMember(
-                    AdmissionGrants: member.AdmissionGrants,
-                    BodyColor: member.BodyColor,
-                    Designations: [.. member.Designations],
-                    DynamicState: member.DynamicState,
-                    Mobility: member.Mobility,
-                    Peer: member.Peer,
-                    Position: member.Position,
-                    Profile: profile,
-                    SourceGrants: member.SourceGrants,
-                    // SourcePrincipal is stamped at construction but read by neither resolution path (see
-                    // WorldLandedMemberCheckpoint's own remarks) — any value restores the same observable behavior.
-                    SourcePrincipal: WorldPrincipal.Console,
-                    SourceSlot: member.SourceSlot,
-                    TargetSlot: member.TargetSlot,
-                    Yaw: member.Yaw
-                ));
-            }
-
-            m_inDoubtTransfers.Add(item: new InDoubtTransfer(
-                CommitMembers: [.. pending.CommitMembers],
-                Landed: landed,
-                MemberCount: pending.MemberCount,
-                SourceAuthority: row.Server.AuthorityIdentity,
-                SourceDeadlineTick: pending.SourceDeadlineTick,
-                Spawned: pending.Spawned,
-                TargetAuthority: LocalPeerCall(local: target),
-                TargetName: (pending.TargetName ?? target.Name),
-                // Every other PendingTransfer field only feeds resolver-driven bookkeeping
-                // (NoteResolvedTransferOutcome's tape narration, CloseAdjacencyAfterRefusal's adjacency clamp) that a
-                // console-driven world.transfer — the only shape this host ever puts in doubt today — never
-                // populates either; FrozenCohortSlots carries every landed member's own source slot so
-                // HeldCrossingSeats still recognizes this row's outstanding crossing correctly.
-                Transfer: new PendingTransfer(
-                    ActingPrincipal: WorldPrincipal.Console,
-                    AdjacencyCounterpart: null,
-                    Arrival: WorldPortalArrival.Spawn,
-                    Border: string.Empty,
-                    BorderCapacity: null,
-                    Continuum: null,
-                    Counterpart: null,
-                    Destination: TransferDestination.Existing(name: (pending.TargetName ?? pending.TargetAuthority)),
-                    FrozenCohortSlots: [.. landed.Select(selector: static member => member.SourceSlot)],
-                    FrozenGenerationId: null,
-                    FrozenScopeKey: null,
-                    FullPolicy: WorldTransferFullPolicy.Retry,
-                    HoldSeconds: 0,
-                    PartyAllOrNothing: false,
-                    ResolvedDestinationRow: null,
-                    Scope: TransferScope.Body,
-                    SourceCrossingPoint: default,
-                    SourceFrame: null,
-                    SourceInstance: row.Name,
-                    SourceSlot: ((landed.Count > 0) ? landed[0].SourceSlot : 0),
-                    TestForceJoinRefusalOrdinal: null,
-                    TransferId: pending.TransferId
-                )
-            ));
-        }
+        m_inDoubtTransfers.RemoveAll(pending => string.Equals(pending.Transfer.SourceInstance, row.Name, StringComparison.Ordinal));
+        m_inDoubtTransfers.AddRange(restoredTransfers);
+        ResolveForwardedRecoveries();
     }
 
     /// <summary><c>world.rate</c>'s read-back payload for one instance — see <see cref="TryDescribeRate"/>.</summary>

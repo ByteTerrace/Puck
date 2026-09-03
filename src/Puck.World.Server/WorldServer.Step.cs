@@ -186,6 +186,10 @@ public sealed partial class WorldServer {
         }
 
         foreach (var rule in rules) {
+            if (rule.Decision is not null) {
+                applied |= EvaluateDecisionRule(rule, tick, stepTicks);
+                continue;
+            }
             var bindings = latch.Bindings(name: rule.Name);
 
             if (rule.Interaction is { } interaction) {
@@ -474,6 +478,8 @@ public sealed partial class WorldServer {
     // DeliverDefinition, so the delivery happens here: once per tick with at least one applied effect, the same
     // once-per-step shape DrainPendingOps keeps. KEEP IN SYNC with DrainPendingOps' delivery.
     private void EvaluateWorldRules(ulong tick, ulong stepTicks) {
+        m_decisionWork = default;
+        FreezeDecisionPerception(m_rules);
         var applied = EvaluateCompiledRules(
             latch: m_ruleGateHeld,
             rules: m_rules,
@@ -504,6 +510,13 @@ public sealed partial class WorldServer {
     // outright rather than submitting). SAVE is the one exception to all of this: it submits no WorldMutation at all (see
     // ActionEffect.Save's remarks) and is handled before the mutation switch below ever runs.
     private bool FireWorldRuleEffect(CompiledWorldEffect effect, string ruleName, ulong tick, ulong stepTicks, bool preflight = false, bool strict = false) {
+        if (effect.Kind is WorldRuleEffectKind.ObserveSocial or WorldRuleEffectKind.ForgetSocial) {
+            if (!preflight) { FireSocialEffect(effect, tick); }
+            return false; // Runtime-only memory never broadcasts a public document update.
+        }
+        if (effect.Kind == WorldRuleEffectKind.TransformState) {
+            return ApplyWorldRuleMutation(effect: in effect, ruleName: ruleName, mutation: new WorldMutation.TransformState(WorldPrincipal.World, effect.Transform!), tick: tick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false, preflight: preflight);
+        }
         if (effect.Kind == WorldRuleEffectKind.Transaction) {
             return FireWorldRuleTransaction(transaction: effect, ruleName: ruleName, tick: tick, stepTicks: stepTicks);
         }
@@ -869,30 +882,11 @@ public sealed partial class WorldServer {
 
                 var right = stack[--top];
                 var left = stack[--top];
-                long result;
-
-                if (kind == CellKind.Fixed) {
-                    var a = FixedQ4816.FromRawBits(value: left);
-                    var b = FixedQ4816.FromRawBits(value: right);
-                    result = token.Operation switch {
-                        WorldExpressionOp.Add => checked(left + right),
-                        WorldExpressionOp.Subtract => checked(left - right),
-                        WorldExpressionOp.Multiply => checked(a * b).Value,
-                        WorldExpressionOp.Divide when right != 0L => checked(a / b).Value,
-                        WorldExpressionOp.Minimum => Math.Min(left, right),
-                        WorldExpressionOp.Maximum => Math.Max(left, right),
-                        _ => throw new DivideByZeroException(),
-                    };
-                } else {
-                    result = token.Operation switch {
-                        WorldExpressionOp.Add => checked(left + right),
-                        WorldExpressionOp.Subtract => checked(left - right),
-                        WorldExpressionOp.Multiply => checked(left * right),
-                        WorldExpressionOp.Divide when right != 0L => checked(left / right),
-                        WorldExpressionOp.Minimum => Math.Min(left, right),
-                        WorldExpressionOp.Maximum => Math.Max(left, right),
-                        _ => throw new DivideByZeroException(),
-                    };
+                // Data-dependent arithmetic refusal can occur thousands of times in a dense flock sample.
+                // Preserve the ordinary checked/rounded semantics without allocating an exception per neighbor.
+                if (!WorldExpressionArithmetic.TryBinary(token.Operation, kind, left, right, out var result)) {
+                    value = 0L;
+                    return false;
                 }
 
                 stack[top++] = result;
@@ -1252,6 +1246,9 @@ public sealed partial class WorldServer {
 
         m_ruleGateHeld.Prune(compiled: m_rules);
         m_interactionGateHeld.Prune(compiled: m_interactions);
+        ReconcileDecisions();
+        ReconcileSocial(definition);
+        m_population.BindFlockAffinities(definition, EvaluateFlockAffinity);
     }
     private bool RuleGateOpen(CompiledWorldPredicate[] gate, ulong tick) {
         if (gate.Length == 0) {
@@ -1281,6 +1278,12 @@ public sealed partial class WorldServer {
                 continue;
             }
 
+            if (predicate.LeftExpression is { } leftExpression) {
+                stack[top++] = TryEvaluateExpression(leftExpression, predicate.ValueKind, tick, out var leftValue) &&
+                    TryEvaluateExpression(predicate.RightExpression!, predicate.ValueKind, tick, out var rightValue) &&
+                    WorldFactHolds(predicate.Comparison, leftValue, false, rightValue, false);
+                continue;
+            }
             var value = ReadWorldFact(
                 operand: predicate.Left,
                 tick: tick
@@ -1359,6 +1362,8 @@ public sealed partial class WorldServer {
         }
     }
     private void StepCore(in FixedStepContext context) {
+        m_socialClock = context.ElapsedTicks;
+        m_social?.Advance(m_socialClock);
         // The per-tick mutation-dispatch allowance opens HERE, before either half of the tick that spends it: the
         // addon seam's pre-flight (TickAddons, immediately below) and the drain that applies what it — and every peer
         // submission buffered since the last step — enqueued.
@@ -1886,17 +1891,32 @@ public sealed partial class WorldServer {
     /// semantics, because occupancy is what makes a pool exist at all (a bot at full authority is not an oversight
     /// there). <see cref="WorldBody.NextIntent"/>'s tape-outranks-submitted ladder is itself untouched; only how the
     /// submitted tier is produced differs by occupancy.</remarks>
-    /// <param name="context">The launcher's fixed-step context for this tick.</param>
+    /// <param name="context">Explicit simulation coordinates for this tick. Hosts and ordinary replay drivers
+    /// use <see cref="Advance"/> to derive these from the authority's own checkpointed clock.</param>
     public void Step(in FixedStepContext context) {
         lock (m_authorityGate) {
             StepCore(context: in context);
+        }
+    }
+    /// <summary>Advances one step from this authority's own checkpointed clock. Hosts and replay drivers use this
+    /// entry point so restoring a timeline cannot inherit the host pacing counter's old tick or elapsed time.</summary>
+    /// <param name="stepTicks">The exact duration of this step in engine ticks.</param>
+    /// <exception cref="OverflowException">The completed tick or engine-time coordinate would overflow.</exception>
+    public void Advance(ulong stepTicks) {
+        lock (m_authorityGate) {
+            _ = checked(m_lastCompletedTick + 1UL);
+            var context = new FixedStepContext(
+                ElapsedTicks: checked(m_lastCompletedEngineTicks + stepTicks),
+                StepTicks: stepTicks,
+                Tick: m_lastCompletedTick);
+            StepCore(in context);
         }
     }
     /// <summary>Submits one envelope into the ordered domain — the single front door every non-intent submission kind
     /// drains through (see <see cref="IWorldServerHost.Submit"/>'s own remarks). Enqueues, then immediately drains
     /// the whole queue inline, so a submission applies synchronously before this call returns — exactly matching the
     /// per-kind synchronous methods it replaces. The in-process <c>LoopbackTransport</c> submits on connection 0;
-    /// <c>WorldTcpHost</c> submits each admitted socket peer under its own per-connection id.</summary>
+    /// <c>WorldPeerHost</c> submits each admitted socket peer under its own per-connection id.</summary>
     /// <param name="envelope">The envelope to submit.</param>
     /// <param name="completion">Invoked once with the envelope's typed result, or <see langword="null"/>.</param>
     public void Submit(SubmissionEnvelope envelope, Action<WorldSubmissionResult>? completion = null) =>
@@ -2006,6 +2026,7 @@ public sealed partial class WorldServer {
     private sealed class RuleLatch {
         private readonly Dictionary<string, Dictionary<LatchKey, bool>> m_byRule = new(comparer: StringComparer.Ordinal);
         private readonly HashSet<LatchKey> m_touched = [];
+        private readonly List<KeyValuePair<LatchKey, bool>> m_hashScratch = [];
 
         public int Count {
             get {
@@ -2034,10 +2055,10 @@ public sealed partial class WorldServer {
                     continue;
                 }
 
-                var ordered = bindings.ToArray();
-
-                Array.Sort(
-                    array: ordered,
+                m_hashScratch.Clear();
+                foreach (var pair in bindings) { m_hashScratch.Add(pair); }
+                var ordered = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(m_hashScratch);
+                ordered.Sort(
                     comparison: static (left, right) => {
                         var result = left.Key.Left.CompareTo(value: right.Key.Left);
 
@@ -2110,7 +2131,7 @@ public sealed partial class WorldServer {
             var live = new HashSet<string>(comparer: StringComparer.Ordinal);
 
             foreach (var rule in compiled) {
-                _ = live.Add(item: rule.Name);
+                if (rule.Decision is null) { _ = live.Add(item: rule.Name); }
             }
 
             foreach (var name in m_byRule.Keys) {

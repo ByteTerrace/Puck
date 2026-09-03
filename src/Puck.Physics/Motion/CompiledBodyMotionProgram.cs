@@ -88,6 +88,7 @@ public sealed class CompiledBodyMotionProgram {
         BodyMotionOp.ProduceWanderIntent => 1,
         BodyMotionOp.ProduceAttendIntent => 2,
         BodyMotionOp.FaceSensorTarget => 2,
+        BodyMotionOp.ProduceFlockIntent => 2,
         BodyMotionOp.ResolveYawAttitudeAndPlanarFrame or BodyMotionOp.IntegrateLocalAttitude or BodyMotionOp.ResolveDriveFrame
             or BodyMotionOp.ResolveHold => 0,
         BodyMotionOp.ComputePlanarTargetVelocity or BodyMotionOp.ComputeLocalTargetVelocity => 1,
@@ -111,7 +112,7 @@ public sealed class CompiledBodyMotionProgram {
     );
     private static BodyProgramAdmission RequiredAdmission(BodyMotionOp operation) => operation switch {
         BodyMotionOp.SenseNearestInCone => BodyProgramAdmission.Sensors,
-        BodyMotionOp.ProduceWanderIntent or BodyMotionOp.ProduceAttendIntent or BodyMotionOp.FaceSensorTarget => (BodyProgramAdmission.Sensors | BodyProgramAdmission.Channels | BodyProgramAdmission.ActionState),
+        BodyMotionOp.ProduceWanderIntent or BodyMotionOp.ProduceAttendIntent or BodyMotionOp.FaceSensorTarget or BodyMotionOp.ProduceFlockIntent => (BodyProgramAdmission.Sensors | BodyProgramAdmission.Channels | BodyProgramAdmission.ActionState),
         BodyMotionOp.ResolveYawAttitudeAndPlanarFrame or BodyMotionOp.IntegrateLocalAttitude or BodyMotionOp.ComputePlanarTargetVelocity
             or BodyMotionOp.ComputeLocalTargetVelocity or BodyMotionOp.ShapePlanarVelocity
             or BodyMotionOp.SnapYawToPlanarIntent or BodyMotionOp.ResolveDriveFrame or BodyMotionOp.ShapeDriveVelocity

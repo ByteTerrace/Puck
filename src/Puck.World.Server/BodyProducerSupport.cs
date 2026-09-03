@@ -19,7 +19,7 @@ internal readonly record struct BodySensorTarget(int Index, FixedVector3 Positio
         Position: position
     );
 }
-internal readonly record struct BodyProducerSensors(BodySensorTarget Candidate, BodySensorTarget CurrentTarget);
+internal readonly record struct BodyProducerSensors(BodySensorTarget Candidate, BodySensorTarget CurrentTarget, FixedVector3 FlockDesired = default);
 internal struct BodyProducerState {
     public int AcquiredTarget;
     public FixedQ4816 ActivityPhase;
@@ -42,4 +42,14 @@ internal struct BodyProducerState {
     // The navigation domain the active producer resolves through, or -1. Kept beside the curve index so a live
     // same-name producer retune invalidates its cached route before the next sensor read.
     public int ActiveProducerNavigationDomainIndex;
+    public bool FlockSeeded;
+    public int FlockGeneration;
+    // Cached, UNCLAMPED neighbor contribution (magnitude <= 3). Goal/heading/frame are blended afresh each step.
+    public FixedVector3 FlockDesired;
+    public ulong FlockRemainingTicks;
+    public ulong FlockSampleOrdinal;
+    // Last actually perceived target, not a live read of the target body's current pose.
+    public WorldFlockObservation? FlockTarget;
+    // Derived binding, restored from the checkpoint's kit/producer names. Not independent simulation state.
+    public CompiledBodyProducer? FlockBinding;
 }

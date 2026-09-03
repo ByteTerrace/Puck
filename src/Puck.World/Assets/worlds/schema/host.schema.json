@@ -65,14 +65,14 @@
       ]
     },
     "listen": {
-      "description": "The TCP listen endpoint (host:port) the authoritative host binds for remote peer admission, or null to stay loopback-only (no socket ever opens). Durable configuration per the unification contract \u2014 the --listen CLI flag reflects it for a single run without editing the document. Shape-only validation (null or a non-whitespace host:port pair); Server.WorldTcpHost is what actually parses and binds it.",
+      "description": "The QUIC listen endpoint (host:port) the authoritative host binds for remote peer admission, or null to stay loopback-only (no socket ever opens). Durable configuration per the unification contract \u2014 the --listen CLI flag reflects it for a single run without editing the document. Shape-only validation (null or a non-whitespace host:port pair); Server.WorldPeerHost is what actually parses and binds it.",
       "type": [
         "string",
         "null"
       ]
     },
     "authority": {
-      "description": "The TCP endpoint at which this world\u0027s authority is reached when another world resolves it as a destination, or null when the authority is colocated with the resolver. Colocation short-circuits the authority transport; it does not select a separate transfer path.",
+      "description": "The QUIC endpoint at which this world\u0027s authority is reached when another world resolves it as a destination, or null when the authority is colocated with the resolver. Colocation short-circuits the authority transport; it does not select a separate transfer path.",
       "type": [
         "string",
         "null"

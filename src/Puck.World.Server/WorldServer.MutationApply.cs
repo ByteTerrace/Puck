@@ -486,6 +486,11 @@ public sealed partial class WorldServer {
             return false;
         }
 
+        if (!CanInstallSocial(candidate, out var socialReason)) {
+            RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: socialReason, verb: verb);
+            return false;
+        }
+
         if (ExceedsBootDerivedFaceReservation(
             candidate: candidate,
             reason: out var reservationReason
@@ -984,19 +989,11 @@ public sealed partial class WorldServer {
     private bool TryApplyMutation(WorldMutation mutation, ulong tick, int connectionId, long correlationId, bool preMetered) {
         // THE ONE ADMISSION PREDICATE decides the whole authority question — section hold, the Mutate/section kind
         // mask, the row-scoped Edit hold and ITS mask, and the untrusted per-tick dispatch budget. Every ordered-domain
-        // ingress converges here (loopback, console, and the TCP peer door alike), so this call is what gives the peer
+        // ingress converges here (loopback, console, and the QUIC peer door alike), so this call is what gives the peer
         // door exactly the masks and metering the addon seam has, from the same code rather than from a second reading
         // of the same rules. `preMetered` says only whether THIS ingress already charged the dispatch (the addon seam
         // meters at its own pre-flight, before decode, deliberately); it never changes which rules run.
-        if (!TryAdmitMutation(
-            principal: mutation.Principal,
-            section: SectionOf(mutation: mutation),
-            kindOrdinal: WorldMutationKindCatalog.OrdinalOf(mutation: mutation),
-            rowScopedEditSubject: RowScopedEditSubjectOf(mutation: mutation),
-            rowScopedMutateSubject: RowScopedMutateSubjectOf(mutation: mutation),
-            meter: !preMetered,
-            admission: out var admission
-        )) {
+        if (!TryAdmitCompleteMutation(mutation, preMetered, out var admission)) {
             var denial = admission.Describe();
 
             Console.Error.WriteLine(value: $"[world.grant denied: {mutation.Principal.Describe()} {denial} — {Describe(mutation: mutation)} dropped]");
@@ -1085,6 +1082,11 @@ public sealed partial class WorldServer {
                 reason: validationReason
             );
 
+            return false;
+        }
+
+        if (!CanInstallSocial(candidate, out var socialReason)) {
+            Reject(connectionId: connectionId, correlationId: correlationId, mutation: mutation, reason: socialReason);
             return false;
         }
 

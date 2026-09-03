@@ -7,9 +7,11 @@ namespace Puck.World;
 /// <summary>One kit's named arguments for an authored producer program.</summary>
 /// <param name="Scalars">Fixed-point scalar arguments keyed by instruction-defined name.</param>
 /// <param name="Channels">Authored channel arguments keyed by instruction-defined name.</param>
+/// <param name="Flock">Bounded perception and steering arguments for ProduceFlockIntent, absent otherwise.</param>
 public sealed record BodyProgramParameters(
     IReadOnlyDictionary<string, float> Scalars,
-    IReadOnlyDictionary<string, string> Channels
+    IReadOnlyDictionary<string, string> Channels,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFlockProfile? Flock = null
 );
 /// <summary>One authored per-body target register and the envelope a designation into it must satisfy.</summary>
 /// <param name="Name">The game-authored register name.</param>
@@ -209,7 +211,8 @@ public static class WorldTargetSelection {
         foreach (var rule in rules) {
             if (
                 (rule is not null) &&
-                (PredicateReferencesLineOfSight(predicate: rule.Gate) || rule.Effects.Any(predicate: EffectReferencesLineOfSight))
+                (PredicateReferencesLineOfSight(predicate: rule.Gate) || rule.Effects.Any(predicate: EffectReferencesLineOfSight) ||
+                 rule.Decision?.Options.Any(static option => option.Neighbors?.RequiresLineOfSight == true) == true)
             ) {
                 return true;
             }
@@ -229,6 +232,7 @@ public static class WorldTargetSelection {
     public static bool RequiresLineOfSight(WorldDefinition definition) =>
         (definition.TargetRegisters.Any(predicate: register => register.RequiresLineOfSight)
         || definition.Navigation.Rows.Count != 0
+        || definition.Kits.Any(kit => kit.Producers.Values.Any(parameters => parameters?.Flock?.RequiresLineOfSight == true))
         || definition.BodyMotionPrograms.Any(predicate: program => (program.Target is BodyTargetSource.Sensed { RequiresLineOfSight: true }))
         || RulesReferenceLineOfSight(rules: definition.Rules));
 }

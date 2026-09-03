@@ -36,23 +36,24 @@ choice `--backend directx|vulkan` (Direct3D 12 is the Windows default),
 because changing APIs rebuilds the whole render host.
 
 **Networking.** `--listen <ip:port>` (or the document's `host.listen`) binds
-the P7 socket door (`Server/WorldTcpHost`) so a remote peer can join the same
+the QUIC peer endpoint (`WorldPeerHost`) so a remote peer can join the same
 ordered domain a local script drives; `--connect <ip:port>` keeps the normal
 world/presentation composition while its local seats are authorized and driven
-by that remote authority. Listening and connecting remain separate boot modes.
-Both are zero by default (no socket ever opens). A connection
-crosses TWO doors before either side sees a submission: `WorldHelloDoor`
-(protocol-version compatibility) and, once that passes, `WorldAdmissionDoor`
+by that remote authority. Listening and connecting may coexist on the shared
+`Puck.Networking.Peers.Peer`; neither is enabled by default. The networking
+library owns TLS, certificate-bound identity, and bounded message delivery;
+there is no TCP fallback. `PeerStream` adapts those messages to World's byte
+codecs. After that peer handshake, an interactive connection crosses two
+application checks: `WorldHelloDoor` (the version-1 protocol contract) and
+`WorldAdmissionDoor`
 (`Puck.World.Schema`'s `WorldAdmissionDoor.cs`) — a challenge-response
 identity check over `Puck.Attestation`'s signed attestations against the
 world document's own `admission` section. A world authoring no `admission`
 entries admits no remote peer at all, and no traveller from another authority
 either (deny by default — a transfer's own arrival verdict comes from the same
 section, through a keyless `federatedAuthority` row naming the source authority
-namespace or `*`); `--connect-identity-dir <dir>`
-supplies the connecting client's own identity, and omitting it signs with a
-freshly minted, unregistered key so the door's refusal path is exercisable
-without a pre-arranged identity. `world.peers` echoes each connection's
+namespace or `*`). Transport identity alone grants no World permissions.
+`world.peers` echoes each connection's
 verified identity and mapped principal and disclosure tier, plus an `arrivals:`
 group naming each transferred body and the authority its verdict was decided
 against; `world.admission` echoes the document's own authored entries and each
@@ -450,9 +451,11 @@ probe socket, a HUD `Frame` element) names a **seat**, never a device: `{
 enclosing seat scope (an identity's own HUD panel, a seat-scoped probe socket)
 or seat 1 at world scope. `WorldScreenBinder` resolves `(seat, sensor)` to a
 live feed every frame (`roster.TryGetSeatDevice` → the device → its sensor's
-feed), enumerating attached devices (and retiring vanished ones) roughly every
-two seconds; a seat with no camera, or whose camera lacks the requested
-sensor, reports that fault through `screen.state`/`screen.camera` rather than
+feed). Physical-device discovery runs on a worker with at most one scan in
+flight; the renderer adopts completed snapshots and retires vanished devices
+without waiting for discovery. Another scan becomes due two seconds after the
+previous result was consumed. A seat with no camera, or whose camera lacks the
+requested sensor, reports that fault through `screen.state`/`screen.camera` rather than
 refusing the bind — reassigning a camera moves every consumer to the new
 device with no reopen, on the next produced frame. A scan that fails (the
 platform enumeration call throws) is never read as "every camera unplugged" —
@@ -830,9 +833,10 @@ distance with its reach multiplier, horizon-ray step tax, and far-plane fog
 remnant, the field lattice program's node/cadence counts and exact
 full-cell/body-slot pass costs, and the state row count —
 how an authored choice's price becomes legible instead of a silent frame tax.
-Navigation adds its compiled cell count, fixed A* workspace bytes, summed
-per-search expansion caps, live follower count, and last-search expansions to
-that sheet, plus the simultaneous-replan ceiling across current followers.
+Navigation adds its compiled cell count, fixed A*/shared-tree workspace bytes,
+authored search caps, live follower count, and this tick's expansions to that
+sheet, plus the simultaneous-replan ceiling across current followers. Shared
+domains contribute their aggregate per-tick budget once, not once per follower.
 `world.navigation` lists each surface/volume/medium domain and
 `body.targets <body>` includes the selected route's status and waypoint. Both
 `world.navigation` and `world.budget` are server-safe under `--headless`;
@@ -935,3 +939,18 @@ out of the build on 2026-08-02 with the rest of `experimental/`; nothing has
 taken over its coverage, and its subcommand inventory lives in git history,
 not here. Do not cite it or re-derive a gate from it — the current
 verification story is the paragraph above.
+
+The [discrete state contract](../Puck.World.Schema/README.md#discrete-boards-cards-and-turns)
+covers tabletop/card rules and turn-based tactics. `world.state.transform`
+submits a closed atomic operation; `world.state.act <phase-row> <sequence>`
+adds its phase guard. `world.topologies` reads topology declarations,
+`world.state` reads authority state, and `world.state.observe` requests the
+calling principal's explicitly disclosed literal observations. The headless
+[tabletop fixture](../../tests/Puck.World.Canaries/tabletop-state/fixture.world.json)
+includes legal/blocked moves, ray flips, ordered card transfer, and replay.
+
+[Decision policies](../Puck.World.Schema/README.md#decision-policies) let a world
+rule select eligible actions by highest score or weighted chance, with authored
+reconsideration, commitment, and interrupts. Inspect them with `world.decisions`;
+`world.rules` identifies policy-bearing rules and `world.budget` includes their
+worst-case work. The Schema reference includes a complete rule example.

@@ -11,7 +11,19 @@ frame/wire grammar its codecs frame payloads through). The runtime that
 consumes these shapes is [`Puck.World.Server`](../Puck.World.Server/README.md);
 the process that composes both is [`Puck.World`](../Puck.World/README.md).
 
+`WorldEntityAddress` lives in Schema while retaining the `Puck.World.Protocol`
+namespace: authored social references and wire messages share its original
+authority/index/generation identity. Moving an individual does not turn its
+current destination slot into a new social identity.
+
 ## The dependency firewall
+
+Authority persistence uses the explicitly named `TryEncodeCommittedMutation` /
+`TryDecodeCommittedMutation` entry points on `WorldSubmissionCodec`. They preserve
+world-authored journal entries while keeping nested principal checks. They are
+not submission decoders: the ordinary mutation and envelope paths continue to
+refuse callers claiming to be the world, including bytes produced by the
+committed encoder. See [server persistence](../Puck.World.Server/README.md).
 
 `Puck.World.Protocol` references `Puck.Abstractions`, `Puck.Commands`,
 `Puck.Maths`, `Puck.Networking`, and `Puck.World.Schema`

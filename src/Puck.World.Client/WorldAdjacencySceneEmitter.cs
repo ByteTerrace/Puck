@@ -79,7 +79,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     // EmitStatic consumes it synchronously and never retains the reference.
     private readonly WorldPlacement[] m_mappedPlacements = new WorldPlacement[MaxInstancesPerBand];
     // WriteRevision's own scratch: the rebuild watch must not disturb the emitted latch it is comparing against.
-    private readonly bool[] m_polledEntities = new bool[WorldRigCatalog.Capacity];
+    private readonly bool[] m_polledEntities = new bool[WorldBodiesLimits.CapacityCeiling];
     // WriteRevision's own scratch for the reachability poll's "still present this call" set, cleared and refilled
     // every call rather than reallocated.
     private readonly HashSet<string> m_observedAdjacencies = new(comparer: StringComparer.Ordinal);
@@ -117,7 +117,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
         m_source = source;
         m_suppressEntity = suppressEntity;
         m_bandCount = WorldAdjacencyBands.ProjectionCapacity(definition: client.Definition);
-        m_gaitPhases = new float[(m_bandCount * WorldRigCatalog.Capacity)];
+        m_gaitPhases = new float[(m_bandCount * WorldBodiesLimits.CapacityCeiling)];
         m_previousRenderPositions = new Vector3[m_gaitPhases.Length];
         m_motionAddresses = new WorldEntityAddress[m_gaitPhases.Length];
         m_motionSeeded = new bool[m_gaitPhases.Length];
@@ -155,8 +155,8 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
         );
 
         for (var band = 0; (band < bandCount); band++) {
-            var bodyMaterials = new int[WorldRigCatalog.Capacity];
-            var accentMaterials = new int[WorldRigCatalog.Capacity];
+            var bodyMaterials = new int[WorldBodiesLimits.CapacityCeiling];
+            var accentMaterials = new int[WorldBodiesLimits.CapacityCeiling];
 
             // The palette a live band adds — one body plus one accent per rendered body. Reserved because AddMaterial
             // never dedupes, so an unreserved live palette would spend program words nothing measured.
@@ -296,7 +296,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     }
 
     // Selects and emits the delivered bodies this band actually renders. Two bounds, both load-bearing:
-    //   - the neighbour's OWN delivered table width, never the renderer's 128-rig catalog width (the bound contact
+    //   - the neighbour's OWN delivered table width, never the engine-wide body ceiling (the bound contact
     //     resolution and PackDynamicTransforms already walk);
     //   - the band itself, then MaxEntitiesPerBand in delivered-slot order, exactly as WorldAdjacencyGeometry.Select
     //     bounds the static half. A body outside the band is standing on terrain this border does not render, and at a
@@ -304,13 +304,13 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     //     at two places at once.
     private void EmitEntities(SdfProgramBuilder builder, WorldAdjacencyProjection projection, int bandIndex, int slotBase) {
         var neighbour = projection.Neighbour;
-        var bodyMaterials = new int[WorldRigCatalog.Capacity];
-        var accentMaterials = new int[WorldRigCatalog.Capacity];
+        var bodyMaterials = new int[WorldBodiesLimits.CapacityCeiling];
+        var accentMaterials = new int[WorldBodiesLimits.CapacityCeiling];
         var noseFactor = neighbour.Definition.PlayerDefaults.NoseFactor;
-        var appearanceBase = (bandIndex * WorldRigCatalog.Capacity);
+        var appearanceBase = (bandIndex * WorldBodiesLimits.CapacityCeiling);
         var truncated = SelectBand(
             destination: m_emittedEntities.AsSpan(
-                length: WorldRigCatalog.Capacity,
+                length: WorldBodiesLimits.CapacityCeiling,
                 start: appearanceBase
             ),
             projection: projection
@@ -323,7 +323,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             Console.Error.WriteLine(value: $"[world.adjacency: '{projection.Name}' neighbour bodies truncated for rendering at {MaxEntitiesPerBand} bodies]");
         }
 
-        for (var index = 0; (index < WorldRigCatalog.Capacity); index++) {
+        for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
             var appearanceIndex = (appearanceBase + index);
 
             if (!m_emittedEntities[appearanceIndex]) {
@@ -497,11 +497,11 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
 
             var bound = Math.Min(
                 val1: neighbour.EntityCapacity,
-                val2: WorldRigCatalog.Capacity
+                val2: WorldBodiesLimits.CapacityCeiling
             );
 
             for (var entity = 0; (entity < bound); entity++) {
-                var motionIndex = ((bandIndex * WorldRigCatalog.Capacity) + entity);
+                var motionIndex = ((bandIndex * WorldBodiesLimits.CapacityCeiling) + entity);
 
                 // The emitted latch, not a fresh liveness read: the program's geometry was compiled for exactly this
                 // set, and re-deriving the set here would pack a body whose leaves this program never emitted.
@@ -602,7 +602,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
 
         for (var bandIndex = 0; (bandIndex < bandLimit); bandIndex++) {
             var projection = visuals[bandIndex];
-            var appearanceBase = (bandIndex * WorldRigCatalog.Capacity);
+            var appearanceBase = (bandIndex * WorldBodiesLimits.CapacityCeiling);
             var polled = m_polledEntities.AsSpan();
 
             _ = SelectBand(
@@ -611,7 +611,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             );
 
             if (!polled.SequenceEqual(other: m_emittedEntities.AsSpan(
-                length: WorldRigCatalog.Capacity,
+                length: WorldBodiesLimits.CapacityCeiling,
                 start: appearanceBase
             ))) {
                 m_selectionRevision++;

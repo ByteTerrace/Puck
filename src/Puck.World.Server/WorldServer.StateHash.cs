@@ -6,6 +6,9 @@ public sealed partial class WorldServer {
     // Hashes the runtime-only state feature lanes that are not represented in Definition.State. The owning server
     // supplies this seam because the edge latches intentionally remain private implementation details.
     internal void AppendStateFeatureHash(ref Fnv1aHash hash) {
+        AppendDecisionHash(ref hash);
+        hash.Add((byte)(m_social is null ? 0 : 1));
+        if (m_social is { } social) { hash.Add(social.StateHash); hash.Add((long)m_lastSocialResult); }
         m_ruleGateHeld.AppendStateHash(
             compiled: m_rules,
             hash: ref hash
@@ -27,6 +30,7 @@ public sealed partial class WorldServer {
             }
         }
         m_population.AppendNavigationStateHash(hash: ref hash);
+        m_population.AppendFlockStateHash(hash: ref hash);
 
     }
 }

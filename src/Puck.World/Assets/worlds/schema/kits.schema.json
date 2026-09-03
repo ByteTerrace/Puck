@@ -224,6 +224,110 @@
                       "null"
                     ]
                   }
+                },
+                "flock": {
+                  "description": "Bounded perception and steering arguments for ProduceFlockIntent, absent otherwise.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "range": {
+                      "description": "Inclusive sensing radius, in world units.",
+                      "type": "number"
+                    },
+                    "separationRadius": {
+                      "description": "Personal-space radius, no greater than Range.",
+                      "type": "number"
+                    },
+                    "candidateBudget": {
+                      "description": "Maximum inspected candidates, including rejected ones, per sensing update. A sensed target and local neighbors share this one sample, using the larger of their ranges.",
+                      "type": "integer"
+                    },
+                    "maxNeighbors": {
+                      "description": "Maximum nearest sampled neighbors retained, no greater than CandidateBudget.",
+                      "type": "integer"
+                    },
+                    "updateSeconds": {
+                      "description": "Neighbor and sensed-target refresh interval; zero means every simulation step. Sensed targets hold their last observed position between samples. Designations, route goals, and heading blend every step.",
+                      "type": "number"
+                    },
+                    "space": {
+                      "description": "Tangent-plane or three-dimensional motion.",
+                      "enum": [
+                        "Tangent",
+                        "Volume"
+                      ]
+                    },
+                    "separation": {
+                      "description": "Local repulsion weight in [0,1].",
+                      "type": "number"
+                    },
+                    "alignment": {
+                      "description": "Neighbor mean-heading weight in [0,1].",
+                      "type": "number"
+                    },
+                    "cohesion": {
+                      "description": "Neighbor centroid-attraction weight in [0,1].",
+                      "type": "number"
+                    },
+                    "goal": {
+                      "description": "Selected target or route waypoint weight in [0,1].",
+                      "type": "number"
+                    },
+                    "inertia": {
+                      "description": "Current heading persistence weight in [0,1].",
+                      "type": "number"
+                    },
+                    "arrivalDistance": {
+                      "description": "Distance inside which the goal term becomes zero.",
+                      "type": "number"
+                    },
+                    "halfAngleDegrees": {
+                      "description": "Forward sensing half-angle in (0,180]. Coincident neighbors remain perceptible.",
+                      "type": "number"
+                    },
+                    "requiresLineOfSight": {
+                      "description": "Whether every sampled neighbor must pass a deterministic solid-field sight test.",
+                      "type": "boolean"
+                    },
+                    "movementDomain": {
+                      "description": "Optional volume/medium navigation domain constraining the body\u0027s integrated locomotion while this producer runs. Its agentRadius must enclose the kit\u0027s collider about the body root. Invalid steps stop, without teleporting or finding an escape route. Later external impulses, contacts, and authority teleports remain separate.",
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "cohesionAffinity": {
+                      "$ref": "./common.schema.json#/$defs/WorldValueExpressionNullable",
+                      "description": "Optional Fixed expression weighting each retained neighbor in the centroid. Left is the observer, right the neighbor. State-backed and social facts only; sampled at UpdateSeconds, clamped to [0,1], arithmetic failure reads zero, absent reads one. This does not filter separation or increase the candidate budget.",
+                      "default": null
+                    },
+                    "alignmentAffinity": {
+                      "$ref": "./common.schema.json#/$defs/WorldValueExpressionNullable",
+                      "description": "Independent Fixed expression weighting each retained neighbor\u0027s heading, under the same contract as CohesionAffinity. Affinities select relative influence; the outer Alignment and Cohesion weights set term strength.",
+                      "default": null
+                    }
+                  },
+                  "required": [
+                    "range",
+                    "separationRadius",
+                    "candidateBudget",
+                    "maxNeighbors",
+                    "updateSeconds",
+                    "space",
+                    "separation",
+                    "alignment",
+                    "cohesion",
+                    "goal",
+                    "inertia",
+                    "arrivalDistance",
+                    "halfAngleDegrees",
+                    "requiresLineOfSight"
+                  ],
+                  "additionalProperties": false,
+                  "default": null
                 }
               },
               "required": [

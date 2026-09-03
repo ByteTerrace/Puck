@@ -41,9 +41,7 @@ namespace Puck.World.Client;
 /// its active flag's release write; readers acquire that flag before consuming the copied pose fields.</para>
 /// </remarks>
 public sealed class WorldSessionMirror : IClientSink {
-    // The bounded per-entity table width. WorldRigCatalog.Capacity (Puck.World, unreachable from here) and
-    // WorldClient.EntityCapacity are both 128 today but neither is reachable from this project; WorldBodiesLimits
-    // .CapacityCeiling is the schema-level source both trace to.
+    // The bounded entity table uses the same schema ceiling as the client. Appearance-catalog size is unrelated.
     private const int EntityCapacity = WorldBodiesLimits.CapacityCeiling;
 
     private WorldDefinition m_definition;

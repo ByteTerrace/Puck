@@ -22,6 +22,13 @@ plus the pieces that need no OS-specific code at all.
   which one opened. A successful pixel open has already published a usable host
   frame from every stream; a successful shared open has validated native GPU
   input before the consumer attaches its target textures.
+- **Camera discovery polling** — `CameraDeviceScanner` runs at most one
+  enumeration on a worker thread and hands completed snapshots back to its
+  caller without waiting. The cadence starts after completion; a slow or stuck
+  driver cannot queue more scans. Failures stay distinct from an empty device
+  list. Disposal ignores a late result without blocking, so the platform service
+  must outlive its outstanding scan. Polling and device-table reconciliation
+  belong to one caller thread; the worker never mutates a roster or live feed.
 - **`Puck.Memory`** — the unmanaged allocator (mimalloc-backed, with a
   tracking wrapper and a plain native fallback), registered via
   `AddPuckAllocator`.

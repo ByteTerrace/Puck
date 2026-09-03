@@ -183,6 +183,29 @@ public sealed partial class WorldInstanceHost {
             return;
         }
 
+        // Resolve once, then split BEFORE reserving anything. A parent cohort lease would consume the very
+        // slots its children need and incorrectly require capacity for the whole non-atomic party.
+        if (!transfer.PartyAllOrNothing && members.Length > 1) {
+            var splitDestination = targetAuthority.Remote is { } remote
+                ? TransferDestination.Remote(name: targetName, documentPath: transfer.Destination.DocumentPath!, authority: remote.Endpoint)
+                : TransferDestination.Existing(name: targetName);
+            for (var ordinal = 0; ordinal < members.Length; ordinal++) {
+                var member = members[ordinal];
+                ApplyTransfer(transfer: transfer with {
+                    TransferId = MintUnappliedTransferId(sourceInstance: transfer.SourceInstance),
+                    Scope = TransferScope.Body,
+                    SourceSlot = member,
+                    Destination = splitDestination,
+                    FrozenCohortSlots = [member],
+                    PartyAllOrNothing = true,
+                    TestForceJoinRefusalOrdinal = transfer.TestForceJoinRefusalOrdinal == ordinal ? 0 : null,
+                    ScopeProofAlreadyVerified = true,
+                });
+            }
+            if (spawned) { ReapIfEmpty(name: targetName); }
+            return;
+        }
+
         // Reserve through the destination authority's escrow even when both authorities happen to be colocated.
         // Loopback is only a transport optimization beneath this contract; it is not a second transfer path.
         var sourceTick = (source.Server.NextInputTick - 1UL);
@@ -210,6 +233,9 @@ public sealed partial class WorldInstanceHost {
             val2: checked((((holdEngineTicks + sourceStepTicks) - 1UL) / sourceStepTicks))
         );
         var reservationMembers = new WorldTransferReservationMember[members.Length];
+        // Use the source row's authenticated namespace, not a locally invented composite label.
+        var sourceAuthority = source.Server.AuthorityIdentity;
+        using var sourceSocial = new SourceSocialHold(source.Server, new(sourceAuthority, transfer.TransferId), members.Length);
 
         for (var reservationIndex = 0; (reservationIndex < members.Length); reservationIndex++) {
             var sourceSlot = members[reservationIndex];
@@ -223,6 +249,14 @@ public sealed partial class WorldInstanceHost {
                 return (Identity: body?.Profile, Source: (body?.Source ?? IntentSource.Idle), BodyColor: source.Server.Population.BodyColor(index: sourceSlot), CatalogRig: source.Server.Population.CatalogRig(index: sourceSlot), Mobility: mobility);
             });
 
+            if (!sourceSocial.TryCapture(traveler.Mobility, out var social, out var socialReason)) {
+                Console.Error.WriteLine($"[world.transfer: transfer={transfer.TransferId} refused ({socialReason}) — every source member remains attached]");
+                if (spawned) { ReapIfEmpty(name: targetName); }
+                NoteResolvedTransferOutcome(in transfer, transfer.SourceInstance, targetName, $"refused-social:{socialReason}");
+                CloseAdjacencyAfterRefusal(reason: socialReason, transfer: in transfer);
+                return;
+            }
+
             reservationMembers[reservationIndex] = new WorldTransferReservationMember(
                 Principal: MemberTravelPrincipal(
                     server: source.Server,
@@ -234,14 +268,14 @@ public sealed partial class WorldInstanceHost {
                 Source: traveler.Source,
                 BodyColor: traveler.BodyColor,
                 CatalogRig: traveler.CatalogRig,
-                Mobility: traveler.Mobility
+                Mobility: traveler.Mobility,
+                Social: social
             );
         }
 
         // The wire-facing federation identity is the SOURCE ROW's own authenticated namespace — the value
         // WorldAttestedAuthenticator proves and the receiving door's SourceAuthorityMismatch check compares every
         // subsequent frame against — never a locally-invented composite label the far side never verified.
-        var sourceAuthority = source.Server.AuthorityIdentity;
         var reservationRequest = new WorldTransferReservationRequest(
             TransferId: transfer.TransferId,
             SourceAuthority: sourceAuthority,
@@ -331,44 +365,6 @@ public sealed partial class WorldInstanceHost {
                 reason: malformedReason,
                 transfer: in transfer
             );
-            return;
-        }
-
-        // Resolve ONCE for the party before splitting: a Fresh target is one shared instance, and a resolver-driven
-        // party keeps the one generation its frozen proof named. Each member then receives an independent transfer
-        // identity, lease, reserve/commit verdict and rollback boundary against that already-resolved target. A full
-        // destination may land an earlier member and refuse a later one — the authored distinction from atomic.
-        if (
-            !transfer.PartyAllOrNothing &&
-            (members.Length > 1)
-        ) {
-            var splitDestination = ((targetAuthority.Remote is { } remote)
-                ? TransferDestination.Remote(
-                    name: targetName,
-                    documentPath: transfer.Destination.DocumentPath!,
-                    authority: remote.Endpoint
-                )
-                : TransferDestination.Existing(name: targetName)
-            );
-
-            for (var ordinal = 0; (ordinal < members.Length); ordinal++) {
-                var member = members[ordinal];
-
-                ApplyTransfer(transfer: transfer with {
-                    TransferId = MintUnappliedTransferId(sourceInstance: transfer.SourceInstance),
-                    Scope = TransferScope.Body,
-                    SourceSlot = member,
-                    Destination = splitDestination,
-                    FrozenCohortSlots = [member],
-                    PartyAllOrNothing = true,
-                    TestForceJoinRefusalOrdinal = ((transfer.TestForceJoinRefusalOrdinal == ordinal)
-                    ? 0
-                    : null),
-                    ScopeProofAlreadyVerified = true,
-                });
-            }
-
-            if (spawned) { ReapIfEmpty(name: targetName); }
             return;
         }
 
@@ -517,7 +513,8 @@ public sealed partial class WorldInstanceHost {
                 AdmissionGrants: admissionGrants,
                 SourceGrants: sourceGrants,
                 SourcePrincipal: memberPrincipal,
-                Mobility: reservationMembers[index].Mobility!.Value
+                Mobility: reservationMembers[index].Mobility!.Value,
+                FollowedSeatMask: CaptureFollowedSeats(transfer.SourceInstance, sourceSlot)
             ));
             var actionContinuity = source.Server.Population.NameTransferActionContinuity(
                 slot: sourceSlot,
@@ -615,7 +612,7 @@ public sealed partial class WorldInstanceHost {
                 // lease, or restore the source after a confirmed missing/expired reservation. Never infer from a
                 // still-in-flight or failed transport whether the destination applied the commit.
                 m_inDoubtTransfers.Add(item: new InDoubtTransfer(
-                    Transfer: transfer,
+                    Transfer: transfer with { FrozenCohortSlots = [.. members] },
                     TargetAuthority: targetAuthority,
                     SourceAuthority: sourceAuthority,
                     TargetName: targetName,
@@ -625,6 +622,7 @@ public sealed partial class WorldInstanceHost {
                     CommitMembers: commitMembers,
                     MemberCount: members.Length
                 ));
+                sourceSocial.KeepForResolution(landed);
                 Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} IN-DOUBT ('{targetName}' commit acknowledgement was lost: {commitReason}) — recovery state retained for status reconciliation]");
                 return;
             }
@@ -635,18 +633,20 @@ public sealed partial class WorldInstanceHost {
         }
 
         if (abortReason is not null) {
-            if (landed.Count > 0) {
+            try {
                 targetAuthority.Abort(
                     sourceAuthority: sourceAuthority,
                     transferId: transfer.TransferId
                 );
+            } catch (Exception exception) when (exception is IOException or System.Net.Sockets.SocketException or OperationCanceledException) {
+                // No ambiguous commit reaches this arm. A failed abort leaves only the expiring destination lease.
             }
-
-            foreach (var member in landed) {
-                RestoreDetachedMember(
-                    member: member,
-                    source: source
-                );
+            if (!RestoreDetachedMembers(source, new(sourceAuthority, transfer.TransferId), landed, commitMembers)) {
+                m_inDoubtTransfers.Add(new(transfer with { FrozenCohortSlots = [.. members] }, targetAuthority, sourceAuthority, targetName, spawned,
+                    reservationRequest.DeadlineSourceTick, landed, commitMembers, members.Length, RollbackOnly: true));
+                sourceSocial.KeepForResolution(landed);
+                Console.Error.WriteLine($"[world.transfer: transfer={transfer.TransferId} ROLLBACK-PENDING ({abortReason}) — {landed.Count} source member(s) retain recovery state]");
+                return;
             }
 
             Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} ABORTED ({abortReason}) — every landed member returned to '{transfer.SourceInstance}' at its exact source pose]");
@@ -672,14 +672,15 @@ public sealed partial class WorldInstanceHost {
             return;
         }
 
-        FinalizeCommittedTransfer(
-            transfer: in transfer,
-            targetAuthority: targetAuthority,
-            targetName: targetName,
-            spawned: spawned,
-            landed: landed,
-            memberCount: members.Length
-        );
+        var confirmed = new InDoubtTransfer(transfer with { FrozenCohortSlots = [.. members] }, targetAuthority,
+            sourceAuthority, targetName, spawned, reservationRequest.DeadlineSourceTick, landed, commitMembers,
+            members.Length, CommitConfirmed: true);
+        m_inDoubtTransfers.Add(confirmed);
+        sourceSocial.KeepForResolution(landed);
+        if (TryPublishCommittedTransfer(confirmed)) {
+            m_inDoubtTransfers.Remove(confirmed);
+            CompleteCommittedTransfer(confirmed);
+        }
     }
     // The candidate cohort a set of local seats resolves as — read live off the server, shared by every resolver
     // call this file makes (the per-hit TryDeriveScopeKey probe and the per-group TryResolve mint/reuse alike).
@@ -982,7 +983,7 @@ public sealed partial class WorldInstanceHost {
             values: cohortSlots.Select(selector: static slot => (slot + 1))
         )}])]");
     }
-    private void FinalizeCommittedTransfer(in PendingTransfer transfer, WorldPeerCall targetAuthority, string targetName, bool spawned, List<LandedMember> landed, int memberCount) {
+    private void PublishCommittedTransfer(in PendingTransfer transfer, WorldPeerCall targetAuthority, string targetName, List<LandedMember> landed) {
 
         _ = m_instances.TryGetValue(
             key: transfer.SourceInstance,
@@ -1008,13 +1009,13 @@ public sealed partial class WorldInstanceHost {
                 var onwardSlot = member.TargetSlot;
 
                 if (targetAuthority.Remote is { } forwardedAuthority) {
-                    if (!forwardedAuthority.TryRouteCredential(
-                        bodyIndex: member.TargetSlot,
-                        credential: out var credential
-                    )) {
-                        throw new InvalidOperationException(message: $"committed remote body:{member.TargetSlot} has no source-scoped transfer credential");
-                    }
-
+                    // Recovery opens a fresh remote link, with no reservation cache. The confirmed commit's
+                    // retained member is the credential's authority: a slot-keyed cache could also name a later
+                    // occupant by the time an ambiguous handoff is resolved.
+                    var credential = new WorldRemoteRouteCredential(
+                        BodyIndex: member.TargetSlot,
+                        SourceAuthority: sourceInstance.Server.AuthorityIdentity,
+                        Mobility: member.Mobility.Advance());
                     onward = new WorldRemoteForwardedAuthority(
                         authority: forwardedAuthority,
                         credential: credential
@@ -1024,7 +1025,7 @@ public sealed partial class WorldInstanceHost {
                     onward = new WorldLocalForwardedAuthority(
                         server: localTarget.Server,
                         endpoint: (localTarget.Server.Definition.Host.Authority ?? EndpointFor(instance: localTarget).Identity),
-                        sourceAuthority: $"{m_machineId:N}/{transfer.SourceInstance}",
+                        sourceAuthority: sourceInstance.Server.AuthorityIdentity,
                         mobility: member.Mobility.Advance()
                     );
                 }
@@ -1040,7 +1041,7 @@ public sealed partial class WorldInstanceHost {
                     }
 
                     m_forwardedBodies[key] = new ForwardedBody(
-                        Authority: onward,
+                        Authority: new WorldDeferredForwardedAuthority(onward.DescribeForCheckpoint(), onward),
                         BodyIndex: onwardSlot
                     );
                 }
@@ -1064,13 +1065,16 @@ public sealed partial class WorldInstanceHost {
             // boot<->anywhere and anywhere<->anywhere, the ONE new write this stage adds. At most one roster slot
             // ever matches (a followed seat's own location is exactly its own presenting body), but the walk costs
             // O(4) regardless of which instance is source or destination.
-            var followed = false;
+            // A previous attempt may already have published one or more routes. Such a participant still follows
+            // this member even though its endpoint no longer names the source; never vacate its roster on retry.
+            var followed = member.FollowedSeatMask != 0;
 
             for (var followedSlot = 0; (followedSlot < m_seats.SeatCount); followedSlot++) {
                 var locationEndpoint = m_seats.RoutedEndpoint(slot: followedSlot);
                 var locationEntity = m_seats.RoutedEntity(slot: followedSlot);
 
                 if (
+                    ((member.FollowedSeatMask & (1 << followedSlot)) == 0) ||
                     (locationEndpoint is null) ||
                     !string.Equals(
                     a: locationEndpoint.Identity,
@@ -1082,20 +1086,17 @@ public sealed partial class WorldInstanceHost {
                     continue;
                 }
 
-                followed = true;
                 WorldAuthorityEndpoint endpoint;
                 WorldAuthorityRouteDescription? initialRoute = null;
 
                 if (targetAuthority.Remote is { } remoteTarget) {
-                    if (!remoteTarget.TryRouteCredential(
-                        bodyIndex: member.TargetSlot,
-                        credential: out var routeCredential
-                    )) {
-                        throw new InvalidOperationException(message: $"committed remote body:{member.TargetSlot} has no source-scoped transfer credential");
-                    }
+                    var routeCredential = new WorldRemoteRouteCredential(
+                        BodyIndex: member.TargetSlot,
+                        SourceAuthority: sourceInstance!.Server.AuthorityIdentity,
+                        Mobility: member.Mobility.Advance());
                     try {
                         if (remoteTarget.TryDescribeRoute(
-                            bodyIndex: member.TargetSlot,
+                            credential: in routeCredential,
                             route: out var describedRoute,
                             reason: out var routeReason
                         )) {
@@ -1236,6 +1237,24 @@ public sealed partial class WorldInstanceHost {
                 ? $" as {member.Profile.Id}"
                 : " (anonymous)")} — {arrival.Text}]");
         }
+
+    }
+    // Only after all route/roster publication returned successfully may recovery, source memory, and the
+    // destination's exact-retry receipt be retired. No external publication callback runs during memory retirement.
+    private void CompleteCommittedTransfer(InDoubtTransfer pending) {
+        var transfer = pending.Transfer;
+        var targetAuthority = pending.TargetAuthority!.Value;
+        var targetName = pending.TargetName;
+        var spawned = pending.Spawned;
+        var landed = pending.Landed;
+        var memberCount = pending.MemberCount;
+        var sourceInstance = m_instances[transfer.SourceInstance];
+        var sourceKey = new WorldTransferKey(pending.SourceAuthority, transfer.TransferId);
+        sourceInstance.Server.ExecuteAuthorityOperation(() => {
+            foreach (var member in landed) {
+                sourceInstance.Server.SocialMemory?.RetireFrozenObserver(member.Mobility.Incarnation, sourceKey);
+            }
+        });
 
         // A freshly spawned destination that seated NOBODY (every member skipped at detach — see the defense-in-
         // depth branch above) is worth cleaning up rather than leaking an empty one-shot instance. ReapIfEmpty
@@ -1409,7 +1428,7 @@ public sealed partial class WorldInstanceHost {
     // nothing, correctly: a refusal or an abort leaves the source row's own population untouched by definition.
     private void NoteResolvedTransferOutcome(in PendingTransfer transfer, string sourceName, string targetName, string outcome, IReadOnlyList<int>? departedBootSlots = null) {
         if (
-            (transfer.ResolvedDestinationRow is not { } row) ||
+            ((transfer.RecoveryDestinationName ?? transfer.ResolvedDestinationRow?.Name.Value) is not { } destinationName) ||
             (transfer.FrozenScopeKey is not { } scopeKey) ||
             (transfer.FrozenGenerationId is not { } generationId)
         ) {
@@ -1420,7 +1439,7 @@ public sealed partial class WorldInstanceHost {
 
         void Note(WorldReplayTape? tape) => tape?.NoteTransfer(
             transferId: transferId,
-            destinationName: row.Name.Value,
+            destinationName: destinationName,
             scopeKey: scopeKey,
             generationId: generationId,
             outcome: outcome,
@@ -1461,8 +1480,8 @@ public sealed partial class WorldInstanceHost {
         WorldSubmissionPayload.Query { Value: WorldQuery.Properties properties } when (properties.BodyIndex is not null) => new WorldSubmissionPayload.Query(Value: properties with { BodyIndex = bodyIndex }),
         _ => payload,
     };
-    private static void RestoreDetachedMember(WorldInstance source, LandedMember member) {
-        source.Server.ExecuteAuthorityOperation(operation: () => {
+    private static bool RestoreDetachedMember(WorldInstance source, LandedMember member) {
+        return source.Server.ExecuteAuthorityOperation(operation: () => {
             var restored = ((member.Peer is { } peer)
                 ? source.Server.Population.RestoreDetachedPeer(
                     peer: in peer,
@@ -1484,6 +1503,9 @@ public sealed partial class WorldInstanceHost {
             );
 
             if (restored) {
+                // A slot reused during recovery has a new local generation, not the returning individual's
+                // durable identity. Reinstall the captured mobility credential before releasing its memory hold.
+                source.Server.Population.SetMobility(index: member.SourceSlot, mobility: member.Mobility);
                 source.Server.Population.SetBodyColor(
                     slot: member.SourceSlot,
                     color: member.BodyColor
@@ -1499,6 +1521,7 @@ public sealed partial class WorldInstanceHost {
                     );
                 }
             }
+            return restored;
         });
     }
     private static void SeedArrivalOccupancy(WorldInstance instance, int seat) {
@@ -1560,7 +1583,7 @@ public sealed partial class WorldInstanceHost {
     // (the landing collapses previous to current — WorldBody.Pose) makes the swept test the point test, so
     // the region's own Inside answer is exactly what the next scan would latch.
     // The same seed for an arrival this host did not itself land: a traveler committed into one of this process's
-    // instances over the wire reaches the destination through the escrow, never through FinalizeCommittedTransfer,
+    // instances over the wire reaches the destination through the escrow, never through PublishCommittedTransfer,
     // so the commit-time seed there covers colocated arrivals only. The escrow's own border admission is written by
     // the destination for both topologies, which is what makes this reachable at all.
     private void SeedFederatedArrivalOccupancy(WorldInstance instance) {
@@ -1955,7 +1978,7 @@ public sealed partial class WorldInstanceHost {
     /// <summary>Which of a source instance's local seats a queued transfer moves — see
     /// <see cref="PendingTransfer.Scope"/>.</summary>
     public enum TransferScope {
-        /// <summary>One named seat.</summary>
+        /// <summary>One body by its source-authority index, including peers and creatures.</summary>
         Body,
 
         /// <summary>The source instance's whole active local-seat set (0..<see cref="Server.WorldPopulation.LocalSeatCount"/>-1),
@@ -1971,7 +1994,7 @@ public sealed partial class WorldInstanceHost {
     /// <see cref="Server.WorldServer"/>'s own pending-ops FIFO (compose/validate at apply, never at submit).</summary>
     /// <param name="SourceInstance">The console-facing name of the instance the seat(s) currently occupy.</param>
     /// <param name="Scope">Whether this moves one named seat or the source's whole active local-seat set.</param>
-    /// <param name="SourceSlot">The source instance's 0-based local seat — ignored when <paramref name="Scope"/> is
+    /// <param name="SourceSlot">The source instance's 0-based body index — ignored when <paramref name="Scope"/> is
     /// <see cref="TransferScope.Party"/>.</param>
     /// <param name="Destination">How the destination instance resolves.</param>
     /// <param name="ActingPrincipal">The principal that submitted the transfer.</param>
@@ -2029,6 +2052,8 @@ public sealed partial class WorldInstanceHost {
     /// <param name="ScopeProofAlreadyVerified">Internal split-party marker: the parent already re-verified the
     /// frozen cohort's membership proof before creating one-member transactions against its one resolved target.</param>
     /// <param name="Attempt">How many times a retryable capacity refusal has already re-queued this crossing.</param>
+    /// <param name="RecoveryDestinationName">The captured resolver destination used only for outcome narration
+    /// after restart. Recovery never resolves or re-enqueues this already-detached crossing.</param>
     private readonly record struct PendingTransfer(
         string SourceInstance,
         TransferScope Scope,
@@ -2053,7 +2078,8 @@ public sealed partial class WorldInstanceHost {
         int? BorderCapacity,
         string Border,
         bool ScopeProofAlreadyVerified = false,
-        int Attempt = 0
+        int Attempt = 0,
+        string? RecoveryDestinationName = null
     );
     // One landed member's captured state — enough to restore it exactly at the source if the transfer
     // aborts after it already joined the destination. Body color/position/yaw/dynamic state/designations are all
@@ -2075,17 +2101,26 @@ public sealed partial class WorldInstanceHost {
         IReadOnlyList<WorldAdmissionGrant> AdmissionGrants,
         IReadOnlyList<WorldGrant> SourceGrants,
         WorldPrincipal SourcePrincipal,
-        WorldMobilityIdentity Mobility
+        WorldMobilityIdentity Mobility,
+        byte FollowedSeatMask = 0
     );
     private sealed record InDoubtTransfer(
         PendingTransfer Transfer,
-        WorldPeerCall TargetAuthority,
+        WorldPeerCall? TargetAuthority,
         string SourceAuthority,
         string TargetName,
         bool Spawned,
         ulong SourceDeadlineTick,
         List<LandedMember> Landed,
         List<WorldTransferCommitMember> CommitMembers,
-        int MemberCount
-    );
+        int MemberCount,
+        bool RollbackOnly = false,
+        bool ConflictingCommitReported = false,
+        string? RecoveryAuthority = null,
+        string? RecoveryEndpoint = null,
+        WorldDefinition? RecoveryDefinition = null,
+        bool CommitConfirmed = false
+    ) {
+        public bool PublicationFailureReported { get; set; }
+    }
 }

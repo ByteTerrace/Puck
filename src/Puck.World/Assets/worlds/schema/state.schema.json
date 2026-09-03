@@ -41,7 +41,7 @@
         "null"
       ],
       "items": {
-        "description": "One state.lattices topology -- the footprint, cadence, and reactions every lattice-shaped state row referencing it shares. Exactly one topology may be declared today (the wire frame and checkpoint key off a single lattice); the list spelling is the growth seam, not a live capacity.",
+        "description": "One state.lattices topology -- the footprint, cadence, and reactions every lattice-shaped state row referencing it shares. At most one physical field topology and bounded discrete topologies may coexist.",
         "type": [
           "object",
           "null"
@@ -77,7 +77,7 @@
             "default": 8
           },
           "reactions": {
-            "description": "The per-step reactions over this topology\u0027s rows, applied in document order.",
+            "description": "The per-step reactions over a physical field topology, applied in document order.",
             "type": [
               "array",
               "null"
@@ -308,6 +308,31 @@
               ]
             },
             "default": null
+          },
+          "kind": {
+            "description": "Physical fields or a discrete grid, ring, or axial hexagon.",
+            "enum": [
+              "Field",
+              "Grid",
+              "Ring",
+              "Hex"
+            ],
+            "default": "Field"
+          },
+          "wrap": {
+            "description": "Wrapped axes for a discrete grid; rings always wrap.",
+            "enum": [
+              "None",
+              "X",
+              "Y",
+              "Both"
+            ],
+            "default": "None"
+          },
+          "radius": {
+            "description": "The axial hexagon radius; zero for other kinds.",
+            "type": "integer",
+            "default": 0
           }
         },
         "required": [
@@ -319,6 +344,159 @@
         ],
         "additionalProperties": false
       },
+      "default": null
+    },
+    "social": {
+      "description": "Optional bounded social-memory policy; learned runtime impressions are checkpoint state, not public cell rows.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "dimensions": {
+          "description": "Independent, uniquely named impression dimensions. Values are normalized to [-1,1].",
+          "type": "array",
+          "items": {
+            "description": "One contextual belief\u0027s authored bounds and learning behavior. Confidence is a game heuristic, not a calibrated probability. This is not a personality or mood model.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "name": {
+                "description": "Non-empty dimension name; contexts, attempts, and outcomes may use distinct dimensions.",
+                "type": "string"
+              },
+              "minimum": {
+                "description": "Lower normalized bound, at least -1.",
+                "type": "number",
+                "default": -1
+              },
+              "maximum": {
+                "description": "Upper normalized bound, at most 1, strictly greater than Minimum.",
+                "type": "number",
+                "default": 1
+              },
+              "baseline": {
+                "description": "Value of an unknown impression, inside the bounds.",
+                "type": "number",
+                "default": 0
+              },
+              "priorWeight": {
+                "description": "Positive inertia toward the current estimate, at most 1024.",
+                "type": "number",
+                "default": 4
+              },
+              "weightCapacity": {
+                "description": "Maximum accumulated evidence weight, positive and at most 65536.",
+                "type": "number",
+                "default": 64
+              },
+              "learningRate": {
+                "description": "[0,1] multiplier on value learning; zero locks the value but not evidence/confidence.",
+                "type": "number",
+                "default": 1
+              },
+              "maximumChange": {
+                "description": "[0,2] maximum absolute value change per accepted event or direct-observation upgrade.",
+                "type": "number",
+                "default": 0.25
+              },
+              "conflictThreshold": {
+                "description": "[0,2] distance from the current estimate above which fresh evidence is conflicting.",
+                "type": "number",
+                "default": 0.5
+              },
+              "conflictGain": {
+                "description": "[0,1] maximum uncertainty increase, scaled by effective evidence strength.",
+                "type": "number",
+                "default": 0.25
+              },
+              "consistencyGain": {
+                "description": "[0,1] maximum uncertainty decrease for consistent, independent evidence.",
+                "type": "number",
+                "default": 0.125
+              },
+              "followUpBoost": {
+                "description": "[0,16] extra direct-evidence weight per unit uncertainty; does not boost repeated events.",
+                "type": "number",
+                "default": 1
+              },
+              "confidenceDecaySeconds": {
+                "description": "Exact engine-tick duration for linear evidence-weight decay; zero disables it.",
+                "type": "number",
+                "default": 0
+              },
+              "recoverySeconds": {
+                "description": "Exact engine-tick duration for linear value recovery to baseline; zero disables it.",
+                "type": "number",
+                "default": 0
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "impressionCapacity": {
+          "description": "Total retained (observer, subject, dimension) entries, not body capacity.",
+          "type": "integer",
+          "default": 65536
+        },
+        "impressionsPerObserver": {
+          "description": "Maximum retained entries for one observer, across subjects and dimensions.",
+          "type": "integer",
+          "default": 256
+        },
+        "receiptCapacity": {
+          "description": "Exact duplicate-evidence ledger capacity. Unexpired receipts are never evicted.",
+          "type": "integer",
+          "default": 65536
+        },
+        "evidenceAttemptsPerTick": {
+          "description": "Maximum ingestion attempts, including invalid and duplicate attempts.",
+          "type": "integer",
+          "default": 1024
+        },
+        "expiredReceiptsPerTick": {
+          "description": "Maximum expired ledger entries reclaimed when the engine clock advances.",
+          "type": "integer",
+          "default": 1024
+        },
+        "evidenceLifetimeSeconds": {
+          "description": "Positive exact engine-tick admission age. Older evidence is refused.",
+          "type": "number",
+          "default": 60
+        },
+        "reliabilityDimension": {
+          "description": "Optional [0,1] dimension used to assess a report\u0027s source, independently of affection.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "unfamiliarReliability": {
+          "description": "Fallback source reliability in [0,1], blended with learned reliability by confidence.",
+          "type": "number",
+          "default": 0.5
+        },
+        "directWeight": {
+          "description": "Non-negative weight of a direct observation of quality one, at most 1024.",
+          "type": "number",
+          "default": 1
+        },
+        "reportWeight": {
+          "description": "Non-negative report weight before quality and source reliability, at most 1024.",
+          "type": "number",
+          "default": 0.5
+        }
+      },
+      "required": [
+        "dimensions"
+      ],
+      "additionalProperties": false,
       "default": null
     }
   },

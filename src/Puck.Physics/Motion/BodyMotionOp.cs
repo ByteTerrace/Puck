@@ -10,6 +10,8 @@ public enum BodyMotionOp : byte {
     ProduceWanderIntent,
     ProduceAttendIntent,
     FaceSensorTarget,
+    /// <summary>Translates a bounded flock steering preference into ordinary motion channels.</summary>
+    ProduceFlockIntent,
     ResolveYawAttitudeAndPlanarFrame,
     IntegrateLocalAttitude,
     ComputePlanarTargetVelocity,

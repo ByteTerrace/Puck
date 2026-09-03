@@ -58,6 +58,21 @@ root-crossing dependency was the audio director, narrowed to
 
 ## The entity view
 
+Catalog appearance and body identity are independent. `WorldRigCatalog` holds
+128 reusable looks; each body has a separate transform range large enough for
+any of them. A pinned or transferred look therefore keeps every leaf, even when
+its destination slot originally wore a smaller rig. Restyling one body does not
+move another body's transforms or attachment slots. Render-capacity probes
+reserve the largest rig for every admitted body, including repeated looks;
+the number of catalog entries is not the population limit.
+
+Each catalog leaf retains its own culling instance and animated transform. Its
+sphere fits the emitted primitive, including the unscaled authored offset, so
+small looks stay enclosed and a tile touching one hand need not evaluate the
+whole creature. `world.population` reports leaves, culling instances, and
+authored instructions separately. The renderer's instance ceiling remains a
+separate constraint on dense populations; reusable appearances do not remove it.
+
 - `WorldClient.cs` — consumes each tick's snapshot into a double-buffered
   entity view (previous/current pose per entity) and resolves per-frame
   render poses: position lerp plus shortest-path orientation nlerp at the

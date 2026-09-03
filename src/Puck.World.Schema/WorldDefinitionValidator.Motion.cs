@@ -115,6 +115,10 @@ public static partial class WorldDefinitionValidator {
 
                 if (compiledProgram.Kind == BodyProgramKind.Producer) {
                     var senses = compiledProgram.Contains(operation: BodyMotionOp.SenseNearestInCone);
+                    var flocks = compiledProgram.Contains(operation: BodyMotionOp.ProduceFlockIntent);
+                    if (flocks && (compiledProgram.Contains(BodyMotionOp.ProduceAttendIntent) || compiledProgram.Contains(BodyMotionOp.ProduceWanderIntent) || compiledProgram.Contains(BodyMotionOp.FaceSensorTarget))) {
+                        errors.Add($"{path} ProduceFlockIntent owns the movement preference and cannot combine with another intent or facing producer.");
+                    }
 
                     if (
                         compiledProgram.Contains(operation: BodyMotionOp.ProduceAttendIntent) &&
@@ -144,8 +148,10 @@ public static partial class WorldDefinitionValidator {
                             if (!Enum.IsDefined(value: sensed.Scope)) {
                                 errors.Add(item: $"{path}.target.scope '{sensed.Scope}' is not a defined BodyTargetScope.");
                             }
-                            RequirePositive(
+                            RequireRange(
                                 value: sensed.Range,
+                                min: 1f / 65536f,
+                                max: 1_000_000f,
                                 name: $"{path}.target.range",
                                 errors: errors
                             );
@@ -592,6 +598,8 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
+            ValidateFlockProfile(parameters.Flock, program, itemPath, errors);
+
             var required = new HashSet<string>(comparer: StringComparer.Ordinal);
 
             if (program.Contains(operation: BodyMotionOp.ProduceWanderIntent)) {
@@ -775,8 +783,20 @@ public static partial class WorldDefinitionValidator {
             }
 
             var producerPath = $"{path}[{name}]";
-            RequirePositiveScalar(errors: errors, name: "approach", parameters: parameters, path: producerPath);
-            RequirePositiveScalar(errors: errors, name: "standoffRadius", parameters: parameters, path: producerPath);
+            if (domain.Shared is not null && domain.Kind != WorldNavigationKind.Surface && errors.Count == 0 && !FlockColliderFitsDomain(kit, definition, domain)) {
+                errors.Add($"{producerPath} shared navigation domain '{domain.Name}' agentRadius must enclose every collider volume about the body root, including its local offsets.");
+            }
+            if (parameters.Flock is { } flock) {
+                if (flock.ArrivalDistance > domain.ArrivalDistance) {
+                    errors.Add($"{producerPath}.flock.arrivalDistance exceeds navigation arrivalDistance.");
+                }
+                if ((flock.Space == WorldFlockSpace.Tangent) != (domain.Kind == WorldNavigationKind.Surface)) {
+                    errors.Add($"{producerPath}.flock.space disagrees with navigation domain '{domain.Name}'.");
+                }
+            } else {
+                RequirePositiveScalar(errors: errors, name: "approach", parameters: parameters, path: producerPath);
+                RequirePositiveScalar(errors: errors, name: "standoffRadius", parameters: parameters, path: producerPath);
+            }
             if (
                 TryScalar(name: "standoffRadius", parameters: parameters, value: out var standoff) &&
                 float.IsFinite(f: standoff) &&
@@ -792,7 +812,9 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            RequirePositiveScalar(errors: errors, name: "altitudeGain", parameters: parameters, path: producerPath);
+            if (parameters.Flock is null) {
+                RequirePositiveScalar(errors: errors, name: "altitudeGain", parameters: parameters, path: producerPath);
+            }
             var directVertical = motionProgram is not null && (
                 motionProgram.Contains(operation: BodyMotionOp.ComputeLocalTargetVelocity) ||
                 motionProgram.Contains(operation: BodyMotionOp.ApplyVerticalDrive)

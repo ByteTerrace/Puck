@@ -182,6 +182,7 @@ public static class WorldSubmissionCodec {
         WorldQuery.MusicState => 19,
         WorldQuery.JudgeState => 20,
         WorldQuery.InstrumentState => 21,
+        WorldQuery.StateObservations => 22,
         _ => throw UnknownLeaf(value: value),
     };
     private static Type? QueryType(byte kind) => kind switch {
@@ -206,6 +207,7 @@ public static class WorldSubmissionCodec {
         19 => typeof(WorldQuery.MusicState),
         20 => typeof(WorldQuery.JudgeState),
         21 => typeof(WorldQuery.InstrumentState),
+        22 => typeof(WorldQuery.StateObservations),
         _ => null,
     };
     private static WorldCommand ReadCommand(BinaryReader reader) {
@@ -800,8 +802,11 @@ public static class WorldSubmissionCodec {
     // (documentAllowed stays false — a document can no more trade than it can act) but never itself the acting
     // principal: Server.WorldServer's own TryAuthorizeMarketParty is what checks a party against the actor
     // submitting it, a live-runtime question this wire-shape check cannot answer and does not attempt to.
-    private static bool TryValidateMutationPrincipals(WorldMutation mutation, out WorldCodecFailure failure) {
-        if (!TryValidatePrincipal(
+    private static bool TryValidateMutationPrincipals(WorldMutation mutation, out WorldCodecFailure failure, bool committed = false) {
+        failure = default;
+        // Only the committed-journal codec admits the canonical structural actor. Nested grant/market parties
+        // still pass the normal validation below; no live submission decoder calls this with committed=true.
+        if (!(committed && mutation.Principal == WorldPrincipal.World) && !TryValidatePrincipal(
             mutation.Principal,
             out failure
         )) {
@@ -844,7 +849,7 @@ public static class WorldSubmissionCodec {
             PrincipalKind.Seat => ((principal.Index >= 0) && (principal.Name is null) && (principal.Generation == 0)),
             PrincipalKind.Console => ((principal.Index == 0) && (principal.Name is null) && (principal.Generation == 0)),
             PrincipalKind.Addon => ((principal.Index == 0) && !string.IsNullOrEmpty(value: principal.Name) && (principal.Generation == 0)),
-            PrincipalKind.Peer => (WorldBodiesLimits.IsPeerIndex(index: principal.Index) && (principal.Name is null) && (principal.Generation > 0)),
+            PrincipalKind.Peer => (WorldBodiesLimits.IsBodyIndex(index: principal.Index) && (principal.Name is null) && (principal.Generation > 0)),
             PrincipalKind.Document => (documentAllowed && (principal.Index == 0) && !string.IsNullOrEmpty(value: principal.Name) && (principal.Generation == 0)),
             // Group's shape mirrors Addon's (Index 0, a non-empty Name carrying the id, Generation 0) but is valid
             // UNCONDITIONALLY — never gated behind documentAllowed — because unlike Document a group IS a real live
@@ -858,7 +863,7 @@ public static class WorldSubmissionCodec {
             : Fail(
                 WorldCodecRefusal.PrincipalShapeInvalid,
                 (principal.Kind, documentAllowed) switch {
-                    (PrincipalKind.Peer, _) when !WorldBodiesLimits.IsPeerIndex(index: principal.Index) => $"Peer principal index {principal.Index} is outside {WorldBodiesLimits.LocalSeatCount}..{(WorldBodiesLimits.CapacityCeiling - 1)}",
+                    (PrincipalKind.Peer, _) when !WorldBodiesLimits.IsBodyIndex(index: principal.Index) => $"Peer principal index {principal.Index} is outside 0..{(WorldBodiesLimits.CapacityCeiling - 1)}",
                     (PrincipalKind.Document, false) => $"{principal.Describe()} cannot ACT — a document is written to, never a submitter; its capability is authored as a grant ROW with world.grant.set, which the cross-document write-back channel reads off the owner's document",
                     // The World principal is refused on BOTH sides of this rule, for two DIFFERENT reasons — one message
                     // each, because the shared one told a console-typed `world.grant.set world …` that it was an
@@ -1478,7 +1483,19 @@ public static class WorldSubmissionCodec {
             out failure
         );
     /// <summary>Decodes the mutation leaf under its stable catalog ordinal.</summary>
-    public static bool TryDecodeMutation(ReadOnlySpan<byte> bytes, out WorldMutation? mutation, out WorldCodecFailure failure) {
+    public static bool TryDecodeMutation(ReadOnlySpan<byte> bytes, out WorldMutation? mutation, out WorldCodecFailure failure) =>
+        TryDecodeMutationCore(bytes, out mutation, out failure, committed: false);
+
+    /// <summary>Decodes a mutation already committed by a trusted authority, including its world-authored actor.
+    /// This is a persistence leaf, never an external-submission decoder.</summary>
+    /// <param name="bytes">The bounded catalog-tagged mutation bytes from trusted authority storage.</param>
+    /// <param name="mutation">The decoded mutation, or null on refusal.</param>
+    /// <param name="failure">The shape refusal, or default on success.</param>
+    /// <returns>Whether the mutation and all principal shapes are admissible for a committed journal.</returns>
+    public static bool TryDecodeCommittedMutation(ReadOnlySpan<byte> bytes, out WorldMutation? mutation, out WorldCodecFailure failure) =>
+        TryDecodeMutationCore(bytes, out mutation, out failure, committed: true);
+
+    private static bool TryDecodeMutationCore(ReadOnlySpan<byte> bytes, out WorldMutation? mutation, out WorldCodecFailure failure, bool committed) {
         if (
             !TryDecodeJsonUnion(
             bytes: bytes,
@@ -1492,7 +1509,8 @@ public static class WorldSubmissionCodec {
         }
         if (!TryValidateMutationPrincipals(
             failure: out failure,
-            mutation: mutation
+            mutation: mutation,
+            committed: committed
         )) {
             mutation = null;
             return false;
@@ -1743,7 +1761,19 @@ public static class WorldSubmissionCodec {
             out failure
         );
     /// <summary>Encodes the mutation leaf under its stable catalog ordinal.</summary>
-    public static bool TryEncodeMutation(WorldMutation mutation, out byte[] bytes, out WorldCodecFailure failure) {
+    public static bool TryEncodeMutation(WorldMutation mutation, out byte[] bytes, out WorldCodecFailure failure) =>
+        TryEncodeMutationCore(mutation, out bytes, out failure, committed: false);
+
+    /// <summary>Encodes a mutation already committed by a trusted authority. Unlike live ingress, this permits
+    /// the canonical world-authored actor; it does not grant authority or admit a new submission.</summary>
+    /// <param name="mutation">The committed journal entry.</param>
+    /// <param name="bytes">Its catalog-tagged bytes, or an empty array on refusal.</param>
+    /// <param name="failure">The shape refusal, or default on success.</param>
+    /// <returns>Whether the mutation is encodable with valid committed-journal principal shapes.</returns>
+    public static bool TryEncodeCommittedMutation(WorldMutation mutation, out byte[] bytes, out WorldCodecFailure failure) =>
+        TryEncodeMutationCore(mutation, out bytes, out failure, committed: true);
+
+    private static bool TryEncodeMutationCore(WorldMutation mutation, out byte[] bytes, out WorldCodecFailure failure, bool committed) {
         if (mutation is null) {
             bytes = [];
             failure = Fail(
@@ -1755,7 +1785,8 @@ public static class WorldSubmissionCodec {
         }
         if (!TryValidateMutationPrincipals(
             failure: out failure,
-            mutation: mutation
+            mutation: mutation,
+            committed: committed
         )) {
             bytes = [];
             return false;

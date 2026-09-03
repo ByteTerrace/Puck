@@ -16,6 +16,9 @@ public readonly record struct WorldRemoteRouteCredential(int BodyIndex, string S
 /// <param name="credential">The immutable route credential committed for it.</param>
 public sealed class WorldRemoteForwardedAuthority(WorldRemoteAuthority authority, WorldRemoteRouteCredential credential) : IWorldForwardedAuthority {
     /// <inheritdoc/>
+    public Task<string?> StreamProjectionAsync(Stream output, WorldDisclosureTier ceiling, byte remainingHops, CancellationToken ct) =>
+        authority.RelayProjectionAsync(new(credential.SourceAuthority, credential.Mobility, ceiling, remainingHops), output, ct);
+    /// <inheritdoc/>
     public bool TryDescribeRoute(out WorldAuthorityRouteDescription route, out string reason) {
         var held = credential;
 
@@ -47,10 +50,8 @@ public sealed class WorldRemoteForwardedAuthority(WorldRemoteAuthority authority
         );
     }
     /// <inheritdoc/>
-    public void DescribeForCheckpoint(out string destinationAuthority, out WorldMobilityIdentity mobility) {
-        destinationAuthority = authority.Authority;
-        mobility = credential.Mobility;
-    }
+    public WorldForwardingDestination DescribeForCheckpoint() => new(authority.PeerAuthority,
+        credential.SourceAuthority, credential.Mobility, authority.Endpoint, authority.Definition);
 }
 
 /// <summary>The concerns that get their own ordered connection to one peer authority.</summary>
@@ -70,6 +71,9 @@ public enum WorldTransferStep : byte {
     /// <summary>The transport failed, so whether the destination applied this step is unknown. A commit that ends
     /// here is in doubt, never a refusal.</summary>
     Unreachable,
+
+    /// <summary>The asynchronous recovery request is still in flight. Its exact transaction remains held.</summary>
+    Pending,
 }
 /// <summary>One federation response, or the named reason there is none. The lane never faults a caller's task: a
 /// dead peer is a refusal with a name, so a simulation-thread caller always receives an answer it can act on.</summary>
@@ -116,7 +120,7 @@ public readonly record struct WorldFederationAnswer(WorldFederationResponse Kind
 /// is what keeps a dead neighbour from stalling the tick. A caller that could be told "not yet" would have to hold
 /// state across ticks the adjacency scan is concurrently re-deriving, so no path here returns one.</para>
 /// </remarks>
-public sealed class WorldRemoteAuthority : IDisposable {
+public sealed partial class WorldRemoteAuthority : IDisposable {
     /// <summary>The detail every federation request answers with when this run holds no signing identity.</summary>
     private const string UnconfiguredDetail = "this run holds no federation signing identity";
 
@@ -147,6 +151,7 @@ public sealed class WorldRemoteAuthority : IDisposable {
     private readonly ConcurrentDictionary<(string SourceAuthority, WorldFederationLane Lane), PersistentRequestLane<WorldFederationRequest, WorldFederationResponse>> m_requestLanes = new();
     private readonly ConcurrentDictionary<TransferStepKey, Task<WorldFederationAnswer>> m_transferSteps = new();
     private string m_authority = string.Empty;
+    private string m_peerAuthority = string.Empty;
     // Frames is the "nothing observed yet" value, so the first delivered document always narrates its tier once.
     private WorldDisclosureTier m_observedTier = WorldDisclosureTier.Frames;
 
@@ -155,6 +160,8 @@ public sealed class WorldRemoteAuthority : IDisposable {
     private readonly string m_observerAuthority;
     private readonly Action<WorldAuthorityRouteDescription>? m_routeChanged;
     private readonly IAuthenticator m_security;
+    private readonly WorldPeerNetwork m_network;
+    private readonly bool m_ownsNetwork;
     private readonly WorldRemoteAuthority? m_submissionAuthority;
     private readonly WorldRemoteRouteCredential? m_submissionCredential;
 
@@ -165,13 +172,11 @@ public sealed class WorldRemoteAuthority : IDisposable {
     private WorldDefinition m_definition;
     private long m_lastObservedTickBits;
     private WorldAuthorityRouteDescription? m_observedRoute;
-    // The endpoint and its description travel as one reference so a republish swaps both atomically: every reader
-    // (a lane dial, an observer connect, an Endpoint narration) sees one generation's pair, never a mix.
-    private PublishedRoute m_route;
-    private int m_routeRevision;
+    // The physical entry stays fixed even when a traveler's logical destination changes.
+    private readonly PublishedRoute m_route;
     private int m_unconfiguredNoted;
 
-    public WorldRemoteAuthority(string endpoint, WorldDefinition placeholder, IAuthenticator security, string observerAuthority, WorldRemoteAuthority? submissionAuthority = null, WorldRemoteRouteCredential? submissionCredential = null, WorldAuthorityRouteDescription? initialRoute = null, Action<WorldAuthorityRouteDescription>? routeChanged = null, CancellationToken applicationStopping = default) {
+    public WorldRemoteAuthority(string endpoint, WorldDefinition placeholder, IAuthenticator security, string observerAuthority, WorldRemoteAuthority? submissionAuthority = null, WorldRemoteRouteCredential? submissionCredential = null, WorldAuthorityRouteDescription? initialRoute = null, Action<WorldAuthorityRouteDescription>? routeChanged = null, CancellationToken applicationStopping = default, string? expectedAuthority = null, WorldPeerNetwork? network = null) {
         if (!IPEndPoint.TryParse(
             result: out var parsed,
             s: endpoint
@@ -182,7 +187,10 @@ public sealed class WorldRemoteAuthority : IDisposable {
         m_route = new PublishedRoute(endpoint: parsed);
         m_definition = placeholder;
         m_security = (security ?? throw new ArgumentNullException(paramName: nameof(security)));
+        m_network = network ?? submissionAuthority?.m_network ?? new WorldPeerNetwork();
+        m_ownsNetwork = network is null && submissionAuthority is null;
         m_observerAuthority = observerAuthority;
+        m_peerAuthority = expectedAuthority ?? string.Empty;
         m_submissionAuthority = submissionAuthority;
         m_submissionCredential = submissionCredential;
         if ((submissionAuthority is null) != (submissionCredential is null)) {
@@ -192,13 +200,8 @@ public sealed class WorldRemoteAuthority : IDisposable {
         m_routeChanged = routeChanged;
         m_lifetime = CancellationTokenSource.CreateLinkedTokenSource(token: applicationStopping);
         if (initialRoute is { } route) {
-            if (!IPEndPoint.TryParse(
-                route.Endpoint,
-                out var initialEndpoint
-            )) {
-                throw new FormatException(message: $"route endpoint '{route.Endpoint}' is not a parseable IP endpoint");
-            }
-            m_route = new PublishedRoute(endpoint: initialEndpoint);
+            // A logical destination can be a colocated world with no public listener. Keep the authenticated
+            // entry endpoint; its source-scoped forwarding chain relays this traveler's projection.
             m_definition = route.Definition;
             m_authority = route.Entity.Authority;
             m_lastObservedTickBits = unchecked((long)route.Tick);
@@ -206,7 +209,10 @@ public sealed class WorldRemoteAuthority : IDisposable {
         m_link = new WorldFederatedServerLink(authority: this);
     }
 
-    public string Authority => Volatile.Read(location: ref m_authority);
+    public string Authority => Volatile.Read(ref m_authority) is { Length: > 0 } observed ? observed : PeerAuthority;
+    /// <summary>Gets the pinned first-hop transaction namespace, or an empty string before the first handshake.
+    /// Reconnection checks this namespace before sending a request. It is distinct from a traveler's onward route.</summary>
+    public string PeerAuthority => Volatile.Read(ref m_peerAuthority);
     /// <summary>Gets a value indicating whether every established lane is outside its unreachable-peer backoff
     /// window. WALL-CLOCK transport lifecycle state (<see cref="PersistentRequestLane{TRequestKind,TResponseKind}.IsAvailable"/>),
     /// legitimate for a read-back to print and never for simulation to read — link liveness the sim acts on is
@@ -224,9 +230,8 @@ public sealed class WorldRemoteAuthority : IDisposable {
         }
     }
     public WorldDefinition Definition => Volatile.Read(location: ref m_definition);
-    /// <summary>Gets the current route's endpoint as text — the description cached beside the endpoint when the
-    /// route was published, so reading it costs no formatting and always names the same generation the lanes dial.</summary>
-    public string Endpoint => Volatile.Read(location: ref m_route).Description;
+    /// <summary>Gets the fixed authenticated entry endpoint as cached text, without per-read formatting.</summary>
+    public string Endpoint => m_route.Description;
     public IServerLink Link => m_link;
     public ulong NextInputTick => (unchecked((ulong)Interlocked.Read(location: ref m_lastObservedTickBits)) + 1UL);
 
@@ -501,10 +506,7 @@ public sealed class WorldRemoteAuthority : IDisposable {
             }
         }
     }
-    // Reads m_route exactly once, so the endpoint a lane dials and the description it records for that same connect
-    // always name the same route republish generation; the description was formatted when the route was published,
-    // never per attempt.
-    private LaneRoute CurrentRoute() => Volatile.Read(location: ref m_route).Lane;
+    private LaneRoute CurrentRoute() => m_route.Lane;
     private static string DescribeHandshake(WireFrameRead read, string stage) =>
         (read.Ok
             ? new WorldFederationAnswer(
@@ -581,6 +583,7 @@ public sealed class WorldRemoteAuthority : IDisposable {
         m_requestLanes.GetOrAdd(
             key: (sourceAuthority, LaneOf(kind: kind)),
             valueFactory: key => new PersistentRequestLane<WorldFederationRequest, WorldFederationResponse>(
+                connect: m_network.ConnectAsync,
                 connectRetryDelay: ConnectRetryDelay,
                 lifetime: m_lifetime.Token,
                 onUnavailable: exception => Console.Error.WriteLine(value: $"[world.authority unavailable: federation lane to '{Endpoint}' is reconnecting ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")})]"),
@@ -597,31 +600,25 @@ public sealed class WorldRemoteAuthority : IDisposable {
             : WorldFederationLane.Transaction
         );
     private async Task<bool> ObserveSessionAsync(IClientSink sink, CancellationToken ct) {
-        using var client = new TcpClient();
+        var upstream = m_submissionAuthority ?? this;
+        var observedEndpoint = upstream.m_route.Endpoint;
 
-        client.NoDelay = true;
-        var observedEndpoint = Volatile.Read(location: ref m_route).Endpoint;
-        var observedRouteRevision = Volatile.Read(location: ref m_routeRevision);
-
-        await client.ConnectAsync(
-            cancellationToken: ct,
-            remoteEP: observedEndpoint
-        ).ConfigureAwait(continueOnCapturedContext: false);
-        using var stream = client.GetStream();
+        await using var stream = await m_network.ConnectAsync(observedEndpoint, ct).ConfigureAwait(false);
 
         await HandshakeWireFormat.WriteHelloAsync(
             ct: ct,
             key: WorldFederationCodec.WireKey,
             stream: stream
         ).ConfigureAwait(continueOnCapturedContext: false);
-        await AuthenticateAsync(
+        await upstream.AuthenticateAsync(
             ct: ct,
             stream: stream
         ).ConfigureAwait(continueOnCapturedContext: false);
         await WorldFederationCodec.WriteRequestAsync(
-            body: default,
+            body: m_submissionCredential is { } credential
+                ? WorldFederationCodec.EncodeTravelerObservation(new(credential.SourceAuthority, credential.Mobility)) : default,
             ct: ct,
-            kind: WorldFederationRequest.Observe,
+            kind: m_submissionCredential.HasValue ? WorldFederationRequest.ObserveTraveler : WorldFederationRequest.Observe,
             stream: stream
         ).ConfigureAwait(continueOnCapturedContext: false);
 
@@ -636,6 +633,17 @@ public sealed class WorldRemoteAuthority : IDisposable {
             }
 
             switch ((WorldFederationResponse)frame.Kind) {
+                case WorldFederationResponse.ProjectionInvalidated:
+                    return m_submissionCredential.HasValue;
+                case WorldFederationResponse.Refusal:
+                    Console.Error.WriteLine($"[world.projection: remote observer '{Endpoint}' refused ({Encoding.UTF8.GetString(frame.Body.Span)})]");
+                    return false;
+                case WorldFederationResponse.Route:
+                    if (!m_submissionCredential.HasValue || !WorldFederationCodec.TryDecodeRoute(frame.Body.Span, out var route, out _)) {
+                        return false;
+                    }
+                    PublishObservedRoute(route);
+                    break;
                 case WorldFederationResponse.Definition: {
                         if (
                             !WorldFederationCodec.TryDecodeDocument(
@@ -674,18 +682,6 @@ public sealed class WorldRemoteAuthority : IDisposable {
                             return false;
                         }
 
-                        var containsObservedEntity = SnapshotContainsObservedEntity(snapshot: in snapshot);
-
-                        if (
-                            (Volatile.Read(location: ref m_routeRevision) != observedRouteRevision) ||
-                            (!containsObservedEntity && RefreshObservedRoute())
-                        ) {
-                            // The route callback seeded the new authority's committed image. Publishing this
-                            // old authority's missing-body snapshot first would create an avoidable inactive
-                            // frame between two committed writers—the camera hitch the route seed exists to
-                            // eliminate. Reconnect directly to the new head instead.
-                            return true;
-                        }
                         _ = Interlocked.Exchange(
                             location1: ref m_lastObservedTickBits,
                             value: unchecked((long)snapshot.Tick)
@@ -766,42 +762,10 @@ public sealed class WorldRemoteAuthority : IDisposable {
             );
         }
     }
-    private bool RefreshObservedRoute() {
-        if (
-            (m_submissionAuthority is null) ||
-            (m_submissionCredential is not { } credential) ||
-            !TryDescribeRoute(
-            credential: in credential,
-            reason: out _,
-            route: out var route
-        ) ||
-            !IPEndPoint.TryParse(
-            route.Endpoint,
-            out var routedEndpoint
-        )
-        ) {
-            return false;
-        }
-
-        if (
-            (m_observedRoute is { } observed) &&
-            string.Equals(
-            a: observed.Endpoint,
-            b: route.Endpoint,
-            comparisonType: StringComparison.Ordinal
-        ) &&
-            (observed.Entity == route.Entity)
-        ) {
-            m_observedRoute = route;
-            return false;
-        }
-
-        Volatile.Write(
-            location: ref m_route,
-            value: new PublishedRoute(endpoint: routedEndpoint)
-        );
+    private void PublishObservedRoute(WorldAuthorityRouteDescription route) {
+        var changed = m_observedRoute is not { } observed || observed.Entity != route.Entity;
         m_observedRoute = route;
-        InvalidateAcknowledgement(credential: in credential);
+        if (changed && m_submissionCredential is { } credential) { InvalidateAcknowledgement(credential: in credential); }
         Volatile.Write(
             location: ref m_definition,
             value: route.Definition
@@ -814,39 +778,13 @@ public sealed class WorldRemoteAuthority : IDisposable {
             location1: ref m_lastObservedTickBits,
             value: unchecked((long)route.Tick)
         );
-        _ = Interlocked.Increment(location: ref m_routeRevision);
         m_routeChanged?.Invoke(obj: route);
-        return true;
-    }
-    private bool SnapshotContainsObservedEntity(in WorldSnapshot snapshot) {
-        var observedEntity = m_observedRoute?.Entity;
-        var bodyIndex = (observedEntity?.Index ?? (m_submissionCredential?.BodyIndex ?? -1));
-
-        foreach (ref readonly var entry in snapshot.Entries.Span) {
-            // A population slot may be reused in the same snapshot that the traveler leaves. Index+active alone
-            // would then mistake the replacement occupant for the traveler and suppress the route refresh forever,
-            // leaving control/camera attached to the wrong body. A durable entity address is authority/index/
-            // generation; use all three whenever the committed route supplied them.
-            if (
-                (entry.Index == bodyIndex) &&
-                entry.Active &&
-                ((observedEntity is null) || ((entry.Generation == observedEntity.Value.Generation) &&
-                    string.Equals(
-                a: snapshot.Authority,
-                b: observedEntity.Value.Authority,
-                comparisonType: StringComparison.Ordinal
-            )))
-            ) {
-                return true;
-            }
-        }
-        return false;
     }
     // A Completion body is one whole downstream frame, decoded in place over the answer's own buffer.
     private static bool TryReadCompletion(ReadOnlyMemory<byte> body, out WorldSubmissionResult? result, out string reason) {
         result = null;
 
-        if (!WorldTcpWireFormat.TryDecodeDownstream(
+        if (!WorldPeerWireFormat.TryDecodeDownstream(
             body: out var completionBody,
             frame: body,
             kind: out var completionKind
@@ -855,7 +793,7 @@ public sealed class WorldRemoteAuthority : IDisposable {
             return false;
         }
 
-        return WorldTcpWireFormat.TryReadResult(
+        return WorldPeerWireFormat.TryReadResult(
             body: completionBody.Span,
             kind: completionKind,
             reason: out reason,
@@ -969,7 +907,7 @@ public sealed class WorldRemoteAuthority : IDisposable {
     }
     public IDisposable AttachSink(IClientSink sink) {
         ArgumentNullException.ThrowIfNull(sink);
-        var lease = CancellationTokenSource.CreateLinkedTokenSource(token: m_lifetime.Token);
+        var lease = new ObservationLease(m_lifetime.Token);
 
         _ = Task.Run(function: () => ObserveUntilCancelledAsync(
             sink: sink,
@@ -1039,12 +977,23 @@ public sealed class WorldRemoteAuthority : IDisposable {
 
         if (
             !verdict.Ok ||
-            (verdict.Kind != ((byte)WorldFederationResponse.Ack))
+            (verdict.Kind != ((byte)WorldFederationResponse.Authenticated))
         ) {
             throw new IOException(message: DescribeHandshake(
                 read: verdict,
                 stage: "authentication"
             ));
+        }
+        if (!WorldFederationCodec.TryDecodeAuthorityIdentity(verdict.Body.Span, out var peerAuthority, out var identityFailure)) {
+            throw new IOException($"federation authentication — invalid destination identity ({identityFailure})");
+        }
+        // Routed observations use their transaction authority's authenticated entry connection too, so private
+        // onward world names never become socket endpoints or weaken the original peer namespace pin.
+        if (m_submissionAuthority is null) {
+            var expected = Interlocked.CompareExchange(ref m_peerAuthority, peerAuthority, string.Empty);
+            if (expected.Length != 0 && !string.Equals(expected, peerAuthority, StringComparison.Ordinal)) {
+                throw new IOException($"federation destination authority mismatch: expected '{expected}', received '{peerAuthority}'");
+            }
         }
     }
     /// <summary>Resolves this transfer's commit step.</summary>
@@ -1064,26 +1013,7 @@ public sealed class WorldRemoteAuthority : IDisposable {
             answer: out var answer
         );
 
-        if (!answer.Ok) {
-            reason = answer.Describe();
-
-            return WorldTransferStep.Unreachable;
-        }
-
-        if (
-            (answer.Kind != WorldFederationResponse.Commit) ||
-            !WorldFederationCodec.TryDecodeCommitReply(
-            body: answer.Body.Span,
-            accepted: out accepted,
-            reason: out reason,
-            failure: out _
-        )
-        ) {
-            accepted = false;
-            reason = answer.Describe();
-        }
-
-        return WorldTransferStep.Answered;
+        return DecodeCommitAnswer(answer, out accepted, out reason);
     }
     public void Dispose() {
         m_lifetime.Cancel();
@@ -1096,6 +1026,7 @@ public sealed class WorldRemoteAuthority : IDisposable {
         }
         m_requestLanes.Clear();
         m_transferSteps.Clear();
+        if (m_ownsNetwork) { m_network.Dispose(); }
     }
     /// <summary>Resolves this transfer's reservation step.</summary>
     /// <param name="request">The reservation request.</param>
@@ -1204,7 +1135,7 @@ public sealed class WorldRemoteAuthority : IDisposable {
             m_worker = Task.Run(function: () => RunAsync(ct: m_lifetime.Token));
         }
 
-        private async Task HandoffAsync(NetworkStream stream, CancellationToken ct) {
+        private async Task HandoffAsync(Stream stream, CancellationToken ct) {
             // This is an intentional route handoff, not a dropped client. Tell the older authority not to
             // synthesize a neutral release: the new lane will seed the same current held state.
             await WorldFederationCodec.WriteRequestAsync(
@@ -1299,20 +1230,13 @@ public sealed class WorldRemoteAuthority : IDisposable {
             }
         }
         private async Task RunConnectionAsync(Action established, CancellationToken ct) {
-            using var client = new TcpClient();
-
-            client.NoDelay = true;
             // One route snapshot: the endpoint dialed and the description every later comparison names are the
             // same generation, and the comparisons below are against the owner's cached description, never a
             // fresh formatting.
             var route = m_owner.CurrentRoute();
 
-            await client.ConnectAsync(
-                cancellationToken: ct,
-                remoteEP: route.Endpoint
-            ).ConfigureAwait(continueOnCapturedContext: false);
             var connectedEndpoint = route.Description;
-            using var stream = client.GetStream();
+            await using var stream = await m_owner.m_network.ConnectAsync(route.Endpoint, ct).ConfigureAwait(false);
 
             await HandshakeWireFormat.WriteHelloAsync(
                 ct: ct,

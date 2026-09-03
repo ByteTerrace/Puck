@@ -309,7 +309,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             writeItem: static (w, entry) => {
                 w.WriteUInt64(value: entry.Tick);
                 w.WriteBlock(value: EncodeLeafBlock<WorldMutation>(
-                    tryEncode: WorldSubmissionCodec.TryEncodeMutation,
+                    tryEncode: WorldSubmissionCodec.TryEncodeCommittedMutation,
                     value: entry.Mutation,
                     what: "journal mutation"
                 ));
@@ -336,6 +336,15 @@ public static partial class WorldAuthorityCheckpointCodec {
                 w.WriteBoolean(value: row.Held);
             }
         );
+        WriteArray(writer, section.Decisions, static (w, s) => {
+            w.WriteString(s.Rule); w.WriteInt32(s.Key); w.WriteInt32(s.Generation); w.WriteInt32(s.Selected);
+            w.WriteBoolean(s.Evaluated); w.WriteBoolean(s.InterruptHeld);
+            w.WriteUInt64(s.PeriodRemaining); w.WriteUInt64(s.CommitmentRemaining); w.WriteUInt64(s.RandomState);
+            w.WriteUInt64(s.DrawCount); w.WriteUInt64(s.Reconsiderations); w.WriteInt64(s.LastScore);
+            w.WriteInt32(s.Candidate); w.WriteInt32(s.CandidateGeneration);
+        });
+        WriteOptionalClass(writer, section.Social, WriteSocialMemory);
+        writer.WriteInt32(section.LastSocialResult);
         WriteArray(
             writer: writer,
             items: section.InteractionGateHeld,
@@ -425,7 +434,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 var mutation = ReadLeafBlock<WorldMutation>(
                     field: "journal mutation",
                     reader: ref r,
-                    tryDecode: WorldSubmissionCodec.TryDecodeMutation
+                    tryDecode: WorldSubmissionCodec.TryDecodeCommittedMutation
                 );
 
                 return (tick, mutation!);
@@ -457,6 +466,12 @@ public static partial class WorldAuthorityCheckpointCodec {
                 return (rule, held);
             }
         );
+        var decisions = ReadArray(ref reader, "server decisions", static (ref WireReader r) => new WorldDecisionCheckpoint(
+            r.ReadString("decision rule", MaxStringBytes), r.ReadInt32(), r.ReadInt32(), r.ReadInt32(),
+            r.ReadBoolean(), r.ReadBoolean(), r.ReadUInt64(), r.ReadUInt64(), r.ReadUInt64(),
+            r.ReadUInt64(), r.ReadUInt64(), r.ReadInt64(), r.ReadInt32(), r.ReadInt32()));
+        var social = ReadOptionalClass(ref reader, ReadSocialMemory);
+        var lastSocialResult = reader.ReadInt32();
         var interactionGateHeld = ReadArray(
             reader: ref reader,
             field: "server interaction gate held",
@@ -557,6 +572,9 @@ public static partial class WorldAuthorityCheckpointCodec {
             MusicDirectorTransitionCount: musicDirectorTransitionCount,
             Pending: pending,
             RuleGateHeld: ruleGateHeld,
+            Decisions: decisions,
+            Social: social,
+            LastSocialResult: lastSocialResult,
             SolidRevision: solidRevision
         );
         reason = string.Empty;

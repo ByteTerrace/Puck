@@ -6,19 +6,19 @@ namespace Puck.World;
 
 /// <summary>
 /// The admission door's runtime read-back — server-safe (headless or windowed): <c>world.peers</c> echoes every body
-/// the door admitted, whether it crossed as a TCP connection (<see cref="WorldTcpHost"/>'s connection table) or as a
+/// the door admitted, whether it crossed as a QUIC connection (<see cref="WorldPeerHost"/>'s connection table) or as a
 /// traveller an authenticated federation authority handed over. <c>world.admission</c> echoes the document half.
 /// </summary>
 public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, WorldInstanceHost? instances = null) : ICommandModule {
-    private static string Describe(WorldServer server, WorldTcpHost? tcpHost) {
+    private static string Describe(WorldServer server, WorldPeerHost? peerHost) {
         var arrivals = DescribeArrivals(server: server);
 
-        if (tcpHost is not { IsListening: true }) {
+        if (peerHost is not { IsListening: true }) {
             return $"[world.peers: not listening — no host.listen/--listen endpoint{arrivals}]";
         }
 
-        var connections = tcpHost.Connections;
-        var refusals = tcpHost.FederationRefusals;
+        var connections = peerHost.Connections;
+        var refusals = peerHost.FederationRefusals;
         var refusalEcho = ((refusals.Count == 0)
             ? " | federation-refusals none"
             : $" | federation-refusals {string.Join(
@@ -28,7 +28,7 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
         );
 
         if (connections.Count == 0) {
-            return $"[world.peers: listening on {tcpHost.ListenEndpoint}, 0 connections{arrivals}{refusalEcho}]";
+            return $"[world.peers: listening on {peerHost.ListenEndpoint}, 0 connections{arrivals}{refusalEcho}]";
         }
 
         var rows = string.Join(
@@ -36,7 +36,7 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
             values: connections.Select(selector: c => $"conn:{c.ConnectionId} peer:{c.PeerIndex}:{c.Generation} identity:{c.IdentityDomain}/{c.IdentitySubject} tier:{c.Tier} @ {c.RemoteEndpoint}")
         );
 
-        return $"[world.peers: listening on {tcpHost.ListenEndpoint}, {connections.Count} connections | {rows}{arrivals}{refusalEcho}]";
+        return $"[world.peers: listening on {peerHost.ListenEndpoint}, {connections.Count} connections | {rows}{arrivals}{refusalEcho}]";
     }
     private static string DescribeArrivals(WorldServer server) {
         var population = server.Population;
@@ -258,7 +258,7 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
                     return CommandResult.Error(output: $"[world.peers: refused ({refusal})]");
                 }
 
-                return new CommandResult(Output: Describe(server: instance.Server, tcpHost: instance.Door));
+                return new CommandResult(Output: Describe(server: instance.Server, peerHost: instance.Door));
             }
         );
 

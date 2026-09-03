@@ -149,10 +149,10 @@ internal static class WorldBootComposition {
         services.AddSingleton<LoopbackTransport>();
         services.AddSingleton<IServerLink>(implementationFactory: static sp => sp.GetRequiredService<LoopbackTransport>());
 
-        // The TCP socket door — registered in EVERY boot shape (headless or windowed, play-and-host is first-class)
+        // The QUIC peer endpoint is registered in every boot shape, sharing the process's networking owner,
         // but only ever bound when host.listen/--listen names an endpoint (WorldPostBuildWiring.Install starts it).
         // Disposed by the container at shutdown (IDisposable), which stops the listener and drops every connection.
-        services.AddSingleton<WorldTcpHost>();
+        services.AddSingleton<WorldPeerHost>();
 
         // The addon principals: mounts the world document's enabled Simulation-lane rows through a Puck.Scripting
         // AddonHost (consumed, never modified) and attaches itself to the server, which then pumps it at three pinned
@@ -370,7 +370,7 @@ internal static class WorldBootComposition {
         // The self-update document section's read-back verb — world.update. Live update.status/.check/.apply verbs
         // (when AddSelfUpdate is registered) are Puck.Launcher's own ICommandModule, not this one.
         services.AddSingleton<ICommandModule, WorldUpdateCommandModule>();
-        // The TCP socket's read-back verb — world.peers (the connection table WorldTcpHost owns).
+        // The QUIC socket's read-back verb — world.peers (the connection table WorldPeerHost owns).
         services.AddSingleton<ICommandModule, WorldNetworkCommandModule>();
         // The diegetic screens' verb surface — screen.insert/.eject/.select/.options/.link/.unlink submit a
         // WorldScreenOp through the ordered domain to the CORE Server.WorldMachineHost (machines boot and step in
@@ -511,7 +511,8 @@ internal static class WorldBootComposition {
                 link: sp.GetRequiredService<IServerLink>(),
                 federation: new WorldFederationIdentity(
                     Authenticator: sp.GetRequiredService<IAuthenticator>(),
-                    Subject: bootServer.AuthorityIdentity
+                    Subject: bootServer.AuthorityIdentity,
+                    Network: sp.GetRequiredService<WorldPeerNetwork>()
                 ),
                 documentOrigin: new WorldFileOrigin(resolvedPath: bootOrigin.SourcePath)
             ) {

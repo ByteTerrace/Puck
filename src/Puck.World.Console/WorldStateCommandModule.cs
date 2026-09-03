@@ -29,7 +29,7 @@ namespace Puck.World;
 /// (<c>world.grant … edit state:&lt;name&gt; verbs:UpsertStateCell,RemoveStateCell</c>), which admits the per-cell
 /// writes while denying the whole-row pair — the difference between bumping a row and redefining it. Revoking either
 /// grant, or narrowing its mask, refuses that principal's writes here, whichever verb produced them.</remarks>
-public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IServerLink link) : ICommandModule {
+public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority authority, IServerLink link, WorldDeferredVerbEchoes echoes) : ICommandModule {
     private static string DescribeCell(WorldServer server, WorldStateRow row, string key, long raw, string? text, WorldStateAdvance? advance, WorldStateDynamics? dynamics, WorldStateCycle? cycle) =>
         $"[world.state.cell '{row.Name}'.'{key}' value={DescribeValue(
             raw: raw,
@@ -102,8 +102,8 @@ public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IS
         var parts = new List<string>(capacity: decks.Count);
 
         for (var index = 0; (index < decks.Count); index++) {
-            if (decks[index] != 0L) {
-                parts.Add(item: $"{index}=0x{decks[index]:X}");
+            if (!decks[index].IsEmpty) {
+                parts.Add(item: $"{index}=0x{decks[index]}");
             }
         }
 
@@ -266,13 +266,13 @@ public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IS
             key: WorldStateRow.SlotKey.Value,
             row: row,
             server: server
-        )}{DescribeCycle(cycle: row.Cycle)}{DescribeDraw(row: row)}]";
+        )}{DescribeCycle(cycle: row.Cycle)}{DescribeDraw(row: row)}{DescribeDiscrete(server, row)}]";
 
         if (!row.IsSlot) {
             var capacity = Math.Clamp(
-                value: (row.Capacity ?? WorldStateCapacity.MaxCellsPerRow),
+                value: (row.Capacity ?? row.CellCeiling),
                 min: 1,
-                max: WorldStateCapacity.MaxCellsPerRow
+                max: row.CellCeiling
             );
 
             return $"{head} cells={(row.Cells?.Count ?? 0)}/{capacity}{tail}";
@@ -424,6 +424,9 @@ public sealed class WorldStateCommandModule(IWorldConsoleAuthority authority, IS
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
+        foreach (var command in DiscreteCommands()) {
+            yield return command;
+        }
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.rule.failures",

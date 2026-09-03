@@ -32,7 +32,7 @@ namespace Puck.World;
 /// seam — is not built: the seam is <see cref="Server.WorldServer.ApplySession"/>
 /// itself (already reachable per-instance, exactly as the instance-targeted player verbs reach it), but wiring a live
 /// socket connection to address anything but the boot instance is unbuilt. See
-/// <c>src/Puck.World.Server/WorldTcpHost.cs</c> for where that door lives today.</para></remarks>
+/// <c>src/Puck.World.Server/WorldPeerHost.cs</c> for where that door lives today.</para></remarks>
 internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Client.WorldSeatAuthorityRouter seatRouter) : ICommandModule {
     private readonly WorldInstanceHost m_instances = instances;
     private readonly Client.WorldSeatAuthorityRouter m_seatRouter = seatRouter;
@@ -103,24 +103,20 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
 
         return false;
     }
-    // The 1-based seat display index world.transfer shares with the instance-targeted player.* verbs (see
-    // PlayerCommandModule's own TryStripInstanceToken/ResolveInstanceSlot) — translated to the 0-based slot
-    // SessionRequest/WorldCommand carry by the caller.
-    private static bool TrySlot(in WireArgs args, int index, string verb, out int slot) {
-        if (
-            !args.TryInt(
-            index: index,
-            value: out slot
-        ) ||
-            (slot < 1) ||
-            (slot > WorldBodiesLimits.LocalSeatCount)
-        ) {
-            slot = 0;
-
-            return false;
+    // Explicit body targets are zero-based; bare numbers retain the local-seat display convention.
+    // The authority validates its actual capacity and occupancy when the transfer drains.
+    private static bool TryTransferBodyIndex(in WireArgs args, int index, out int bodyIndex) {
+        var token = args[index];
+        if (token.StartsWith("body:", StringComparison.OrdinalIgnoreCase) &&
+            CommandArgs.TryParseInt(token[5..], out bodyIndex) && (uint)bodyIndex < WorldBodiesLimits.CapacityCeiling) {
+            return true;
         }
-
-        return true;
+        if (args.TryInt(index, out var seat) && seat >= 1 && seat <= WorldBodiesLimits.LocalSeatCount) {
+            bodyIndex = seat - 1;
+            return true;
+        }
+        bodyIndex = -1;
+        return false;
     }
 
     /// <inheritdoc/>
@@ -310,10 +306,10 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
         );
         yield return Simulation(
             name: "world.transfer",
-            description: "Queues a SAME-PROCESS transfer out of one running instance: world.transfer <source-instance> <slot|party> <destination>, where <slot> is the SOURCE instance's 1-based seat (the player.*/seat.* convention, one body) or the literal 'party' (every currently-active local seat 0..LocalSeatCount-1 of the source, moved together), and <destination> is one of: '<target-instance>' (an already-running instance, by name — the original form, which ALSO accepts two trailing VERIFICATION-ONLY modifiers in either order: 'transfer:<id>' supplies an EXPLICIT transfer id instead of minting a fresh one — a diegetic portal crossing never supplies this; resubmitting the SAME id refuses BY NAME rather than double-landing, the retry/idempotence proof — and 'forcejoinrefusal:<n>' forces the n-th (1-based) party member's destination join to refuse once, exercising the abort/rollback path directly, since a genuine document-authored join refusal is otherwise unreachable once the reservation below closes capacity and destination Drive standing); 'ephemeral <site> <path>' (a BRAND-NEW instance, deterministically named '<site>-<n>' from a per-site draw counter this host holds — n advances by exactly one per ephemeral transfer resolved at that site, so two ephemeral transfers from one site draw two DISTINCT names, deterministic within one process run because it is a pure function of drain order (never wall-clock/RNG/tick-of-entry) — NOT replay-stable: transfers and this fresh-name counter sit outside the boot-only replay tape; the two verification modifiers above are NOT accepted on this form, since its own trailing tokens are the document path); or 'persisted <name> <path>' (a STABLE instance: reused if <name> is already running, else started from <path> — two transfers naming the same persisted instance are two doors into one place; same modifier restriction as ephemeral). Applied at this host's ONE pending-transfer drain point (see WorldInstanceHost) as ONE TRANSACTION: RESERVES every member's exact destination slot — proven free AND destination-Drive-authorized — BEFORE any member detaches, so a capacity or destination-authority refusal is impossible-by-construction once detachment begins and the whole party stays wholly home on any pre-check failure, no reservation leaked; each member's LEAVE(source) then JOIN(destination) then runs synchronously into its reserved slot with no Server.Step of any instance between the first and the last, so a body is never active in two instances at once nor in neither; and if a join STILL refuses (a class reservation cannot pre-check, or the forcejoinrefusal test hook), the WHOLE transfer ABORTS — every member already landed in THIS transfer returns to its EXACT pre-transfer pose at the source (position and facing, captured before its own detach), never a fresh spawn. A traveler carries its seat's identity/profile, its captured pose, and its captured dynamic state (velocity, a live dash overlay, in-flight timed presses — see WorldBody.TransferState) to the DESTINATION for exactly one purpose: reproducing that traveler's EXACT source state if this transfer later aborts (WorldPopulation.RestoreDetachedSeat) — none of it seeds the arrival itself, nor is the tape carried across; the destination embodies each accepted arrival through its OWN normal join (kit, appearance, and grants come from the destination's own tables), landing on its own reserved local seat, fresh. Two or more edges resolving the SAME (destination row, scope key) within one portal scan window — including two seats entering the same doorway together — COALESCE into ONE transfer with ONE merged cohort and ONE transfer id, never independently-drained siblings. An ephemeral destination reaps like any other instance once empty; a persisted one is RETAINED through an occupancy dip to zero until an explicit world.instance.stop. Queued, not applied inline: at the drain point every echo carries the transfer id — each ACCEPTED member's full decision on stdout (departed source seat, arrived destination seat, the arrival pose), a whole-transfer refusal or ABORT on stderr naming why. This verb is the DEVELOPER REFLECTION of the in-session portal act — the console mirror of an in-world capability (a portal facet's diegetic trigger feeds this SAME queue), never a separate product, per the unification doctrine. Refuses to enqueue only on a malformed <slot>/<destination> shape; every other refusal (unknown or unstartable instance, source and destination naming the same instance, an inactive/out-of-range/absent source seat, a denied Drive grant, no free seat to reserve in the destination, an already-applied transfer id) is named at drain time.",
+            description: "Queues a same-process transfer: world.transfer <source-instance> <body:index|seat|party> <destination>. body:<index> addresses any zero-based body index; a bare seat number is 1-based within the four local seats; party selects the source world's active local-seat cohort. Destination is an existing instance name, ephemeral <site> <path>, or persisted <name> <path>. The acting principal must hold Drive for each source body, and destination admission must authorize the arrival. Actual capacity, occupancy, grants, and destination resolution are checked at the transfer drain. Reservation precedes detach; a confirmed refusal restores detached members, while an ambiguous commit retains recovery state until resolved. Accepted moves echo their source and destination; refusals echo a reason. A forwarding authority remains alive after its last traveler departs. An ephemeral destination can otherwise reap when empty; persisted destinations remain until explicitly stopped. The existing-name destination also accepts transfer:<id> and forcejoinrefusal:<ordinal> as verification-only modifiers. Transfer handshakes are checkpointed host state, not boot-only replay input.",
             handler: (context, args) => {
                 if (args.Count < 3) {
-                    return CommandResult.Error(output: "[world.transfer: expected <source-instance> <slot|party> <target-instance> | ephemeral <site> <path> | persisted <name> <path>]");
+                    return CommandResult.Error(output: "[world.transfer: expected <source-instance> <body:index|seat|party> <target-instance> | ephemeral <site> <path> | persisted <name> <path>]");
                 }
 
                 var sourceName = args[0].ToString();
@@ -321,18 +317,17 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                     index: 1,
                     value: "party"
                 );
-                var slot = 0;
+                var bodyIndex = 0;
 
                 if (
                     !party &&
-                    !TrySlot(
+                    !TryTransferBodyIndex(
                     args: in args,
                     index: 1,
-                    slot: out slot,
-                    verb: "world.transfer"
+                    bodyIndex: out bodyIndex
                 )
                 ) {
-                    return CommandResult.Error(output: $"[world.transfer: slot must be an integer 1..{WorldBodiesLimits.LocalSeatCount}, or 'party']");
+                    return CommandResult.Error(output: $"[world.transfer: expected body:<0..{WorldBodiesLimits.CapacityCeiling - 1}>, a local seat 1..{WorldBodiesLimits.LocalSeatCount}, or 'party']");
                 }
 
                 WorldInstanceHost.TransferDestination destination;
@@ -415,7 +410,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                     scope: (party
                     ? WorldInstanceHost.TransferScope.Party
                     : WorldInstanceHost.TransferScope.Body),
-                    sourceSlot: (slot - 1),
+                    sourceSlot: bodyIndex,
                     destination: destination,
                     actingPrincipal: context.ActingPrincipal(),
                     explicitTransferId: explicitTransferId,

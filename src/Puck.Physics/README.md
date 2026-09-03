@@ -199,6 +199,34 @@ per-tick rates use. `CaptureState`/`FromState` preserve the rope limits and
 that accumulator's remainder when a same-world checkpoint must continue on
 the exact next fixed-point fraction.
 
+## Bounded local perception
+
+`FixedSpatialNeighborhood` freezes a set of fixed-point positions into an ordered
+grid. A query examines at most 27 cells and an explicit candidate budget, even
+when thousands of points coincide. Nearby occupied cells share attention;
+the caller's deterministic sample ordinal rotates the occupants examined.
+The result is the nearest retained subset of that sample, not a promise of the
+globally nearest neighbors when the budget binds. `FixedNeighborhoodWork`
+reports both inspected work and unexamined candidates. Memory capacity and
+perception work are independent limits.
+
+Grid width bounds query radius. Rebuild and query reuse construction-time
+storage, and squared-distance comparisons use wide raw integers without
+rounding. This is a perception primitive, not a collision broadphase: a contact
+solver cannot discard contacts merely because an attention budget ran out.
+`FixedSpatialNeighborhoodTests` compares complete queries with an independent
+integer oracle and exercises coincident crowds, rotating attention, coordinate
+extrema, input-order invariance, and steady-state allocation.
+
+`FixedFlockSteering` consumes that bounded frozen sample. It blends separation,
+affinity-weighted centroid attraction, independently weighted velocity alignment,
+goal direction and heading persistence. A support normal projects steering into
+the body's actual tangent plane; a zero normal keeps all three dimensions.
+Coincident pairs receive opposite deterministic separation directions. Affinity
+and goal selection are caller policy, so following a competent stranger need not
+imply attraction or friendship. The kernel returns intent, not a collision-free
+trajectory. Its steering decomposition follows [Reynolds' steering model](https://www.red3d.com/cwr/steer/gdc99/).
+
 ## 🚀 Basic use
 
 ```csharp

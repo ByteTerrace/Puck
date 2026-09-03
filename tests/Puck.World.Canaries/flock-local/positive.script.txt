@@ -1,0 +1,12 @@
+replay.record flock-local
+world.population 128
+world.flock
+body.where 4
+world.wait 240
+world.flock
+world.budget
+body.where 4
+world.state.hash
+replay.stop
+replay.verify flock-local
+wire.errors

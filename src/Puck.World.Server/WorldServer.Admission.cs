@@ -81,7 +81,7 @@ public sealed partial class WorldServer {
     }
     /// <summary>Disconnects one remote-human peer connection: revokes every grant that generation held and drops the
     /// body, through the same <see cref="WorldServerEvent.PeerDisconnected"/> ordered-domain path a census shrink
-    /// uses. <c>Server.WorldTcpHost</c> calls this from the tick thread on socket teardown (graceful or dead).</summary>
+    /// uses. <c>Server.WorldPeerHost</c> calls this from the tick thread on socket teardown (graceful or dead).</summary>
     /// <param name="peer">The peer entry <see cref="TryAdmitPeerConnection"/> returned at admission.</param>
     internal void DisconnectPeerConnection(WorldPeerEventEntry peer) {
         ApplyLifecycleEvents(
@@ -111,7 +111,7 @@ public sealed partial class WorldServer {
     }
     /// <summary>Admits one remote-human peer connection through the population door and dispatches the
     /// <see cref="WorldServerEvent.PeerAdmitted"/> event through the same ordered domain every other lifecycle event
-    /// drains through — <c>Server.WorldTcpHost</c>'s Hello door is the one caller, and it calls this only from the
+    /// drains through — <c>Server.WorldPeerHost</c>'s Hello door is the one caller, and it calls this only from the
     /// tick thread (the population/grant tables carry no lock), only after <see cref="Protocol.WorldAdmissionDoor"/>
     /// has already verified the connecting peer's identity off the tick thread. Refused by name on whichever
     /// capacity bound <see cref="WorldPopulation.TryAdmitRemotePeer"/> names.</summary>
@@ -506,7 +506,7 @@ public sealed partial class WorldServer {
                     // the OS session grants it. The trust boundary this door polices is the process boundary itself;
                     // requiring a signed claim from your own process to talk to your own process would authenticate
                     // nothing real while adding a key-management burden with no attacker on the other side of it. A
-                    // REMOTE connection (Server.WorldTcpHost) crosses a real wire and passes through WorldAdmissionDoor
+                    // REMOTE connection (Server.WorldPeerHost) crosses a real wire and passes through WorldAdmissionDoor
                     // in addition to this check, once this one succeeds.
                     if (!WorldHelloDoor.TryAccept(
                         offeredKey: join.WireProtocolKey,

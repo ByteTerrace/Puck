@@ -310,6 +310,46 @@ can be WON does not wait on the rules section.**
 
 ## How the work is shaped
 
+**Creature collectives (owner decisions, 2026-09-02).** Authorable local laws,
+not a prescribed group lifecycle, must allow solitary creatures to form packs,
+split into overlapping subclusters, reunite, and leave again. Explicit orders
+remain possible. Social membership, chosen activity, local steering, shared
+navigation, and physical contact answer different questions. Sharing a compatible
+route is an optimization of chosen behavior, never a reason to force membership;
+followers retain independent progress and may detach without losing their bonds.
+Ground travel uses the body's tangent plane; airborne and submerged travel use
+three dimensions, with medium membership remaining an actual traversal constraint.
+
+Relationships are directed, contextual, and author-named numeric dimensions.
+Affection, source reliability, and perceived competence must not collapse into
+one score. A creature may follow a capable stranger it dislikes. Perception and
+memory are distinct from world truth: observations and communicated claims carry
+provenance, and repeated reports of one event do not become independent evidence.
+Conflicts can motivate authored investigation without making the next observation
+automatically decisive. Observable attempts and outcomes are separate evidence;
+private intent is not magically disclosed. Compact impressions and retained
+salient episodes have authored retention, including creatures that remember
+everyone. Personality has authored baselines, bounds, plasticity, and optional
+recovery; one mistaken expectation need not rewrite unrelated instincts.
+
+Decisions filter inadmissible options, then use authored scoring and either
+deterministic or reproducibly weighted choice, with commitment and interruption
+rules. Choice randomness is local to the decision, not consumed anew every tick.
+Authored cadence and deterministic work budgets control sensing and deliberation;
+memory size does not require scanning every remembered individual. Bounded
+attention must bound candidate inspection as well as retained neighbor count.
+Engine primitives remain a closed declarative vocabulary; arbitrary policy stays
+with addons rather than a second scripting language inside state.
+
+The acceptance workload is a few thousand creatures densely packed on ground
+or in a body of water, with visible presentation at least 60 FPS on the desktop
+and Steam Deck targets. This is an acceptance requirement, not a measurement.
+Falsifiers include density-dependent unbounded perception work, slot reuse
+inheriting another creature's memories, duplicate hearsay increasing corroboration,
+checkpoint divergence, incompatible followers borrowing a narrow route, and
+split/replan bursts breaking the frame budget. Verification must include actual
+world runs and rendered whole-frame costs, not only isolated steering timings.
+
 Five tracks and **two thin prerequisites, no cycles** — stated as two rather than one because both
 are real and an honest account is what keeps the fold from becoming a pile: **track 2's runner gates
 track 1** (track 1's own proof is a canary), and **track 5's entity-address type gates track 3's

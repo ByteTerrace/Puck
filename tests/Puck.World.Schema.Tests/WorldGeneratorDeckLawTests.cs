@@ -23,7 +23,7 @@ public sealed class WorldGeneratorDeckLawTests {
             new WorldGeneratorWeightedNumeric(Value: 40, Weight: 2UL),
         ]
     );
-    private static bool TryFire(WorldGenerator generator, long cursor, IReadOnlyList<long>? decks, out WorldGeneratorEngine.FireResult result, out string reason) =>
+    private static bool TryFire(WorldGenerator generator, long cursor, IReadOnlyList<ClosedBitset256>? decks, out WorldGeneratorEngine.FireResult result, out string reason) =>
         WorldGeneratorEngine.TryFire(
             generator: generator,
             targetKind: CellKind.Int,
@@ -34,7 +34,7 @@ public sealed class WorldGeneratorDeckLawTests {
             result: out result,
             reason: out reason
         );
-    private static WorldGeneratorEngine.FireResult Fire(WorldGenerator generator, long cursor, IReadOnlyList<long>? decks) {
+    private static WorldGeneratorEngine.FireResult Fire(WorldGenerator generator, long cursor, IReadOnlyList<ClosedBitset256>? decks) {
         Assert.True(condition: TryFire(generator: generator, cursor: cursor, decks: decks, result: out var result, reason: out var reason), userMessage: reason);
 
         return result;
@@ -58,7 +58,7 @@ public sealed class WorldGeneratorDeckLawTests {
     public void WithoutReplacement_DealsEveryOutcomeOncePerPass_ThenRefusesByName() {
         var bag = Bag(mode: WorldGeneratorMode.WithoutReplacement);
         var cursor = 0L;
-        IReadOnlyList<long>? decks = null;
+        IReadOnlyList<ClosedBitset256>? decks = null;
         var dealt = new List<long>();
 
         for (var deal = 0; (deal < 4); deal++) {
@@ -67,7 +67,7 @@ public sealed class WorldGeneratorDeckLawTests {
             Assert.Equal(expected: 1L, actual: fired.Samples);
             Assert.NotNull(@object: fired.Decks);
             Assert.Single(collection: fired.Decks!);
-            Assert.Equal(expected: (deal + 1), actual: System.Numerics.BitOperations.PopCount(value: unchecked((ulong)fired.Decks![0])));
+            Assert.Equal(expected: (deal + 1), actual: fired.Decks![0].Count);
 
             dealt.Add(item: fired.Numeric!.Value);
             cursor += fired.Samples;
@@ -82,7 +82,7 @@ public sealed class WorldGeneratorDeckLawTests {
     public void ReshuffleOnExhaustion_StartsANewPass_AndEveryPassIsAPermutation() {
         var bag = Bag(mode: WorldGeneratorMode.ReshuffleOnExhaustion);
         var cursor = 0L;
-        IReadOnlyList<long>? decks = null;
+        IReadOnlyList<ClosedBitset256>? decks = null;
 
         for (var pass = 0; (pass < 5); pass++) {
             var dealt = new List<long>();
@@ -96,15 +96,15 @@ public sealed class WorldGeneratorDeckLawTests {
             }
 
             Assert.Equal(expected: new long[] { 10L, 20L, 30L, 40L }, actual: dealt.Order().ToArray());
-            Assert.Equal(expected: 4, actual: System.Numerics.BitOperations.PopCount(value: unchecked((ulong)decks![0])));
+            Assert.Equal(expected: 4, actual: decks![0].Count);
         }
     }
     [Fact]
     public void PersistedCursorAndDeck_ReplayTheSameDeal() {
         var bag = Bag(mode: WorldGeneratorMode.ReshuffleOnExhaustion);
         var cursor = 0L;
-        IReadOnlyList<long>? decks = null;
-        var trail = new List<(long Cursor, long[]? Decks, long Value)>();
+        IReadOnlyList<ClosedBitset256>? decks = null;
+        var trail = new List<(long Cursor, ClosedBitset256[]? Decks, long Value)>();
 
         for (var deal = 0; (deal < 11); deal++) {
             var fired = Fire(generator: bag, cursor: cursor, decks: decks);
@@ -122,7 +122,7 @@ public sealed class WorldGeneratorDeckLawTests {
     public void WithReplacement_IgnoresAnyDeckAndPersistsNone() {
         var bag = Bag(mode: WorldGeneratorMode.WithReplacement);
         var plain = Fire(generator: bag, cursor: 7L, decks: null);
-        var withStaleDeck = Fire(generator: bag, cursor: 7L, decks: [0b1011L]);
+        var withStaleDeck = Fire(generator: bag, cursor: 7L, decks: [new(Word0: 0b1011UL)]);
 
         Assert.Null(@object: plain.Decks);
         Assert.Equal(expected: plain.Numeric, actual: withStaleDeck.Numeric);
@@ -178,17 +178,17 @@ public sealed class WorldGeneratorDeckLawTests {
 
                 expectedRng.Advance(count: unchecked(((ulong)cursor) * 2UL));
                 var expectedEntry = WeightedSampler.Create<int>(entries: remaining).Sample(generator: ref expectedRng);
-                var actual = Fire(generator: generator, cursor: cursor, decks: [unchecked((long)deck)]);
+                var actual = Fire(generator: generator, cursor: cursor, decks: [new(Word0: deck)]);
 
                 Assert.Equal(expected: generator.Weighted![expectedEntry].Value, actual: actual.Numeric);
             }
         }
 
-        _ = Fire(generator: generator, cursor: 0L, decks: [unchecked((long)Deck)]);
+        _ = Fire(generator: generator, cursor: 0L, decks: [new(Word0: Deck)]);
         var before = GC.GetAllocatedBytesForCurrentThread();
 
         for (var cursor = 0L; (cursor < 1024L); cursor++) {
-            _ = Fire(generator: generator, cursor: cursor, decks: [unchecked((long)Deck)]);
+            _ = Fire(generator: generator, cursor: cursor, decks: [new(Word0: Deck)]);
         }
 
         var allocated = (GC.GetAllocatedBytesForCurrentThread() - before);

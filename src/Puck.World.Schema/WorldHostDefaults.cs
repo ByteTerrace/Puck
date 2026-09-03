@@ -258,12 +258,12 @@ public enum WorldHostPresentation : byte {
 /// <param name="Genlock">The external-clock election policy, consumed at boot by the clock registry (which tolerates an
 /// unknown source id): <see langword="null"/> for the launcher's automatic election, or a non-whitespace source id /
 /// <c>off</c>. Shape-only validation (null or non-whitespace); the registry, not the validator, interprets the id.</param>
-/// <param name="Listen">The TCP listen endpoint (<c>host:port</c>) the authoritative host binds for remote peer
+/// <param name="Listen">The QUIC listen endpoint (<c>host:port</c>) the authoritative host binds for remote peer
 /// admission, or <see langword="null"/> to stay loopback-only (no socket ever opens). Durable configuration per the
 /// unification contract — the <c>--listen</c> CLI flag reflects it for a single run without editing the document.
-/// Shape-only validation (null or a non-whitespace <c>host:port</c> pair); <c>Server.WorldTcpHost</c> is what actually
+/// Shape-only validation (null or a non-whitespace <c>host:port</c> pair); <c>Server.WorldPeerHost</c> is what actually
 /// parses and binds it.</param>
-/// <param name="Authority">The TCP endpoint at which this world's authority is reached when another world resolves
+/// <param name="Authority">The QUIC endpoint at which this world's authority is reached when another world resolves
 /// it as a destination, or <see langword="null"/> when the authority is colocated with the resolver. Colocation
 /// short-circuits the authority transport; it does not select a separate transfer path.</param>
 /// <param name="Backend">The preferred graphics backend (<see cref="WorldBackendPreference.Auto"/> is OS-portable), or

@@ -98,8 +98,8 @@ internal sealed class WorldCaptureScheduler {
         }
     }
 
-    /// <summary>The tick-complete hook — compose beside <c>WorldConsoleWaitGate.PublishTick</c> at the same call
-    /// site (<c>publishTick: (waitGate.PublishTick + captureScheduler.PublishTick)</c>).</summary>
+    /// <summary>The authority tick-complete hook. The composition root publishes the server's completed tick here;
+    /// console waits use a separate monotonic host-work counter that does not rewind during replay.</summary>
     /// <param name="tick">The just-completed simulation tick.</param>
     public void PublishTick(ulong tick) {
         FinalizePending();

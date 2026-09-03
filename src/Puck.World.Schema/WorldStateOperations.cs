@@ -1,0 +1,114 @@
+using System.Text.Json.Serialization;
+using Puck.Abstractions.Documents;
+
+namespace Puck.World;
+
+/// <summary>Declares the stable token identities shared by attribute and zone rows.</summary>
+/// <param name="Capacity">The greatest token count, 1 through 4096.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldStateTokens(int Capacity = 256);
+
+/// <summary>A bounded zone whose cell keys identify tokens. Cell order is pile order; values are membership bits.</summary>
+/// <param name="Tokens">The token-domain row. Every token belongs to exactly one zone of its domain.</param>
+/// <param name="Ordered">Whether first/last selection and insertion order have gameplay meaning.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldStateZone(string Tokens, bool Ordered = true);
+
+/// <summary>How participants complete a phase.</summary>
+[JsonConverter(typeof(StrictEnumConverter<WorldPhaseMode>))]
+public enum WorldPhaseMode : byte {
+    /// <summary>Participants act in declaration order, with multiple actions before explicitly completing.</summary>
+    Sequential,
+    /// <summary>All participants may act until each declares readiness.</summary>
+    Together,
+    /// <summary>Only the world program resolves this phase.</summary>
+    Resolution,
+}
+
+/// <summary>One node in a finite phase protocol.</summary>
+/// <param name="Name">The phase name.</param>
+/// <param name="Mode">Who may complete the phase.</param>
+/// <param name="Next">The next phase name.</param>
+/// <param name="TimeoutSeconds">The deadline interval, or zero for no deadline.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldPhaseDefinition(string Name, WorldPhaseMode Mode, string Next, decimal TimeoutSeconds = 0);
+
+/// <summary>Authored phase protocol and persisted progression. Participants are authenticated principal tokens;
+/// readiness does not change their grants. One completion performs at most one phase transition.</summary>
+/// <param name="Participants">Distinct principal tokens in deterministic activation order, at most 32.</param>
+/// <param name="Phases">The finite phase table, at most 32.</param>
+/// <param name="Current">The current phase ordinal.</param>
+/// <param name="Active">The current participant ordinal for sequential phases.</param>
+/// <param name="Ready">The ready-participant bits for together phases.</param>
+/// <param name="Sequence">The generation incremented on changing activation or phase; readiness alone preserves it.</param>
+/// <param name="Round">The round, incremented on returning to phase zero.</param>
+/// <param name="DeadlineTick">The absolute deadline; zero at sequence zero derives from the initial phase timeout.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldStatePhase(IReadOnlyList<string> Participants, IReadOnlyList<WorldPhaseDefinition> Phases,
+    int Current = 0, int Active = 0, uint Ready = 0, long Sequence = 0, long Round = 0, long DeadlineTick = 0);
+
+/// <summary>Admission guard for a submitted gameplay operation.</summary>
+/// <param name="Row">The phase row.</param>
+/// <param name="Sequence">The observed activation/phase generation.</param>
+/// <param name="Participant">World-program-only participant attribution; outside callers always use their stamp.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldPhaseGuard(string Row, long Sequence, string? Participant = null);
+
+/// <summary>Selection of a single token from a zone.</summary>
+[JsonConverter(typeof(StrictEnumConverter<WorldZoneSelector>))]
+public enum WorldZoneSelector : byte {
+    /// <summary>Select by stable token identity.</summary>
+    Key,
+    /// <summary>Select the first cell of an ordered zone.</summary>
+    First,
+    /// <summary>Select the last cell of an ordered zone.</summary>
+    Last,
+    /// <summary>Select by one draw from an explicitly named stream-draw state row.</summary>
+    Random,
+}
+
+/// <summary>The closed set of atomic state transforms. Each folds one candidate document and journals once.</summary>
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+[JsonDerivedType(typeof(WorldStateTransform.Transfer), "transfer")]
+[JsonDerivedType(typeof(WorldStateTransform.SetRay), "setRay")]
+[JsonDerivedType(typeof(WorldStateTransform.CompletePhase), "completePhase")]
+[JsonDerivedType(typeof(WorldStateTransform.MoveToken), "moveToken")]
+[JsonDerivedType(typeof(WorldStateTransform.Observe), "observe")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public abstract record WorldStateTransform {
+    /// <summary>Refreshes a knowledge board from its declared source and visibility mask; authority only.</summary>
+    public sealed record Observe(string Row) : WorldStateTransform;
+    /// <summary>Moves a token along an affordable route, debiting movement points in the same candidate.</summary>
+    /// <param name="Positions">The token-keyed position row; valuesFrom names the terrain topology.</param>
+    /// <param name="Token">The stable token key.</param>
+    /// <param name="Destination">The destination cell ordinal.</param>
+    /// <param name="Terrain">The board row containing nonnegative entry costs; negative values are impassable.</param>
+    /// <param name="Allowance">The token-keyed movement-points row.</param>
+    /// <param name="MaxVisits">The route search's settled-node bound.</param>
+    public sealed record MoveToken(string Positions, string Token, int Destination, string Terrain, string Allowance, int MaxVisits) : WorldStateTransform;
+    /// <summary>Moves one token, preserving identity. A random draw advances only when the whole transfer commits.</summary>
+    /// <param name="From">The source zone.</param>
+    /// <param name="To">The destination zone.</param>
+    /// <param name="Selector">The source selector.</param>
+    /// <param name="Key">The token key for key selection.</param>
+    /// <param name="InsertFirst">Insert at the first position rather than the last.</param>
+    /// <param name="Draw">A streamDraw site for random selection; absent for other selectors.</param>
+    public sealed record Transfer(string From, string To, WorldZoneSelector Selector = WorldZoneSelector.Key,
+        string? Key = null, bool InsertFirst = false, string? Draw = null) : WorldStateTransform;
+
+    /// <summary>Writes only a nonempty run of matching cells closed by a required terminator; otherwise refuses.</summary>
+    /// <param name="Row">The board row.</param>
+    /// <param name="From">The origin key, excluded from the write.</param>
+    /// <param name="Direction">A direction in the board's topology.</param>
+    /// <param name="Through">Every intervening cell must have this value.</param>
+    /// <param name="Until">The closing value, excluded from the write.</param>
+    /// <param name="Value">The replacement value.</param>
+    public sealed record SetRay(string Row, string From, string Direction, long Through, long Until, long Value) : WorldStateTransform;
+
+    /// <summary>Completes the acting participant's activation or readiness, guarded against stale submissions.</summary>
+    /// <param name="Row">The phase row.</param>
+    /// <param name="ExpectedSequence">The exact observed progression sequence; only the world program may omit it.</param>
+    /// <param name="Timeout">World-only completion after the current deadline.</param>
+    /// <param name="Participant">World-only named participant on whose completion the authored rule acts.</param>
+    public sealed record CompletePhase(string Row, long? ExpectedSequence = null, bool Timeout = false, string? Participant = null) : WorldStateTransform;
+}

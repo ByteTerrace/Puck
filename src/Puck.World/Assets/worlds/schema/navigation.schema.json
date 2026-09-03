@@ -106,6 +106,29 @@
               "null"
             ],
             "default": null
+          },
+          "shared": {
+            "description": "Optional shared reverse-search policy. Absent uses independent bounded A* searches. Shared searches are queued and advanced on subsequent simulation ticks, independently of any leader.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "goalCapacity": {
+                "description": "Resident destination-cell trees. A full cache with pending work refuses another destination as capacity-limited; it never launches an unbudgeted independent search.",
+                "type": "integer"
+              },
+              "expandedNodesPerTick": {
+                "description": "Total reverse-Dijkstra expansions per simulation tick, shared fairly between pending resident goals. Each expansion inspects at most 26 edges. A tree can eventually settle every domain cell; the independent A* MaxExpandedNodes bound does not truncate a shared tree.",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "goalCapacity",
+              "expandedNodesPerTick"
+            ],
+            "additionalProperties": false,
+            "default": null
           }
         },
         "required": [

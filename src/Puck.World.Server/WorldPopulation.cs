@@ -296,7 +296,7 @@ public sealed partial class WorldPopulation {
                 Kind = ((index < LocalSeatCount)
                 ? PopulationKind.LocalSeat
                 : PopulationKind.NetworkPeer),
-                CatalogRig = checked((byte)index),
+                CatalogRig = WorldLookSource.Catalog.DefaultIndex(index),
                 Designations = NewDesignations(),
                 ProducerState = new BodyProducerState {
                     AcquiredTarget = -1,
@@ -333,7 +333,7 @@ public sealed partial class WorldPopulation {
         // True when this entity-table occupant arrived through authority transfer rather than the destination's own
         // census/inhabitant authoring. Population edits must not reseed it; replay and abort carry this bit explicitly.
         public bool IsAuthorityTransferred { get; set; }
-        // Whether this slot is bound to a REMOTE-ADMITTED human connection (Server.WorldTcpHost's Hello door), as
+        // Whether this slot is bound to a REMOTE-ADMITTED human connection (Server.WorldPeerHost's Hello door), as
         // opposed to a locally-simulated census stand-in. Set by TryAdmitRemotePeer/ApplyPeerAdmitted, cleared by
         // ApplyPeerDisconnected — SetSimulatedCount skips a slot carrying it exactly like an inhabited one, so a
         // world.population edit can never silently reassign or deactivate a connected human's body.

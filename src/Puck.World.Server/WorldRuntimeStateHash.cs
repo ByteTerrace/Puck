@@ -16,7 +16,7 @@ public enum WorldStateHashScope : byte {
 }
 
 /// <summary>Computes deterministic hashes over explicitly named live-state boundaries.</summary>
-public static class WorldRuntimeStateHash {
+public static partial class WorldRuntimeStateHash {
     private const ulong WorldDomain = 0x574f524c44535431UL; // "WORLDST1"
     private const ulong AuthoritativeDomain = 0x4155544853543031UL; // "AUTHST01"
 
@@ -52,7 +52,7 @@ public static class WorldRuntimeStateHash {
     }
 
     /// <summary>Hashes the state system's authoritative live lanes: world rows and traits, fields, rule/interaction
-    /// latches, body action and cached navigation state, and poses. The rest of the world document, grants, presentation caches, pending
+    /// latches, body action, cached navigation and flock perception, slot generations, prior travel, and poses. The rest of the world document, grants, presentation caches, pending
     /// transport work, diagnostics, and screen-machine cores are deliberately outside this boundary.</summary>
     public static ulong HashAuthoritative(WorldServer server, ulong tick) {
         ArgumentNullException.ThrowIfNull(argument: server);
@@ -170,6 +170,8 @@ public static class WorldRuntimeStateHash {
             AppendString(hash: ref hash, value: draw.Source?.Value);
             AppendGenerator(hash: ref hash, generator: draw.Generator);
             hash.Add(value: ((byte)draw.Timing));
+            hash.Add((byte)(draw.Secret is null ? 0 : 1));
+            if (draw.Secret is { } secret) { hash.Add(secret.Word0); hash.Add(secret.Word1); hash.Add(secret.Word2); hash.Add(secret.Word3); }
         }
     }
     private static void AppendGenerator(ref Fnv1aHash hash, WorldGenerator? generator) {
@@ -290,6 +292,7 @@ public static class WorldRuntimeStateHash {
         }
     }
     private static void AppendWorld(ref Fnv1aHash hash, WorldServer server, ulong tick) {
+        AppendDiscreteTopologies(ref hash, server.Definition.StateRaw);
         var rows = server.Definition.State;
         var catalog = server.Definition.StateCatalog;
 
@@ -316,6 +319,7 @@ public static class WorldRuntimeStateHash {
             hash.Add(value: ((byte)(row.GatesDrive ? 1 : 0)));
             hash.Add(value: ((byte)(row.Evicts ? 1 : 0)));
             hash.Add(value: row.DrawCursor);
+            AppendDiscreteRow(ref hash, row);
             AppendAdvance(hash: ref hash, advance: row.Advance);
             AppendDraw(hash: ref hash, draw: row.Draw);
             AppendDynamics(hash: ref hash, dynamics: row.Dynamics);
@@ -326,8 +330,11 @@ public static class WorldRuntimeStateHash {
             for (var cellIndex = 0; (cellIndex < cells.Count); cellIndex++) {
                 var cell = cells[cellIndex];
 
+                AppendVisibility(ref hash, cell.Visibility);
                 AppendString(hash: ref hash, value: cell.Key.Value);
                 hash.Add(value: cell.Value);
+                hash.Add(value: (byte)(cell.Observation is null ? 0 : 1));
+                if (cell.Observation is { } observed) { hash.Add(value: observed.Tick); hash.Add(value: (byte)(observed.Visible ? 1 : 0)); }
                 AppendString(hash: ref hash, value: cell.Text);
                 AppendString(hash: ref hash, value: cell.Provenance);
                 AppendAdvance(hash: ref hash, advance: cell.Advance);
@@ -355,12 +362,24 @@ public static class WorldRuntimeStateHash {
                 }
             }
 
+            hash.Add(value: (byte)(row.Phase is null ? 0 : 1));
+            if (row.Phase is { } phase) {
+                hash.Add(value: phase.Current);
+                hash.Add(value: phase.Active);
+                hash.Add(value: phase.Ready);
+                hash.Add(value: phase.Sequence);
+                hash.Add(value: phase.Round);
+                hash.Add(value: phase.DeadlineTick);
+            }
             var decks = row.DrawDecks ?? [];
 
             hash.Add(value: ((uint)decks.Count));
 
             for (var deckIndex = 0; (deckIndex < decks.Count); deckIndex++) {
-                hash.Add(value: decks[deckIndex]);
+                hash.Add(value: decks[deckIndex].Word0);
+                hash.Add(value: decks[deckIndex].Word1);
+                hash.Add(value: decks[deckIndex].Word2);
+                hash.Add(value: decks[deckIndex].Word3);
             }
         }
 

@@ -111,7 +111,7 @@ public sealed partial class WorldServer {
         });
     }
     /// <summary>Reserves destination body indices under a binding transfer lease. The same method backs loopback
-    /// colocation and the TCP authority door; callers never reserve population capacity by inspecting it directly.</summary>
+    /// colocation and the QUIC authority door; callers never reserve population capacity by inspecting it directly.</summary>
     /// <param name="request">The source-tick deadline, border policy, and prospective travelers.</param>
     /// <returns>The destination's verdict and assigned body indices.</returns>
     public WorldTransferReservationReply ReserveTransfer(WorldTransferReservationRequest request) =>

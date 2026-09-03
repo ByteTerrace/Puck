@@ -18,6 +18,9 @@ namespace Puck.World;
 public readonly record struct WorldReplayDriveProgress(string SourceName, int Cursor, int Target, int TapeTicks, string? ForkName, bool FastForward, int DivergedAt);
 public sealed partial class WorldReplayTape {
     private DriveState? m_drive;
+    /// <summary>Raised after a live drive installs its starting authority timeline. The composition root refreshes
+    /// local route epochs so input deduplication and presentation do not retain the replaced timeline's cursor.</summary>
+    public event Action? TimelineRestored;
 
     // One live drive's whole mutable state — dropped the instant the drive ends, so no field of it can leak into
     // the recording a fork hands over to.
@@ -200,29 +203,9 @@ public sealed partial class WorldReplayTape {
     }
     // Installs the tape's boot image into the running server through its own doors: a forced world.load of the
     // embedded definition (solids, machines, addon plan, document grants, journal, base — the whole rebuild
-    // pipeline), then the population image a fresh server of that definition reaches once the recorded seats join
-    // on their pinned rates, installed through the population's checkpoint door (a rebuild alone keeps every live
-    // body's pose, and a seat leave/rejoin resumes the parked body rather than respawning it).
+    // pipeline), then the complete authority checkpoint a fresh server reaches after the recorded seats join.
+    // This resets clocks, memory, decisions, latches, grants, and held input as well as the population image.
     private string? ResetLiveWorldToBootImage(WorldReplaySnapshot source, WorldDefinition definition, string? documentPath) {
-        m_liveServer.EnqueueRebuild(
-            request: new WorldRebuildRequest(
-                Kind: WorldRebuildKind.Load,
-                Definition: definition,
-                PathHint: documentPath,
-                Force: true,
-                ContentHash: WorldDefinitionFileSource.ComputeContentHash(content: source.DefinitionJson)
-            ),
-            principal: WorldPrincipal.Console
-        );
-        _ = m_liveServer.DrainAdministrative();
-
-        if (!ReferenceEquals(
-            objA: m_liveServer.Definition,
-            objB: definition
-        )) {
-            return "the boot-image rebuild of the tape's embedded definition was refused (the [world.definition rejected: …] line above names why)";
-        }
-
         var population = new WorldPopulation(definition: definition);
         using var machines = new WorldMachineHost(
             screens: definition.Screens,
@@ -242,14 +225,28 @@ public sealed partial class WorldReplayTape {
             profiles: m_profiles,
             server: shadow
         );
-        m_liveServer.Population.Restore(
-            checkpoint: population.Capture(),
-            defaults: definition.PlayerDefaults,
-            tick: m_liveServer.NextInputTick
-        );
-        m_liveServer.Events.Restore(checkpoint: shadow.Events.Capture());
-
-        return null;
+        // A population-only reset leaves the old clock, latches, social history, decisions, and held input alive.
+        // Reuse the complete authority checkpoint so a live drive starts from the same state as offline replay.
+        if (!shadow.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var checkpoint, out var reason)) {
+            return $"the replay boot image could not be captured: {reason}";
+        }
+        return m_liveServer.ExecuteAuthorityOperation<string?>(() => {
+            if (m_liveServer.ReplayTimelineResetRefusal() is { } refusal) { return refusal; }
+            m_liveServer.EnqueueRebuild(
+                request: new WorldRebuildRequest(
+                    Kind: WorldRebuildKind.Load,
+                    Definition: definition,
+                    PathHint: documentPath,
+                    Force: true,
+                    ContentHash: WorldDefinitionFileSource.ComputeContentHash(content: source.DefinitionJson)),
+                principal: WorldPrincipal.Console);
+            _ = m_liveServer.DrainAdministrative();
+            if (!ReferenceEquals(m_liveServer.Definition, definition)) {
+                return "the boot-image rebuild of the tape's embedded definition was refused (the [world.definition rejected: …] line above names why)";
+            }
+            m_liveServer.RestoreCheckpoint(checkpoint!);
+            return null;
+        });
     }
 
     /// <summary>Ends the live drive where it stands: the recorded ticks already stepped stay applied, the local
@@ -273,7 +270,7 @@ public sealed partial class WorldReplayTape {
     /// <summary>Feeds the recorded tick at the drive cursor into the live server ahead of the step that consumes it
     /// — the same doors and order the offline drive uses — while <see cref="Mode"/> is
     /// <see cref="WorldReplayMode.Replaying"/>. Called by <see cref="WorldServerStepShell"/> immediately before
-    /// <see cref="WorldServer.Step"/>; a no-op otherwise, or when the cursor's tick is already in the doors.</summary>
+    /// <see cref="WorldServer.Advance"/>; a no-op otherwise, or when the cursor's tick is already in the doors.</summary>
     public void InjectDriveTick() {
         if (
             (m_mode != WorldReplayMode.Replaying) ||
@@ -301,7 +298,8 @@ public sealed partial class WorldReplayTape {
     /// when fast-forwarding). Refuses, leaving the session untouched, when the tape is busy, recorded nothing, its
     /// active seat set differs from the live one (join or leave to match — a seat cannot be respawned through the
     /// session door), a screen machine or addon guest already holds state the rebuild door cannot reset, an
-    /// engagement is in flight, or the boot-image rebuild is rejected.</summary>
+    /// engagement is in flight, a remote connection or transfer obligation depends on the current timeline,
+    /// or the boot-image rebuild is rejected. The host tick thread owns this operation.</summary>
     /// <param name="name">The saved tape's name.</param>
     /// <param name="toTick">How many recorded ticks to drive (<c>1..TickCount</c>), or <see langword="null"/> for
     /// the whole tape.</param>
@@ -422,6 +420,7 @@ public sealed partial class WorldReplayTape {
         };
         m_transport.InputMasked = true;
         m_mode = WorldReplayMode.Replaying;
+        TimelineRestored?.Invoke();
         refusal = "";
 
         return true;

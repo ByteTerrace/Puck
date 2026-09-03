@@ -17,7 +17,7 @@ public sealed partial class WorldPopulation {
             entry.ProducerState.ActivityRate = (producer.Scalar(name: "activityRateBase") + (producer.Scalar(name: "activityRateRange") * activityUnit));
         }
     }
-    private bool HasLineOfSight(in FixedVector3 from, in FixedQuaternion fromOrientation, in FixedVector3 to, in FixedQuaternion toOrientation) {
+    internal bool HasLineOfSight(in FixedVector3 from, in FixedQuaternion fromOrientation, in FixedVector3 to, in FixedQuaternion toOrientation) {
         var start = (from + fromOrientation.Rotate(vector: LocalSightOffset));
         var end = (to + toOrientation.Rotate(vector: LocalSightOffset));
 
@@ -77,6 +77,7 @@ public sealed partial class WorldPopulation {
     private BodyProducerSensors ReadProducerSensors(int selfIndex, Entry entry, int currentTarget, in FixedVector3 self, in FixedVector3 forward, CompiledBodyProducer producer) {
         var candidate = BodySensorTarget.None;
         var targetSource = producer.Target;
+        var frozen = producer.Flock is not null;
 
         if (targetSource?.Source is BodyTargetSource.Designated) {
             var designated = entry.Designations[targetSource.Value.RegisterIndex];
@@ -92,7 +93,7 @@ public sealed partial class WorldPopulation {
                 m_entries[designated.Index].Active &&
                 (m_entries[designated.Index].Body is { } designatedBody)
             ) {
-                var position = designatedBody.FixedPosition;
+                var position = frozen ? m_flockPositions[designated.Index] : designatedBody.FixedPosition;
 
                 candidate = new BodySensorTarget(
                     Index: designated.Index,
@@ -100,6 +101,8 @@ public sealed partial class WorldPopulation {
                     DistanceSquared: (position - self).LengthSquared
                 );
             }
+        } else if (frozen && targetSource?.Source is BodyTargetSource.Sensed) {
+            candidate = ReadFlockTarget(entry, self);
         } else if (targetSource?.Source is BodyTargetSource.Sensed sensed) {
             var fixedSource = targetSource.Value;
 
@@ -113,7 +116,7 @@ public sealed partial class WorldPopulation {
                     continue;
                 }
 
-                var position = body.FixedPosition;
+                var position = frozen ? m_flockPositions[index] : body.FixedPosition;
 
                 if (
                     !BodyTargetConeSense.Contains(
@@ -126,9 +129,9 @@ public sealed partial class WorldPopulation {
                 ) ||
                     (sensed.RequiresLineOfSight && !HasLineOfSight(
                     from: self,
-                    fromOrientation: m_entries[selfIndex].Body!.FixedOrientation,
+                    fromOrientation: frozen ? m_flockOrientations[selfIndex] : m_entries[selfIndex].Body!.FixedOrientation,
                     to: position,
-                    toOrientation: body.FixedOrientation
+                    toOrientation: frozen ? m_flockOrientations[index] : body.FixedOrientation
                 ))
                 ) {
                     continue;
@@ -166,15 +169,17 @@ public sealed partial class WorldPopulation {
             candidate = ReadNavigatedTarget(
                 entry: entry,
                 self: self,
-                target: targetSource.Value
+                target: targetSource.Value,
+                frozen: frozen
             );
         }
 
-        var current = (((currentTarget >= 0) && (currentTarget < Capacity) && m_entries[currentTarget].Active && (m_entries[currentTarget].Body is { } held))
+        var current = frozen ? (candidate.Index == currentTarget ? candidate : BodySensorTarget.None) :
+            (((currentTarget >= 0) && (currentTarget < Capacity) && m_entries[currentTarget].Active && (m_entries[currentTarget].Body is { } held))
             ? new BodySensorTarget(
                 Index: currentTarget,
-                Position: held.FixedPosition,
-                DistanceSquared: (held.FixedPosition - self).LengthSquared
+                Position: frozen ? m_flockPositions[currentTarget] : held.FixedPosition,
+                DistanceSquared: ((frozen ? m_flockPositions[currentTarget] : held.FixedPosition) - self).LengthSquared
             )
             : BodySensorTarget.None
         );
@@ -184,8 +189,9 @@ public sealed partial class WorldPopulation {
             CurrentTarget: current
         );
     }
-    private BodySensorTarget ReadNavigatedTarget(Entry entry, in FixedVector3 self, in FixedBodyTargetSource target) {
+    private BodySensorTarget ReadNavigatedTarget(Entry entry, in FixedVector3 self, in FixedBodyTargetSource target, bool frozen) {
         var state = entry.NavigationState;
+        state.ExpandedLast = 0;
         var designation = entry.Designations[target.RegisterIndex];
         FixedVector3 goal;
         var targetIndex = WorldTargetDesignation.PointIndex;
@@ -198,7 +204,7 @@ public sealed partial class WorldPopulation {
             m_entries[designation.Index].Active &&
             m_entries[designation.Index].Body is { } designatedBody
         ) {
-            goal = designatedBody.FixedPosition;
+            goal = frozen ? m_flockPositions[designation.Index] : designatedBody.FixedPosition;
             targetIndex = designation.Index;
         } else {
             state.Clear(status: WorldNavigationStatus.NoTarget);
@@ -229,13 +235,9 @@ Replan:
             state.DomainIndex = target.NavigationDomainIndex;
             state.GoalCell = goalCell;
             state.Waypoint = 1;
-            state.Status = domain.FindPath(
-                start: start,
-                goal: goalCell,
-                path: state.WritablePath(),
-                pathLength: out state.PathLength,
-                expanded: out state.ExpandedLast
-            );
+            state.Status = domain.Sharing is not null
+                ? domain.RequestShared(start, goalCell, state.WritablePath(), out state.PathLength)
+                : domain.FindPath(start, goalCell, state.WritablePath(), out state.PathLength, out state.ExpandedLast);
             if (state.PathLength == 0) {
                 state.Waypoint = 0;
                 return BodySensorTarget.None;
@@ -370,15 +372,13 @@ Replan:
         );
     }
     // Seed a simulated entry's static per-index data from the authored distribution and independent sequences. Baked
-    // for every entry at construction so the color is valid across all 128 from frame 1. A
+    // for every entry at construction so its color and spawn are valid regardless of producer kind. A
     // live Rebuild re-derives the kit/wander-dependent statics with resetPhase: false, which keeps the running wander
     // phase/activity so the retune does not jerk the crowd.
     private void SeedSimulated(int index, bool resetPhase = true) {
         var offset = (index - LocalSeatCount);
 
-        if (SeedProducer(kit: m_kits[m_entries[index].KitIndex]) is not { } producer) {
-            return;
-        }
+        var producer = SeedProducer(kit: m_kits[m_entries[index].KitIndex]);
 
         var phase = WorldSequenceSampling.FixedAngle(
             sequence: m_peerVariation.Phase,
@@ -399,7 +399,7 @@ Replan:
         );
         var entry = m_entries[index];
 
-        entry.ProducerState.PreferredAltitude = PreferredAltitudeFor(
+        entry.ProducerState.PreferredAltitude = producer is null ? FixedQ4816.Zero : PreferredAltitudeFor(
             kit: m_kits[entry.KitIndex],
             producer: producer,
             altitudeUnit: altitudeUnit
@@ -444,14 +444,16 @@ Replan:
             s: m_playerDefaults.Saturation,
             v: m_playerDefaults.Value
         );
-        ApplyVariation(
-            activityUnit: activityUnit,
-            entry: entry,
-            phase: phase,
-            producer: producer,
-            resetPhase: resetPhase,
-            weaveUnit: weaveUnit
-        );
+        if (producer is not null) {
+            ApplyVariation(
+                activityUnit: activityUnit,
+                entry: entry,
+                phase: phase,
+                producer: producer,
+                resetPhase: resetPhase,
+                weaveUnit: weaveUnit
+            );
+        }
     }
     private static FixedVector3 SpawnAtPoint(FixedVector3 basePoint, FixedQ4816 halfExtent, WorldSequence fill, int ordinal) {
         var (jitterX, jitterZ) = WorldSequenceSampling.FixedPair(
@@ -469,6 +471,7 @@ Replan:
     }
     // Run the named producer before motion. Live and Idle name no producer.
     private void StageProducer(Entry entry, WorldBody body, int index, ulong stepTicks) {
+        body.SetFlockMovementDomain(null);
         var kitIndex = ((entry.Kind == PopulationKind.LocalSeat)
             ? m_seatKit
             : entry.KitIndex
@@ -490,6 +493,7 @@ Replan:
                 entry.ProducerState.ActiveProducerNavigationDomainIndex = -1;
                 entry.ProducerState.CurveArcRaw = 0L;
                 entry.NavigationState.Clear(status: WorldNavigationStatus.NoTarget);
+                entry.ProducerState.FlockSeeded = false;
             }
             return;
         }
@@ -516,8 +520,15 @@ Replan:
             entry.ProducerState.CurveArcRaw = 0L;
             entry.ProducerState.ActiveProducerNavigationDomainIndex = navigationDomainIndex;
             entry.NavigationState.Clear();
+            entry.ProducerState.FlockSeeded = false;
         }
 
+        if (producer.Flock is not null) {
+            if (producer.Flock.MovementDomainIndex >= 0) {
+                body.SetFlockMovementDomain(m_navigation[producer.Flock.MovementDomainIndex]);
+            }
+            RefreshFlockPerception(index, entry, producer, stepTicks);
+        }
         var sensors = ReadProducerSensors(
             selfIndex: index,
             entry: entry,
@@ -526,6 +537,11 @@ Replan:
             forward: body.FixedOrientation.Rotate(vector: LocalForward),
             producer: producer
         );
+        if (producer.Flock is not null) {
+            sensors = sensors with { FlockDesired = BlendFlockPreference(index, entry, producer.Flock, sensors.Candidate) };
+        } else {
+            entry.ProducerState.FlockSeeded = false;
+        }
 
         body.ExecuteProducer(
             producer: producer,
@@ -610,6 +626,7 @@ Replan:
                     stepTicks: stepTicks,
                     tick: tick
                 );
+                RecordFlockMotion(body);
             }
         }
     }
@@ -663,6 +680,8 @@ Replan:
 
         (m_contactField as WorldColliderSet)?.RefreshAttached(population: this);
         SolveGravity();
+        FreezeFlockImage();
+        m_navigation.BeginStep();
 
         for (var index = LocalSeatCount; (index < Capacity); index++) {
             var entry = m_entries[index];
@@ -703,6 +722,7 @@ Replan:
                 generatorInvocations: m_generatorInvocations,
                 judgeInvocations: m_judgeInvocations
             );
+            RecordFlockMotion(player);
         }
     }
     /// <summary>Overrides an already-active seat's own pose and velocity — the mapped-arrival half of a portal

@@ -166,6 +166,7 @@ public sealed partial class WorldServer {
         WorldMutation.UpsertHudElement m => $"UpsertHudElement '{m.PanelId}'.'{m.Element.Id}'",
         WorldMutation.RemoveHudElement m => $"RemoveHudElement '{m.PanelId}'.'{m.ElementId}'",
         WorldMutation.SetHudDefaults => "SetHudDefaults",
+        WorldMutation.TransformState => "TransformState",
         WorldMutation.UpsertStateRow m => $"UpsertStateRow '{m.Row.Name}'",
         WorldMutation.RemoveStateRow m => $"RemoveStateRow '{m.Name}'",
         WorldMutation.UpsertStateCell m => $"UpsertStateCell '{m.Row}'.'{m.Key}'",
@@ -303,6 +304,11 @@ public sealed partial class WorldServer {
                 separator: "; ",
                 values: rule.Effects.Select(selector: static effect => effect.Describe)
             );
+
+            if (rule.Decision is { } decision) {
+                lines.Add($"{rule.Name} decision={decision.Mode} options={decision.Options.Length} when {gate} -> common [{effects}]; choices/timers: world.decisions");
+                continue;
+            }
 
             var held = latch.Held(name: rule.Name);
             var scope = ((rule.Interaction is { } interaction)

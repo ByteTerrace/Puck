@@ -27,7 +27,7 @@ namespace Puck.World;
 internal static class WorldDrawBootResolver {
     private static void Narrate(string site, string instanceIdentity, string settled) =>
         Console.Error.WriteLine(value: $"[world.draw: settled {site} instance={instanceIdentity} -> {settled}]");
-    private static bool TryDrawSite(WorldDefinition definition, ulong worldSeed, string instanceIdentity, string site, WorldDraw draw, CellKind targetKind, out WorldGeneratorEngine.FireResult fired, out string reason, long cursor = 0L, IReadOnlyList<long>? decks = null) {
+    private static bool TryDrawSite(WorldDefinition definition, ulong worldSeed, string instanceIdentity, string site, WorldDraw draw, CellKind targetKind, out WorldGeneratorEngine.FireResult fired, out string reason, long cursor = 0L, IReadOnlyList<ClosedBitset256>? decks = null) {
         fired = default;
 
         if (!WorldGeneratorEngine.TryResolveSource(
@@ -53,6 +53,7 @@ internal static class WorldDrawBootResolver {
             cursor: cursor,
             decks: decks,
             result: out fired,
+            secret: draw.Secret,
             reason: out var fireReason
         )) {
             reason = $"{site} {fireReason}";

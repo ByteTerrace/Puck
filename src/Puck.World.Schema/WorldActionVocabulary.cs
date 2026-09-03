@@ -13,12 +13,19 @@ namespace Puck.World;
 [JsonDerivedType(typeof(ActionPredicate.Now), typeDiscriminator: "now")]
 [JsonDerivedType(typeof(ActionPredicate.Recently), typeDiscriminator: "recently")]
 [JsonDerivedType(typeof(ActionPredicate.CompareState), typeDiscriminator: "compareState")]
+[JsonDerivedType(typeof(ActionPredicate.CompareValue), typeDiscriminator: "compareValue")]
 [JsonDerivedType(typeof(ActionPredicate.TimerElapsed), typeDiscriminator: "timerElapsed")]
 [JsonDerivedType(typeof(ActionPredicate.All), typeDiscriminator: "all")]
 [JsonDerivedType(typeof(ActionPredicate.Any), typeDiscriminator: "any")]
 [JsonDerivedType(typeof(ActionPredicate.Not), typeDiscriminator: "not")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record ActionPredicate {
+    /// <summary>World-scope comparison of two bounded numeric expressions. Arithmetic failure makes this comparison false.</summary>
+    /// <param name="Left">Left numeric expression.</param>
+    /// <param name="Comparison">The comparison operation.</param>
+    /// <param name="Right">Right numeric expression.</param>
+    /// <param name="Kind">The common Int or Fixed domain; no implicit conversion is performed.</param>
+    public sealed record CompareValue(WorldValueExpression Left, ActionStateComparison Comparison, WorldValueExpression Right, CellKind Kind = CellKind.Fixed) : ActionPredicate;
     /// <summary>The fact holds this tick.</summary>
     public sealed record Now(ActionFact Fact) : ActionPredicate;
     /// <summary>The fact held within the last <paramref name="WindowSeconds"/> — a per-instance recency clock,
@@ -71,13 +78,16 @@ public abstract record ActionPredicate {
     public sealed record Not(ActionPredicate Predicate) : ActionPredicate;
 }
 
-/// <summary>A bounded postfix numeric expression evaluated by a world rule. Each token either pushes a value or
+/// <summary>A bounded postfix numeric expression evaluated by a world rule, decision, or flock affinity. Each token either pushes a value or
 /// consumes preceding values; the compiler proves stack shape and numeric kind before simulation begins.</summary>
 /// <param name="Tokens">The postfix tokens, in evaluation order.</param>
 public sealed record WorldValueExpression(IReadOnlyList<WorldValueToken> Tokens);
 /// <summary>One authored token in a <see cref="WorldValueExpression"/>.</summary>
 [JsonDerivedType(typeof(WorldValueToken.Constant), typeDiscriminator: "constant")]
 [JsonDerivedType(typeof(WorldValueToken.State), typeDiscriminator: "state")]
+[JsonDerivedType(typeof(WorldValueToken.Social), typeDiscriminator: "social")]
+[JsonDerivedType(typeof(WorldValueToken.SocialClock), typeDiscriminator: "socialClock")]
+[JsonDerivedType(typeof(WorldValueToken.SocialResult), typeDiscriminator: "socialResult")]
 [JsonDerivedType(typeof(WorldValueToken.Add), typeDiscriminator: "add")]
 [JsonDerivedType(typeof(WorldValueToken.Subtract), typeDiscriminator: "subtract")]
 [JsonDerivedType(typeof(WorldValueToken.Multiply), typeDiscriminator: "multiply")]
@@ -87,6 +97,12 @@ public sealed record WorldValueExpression(IReadOnlyList<WorldValueToken> Tokens)
 [JsonDerivedType(typeof(WorldValueToken.Clamp), typeDiscriminator: "clamp")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldValueToken {
+    /// <summary>A directed impression query, with its facet's declared numeric kind.</summary>
+    public sealed record Social(WorldSocialQuery Query) : WorldValueToken;
+    /// <summary>The social bank's current engine tick, Int saturated at Int64.MaxValue.</summary>
+    public sealed record SocialClock : WorldValueToken;
+    /// <summary>The last social evidence result ordinal, Int; -1 before any attempt. Rule effects execute in document order.</summary>
+    public sealed record SocialResult : WorldValueToken;
     /// <summary>An exact authored decimal, converted to the destination row's numeric kind at compile time.</summary>
     /// <param name="Value">The exact decimal literal.</param>
     public sealed record Constant(decimal Value) : WorldValueToken;
@@ -103,7 +119,8 @@ public abstract record WorldValueToken {
     public sealed record Subtract : WorldValueToken;
     /// <summary>Consumes two values and pushes their product in the destination row's numeric domain.</summary>
     public sealed record Multiply : WorldValueToken;
-    /// <summary>Consumes two values and pushes left divided by right; zero fails the effect or transaction.</summary>
+    /// <summary>Consumes two values and pushes left divided by right; zero fails evaluation. The caller closes a gate,
+    /// rejects an effect/decision candidate, or supplies zero affinity according to its own contract.</summary>
     public sealed record Divide : WorldValueToken;
     /// <summary>Consumes two values and pushes the lesser.</summary>
     public sealed record Min : WorldValueToken;
@@ -158,6 +175,7 @@ public readonly record struct WorldGameplayCue(string Name, string? Payload, int
 }
 /// <summary>The finite, non-recursive effect vocabulary admitted inside an atomic world-rule transaction. It mirrors
 /// the rollback-safe world-scope effects explicitly; nested transactions and persistence I/O have no wire shape.</summary>
+[JsonDerivedType(typeof(WorldTransactionStep.TransformStateStep), typeDiscriminator: "transformState")]
 [JsonDerivedType(typeof(WorldTransactionStep.SetCell), typeDiscriminator: "setState")]
 [JsonDerivedType(typeof(WorldTransactionStep.AddCell), typeDiscriminator: "addState")]
 [JsonDerivedType(typeof(WorldTransactionStep.CountdownCell), typeDiscriminator: "countdownState")]
@@ -177,6 +195,9 @@ public readonly record struct WorldGameplayCue(string Name, string? Payload, int
 [JsonDerivedType(typeof(WorldTransactionStep.PaintFieldStep), typeDiscriminator: "paintField")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldTransactionStep {
+    /// <summary>One atomic state transform.</summary>
+    /// <param name="Transform">The bounded operation.</param>
+    public sealed record TransformStateStep(WorldStateTransform Transform) : WorldTransactionStep;
     /// <summary>Sets one state cell from exactly one numeric source spelling.</summary>
     /// <param name="State">The destination row.</param>
     /// <param name="Key">The optional destination cell key.</param>
@@ -263,6 +284,7 @@ public abstract record WorldTransactionStep {
 [JsonDerivedType(typeof(ActionEffect.PlanarImpulse), typeDiscriminator: "planarImpulse")]
 [JsonDerivedType(typeof(ActionEffect.SetState), typeDiscriminator: "setState")]
 [JsonDerivedType(typeof(ActionEffect.AddState), typeDiscriminator: "addState")]
+[JsonDerivedType(typeof(ActionEffect.TransformState), typeDiscriminator: "transformState")]
 [JsonDerivedType(typeof(ActionEffect.CountdownState), typeDiscriminator: "countdownState")]
 [JsonDerivedType(typeof(ActionEffect.StartTimer), typeDiscriminator: "startTimer")]
 [JsonDerivedType(typeof(ActionEffect.Designate), typeDiscriminator: "designate")]
@@ -283,8 +305,17 @@ public abstract record WorldTransactionStep {
 [JsonDerivedType(typeof(ActionEffect.ApplyBodyImpulse), typeDiscriminator: "applyBodyImpulse")]
 [JsonDerivedType(typeof(ActionEffect.DesignateBody), typeDiscriminator: "designateBody")]
 [JsonDerivedType(typeof(ActionEffect.PaintField), typeDiscriminator: "paintField")]
+[JsonDerivedType(typeof(ActionEffect.ObserveSocial), typeDiscriminator: "observeSocial")]
+[JsonDerivedType(typeof(ActionEffect.ForgetSocial), typeDiscriminator: "forgetSocial")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record ActionEffect {
+    /// <summary>Delivers explicitly perceived evidence through the world's bounded social-memory policy. World-scope only.</summary>
+    public sealed record ObserveSocial(WorldSocialObservation Evidence) : ActionEffect;
+    /// <summary>Forgets one impression without clearing its unexpired evidence receipts. World-scope only.</summary>
+    public sealed record ForgetSocial(WorldSocialRelationship Relationship) : ActionEffect;
+    /// <summary>Applies a bounded state transform through the ordinary mutation pipeline.</summary>
+    /// <param name="Transform">The typed operation.</param>
+    public sealed record TransformState(WorldStateTransform Transform) : ActionEffect;
     /// <summary>Writes the body's vertical-velocity channel (the jump launch / the surge). Under the grounded model
     /// gravity owns its decay; under the free model it bleeds to zero at the tuning's rise gravity (no fall phase).</summary>
     public sealed record SetVerticalVelocity(float Velocity, ActionTarget Target = ActionTarget.Self) : ActionEffect;

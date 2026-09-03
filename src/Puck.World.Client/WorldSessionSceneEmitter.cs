@@ -63,13 +63,13 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     // Per-avatar movement-driven gait state, scratch reused across frames to keep packing allocation-free — the SAME
     // distance-driven approach Client.WorldSceneEmitter.PackDynamicTransforms uses, over this emitter's own
     // interpolated (not host-supplied) positions.
-    private readonly float[] m_avatarGaitPhases = new float[WorldRigCatalog.Capacity];
-    private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldRigCatalog.Capacity];
-    private readonly bool[] m_avatarPoseSeeded = new bool[WorldRigCatalog.Capacity];
-    private readonly WorldEntityAddress[] m_avatarMotionAddresses = new WorldEntityAddress[WorldRigCatalog.Capacity];
-    private readonly int[] m_emittedRigs = new int[WorldRigCatalog.Capacity];
-    private readonly float[] m_emittedScales = new float[WorldRigCatalog.Capacity];
-    private readonly float[] m_emittedGaitAmplitudes = new float[WorldRigCatalog.Capacity];
+    private readonly float[] m_avatarGaitPhases = new float[WorldBodiesLimits.CapacityCeiling];
+    private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldBodiesLimits.CapacityCeiling];
+    private readonly bool[] m_avatarPoseSeeded = new bool[WorldBodiesLimits.CapacityCeiling];
+    private readonly WorldEntityAddress[] m_avatarMotionAddresses = new WorldEntityAddress[WorldBodiesLimits.CapacityCeiling];
+    private readonly int[] m_emittedRigs = new int[WorldBodiesLimits.CapacityCeiling];
+    private readonly float[] m_emittedScales = new float[WorldBodiesLimits.CapacityCeiling];
+    private readonly float[] m_emittedGaitAmplitudes = new float[WorldBodiesLimits.CapacityCeiling];
 
     /// <summary>Initializes the emitter over a resolved session mirror and a bind-time-resolved camera choice.</summary>
     /// <param name="mirror">The destination's client-side mirror this emitter reads static geometry from.</param>
@@ -90,11 +90,11 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     // scale) both flow through the ONE WorldRigCatalog.Emit call, exactly like Client.WorldSceneEmitter.Compose's
     // own avatar block.
     private void EmitAvatars(SdfProgramBuilder builder, bool probeWorstCase, int slotBase) {
-        var bodyMaterials = new int[WorldRigCatalog.Capacity];
-        var accentMaterials = new int[WorldRigCatalog.Capacity];
+        var bodyMaterials = new int[WorldBodiesLimits.CapacityCeiling];
+        var accentMaterials = new int[WorldBodiesLimits.CapacityCeiling];
         var noseFactor = m_mirror.Definition.PlayerDefaults.NoseFactor;
 
-        for (var index = 0; (index < WorldRigCatalog.Capacity); index++) {
+        for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
             // A Creation look's body would render through the stamp pool on the boot path; this emitter has no
             // stamp-pool seam (see this type's own remarks), so a mirrored Creation-look body still renders as its
             // catalog avatar — RigFor's Creation-look fallback lands here for that reason.
@@ -367,7 +367,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         );
         var alpha = m_mirror.InterpolationAlpha;
 
-        for (var index = 0; (index < WorldRigCatalog.Capacity); index++) {
+        for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
             if (!m_mirror.IsActive(index: index)) {
                 m_avatarPoseSeeded[index] = false;
 
@@ -435,10 +435,9 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         destination[1] = m_mirror.SnapshotRevision;
     }
 
-    /// <summary>The frozen transform-slot count this emitter declares: the all-128-rig avatar catalog's leaf capacity
+    /// <summary>The frozen transform-slot count this emitter declares: maximum-sized catalog ranges for all body slots
     /// — the same frozen worst case <c>WorldSceneEmitter.DynamicSlotCount</c> reserves for its own
-    /// avatar range, sized off the destination's population capacity (<see cref="WorldRigCatalog.Capacity"/> and
-    /// <see cref="WorldBodiesLimits.CapacityCeiling"/> are single-sourced today), so a full destination can never
+    /// avatar range, sized off the engine-wide <see cref="WorldBodiesLimits.CapacityCeiling"/>, so a full destination can never
     /// outgrow this emitter's own probe.</summary>
     public int DynamicSlotCount => WorldRigCatalog.DynamicTransformCapacity;
     /// <inheritdoc/>

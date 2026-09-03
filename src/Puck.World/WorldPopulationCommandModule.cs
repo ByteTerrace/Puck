@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Client;
@@ -10,7 +11,7 @@ namespace Puck.World;
 /// <summary>
 /// The world's participant/census verb surface — SERVER-SAFE (registered in <c>AddWorldAuthoritativeCore</c>, headless
 /// or windowed alike): <c>world.players</c>, <c>world.devices</c>, <c>world.device-profiles</c>,
-/// <c>world.population</c>, <c>world.navigation</c>, and <c>world.budget</c>. Split out of
+/// <c>world.population</c>, <c>world.navigation</c>, <c>world.flock</c>, <c>world.decisions</c>, <c>world.social</c>, and <c>world.budget</c>. Split out of
 /// <see cref="WorldCommandModule"/> (which stays presentation-only — graphics levers, GPU timing, the diegetic-row
 /// listings), because these verbs read pure roster/population/document state and never require a GPU, window, or audio
 /// device. <c>world.budget</c> accepts an optional render probe: windowed composition fills its render figures,
@@ -191,9 +192,11 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
                 ? $"producer:{producer}"
                 : "live"
         ));
+        var looks = server.Definition.Looks;
         var workload = WorldRigCatalog.ActiveWorkload(
             isActive: population.IsActive,
-            capacity: population.Capacity
+            capacity: population.Capacity,
+            rigFor: index => WorldRigCatalog.RigFor(WorldDefinitionRows.ResolveLook(looks, population.LookIndex(index)), population.CatalogRig(index))
         );
         // The per-kit census derives its names and counts from the definition rows, in row order.
         var counts = population.ActiveKitCounts();
@@ -205,7 +208,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         var kitAssignment = DescribeAssignment(assignment: server.Definition.Assignment);
         var lookAssignment = DescribeAssignment(assignment: server.Definition.LookAssignment);
 
-        return $"[world.population: {simulated} network-human stand-ins active (0..{population.PeerCapacity}), behavior {behavior} | distribution {DescribeDistribution(distribution: defaults.Distribution)} | peerVariation {DescribeVariation(variation: defaults.PeerVariation)} seatVariation {DescribeVariation(variation: defaults.SeatVariation)} peerColors {DescribeSequence(sequence: defaults.PeerColors)} | assignments kit={kitAssignment} look={lookAssignment} | {local} local + {simulated} = {(local + simulated)}/{population.Capacity} inhabitants | archetypes {kits} | unique deterministic rigs {WorldRigCatalog.MinInstructionCount}..{WorldRigCatalog.MaxInstructionCount} instructions/avatar; active {workload.Leaves} leaf instances, {workload.Instructions} authored VM instructions]";
+        return $"[world.population: {simulated} network-human stand-ins active (0..{population.PeerCapacity}), behavior {behavior} | distribution {DescribeDistribution(distribution: defaults.Distribution)} | peerVariation {DescribeVariation(variation: defaults.PeerVariation)} seatVariation {DescribeVariation(variation: defaults.SeatVariation)} peerColors {DescribeSequence(sequence: defaults.PeerColors)} | assignments kit={kitAssignment} look={lookAssignment} | {local} local + {simulated} = {(local + simulated)}/{population.Capacity} inhabitants | archetypes {kits} | {WorldRigCatalog.RigCount} catalog looks, {WorldRigCatalog.MinInstructionCount}..{WorldRigCatalog.MaxInstructionCount} instructions/avatar; catalog workload {workload.Leaves} leaves in {workload.Instances} leaf cull instances, {workload.Instructions} authored VM instructions (creation stamps accounted separately)]";
     }
     private string DescribeBudget() {
         var render = ((renderProbe?.Node is { } node)
@@ -236,9 +239,9 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         var navigationWork = population.NavigationWork();
         var navigation = $"navigation {population.NavigationCellCount} compiled cell(s), {population.NavigationWorkspaceBytes} workspace byte(s), declared search {population.NavigationDeclaredSearchWork} expansion(s), live {navigationWork.Followers} follower(s) / last {navigationWork.LastExpanded} expansion(s) / simultaneous-replan ceiling {navigationWork.WorstExpanded} expansion(s)";
         var ruleBudget = WorldRuleWorkBudget.Measure(definition: server.Definition);
-        var rules = $"rules {ruleBudget.RuleRows}/{WorldRuleCapacity.MaxRules}, interactions {ruleBudget.InteractionRows}/{WorldInteractionCapacity.MaxInteractions}, worst {ruleBudget.EvaluationSlots} evaluation(s), {ruleBudget.WorkUnitsPerTick}/{WorldRuleCapacity.MaxWorkUnitsPerTick} work unit(s) / tick";
+        var rules = $"rules {ruleBudget.RuleRows}/{WorldRuleCapacity.MaxRules}, interactions {ruleBudget.InteractionRows}/{WorldInteractionCapacity.MaxInteractions}, worst {ruleBudget.EvaluationSlots} evaluation(s), {ruleBudget.WorkUnitsPerTick}/{WorldRuleCapacity.MaxWorkUnitsPerTick} work unit(s) / tick (including {ruleBudget.FlockAffinityWorkUnitsPerTick} flock-affinity units); decision perception {ruleBudget.DecisionImagePointsPerTick} pose(s), {ruleBudget.DecisionGridBuildsPerTick} shared grid rebuild(s)/{ruleBudget.DecisionGridPointsPerTick} point(s) sorted per tick ceiling";
 
-        return $"[world.budget: {render} | {far} | {lattice} | {gravity} | {placements} | state {(server.Definition.State?.Count ?? 0)} row(s) | {rules} | {curves} | {navigation}]";
+        return $"[world.budget: {render} | {far} | {lattice} | {gravity} | {placements} | state {(server.Definition.State?.Count ?? 0)} row(s) | {rules} | {curves} | {navigation} | {population.DescribeFlockWork()} | {server.DescribeSocialBudget()}]";
     }
     private static string DescribeSequence(WorldSequence sequence) =>
         $"{sequence.Name}(offset={sequence.Offset},step={sequence.Step:0.########})";
@@ -247,6 +250,37 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.social",
+            description: "Operator inspection of social policy, bounded work, and last evidence outcome, or one belief: world.social [<query-json>]. Requires Observe/all.",
+            handler: (context, args) => {
+                try {
+                    var query = args.Count == 0 ? null : JsonSerializer.Deserialize(
+                        WorldCommandArguments.RawAfter(context, in args, 1), WorldJsonContext.Default.WorldSocialQuery)
+                        ?? throw new JsonException("query must be an object");
+                    return new CommandResult(Output: server.DescribeSocial(context.ActingPrincipal(), query));
+                } catch (JsonException exception) { return new CommandResult(Output: $"[world.social: invalid query: {exception.Message}]"); }
+            },
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.decisions",
+            description: "Echoes authored choice policies and active bindings: selected option, last score, commitment, reconsideration cadence, and local random draw count.",
+            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.decisions") is { } refusal)
+                ? refusal : new CommandResult(Output: server.DescribeDecisions())),
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.flock",
+            description: "Echoes each kit's authored local flock steering: space, perception range/cone/cadence, candidate and neighbor budgets, sight requirement, steering weights, and last-step work. Available headless; does not change behavior.",
+            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.flock") is { } refusal)
+                ? refusal
+                : new CommandResult(Output: population.DescribeFlocks())),
+            routing: CommandRouting.Immediate
+        );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.navigation",
@@ -259,7 +293,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.budget",
-            description: "Prints the immediate compose-time cost sheet: rendering, far-distance, fields, gravity, placements, state/rules, curve followers, and bounded navigation memory/search work. Rendering reads 'not built yet' under a headless host; authoritative costs remain available.",
+            description: "Prints the immediate compose-time cost sheet: rendering, far-distance, fields, gravity, placements, state/rules, curves, bounded navigation, and local flock perception work. Rendering reads 'not built yet' under a headless host; authoritative costs remain available.",
             handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.budget") is { } refusal)
                 ? refusal
                 : new CommandResult(Output: DescribeBudget())),

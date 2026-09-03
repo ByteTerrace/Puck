@@ -184,6 +184,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             value: member.Mobility,
             writeValue: WorldWireLeaves.WriteMobility
         );
+        writer.WriteBoolean(member.Social is not null);
+        if (member.Social is { } social) { WriteSocialMemory(writer, social); }
     }
     private static WorldTransferReservationMember ReadReservationMember(ref WireReader reader, WorldPlayerDefaults defaults) {
         var principal = ReadPrincipal(reader: ref reader);
@@ -199,6 +201,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             reader: ref reader,
             readValue: static (ref WireReader r) => WorldWireLeaves.ReadMobility(reader: ref r)
         );
+        var social = reader.ReadBoolean() ? ReadSocialMemory(ref reader) : null;
 
         return new WorldTransferReservationMember(
             BodyColor: bodyColor,
@@ -207,7 +210,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             Mobility: mobility,
             PreferredSlot: preferredSlot,
             Principal: principal,
-            Source: source
+            Source: source,
+            Social: social
         );
     }
     private static void WriteReservationRequest(WireWriter writer, WorldTransferReservationRequest request) {

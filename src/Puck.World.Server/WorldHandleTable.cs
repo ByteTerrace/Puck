@@ -14,7 +14,7 @@ namespace Puck.World.Server;
 /// <remarks>
 /// <para><b>Only a principal outside the trust boundary gets one.</b> The constructor refuses every
 /// <see cref="PrincipalKind"/> but the two untrusted kinds, <see cref="PrincipalKind.Addon"/> and
-/// <see cref="PrincipalKind.Peer"/> (the socket transport that admits peers, <see cref="WorldTcpHost"/>, lives in this
+/// <see cref="PrincipalKind.Peer"/> (the socket transport that admits peers, <see cref="WorldPeerHost"/>, lives in this
 /// same project) — a fully-trusted <see cref="PrincipalKind.Console"/> or a locally-trusted
 /// <see cref="PrincipalKind.Seat"/> could grant itself anything, so handing either a handle table is ceremony, not
 /// security; both keep naming subjects directly.</para>

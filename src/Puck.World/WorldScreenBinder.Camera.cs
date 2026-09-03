@@ -27,10 +27,6 @@ internal sealed partial class WorldScreenBinder {
     // explicit slot acquisitions enforce the guarantee when producer and renderer cadence diverge.
     private const int CameraTargetCount = 3;
 
-    // How often the device table is refreshed against ICameraCaptureService.EnumerateDevices() (hot plug/unplug) —
-    // cheap enough to run every publish, expensive enough (a platform enumeration call) to throttle to a human-scale
-    // cadence rather than every produced frame.
-    private static readonly long CameraDeviceScanInterval = (2L * Stopwatch.Frequency);
     // The document-member-to-platform-control pairing, stated once so ApplyCameraControlsFor and DescribeCameraFeed
     // can never disagree about which authored member drives which device control.
     private static readonly (CameraControl Control, string Name, Func<WorldCameraControls, int?> Select)[] CameraControlMap = [
@@ -183,7 +179,7 @@ internal sealed partial class WorldScreenBinder {
             }
         }
     }
-    // Re-enumerates every physical camera at boot and roughly every CameraDeviceScanInterval thereafter (hot plug):
+    // Polls physical-camera scans off the render thread, with two seconds between completions and new attempts:
     // a newly seen device is content-addressed (InputDeviceId.FromKey — reconnect-stable) and observed onto the
     // roster (its default-seating policy attaches it, or leaves it unassigned); a device that vanished has its graph
     // closed and every feed detached with a "camera disconnected" fault, then drops out of the table so a later
@@ -191,32 +187,19 @@ internal sealed partial class WorldScreenBinder {
     // read as "every camera unplugged" — the device table is left untouched and removals resume only once a scan
     // completes again; the failure narrates once per episode rather than on every retry.
     private void ServiceCameraDevices() {
-        var now = Stopwatch.GetTimestamp();
-
-        if (
-            (m_nextCameraDeviceScanTimestamp != 0L) &&
-            (now < m_nextCameraDeviceScanTimestamp)
-        ) {
-            return;
-        }
-
-        m_nextCameraDeviceScanTimestamp = (now + CameraDeviceScanInterval);
-
-        if (!m_cameraCapture.IsSupported) {
-            return;
-        }
+        if (!m_cameraDeviceScanner.TryPoll(Stopwatch.GetTimestamp(), out var scan)) { return; }
 
         CameraDeviceScanOutcome outcome;
         var infoById = new Dictionary<InputDeviceId, CameraDeviceInfo>();
 
-        try {
-            foreach (var info in m_cameraCapture.EnumerateDevices()) {
+        if (scan.Failure is null) {
+            foreach (var info in scan.Devices) {
                 infoById[InputDeviceId.FromKey(key: info.Id)] = info;
             }
 
             outcome = new CameraDeviceScanOutcome.Success(Ids: infoById.Keys.ToHashSet());
-        } catch (InvalidOperationException exception) {
-            outcome = new CameraDeviceScanOutcome.Failure(Message: exception.Message);
+        } else {
+            outcome = new CameraDeviceScanOutcome.Failure(Message: scan.Failure);
         }
 
         var decision = CameraDeviceScanReconciler.Reconcile(knownIds: m_cameraDevices.Keys.ToHashSet(), outcome: outcome, wasFailing: m_cameraDeviceScanFailed);
@@ -902,6 +885,7 @@ internal sealed partial class WorldScreenBinder {
         }
     }
     private void DisposeCamera() {
+        m_cameraDeviceScanner.Dispose();
         foreach (var device in m_cameraDeviceOrder) {
             DisposeCameraDevice(device: device, fault: null);
         }

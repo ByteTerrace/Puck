@@ -33,9 +33,11 @@ ONE server-side table authorizes every write: `WorldGrants`
   `WorldPrincipalMapping` or the wire codec as a submitter; it exists only as
   a grant TARGET and a membership-row value, expanded fresh on every
   `Allows` check — see "`Allows` returns a verdict" below). Admitted peers occupy indices
-  4–127 and carry a positive generation. The shared console/JSON parser
-  accepts any nonnegative peer index with a positive generation; authored
-  world validation caps it below 128. Tokens: `seat1..seat4` (1-based),
+  the document's authored local-seat count through its population ceiling and
+  carry a positive generation. A zero-seat world can admit peer 0. Shared
+  console/JSON and wire parsers check only the representation bound through
+  `WorldBodiesLimits.IsBodyIndex`; the receiving authority owns census,
+  occupancy, and generation checks. Tokens: `seat1..seat4` (1-based),
   `console`, `addon:<name>`, `peer:<n>:<generation>`; `Describe()` emits the
   same generation-bearing peer token. `Document(id)` (`document:<id>`) is the
   fifth kind: ANOTHER world document asking this document's authority to act,
@@ -174,7 +176,7 @@ unmasked untrusted row is unreachable rather than permissive. `world.why`'s
 `verbs:` diagnosis states exactly this rule and now agrees with every door.
 
 **Two call sites, one rule.** `WorldServer.TryApplyMutation` covers the whole
-ordered domain — loopback, console, and the `WorldTcpHost` peer door all
+ordered domain — loopback, console, and the `WorldPeerHost` peer door all
 converge there, so a peer gets the same masks and metering an addon does, from
 the same code. The addon seam
 (`WorldAddonRuntime.ResolveMutations`) keeps its own EARLIER call site: it
@@ -271,7 +273,7 @@ clear authored ceilings.
 `WorldServer.TryAdmitVerifiedParticipant` is the only path from an ingress to a
 population body plus grant rows, and it takes a `WorldAdmissionVerdict` — never
 raw `WorldGrant` rows. Only `Protocol.WorldAdmissionDoor` mints a verdict:
-`TryAdmit` (a verified attestation claim at the TCP hello), `TryMatchEntry` (an
+`TryAdmit` (a verified attestation claim at the QUIC hello), `TryMatchEntry` (an
 already-verified identity re-matched against a rebuild candidate), and
 `TryAdmitArrival` (an authenticated federation authority's namespace). No
 verdict means a named refusal, never a default seed.
@@ -483,3 +485,10 @@ furniture. For ad-hoc work: every denial case
 needs a control (actor holding the grant succeeds), keep actor ≠ target
 (every seat is seeded wide, so self-targeting discriminates nothing), and
 prove a new assertion once by breaking it.
+
+`Observe` also admits a concrete `state:<row>` subject. The
+`StateObservations(row)` query still filters values by the row/cell audience
+using the authenticated envelope principal, and cannot select another recipient.
+`TransformState` needs edit authority over every written row, including its
+random draw site. A row's `phaseOf` requires the matching guard on external
+transforms; capability grants remain necessary alongside phase eligibility.

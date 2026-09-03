@@ -99,16 +99,17 @@ namespace Puck.World;
 /// character) at the JSON converter before a document can hold one. The reserved <c>$</c> prefix is refused on top of
 /// that, by <see cref="WorldRuleCompiler.CompileAll"/> — exactly as it is for a state row name, and for the same
 /// reason: <c>$</c> marks what the engine mints, and nothing mints a rule.</param>
-/// <param name="Effects">The effects applied in order when the rule fires.</param>
+/// <param name="Effects">The effects applied in order when the rule fires. With a Decision, these are common entry effects and may be empty.</param>
 /// <param name="Gate">The predicate that must hold, or <see langword="null"/> for always.</param>
 /// <param name="ForEach">A keyed state row to iterate, or <see langword="null"/> for one evaluation per tick. With
 /// a row named, the gate and effects evaluate once per cell the row holds at the top of the tick, with
 /// <c>$each</c> bound to that cell's key (a body index by convention) — the quantifier that lets one rule tick a
 /// status for every body carrying it. The latch is kept per key.</param>
-/// <param name="Mode">Whether the rule fires every tick the gate holds (<see cref="ActionTriggerMode.Level"/>, the
+/// <param name="Mode">Without a Decision, whether the rule fires every tick the gate holds (<see cref="ActionTriggerMode.Level"/>, the
 /// default) or once per crossing (<see cref="ActionTriggerMode.Edge"/>). A rule that writes a row almost always wants
 /// <see cref="ActionTriggerMode.Edge"/>: level-firing an <c>addState</c> is what wrote 503 journal entries in 500
 /// ticks.</param>
+/// <param name="Decision">Optional choice policy; requires Level mode. Common effects run only when entering a selected option.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldRule(
     WorldCellName Name,
@@ -119,7 +120,8 @@ public sealed record WorldRule(
     // trailing the required ones. Document order is unaffected: JSON binds by name.
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ActionPredicate? Gate = null,
     ActionTriggerMode Mode = ActionTriggerMode.Level,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ForEach = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ForEach = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDecision? Decision = null
 );
 /// <summary>The reserved <see cref="ActionPredicate.CompareState"/> channels a world rule may compare against instead
 /// of a declared <see cref="WorldStateRow"/> — time, population, region occupancy, a screen-machine's live memory,
@@ -166,8 +168,8 @@ public static class WorldRuleFacts {
     /// switch and refusal that spells a binding reads this table.</summary>
     public static readonly (RuleBinding Binding, string KeyToken, string Scope)[] Bindings = [
         (RuleBinding.Each, "$each", "a rule declaring 'forEach'"),
-        (RuleBinding.Left, "$left", "an interaction"),
-        (RuleBinding.Right, "$right", "a Distance interaction"),
+        (RuleBinding.Left, "$left", "an interaction or flock-affinity expression"),
+        (RuleBinding.Right, "$right", "a Distance interaction or flock-affinity expression"),
     ];
 
     /// <summary>The body-reference spelling of a binding's key token — the token without its leading <c>$</c>.</summary>
@@ -209,7 +211,7 @@ public static class WorldRuleFacts {
     /// guard against).</summary>
     public const string LineOfSightPrefix = "$los:";
     /// <summary>The prefix; <c>$nav:&lt;bodyRef&gt;:&lt;facet&gt;</c> reads one body's live route state. Facets are
-    /// <c>hasPath</c>, <c>active</c>, <c>arrived</c>, <c>unreachable</c>, and <c>remaining</c> waypoints.</summary>
+    /// <c>hasPath</c>, <c>active</c>, <c>arrived</c>, <c>unreachable</c>, <c>pending</c>, <c>capacity</c>, and <c>remaining</c> waypoints.</summary>
     public const string NavigationPrefix = "$nav:";
     /// <summary>The prefix; <c>$link:&lt;adjacencyName&gt;</c> reads how many simulation ticks have passed since the
     /// named <c>adjacencies</c> row last received a delivered neighbour refresh — <c>0</c> the tick a refresh landed,
@@ -446,6 +448,16 @@ public enum WorldRuleFactKind : byte {
 
     /// <summary>One body's navigation status or remaining waypoint count.</summary>
     Navigation,
+    /// <summary>A bounded discrete topology query.</summary>
+    Board,
+    /// <summary>A phase protocol progression value.</summary>
+    Phase,
+    /// <summary>A directed social-memory query.</summary>
+    Social,
+    /// <summary>The social bank's engine clock.</summary>
+    SocialClock,
+    /// <summary>The last social evidence outcome ordinal.</summary>
+    SocialResult,
 }
 /// <summary>One resolved operand of a world-rule comparison — the (<see cref="Kind"/>, <see cref="Row"/>,
 /// <see cref="Key"/>) address plus the <see cref="Screen"/>/<see cref="Address"/> machine coordinates, the live
@@ -490,6 +502,8 @@ public enum WorldRuleFactKind : byte {
 /// that do not read a state row.</param>
 /// <param name="FilterRow">The optional keyed row whose nonzero cells admit reduction candidates.</param>
 /// <param name="FilterHandle">The compiled handle for <paramref name="FilterRow"/>.</param>
+/// <param name="Board">The compiled discrete query, when present.</param>
+/// <param name="Social">The compiled directed social query, when present.</param>
 public readonly record struct CompiledWorldOperand(
     WorldRuleFactKind Kind,
     string? Row,
@@ -508,7 +522,9 @@ public readonly record struct CompiledWorldOperand(
     CellKind ValueKind = CellKind.Fixed,
     WorldStateHandle StateHandle = default,
     string? FilterRow = null,
-    WorldStateHandle FilterHandle = default
+    WorldStateHandle FilterHandle = default,
+    CompiledWorldBoardQuery? Board = null,
+    CompiledWorldSocialQuery? Social = null
 );
 /// <summary>One operation in a compiled postfix Boolean gate.</summary>
 public enum CompiledWorldPredicateKind : byte {
@@ -538,6 +554,8 @@ public enum CompiledWorldPredicateKind : byte {
 /// keeping the text beside the compiled form.</param>
 /// <param name="Kind">The postfix Boolean operation.</param>
 /// <param name="Arity">The number of preceding results consumed by an <c>all</c> or <c>any</c> token.</param>
+/// <param name="LeftExpression">Left postfix expression for compareValue; null for an ordinary comparison.</param>
+/// <param name="RightExpression">Right postfix expression for compareValue.</param>
 public readonly record struct CompiledWorldPredicate(
     CompiledWorldOperand Left,
     ActionStateComparison Comparison,
@@ -546,7 +564,9 @@ public readonly record struct CompiledWorldPredicate(
     CompiledWorldOperand? Comparand,
     string Describe,
     CompiledWorldPredicateKind Kind = CompiledWorldPredicateKind.Compare,
-    int Arity = 0
+    int Arity = 0,
+    CompiledWorldExpressionToken[]? LeftExpression = null,
+    CompiledWorldExpressionToken[]? RightExpression = null
 );
 /// <summary>One opcode in a compiled numeric world-rule expression.</summary>
 public enum WorldExpressionOp : byte {
@@ -651,6 +671,12 @@ public enum WorldRuleEffectKind : byte {
 
     /// <summary>Paint a bounded neighborhood in the live field lattice.</summary>
     PaintField,
+    /// <summary>An atomic discrete state transform.</summary>
+    TransformState,
+    /// <summary>Deliver evidence into bounded social memory.</summary>
+    ObserveSocial,
+    /// <summary>Forget a directed impression while retaining its duplicate-evidence ledger.</summary>
+    ForgetSocial,
 }
 /// <summary>One compiled world-rule effect. Document and state effects submit ordinary mutations under
 /// <see cref="WorldPrincipal.World"/>, so journal and undo cover them like other writes. Save, pose, cue, body, and
@@ -685,6 +711,9 @@ public enum WorldRuleEffectKind : byte {
 /// <param name="Payload">The optional cue payload.</param>
 /// <param name="Body">The compiled body operation.</param>
 /// <param name="Paint">The compiled lattice paint.</param>
+/// <param name="Transform">The discrete state transform.</param>
+/// <param name="SocialObservation">The compiled social evidence delivery.</param>
+/// <param name="SocialRelationship">The directed impression to forget.</param>
 public readonly record struct CompiledWorldEffect(
     WorldRuleEffectKind Kind,
     string Row,
@@ -705,7 +734,10 @@ public readonly record struct CompiledWorldEffect(
     string? Cue = null,
     string? Payload = null,
     CompiledWorldBodyEffect? Body = null,
-    CompiledWorldFieldPaint? Paint = null
+    CompiledWorldFieldPaint? Paint = null,
+    WorldStateTransform? Transform = null,
+    CompiledWorldSocialObservation? SocialObservation = null,
+    CompiledWorldSocialRelationship? SocialRelationship = null
 );
 /// <summary>A literal body pose compiled to deterministic numerics — angles in radians.</summary>
 /// <param name="Position">The world position.</param>
@@ -720,15 +752,20 @@ public readonly record struct CompiledWorldPose(FixedVector3 Position, FixedQ481
 /// <param name="Effects">The compiled effects, in authored order.</param>
 /// <param name="ForEach">The keyed row a rule iterates (<see cref="WorldRule.ForEach"/>), or <see langword="null"/>.</param>
 /// <param name="Interaction">The co-occurrence an interaction evaluates, or <see langword="null"/> for a rule.</param>
-public sealed record CompiledWorldRule(string Name, ActionTriggerMode Mode, CompiledWorldPredicate[] Gate, CompiledWorldEffect[] Effects, string? ForEach = null, CompiledInteraction? Interaction = null);
+/// <param name="Decision">The compiled optional choice policy.</param>
+public sealed record CompiledWorldRule(string Name, ActionTriggerMode Mode, CompiledWorldPredicate[] Gate, CompiledWorldEffect[] Effects, string? ForEach = null, CompiledInteraction? Interaction = null, CompiledWorldDecision? Decision = null);
 
 /// <summary>Hard bounds for rule programs; these are representation and per-tick work limits, not gameplay tuning.</summary>
 public static class WorldRuleCapacity {
+    /// <summary>The maximum options considered by one decision.</summary>
+    public const int MaxDecisionOptions = 32;
+    /// <summary>The maximum individuals retained by one parameterized decision option.</summary>
+    public const int MaxDecisionCandidates = 32;
     /// <summary>The most ordinary rule rows a document may declare.</summary>
     public const int MaxRules = 128;
     /// <summary>The most top-level effects one rule or interaction may carry.</summary>
     public const int MaxEffectsPerRule = 64;
-    /// <summary>The maximum statically derived rule/interaction work admitted for one simulation tick.</summary>
+    /// <summary>The maximum statically derived rule, interaction, and flock-affinity work admitted for one simulation tick.</summary>
     public const long MaxWorkUnitsPerTick = 1_000_000L;
     /// <summary>The most postfix tokens in one Boolean gate.</summary>
     public const int MaxPredicateTokens = 256;

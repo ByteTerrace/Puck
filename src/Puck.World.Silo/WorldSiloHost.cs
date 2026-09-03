@@ -358,7 +358,8 @@ public sealed class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateResolver 
                     ),
                     trustEntries: () => definition.Admission
                 ),
-                Subject: subject
+                Subject: subject,
+                Network: new WorldPeerNetwork(worldRow.Federation.KeyFile)
             );
             reason = string.Empty;
 
@@ -453,7 +454,7 @@ public sealed class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateResolver 
             return;
         }
 
-        if (!WorldSubmissionCodec.TryEncodeMutation(
+        if (!WorldSubmissionCodec.TryEncodeCommittedMutation(
             bytes: out var encoded,
             failure: out var failure,
             mutation: mutation
@@ -589,7 +590,7 @@ public sealed class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateResolver 
 
             foreach (var entry in tail.Entries) {
                 if (
-                    !WorldSubmissionCodec.TryDecodeMutation(
+                    !WorldSubmissionCodec.TryDecodeCommittedMutation(
                     bytes: entry.Encoded.Span,
                     failure: out var failure,
                     mutation: out var mutation
@@ -651,8 +652,9 @@ public sealed class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateResolver 
 
         server.Adjacencies = adjacencies;
 
-        var door = new WorldTcpHost(
+        var door = new WorldPeerHost(
             authenticator: federation.Authenticator,
+            network: federation.Network,
             server: server
         );
         var row = new WorldInstance(
@@ -663,6 +665,7 @@ public sealed class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateResolver 
             origin: () => origin.Identity,
             ownedAdjacencies: adjacencies,
             ownedMachines: machines,
+            ownedNetwork: federation.Network,
             server: server
         ) {
             AwaitingMirrors = (checkpoint is not null),

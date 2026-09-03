@@ -11,18 +11,6 @@ namespace Puck.Networking.Peers;
 /// <see cref="PeerFrameKind.HelloRefused"/> frame through <see cref="RefuseAsync"/>; only a connection the peer
 /// closed first is returned silently, since there is nobody left to tell.</summary>
 internal static class PeerHandshake {
-    private static async Task DrainUntilPeerClosesAsync(Stream stream, CancellationToken ct) {
-        var sink = new byte[256];
-
-        try {
-            while (await stream.ReadAsync(
-                buffer: sink,
-                cancellationToken: ct
-            ).ConfigureAwait(continueOnCapturedContext: false) > 0) {
-            }
-        } catch (Exception exception) when ((exception is IOException or ObjectDisposedException or OperationCanceledException)) {
-        }
-    }
     /// <summary>Turns a <see cref="PeerFrameKind.HelloRefused"/> frame the handshake received into the refusal
     /// this side reports: the peer's own name (<see cref="PeerRefusal.RefusedByPeer"/>) is returned as it stands,
     /// since the peer that sent it is already refusing and draining, while a body that does not decode is this
@@ -67,7 +55,7 @@ internal static class PeerHandshake {
 
             drain.CancelAfter(delay: PeerWireProtocol.RefusalDrainTimeout);
 
-            await DrainUntilPeerClosesAsync(
+            await StreamDrain.UntilClosedAsync(
                 ct: drain.Token,
                 stream: stream
             ).ConfigureAwait(continueOnCapturedContext: false);
