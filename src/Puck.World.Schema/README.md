@@ -103,11 +103,14 @@ frame its MoveAdvance/MoveStrafe channel rows are authored in
 facing its travel, `Heading` body-relative with `Turn` steering — the stick's
 `player.move` is camera-framed by its own definition, so keyboard-in-heading
 beside stick-in-camera is one document), and the seat rig's own `dynamics` op
-(a named `dynamics` row shaping the boom ease). The motion-model union's second arm is
-`WorldMotionModel.Vehicle` — anisotropic body-frame drive (longitudinal
-accel/brake/coast, lateral grip/drift, speed-scaled steering, optional pitched
-flight) read by the `ResolveVehicleFrame`/`ShapeVehicleVelocity` operations;
-`kart.world.json` is its worked example. The retired `arcade` world's
+(a named `dynamics` row shaping the boom ease). Beside `holds`, the arm carries one
+more optional row: `drive` (`WorldDrive`) — anisotropic body-frame drive
+(longitudinal accel/brake/coast, lateral grip and a held `drift`,
+speed-scaled steering, optional pitched flight) read by the
+`ResolveDriveFrame`/`ShapeDriveVelocity` operations. A kart is the one arm plus a
+drive row exactly as a swimmer is the one arm plus a `Medium` hold row; a
+program selecting either drive operation against a kit authoring no row refuses
+by the `Drive` tuning facet's name. The retired `arcade` world's
 `gaming-brick`-cabinet + region-gated prompt/prize + `rules`-driven `state`
 reaction ladder (originally a document-mounted addon, ported to a world rule
 before the world itself was retired) survives only in git history; no shipped world exercises the `rules` section

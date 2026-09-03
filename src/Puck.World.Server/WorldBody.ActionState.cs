@@ -306,8 +306,8 @@ public sealed partial class WorldBody {
             : $"{reason}; clamped by visited world"
         );
     }
-    // The vehicle boost rides the same held-multiplier ordinal the grounded sprint resolves into (see
-    // FixedWorldKit.SprintChannelOrdinal).
+    // A drive's boost is the kit's own held sprint multiplier under the drive's own name — one ordinal seam (see
+    // FixedWorldKit.SprintChannelOrdinal), never a second channel.
     private bool BoostHeld(in PlayerIntent intent) =>
         ((m_sprintChannelOrdinal >= 0) && (intent[m_sprintChannelOrdinal] >= m_channelThresholds[m_sprintChannelOrdinal]));
     private PlayerIntent ClampRole(PlayerIntent intent, ChannelRole role) {

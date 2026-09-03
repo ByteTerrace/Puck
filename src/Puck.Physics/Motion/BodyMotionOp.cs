@@ -16,14 +16,14 @@ public enum BodyMotionOp : byte {
     ComputeLocalTargetVelocity,
     ShapePlanarVelocity,
     SnapYawToPlanarIntent,
-    ResolveVehicleFrame,
+    ResolveDriveFrame,
 
     /// <summary>Keeps the hold the body has while its surface is still there and the same face, and otherwise takes
     /// the first hold the kit's ordered list offers. Sets the hold's frame — the tangent plane movement rides and the
     /// up axis the body's attitude and its contact walkable test stand against. Runs after the ordinary frame
     /// operation, whose heading it leaves intact.</summary>
     ResolveHold,
-    ShapeVehicleVelocity,
+    ShapeDriveVelocity,
     RunActionTriggers,
     ApplyVerticalGravity,
     ApplyVerticalDecay,

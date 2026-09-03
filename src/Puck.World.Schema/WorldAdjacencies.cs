@@ -806,7 +806,6 @@ public static class WorldAdjacencyPolicy {
 
             var (acceleration, terminalSpeed) = motion switch {
                 WorldMotionModel.Grounded grounded => (CeilingFixed(value: MathF.Abs(x: grounded.FallGravity)), CeilingFixed(value: MathF.Abs(x: grounded.MaxFallSpeed))),
-                WorldMotionModel.Vehicle vehicle => (CeilingFixed(value: MathF.Abs(x: vehicle.FallGravity)), CeilingFixed(value: MathF.Abs(x: vehicle.MaxFallSpeed))),
                 _ => (FixedQ4816.Zero, FixedQ4816.Zero),
             };
 

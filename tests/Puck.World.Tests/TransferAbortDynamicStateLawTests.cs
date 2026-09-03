@@ -76,7 +76,7 @@ public sealed class TransferAbortDynamicStateLawTests {
         Assert.Equal(expected: capturedState.PlanarVelocity, actual: restoredState.PlanarVelocity);
         Assert.Equal(expected: capturedState.VerticalVelocity, actual: restoredState.VerticalVelocity);
         Assert.Equal(expected: capturedState.Orientation, actual: restoredState.Orientation);
-        Assert.Equal(expected: capturedState.VehiclePitch, actual: restoredState.VehiclePitch);
+        Assert.Equal(expected: capturedState.DrivePitch, actual: restoredState.DrivePitch);
         Assert.Equal(expected: capturedState.OverlayVelocity, actual: restoredState.OverlayVelocity);
         Assert.Equal(expected: capturedState.OverlayRemainingTicks, actual: restoredState.OverlayRemainingTicks);
         Assert.Equal(expected: capturedState.ChannelTimerTicks[1], actual: restoredState.ChannelTimerTicks[1]);

@@ -569,7 +569,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteFixedVector(value: state.PlanarVelocity);
         writer.WriteFixed(value: state.VerticalVelocity);
         writer.WriteFixedQuaternion(value: state.Orientation);
-        writer.WriteFixed(value: state.VehiclePitch);
+        writer.WriteFixed(value: state.DrivePitch);
         writer.WriteFixedVector(value: state.OverlayVelocity);
         writer.WriteUInt64(value: state.OverlayRemainingTicks);
         WriteULongArray(
@@ -606,9 +606,9 @@ public static partial class WorldAuthorityCheckpointCodec {
             values: state.MotionRecency
         );
         writer.WriteInt64(value: state.PlanarRampRemainder);
-        writer.WriteInt64(value: state.VehicleLongRemainder);
-        writer.WriteInt64(value: state.VehicleLatRemainder);
-        writer.WriteInt64(value: state.VehicleResidualRemainder);
+        writer.WriteInt64(value: state.DriveLongRemainder);
+        writer.WriteInt64(value: state.DriveLatRemainder);
+        writer.WriteInt64(value: state.DriveResidualRemainder);
         writer.WriteInt64(value: state.MediumThrustRampRemainder);
         writer.WriteInt64(value: state.PlanarFollowerPositionRawX);
         writer.WriteInt64(value: state.PlanarFollowerPositionRawY);
@@ -692,7 +692,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var planarVelocity = reader.ReadFixedVector();
         var verticalVelocity = reader.ReadFixed();
         var orientation = reader.ReadFixedQuaternion();
-        var vehiclePitch = reader.ReadFixed();
+        var drivePitch = reader.ReadFixed();
         var overlayVelocity = reader.ReadFixedVector();
         var overlayRemainingTicks = reader.ReadUInt64();
         var channelTimerTicks = ReadULongArray(
@@ -726,9 +726,9 @@ public static partial class WorldAuthorityCheckpointCodec {
             reader: ref reader
         );
         var planarRampRemainder = reader.ReadInt64();
-        var vehicleLongRemainder = reader.ReadInt64();
-        var vehicleLatRemainder = reader.ReadInt64();
-        var vehicleResidualRemainder = reader.ReadInt64();
+        var driveLongRemainder = reader.ReadInt64();
+        var driveLatRemainder = reader.ReadInt64();
+        var driveResidualRemainder = reader.ReadInt64();
         var mediumThrustRampRemainder = reader.ReadInt64();
         var planarFollowerPositionRawX = reader.ReadInt64();
         var planarFollowerPositionRawY = reader.ReadInt64();
@@ -863,10 +863,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             MediumThrustRampRemainder: mediumThrustRampRemainder,
             TapeIntents: tapeIntents,
             TapeRemainingTicks: tapeRemainingTicks,
-            VehicleLatRemainder: vehicleLatRemainder,
-            VehicleLongRemainder: vehicleLongRemainder,
-            VehiclePitch: vehiclePitch,
-            VehicleResidualRemainder: vehicleResidualRemainder,
+            DriveLatRemainder: driveLatRemainder,
+            DriveLongRemainder: driveLongRemainder,
+            DrivePitch: drivePitch,
+            DriveResidualRemainder: driveResidualRemainder,
             VerticalFollowerPositionRaw: verticalFollowerPositionRaw,
             VerticalFollowerPreviousTarget: verticalFollowerPreviousTarget,
             VerticalFollowerVelocityRaw: verticalFollowerVelocityRaw,

@@ -1138,38 +1138,6 @@ public sealed class HoldLawTests {
         ), userMessage: admittedReason);
     }
     [Fact]
-    public void AHoldProgramOnAModelSupplyingNoHolds_RefusesValidationNamingTheFacet() {
-        var document = BuildHoldDocument(holds: [Ground(), Wall(), Air()]);
-        var kits = document.Kits.ToList();
-
-        kits[0] = (kits[0] with {
-            Motion = new WorldMotionModel.Vehicle(
-                Accel: 8f,
-                Brake: 12f,
-                CoastDrag: 4f,
-                FallGravity: 30f,
-                Grip: 20f,
-                MaxFallSpeed: 40f,
-                PitchRate: 0f,
-                ReverseTopSpeed: 4f,
-                RiseGravity: 20f,
-                SteerFalloff: 0.5f,
-                SteerRate: 2f,
-                SteerReferenceSpeed: 6f,
-                TopSpeed: 12f
-            ),
-        });
-
-        Assert.False(
-            condition: WorldDefinitionValidator.TryValidateLocally(
-            definition: (document with { KitRowsRaw = kits }),
-            reason: out var reason
-        ),
-            userMessage: "a vehicle model paired with a holds program was expected to refuse"
-        );
-        Assert.Contains(actualString: reason, expectedSubstring: "Holds");
-    }
-    [Fact]
     public void AGripsLeanIsTurnedIntoOverTheBodySpan_NotSnappedTo_WhereAnUnleanedGripNeverLeavesGravityUp() {
         // The drawn axis turns at speed over span (rad/s), so with the fixture's capsule and the wall row's 2 m/s a
         // quarter turn takes most of a second: after sixty climbing ticks the axis is visibly short of the face, the

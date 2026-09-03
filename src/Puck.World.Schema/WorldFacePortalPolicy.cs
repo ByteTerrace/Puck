@@ -86,23 +86,13 @@ public static class WorldFacePortalPolicy {
                         y: Magnitude(value: grounded.MaxFallSpeed)
                     );
 
-                    break;
-                case WorldMotionModel.Vehicle vehicle:
-                    ceiling = FixedQ4816.Max(
-                        x: ceiling,
-                        y: Scaled(
-                            baseSpeed: (vehicle.TopSpeedEnvelope?.Max ?? vehicle.TopSpeed),
-                            multiplier: vehicle.BoostMultiplier
-                        )
-                    );
-                    ceiling = FixedQ4816.Max(
-                        x: ceiling,
-                        y: Magnitude(value: vehicle.ReverseTopSpeed)
-                    );
-                    ceiling = FixedQ4816.Max(
-                        x: ceiling,
-                        y: Magnitude(value: vehicle.MaxFallSpeed)
-                    );
+                    // A drive row travels backwards at its own rate, which no forward bound covers.
+                    if (grounded.Drive is { } drive) {
+                        ceiling = FixedQ4816.Max(
+                            x: ceiling,
+                            y: Magnitude(value: drive.ReverseSpeed)
+                        );
+                    }
 
                     break;
                 default:

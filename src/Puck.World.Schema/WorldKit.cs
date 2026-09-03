@@ -76,11 +76,10 @@ public enum WorldBodyContactMode : byte {
 /// <param name="Collider">The kit's compiled body volumes, or <see langword="null"/> for a volumeless kit.</param>
 /// <param name="BodyContact">The authored dynamic-body contact mode.</param>
 /// <param name="Mass">The compiled gravitational mass.</param>
-/// <param name="SprintChannelOrdinal">The ordinal <see cref="WorldMotionModel.Grounded.SprintChannel"/> (or the
-/// vehicle arm's <see cref="WorldMotionModel.Vehicle.BoostChannel"/> — the same held-multiplier seam) resolved to,
-/// or <c>-1</c> for a kit with no sprint capability (including a kit whose declared model carries none).</param>
-/// <param name="DriftChannelOrdinal">The ordinal <see cref="WorldMotionModel.Vehicle.DriftChannel"/> resolved to,
-/// or <c>-1</c> for a kit that cannot drift (every non-vehicle kit).</param>
+/// <param name="SprintChannelOrdinal">The ordinal <see cref="WorldMotionModel.Grounded.SprintChannel"/> resolved
+/// to, or <c>-1</c> for a kit with no sprint capability (including a kit whose declared model carries none).</param>
+/// <param name="DriftChannelOrdinal">The ordinal <see cref="WorldDriveDrift.Channel"/> resolved to, or <c>-1</c>
+/// for a kit that cannot drift (every kit authoring no drive row, and every drive row authoring no drift).</param>
 /// <param name="RoleOrdinals">The authored ordinals resolved for engine motion roles.</param>
 /// <param name="RoleMask">The compiled per-ordinal role predicate.</param>
 /// <param name="ActionState">The kit's compiled named action-state register file.</param>
@@ -234,9 +233,8 @@ public readonly record struct FixedWorldKit(
         }
 
         // An arm without a held-multiplier channel resolves -1 here the same way a kit with the field unset does —
-        // "no sprint" by construction, not a special case (DeclaredSprintChannel is the one arm-dispatch read,
-        // covering Grounded's sprint and the vehicle arm's boost, the same held-multiplier seam). The
-        // vehicle arm's drift channel is its own held read, resolved the same way below.
+        // "no sprint" by construction, not a special case (DeclaredSprintChannel is the one arm-dispatch read). A
+        // drive row's drift channel is its own held read, resolved the same way below.
         var sprintOrdinal = (((kit.Motion.DeclaredSprintChannel is { Length: > 0 } sprintChannel)
             && channels.TryGetOrdinal(
             name: sprintChannel,
@@ -245,7 +243,7 @@ public readonly record struct FixedWorldKit(
             ? sprintResolved
             : -1
         );
-        var driftOrdinal = ((((kit.Motion as WorldMotionModel.Vehicle)?.DriftChannel is { Length: > 0 } driftChannel)
+        var driftOrdinal = (((kit.Motion.DeclaredDrive?.Drift?.Channel is { Length: > 0 } driftChannel)
             && channels.TryGetOrdinal(
             name: driftChannel,
             ordinal: out var driftResolved

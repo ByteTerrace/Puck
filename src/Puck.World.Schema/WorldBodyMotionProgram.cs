@@ -82,14 +82,14 @@ public static class BodyMotionProgramRoles {
         ChannelRole.MoveAdvance or ChannelRole.MoveStrafe => (program.Contains(operation: BodyMotionOp.ComputePlanarTargetVelocity)
             || program.Contains(operation: BodyMotionOp.SnapYawToPlanarIntent)
             || program.Contains(operation: BodyMotionOp.ComputeLocalTargetVelocity)
-            || (program.Contains(operation: BodyMotionOp.ShapeVehicleVelocity) && (role == ChannelRole.MoveAdvance))),
+            || (program.Contains(operation: BodyMotionOp.ShapeDriveVelocity) && (role == ChannelRole.MoveAdvance))),
         ChannelRole.Turn => (program.Contains(operation: BodyMotionOp.ResolveYawAttitudeAndPlanarFrame)
             || program.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)
-            || program.Contains(operation: BodyMotionOp.ResolveVehicleFrame)),
+            || program.Contains(operation: BodyMotionOp.ResolveDriveFrame)),
         ChannelRole.MoveUp => (program.Contains(operation: BodyMotionOp.ComputeLocalTargetVelocity)
             || program.Contains(operation: BodyMotionOp.ApplyVerticalDrive)),
-        // ResolveVehicleFrame reads Pitch only under a positive PitchRate, so Pitch is not REQUIRED for it — a
-        // pitchless world's flying-vehicle pitch reads zero rather than refusing the kit.
+        // ResolveDriveFrame reads Pitch only under a positive pitchRate, so Pitch is not required for it — a
+        // pitchless world's flying drive pitch reads zero rather than refusing the kit.
         ChannelRole.Pitch or ChannelRole.Roll => program.Contains(operation: BodyMotionOp.IntegrateLocalAttitude),
         // SnapYawToPlanarIntent reads FaceX/FaceZ only when a world declares them (FaceY rides along for
         // attitude-bearing arms) — a faceless world's snap stays movement-facing rather than refusing the kit.

@@ -14,7 +14,7 @@ internal sealed partial class PlayerCommandModule {
     // Composes the camera control application: possesses the seat's designated camera body through the SAME
     // ComposeControl/Control(+per-tick Drive) gated path any other possession target uses (Server.WorldEngagement) — never a
     // bespoke authority check. Exclusive composition drops the seat's own-body application for the duration, exactly like an ordinary
-    // vehicle possession; WorldPerceptionAnchor then swaps the seat's camera eye/audio listener/HUD bindings onto the
+    // possession of a driven body; WorldPerceptionAnchor then swaps the seat's camera eye/audio listener/HUD bindings onto the
     // camera body as a side effect of the SAME application set, not a second mechanism. Refuses (mutating nothing) when the
     // world declares no camera body for this seat, or the server's own Control check denies the actor — the ModeHandler
     // caller has already checked Drive over the target SEAT's own body; this is the separate Control check the route

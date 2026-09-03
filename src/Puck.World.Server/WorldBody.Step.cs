@@ -80,13 +80,12 @@ public sealed partial class WorldBody {
             );
 
             {
-                // moveSpeed goes through ResolveMoveSpeed's per-arm dispatch — grounded reads the rate live off the
-                // seated profile every frame (an identity.motion edit is real-time; a profileless stand-in falls back to the
-                // tuning's speed), clamped by the kit's own authored MoveSpeedEnvelope when declared; vehicle
-                // deliberately never reads the profile and instead clamps the kit's OWN TopSpeed through its
-                // TopSpeedEnvelope. Either arm, the clamp lands BEFORE ExecuteProgram ever sees the value, so the sim
-                // never observes an unclamped speed, and EffectiveMoveSpeed's read-back echo performs the SAME resolve.
-                // No envelope (the default) is a no-op clamp elided entirely: today's behavior, byte-identical.
+                // moveSpeed goes through ResolveMoveSpeed: the rate reads live off the seated profile every frame
+                // (an identity.motion edit is real-time; a profileless stand-in falls back to the tuning's speed),
+                // clamped by the kit's own authored MoveSpeedEnvelope when declared. The clamp lands BEFORE
+                // ExecuteProgram ever sees the value, so the sim never observes an unclamped speed, and
+                // EffectiveMoveSpeed's read-back echo performs the same resolve. No envelope (the default) is a
+                // no-op clamp elided entirely; a kit pinning its speed outright authors min == max.
                 var moveSpeed = ResolveMoveSpeed();
                 var turnSpeed = (Profile?.FixedTurnSpeed ?? m_tuning.TurnSpeed);
 
@@ -618,14 +617,14 @@ public sealed partial class WorldBody {
             case BodyMotionOp.SnapYawToPlanarIntent:
                 SnapYawToPlanarIntent(scratch: ref scratch);
                 break;
-            case BodyMotionOp.ResolveVehicleFrame:
-                ResolveVehicleFrame(scratch: ref scratch);
+            case BodyMotionOp.ResolveDriveFrame:
+                ResolveDriveFrame(scratch: ref scratch);
                 break;
             case BodyMotionOp.ResolveHold:
                 ResolveHold(scratch: ref scratch);
                 break;
-            case BodyMotionOp.ShapeVehicleVelocity:
-                ShapeVehicleVelocity(scratch: ref scratch);
+            case BodyMotionOp.ShapeDriveVelocity:
+                ShapeDriveVelocity(scratch: ref scratch);
                 break;
             case BodyMotionOp.RunActionTriggers:
                 ProcessLaneActions(scratch: ref scratch);
@@ -1142,14 +1141,14 @@ public sealed partial class WorldBody {
         m_positionAccumulator.ResetY();
         m_grounded = true;
 
-        // A teleport must not carry momentum: drop the ramped planar velocity, its accumulator carries (the grounded
-        // ramp and the vehicle arm's decomposed channels alike), the response table's recency clocks, and the
+        // A teleport must not carry momentum: drop the ramped planar velocity, its accumulator carries (the
+        // isotropic ramp and a drive row's decomposed channels alike), the response table's recency clocks, and the
         // dynamics followers' own state and previous-target carries.
         m_planarVelocity = default;
         m_planarRampAccumulator.Reset();
-        m_vehicleLongAccumulator.Reset();
-        m_vehicleLatAccumulator.Reset();
-        m_vehicleResidualAccumulator.Reset();
+        m_driveLongAccumulator.Reset();
+        m_driveLatAccumulator.Reset();
+        m_driveResidualAccumulator.Reset();
         Array.Clear(array: m_motionRecency);
         m_planarFollower = default;
         m_planarPreviousTarget = default;
@@ -1164,24 +1163,15 @@ public sealed partial class WorldBody {
         m_submerged = false;
         m_atSurface = false;
     }
-    // The one seat-time resolve, per arm. Shared by Advance (which feeds this into the program) and
-    // EffectiveMoveSpeed (which only reads it back) so the two can never compute two different answers to "what
-    // speed is this body actually moving at". A new model arm adds its own case here, alongside its SetTuning case
-    // (see CompiledMotionArm's remarks).
+    // The one seat-time resolve. Shared by Advance (which feeds this into the program) and EffectiveMoveSpeed
+    // (which only reads it back) so the two can never compute two different answers to "what speed is this body
+    // actually moving at". One law for every kit: the seated profile's claimed rate, else the kit's own, clamped by
+    // the kit's envelope. A kart pins its speed with min == max rather than opting out of the profile read; a held
+    // sprint (a drive's boost) multiplies AFTER this clamp, never inside it (see ShapeDriveVelocity).
     private FixedQ4816 ResolveMoveSpeed() {
-        switch (m_motionArm) {
-            case CompiledMotionArm.Grounded:
-                var resolved = (Profile?.FixedMoveSpeed ?? m_tuning.MoveSpeed);
+        var resolved = (Profile?.FixedMoveSpeed ?? m_tuning.MoveSpeed);
 
-                return (m_tuning.MoveSpeedEnvelope?.Clamp(value: resolved) ?? resolved);
-            case CompiledMotionArm.Vehicle:
-                // Deliberately never reads Profile — a kart's speed is the kit's, a design fact per arm, not an
-                // omission. TopSpeed is the base rate the (optional) TopSpeedEnvelope pins; boost multiplies AFTER
-                // this resolve (see ShapeVehicleVelocity), never inside it.
-                return (m_vehicleTuning.TopSpeedEnvelope?.Clamp(value: m_vehicleTuning.TopSpeed) ?? m_vehicleTuning.TopSpeed);
-            default:
-                throw new NotSupportedException(message: $"Motion arm '{m_motionArm}' has no compiled move-speed resolve.");
-        }
+        return (m_tuning.MoveSpeedEnvelope?.Clamp(value: resolved) ?? resolved);
     }
     // Position/planar contact response applies to ANY collider-bearing body regardless of motion model — a flying
     // body still shouldn't clip through a wall. The vertical WRITE-BACK (m_verticalVelocity, m_planarVelocity, the
@@ -1544,21 +1534,21 @@ public sealed partial class WorldBody {
 
         return m_up;
     }
-    // --- The vehicle arm (the ResolveVehicleFrame/ShapeVehicleVelocity ops). ---
+    // --- The drive row (the ResolveDriveFrame/ShapeDriveVelocity ops). ---
 
-    // The vehicle frame (phase 0): resolve up, integrate speed-scaled steering into the heading, and (under a
-    // positive PitchRate) integrate the Pitch channel into the clamped pitch scalar; facing/right derive from the
+    // The drive frame (phase 0): resolve up, integrate speed-scaled steering into the heading, and (under a
+    // positive pitchRate) integrate the Pitch channel into the clamped pitch scalar; facing/right derive from the
     // fresh yaw(+pitch) attitude. Steering authority rises linearly from zero at standstill to full at
-    // SteerReferenceSpeed, falls linearly to SteerFalloff× at the RESOLVED (envelope-clamped) top speed — the SAME
-    // scratch.MoveSpeed ResolveMoveSpeed filled before phase 0, never a second TopSpeed read, so a clamped kit's
-    // falloff anchor moves with its clamp instead of an unreachable authored TopSpeed — reverses sign with
-    // reversing travel (a car backing up, not a turret), and scales by DriftSteerScale while the drift channel
-    // reads held.
-    private void ResolveVehicleFrame(ref BodyMotionScratch scratch) {
+    // steerReferenceSpeed, falls linearly to steerFalloff× at the RESOLVED (envelope-clamped) move speed — the same
+    // scratch.MoveSpeed ResolveMoveSpeed filled before phase 0, so a clamped kit's falloff anchor moves with its
+    // clamp instead of an unreachable authored rate — reverses sign with reversing travel (a car backing up, not a
+    // turret), and scales by the drift row's steerScale while its channel reads held. The rate at full authority is
+    // the kit's own turnSpeed (scratch.TurnSpeed), the same one every other frame operation turns at.
+    private void ResolveDriveFrame(ref BodyMotionScratch scratch) {
         scratch.Up = ResolveUp(stepTicks: scratch.StepTicks);
         scratch.AttitudeUp = scratch.Up;
 
-        var tuning = m_vehicleTuning;
+        var tuning = (m_tuning.Drive ?? default);
         // The signed longitudinal speed against the PREVIOUS attitude — shaping runs after this frame op, so the
         // one-tick-old velocity is the deterministic witness available here.
         var previousFacing = m_orientation.Rotate(vector: -UnitZ);
@@ -1596,7 +1586,7 @@ public sealed partial class WorldBody {
         var yawRate = ((Role(
             intent: in scratch.Intent,
             role: ChannelRole.Turn
-        ) * tuning.SteerRate) * authority);
+        ) * scratch.TurnSpeed) * authority);
         var pitchRate = ((tuning.PitchRate > FixedQ4816.Zero)
             ? (Role(
                 intent: in scratch.Intent,
@@ -1614,13 +1604,13 @@ public sealed partial class WorldBody {
         );
 
         m_yaw += angleStep.X;
-        m_vehiclePitch = FixedQ4816.Clamp(
-            value: (m_vehiclePitch + angleStep.Y),
-            minimum: -MaxVehiclePitch,
-            maximum: MaxVehiclePitch
+        m_drivePitch = FixedQ4816.Clamp(
+            value: (m_drivePitch + angleStep.Y),
+            minimum: -MaxDrivePitch,
+            maximum: MaxDrivePitch
         );
 
-        var attitude = ((m_vehiclePitch == FixedQ4816.Zero)
+        var attitude = ((m_drivePitch == FixedQ4816.Zero)
             ? FixedQuaternion.FromAxisAngle(
                 angle: m_yaw,
                 axis: UnitY
@@ -1629,7 +1619,7 @@ public sealed partial class WorldBody {
                 angle: m_yaw,
                 axis: UnitY
             ) * FixedQuaternion.FromAxisAngle(
-                angle: m_vehiclePitch,
+                angle: m_drivePitch,
                 axis: UnitX
             )).Normalize()
         );
@@ -1851,18 +1841,18 @@ public sealed partial class WorldBody {
 
         return target;
     }
-    // The vehicle shaping (phase 2): decompose the carried velocity into body-frame longitudinal/lateral/residual
-    // components, converge each at its own authored rate, and recompose — the anisotropy a kart's feel needs and
-    // grounded's isotropic MoveToward cannot express. Longitudinal follows the bipolar throttle (accelerate toward
-    // the commanded fraction of scratch.MoveSpeed — the RESOLVED, envelope-clamped base top speed, the same value
-    // EffectiveMoveSpeed echoes, never the raw authored TopSpeed; back-throttle brakes while moving forward and
-    // reverses from rest at the unenveloped ReverseTopSpeed; the over-speed excess bleeds at CoastDrag, which is
-    // also the centered-throttle coast). A held boost multiplies scratch.MoveSpeed AFTER the clamp, on top of the
-    // resolved base rate, never inside it — the envelope pins the base, boost rides on top. Lateral and residual
-    // slip converge to zero at Grip — DriftGrip while drifting. A contact-pinned variant (PitchRate zero) has no
-    // drive or grip authority while airborne: a launched kart holds its velocity and gravity owns the arc.
-    private void ShapeVehicleVelocity(ref BodyMotionScratch scratch) {
-        var tuning = m_vehicleTuning;
+    // The drive shaping (phase 2): decompose the carried velocity into body-frame longitudinal/lateral/residual
+    // components, converge each at its own authored rate, and recompose — the anisotropy a kart's feel needs and the
+    // isotropic MoveToward cannot express. Longitudinal follows the bipolar throttle (accelerate toward the
+    // commanded fraction of scratch.MoveSpeed — the resolved, envelope-clamped move speed, the same value
+    // EffectiveMoveSpeed echoes; back-throttle brakes while moving forward and reverses from rest at the unenveloped
+    // reverseSpeed; the over-speed excess bleeds at coast, which is also the centered-throttle coast). A held sprint
+    // multiplies scratch.MoveSpeed AFTER the clamp, on top of the resolved base rate, never inside it — the envelope
+    // pins the base, the boost rides on top. Lateral and residual slip converge to zero at grip — the drift row's
+    // grip while its channel reads held. A contact-pinned variant (pitchRate zero) has no drive or grip authority
+    // while airborne: a launched kart holds its velocity and gravity owns the arc.
+    private void ShapeDriveVelocity(ref BodyMotionScratch scratch) {
+        var tuning = (m_tuning.Drive ?? default);
         var throttle = Role(
             intent: in scratch.Intent,
             role: ChannelRole.MoveAdvance
@@ -1884,32 +1874,32 @@ public sealed partial class WorldBody {
 
             if (throttle > FixedQ4816.Zero) {
                 var commanded = (BoostHeld(intent: in scratch.Intent)
-                    ? (scratch.MoveSpeed * tuning.BoostMultiplier)
+                    ? (scratch.MoveSpeed * m_tuning.SprintMultiplier)
                     : scratch.MoveSpeed
                 );
 
                 target = (throttle * commanded);
                 rate = ((longitudinal <= target)
                     ? tuning.Accel
-                    : tuning.CoastDrag
+                    : tuning.Coast
                 );
             } else if (throttle < FixedQ4816.Zero) {
                 if (longitudinal > FixedQ4816.Zero) {
                     target = FixedQ4816.Zero;
                     rate = tuning.Brake;
                 } else {
-                    target = (throttle * tuning.ReverseTopSpeed);
+                    target = (throttle * tuning.ReverseSpeed);
                     rate = tuning.Accel;
                 }
             } else {
                 target = FixedQ4816.Zero;
-                rate = tuning.CoastDrag;
+                rate = tuning.Coast;
             }
 
             longitudinal = FixedQ4816.MoveToward(
                 current: longitudinal,
                 target: target,
-                maxDelta: m_vehicleLongAccumulator.Integrate(
+                maxDelta: m_driveLongAccumulator.Integrate(
                     elapsedTicks: scratch.StepTicks,
                     ratePerSecond: rate
                 )
@@ -1923,7 +1913,7 @@ public sealed partial class WorldBody {
             lateral = FixedQ4816.MoveToward(
                 current: lateral,
                 target: FixedQ4816.Zero,
-                maxDelta: m_vehicleLatAccumulator.Integrate(
+                maxDelta: m_driveLatAccumulator.Integrate(
                     elapsedTicks: scratch.StepTicks,
                     ratePerSecond: grip
                 )
@@ -1931,7 +1921,7 @@ public sealed partial class WorldBody {
             residual = FixedVector3.MoveToward(
                 current: residual,
                 target: default,
-                maxDelta: m_vehicleResidualAccumulator.Integrate(
+                maxDelta: m_driveResidualAccumulator.Integrate(
                     elapsedTicks: scratch.StepTicks,
                     ratePerSecond: grip
                 )

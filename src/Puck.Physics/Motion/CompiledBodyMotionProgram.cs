@@ -88,10 +88,10 @@ public sealed class CompiledBodyMotionProgram {
         BodyMotionOp.ProduceWanderIntent => 1,
         BodyMotionOp.ProduceAttendIntent => 2,
         BodyMotionOp.FaceSensorTarget => 2,
-        BodyMotionOp.ResolveYawAttitudeAndPlanarFrame or BodyMotionOp.IntegrateLocalAttitude or BodyMotionOp.ResolveVehicleFrame
+        BodyMotionOp.ResolveYawAttitudeAndPlanarFrame or BodyMotionOp.IntegrateLocalAttitude or BodyMotionOp.ResolveDriveFrame
             or BodyMotionOp.ResolveHold => 0,
         BodyMotionOp.ComputePlanarTargetVelocity or BodyMotionOp.ComputeLocalTargetVelocity => 1,
-        BodyMotionOp.ShapePlanarVelocity or BodyMotionOp.SnapYawToPlanarIntent or BodyMotionOp.ShapeVehicleVelocity => 2,
+        BodyMotionOp.ShapePlanarVelocity or BodyMotionOp.SnapYawToPlanarIntent or BodyMotionOp.ShapeDriveVelocity => 2,
         BodyMotionOp.RunActionTriggers => 3,
         BodyMotionOp.ApplyVerticalGravity or BodyMotionOp.ApplyVerticalDecay or BodyMotionOp.ApplyHold
             or BodyMotionOp.ApplyVerticalDrive => 4,
@@ -114,7 +114,7 @@ public sealed class CompiledBodyMotionProgram {
         BodyMotionOp.ProduceWanderIntent or BodyMotionOp.ProduceAttendIntent or BodyMotionOp.FaceSensorTarget => (BodyProgramAdmission.Sensors | BodyProgramAdmission.Channels | BodyProgramAdmission.ActionState),
         BodyMotionOp.ResolveYawAttitudeAndPlanarFrame or BodyMotionOp.IntegrateLocalAttitude or BodyMotionOp.ComputePlanarTargetVelocity
             or BodyMotionOp.ComputeLocalTargetVelocity or BodyMotionOp.ShapePlanarVelocity
-            or BodyMotionOp.SnapYawToPlanarIntent or BodyMotionOp.ResolveVehicleFrame or BodyMotionOp.ShapeVehicleVelocity
+            or BodyMotionOp.SnapYawToPlanarIntent or BodyMotionOp.ResolveDriveFrame or BodyMotionOp.ShapeDriveVelocity
             => (BodyProgramAdmission.Channels | BodyProgramAdmission.Pose | BodyProgramAdmission.Velocity),
         // A hold reads intent, writes the body frame, and spends a body-lane state slot, so it claims every register
         // family a motion program owns.

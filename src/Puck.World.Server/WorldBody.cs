@@ -112,7 +112,6 @@ public sealed partial class WorldBody {
     // The last grounded Advance's standing witness for the world.contacts read-back.
     private int m_lastContactCount;
     private FixedQ4816 m_maxSmoothError;
-    private CompiledMotionArm m_motionArm;
     // world.contacts' obstruction witness — LATCHED, not a raw per-tick read (see UpdateObstructionWitness): the
     // last non-walkable push's normal, held across ticks while the body stays actively driven and hasn't moved
     // since, so a solver tick that happens not to re-register the push (fully depenetrated already, or a query
@@ -195,13 +194,10 @@ public sealed partial class WorldBody {
     // to the tuning's speeds. Swapped in place by
     // RecompileKit when the body's kit row is retuned live (pose survives; only the compiled feel changes).
     private FixedMotionTuning m_tuning;
-    // The vehicle frame's authoritative pitch scalar (radians) — the flying variant's climb attitude, integrated
-    // alongside m_yaw and clamped so the facing can never flip past vertical. Inert (held zero) while PitchRate is
-    // zero. Levelled by Face, written by Pose, like m_yaw.
-    private FixedQ4816 m_vehiclePitch;
-    // The vehicle arm's compiled tuning — meaningful only under a vehicle-model kit (the facet gate refuses a
-    // program selecting the vehicle ops against any other arm, so the ops never read the zero default).
-    private FixedVehicleTuning m_vehicleTuning;
+    // The drive frame's authoritative pitch scalar (radians) — the flying variant's climb attitude, integrated
+    // alongside m_yaw and clamped so the facing can never flip past vertical. Inert (held zero) while the drive row's
+    // pitchRate is zero. Levelled by Face, written by Pose, like m_yaw.
+    private FixedQ4816 m_drivePitch;
     // The vertical channel — the axis the bound vertical effects write. Under the grounded model gravity integrates it
     // and m_grounded gates/refreshes the composition facts; under the free model a written impulse bleeds to zero at
     // the tuning's rise gravity (no fall phase). Reset to a clean grounded rest (in ResetVertical) only by a hard
@@ -217,28 +213,22 @@ public sealed partial class WorldBody {
     // read back out of it).
     private FixedQ4816 m_yaw;
 
-    // Which arm's compiled tuning ResolveMoveSpeed (and every other per-arm resolve) dispatches on — set by
-    // SetTuning alongside the compiled tuning itself, never re-derived. A new model arm is a localized addition: a
-    // new member here, its SetTuning case, and its ResolveMoveSpeed case — the same localized-addition rule
-    // SetTuning's own remarks already state.
-    private enum CompiledMotionArm : byte { Grounded, Vehicle }
-
-    // The vehicle arm's held drift channel: -1 (cannot drift) unless the kit's model names one that resolves —
-    // the same resolved-outside/consumed-as-ordinal pattern as m_sprintChannelOrdinal.
+    // The drive row's held drift channel: -1 (cannot drift) unless the row names one that resolves — the same
+    // resolved-outside/consumed-as-ordinal pattern as m_sprintChannelOrdinal.
     private int m_driftChannelOrdinal = -1;
-    // The vehicle arm's longitudinal/lateral/residual convergence remainders — one accumulator per decomposed
+    // The drive row's longitudinal/lateral/residual convergence remainders — one accumulator per decomposed
     // channel so each rate's sub-tick tail carries independently (the body-frame twin of m_planarRampAccumulator).
-    private FixedRateAccumulator m_vehicleLongAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
-    private FixedRateAccumulator m_vehicleLatAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
-    private FixedRateAccumulator m_vehicleResidualAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
+    private FixedRateAccumulator m_driveLongAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
+    private FixedRateAccumulator m_driveLatAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
+    private FixedRateAccumulator m_driveResidualAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
     private static readonly FixedQ4816 MaxActionHoldSecondsFixed = FixedQ4816.FromInteger(value: 60L);
     private static readonly FixedQ4816 NegativeOne = -FixedQ4816.One;
     private static readonly FixedQ4816 Pi = FixedQ4816.FromDouble(value: Math.PI);
     // Above the yaw round-trip error of FromAxisAngle -> ExtractYaw, below any facing a snap can leave (radians).
     private static readonly FixedQ4816 FacingAdoptEpsilon = FixedQ4816.FromDouble(value: 0.001);
-    // The vehicle pitch clamp (~69°): the flying variant's facing can climb and dive steeply but never flip past
+    // The drive pitch clamp (~69°): the flying variant's facing can climb and dive steeply but never flip past
     // vertical, which would invert the yaw frame mid-flight.
-    private static readonly FixedQ4816 MaxVehiclePitch = FixedQ4816.FromDouble(value: 1.2);
+    private static readonly FixedQ4816 MaxDrivePitch = FixedQ4816.FromDouble(value: 1.2);
     private static readonly FixedQ4816 TwoPi = FixedQ4816.FromDouble(value: (2.0 * Math.PI));
     private static readonly FixedVector3 UnitX = new(
         X: FixedQ4816.One,
@@ -361,7 +351,7 @@ public sealed partial class WorldBody {
     /// <param name="maxSmoothError">The compiled world-distance correction smoothing threshold.</param>
     /// <param name="sprintChannelOrdinal">The ordinal <see cref="WorldMotionModel.Grounded.SprintChannel"/> resolved to
     /// (<see cref="FixedWorldKit.SprintChannelOrdinal"/>), or <c>-1</c> for a kit with no sprint capability.</param>
-    /// <param name="driftChannelOrdinal">The ordinal <see cref="WorldMotionModel.Vehicle.DriftChannel"/> resolved to
+    /// <param name="driftChannelOrdinal">The ordinal <see cref="WorldDriveDrift.Channel"/> resolved to
     /// (<see cref="FixedWorldKit.DriftChannelOrdinal"/>), or <c>-1</c> for a kit that cannot drift.</param>
     /// <param name="planarDynamics">The kit's compiled second-order follower
     /// (<see cref="FixedWorldKit.PlanarDynamics"/>), or <see langword="null"/> when the kit shapes planar velocity

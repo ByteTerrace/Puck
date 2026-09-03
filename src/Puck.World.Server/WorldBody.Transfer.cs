@@ -38,7 +38,7 @@ public sealed partial class WorldBody {
             PlanarVelocity: m_planarVelocity,
             VerticalVelocity: m_verticalVelocity,
             Orientation: m_orientation,
-            VehiclePitch: m_vehiclePitch,
+            DrivePitch: m_drivePitch,
             OverlayVelocity: m_overlayVelocity,
             OverlayRemainingTicks: m_overlayRemaining,
             ChannelTimerTicks: [.. m_laneTimers],
@@ -53,9 +53,9 @@ public sealed partial class WorldBody {
             PendingDefaultChannelValue: [.. m_pendingDefaultChannelValue],
             MotionRecency: [.. m_motionRecency],
             PlanarRampRemainder: m_planarRampAccumulator.Remainder,
-            VehicleLongRemainder: m_vehicleLongAccumulator.Remainder,
-            VehicleLatRemainder: m_vehicleLatAccumulator.Remainder,
-            VehicleResidualRemainder: m_vehicleResidualAccumulator.Remainder,
+            DriveLongRemainder: m_driveLongAccumulator.Remainder,
+            DriveLatRemainder: m_driveLatAccumulator.Remainder,
+            DriveResidualRemainder: m_driveResidualAccumulator.Remainder,
             MediumThrustRampRemainder: m_mediumThrustRampAccumulator.Remainder,
             PlanarFollowerPositionRawX: m_planarFollower.X.PositionRaw,
             PlanarFollowerPositionRawY: m_planarFollower.Y.PositionRaw,
@@ -234,7 +234,7 @@ public sealed partial class WorldBody {
         m_planarVelocity = state.PlanarVelocity;
         m_verticalVelocity = state.VerticalVelocity;
         m_orientation = state.Orientation;
-        m_vehiclePitch = state.VehiclePitch;
+        m_drivePitch = state.DrivePitch;
         m_overlayVelocity = state.OverlayVelocity;
         m_overlayRemaining = state.OverlayRemainingTicks;
         m_source = state.Source;
@@ -285,16 +285,16 @@ public sealed partial class WorldBody {
             remainder: state.PlanarRampRemainder,
             ticksPerSecond: EngineTicksPerSecond
         );
-        m_vehicleLongAccumulator = FixedRateAccumulator.FromRemainder(
-            remainder: state.VehicleLongRemainder,
+        m_driveLongAccumulator = FixedRateAccumulator.FromRemainder(
+            remainder: state.DriveLongRemainder,
             ticksPerSecond: EngineTicksPerSecond
         );
-        m_vehicleLatAccumulator = FixedRateAccumulator.FromRemainder(
-            remainder: state.VehicleLatRemainder,
+        m_driveLatAccumulator = FixedRateAccumulator.FromRemainder(
+            remainder: state.DriveLatRemainder,
             ticksPerSecond: EngineTicksPerSecond
         );
-        m_vehicleResidualAccumulator = FixedRateAccumulator.FromRemainder(
-            remainder: state.VehicleResidualRemainder,
+        m_driveResidualAccumulator = FixedRateAccumulator.FromRemainder(
+            remainder: state.DriveResidualRemainder,
             ticksPerSecond: EngineTicksPerSecond
         );
         m_mediumThrustRampAccumulator = FixedRateAccumulator.FromRemainder(
@@ -455,7 +455,7 @@ public sealed partial class WorldBody {
     /// remainder is authoritative simulation state... a fraction, not a tick" contract, which is exactly why the
     /// integration-remainder fields below are safe to carry).</para>
     /// <para><b>Captured (this struct's fields, below).</b> <see cref="PlanarVelocity"/>, <see cref="VerticalVelocity"/>,
-    /// <see cref="Orientation"/>, <see cref="VehiclePitch"/>, <see cref="OverlayVelocity"/>/<see cref="OverlayRemainingTicks"/>,
+    /// <see cref="Orientation"/>, <see cref="DrivePitch"/>, <see cref="OverlayVelocity"/>/<see cref="OverlayRemainingTicks"/>,
     /// <see cref="ChannelTimerTicks"/>/<see cref="ChannelTimerValues"/>.
     /// <see cref="BodyMotionProgramName"/> — a live <c>body.motion</c> switch away from the seat kit's own default
     /// program (<see cref="Puck.World.Server.WorldPopulation.RestoreDetachedSeat"/> always reconstructs from the kit's
@@ -473,13 +473,13 @@ public sealed partial class WorldBody {
     /// teleport must not carry momentum), but an abort is not an ordinary teleport from the player's perspective —
     /// the same reasoning that justifies capturing <see cref="PlanarVelocity"/>/<see cref="VerticalVelocity"/>
     /// on top of the same reset, extended to their integration carries.
-    /// <see cref="PlanarRampRemainder"/>/<see cref="VehicleLongRemainder"/>/<see cref="VehicleLatRemainder"/>/
-    /// <see cref="VehicleResidualRemainder"/>/<see cref="MediumThrustRampRemainder"/>/<see cref="OverlayRemainderX"/>,Y,Z —
-    /// the response/vehicle/medium/overlay rate accumulators' own <see cref="Puck.Maths.FixedRateAccumulator.Remainder"/>s.
+    /// <see cref="PlanarRampRemainder"/>/<see cref="DriveLongRemainder"/>/<see cref="DriveLatRemainder"/>/
+    /// <see cref="DriveResidualRemainder"/>/<see cref="MediumThrustRampRemainder"/>/<see cref="OverlayRemainderX"/>,Y,Z —
+    /// the response/drive/medium/overlay rate accumulators' own <see cref="Puck.Maths.FixedRateAccumulator.Remainder"/>s.
     /// These are frame-independent (a rate of convergence, not a position), unlike the position/rotation/vertical
     /// accumulators excluded below — see this list's own "deliberately re-derived" entry for exactly why that
-    /// distinction holds. Kart makes the vehicle trio live for an ordinary seat; a medium hold makes the medium one
-    /// live.
+    /// distinction holds. A drive row makes the drive trio live for an ordinary seat; a medium hold makes the medium
+    /// one live.
     /// <see cref="PlanarFollowerPositionRawX"/>,Y,Z/<see cref="PlanarFollowerVelocityRawX"/>,Y,Z/
     /// <see cref="PlanarFollowerPreviousTarget"/>/<see cref="VerticalFollowerPositionRaw"/>/
     /// <see cref="VerticalFollowerVelocityRaw"/>/<see cref="VerticalFollowerPreviousTarget"/> — a kit shaping planar
@@ -509,7 +509,7 @@ public sealed partial class WorldBody {
     /// <see cref="FixedTickConversion.DurationEngineTicks"/>'s own seconds conversion, which would drift the
     /// restored duration from what was actually live) — the body's own future trajectory.</para>
     /// <para><b>Deliberately re-derived (with reason) — never added to this struct.</b>
-    /// <c>m_motionArm</c>/<c>m_tuning</c>/<c>m_vehicleTuning</c>/<c>m_driftChannelOrdinal</c>/
+    /// <c>m_tuning</c>/<c>m_driftChannelOrdinal</c>/
     /// <c>m_sprintChannelOrdinal</c>/<c>m_laneBindings</c>/<c>m_channelThresholds</c>/<c>m_channelShapes</c>/
     /// <c>m_roleChannels</c>/<c>m_roleOrdinals</c>/<c>m_actionStateDefinitions</c>/<c>m_collider</c>/
     /// <c>m_maxSmoothError</c> — compiled kit config; <see cref="Puck.World.Server.WorldPopulation.RestoreDetachedSeat"/>
@@ -571,11 +571,11 @@ public sealed partial class WorldBody {
     /// <param name="PlanarVelocity">The ramped horizontal velocity the grounded model integrates.</param>
     /// <param name="VerticalVelocity">The vertical (gravity/jump) velocity.</param>
     /// <param name="Orientation">The full attitude — captured directly rather than re-derived from yaw alone, so a
-    /// future vehicle seat kit's pitch/roll survives too (today's seat kits are grounded-only, where this always
+    /// future driven seat kit's pitch/roll survives too (today's seat kits author no drive row, where this always
     /// agrees with the yaw already carried alongside it — see <see cref="Puck.World.Server.WorldPopulation.RestoreDetachedSeat"/>'s
-    /// own remarks on the grounded-model exact case).</param>
-    /// <param name="VehiclePitch">The vehicle frame's own climb-attitude scalar (inert, always zero, under a grounded
-    /// seat kit — carried for the same forward-compatibility reason as <paramref name="Orientation"/>).</param>
+    /// own remarks on the exact case).</param>
+    /// <param name="DrivePitch">The drive frame's own climb-attitude scalar (inert, always zero, for a kit authoring
+    /// no drive row — carried for the same forward-compatibility reason as <paramref name="Orientation"/>).</param>
     /// <param name="OverlayVelocity">The timed impulse overlay's (the dash) world-space velocity, if one is live.</param>
     /// <param name="OverlayRemainingTicks">Engine ticks remaining on the live overlay — a duration, not a deadline.</param>
     /// <param name="ChannelTimerTicks">Per-ordinal remaining ticks on an in-flight timed <c>body.press</c> — a
@@ -595,9 +595,9 @@ public sealed partial class WorldBody {
     /// holds, copied defensively.</param>
     /// <param name="MotionRecency">The body-motion program's own Recently-gate clocks, copied defensively.</param>
     /// <param name="PlanarRampRemainder">The response table's ramp accumulator's own signed remainder.</param>
-    /// <param name="VehicleLongRemainder">The vehicle arm's longitudinal convergence accumulator's own remainder.</param>
-    /// <param name="VehicleLatRemainder">The vehicle arm's lateral convergence accumulator's own remainder.</param>
-    /// <param name="VehicleResidualRemainder">The vehicle arm's residual convergence accumulator's own remainder.</param>
+    /// <param name="DriveLongRemainder">The drive row's longitudinal convergence accumulator's own remainder.</param>
+    /// <param name="DriveLatRemainder">The drive row's lateral convergence accumulator's own remainder.</param>
+    /// <param name="DriveResidualRemainder">The drive row's residual convergence accumulator's own remainder.</param>
     /// <param name="MediumThrustRampRemainder">The medium law's thrust convergence accumulator's own remainder.</param>
     /// <param name="PlanarFollowerPositionRawX">The planar dynamics follower's X-lane Q32 position raw.</param>
     /// <param name="PlanarFollowerPositionRawY">The planar dynamics follower's Y-lane Q32 position raw.</param>
@@ -640,7 +640,7 @@ public sealed partial class WorldBody {
         FixedVector3 PlanarVelocity,
         FixedQ4816 VerticalVelocity,
         FixedQuaternion Orientation,
-        FixedQ4816 VehiclePitch,
+        FixedQ4816 DrivePitch,
         FixedVector3 OverlayVelocity,
         ulong OverlayRemainingTicks,
         ulong[] ChannelTimerTicks,
@@ -653,9 +653,9 @@ public sealed partial class WorldBody {
         FixedQ4816[] PendingDefaultChannelValue,
         ulong[] MotionRecency,
         long PlanarRampRemainder,
-        long VehicleLongRemainder,
-        long VehicleLatRemainder,
-        long VehicleResidualRemainder,
+        long DriveLongRemainder,
+        long DriveLatRemainder,
+        long DriveResidualRemainder,
         long MediumThrustRampRemainder,
         long PlanarFollowerPositionRawX,
         long PlanarFollowerPositionRawY,

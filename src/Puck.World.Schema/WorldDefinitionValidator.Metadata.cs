@@ -700,11 +700,9 @@ public static partial class WorldDefinitionValidator {
             }
         }
     }
-    // A kit's vehicle drive tuning: every convergence rate positive, the steering authority curve well-formed, and
-    // the held drift/boost channel names resolving to declared channels (a misspelled name is otherwise a silent,
-    // permanent no-op). An owned world's identity-carried locomotion state rows feed WorldIdentity's live speed
-    // reads RAW at construction — no verb door runs on a document load — so a non-positive persisted value is
-    // refused here; identity.motion refuses the same range live.
+    // An owned world's identity-carried locomotion state rows feed WorldIdentity's live speed reads raw at
+    // construction — no verb door runs on a document load — so a non-positive persisted value is refused here;
+    // identity.motion refuses the same range live.
     private static void ValidateIdentityMotionState(WorldIdentityDefinition? identity, IReadOnlyDictionary<string, WorldStateRow> stateRows, List<string> errors) {
         if (identity is null) {
             return;

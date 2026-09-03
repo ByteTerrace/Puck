@@ -100,8 +100,22 @@
                     "default": true
                   },
                   "moveSpeedEnvelope": {
-                    "$ref": "./common.schema.json#/$defs/MotionScalarEnvelope",
                     "description": "The inclusive bound a seated player\u0027s live profile speed (and the profileless MoveSpeed fallback) is clamped to at seat time, or null (the default) for no bound \u2014 a feel-pinned world authors this to keep a seat\u0027s speed inside its own kit\u0027s envelope regardless of what the player\u0027s identity requests. null reproduces today\u0027s unclamped behavior exactly; Min == Max pins the effective speed outright; a narrower-than-wide-open range still admits a bounded profile override. See MotionScalarEnvelope.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "min": {
+                        "description": "The least admitted value (inclusive).",
+                        "type": "number"
+                      },
+                      "max": {
+                        "description": "The greatest admitted value (inclusive) \u2014 WorldDefinitionValidator refuses Max \u003C Min by name. Equal to Min pins the scalar outright regardless of what a profile requests.",
+                        "type": "number"
+                      }
+                    },
+                    "additionalProperties": false,
                     "default": null
                   },
                   "holds": {
@@ -115,26 +129,31 @@
                     },
                     "default": null
                   },
+                  "drive": {
+                    "$ref": "./common.schema.json#/$defs/WorldDrive",
+                    "description": "The anisotropic drive row \u2014 see WorldDrive \u2014 read by the ResolveDriveFrame/ShapeDriveVelocity operations, or null (the default) for a kit whose planar velocity is the isotropic shaping\u0027s alone. A program selecting either drive operation against a kit authoring no row refuses by name through the Drive tuning facet.",
+                    "default": null
+                  },
                   "declaredSprintChannel": {
-                    "description": "The declared held-multiplier channel of whichever arm this is \u2014 SprintChannel or the vehicle arm\u0027s BoostChannel (the same held-multiplier seam under a different name) \u2014 or null for an arm (or a declaration) without one. The one sprint-resolution read Compile and the seat binding surfaces share, so a new arm extends it here instead of each caller growing its own cast chain.",
+                    "description": "Gets the declared held-multiplier channel of whichever arm this is (SprintChannel), or null for an arm without one. The one sprint-resolution read Compile and the seat binding surfaces share, so a new arm extends it here instead of each caller growing its own cast chain.",
                     "type": [
                       "string",
                       "null"
                     ]
                   },
                   "declaredMoveFrame": {
-                    "description": "The declared move frame of whichever arm this is \u2014 Heading for an arm without the choice. The client\u0027s camera composition keys off this, arm-agnostically.",
+                    "description": "Gets the declared move frame of whichever arm this is \u2014 Heading for an arm without the choice. The client\u0027s camera composition keys off this, arm-agnostically.",
                     "enum": [
                       "Heading",
                       "World"
                     ]
                   },
                   "declaredTurnSpeed": {
-                    "description": "The declared Turn-channel rate of whichever arm this is, in radians per second at full deflection \u2014 zero for an arm without one. The client\u0027s steer follow keys off this, arm-agnostically.",
+                    "description": "Gets the declared Turn-channel rate of whichever arm this is, in radians per second at full deflection \u2014 zero for an arm without one. The client\u0027s steer follow keys off this, arm-agnostically.",
                     "type": "number"
                   },
                   "declaredResponse": {
-                    "description": "The declared velocity-response table of whichever arm this is (see Response), null-coalesced to the empty table \u2014 a kit\u0027s authored null and a kit with no planar-shaping arm at all read identically here.",
+                    "description": "Gets the declared velocity-response table of whichever arm this is (see Response), null-coalesced to the empty table \u2014 a kit\u0027s authored null and a kit with no planar-shaping arm at all read identically here.",
                     "type": [
                       "array",
                       "null"
@@ -144,7 +163,7 @@
                     }
                   },
                   "declaredDynamics": {
-                    "description": "The declared dynamics row name of whichever arm this is (see Dynamics), or null for an arm shaped by DeclaredResponse instead, or with no planar-shaping arm at all.",
+                    "description": "Gets the declared dynamics row name of whichever arm this is (see Dynamics), or null for an arm shaped by DeclaredResponse instead, or with no planar-shaping arm at all.",
                     "type": [
                       "string",
                       "null"
@@ -159,6 +178,10 @@
                     "items": {
                       "$ref": "./common.schema.json#/$defs/WorldHold"
                     }
+                  },
+                  "declaredDrive": {
+                    "$ref": "./common.schema.json#/$defs/WorldDrive",
+                    "description": "Gets the declared drive row of whichever arm this is (see Drive), or null for a kit authoring none. The one arm-agnostic read the kit compiler, the speed ceiling, and the kit read-back share."
                   }
                 },
                 "required": [
@@ -168,163 +191,6 @@
                   "fallGravity",
                   "maxFallSpeed",
                   "sprintMultiplier"
-                ],
-                "additionalProperties": false
-              },
-              {
-                "description": "Anisotropic body-frame locomotion \u2014 the racing-vehicle arm the ResolveVehicleFrame/ ShapeVehicleVelocity operations read. Velocity decomposes into longitudinal/lateral (and residual) body-frame components, each converging at its own authored rate \u2014 what separates a vehicle from Grounded, whose isotropic planar shaping cannot tune grip apart from acceleration. Steering authority scales with longitudinal speed (no spinning in place, looser at top speed) and reverses sign with reversing travel. One row serves the ground, hover, and air variants: a contact-pinned variant pairs this arm with a program keeping ApplyVerticalGravity (grounded-style vertical ownership and ramp ballistics), a flying variant pairs it with ApplyVerticalDecay and a positive PitchRate so climb emerges from the pitched facing.",
-                "properties": {
-                  "$type": {
-                    "const": "vehicle"
-                  },
-                  "topSpeed": {
-                    "description": "The forward speed (u/s) full throttle converges on.",
-                    "type": "number"
-                  },
-                  "reverseTopSpeed": {
-                    "description": "The reverse speed (u/s) full back-throttle converges on from rest; 0 forbids reversing.",
-                    "type": "number"
-                  },
-                  "accel": {
-                    "description": "The longitudinal convergence rate (u/s\u00B2) while throttle commands more speed.",
-                    "type": "number"
-                  },
-                  "brake": {
-                    "description": "The longitudinal convergence rate (u/s\u00B2) while back-throttle opposes forward travel.",
-                    "type": "number"
-                  },
-                  "coastDrag": {
-                    "description": "The longitudinal convergence rate (u/s\u00B2) toward rest with throttle centered, and the decay rate while over the commanded speed (the post-boost bleed).",
-                    "type": "number"
-                  },
-                  "grip": {
-                    "description": "The lateral convergence rate (u/s\u00B2) toward zero slip \u2014 traction. Lower is slidier.",
-                    "type": "number"
-                  },
-                  "steerRate": {
-                    "description": "The yaw rate (rad/s) at full steering authority.",
-                    "type": "number"
-                  },
-                  "steerReferenceSpeed": {
-                    "description": "The longitudinal speed (u/s) at which steering authority peaks; authority rises linearly from zero at standstill.",
-                    "type": "number"
-                  },
-                  "steerFalloff": {
-                    "description": "The fraction of full steering authority remaining at TopSpeed, in [0, 1]; authority falls linearly from the reference speed.",
-                    "type": "number"
-                  },
-                  "pitchRate": {
-                    "description": "The pitch rate (rad/s) the Pitch channel commands; 0 locks the frame planar (the ground and hover variants). Positive selects the flying variant\u0027s pitched facing, clamped inside the integrator so the frame can never flip past vertical.",
-                    "type": "number"
-                  },
-                  "riseGravity": {
-                    "description": "The upward-motion gravity (u/s\u00B2) \u2014 the contact-pinned variant\u0027s arc top, and the flying variant\u0027s vertical-impulse bleed rate (via ApplyVerticalDecay).",
-                    "type": "number"
-                  },
-                  "fallGravity": {
-                    "description": "The falling gravity (u/s\u00B2) under ApplyVerticalGravity.",
-                    "type": "number"
-                  },
-                  "maxFallSpeed": {
-                    "description": "The terminal fall speed (u/s) under ApplyVerticalGravity.",
-                    "type": "number"
-                  },
-                  "driftGrip": {
-                    "description": "The lateral convergence rate (u/s\u00B2) replacing Grip while DriftChannel reads held \u2014 the deliberate low-traction state. Required positive when a drift channel is declared; ignored without one.",
-                    "type": "number",
-                    "default": 0
-                  },
-                  "driftSteerScale": {
-                    "description": "The steering-authority multiplier while drifting (the tightened drift arc).",
-                    "type": "number",
-                    "default": 1
-                  },
-                  "boostMultiplier": {
-                    "description": "The TopSpeed multiplier while BoostChannel reads held; 1 is a no-op. The timed item boost is planarImpulse, not this.",
-                    "type": "number",
-                    "default": 1
-                  },
-                  "driftChannel": {
-                    "description": "The declared channel name read while held to drift, or null for a kit that cannot drift. Resolved to an ordinal once by Compile.",
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "default": null
-                  },
-                  "boostChannel": {
-                    "description": "The declared channel name read while held to boost, or null for a kit with no held boost. Resolved through the same held-channel seam as SprintChannel.",
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "default": null
-                  },
-                  "topSpeedEnvelope": {
-                    "$ref": "./common.schema.json#/$defs/MotionScalarEnvelope",
-                    "description": "The racing-integrity clamp: the inclusive bound the resolved base TopSpeed is pinned to at resolve time \u2014 a live world.row.set kits retune (deliberately admitted even past the bound; WorldDefinitionValidator checks only the envelope\u0027s own shape, never that TopSpeed already sits inside it \u2014 the clamp exists precisely to catch a retune the envelope disagrees with, so requiring conformance up front would refuse the case it exists for), and any future per-seat vehicle stat resolve, both pass through it, or null (the default) for no bound. BoostMultiplier multiplies after this clamp, never before \u2014 the envelope pins the base top speed, boost rides on top, the same sprint-after-clamp precedent MoveSpeedEnvelope established for the grounded arm. The vehicle arm\u0027s resolve deliberately never reads a seated profile\u0027s speed (a kart\u0027s speed is the kit\u0027s), so this is the only seat-time clamp the vehicle arm has \u2014 unlike the grounded arm\u0027s envelope, which bounds a fallback a separate live profile read can diverge from, so grounded\u0027s own baseline is still required to sit inside its own bound. See MotionScalarEnvelope.",
-                    "default": null
-                  },
-                  "declaredSprintChannel": {
-                    "description": "The declared held-multiplier channel of whichever arm this is \u2014 SprintChannel or the vehicle arm\u0027s BoostChannel (the same held-multiplier seam under a different name) \u2014 or null for an arm (or a declaration) without one. The one sprint-resolution read Compile and the seat binding surfaces share, so a new arm extends it here instead of each caller growing its own cast chain.",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
-                  "declaredMoveFrame": {
-                    "description": "The declared move frame of whichever arm this is \u2014 Heading for an arm without the choice. The client\u0027s camera composition keys off this, arm-agnostically.",
-                    "enum": [
-                      "Heading",
-                      "World"
-                    ]
-                  },
-                  "declaredTurnSpeed": {
-                    "description": "The declared Turn-channel rate of whichever arm this is, in radians per second at full deflection \u2014 zero for an arm without one. The client\u0027s steer follow keys off this, arm-agnostically.",
-                    "type": "number"
-                  },
-                  "declaredResponse": {
-                    "description": "The declared velocity-response table of whichever arm this is (see Response), null-coalesced to the empty table \u2014 a kit\u0027s authored null and a kit with no planar-shaping arm at all read identically here.",
-                    "type": [
-                      "array",
-                      "null"
-                    ],
-                    "items": {
-                      "$ref": "./common.schema.json#/$defs/MotionResponse"
-                    }
-                  },
-                  "declaredDynamics": {
-                    "description": "The declared dynamics row name of whichever arm this is (see Dynamics), or null for an arm shaped by DeclaredResponse instead, or with no planar-shaping arm at all.",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
-                  "declaredHolds": {
-                    "description": "Gets the declared hold list of whichever arm this is (see Holds), null-coalesced to the empty list \u2014 an arm with no hold vocabulary reads identically to a row authoring none.",
-                    "type": [
-                      "array",
-                      "null"
-                    ],
-                    "items": {
-                      "$ref": "./common.schema.json#/$defs/WorldHold"
-                    }
-                  }
-                },
-                "required": [
-                  "topSpeed",
-                  "reverseTopSpeed",
-                  "accel",
-                  "brake",
-                  "coastDrag",
-                  "grip",
-                  "steerRate",
-                  "steerReferenceSpeed",
-                  "steerFalloff",
-                  "pitchRate",
-                  "riseGravity",
-                  "fallGravity",
-                  "maxFallSpeed"
                 ],
                 "additionalProperties": false
               }

@@ -155,7 +155,7 @@ For each fixed tick:
 The standard right stick binds `player.look.steer`: horizontal input writes
 `FaceX`/`FaceZ`, vertical input only changes camera pitch, and neither writes
 `Turn`. Authors may bind `player.look` for free orbit, explicit bindings may
-still write `Turn`, and vehicle kits may interpret their left-stick roles
+still write `Turn`, and a drive kit may interpret its left-stick roles
 according to their own motion program. The standard left-stick press toggles
 the `run` channel; West and Left Shift remain ordinary hold-to-run sources.
 

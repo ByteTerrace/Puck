@@ -10,9 +10,9 @@ namespace Puck.World.Tests;
 
 /// <summary>
 /// CONTRACT UNDER TEST: the WIDENED <see cref="WorldBody.TransferState"/> — the abort capture must be complete
-/// for a MEDIUM-hold (Dive) kit body and a VEHICLE (Kart) kit body, not just the grounded-only
+/// for a MEDIUM-hold (Dive) kit body and a DRIVE-row (Kart) kit body, not just the row-less
 /// shape <see cref="TransferAbortDynamicStateLawTests"/> already covers. Each law here builds its own MINIMAL but
-/// REAL vehicle/medium kit (motion model, channels, and one authored action exercising the action-track/action-state
+/// REAL drive/medium kit (motion row, channels, and one authored action exercising the action-track/action-state
 /// seams), drives the body into a genuinely non-rest state across EVERY newly captured field, then proves the
 /// detach/restore round trip reproduces every one of them exactly. <c>Puck.World</c> (the composition root) is out
 /// of reach for this project — see <see cref="TransferAbortDynamicStateLawTests"/>'s own remarks — so this proves
@@ -30,7 +30,7 @@ public sealed class TransferAbortKitWideningLawTests {
     private const int UntimedPressOrdinal = 10; // an ordinal NO channel declares — PressChannel needs no binding.
     private const int TimedPressOrdinal = 11; // likewise, distinct from UntimedPressOrdinal.
 
-    private static WorldDefinition BuildVehicleKitDocument() {
+    private static WorldDefinition BuildDriveKitDocument() {
         var channels = new WorldChannel[] {
             new(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveAdvance),
             new(Name: "strafe", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveStrafe),
@@ -38,13 +38,13 @@ public sealed class TransferAbortKitWideningLawTests {
             new(Name: "surge", Shape: ChannelShape.Binary, Composition: true),
         };
 
-        var vehicleGround = new BodyMotionProgram(
-            Name: "vehicle-ground",
+        var driveGround = new BodyMotionProgram(
+            Name: "drive-ground",
             Version: "puck.body-motion.v1",
             Kind: BodyProgramKind.Motion,
             Operations: [
-                BodyMotionOp.ResolveVehicleFrame,
-                BodyMotionOp.ShapeVehicleVelocity,
+                BodyMotionOp.ResolveDriveFrame,
+                BodyMotionOp.ShapeDriveVelocity,
                 BodyMotionOp.RunActionTriggers,
                 BodyMotionOp.ApplyVerticalGravity,
                 BodyMotionOp.IntegratePlanarAndVerticalVelocity,
@@ -54,26 +54,30 @@ public sealed class TransferAbortKitWideningLawTests {
         // A second, otherwise-identical program under a DIFFERENT name — the ONLY thing
         // BodyMotionProgramName's own law needs: a name distinct from the kit's own default to switch TO and prove
         // the switch survives an abort/restore.
-        var vehicleGroundAlt = vehicleGround with { Name = "vehicle-ground-alt" };
+        var driveGroundAlt = driveGround with { Name = "drive-ground-alt" };
         var wander = new BodyMotionProgram(Name: "wander", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceWanderIntent]);
 
         var kit = new WorldKit(
             Name: "kart-test",
-            BodyMotionProgram: "vehicle-ground",
-            Motion: new WorldMotionModel.Vehicle(
-                TopSpeed: 16f,
-                ReverseTopSpeed: 5f,
-                Accel: 7f,
-                Brake: 18f,
-                CoastDrag: 4f,
-                Grip: 22f,
-                SteerRate: 2.4f,
-                SteerReferenceSpeed: 4f,
-                SteerFalloff: 0.55f,
-                PitchRate: 0f,
+            BodyMotionProgram: "drive-ground",
+            Motion: new WorldMotionModel.Grounded(
+                MoveSpeed: 16f,
+                TurnSpeed: 2.4f,
                 RiseGravity: 14f,
                 FallGravity: 26f,
-                MaxFallSpeed: 30f
+                MaxFallSpeed: 30f,
+                SprintMultiplier: 1f,
+                MoveSpeedEnvelope: new MotionScalarEnvelope(Max: 16f, Min: 16f),
+                Drive: new WorldDrive(
+                    Accel: 7f,
+                    Brake: 18f,
+                    Coast: 4f,
+                    Grip: 22f,
+                    SteerReferenceSpeed: 4f,
+                    SteerFalloff: 0.55f,
+                    ReverseSpeed: 5f,
+                    PitchRate: 0f
+                )
             ),
             ProducersRaw: new Dictionary<string, BodyProgramParameters> {
                 ["wander"] = Fixtures.TravelerWanderParameters,
@@ -97,14 +101,14 @@ public sealed class TransferAbortKitWideningLawTests {
 
         return Fixtures.BuildDocument() with {
             ChannelsRaw = channels,
-            BodyMotionProgramsRaw = [vehicleGround, vehicleGroundAlt, wander],
+            BodyMotionProgramsRaw = [driveGround, driveGroundAlt, wander],
             KitRowsRaw = [kit],
             DefaultSeatKitRaw = "kart-test",
             StateRaw = new WorldStateSection(World: Fixtures.BuildDocument().State, Identity: [new ActionStateSlot(Name: "surgeCounter", Kind: ActionStateKind.Counter, Initial: 0f)]),
         };
     }
     private static WorldDefinition BuildMediumKitDocument() {
-        // "surge" stays at SurgeOrdinal (index 3), matching the vehicle kit's own layout above — "up" trails it so
+        // "surge" stays at SurgeOrdinal (index 3), matching the drive kit's own layout above — "up" trails it so
         // the shared ordinal constants below address the same channel regardless of which fixture built the body.
         var channels = new WorldChannel[] {
             new(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveAdvance),
@@ -169,7 +173,7 @@ public sealed class TransferAbortKitWideningLawTests {
                 ["wander"] = Fixtures.TravelerWanderParameters,
             },
             ActionsRaw: new Dictionary<string, ActionSpec> {
-                // Mirrors the vehicle kit's own "surge" action above, gated on Rising instead of Falling (a diver
+                // Mirrors the drive kit's own "surge" action above, gated on Rising instead of Falling (a diver
                 // thrusting upward is the reliable, easily-driven fact here — Falling would work too, but Rising is
                 // what this law already drives for MotionRecency, so one drive proves both).
                 ["surge"] = new ActionSpec(
@@ -211,8 +215,8 @@ public sealed class TransferAbortKitWideningLawTests {
     }
 
     [Fact]
-    public void DetachThenRestore_VehicleKitBody_EveryNewlyCapturedFieldRoundTripsExactly() {
-        using var fixture = Fixtures.FreshServer(definition: BuildVehicleKitDocument());
+    public void DetachThenRestore_DriveKitBody_EveryNewlyCapturedFieldRoundTripsExactly() {
+        using var fixture = Fixtures.FreshServer(definition: BuildDriveKitDocument());
         var actor = WorldPrincipal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: actor, Slot: actor.Index, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);
@@ -224,15 +228,15 @@ public sealed class TransferAbortKitWideningLawTests {
         body.SetIntentSource(source: IntentSource.Idle); // Source — a fresh restore body always defaults to Live.
 
         // BOTH of these route through CommitTeleport (Pose ALWAYS; SetBodyMotionProgram only when the name actually
-        // changes — see that method's own remarks), which resets the vehicle accumulators as part of its ordinary
+        // changes — see that method's own remarks), which resets the drive accumulators as part of its ordinary
         // "a teleport must not carry momentum" contract (WorldBody.ResetVertical's own remarks). They MUST run
         // BEFORE the velocity-driving loop below, or they would silently wipe the very accumulator/velocity state
         // this law exists to prove survives a round trip.
-        var programSwitched = body.SetBodyMotionProgram(programName: "vehicle-ground-alt");
+        var programSwitched = body.SetBodyMotionProgram(programName: "drive-ground-alt");
 
         Assert.True(condition: programSwitched);
 
-        // VehiclePitch — forced directly through the SAME public Pose() a hard teleport/warp already uses (this
+        // DrivePitch — forced directly through the SAME public Pose() a hard teleport/warp already uses (this
         // kit's own PitchRate is 0, so nothing in ordinary play would move it; a future flying-variant kit would —
         // see WorldBody.TransferState's own remarks on why this is captured regardless of today's grounded-only
         // seat kits).
@@ -241,10 +245,10 @@ public sealed class TransferAbortKitWideningLawTests {
         body.SubmitIntent(intent: default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One).WithChannel(ordinal: TurnOrdinal, value: FixedQ4816.One));
 
         for (var tick = 0; (tick < 12); tick++) {
-            fixture.Step(); // vehicle longitudinal/lateral/residual accumulators ramp; gravity falls (no collider); the "surge" OnFact action fires once on the Falling edge.
+            fixture.Step(); // drive longitudinal/lateral/residual accumulators ramp; gravity falls (no collider); the "surge" OnFact action fires once on the Falling edge.
         }
 
-        // A live timed press (existing coverage, re-proven under the vehicle arm) and an UNTIMED tap staged but not
+        // A live timed press (existing coverage, re-proven under a drive row) and an UNTIMED tap staged but not
         // yet materialized (MaterializeDefaultLanePresses only runs at the NEXT Advance) — captured with NO Step in
         // between, so the pending-tap fields are genuinely still pending at capture time.
         var pressOutcome = body.PressChannel(ordinal: TimedPressOrdinal, value: FixedQ4816.One, holdSeconds: 5f, authoredMaximum: FixedQ4816.FromInteger(value: 60));
@@ -263,14 +267,14 @@ public sealed class TransferAbortKitWideningLawTests {
         // doctrine (TransferAbortDynamicStateLawTests' own remarks): every one of these must be NONZERO/non-default,
         // or the round-trip assertions below would pass just as well against a body that never carried the state at
         // all.
-        Assert.Equal(expected: "vehicle-ground-alt", actual: capturedState.BodyMotionProgramName);
+        Assert.Equal(expected: "drive-ground-alt", actual: capturedState.BodyMotionProgramName);
         Assert.Equal(expected: IntentSource.Idle, actual: capturedState.Source);
-        Assert.NotEqual(expected: FixedQ4816.Zero, actual: capturedState.VehiclePitch);
+        Assert.NotEqual(expected: FixedQ4816.Zero, actual: capturedState.DrivePitch);
         Assert.True(condition: capturedState.PreviousChannelBit[ForwardOrdinal], userMessage: "the forward channel was held above threshold on the last Advance before capture");
         Assert.True(condition: capturedState.PendingDefaultChannelPress[UntimedPressOrdinal], userMessage: "the untimed tap must still be pending (not yet materialized) at capture");
         Assert.Equal(expected: FixedQ4816.One, actual: capturedState.PendingDefaultChannelValue[UntimedPressOrdinal]);
         Assert.True(condition: (capturedState.ChannelTimerTicks[TimedPressOrdinal] > 0), userMessage: "the timed press must have a live remaining-ticks countdown");
-        Assert.NotEqual(expected: 0L, actual: capturedState.PlanarRampRemainder | capturedState.VehicleLongRemainder | capturedState.VehicleLatRemainder | capturedState.VehicleResidualRemainder);
+        Assert.NotEqual(expected: 0L, actual: capturedState.PlanarRampRemainder | capturedState.DriveLongRemainder | capturedState.DriveLatRemainder | capturedState.DriveResidualRemainder);
         Assert.True(condition: (capturedState.LaneFactHeld[SurgeOrdinal] != 0UL), userMessage: "the surge action's OnFact edge (Falling) must be latched held by now");
         // LaneLatch (the OnPress pending-press buffer, distinct from LaneFactHeld's OnFact edge bit — see
         // WorldBody.LaneActionRuntime's own field remarks) legitimately stays 0 here: "surge" binds OnFact only, no
@@ -300,7 +304,7 @@ public sealed class TransferAbortKitWideningLawTests {
         Assert.Equal(expected: capturedState.PlanarVelocity, actual: restoredState.PlanarVelocity);
         Assert.Equal(expected: capturedState.VerticalVelocity, actual: restoredState.VerticalVelocity);
         Assert.Equal(expected: capturedState.Orientation, actual: restoredState.Orientation);
-        Assert.Equal(expected: capturedState.VehiclePitch, actual: restoredState.VehiclePitch);
+        Assert.Equal(expected: capturedState.DrivePitch, actual: restoredState.DrivePitch);
         Assert.Equal(expected: capturedState.BodyMotionProgramName, actual: restoredState.BodyMotionProgramName);
         Assert.Equal(expected: capturedState.Source, actual: restoredState.Source);
         Assert.Equal(expected: capturedState.PreviousChannelBit, actual: restoredState.PreviousChannelBit);
@@ -309,9 +313,9 @@ public sealed class TransferAbortKitWideningLawTests {
         Assert.Equal(expected: capturedState.ChannelTimerTicks[TimedPressOrdinal], actual: restoredState.ChannelTimerTicks[TimedPressOrdinal]);
         Assert.Equal(expected: capturedState.ChannelTimerValues[TimedPressOrdinal], actual: restoredState.ChannelTimerValues[TimedPressOrdinal]);
         Assert.Equal(expected: capturedState.PlanarRampRemainder, actual: restoredState.PlanarRampRemainder);
-        Assert.Equal(expected: capturedState.VehicleLongRemainder, actual: restoredState.VehicleLongRemainder);
-        Assert.Equal(expected: capturedState.VehicleLatRemainder, actual: restoredState.VehicleLatRemainder);
-        Assert.Equal(expected: capturedState.VehicleResidualRemainder, actual: restoredState.VehicleResidualRemainder);
+        Assert.Equal(expected: capturedState.DriveLongRemainder, actual: restoredState.DriveLongRemainder);
+        Assert.Equal(expected: capturedState.DriveLatRemainder, actual: restoredState.DriveLatRemainder);
+        Assert.Equal(expected: capturedState.DriveResidualRemainder, actual: restoredState.DriveResidualRemainder);
         Assert.Equal(expected: capturedState.LaneLatch, actual: restoredState.LaneLatch);
         Assert.Equal(expected: capturedState.LaneFactHeld, actual: restoredState.LaneFactHeld);
         Assert.Equal(expected: capturedState.ActionStateValues, actual: restoredState.ActionStateValues);
@@ -322,9 +326,9 @@ public sealed class TransferAbortKitWideningLawTests {
         Assert.Equal(expected: capturedState.TapeIntents, actual: restoredState.TapeIntents);
         Assert.Equal(expected: capturedState.TapeRemainingTicks, actual: restoredState.TapeRemainingTicks);
 
-        // Structural, not a gap: the vehicle arm always compiles m_tuning from an EMPTY Response table
-        // (WorldBody.SetTuning's own Vehicle arm), so RecencySlots is always 0 — MotionRecency is legitimately
-        // empty for every vehicle body, proven by the MEDIUM law below instead.
+        // Structural, not a gap: a drive kit shapes planar velocity through its own row and authors no response
+        // table, so RecencySlots is 0 — MotionRecency is legitimately empty here, proven by the MEDIUM law below
+        // instead.
         Assert.Empty(collection: capturedState.MotionRecency);
         Assert.Empty(collection: restoredState.MotionRecency);
 
@@ -342,7 +346,7 @@ public sealed class TransferAbortKitWideningLawTests {
 
         body.SetIntentSource(source: IntentSource.Idle);
 
-        // MUST run BEFORE the velocity-driving loop below — see the vehicle law's own remarks on why (CommitTeleport
+        // MUST run BEFORE the velocity-driving loop below — see the drive law's own remarks on why (CommitTeleport
         // resets the medium ramp accumulator as part of its ordinary "a teleport must not carry momentum" contract).
         var programSwitched = body.SetBodyMotionProgram(programName: "medium-alt");
 
@@ -373,14 +377,14 @@ public sealed class TransferAbortKitWideningLawTests {
         Assert.Equal(expected: FixedQ4816.One, actual: capturedState.PendingDefaultChannelValue[UntimedPressOrdinal]);
         Assert.True(condition: (capturedState.ChannelTimerTicks[TimedPressOrdinal] > 0));
         Assert.NotEqual(expected: 0L, actual: capturedState.MediumThrustRampRemainder);
-        // MotionRecency — the MEDIUM kit's own proof (the vehicle law above documents why it cannot prove this):
+        // MotionRecency — the MEDIUM kit's own proof (the drive law above documents why it cannot prove this):
         // Response row 0's Recently(Rising) clock must have refreshed from the driven Up-channel thrust.
         Assert.NotEmpty(collection: capturedState.MotionRecency);
         Assert.True(condition: (capturedState.MotionRecency[0] > 0UL), userMessage: "the Recently(Rising) response row's clock must have refreshed while Rising held");
         Assert.True(condition: (capturedState.LaneFactHeld[SurgeOrdinal] != 0UL));
-        // LaneLatch legitimately stays 0 here — see the vehicle law's own remarks (OnFact carries no OnPress latch).
+        // LaneLatch legitimately stays 0 here — see the drive law's own remarks (OnFact carries no OnPress latch).
         Assert.True(condition: (capturedState.ActionStateValues[0] > FixedQ4816.Zero), userMessage: "surgeCounter must have incremented from the Rising edge firing");
-        // ActionStateDirty/DirtyKind/DirtyOperand — see the vehicle law's own remarks on why these legitimately read
+        // ActionStateDirty/DirtyKind/DirtyOperand — see the drive law's own remarks on why these legitimately read
         // false/default at any capture point in this engine's real architecture (WorldPopulation.CompleteStep's own
         // unconditional per-tick drain). Round-tripped below regardless.
         Assert.True(condition: (capturedState.TapeIntents.Length > 0));

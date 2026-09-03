@@ -94,7 +94,7 @@ internal static class Fixtures {
 
     /// <summary>The full parameter set <c>ValidateProducerParameters</c> requires for a kit naming the "wander"
     /// producer — shared by every fixture kit that declares one (<see cref="BuildKits"/>'s own "traveler" row, and
-    /// any other suite file's own custom kit — see <see cref="TransferAbortKitWideningLawTests"/>'s vehicle/medium
+    /// any other suite file's own custom kit — see <see cref="TransferAbortKitWideningLawTests"/>'s drive/medium
     /// kits). Values mirror the shipped worlds' own "traveler"-style kit; none of them is exercised by any of these
     /// suites' laws — WorldPopulation.SeedSeatWander unconditionally resolves this producer on the assigned kit's
     /// row regardless of whether anything actually wanders (see <see cref="BuildKits"/>'s own remarks on why the

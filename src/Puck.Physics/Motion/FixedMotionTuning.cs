@@ -58,27 +58,41 @@ public readonly record struct FixedMotionTuning(
     MotionMoveFrame MoveFrame,
     bool FacingSnap,
     FixedMotionScalarEnvelope? MoveSpeedEnvelope,
-    FixedMotionDynamics? PlanarDynamics = null
+    FixedMotionDynamics? PlanarDynamics = null,
+    FixedBodyDrive? Drive = null
 ) {
     /// <summary>Gets the number of recency clocks the response table's recency gates share.</summary>
     public int RecencySlots => ResponseRecencyFacts.Length;
 }
-/// <summary>The one-time fixed-point compilation of an authored vehicle motion row. Runtime simulation reads only
-/// this form; the held drift/boost channel names resolve to ordinals separately, through the world's channel
-/// table.</summary>
-public readonly record struct FixedVehicleTuning(
-    FixedQ4816 TopSpeed,
-    FixedQ4816 ReverseTopSpeed,
+/// <summary>The one-time fixed-point compilation of a kit's authored <c>drive</c> row — the anisotropic
+/// body-frame drive <see cref="BodyMotionOp.ResolveDriveFrame"/>/<see cref="BodyMotionOp.ShapeDriveVelocity"/>
+/// read, beside the planar shaping every other operation reads. The kit's own
+/// <see cref="FixedMotionTuning.MoveSpeed"/> is the forward target and <see cref="FixedMotionTuning.TurnSpeed"/> the
+/// steering rate: this row carries only what a drive alone has. The held drift channel name resolves to an ordinal
+/// separately, through the world's channel table.</summary>
+/// <param name="ReverseSpeed">The reverse speed (u/s) full back-throttle converges on from rest; zero forbids
+/// reversing.</param>
+/// <param name="Accel">The longitudinal convergence rate (u/s²) while throttle commands more speed.</param>
+/// <param name="Brake">The longitudinal convergence rate (u/s²) while back-throttle opposes forward travel.</param>
+/// <param name="Coast">The longitudinal convergence rate (u/s²) toward rest with throttle centered, and the decay
+/// rate while over the commanded speed.</param>
+/// <param name="Grip">The lateral convergence rate (u/s²) toward zero slip.</param>
+/// <param name="SteerReferenceSpeed">The longitudinal speed (u/s) at which steering authority peaks.</param>
+/// <param name="SteerFalloff">The fraction of full steering authority remaining at the resolved move speed, in
+/// <c>[0, 1]</c>.</param>
+/// <param name="PitchRate">The pitch rate (rad/s) the Pitch channel commands; zero locks the frame planar.</param>
+/// <param name="DriftGrip">The lateral convergence rate (u/s²) replacing <paramref name="Grip"/> while the drift
+/// channel reads held; zero without a drift row.</param>
+/// <param name="DriftSteerScale">The steering-authority multiplier while drifting; zero without a drift row.</param>
+public readonly record struct FixedBodyDrive(
+    FixedQ4816 ReverseSpeed,
     FixedQ4816 Accel,
     FixedQ4816 Brake,
-    FixedQ4816 CoastDrag,
+    FixedQ4816 Coast,
     FixedQ4816 Grip,
-    FixedQ4816 SteerRate,
     FixedQ4816 SteerReferenceSpeed,
     FixedQ4816 SteerFalloff,
     FixedQ4816 PitchRate,
     FixedQ4816 DriftGrip,
-    FixedQ4816 DriftSteerScale,
-    FixedQ4816 BoostMultiplier,
-    FixedMotionScalarEnvelope? TopSpeedEnvelope
+    FixedQ4816 DriftSteerScale
 );

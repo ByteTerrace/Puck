@@ -11,8 +11,11 @@
         <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
         <TargetFramework>netstandard2.0</TargetFramework>
     </PropertyGroup>
+    <!-- An analyzer is loaded BY the SDK's own compiler, so its Roslyn reference is a ceiling that compiler sets,
+         never a free float: a resolution newer than the compiler fails every project with CS9057. Pinned to the
+         Roslyn the SDK in global.json ships (10.0.4xx carries 5.9); bump it with the SDK, not with NuGet. -->
     <ItemGroup>
-        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="[5.*, )" PrivateAssets="all" />
-        <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="[5.*, )" PrivateAssets="all" />
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="[5.9.0]" PrivateAssets="all" />
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="[5.9.0]" PrivateAssets="all" />
     </ItemGroup>
 </Project>

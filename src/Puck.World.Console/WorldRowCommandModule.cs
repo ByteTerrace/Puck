@@ -687,21 +687,31 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         return builder.Append(value: ']').ToString();
     }
     // A kit's planar shaping is exactly one of the two mechanisms — echoed alongside the arm so world.kits answers
-    // "how does this kit feel" without a separate lookup.
+    // "how does this kit feel" without a separate lookup. A drive kit shapes planar velocity through its own row and
+    // authors neither, which reads as none here.
     private static string DescribeShaping(WorldMotionModel motion) => ((motion.DeclaredDynamics is { Length: > 0 } row)
         ? $"shaping=dynamics:{row}"
+        : ((motion.DeclaredResponse.Count == 0) && (motion.DeclaredDrive is not null))
+        ? "shaping=drive"
         : string.Create(
         provider: CultureInfo.InvariantCulture,
         handler: $"shaping=response({motion.DeclaredResponse.Count})"
     ));
+    // The optional drive row's own key scalars, or nothing at all for a kit authoring none.
+    private static string DescribeDrive(WorldMotionModel motion) => ((motion.DeclaredDrive is { } drive)
+        ? string.Create(
+        provider: CultureInfo.InvariantCulture,
+        handler: $" drive=(accel={drive.Accel:0.###} brake={drive.Brake:0.###} coast={drive.Coast:0.###} grip={drive.Grip:0.###} reverseSpeed={drive.ReverseSpeed:0.###} drift={((drive.Drift is { } drift)
+            ? drift.Channel
+            : "none"
+        )})"
+    )
+        : string.Empty
+    );
     private static string DescribeMotionArm(WorldMotionModel? motion) => motion switch {
         WorldMotionModel.Grounded grounded => string.Create(
         provider: CultureInfo.InvariantCulture,
-        handler: $"arm=grounded moveSpeed={grounded.MoveSpeed:0.###} turnSpeed={grounded.TurnSpeed:0.###} riseGravity={grounded.RiseGravity:0.###} fallGravity={grounded.FallGravity:0.###} maxFallSpeed={grounded.MaxFallSpeed:0.###} {DescribeShaping(motion: grounded)}"
-    ),
-        WorldMotionModel.Vehicle vehicle => string.Create(
-        provider: CultureInfo.InvariantCulture,
-        handler: $"arm=vehicle topSpeed={vehicle.TopSpeed:0.###} accel={vehicle.Accel:0.###} grip={vehicle.Grip:0.###} boostMultiplier={vehicle.BoostMultiplier:0.###}"
+        handler: $"arm=grounded moveSpeed={grounded.MoveSpeed:0.###} turnSpeed={grounded.TurnSpeed:0.###} riseGravity={grounded.RiseGravity:0.###} fallGravity={grounded.FallGravity:0.###} maxFallSpeed={grounded.MaxFallSpeed:0.###} {DescribeShaping(motion: grounded)}{DescribeDrive(motion: grounded)}"
     ),
         _ => "arm=(none)",
     };
@@ -1080,7 +1090,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.kits",
-            description: "Reports the kit census (Immediate): one segment per declared kit row — name, body motion program, the motion model arm it compiles (grounded|vehicle), and that arm's key movement scalars. The kits section's own read-back (world.row.set kits/world.row.remove kits has no listing of its own otherwise).",
+            description: "Reports the kit census (Immediate): one segment per declared kit row — name, body motion program, the motion model arm it compiles, that arm's key movement scalars and planar shaping, and the drive row's own scalars for a kit authoring one. The kits section's own read-back (world.row.set kits/world.row.remove kits has no listing of its own otherwise).",
             handler: (context, args) => {
                 if (args.Count != 0) {
                     return CommandResult.Error(output: "[world.kits: no arguments — reports the kit census]");

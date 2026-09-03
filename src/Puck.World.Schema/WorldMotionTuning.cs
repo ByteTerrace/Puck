@@ -9,12 +9,10 @@ namespace Puck.World;
 /// <see cref="WorldKit.BodyMotionProgram"/> (which operations run each tick) and this (the shape of the tuning those
 /// operations read). The <c>$type</c> string is the JSON discriminator; a new model is a new derived record, a new
 /// <see cref="JsonDerivedTypeAttribute"/> line, and the facet mapping <c>WorldDefinitionValidator</c> owns for it —
-/// never a hunt through <c>WorldBody</c>. These float values are compiled once into their model's own fixed-point
-/// form (<see cref="FixedMotionTuning"/> for <see cref="Grounded"/>) before simulation and never become runtime
-/// simulation state.
+/// never a hunt through <c>WorldBody</c>. These float values are compiled once into
+/// <see cref="FixedMotionTuning"/> before simulation and never become runtime simulation state.
 /// </summary>
 [JsonDerivedType(typeof(WorldMotionModel.Grounded), typeDiscriminator: "grounded")]
-[JsonDerivedType(typeof(WorldMotionModel.Vehicle), typeDiscriminator: "vehicle")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldMotionModel {
     private WorldMotionModel() {
@@ -72,6 +70,10 @@ public abstract record WorldMotionModel {
     /// <param name="Holds">The ordered list of what may hold this body — see <see cref="WorldHold"/> — read by the
     /// <c>ResolveHold</c>/<c>ApplyHold</c> operations, or <see langword="null"/> (the default) for a kit whose
     /// vertical channel is <c>ApplyVerticalGravity</c>'s alone.</param>
+    /// <param name="Drive">The anisotropic drive row — see <see cref="WorldDrive"/> — read by the
+    /// <c>ResolveDriveFrame</c>/<c>ShapeDriveVelocity</c> operations, or <see langword="null"/> (the default) for a
+    /// kit whose planar velocity is the isotropic shaping's alone. A program selecting either drive operation
+    /// against a kit authoring no row refuses by name through the <c>Drive</c> tuning facet.</param>
     public sealed record Grounded(
         float MoveSpeed,
         float TurnSpeed,
@@ -85,113 +87,38 @@ public abstract record WorldMotionModel {
         MotionMoveFrame MoveFrame = MotionMoveFrame.World,
         bool FacingSnap = true,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MotionScalarEnvelope? MoveSpeedEnvelope = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldHold>? Holds = null
-    ) : WorldMotionModel;
-    /// <summary>
-    /// Anisotropic body-frame locomotion — the racing-vehicle arm the <c>ResolveVehicleFrame</c>/
-    /// <c>ShapeVehicleVelocity</c> operations read. Velocity decomposes into longitudinal/lateral (and residual)
-    /// body-frame components, each converging at its own authored rate — what separates a vehicle from
-    /// <see cref="Grounded"/>, whose isotropic planar shaping cannot tune grip apart from acceleration. Steering
-    /// authority scales with longitudinal speed (no spinning in place, looser at top speed) and reverses sign with
-    /// reversing travel. One row serves the ground, hover, and air variants: a contact-pinned variant pairs this
-    /// arm with a program keeping <c>ApplyVerticalGravity</c> (grounded-style vertical ownership and ramp
-    /// ballistics), a flying variant pairs it with <c>ApplyVerticalDecay</c> and a positive
-    /// <paramref name="PitchRate"/> so climb emerges from the pitched facing.
-    /// </summary>
-    /// <param name="TopSpeed">The forward speed (u/s) full throttle converges on.</param>
-    /// <param name="ReverseTopSpeed">The reverse speed (u/s) full back-throttle converges on from rest; <c>0</c>
-    /// forbids reversing.</param>
-    /// <param name="Accel">The longitudinal convergence rate (u/s²) while throttle commands more speed.</param>
-    /// <param name="Brake">The longitudinal convergence rate (u/s²) while back-throttle opposes forward travel.</param>
-    /// <param name="CoastDrag">The longitudinal convergence rate (u/s²) toward rest with throttle centered, and the
-    /// decay rate while over the commanded speed (the post-boost bleed).</param>
-    /// <param name="Grip">The lateral convergence rate (u/s²) toward zero slip — traction. Lower is slidier.</param>
-    /// <param name="SteerRate">The yaw rate (rad/s) at full steering authority.</param>
-    /// <param name="SteerReferenceSpeed">The longitudinal speed (u/s) at which steering authority peaks; authority
-    /// rises linearly from zero at standstill.</param>
-    /// <param name="SteerFalloff">The fraction of full steering authority remaining at <paramref name="TopSpeed"/>,
-    /// in <c>[0, 1]</c>; authority falls linearly from the reference speed.</param>
-    /// <param name="PitchRate">The pitch rate (rad/s) the Pitch channel commands; <c>0</c> locks the frame planar
-    /// (the ground and hover variants). Positive selects the flying variant's pitched facing, clamped inside the
-    /// integrator so the frame can never flip past vertical.</param>
-    /// <param name="RiseGravity">The upward-motion gravity (u/s²) — the contact-pinned variant's arc top, and the
-    /// flying variant's vertical-impulse bleed rate (via <c>ApplyVerticalDecay</c>).</param>
-    /// <param name="FallGravity">The falling gravity (u/s²) under <c>ApplyVerticalGravity</c>.</param>
-    /// <param name="MaxFallSpeed">The terminal fall speed (u/s) under <c>ApplyVerticalGravity</c>.</param>
-    /// <param name="DriftGrip">The lateral convergence rate (u/s²) replacing <paramref name="Grip"/> while
-    /// <paramref name="DriftChannel"/> reads held — the deliberate low-traction state. Required positive when a
-    /// drift channel is declared; ignored without one.</param>
-    /// <param name="DriftSteerScale">The steering-authority multiplier while drifting (the tightened drift arc).</param>
-    /// <param name="BoostMultiplier">The <paramref name="TopSpeed"/> multiplier while <paramref name="BoostChannel"/>
-    /// reads held; <c>1</c> is a no-op. The timed item boost is <c>planarImpulse</c>, not this.</param>
-    /// <param name="DriftChannel">The declared channel name read while held to drift, or <see langword="null"/> for a kit
-    /// that cannot drift. Resolved to an ordinal once by <see cref="FixedWorldKit.Compile"/>.</param>
-    /// <param name="BoostChannel">The declared channel name read while held to boost, or <see langword="null"/> for a kit
-    /// with no held boost. Resolved through the same held-channel seam as <see cref="Grounded.SprintChannel"/>.</param>
-    /// <param name="TopSpeedEnvelope">The racing-integrity clamp: the inclusive bound the resolved base
-    /// <paramref name="TopSpeed"/> is pinned to at resolve time — a live <c>world.row.set kits</c> retune (deliberately
-    /// admitted even past the bound; <see cref="WorldDefinitionValidator"/> checks only the envelope's own shape,
-    /// never that <paramref name="TopSpeed"/> already sits inside it — the clamp exists precisely to catch a retune
-    /// the envelope disagrees with, so requiring conformance up front would refuse the case it exists for), and any
-    /// future per-seat vehicle stat resolve, both pass through it, or <see langword="null"/> (the default) for no
-    /// bound. <paramref name="BoostMultiplier"/> multiplies after this clamp, never before — the envelope pins the
-    /// base top speed, boost rides on top, the same sprint-after-clamp precedent
-    /// <see cref="Grounded.MoveSpeedEnvelope"/> established for the grounded arm. The vehicle arm's resolve
-    /// deliberately never reads a seated profile's speed (a kart's speed is the kit's), so this is the only seat-time
-    /// clamp the vehicle arm has — unlike the grounded arm's envelope, which bounds a fallback a separate live
-    /// profile read can diverge from, so grounded's own baseline is still required to sit inside its own bound.
-    /// See <see cref="MotionScalarEnvelope"/>.</param>
-    public sealed record Vehicle(
-        float TopSpeed,
-        float ReverseTopSpeed,
-        float Accel,
-        float Brake,
-        float CoastDrag,
-        float Grip,
-        float SteerRate,
-        float SteerReferenceSpeed,
-        float SteerFalloff,
-        float PitchRate,
-        float RiseGravity,
-        float FallGravity,
-        float MaxFallSpeed,
-        float DriftGrip = 0f,
-        float DriftSteerScale = 1f,
-        float BoostMultiplier = 1f,
-        string? DriftChannel = null,
-        string? BoostChannel = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MotionScalarEnvelope? TopSpeedEnvelope = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldHold>? Holds = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDrive? Drive = null
     ) : WorldMotionModel;
 
-    /// <summary>The declared held-multiplier channel of whichever arm this is — <see cref="Grounded.SprintChannel"/>
-    /// or the vehicle arm's <see cref="Vehicle.BoostChannel"/> (the same held-multiplier seam under a different
-    /// name) — or <see langword="null"/> for an arm (or a declaration) without one. The one sprint-resolution read <see cref="FixedWorldKit.Compile"/> and the seat binding surfaces share,
-    /// so a new arm extends it here instead of each caller growing its own cast chain.</summary>
+    /// <summary>Gets the declared held-multiplier channel of whichever arm this is
+    /// (<see cref="Grounded.SprintChannel"/>), or <see langword="null"/> for an arm without one. The one
+    /// sprint-resolution read <see cref="FixedWorldKit.Compile"/> and the seat binding surfaces share, so a new arm
+    /// extends it here instead of each caller growing its own cast chain.</summary>
     public string? DeclaredSprintChannel => this switch {
         Grounded grounded => grounded.SprintChannel,
-        Vehicle vehicle => vehicle.BoostChannel,
         _ => null,
     };
-    /// <summary>The declared move frame of whichever arm this is — <see cref="MotionMoveFrame.Heading"/> for an arm
-    /// without the choice. The client's camera composition keys off this, arm-agnostically.</summary>
+    /// <summary>Gets the declared move frame of whichever arm this is — <see cref="MotionMoveFrame.Heading"/> for an
+    /// arm without the choice. The client's camera composition keys off this, arm-agnostically.</summary>
     public MotionMoveFrame DeclaredMoveFrame => this switch {
         Grounded grounded => grounded.MoveFrame,
         _ => MotionMoveFrame.Heading,
     };
-    /// <summary>The declared Turn-channel rate of whichever arm this is, in radians per second at full deflection —
-    /// zero for an arm without one. The client's steer follow keys off this, arm-agnostically.</summary>
+    /// <summary>Gets the declared Turn-channel rate of whichever arm this is, in radians per second at full
+    /// deflection — zero for an arm without one. The client's steer follow keys off this, arm-agnostically.</summary>
     public float DeclaredTurnSpeed => this switch {
         Grounded grounded => grounded.TurnSpeed,
         _ => 0f,
     };
-    /// <summary>The declared velocity-response table of whichever arm this is (see <see cref="Grounded.Response"/>),
-    /// null-coalesced to the empty table — a kit's authored <see langword="null"/> and a
-    /// kit with no planar-shaping arm at all read identically here.</summary>
+    /// <summary>Gets the declared velocity-response table of whichever arm this is (see
+    /// <see cref="Grounded.Response"/>), null-coalesced to the empty table — a kit's authored <see langword="null"/>
+    /// and a kit with no planar-shaping arm at all read identically here.</summary>
     public IReadOnlyList<MotionResponse> DeclaredResponse => ((this switch {
         Grounded grounded => grounded.Response,
         _ => null,
     }) ?? []);
-    /// <summary>The declared <c>dynamics</c> row name of whichever arm this is (see
+    /// <summary>Gets the declared <c>dynamics</c> row name of whichever arm this is (see
     /// <see cref="Grounded.Dynamics"/>), or <see langword="null"/> for an arm shaped by <see cref="DeclaredResponse"/>
     /// instead, or with no planar-shaping arm at all.</summary>
     public string? DeclaredDynamics => this switch {
@@ -205,6 +132,13 @@ public abstract record WorldMotionModel {
         Grounded grounded => grounded.Holds,
         _ => null,
     }) ?? []);
+    /// <summary>Gets the declared drive row of whichever arm this is (see <see cref="Grounded.Drive"/>), or
+    /// <see langword="null"/> for a kit authoring none. The one arm-agnostic read the kit compiler, the speed
+    /// ceiling, and the kit read-back share.</summary>
+    public WorldDrive? DeclaredDrive => this switch {
+        Grounded grounded => grounded.Drive,
+        _ => null,
+    };
 }
 /// <summary>
 /// The world's motion defaults — the profileless locomotion speeds a stand-in with no seated profile advances on.
@@ -263,10 +197,65 @@ public sealed record MotionResponse(
 /// <paramref name="Max"/> &lt; <paramref name="Min"/> by name. Equal to <paramref name="Min"/> pins the scalar
 /// outright regardless of what a profile requests.</param>
 public readonly record struct MotionScalarEnvelope(float Min, float Max);
+/// <summary>The held low-traction state of a kit's <see cref="WorldDrive"/> — a declared channel whose held read
+/// swaps the drive's lateral grip and scales its steering authority. Absent, the kit cannot drift.</summary>
+/// <param name="Channel">The declared composition channel name read while held.</param>
+/// <param name="Grip">The lateral convergence rate (u/s²) replacing <see cref="WorldDrive.Grip"/> while the channel
+/// reads held — the deliberate low-traction state. Required positive.</param>
+/// <param name="SteerScale">The steering-authority multiplier while drifting (the tightened drift arc). Required
+/// positive.</param>
+public sealed record WorldDriveDrift(
+    string Channel,
+    float Grip,
+    float SteerScale
+);
+/// <summary>
+/// A kit's anisotropic drive row — what only a drive has, authored beside the one motion arm rather than replacing
+/// it. Velocity decomposes into longitudinal/lateral (and residual) body-frame components, each converging at its
+/// own authored rate: the anisotropy a kart needs and the arm's isotropic planar shaping cannot express, since that
+/// shaping cannot tune grip apart from acceleration. Steering authority scales with longitudinal speed (no spinning
+/// in place, looser at top speed) and reverses sign with reversing travel.
+/// </summary>
+/// <remarks>The forward speed full throttle converges on is the kit's own
+/// <see cref="WorldMotionModel.Grounded.MoveSpeed"/> (bounded by its
+/// <see cref="WorldMotionModel.Grounded.MoveSpeedEnvelope"/>, scaled by its
+/// <see cref="WorldMotionModel.Grounded.SprintMultiplier"/> while the sprint channel reads held), the steering rate
+/// at full authority is its <see cref="WorldMotionModel.Grounded.TurnSpeed"/>, and the gravity trio is the arm's own
+/// — one name each, never a second spelling. One row serves the ground, hover, and air variants: a contact-pinned
+/// variant pairs the drive operations with a program keeping <c>ApplyVerticalGravity</c>, a flying variant with
+/// <c>ApplyVerticalDecay</c> and a positive <paramref name="PitchRate"/> so climb emerges from the pitched
+/// facing.</remarks>
+/// <param name="Accel">The longitudinal convergence rate (u/s²) while throttle commands more speed.</param>
+/// <param name="Brake">The longitudinal convergence rate (u/s²) while back-throttle opposes forward travel.</param>
+/// <param name="Coast">The longitudinal convergence rate (u/s²) toward rest with throttle centered, and the decay
+/// rate while over the commanded speed (the post-boost bleed).</param>
+/// <param name="Grip">The lateral convergence rate (u/s²) toward zero slip — traction. Lower is slidier.</param>
+/// <param name="SteerReferenceSpeed">The longitudinal speed (u/s) at which steering authority peaks; authority
+/// rises linearly from zero at standstill.</param>
+/// <param name="SteerFalloff">The fraction of full steering authority remaining at the kit's resolved move speed,
+/// in <c>[0, 1]</c>; authority falls linearly from the reference speed.</param>
+/// <param name="ReverseSpeed">The reverse speed (u/s) full back-throttle converges on from rest; <c>0</c> forbids
+/// reversing.</param>
+/// <param name="PitchRate">The pitch rate (rad/s) the Pitch channel commands; <c>0</c> locks the frame planar (the
+/// ground and hover variants). Positive selects the flying variant's pitched facing, clamped inside the integrator
+/// so the frame can never flip past vertical.</param>
+/// <param name="Drift">The held low-traction state, or <see langword="null"/> (the default) for a kit that cannot
+/// drift.</param>
+public sealed record WorldDrive(
+    float Accel,
+    float Brake,
+    float Coast,
+    float Grip,
+    float SteerReferenceSpeed,
+    float SteerFalloff,
+    float ReverseSpeed = 0f,
+    float PitchRate = 0f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDriveDrift? Drift = null
+);
 /// <summary>The document intake for the engine's compiled motion tunings — the one place an authored
 /// <see cref="WorldMotionModel"/> arm becomes the fixed-point form simulation reads.</summary>
 public static class WorldMotionTuningFactory {
-    private static FixedMotionTuning Compile(float moveSpeed, float turnSpeed, float riseGravity, float fallGravity, float maxFallSpeed, IReadOnlyList<MotionResponse> response, float sprintMultiplier, MotionMoveFrame moveFrame, bool facingSnap, MotionScalarEnvelope? moveSpeedEnvelope, FixedMotionDynamics? dynamics) {
+    private static FixedMotionTuning Compile(float moveSpeed, float turnSpeed, float riseGravity, float fallGravity, float maxFallSpeed, IReadOnlyList<MotionResponse> response, float sprintMultiplier, MotionMoveFrame moveFrame, bool facingSnap, MotionScalarEnvelope? moveSpeedEnvelope, FixedMotionDynamics? dynamics, WorldDrive? drive) {
         var rows = response;
         var compiled = new FixedMotionResponse[rows.Count];
         var recencyFacts = new List<ActionFact>();
@@ -306,10 +295,34 @@ public static class WorldMotionTuningFactory {
             MoveSpeedEnvelope: ((moveSpeedEnvelope is { } envelope)
             ? Compile(envelope: envelope)
             : null),
-            PlanarDynamics: dynamics
+            PlanarDynamics: dynamics,
+            Drive: ((drive is not null)
+            ? Compile(drive: drive)
+            : null)
         );
     }
 
+    /// <summary>Compiles an authored drive row to its fixed-point form. The held drift channel name resolves to an
+    /// ordinal separately, through the world's channel table.</summary>
+    /// <param name="drive">The authored drive row.</param>
+    /// <returns>The compiled row.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="drive"/> is <see langword="null"/>.</exception>
+    public static FixedBodyDrive Compile(WorldDrive drive) {
+        ArgumentNullException.ThrowIfNull(argument: drive);
+
+        return new(
+            ReverseSpeed: FixedQ4816.FromDouble(value: drive.ReverseSpeed),
+            Accel: FixedQ4816.FromDouble(value: drive.Accel),
+            Brake: FixedQ4816.FromDouble(value: drive.Brake),
+            Coast: FixedQ4816.FromDouble(value: drive.Coast),
+            Grip: FixedQ4816.FromDouble(value: drive.Grip),
+            SteerReferenceSpeed: FixedQ4816.FromDouble(value: drive.SteerReferenceSpeed),
+            SteerFalloff: FixedQ4816.FromDouble(value: drive.SteerFalloff),
+            PitchRate: FixedQ4816.FromDouble(value: drive.PitchRate),
+            DriftGrip: FixedQ4816.FromDouble(value: (drive.Drift?.Grip ?? 0f)),
+            DriftSteerScale: FixedQ4816.FromDouble(value: (drive.Drift?.SteerScale ?? 0f))
+        );
+    }
     /// <summary>Compiles an authored scalar envelope to its fixed-point form.</summary>
     /// <param name="envelope">The authored inclusive bound.</param>
     /// <returns>The compiled bound.</returns>
@@ -342,29 +355,8 @@ public static class WorldMotionTuningFactory {
         moveFrame: tuning.MoveFrame,
         facingSnap: tuning.FacingSnap,
         moveSpeedEnvelope: tuning.MoveSpeedEnvelope,
-        dynamics: dynamics
-    );
-    /// <summary>Compiles an authored vehicle motion row to its fixed-point form. The held drift/boost channel names
-    /// resolve to ordinals separately, through the world's channel table.</summary>
-    /// <param name="tuning">The authored vehicle arm.</param>
-    /// <returns>The compiled tuning.</returns>
-    public static FixedVehicleTuning Compile(WorldMotionModel.Vehicle tuning) => new(
-        TopSpeed: FixedQ4816.FromDouble(value: tuning.TopSpeed),
-        ReverseTopSpeed: FixedQ4816.FromDouble(value: tuning.ReverseTopSpeed),
-        Accel: FixedQ4816.FromDouble(value: tuning.Accel),
-        Brake: FixedQ4816.FromDouble(value: tuning.Brake),
-        CoastDrag: FixedQ4816.FromDouble(value: tuning.CoastDrag),
-        Grip: FixedQ4816.FromDouble(value: tuning.Grip),
-        SteerRate: FixedQ4816.FromDouble(value: tuning.SteerRate),
-        SteerReferenceSpeed: FixedQ4816.FromDouble(value: tuning.SteerReferenceSpeed),
-        SteerFalloff: FixedQ4816.FromDouble(value: tuning.SteerFalloff),
-        PitchRate: FixedQ4816.FromDouble(value: tuning.PitchRate),
-        DriftGrip: FixedQ4816.FromDouble(value: tuning.DriftGrip),
-        DriftSteerScale: FixedQ4816.FromDouble(value: tuning.DriftSteerScale),
-        BoostMultiplier: FixedQ4816.FromDouble(value: tuning.BoostMultiplier),
-        TopSpeedEnvelope: ((tuning.TopSpeedEnvelope is { } envelope)
-        ? Compile(envelope: envelope)
-        : null)
+        dynamics: dynamics,
+        drive: tuning.Drive
     );
 
 }

@@ -48,7 +48,7 @@ public static partial class WorldDefinitionValidator {
                 BodyMotionOp.ShapePlanarVelocity => MotionTuningFacet.PlanarResponse,
                 BodyMotionOp.ComputePlanarTargetVelocity => MotionTuningFacet.Sprint,
                 BodyMotionOp.ResolveYawAttitudeAndPlanarFrame or BodyMotionOp.SnapYawToPlanarIntent => MotionTuningFacet.WorldFrame,
-                BodyMotionOp.ResolveVehicleFrame or BodyMotionOp.ShapeVehicleVelocity => MotionTuningFacet.VehicleDrive,
+                BodyMotionOp.ResolveDriveFrame or BodyMotionOp.ShapeDriveVelocity => MotionTuningFacet.Drive,
                 BodyMotionOp.ResolveHold or BodyMotionOp.ApplyHold => (MotionTuningFacet.GravityArc | MotionTuningFacet.Holds),
                 _ => MotionTuningFacet.None,
             };
@@ -57,18 +57,15 @@ public static partial class WorldDefinitionValidator {
         return facets;
     }
     // The model→facet mapping: what each WorldMotionModel arm supplies. A new arm is a localized addition here,
-    // alongside its record arm (WorldDefinition.cs), its WorldBody integrator, and any new BodyMotionOp cases
-    // RequiredMotionTuningFacets needs — never a hunt. Grounded supplies every facet defined
-    // today because it is, today, also the only arm the world's "free" body motion program authors (see
-    // WorldMotionModel.Grounded's remarks) — a strict superset of what free's operations read.
+    // alongside its record arm (WorldMotionTuning.cs), its WorldBody integrator, and any new BodyMotionOp cases
+    // RequiredMotionTuningFacets needs — never a hunt. The arm's own fields supply every facet unconditionally; Drive
+    // is the one an OPTIONAL row carries, so a kit authoring none refuses a drive program by facet name.
     private static MotionTuningFacet SuppliedMotionTuningFacets(WorldMotionModel model) => model switch {
-        WorldMotionModel.Grounded => (MotionTuningFacet.Speed | MotionTuningFacet.GravityArc | MotionTuningFacet.GravityBleed
-            | MotionTuningFacet.PlanarResponse | MotionTuningFacet.Sprint | MotionTuningFacet.WorldFrame | MotionTuningFacet.Holds),
-        // The vehicle arm carries its own gravity trio (contact-pinned variants run ApplyVerticalGravity; flying
-        // variants bleed impulses through ApplyVerticalDecay) but none of grounded's planar-shaping facets — pairing
-        // a vehicle model with ShapePlanarVelocity/ComputePlanarTargetVelocity/the yaw-frame ops refuses by name.
-        WorldMotionModel.Vehicle => (MotionTuningFacet.Speed | MotionTuningFacet.GravityArc | MotionTuningFacet.GravityBleed
-            | MotionTuningFacet.VehicleDrive),
+        WorldMotionModel.Grounded grounded => (MotionTuningFacet.Speed | MotionTuningFacet.GravityArc | MotionTuningFacet.GravityBleed
+            | MotionTuningFacet.PlanarResponse | MotionTuningFacet.Sprint | MotionTuningFacet.WorldFrame | MotionTuningFacet.Holds
+            | ((grounded.Drive is not null)
+            ? MotionTuningFacet.Drive
+            : MotionTuningFacet.None)),
         _ => MotionTuningFacet.None,
     };
     private static bool TryScalar(BodyProgramParameters parameters, string name, out float value) => parameters.Scalars.TryGetValue(
@@ -199,7 +196,7 @@ public static partial class WorldDefinitionValidator {
     }
     // The shape every authored envelope must have regardless of arm: min/max finite, min <= max (FixedQ4816.Clamp's
     // own precondition, refused here so it never throws at seat-resolve time), min non-negative — every consumer
-    // bounds a speed magnitude, and reverse travel is its own positive scalar (reverseTopSpeed), so a negative
+    // bounds a speed magnitude, and reverse travel is its own non-negative scalar (drive.reverseSpeed), so a negative
     // endpoint would only widen the clamp past the bound's apparent intent. Returns whether the shape held, so a
     // caller layering an additional check can skip it once the bound is already malformed.
     private static bool ValidateEnvelopeShape(MotionScalarEnvelope envelope, string path, List<string> errors) {
@@ -228,7 +225,7 @@ public static partial class WorldDefinitionValidator {
     }
     // A kit's full grounded locomotion tuning: speeds, gravity, and the velocity-response table every body
     // integrates under.
-    private static void ValidateGroundedMotion(WorldMotionModel.Grounded tuning, string path, ISet<string> channelNames, ISet<string> dynamicsNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, int simulationRateHz, List<string> errors) {
+    private static void ValidateGroundedMotion(WorldMotionModel.Grounded tuning, string path, ISet<string> channelNames, ISet<string> dynamicsNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, bool shapesPlanarVelocity, int simulationRateHz, List<string> errors) {
         RequirePositive(
             value: tuning.MoveSpeed,
             name: $"{path}.moveSpeed",
@@ -259,14 +256,16 @@ public static partial class WorldDefinitionValidator {
             name: $"{path}.sprintMultiplier",
             errors: errors
         );
-        ValidatePlanarShaping(
-            dynamics: tuning.Dynamics,
-            dynamicsNames: dynamicsNames,
-            errors: errors,
-            path: path,
-            response: tuning.Response,
-            simulationRateHz: simulationRateHz
-        );
+        if (shapesPlanarVelocity) {
+            ValidatePlanarShaping(
+                dynamics: tuning.Dynamics,
+                dynamicsNames: dynamicsNames,
+                errors: errors,
+                path: path,
+                response: tuning.Response,
+                simulationRateHz: simulationRateHz
+            );
+        }
 
         // The sprint channel needs the same "must resolve" bar
         // ValidateRoute holds engageChannel to, for the identical reason (a misspelled name would otherwise be a
@@ -301,6 +300,15 @@ public static partial class WorldDefinitionValidator {
             path: $"{path}.holds",
             stateSlots: stateSlots
         );
+
+        if (tuning.Drive is { } drive) {
+            ValidateDriveMotion(
+                channelNames: channelNames,
+                errors: errors,
+                path: $"{path}.drive",
+                tuning: drive
+            );
+        }
     }
     // The ordered hold list: a unique name per row, a cone inside [0, 180] with min < max for a surface row (and no
     // cone at all for a free one), the kind's own operands, and every named channel/state slot resolvable. Absent (a
@@ -524,18 +532,14 @@ public static partial class WorldDefinitionValidator {
                     errors: errors,
                     path: path,
                     hasMedium: hasMedium,
+                    // The exactly-one planar-shaping rule binds the kit whose program actually shapes planar
+                    // velocity. A drive kit shapes it through its own row instead, so requiring a dead response
+                    // table there would author feel nothing reads. An unresolved program name is already refused
+                    // elsewhere; requiring the shaping keeps that kit's refusal complete.
+                    shapesPlanarVelocity: ((program is null) || program.Contains(operation: BodyMotionOp.ShapePlanarVelocity)),
                     simulationRateHz: simulationRateHz,
                     stateSlots: stateSlots,
                     tuning: grounded
-                );
-
-                break;
-            case WorldMotionModel.Vehicle vehicle:
-                ValidateVehicleMotion(
-                    channelNames: channelNames,
-                    errors: errors,
-                    path: path,
-                    tuning: vehicle
                 );
 
                 break;
@@ -832,9 +836,9 @@ public static partial class WorldDefinitionValidator {
     }
     // Layered over ValidateEnvelopeShape: the kit's own authored value for the bounded scalar must also sit inside
     // its own declared envelope — a world that pins a scalar narrower than the baseline it authors for profileless
-    // stand-ins is self-contradictory. Meaningful only where the bounded value is a fallback a separate, unvalidated
-    // live read (a seated profile) can diverge from — see ValidateVehicleMotion's remarks for the arm that
-    // deliberately skips this layer.
+    // stand-ins is self-contradictory. One arm means one rule: a kit pinning its speed outright (min == max, what a
+    // kart authors) still authors a moveSpeed inside that pin, so a live world.row.set retune past the cap refuses
+    // by name instead of clamping silently.
     private static void ValidateScalarEnvelope(MotionScalarEnvelope envelope, float ownValue, string ownValueName, string path, List<string> errors) {
         if (!ValidateEnvelopeShape(
             envelope: envelope,
@@ -851,15 +855,13 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} [{envelope.Min}, {envelope.Max}] does not contain the kit's own {ownValueName} ({ownValue}).");
         }
     }
-    private static void ValidateVehicleMotion(WorldMotionModel.Vehicle tuning, string path, ISet<string> channelNames, List<string> errors) {
-        RequirePositive(
-            value: tuning.TopSpeed,
-            name: $"{path}.topSpeed",
-            errors: errors
-        );
+    // A kit's drive row: every convergence rate positive, the steering authority curve well-formed, and a declared
+    // drift naming a channel that resolves (a misspelled name is otherwise a silent, permanent no-op). The forward
+    // speed, the steering rate, and the gravity trio are the arm's own fields and are validated with it.
+    private static void ValidateDriveMotion(WorldDrive tuning, string path, ISet<string> channelNames, List<string> errors) {
         RequireNonNegative(
-            value: tuning.ReverseTopSpeed,
-            name: $"{path}.reverseTopSpeed",
+            value: tuning.ReverseSpeed,
+            name: $"{path}.reverseSpeed",
             errors: errors
         );
         RequirePositive(
@@ -873,18 +875,13 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
         RequirePositive(
-            value: tuning.CoastDrag,
-            name: $"{path}.coastDrag",
+            value: tuning.Coast,
+            name: $"{path}.coast",
             errors: errors
         );
         RequirePositive(
             value: tuning.Grip,
             name: $"{path}.grip",
-            errors: errors
-        );
-        RequirePositive(
-            value: tuning.SteerRate,
-            name: $"{path}.steerRate",
             errors: errors
         );
         RequirePositive(
@@ -897,31 +894,6 @@ public static partial class WorldDefinitionValidator {
             name: $"{path}.pitchRate",
             errors: errors
         );
-        RequirePositive(
-            value: tuning.RiseGravity,
-            name: $"{path}.riseGravity",
-            errors: errors
-        );
-        RequirePositive(
-            value: tuning.FallGravity,
-            name: $"{path}.fallGravity",
-            errors: errors
-        );
-        RequirePositive(
-            value: tuning.MaxFallSpeed,
-            name: $"{path}.maxFallSpeed",
-            errors: errors
-        );
-        RequirePositive(
-            value: tuning.DriftSteerScale,
-            name: $"{path}.driftSteerScale",
-            errors: errors
-        );
-        RequirePositive(
-            value: tuning.BoostMultiplier,
-            name: $"{path}.boostMultiplier",
-            errors: errors
-        );
 
         if (
             !float.IsFinite(f: tuning.SteerFalloff) ||
@@ -931,41 +903,28 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.steerFalloff {tuning.SteerFalloff} must be within [0, 1].");
         }
 
-        if (tuning.DriftChannel is { Length: > 0 } driftChannel) {
-            if (!channelNames.Contains(item: driftChannel)) {
-                errors.Add(item: $"{path}.driftChannel '{driftChannel}' names no declared composition channel.");
-            }
-
-            if (
-                !float.IsFinite(f: tuning.DriftGrip) ||
-                (tuning.DriftGrip <= 0f)
-            ) {
-                errors.Add(item: $"{path}.driftGrip {tuning.DriftGrip} must be positive when a drift channel is declared.");
-            }
+        if (tuning.Drift is not { } drift) {
+            return;
         }
 
         if (
-            (tuning.BoostChannel is { Length: > 0 } boostChannel) &&
-            !channelNames.Contains(item: boostChannel)
+            (drift.Channel is not { Length: > 0 } channel) ||
+            !channelNames.Contains(item: channel)
         ) {
-            errors.Add(item: $"{path}.boostChannel '{boostChannel}' names no declared composition channel.");
+            errors.Add(item: $"{path}.drift.channel '{drift.Channel}' names no declared composition channel.");
         }
 
-        // Well-formedness only (finite min/max, min <= max) — deliberately NOT the own-value-in-range check
-        // ValidateScalarEnvelope also applies to grounded's moveSpeed. Grounded's baseline is a profileless fallback
-        // the live-clamped read (Profile's own speed) can diverge from, so an own-value check keeps that fallback
-        // sane. The vehicle arm has no such second channel: topSpeed itself IS the live-clamped read (world.row.set
-        // retunes it in place), so requiring it inside its own envelope would refuse the exact retune-past-the-cap
-        // this envelope exists to catch. A malformed envelope (min > max, non-finite) still refuses.
-        if (tuning.TopSpeedEnvelope is { } topSpeedEnvelope) {
-            ValidateEnvelopeShape(
-                envelope: topSpeedEnvelope,
-                errors: errors,
-                path: $"{path}.topSpeedEnvelope"
-            );
-        }
+        RequirePositive(
+            value: drift.Grip,
+            name: $"{path}.drift.grip",
+            errors: errors
+        );
+        RequirePositive(
+            value: drift.SteerScale,
+            name: $"{path}.drift.steerScale",
+            errors: errors
+        );
     }
-
     private static readonly string[] WanderScalars = [
         "forward", "softRadius", "weaveAmplitude", "inwardGain", "turnScale",
         "weaveFrequencyBase", "weaveFrequencyRange", "altitudeGain", "activityRateBase", "activityRateRange",
@@ -1004,10 +963,10 @@ public static partial class WorldDefinitionValidator {
         /// <see cref="BodyMotionOp.SnapYawToPlanarIntent"/>).</summary>
         WorldFrame = 32,
 
-        /// <summary>The anisotropic drive family — longitudinal accel/brake/coast, lateral grip/drift, and
-        /// speed-scaled steering (<see cref="BodyMotionOp.ResolveVehicleFrame"/>/
-        /// <see cref="BodyMotionOp.ShapeVehicleVelocity"/>).</summary>
-        VehicleDrive = 64,
+        /// <summary>The optional <c>drive</c> row — longitudinal accel/brake/coast, lateral grip/drift, and
+        /// speed-scaled steering (<see cref="BodyMotionOp.ResolveDriveFrame"/>/
+        /// <see cref="BodyMotionOp.ShapeDriveVelocity"/>). Supplied only by a kit that authors one.</summary>
+        Drive = 64,
 
         /// <summary>The ordered hold list (<see cref="BodyMotionOp.ResolveHold"/>/
         /// <see cref="BodyMotionOp.ApplyHold"/>), plus the gravity arc a hold's own gravity and lift laws

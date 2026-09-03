@@ -90,14 +90,14 @@ public sealed partial class WorldBody {
         }
 
         m_bodyMotionProgram = program;
-        // A yaw-scalar program (grounded's frame, or the vehicle frame — which levels its pitch scalar too) re-pins
+        // A yaw-scalar program (the ordinary frame, or the drive frame — which levels its pitch scalar too) re-pins
         // the attitude from the extracted heading; the free 6DOF program keeps the attitude and re-seeds the scalar.
         var resolvesYawAttitude = (program.Contains(operation: BodyMotionOp.ResolveYawAttitudeAndPlanarFrame)
-            || program.Contains(operation: BodyMotionOp.ResolveVehicleFrame));
+            || program.Contains(operation: BodyMotionOp.ResolveDriveFrame));
 
         if (resolvesYawAttitude) {
             m_yaw = ExtractYaw(orientation: m_orientation);
-            m_vehiclePitch = FixedQ4816.Zero;
+            m_drivePitch = FixedQ4816.Zero;
             m_orientation = FixedQuaternion.FromAxisAngle(
                 angle: m_yaw,
                 axis: UnitY
@@ -122,11 +122,6 @@ public sealed partial class WorldBody {
     // compiled/integrator state — never a hunt through Advance's op handlers, which stay generic over whatever the
     // kit's body motion program selects. WorldDefinitionValidator has already refused an incoherent
     // pairing (a program whose operations need a facet the declared model doesn't supply) before this ever runs.
-    //
-    // The vehicle arm also fills m_tuning, from its own gravity trio: ApplyVerticalGravity/ApplyVerticalDecay read
-    // m_tuning's Rise/Fall/MaxFall whichever model authored them (the validator's GravityArc/GravityBleed facets
-    // guarantee the vehicle row carries all three), and MoveSpeed/TurnSpeed mirror TopSpeed/SteerRate so the
-    // pre-dispatch Speed resolve stays well-formed — the vehicle ops themselves read only m_vehicleTuning.
     private void SetTuning(WorldMotionModel motion, FixedMotionDynamics? planarDynamics = null, FixedBodyHold[]? holds = null) {
         m_holds = (holds ?? []);
 
@@ -141,21 +136,7 @@ public sealed partial class WorldBody {
 
         switch (motion) {
             case WorldMotionModel.Grounded grounded:
-                m_motionArm = CompiledMotionArm.Grounded;
                 m_tuning = WorldMotionTuningFactory.Compile(dynamics: planarDynamics, tuning: grounded);
-                m_vehicleTuning = default;
-                break;
-            case WorldMotionModel.Vehicle vehicle:
-                m_motionArm = CompiledMotionArm.Vehicle;
-                m_vehicleTuning = WorldMotionTuningFactory.Compile(tuning: vehicle);
-                m_tuning = WorldMotionTuningFactory.Compile(tuning: new WorldMotionModel.Grounded(
-                    MoveSpeed: vehicle.TopSpeed,
-                    TurnSpeed: vehicle.SteerRate,
-                    RiseGravity: vehicle.RiseGravity,
-                    FallGravity: vehicle.FallGravity,
-                    MaxFallSpeed: vehicle.MaxFallSpeed,
-                    SprintMultiplier: 1f
-                ));
                 break;
             default:
                 throw new NotSupportedException(message: $"Motion model '{motion.GetType().Name}' has no compiled WorldBody integrator.");
@@ -260,11 +241,11 @@ public sealed partial class WorldBody {
     public void Pose(FixedVector3 position, FixedQ4816 yawRadians, FixedQ4816 pitchRadians, FixedQ4816 rollRadians) {
         m_position = position;
         m_yaw = yawRadians;
-        // The vehicle pitch scalar mirrors the posed pitch inside its own clamp, so the next vehicle frame rebuilds
+        // The drive pitch scalar mirrors the posed pitch inside its own clamp, so the next drive frame rebuilds
         // an equivalent (never inverted) attitude from its scalars.
-        m_vehiclePitch = FixedQ4816.Clamp(
-            maximum: MaxVehiclePitch,
-            minimum: -MaxVehiclePitch,
+        m_drivePitch = FixedQ4816.Clamp(
+            maximum: MaxDrivePitch,
+            minimum: -MaxDrivePitch,
             value: pitchRadians
         );
         m_orientation = OrientationFromEuler(
@@ -417,7 +398,7 @@ public sealed partial class WorldBody {
     /// <param name="maxSmoothError">The compiled world-distance correction smoothing threshold.</param>
     /// <param name="sprintChannelOrdinal">The ordinal <see cref="WorldMotionModel.Grounded.SprintChannel"/> resolved to, or <c>-1</c>
     /// for a kit with no sprint capability.</param>
-    /// <param name="driftChannelOrdinal">The ordinal <see cref="WorldMotionModel.Vehicle.DriftChannel"/> resolved to,
+    /// <param name="driftChannelOrdinal">The ordinal <see cref="WorldDriveDrift.Channel"/> resolved to,
     /// or <c>-1</c> for a kit that cannot drift.</param>
     /// <param name="planarDynamics">The kit's compiled second-order follower
     /// (<see cref="FixedWorldKit.PlanarDynamics"/>), or <see langword="null"/> when the kit shapes planar velocity
@@ -487,7 +468,7 @@ public sealed partial class WorldBody {
             Z: FixedQ4816.FromDouble(value: z)
         );
         m_yaw = fixedYaw;
-        m_vehiclePitch = FixedQ4816.Zero;
+        m_drivePitch = FixedQ4816.Zero;
         m_orientation = FixedQuaternion.FromAxisAngle(
             angle: fixedYaw,
             axis: UnitY
@@ -740,15 +721,13 @@ public sealed partial class WorldBody {
     /// <see cref="LastObstructionNormal"/> now surfaces instead. Introspection-only, surfaced by the
     /// <c>world.contacts</c> read-back.</summary>
     public int ContactCount => m_lastContactCount;
-    /// <summary>Gets the base move speed the sim integrates under right now, arm-aware. Under the grounded arm:
-    /// <see cref="Profile"/>'s requested rate (or the tuning's profileless fallback) after the kit's
-    /// <see cref="WorldMotionModel.Grounded.MoveSpeedEnvelope"/> clamp; a held sprint channel scales this after the
-    /// clamp (the envelope pins the base rate, not the sprinting rate). Under the vehicle arm: the kit's own <see cref="WorldMotionModel.Vehicle.TopSpeed"/> after its
-    /// <see cref="WorldMotionModel.Vehicle.TopSpeedEnvelope"/> clamp — the vehicle arm deliberately never reads
-    /// <see cref="Profile"/>'s speed (a kart's speed is the kit's, not the seat's identity), and a held boost
-    /// channel scales this after the clamp, on the same sprint-after-clamp precedent. Every arm, this is the same
-    /// resolve <see cref="Advance"/> performs every tick. A read-only echo: querying this never mutates state, and
-    /// an unenveloped kit returns the requested/kit rate unchanged.</summary>
+    /// <summary>Gets the base move speed the sim integrates under right now: <see cref="Profile"/>'s requested rate
+    /// (or the tuning's profileless fallback) after the kit's
+    /// <see cref="WorldMotionModel.Grounded.MoveSpeedEnvelope"/> clamp. A held sprint channel — a drive row's boost
+    /// included — scales this after the clamp, so the envelope pins the base rate and not the sprinting one; a kit
+    /// that means to pin its speed against any profile authors <c>min == max</c>. This is the same resolve
+    /// <see cref="Advance"/> performs every tick. A read-only echo: querying this never mutates state, and an
+    /// unenveloped kit returns the requested/kit rate unchanged.</summary>
     public FixedQ4816 EffectiveMoveSpeed => ResolveMoveSpeed();
     /// <summary>Gets a value indicating whether this body's own-body control application has been dropped. While it
     /// has, the resolved per-frame intent reaches only the set's other targets (read via <see cref="EngagedIntent"/>)

@@ -2928,23 +2928,6 @@
       ],
       "additionalProperties": false
     },
-    "MotionScalarEnvelope": {
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "min": {
-          "description": "The least admitted value (inclusive).",
-          "type": "number"
-        },
-        "max": {
-          "description": "The greatest admitted value (inclusive) \u2014 WorldDefinitionValidator refuses Max \u003C Min by name. Equal to Min pins the scalar outright regardless of what a profile requests.",
-          "type": "number"
-        }
-      },
-      "additionalProperties": false
-    },
     "WorldHoldSpend": {
       "description": "What a hold spends while it is held: a body-lane state slot and the rate it drains at. The hold releases the tick the slot can no longer pay; refilling it, or trading for it, is a world\u0027s own rules\u0027 business.",
       "type": [
@@ -3111,6 +3094,90 @@
         "name",
         "bond",
         "hold"
+      ],
+      "additionalProperties": false
+    },
+    "WorldDriveDrift": {
+      "description": "The held low-traction state of a kit\u0027s WorldDrive \u2014 a declared channel whose held read swaps the drive\u0027s lateral grip and scales its steering authority. Absent, the kit cannot drift.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "channel": {
+          "description": "The declared composition channel name read while held.",
+          "type": "string"
+        },
+        "grip": {
+          "description": "The lateral convergence rate (u/s\u00B2) replacing Grip while the channel reads held \u2014 the deliberate low-traction state. Required positive.",
+          "type": "number"
+        },
+        "steerScale": {
+          "description": "The steering-authority multiplier while drifting (the tightened drift arc). Required positive.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "channel",
+        "grip",
+        "steerScale"
+      ],
+      "additionalProperties": false
+    },
+    "WorldDrive": {
+      "description": "A kit\u0027s anisotropic drive row \u2014 what only a drive has, authored beside the one motion arm rather than replacing it. Velocity decomposes into longitudinal/lateral (and residual) body-frame components, each converging at its own authored rate: the anisotropy a kart needs and the arm\u0027s isotropic planar shaping cannot express, since that shaping cannot tune grip apart from acceleration. Steering authority scales with longitudinal speed (no spinning in place, looser at top speed) and reverses sign with reversing travel.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "accel": {
+          "description": "The longitudinal convergence rate (u/s\u00B2) while throttle commands more speed.",
+          "type": "number"
+        },
+        "brake": {
+          "description": "The longitudinal convergence rate (u/s\u00B2) while back-throttle opposes forward travel.",
+          "type": "number"
+        },
+        "coast": {
+          "description": "The longitudinal convergence rate (u/s\u00B2) toward rest with throttle centered, and the decay rate while over the commanded speed (the post-boost bleed).",
+          "type": "number"
+        },
+        "grip": {
+          "description": "The lateral convergence rate (u/s\u00B2) toward zero slip \u2014 traction. Lower is slidier.",
+          "type": "number"
+        },
+        "steerReferenceSpeed": {
+          "description": "The longitudinal speed (u/s) at which steering authority peaks; authority rises linearly from zero at standstill.",
+          "type": "number"
+        },
+        "steerFalloff": {
+          "description": "The fraction of full steering authority remaining at the kit\u0027s resolved move speed, in [0, 1]; authority falls linearly from the reference speed.",
+          "type": "number"
+        },
+        "reverseSpeed": {
+          "description": "The reverse speed (u/s) full back-throttle converges on from rest; 0 forbids reversing.",
+          "type": "number",
+          "default": 0
+        },
+        "pitchRate": {
+          "description": "The pitch rate (rad/s) the Pitch channel commands; 0 locks the frame planar (the ground and hover variants). Positive selects the flying variant\u0027s pitched facing, clamped inside the integrator so the frame can never flip past vertical.",
+          "type": "number",
+          "default": 0
+        },
+        "drift": {
+          "$ref": "#/$defs/WorldDriveDrift",
+          "description": "The held low-traction state, or null (the default) for a kit that cannot drift.",
+          "default": null
+        }
+      },
+      "required": [
+        "accel",
+        "brake",
+        "coast",
+        "grip",
+        "steerReferenceSpeed",
+        "steerFalloff"
       ],
       "additionalProperties": false
     },
