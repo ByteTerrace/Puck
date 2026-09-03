@@ -1144,8 +1144,8 @@ program selecting `ResolveHold`/`ApplyHold` or
 `ResolveDriveFrame`/`ShapeDriveVelocity` against a kit authoring none refuses
 by that facet's name. Separately, and unconditionally: a Motion-kind kit
 authoring no holds at all refuses by name outright, whatever operations its
-program selects — the hold list is the only spelling of a vertical channel
-now, so even a kit with no vertical law of its own still authors one row of
+program selects — the hold list is the only spelling of a vertical channel,
+so even a kit with no vertical law of its own still authors one row of
 kind `None`. A world whose kit authors a `Medium` hold row with no medium
 lattice row (`state.world[].lattice.medium`) refuses at boot.
 A `BodyMotionOp` reading a further facet owes `RequiredMotionTuningFacets` and

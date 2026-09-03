@@ -54,7 +54,8 @@ public static class WorldFacePortalPolicy {
     /// profileless motion default and, per kit, its motion row's ceiling (the authored <c>moveSpeedEnvelope</c>
     /// upper bound where one is declared, its own <c>moveSpeed</c> otherwise, scaled by its
     /// <c>sprintMultiplier</c>), its holds' fastest authored vertical speed (a terminal fall speed or a medium's
-    /// rise/sink terminal), and a drive row's <c>reverseSpeed</c> where one is authored.</summary>
+    /// rise/sink terminal — zero for a kit whose holds are all Grip or None, which folds into this maximum as a
+    /// no-op rather than lowering it), and a drive row's <c>reverseSpeed</c> where one is authored.</summary>
     /// <param name="definition">The document to read.</param>
     /// <returns>The declared speed ceiling.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>

@@ -20,6 +20,12 @@ public sealed partial class WorldBody {
     // body's own span rather than by snapping — see SteerAttitudeToward. Zero until the first resolve seats it.
     private FixedVector3 m_attitudeUp;
     private FixedRateAccumulator m_attitudeTurnAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
+    // Whether this body has ever taken a Surface-bond hold — the only source of a REAL lean (m_attitudeUp diverging
+    // from ambient). A body that never does never has one to return from, so SetFreeAttitude seats the drawn axis
+    // to ambient outright instead of turning toward a target that is itself moving: a hold list authoring nothing
+    // but Free and Medium rows is otherwise a moving target the accumulator's bounded rate chases forever without
+    // ever catching, one that never wants a leaned axis to begin with.
+    private bool m_attitudeLeaned;
     // The world's compiled cos(maxSlopeDegrees) — the same threshold contact resolution grounds on, so a hold and
     // the ground it ends on cannot disagree about which faces are walkable.
     private FixedQ4816 m_walkableThreshold = FixedQ4816.One;
@@ -605,6 +611,8 @@ public sealed partial class WorldBody {
             return;
         }
 
+        m_attitudeLeaned = true;
+
         var normal = m_holdNormal;
         var leaned = (gravityUp + ((normal - gravityUp) * hold.UpLean)).Normalize();
 
@@ -747,16 +755,21 @@ public sealed partial class WorldBody {
 
         return m_attitudeUp;
     }
-    // With no face to lean on, the drawn axis returns to the contact axis at the same bounded rate it left it, and
-    // the attitude is recomposed about wherever it has got to so the return is drawn rather than popped — UNLESS the
-    // program integrates its own local attitude (a body-frame 6DOF flight program), which already owns
-    // scratch.Orientation in full: composing a yaw-only snap over it here would discard the pitch/roll that
-    // integration just built, for an axis the program never asked this to draw a facing against.
+    // With a face to lean back out of (m_attitudeLeaned, set only by a Surface-bond resolve in SetHoldFrame), the
+    // drawn axis returns to the contact axis at the same bounded rate it left it, recomposed about wherever it has
+    // got to so the return is drawn rather than popped. A body that has never taken a Surface-bond hold has no lean
+    // to be returning from, so it seats the axis to ambient outright instead: steering it would be chasing a target
+    // rather than returning from one — under GradientDerivedUp that target itself moves every tick with the body's
+    // own position, and a bounded turn never quite closes on a moving target, drifting the drawn axis off the
+    // ambient the ordinary frame operation already composed.
     private void SetFreeAttitude(ref BodyMotionScratch scratch) {
-        var attitude = SteerAttitudeToward(
-            speed: scratch.MoveSpeed,
-            stepTicks: scratch.StepTicks,
-            target: in scratch.Up
+        var attitude = (m_attitudeLeaned
+            ? SteerAttitudeToward(
+                speed: scratch.MoveSpeed,
+                stepTicks: scratch.StepTicks,
+                target: in scratch.Up
+            )
+            : SeatFreeAttitude(target: in scratch.Up)
         );
 
         if (attitude == scratch.AttitudeUp) {
@@ -765,6 +778,9 @@ public sealed partial class WorldBody {
 
         scratch.AttitudeUp = attitude;
 
+        // A body-frame 6DOF flight program already owns scratch.Orientation in full via IntegrateLocalAttitude;
+        // composing a yaw-only snap over it here would discard the pitch/roll that integration just built, for an
+        // axis the program never asked this to draw a facing against.
         if (m_bodyMotionProgram.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)) {
             return;
         }
@@ -773,6 +789,14 @@ public sealed partial class WorldBody {
             scratch: ref scratch,
             yaw: m_yaw
         );
+    }
+    // The counterpart to SteerAttitudeToward's bounded turn, for a target an ordinary frame operation already
+    // computed correctly: seats the drawn axis to it outright, so the next real lean (a Grip's own steer, or a
+    // return through the un-gated path above) turns from the true ambient rather than a stale one.
+    private FixedVector3 SeatFreeAttitude(in FixedVector3 target) {
+        m_attitudeUp = target;
+
+        return target;
     }
     // A grip owns the whole tangent-plane velocity, its rise included, so the tick it ends that rise would be
     // replaced by the next planar shape and lost. It is momentum the body earned: split it against gravity-up, the

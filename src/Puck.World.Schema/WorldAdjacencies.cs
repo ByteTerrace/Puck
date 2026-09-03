@@ -782,7 +782,8 @@ public static class WorldAdjacencyPolicy {
     /// contact envelope <see cref="TryReciprocalHysteresis"/> derives for a wall breaks the second half.</para>
     /// <para>Per kit: the steepest fall acceleration any of its holds author, over one step, capped by their fastest
     /// terminal speed, carried over one more step to a distance. Every quotient rounds outward and one raw unit is
-    /// added last, so the result strictly exceeds the sag.</para>
+    /// added last, so the result strictly exceeds the sag. A kit whose holds are all Grip or None authors neither, so
+    /// its sag is zero and its deadband is the contact skin alone plus that one raw unit.</para>
     /// </remarks>
     /// <param name="definition">The document whose kits, contact skin, and authority rate bound the sag.</param>
     /// <param name="depth">The derived deadband; zero when this returns <see langword="false"/>.</param>

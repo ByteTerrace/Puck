@@ -428,24 +428,35 @@ public static partial class WorldDefinitionValidator {
             if (
                 (hold.Hold is BodyHoldKind.Gravity or BodyHoldKind.Lift)
             ) {
+                // ApplyHoldGravityDecay owns a full-lift row's vertical channel outright and bleeds it at Rise alone
+                // (a symmetric bleed, never the asymmetric arc), so Fall and Terminal go unread there — requiring them
+                // would demand a pair nothing reads.
+                var fullLift = ((hold.Hold == BodyHoldKind.Lift) && (hold.Lift >= 1f));
+
                 if (hold.Gravity is not { } gravity) {
-                    errors.Add(item: $"{rowPath}.gravity is required for a {hold.Hold} hold — the rise, fall and terminal speed are its whole vertical arc.");
+                    errors.Add(item: (fullLift
+                        ? $"{rowPath}.gravity is required for a full-lift hold — its Rise is the bleed rate the channel decays at."
+                        : $"{rowPath}.gravity is required for a {hold.Hold} hold — the rise, fall and terminal speed are its whole vertical arc."
+                    ));
                 } else {
                     RequirePositive(
                         errors: errors,
                         name: $"{rowPath}.gravity.rise",
                         value: gravity.Rise
                     );
-                    RequirePositive(
-                        errors: errors,
-                        name: $"{rowPath}.gravity.fall",
-                        value: gravity.Fall
-                    );
-                    RequirePositive(
-                        errors: errors,
-                        name: $"{rowPath}.gravity.terminal",
-                        value: gravity.Terminal
-                    );
+
+                    if (!fullLift) {
+                        RequirePositive(
+                            errors: errors,
+                            name: $"{rowPath}.gravity.fall",
+                            value: gravity.Fall
+                        );
+                        RequirePositive(
+                            errors: errors,
+                            name: $"{rowPath}.gravity.terminal",
+                            value: gravity.Terminal
+                        );
+                    }
                 }
             } else if (hold.Gravity is not null) {
                 errors.Add(item: $"{rowPath}.gravity is refused for a {hold.Hold} hold on a {hold.Bond} bond — only a Gravity or Lift hold falls under an arc.");
