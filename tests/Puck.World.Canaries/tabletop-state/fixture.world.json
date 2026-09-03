@@ -1,32 +1,270 @@
 {
   "schema": "puck.world.def.v1",
   "documentId": "tabletop-state-canary",
-  "simulation": { "rateHz": 60 },
-  "collision": { "contactSkin": 0.02, "gradientProbe": 0, "maxIterations": 4, "maxSlopeDegrees": 60, "requirements": [] },
-  "bodies": { "localSeats": 0, "networkPlayers": 1, "capacity": 1 },
+  "simulation": {
+    "rateHz": 60
+  },
+  "collision": {
+    "contactSkin": 0.02,
+    "gradientProbe": 0,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60,
+    "requirements": []
+  },
+  "bodies": {
+    "localSeats": 0,
+    "networkPlayers": 1,
+    "capacity": 1
+  },
   "channels": [],
   "views": {
-    "seatControl": { "minPitch": -0.35, "maxPitch": 1.2, "yawReference": "World" },
-    "seatRig": { "name": "table-view", "version": "puck.camera.v1", "operations": [
-      { "$type": "orbit", "distance": 16, "pitch": 0.6, "yaw": 0, "pivotOffset": [0,0,0] },
-      { "$type": "lookAt", "subject": { "$type": "reference" }, "targetOffset": [0,0,0], "worldAxes": true },
-      { "$type": "fov", "fieldOfViewRadians": 0.96 }
-    ] }, "layouts": []
+    "seatControl": {
+      "minPitch": -0.35,
+      "maxPitch": 1.2,
+      "yawReference": "World"
+    },
+    "seatRig": {
+      "name": "table-view",
+      "version": "puck.camera.v1",
+      "operations": [
+        {
+          "$type": "orbit",
+          "distance": 16,
+          "pitch": 0.6,
+          "yaw": 0,
+          "pivotOffset": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "$type": "lookAt",
+          "subject": {
+            "$type": "reference"
+          },
+          "targetOffset": [
+            0,
+            0,
+            0
+          ],
+          "worldAxes": true
+        },
+        {
+          "$type": "fov",
+          "fieldOfViewRadians": 0.96
+        }
+      ]
+    },
+    "layouts": []
   },
-  "bodyMotionPrograms": [{ "name": "still", "version": "puck.body-motion.v1", "kind": "Motion", "operations": ["CommitPose"] }],
-  "kits": { "rows": [{ "name": "defaultKit", "bodyMotionProgram": "still", "motion": { "$type": "grounded", "moveSpeed": 1, "turnSpeed": 1, "riseGravity": 14, "fallGravity": 23, "maxFallSpeed": 20, "response": [], "sprintMultiplier": 1 } }] },
+  "bodyMotionPrograms": [
+    {
+      "name": "still",
+      "version": "puck.body-motion.v1",
+      "kind": "Motion",
+      "operations": [
+        "CommitPose"
+      ]
+    }
+  ],
+  "kits": {
+    "rows": [
+      {
+        "name": "defaultKit",
+        "bodyMotionProgram": "still",
+        "motion": {
+          "speed": {
+            "value": 1
+          },
+          "turn": {
+            "rate": 1
+          },
+          "shaping": [
+            {
+              "along": {
+                "engage": 1000000.0,
+                "brake": 0,
+                "release": 1000000.0
+              }
+            }
+          ],
+          "holds": [
+            {
+              "bond": "Free",
+              "gravity": {
+                "fall": 23,
+                "rise": 14,
+                "terminal": 20
+              },
+              "hold": "Gravity",
+              "name": "air"
+            }
+          ]
+        }
+      }
+    ]
+  },
   "state": {
-    "lattices": [{ "name": "map", "kind": "Grid", "origin": [0,0,0], "cellSize": 1, "width": 4, "depth": 4 }],
+    "lattices": [
+      {
+        "name": "map",
+        "kind": "Grid",
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "cellSize": 1,
+        "width": 4,
+        "depth": 4
+      }
+    ],
     "world": [
-      { "name": "units", "kind": "int", "tokens": { "capacity": 2 }, "cells": [{ "key": "scout", "value": 1 }, { "key": "guard", "value": 2 }] },
-      { "name": "positions", "kind": "int", "keysFrom": "units", "valuesFrom": "map", "phaseOf": "turns", "visibility": {}, "cells": [{ "key": "scout", "value": 0 }, { "key": "guard", "value": 15 }] },
-      { "name": "moves", "kind": "int", "keysFrom": "units", "phaseOf": "turns", "cells": [{ "key": "scout", "value": 3 }, { "key": "guard", "value": 3 }] },
-      { "name": "terrain", "kind": "int", "board": { "topology": "map", "empty": 1 }, "cells": [] },
-      { "name": "discs", "kind": "int", "board": { "topology": "map" }, "cells": [{ "key": "0", "value": 1 }, { "key": "1", "value": 2 }, { "key": "2", "value": 2 }, { "key": "3", "value": 1 }] },
-      { "name": "cards", "kind": "int", "tokens": { "capacity": 2 }, "cells": [{ "key": "copyA", "value": 7 }, { "key": "copyB", "value": 7 }] },
-      { "name": "deck", "kind": "bool", "zone": { "tokens": "cards" }, "cells": [{ "key": "copyA", "value": true }, { "key": "copyB", "value": true }] },
-      { "name": "hand", "kind": "bool", "zone": { "tokens": "cards" }, "cells": [] },
-      { "name": "turns", "kind": "int", "phase": { "participants": ["console"], "phases": [{ "name": "act", "mode": "Sequential", "next": "act" }] }, "cells": [] }
+      {
+        "name": "units",
+        "kind": "int",
+        "tokens": {
+          "capacity": 2
+        },
+        "cells": [
+          {
+            "key": "scout",
+            "value": 1
+          },
+          {
+            "key": "guard",
+            "value": 2
+          }
+        ]
+      },
+      {
+        "name": "positions",
+        "kind": "int",
+        "keysFrom": "units",
+        "valuesFrom": "map",
+        "phaseOf": "turns",
+        "visibility": {},
+        "cells": [
+          {
+            "key": "scout",
+            "value": 0
+          },
+          {
+            "key": "guard",
+            "value": 15
+          }
+        ]
+      },
+      {
+        "name": "moves",
+        "kind": "int",
+        "keysFrom": "units",
+        "phaseOf": "turns",
+        "cells": [
+          {
+            "key": "scout",
+            "value": 3
+          },
+          {
+            "key": "guard",
+            "value": 3
+          }
+        ]
+      },
+      {
+        "name": "terrain",
+        "kind": "int",
+        "board": {
+          "topology": "map",
+          "empty": 1
+        },
+        "cells": []
+      },
+      {
+        "name": "discs",
+        "kind": "int",
+        "board": {
+          "topology": "map"
+        },
+        "cells": [
+          {
+            "key": "0",
+            "value": 1
+          },
+          {
+            "key": "1",
+            "value": 2
+          },
+          {
+            "key": "2",
+            "value": 2
+          },
+          {
+            "key": "3",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "name": "cards",
+        "kind": "int",
+        "tokens": {
+          "capacity": 2
+        },
+        "cells": [
+          {
+            "key": "copyA",
+            "value": 7
+          },
+          {
+            "key": "copyB",
+            "value": 7
+          }
+        ]
+      },
+      {
+        "name": "deck",
+        "kind": "bool",
+        "zone": {
+          "tokens": "cards"
+        },
+        "cells": [
+          {
+            "key": "copyA",
+            "value": true
+          },
+          {
+            "key": "copyB",
+            "value": true
+          }
+        ]
+      },
+      {
+        "name": "hand",
+        "kind": "bool",
+        "zone": {
+          "tokens": "cards"
+        },
+        "cells": []
+      },
+      {
+        "name": "turns",
+        "kind": "int",
+        "phase": {
+          "participants": [
+            "console"
+          ],
+          "phases": [
+            {
+              "name": "act",
+              "mode": "Sequential",
+              "next": "act"
+            }
+          ]
+        },
+        "cells": []
+      }
     ]
   }
 }
