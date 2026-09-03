@@ -1182,6 +1182,38 @@ body-motion program's `curve` target source
 (`Puck.Physics.Motion.BodyTargetSource.CurveFollow`, `Puck.World.Server`'s
 per-tick arc advance) — the seed the kart-track charter inherits.
 
+## The `navigation` section — bounded routes over world truth
+
+`navigation.domains` declares finite named grids consumed by a body-motion
+program whose target source is `{ "$type": "navigated", "domain": "…",
+"register": "…" }`. The register remains the authority-checked destination;
+navigation only replaces the direct bearing with deterministic intermediate
+waypoints. `surface` domains sample ground from the world's SDF, enforce step
+and slope limits, and bake both vertical capsule clearance and swept clearance
+between adjacent cells. `volume` domains are collision-free 3D grids for
+airborne or otherwise unconstrained actors. `medium` domains are 3D grids that
+also name a `state.world` lattice row carrying `lattice.medium`; their solid
+edges are baked, while whole-agent node and edge containment are re-read from
+the live field so draining or moving fluid invalidates a cached route. A
+medium agent's diameter may not exceed its field lattice cell size, keeping
+that conservative neighboring-voxel clearance proof bounded.
+
+All coordinates and tuning quantize once to `FixedQ4816`. A stable A* order
+breaks equal costs by estimated cost and then node ordinal. `connectivity`
+chooses 6, 18, or 26 neighbours for volume/medium domains; diagonal edges
+cannot cut a blocked axis corner. `maxExpandedNodes` and `maxPathNodes` are
+hard per-search/per-route limits, under global ceilings of 16 domains, 65,536
+cells per domain, 262,144 cells per world, and 1,024 retained waypoints per
+body. Route arrays allocate lazily only for bodies that actually navigate.
+Validation also refuses a producer that stops outside `arrivalDistance`, has
+no forward drive, or lacks the vertical channel/gain/consumer required by a
+volume or medium route.
+`world.navigation` reports compiled clear cells and budgets; `body.targets`
+reports route status/waypoint/search work; `$nav:<bodyRef>:<hasPath|active|
+arrived|unreachable|remaining>` exposes the same status to rules. Navigation
+is withheld from presentation projections with the other authoritative AI and
+motion-program declarations.
+
 ## The egress documents — what leaves an authority
 
 `WorldDisclosureTier` (`WorldAdmission.cs`) has three members:

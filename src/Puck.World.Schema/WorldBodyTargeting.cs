@@ -73,15 +73,18 @@ public sealed class WorldTargetRegisterTable {
 /// <param name="ArcStepRaw">The per-tick arc-length increment, Q32 raw — the exact rational
 /// <see cref="BodyTargetSource.CurveFollow.Rate"/><c> / simulationRateHz</c> rounded once at compile time so the
 /// runtime step is a single addition, never a division. Zero for a sensed/designated source.</param>
-public readonly record struct FixedBodyTargetSource(BodyTargetSource Source, FixedQ4816 Range, FixedQ4816 MinimumDot, int RegisterIndex, int CurveIndex = -1, long ArcStepRaw = 0L) {
+/// <param name="NavigationDomainIndex">The bounded navigation-domain index, or <c>-1</c> for a non-navigated source.</param>
+/// <param name="NavigationKind">The navigated domain's topology; surface for non-navigated sources.</param>
+public readonly record struct FixedBodyTargetSource(BodyTargetSource Source, FixedQ4816 Range, FixedQ4816 MinimumDot, int RegisterIndex, int CurveIndex = -1, long ArcStepRaw = 0L, int NavigationDomainIndex = -1, WorldNavigationKind NavigationKind = WorldNavigationKind.Surface) {
     /// <summary>Compiles one validated target declaration.</summary>
     /// <param name="source">The authored source declaration.</param>
     /// <param name="registers">The world's compiled target-register table.</param>
     /// <param name="curves">The world's compiled curves-row table.</param>
+    /// <param name="navigation">The world's compiled navigation-domain table.</param>
     /// <param name="simulationRateHz">The world's own simulation rate — the per-tick arc step's divisor. A
     /// <see cref="BodyTargetSource.CurveFollow"/> source at rate 0 (never validated through) compiles a zero step
     /// rather than dividing.</param>
-    public static FixedBodyTargetSource Compile(BodyTargetSource source, WorldTargetRegisterTable registers, WorldCurveTable curves, int simulationRateHz) => source switch {
+    public static FixedBodyTargetSource Compile(BodyTargetSource source, WorldTargetRegisterTable registers, WorldCurveTable curves, WorldNavigationDomainTable navigation, int simulationRateHz) => source switch {
         BodyTargetSource.Sensed sensed => new FixedBodyTargetSource(
         Source: source,
         Range: FixedQ4816.FromDouble(value: sensed.Range),
@@ -114,9 +117,32 @@ public readonly record struct FixedBodyTargetSource(BodyTargetSource Source, Fix
             rate: curve.Rate,
             simulationRateHz: simulationRateHz
         )
-    ),
+        ),
+        BodyTargetSource.Navigated navigated => CompileNavigated(
+            source: source,
+            navigated: navigated,
+            registers: registers,
+            navigation: navigation
+        ),
         _ => throw new InvalidOperationException(message: $"Unknown body target source '{source.GetType().Name}'."),
     };
+
+    private static FixedBodyTargetSource CompileNavigated(
+        BodyTargetSource source,
+        BodyTargetSource.Navigated navigated,
+        WorldTargetRegisterTable registers,
+        WorldNavigationDomainTable navigation
+    ) {
+        var hasDomain = navigation.TryGetIndex(name: navigated.Domain, index: out var domainIndex);
+        return new FixedBodyTargetSource(
+            Source: source,
+            Range: FixedQ4816.Zero,
+            MinimumDot: FixedQ4816.Zero,
+            RegisterIndex: (registers.TryGetIndex(name: navigated.Register, index: out var registerIndex) ? registerIndex : -1),
+            NavigationDomainIndex: (hasDomain ? domainIndex : -1),
+            NavigationKind: (hasDomain ? navigation.Kind(index: domainIndex) : WorldNavigationKind.Surface)
+        );
+    }
 
     // rate/simulationRateHz rounded once to Q32: rate parses to Q16 at the authoring boundary (the same one rounding
     // every authored float takes), then the division to Q32 is the ONE further rounding — never repeated per tick.
@@ -192,15 +218,17 @@ public static class WorldTargetSelection {
         return false;
     }
 
-    /// <summary>Returns whether any designation envelope, sensed source, or world-rule <c>$los:</c> operand requires
-    /// line of sight — the one gate <c>Server.WorldPopulation.CompileFixedTables</c> reads to decide whether to build
-    /// the solid field at all. A world rule's <c>$los:</c> channel rides the same
+    /// <summary>Returns whether any navigation domain, designation envelope, sensed source, or world-rule
+    /// <c>$los:</c> operand requires the deterministic solid field — the one gate
+    /// <c>Server.WorldPopulation.CompileFixedTables</c> reads to decide whether to build that field at all.
+    /// Navigation compiles collision-clear cells and swept edges from it. A world rule's <c>$los:</c> channel rides the same
     /// <c>Server.WorldPopulation.HasLineOfSight</c> primitive a sensed target's own check does, and that primitive
     /// reads a field the population would otherwise never build if nothing else in the document asked for one —
     /// admitting it here is what keeps a rules-only <c>$los:</c> authoring from silently reading "always false"
     /// forever.</summary>
     public static bool RequiresLineOfSight(WorldDefinition definition) =>
         (definition.TargetRegisters.Any(predicate: register => register.RequiresLineOfSight)
+        || definition.Navigation.Rows.Count != 0
         || definition.BodyMotionPrograms.Any(predicate: program => (program.Target is BodyTargetSource.Sensed { RequiresLineOfSight: true }))
         || RulesReferenceLineOfSight(rules: definition.Rules));
 }

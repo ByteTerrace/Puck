@@ -69,6 +69,30 @@ under the surface-following body-frame policy, gates contact-normal orientation.
 static attractors. Composition additions saturate per Q48.16 component instead
 of wrapping, and a later Replace remains an ordinary assignment.
 
+## Navigation
+
+`WorldNavigationRuntime` compiles each authored domain once at boot/rebuild.
+Surface cells use `TryGroundHeight`, lower/head clearance, slope and step
+limits; every admitted edge is proven with swept spheres and stored in one
+26-bit mask per cell. Free-volume and medium domains use the same swept-sphere
+edge proof in three dimensions. A medium additionally resolves its field name
+to an ordinal once and checks the agent clearance volume at each live node plus
+half-lattice-cell edge samples on search and before following the next cached
+edge. This is how underwater
+routes react to field evolution without rebaking static solids.
+
+Search is bounded A* over reused arrays: integer costs (1000/1414/1732), stable
+`(f, h, nodeOrdinal)` ties and authored expansion/path ceilings. Domain search
+workspace allocates once at compile; per-body route storage allocates lazily on
+first use, so steady-state searches allocate nothing. Changing a navigation definition,
+clearing designations, switching producers, or transferring authority clears
+the local cache; checkpoints carry active routes and the codec validates every
+domain, node, waypoint, status, and budget before restore. The authoritative
+state hash includes producer-domain and route state. `world.navigation`,
+`body.targets`, and `world.budget` expose occupancy, state, expansions, the
+current followers' simultaneous-replan ceiling, and fixed workspace bytes;
+`$nav:` rule facts read the same live status.
+
 **Mutations, the journal, and undo.** A `WorldMutation` applies by composing a
 candidate document, revalidating the WHOLE document through
 `WorldDefinitionValidator`, and only then swapping, journaling, and rebuilding

@@ -100,7 +100,7 @@ Three echo models — do not conflate them:
    `WorldServer.EchoTap` (stderr + toast + mirror), and a rejection
    increments `wire.errors` via `NoteDeferredRejection`. A verb that submits
    through the registering `Submit(link, mutation, echoes, verb)` overload
-   (`WorldDeferredVerbEchoes`; the `world.row.*`/`world.assign` family) also
+   (`WorldDeferredVerbEchoes`; the `world.row.set`/`world.row.remove`/`world.assign` family) also
    gets a per-verb `[<verb>: …]` stderr line when the drain REJECTS its
    mutation — that is what lets a canary account a `refused` outcome against
    the submitting verb. An accepted mutation still prints no per-verb line.
@@ -113,7 +113,9 @@ directional/radial effect, Combine/Replace, and static/attached ride), plus the
 last solver and area structural work counters. `world.budget` repeats the static
 source count, declared areas per target, last exact/approximate evaluations, and
 last area checks/matches so gravity authoring does not create a silent per-tick
-price. Neither verb mutates the field.
+price. `world.navigation` and `world.budget` are authoritative-core verbs: both
+remain registered headless, with budget naming the absent renderer while still
+reporting simulation costs. None of these verbs mutates the field.
 
 `wire.ack [on|quiet]`: quiet drops SUCCESSFUL echoes of verbs registered
 `ackOnly: true` (flood-friendly); errors and answer-bearing verbs always

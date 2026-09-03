@@ -26,6 +26,7 @@ public sealed partial class WorldServer {
                 body.AppendActionStateHash(hash: ref hash);
             }
         }
+        m_population.AppendNavigationStateHash(hash: ref hash);
 
     }
 }

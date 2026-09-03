@@ -656,9 +656,12 @@ What survives them, as work rather than prose:
 - **Unverified, check before scheduling** — session-lever routing (`world.volume`, the render levers,
   `world.save`); a screen route's pad kit and channel masks (document-only, no `body.engage` override
   for the mask); whether fuel is still the only stop for a spinning guest.
-- **Navigation.** The decision worth keeping: navigation derives walkability from the SDF a world
-  already authors, and adopts Puck's existing quantize-once boundary rather than inventing one — the
-  bake is the only place a float may appear, and every consumer after it reads `FixedQ4816`. Match
-  `WorldQueryBaker`/`WorldQueryArtifact`/`BakedWorldQuery`, which already exist and already pack this
-  way. **Falsifier:** the design assumes no chunk or pathfinding primitive exists —
-  `puck declarations src --name Chunk`, `--name FlowField`, `--name Nav` must all return nothing.
+- **Navigation.** Routes are engine primitives, not arbitrary scripts. A world declares bounded named
+  domains over the same deterministic SDF and live field lattice it already authors: `surface` for
+  grounded agents (ground, slope, step, capsule and swept-edge clearance), `volume` for airborne/free
+  3D travel, and `medium` for 3D travel that must remain inside a named live fluid field. A navigated
+  producer follows an authority-checked target register through deterministic bounded A*, and rules
+  observe its status through `$nav:`. Static collision edges bake once in `FixedQ4816`; medium
+  membership stays live so draining water invalidates a route. Expansion/path/cell ceilings, lazy
+  per-body route storage, checkpoint continuation, authoritative hashes, `world.navigation`,
+  `body.targets`, and `world.budget` make both outcome and price explicit.

@@ -16,6 +16,7 @@ public enum BodyTargetScope : byte {
 [JsonDerivedType(typeof(BodyTargetSource.Sensed), typeDiscriminator: "sensed")]
 [JsonDerivedType(typeof(BodyTargetSource.Designated), typeDiscriminator: "designated")]
 [JsonDerivedType(typeof(BodyTargetSource.CurveFollow), typeDiscriminator: "curve")]
+[JsonDerivedType(typeof(BodyTargetSource.Navigated), typeDiscriminator: "navigated")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record BodyTargetSource {
     private BodyTargetSource() {
@@ -40,4 +41,8 @@ public abstract record BodyTargetSource {
     /// curve in reverse. A closed row wraps at the loop point; an open row clamps at either end and holds the
     /// endpoint target rather than overshooting it.</param>
     public sealed record CurveFollow(string Curve, float Rate) : BodyTargetSource;
+    /// <summary>Routes toward a target register through a named bounded surface, volume, or medium domain.</summary>
+    /// <param name="Domain">The authored navigation-domain name.</param>
+    /// <param name="Register">The target register supplying a body or world-space point destination.</param>
+    public sealed record Navigated(string Domain, string Register) : BodyTargetSource;
 }

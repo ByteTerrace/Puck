@@ -134,6 +134,24 @@
               "rate"
             ],
             "additionalProperties": false
+          },
+          {
+            "properties": {
+              "$type": {
+                "const": "navigated"
+              },
+              "domain": {
+                "type": "string"
+              },
+              "register": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "domain",
+              "register"
+            ],
+            "additionalProperties": false
           }
         ],
         "default": null

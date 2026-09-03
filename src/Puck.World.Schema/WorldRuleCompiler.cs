@@ -1678,6 +1678,29 @@ public static partial class WorldRuleCompiler {
             );
         }
 
+        if (name.StartsWith(comparisonType: StringComparison.Ordinal, value: WorldRuleFacts.NavigationPrefix)) {
+            RefuseKeyOnReservedChannel(key: key, keyFieldLabel: keyFieldLabel, name: name, ruleName: ruleName);
+            var tokens = name[WorldRuleFacts.NavigationPrefix.Length..].Split(separator: ':');
+            var width = BodyRefTokenWidth(start: 0, tokens: tokens);
+            if (tokens.Length != width + 1 || tokens[width] is not ("hasPath" or "active" or "arrived" or "unreachable" or "remaining")) {
+                throw new WorldRuleException(
+                    refusal: WorldRuleRefusal.SpatialChannelMalformed,
+                    ruleName: ruleName,
+                    detail: $"'{name}' does not spell '{WorldRuleFacts.NavigationPrefix}<bodyRef>:<hasPath|active|arrived|unreachable|remaining>' ({s_bodyRefVocabulary})"
+                );
+            }
+            return new ResolvedOperand(
+                Operand: new CompiledWorldOperand(
+                    Kind: WorldRuleFactKind.Navigation,
+                    Row: tokens[width],
+                    Key: null,
+                    BodyA: ResolveBodyRefToken(channel: name, definition: definition, ruleName: ruleName, start: 0, tokens: tokens)
+                ),
+                ValueKind: CellKind.Int,
+                Describe: describe
+            );
+        }
+
         if (name.StartsWith(
             comparisonType: StringComparison.Ordinal,
             value: WorldRuleFacts.NearestPrefix
@@ -1755,7 +1778,7 @@ public static partial class WorldRuleCompiler {
             throw new WorldRuleException(
                 refusal: WorldRuleRefusal.StateRowUnknown,
                 ruleName: ruleName,
-                detail: $"'{name}' carries the reserved '{WorldStateRow.ReservedNamePrefix}' prefix but names none of the reserved channels ('{WorldRuleFacts.Tick}', '{WorldRuleFacts.Population}', '{WorldRuleFacts.RegionPrefix}<placementId>', '{WorldRuleFacts.MachinePrefix}<screen>:<address>', '{WorldRuleFacts.ReducePrefix}<op>:<row>', '{WorldRuleFacts.ArgMaxPrefix}<row>', '{WorldRuleFacts.ArgMinPrefix}<row>', '{WorldRuleFacts.DistancePrefix}<a>:<b>', '{WorldRuleFacts.LineOfSightPrefix}<a>:<b>', '{WorldRuleFacts.ParkedPrefix}<bodyRef>', '{WorldRuleFacts.LinkPrefix}<adjacencyName>', '{WorldRuleFacts.ChannelPrefix}<seat>:<channelName>')"
+                detail: $"'{name}' carries the reserved '{WorldStateRow.ReservedNamePrefix}' prefix but names none of the reserved channels ('{WorldRuleFacts.Tick}', '{WorldRuleFacts.Population}', '{WorldRuleFacts.RegionPrefix}<placementId>', '{WorldRuleFacts.MachinePrefix}<screen>:<address>', '{WorldRuleFacts.ReducePrefix}<op>:<row>', '{WorldRuleFacts.ArgMaxPrefix}<row>', '{WorldRuleFacts.ArgMinPrefix}<row>', '{WorldRuleFacts.DistancePrefix}<a>:<b>', '{WorldRuleFacts.LineOfSightPrefix}<a>:<b>', '{WorldRuleFacts.NavigationPrefix}<bodyRef>:<facet>', '{WorldRuleFacts.ParkedPrefix}<bodyRef>', '{WorldRuleFacts.LinkPrefix}<adjacencyName>', '{WorldRuleFacts.ChannelPrefix}<seat>:<channelName>')"
             );
         }
 
@@ -1777,7 +1800,7 @@ public static partial class WorldRuleCompiler {
             ?? throw new WorldRuleException(
             refusal: WorldRuleRefusal.StateRowUnknown,
             ruleName: ruleName,
-            detail: $"'{name}' names no state row, and is not a reserved channel ('{WorldRuleFacts.Tick}', '{WorldRuleFacts.Population}', '{WorldRuleFacts.RegionPrefix}<placementId>', '{WorldRuleFacts.MachinePrefix}<screen>:<address>', '{WorldRuleFacts.ReducePrefix}<op>:<row>', '{WorldRuleFacts.ArgMaxPrefix}<row>', '{WorldRuleFacts.ArgMinPrefix}<row>', '{WorldRuleFacts.DistancePrefix}<a>:<b>', '{WorldRuleFacts.LineOfSightPrefix}<a>:<b>', '{WorldRuleFacts.ParkedPrefix}<bodyRef>', '{WorldRuleFacts.LinkPrefix}<adjacencyName>', '{WorldRuleFacts.ChannelPrefix}<seat>:<channelName>')"
+            detail: $"'{name}' names no state row, and is not a reserved channel ('{WorldRuleFacts.Tick}', '{WorldRuleFacts.Population}', '{WorldRuleFacts.RegionPrefix}<placementId>', '{WorldRuleFacts.MachinePrefix}<screen>:<address>', '{WorldRuleFacts.ReducePrefix}<op>:<row>', '{WorldRuleFacts.ArgMaxPrefix}<row>', '{WorldRuleFacts.ArgMinPrefix}<row>', '{WorldRuleFacts.DistancePrefix}<a>:<b>', '{WorldRuleFacts.LineOfSightPrefix}<a>:<b>', '{WorldRuleFacts.NavigationPrefix}<bodyRef>:<facet>', '{WorldRuleFacts.ParkedPrefix}<bodyRef>', '{WorldRuleFacts.LinkPrefix}<adjacencyName>', '{WorldRuleFacts.ChannelPrefix}<seat>:<channelName>')"
         ));
 
         if (

@@ -520,6 +520,25 @@ body-motion program's `curve` target source
 arc-length follower feeding the SAME planar target-consuming op vocabulary a
 `designated`/`sensed` target does.
 
+### `navigation` — bounded surface, flight, and medium routes
+
+`WorldNavigation.cs` owns named finite domains. `surface` samples SDF ground,
+step/slope limits, a vertical capsule, and swept neighbour edges; `volume`
+uses swept-sphere cells and edges in three dimensions; `medium` adds a named
+`state.world` lattice row carrying `lattice.medium`, checked live at nodes and
+half-cell segment samples so field evolution can invalidate a cached edge.
+Volume connectivity is authored as 6/18/26 neighbours, with blocked-axis
+corner cutting refused. A `BodyTargetSource.Navigated(domain, register)` keeps
+the ordinary authority-checked designation as its goal and supplies bounded
+fixed-point A* waypoints to `ProduceAttendIntent`; volume and medium targets
+also drive `MoveUp`. Stable ties are `(f, h, nodeOrdinal)`. Static edges bake
+once, search arrays are reused, and a body's route array allocates on first
+use. Domain/cell/search/path ceilings are representation bounds, reported by
+`world.navigation`, `body.targets`, and `world.budget`; `$nav:<bodyRef>:<facet>`
+is the rule operand. Routes are local runtime state: clear them on producer,
+designation, transfer, or domain-rebuild discontinuities; checkpoint and hash
+them wherever uninterrupted simulation continuity is promised.
+
 ### `state.lattices` + the `lattice` row trait — the lattice (scalar rows, reactions, lattice-derived geometry)
 
 `WorldFields.cs` (the compiled composite) + `WorldState.cs` (the document

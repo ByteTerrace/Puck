@@ -89,6 +89,19 @@ public static partial class WorldAuthorityCheckpointCodec {
             value: entry.Profile,
             writeValue: WriteIdentityProjection
         );
+        WriteOptional(
+            writer: writer,
+            value: entry.Navigation,
+            writeValue: static (w, navigation) => {
+                w.WriteInt32(value: navigation.ActiveProducerDomainIndex);
+                w.WriteInt32(value: navigation.DomainIndex);
+                w.WriteInt32(value: navigation.GoalCell);
+                w.WriteInt32(value: navigation.Waypoint);
+                w.WriteInt32(value: navigation.ExpandedLast);
+                w.WriteByte(value: checked((byte)navigation.Status));
+                WorldAuthorityCheckpointCodec.WriteArray(writer: w, items: navigation.Path, writeItem: static (pathWriter, value) => pathWriter.WriteInt32(value: value));
+            }
+        );
     }
     private static WorldPopulation.WorldPopulationEntryCheckpoint ReadPopulationEntry(ref WireReader reader) {
         var index = reader.ReadInt32();
@@ -162,6 +175,23 @@ public static partial class WorldAuthorityCheckpointCodec {
             reader: ref reader,
             readValue: static (ref WireReader r) => ReadIdentityProjection(reader: ref r)
         );
+        var navigation = ReadOptional(
+            reader: ref reader,
+            readValue: static (ref WireReader r) => new WorldPopulation.WorldPopulationNavigationCheckpoint(
+                ActiveProducerDomainIndex: r.ReadInt32(),
+                DomainIndex: r.ReadInt32(),
+                GoalCell: r.ReadInt32(),
+                Waypoint: r.ReadInt32(),
+                ExpandedLast: r.ReadInt32(),
+                Status: (WorldNavigationStatus)r.ReadByte(),
+                Path: WorldAuthorityCheckpointCodec.ReadArray(
+                    reader: ref r,
+                    field: "population entry navigation path",
+                    readItem: static (ref WireReader pathReader) => pathReader.ReadInt32(),
+                    maximum: WorldNavigationCapacity.MaxPathNodes
+                )
+            )
+        );
 
         return new WorldPopulation.WorldPopulationEntryCheckpoint(
             AdmissionInstalledGrantTemplates: admissionInstalledGrantTemplates,
@@ -196,7 +226,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             Residue: residue,
             SpawnPosition: spawnPosition,
             SpawnYaw: spawnYaw,
-            Yaw: yaw
+            Yaw: yaw,
+            Navigation: navigation
         );
     }
     private static byte[] EncodePopulation(WorldPopulation.WorldPopulationCheckpoint section) {

@@ -1,0 +1,130 @@
+{
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "domains": {
+      "description": "Finite rectangular domains, each compiled from the world\u0027s deterministic solid field.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One finite navigation grid compiled from the world\u0027s collision and optional medium truth.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The stable domain name referenced by navigated producer targets.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Whether cells follow ground, free 3D space, or a live medium.",
+            "enum": [
+              "Surface",
+              "Volume",
+              "Medium"
+            ]
+          },
+          "origin": {
+            "description": "The world-space center of cell (0,0,0); for a surface domain, Y is the ground-probe baseline."
+          },
+          "cellSize": {
+            "description": "The square cell width in world units.",
+            "type": "number"
+          },
+          "width": {
+            "description": "The number of cells along world X.",
+            "type": "integer"
+          },
+          "depth": {
+            "description": "The number of cells along world Z.",
+            "type": "integer"
+          },
+          "agentRadius": {
+            "description": "The solid-clearance sphere radius. A medium domain also keeps this whole volume submerged.",
+            "type": "number"
+          },
+          "arrivalDistance": {
+            "description": "How close a body must come before advancing to the next waypoint.",
+            "type": "number"
+          },
+          "maxExpandedNodes": {
+            "description": "The hard A* expansion budget for one route search.",
+            "type": "integer"
+          },
+          "maxPathNodes": {
+            "description": "The hard stored-waypoint budget for one route.",
+            "type": "integer"
+          },
+          "layers": {
+            "description": "The number of cells along world Y; surface domains require one.",
+            "type": "integer",
+            "default": 1
+          },
+          "connectivity": {
+            "description": "The volume neighbour set; ignored by surface domains.",
+            "enum": [
+              "Axis",
+              "FacesAndEdges",
+              "Full"
+            ],
+            "default": "Full"
+          },
+          "probeUp": {
+            "description": "For a surface domain, the ground-search distance above origin Y.",
+            "type": "number",
+            "default": 0
+          },
+          "probeDown": {
+            "description": "For a surface domain, the ground-search distance below origin Y.",
+            "type": "number",
+            "default": 0
+          },
+          "agentHeight": {
+            "description": "For a surface domain, the clearance capsule height.",
+            "type": "number",
+            "default": 0
+          },
+          "maxStepHeight": {
+            "description": "For a surface domain, the greatest adjacent height delta.",
+            "type": "number",
+            "default": 0
+          },
+          "maxSlopeDegrees": {
+            "description": "For a surface domain, the greatest adjacent slope.",
+            "type": "number",
+            "default": 0
+          },
+          "medium": {
+            "description": "For a medium domain, the named lattice field that cells must remain inside.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "origin",
+          "cellSize",
+          "width",
+          "depth",
+          "agentRadius",
+          "arrivalDistance",
+          "maxExpandedNodes",
+          "maxPathNodes"
+        ],
+        "additionalProperties": false
+      },
+      "default": null
+    }
+  },
+  "additionalProperties": false,
+  "default": null
+}

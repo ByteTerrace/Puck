@@ -1162,9 +1162,14 @@ public static partial class WorldDefinitionValidator {
             registers: definition.TargetRegisters,
             errors: errors
         );
+        var navigationDomainNames = ValidateNavigation(
+            definition: definition,
+            errors: errors
+        );
         var programs = ValidateBodyMotionPrograms(
             programs: definition.BodyMotionPrograms,
             targetRegisterNames: targetRegisterNames,
+            navigationDomainNames: navigationDomainNames,
             curveNames: curveNames,
             simulationRateHz: definition.SimulationRateHz,
             errors: errors

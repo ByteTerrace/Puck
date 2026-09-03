@@ -39,4 +39,7 @@ internal struct BodyProducerState {
     // transition). ActiveProducerCurveIndex is -1 while the active producer is not a curve-follow source.
     public string? ActiveProducerName;
     public int ActiveProducerCurveIndex;
+    // The navigation domain the active producer resolves through, or -1. Kept beside the curve index so a live
+    // same-name producer retune invalidates its cached route before the next sensor read.
+    public int ActiveProducerNavigationDomainIndex;
 }

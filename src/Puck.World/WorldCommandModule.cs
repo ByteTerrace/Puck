@@ -16,8 +16,9 @@ namespace Puck.World;
 /// occlusion, render scale, an FPS target, a quality preset) — all live console verbs, each echoing the current value
 /// when called with no argument. Registered ONLY when presentation is composed (<c>AddWorldPresentation</c>); over
 /// headless stdin every one of these refuses as unknown. The participant/census verbs (<c>world.players</c>,
-/// <c>world.devices</c>, <c>world.population</c>) moved to <see cref="WorldPopulationCommandModule"/> — server-safe,
-/// registered in core either way. Metrics are armed and read over the pipe (<c>world.timing</c> / <c>world.gpu</c>),
+/// <c>world.devices</c>, <c>world.population</c>) and authoritative diagnostics (<c>world.navigation</c>,
+/// <c>world.budget</c>) moved to <see cref="WorldPopulationCommandModule"/> — server-safe, registered in core either
+/// way. Metrics are armed and read over the pipe (<c>world.timing</c> / <c>world.gpu</c>),
 /// not through an environment variable. Every setting rides <see cref="WorldRenderSettings"/> or a live control
 /// (<see cref="PresentPacingControl"/>, <see cref="GpuTimingControl"/>), read by the frame source each captured frame.
 /// </summary>
@@ -929,54 +930,6 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 screens.SetViewRefreshDivisor(divisor: divisor);
 
                 return new CommandResult(Output: $"[world.view-refresh: every {divisor} produced frame(s)]");
-            }
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.budget",
-            description: "Prints the compose-time cost sheet (Immediate): the live render program's packed words and instances against their frozen envelopes, the program's Lipschitz step scale with its march multiplier (1.00 = unclamped), the far distance (render.farDistance, or the engine's pinned 40 when unauthored) with its derived costs — the reach multiplier over that default, the horizon-ray step count per unit of camera height against the primary march's step budget, and the fog remnant at the far plane (how much of a surface's colour survives to the cutoff: near 1 shows a hard horizon, near 0 means the sky fog has absorbed it) — the lattice program's node/cadence counts plus exact full-cell and body-slot passes, gravity's static source count and last deterministic solve work, the derived static placement instance count (including any Noise/Scatter distribution's resolved copies) against its authored row count, the state row count, and the number of active bodies currently following a curves row (one CompiledCurvatureSpline.Evaluate per follower, per tick). Every number is DERIVED from what the document declares — the sheet is how an authored choice's price becomes legible instead of a silent frame tax.",
-            handler: (_, args) => {
-                if (CommandResult.RequireNoArguments(args: args, verb: "world.budget") is { } refusal) {
-                    return refusal;
-                }
-
-                var render = ((renderProbe.Node is { } node)
-                    ? $"program {node.LiveProgramWords}/{node.ProgramWordCapacity} word(s), {node.LiveProgramInstances} instance(s), stepScale {node.LiveProgramStepScale.ToString(format: "0.###", provider: System.Globalization.CultureInfo.InvariantCulture)}{((node.LiveProgramStepScale is > 0f and < 1f) ? $" (march ~{(1f / node.LiveProgramStepScale).ToString(format: "0.#", provider: System.Globalization.CultureInfo.InvariantCulture)}x baseline)" : string.Empty)}"
-                    : "renderer not built yet"
-                );
-                // The far distance and its derived prices, off the LIVE definition (the value the next frame uploads):
-                // the reach over the pinned default, the horizon-ray step tax (a ray skimming open ground at height h
-                // advances about h per step, so far/h steps reach the far plane — quoted per unit of height against
-                // the primary march's budget), and the static fog remnant exp(-density * far) at the cutoff.
-                var farDistance = Puck.World.Client.WorldRenderFarDistance.Resolve(defaults: server.Definition.Render);
-                var fogDensity = (server.Definition.Render.Sky?.FogDensity ?? Puck.SdfVm.SdfFrame.DefaultSkyFogDensity);
-                var far = string.Create(
-                    provider: System.Globalization.CultureInfo.InvariantCulture,
-                    handler: $"far {farDistance:0.##} unit(s) (reach x{(farDistance / Puck.SdfVm.SdfFrame.DefaultFarDistance):0.##} the {Puck.SdfVm.SdfFrame.DefaultFarDistance:0}-unit default; horizon ray ~{farDistance:0} step(s) per unit of camera height of {Puck.SdfVm.SdfWorldEngine.PrimaryMarchSteps}; fog remnant at the far plane {MathF.Exp(x: (-fogDensity * farDistance)):0.###})"
-                );
-                var lattice = ((population.Fields is { } fields)
-                    ? fields.DescribeCost(
-                        activeBodyCount: population.ActiveCount(),
-                        bodyCapacity: population.Capacity
-                    )
-                    : "lattice none"
-                );
-                var rows = (server.Definition.State?.Count ?? 0);
-                var gravityCompiled = population.CompiledGravity;
-                var gravityStatistics = population.GravityStatistics;
-                var gravityAreaStatistics = population.GravityAreaStatistics;
-                var gravity = $"gravity {gravityCompiled.Attractors.Length} static source(s), {gravityCompiled.Areas.Length} local area(s) / target declared, last global targets {Math.Max(val1: 0, val2: (gravityStatistics.BodyCount - gravityCompiled.Attractors.Length))}, exact {gravityStatistics.ExactSourceEvaluations}, approximate {gravityStatistics.ApproximatedNodeEvaluations}, m2l {gravityStatistics.MultipoleToLocalTranslations}, area targets {gravityAreaStatistics.TargetCount}, active {gravityAreaStatistics.ActiveAreaCount}, evaluations {gravityAreaStatistics.EvaluationCount}, matches {gravityAreaStatistics.MatchCount}";
-                var placementInstances = WorldPlacementStamper.StaticStampInstances(
-                    creations: server.Definition.Creations,
-                    placements: server.Definition.Placements,
-                    worldSeed: (server.Definition.Generation?.WorldSeed ?? 0UL)
-                );
-                var placements = $"placements {placementInstances} static instance(s) ({server.Definition.Placements.Count} row(s))";
-                var curves = $"curves {population.CountCurveFollowers()} follower(s)";
-                var ruleBudget = WorldRuleWorkBudget.Measure(definition: server.Definition);
-                var rules = $"rules {ruleBudget.RuleRows}/{WorldRuleCapacity.MaxRules}, interactions {ruleBudget.InteractionRows}/{WorldInteractionCapacity.MaxInteractions}, worst {ruleBudget.EvaluationSlots} evaluation(s), {ruleBudget.WorkUnitsPerTick}/{WorldRuleCapacity.MaxWorkUnitsPerTick} work unit(s) / tick";
-
-                return new CommandResult(Output: $"[world.budget: {render} | {far} | {lattice} | {gravity} | {placements} | state {rows} row(s) | {rules} | {curves}]");
             }
         );
         yield return CommandDefinition.WithWireArgs(

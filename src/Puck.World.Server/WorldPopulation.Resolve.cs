@@ -53,6 +53,7 @@ public sealed partial class WorldPopulation {
         // retargets every follower on delivery without a second per-tick indirection.
         m_curveRows = definition.Curves;
         m_curves = WorldCurveTable.Compile(curves: definition.Curves);
+        m_navigationTable = WorldNavigationDomainTable.Compile(domains: definition.Navigation.Rows);
         m_kits = new FixedWorldKit[definition.Kits.Count];
 
         for (var kit = 0; (kit < m_kits.Length); kit++) {
@@ -61,6 +62,7 @@ public sealed partial class WorldPopulation {
                 channels: m_channels,
                 targets: m_targets,
                 curves: m_curves,
+                navigation: m_navigationTable,
                 programs: m_bodyMotionPrograms,
                 programRows: programRows,
                 creations: definition.Creations,
@@ -111,6 +113,11 @@ public sealed partial class WorldPopulation {
         m_targetField = (WorldTargetSelection.RequiresLineOfSight(definition: definition)
             ? derivedSolids
             : null
+        );
+        m_navigation = new WorldNavigationRuntime(
+            definition: definition,
+            query: derivedSolids?.Query,
+            fields: m_fields
         );
         m_seatKit = ResolveKit(name: definition.DefaultSeatKit);
         // The LOOK table: the authored rows, or the implicit single catalog look when the author declared none.
@@ -477,6 +484,11 @@ public sealed partial class WorldPopulation {
         );
 
         for (var bodyIndex = 0; (bodyIndex < m_entries.Length); bodyIndex++) {
+            // A route stores domain-local node ordinals. Even when a replacement keeps the same domain name and
+            // dimensions, changed geometry, medium truth, origin, or connectivity gives those ordinals new meaning.
+            // Drop every cached route at the same boundary that installs the new domain runtime; the next producer
+            // tick deterministically replans from its retained designation.
+            m_entries[bodyIndex].NavigationState.Clear();
             var prior = m_entries[bodyIndex].Designations;
             var current = NewDesignations();
 

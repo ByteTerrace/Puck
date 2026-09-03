@@ -224,6 +224,8 @@ public sealed partial class WorldPopulation {
     // own remarks on why this is the definition's own reference, never a copy.
     private IReadOnlyList<WorldCurveRow> m_curveRows = [];
     private WorldCurveTable m_curves = WorldCurveTable.Empty;
+    private WorldNavigationDomainTable m_navigationTable = WorldNavigationDomainTable.Empty;
+    private WorldNavigationRuntime m_navigation = null!;
     // The definition's LOOK rows (empty ⇒ the implicit single catalog look), resolved by CompileFixedTables. Each
     // entry's LookIndex points into this list. PRESENTATION-ONLY — the snapshot carries it to the client's renderer.
     private IReadOnlyList<WorldLook> m_lookRows = [WorldLook.Implicit];
@@ -296,6 +298,11 @@ public sealed partial class WorldPopulation {
                 : PopulationKind.NetworkPeer),
                 CatalogRig = checked((byte)index),
                 Designations = NewDesignations(),
+                ProducerState = new BodyProducerState {
+                    AcquiredTarget = -1,
+                    ActiveProducerCurveIndex = -1,
+                    ActiveProducerNavigationDomainIndex = -1,
+                },
             };
         }
 
@@ -400,5 +407,6 @@ public sealed partial class WorldPopulation {
         public string PressRefusal { get; set; } = string.Empty;
 
         public BodyProducerState ProducerState;
+        public BodyNavigationState NavigationState { get; } = new();
     }
 }

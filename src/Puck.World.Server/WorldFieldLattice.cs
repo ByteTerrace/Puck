@@ -590,6 +590,78 @@ public sealed class WorldFieldLattice {
 
         return best;
     }
+    /// <summary>Reports whether a point lies inside one named live medium field. Unlike <see cref="MediumSurface"/>,
+    /// this keeps the authored field identity and requires the point to lie inside the lattice volume rather than
+    /// clamping it onto the top layer; medium-constrained navigation uses it to keep swimmer routes in their fluid.</summary>
+    public bool IsInsideMedium(string name, in FixedVector3 position) {
+        return TryFieldIndex(name: name, field: out var field) && IsInsideMedium(field: field, position: in position);
+    }
+    /// <summary>Reports whether a point lies inside one compiled live medium-field ordinal. This is the hot-path
+    /// counterpart of <see cref="IsInsideMedium(string, in FixedVector3)"/>: navigation resolves the authored name
+    /// once when its domain is built, then avoids a name-table scan for every node an A* search examines.</summary>
+    public bool IsInsideMedium(int field, in FixedVector3 position) {
+        return IsInsideMediumPoint(field: field, position: in position);
+    }
+    /// <summary>Reports whether an axis-aligned clearance cube around a point remains inside a live medium. Navigation
+    /// constrains the radius to at most half a lattice cell, so the eight corners plus center cover every voxel the
+    /// enclosed agent sphere can enter; requiring the cube is conservative at curved boundaries.</summary>
+    public bool IsInsideMedium(int field, in FixedVector3 position, FixedQ4816 clearance) {
+        if (clearance < FixedQ4816.Zero || !IsInsideMediumPoint(field: field, position: in position)) {
+            return false;
+        }
+        if (clearance == FixedQ4816.Zero) {
+            return true;
+        }
+        for (var ySign = -1; ySign <= 1; ySign += 2) {
+            for (var zSign = -1; zSign <= 1; zSign += 2) {
+                for (var xSign = -1; xSign <= 1; xSign += 2) {
+                    var sample = new FixedVector3(
+                        X: (position.X + (clearance * FixedQ4816.FromInteger(value: xSign))),
+                        Y: (position.Y + (clearance * FixedQ4816.FromInteger(value: ySign))),
+                        Z: (position.Z + (clearance * FixedQ4816.FromInteger(value: zSign)))
+                    );
+                    if (!IsInsideMediumPoint(field: field, position: in sample)) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    }
+    private bool IsInsideMediumPoint(int field, in FixedVector3 position) {
+        if ((uint)field >= (uint)m_isMedium.Length || !m_isMedium[field] || !TryCellOf(position: in position, cell: out var cell)) {
+            return false;
+        }
+        var value = m_values[field][cell];
+        return value > FixedQ4816.Zero && position.Y <= (m_origin.Y + (value * m_heightScale[field]));
+    }
+    /// <summary>Reports whether an entire short segment remains inside one live medium. Samples at no more than half
+    /// a lattice-cell interval on every axis, so a route edge cannot skip a dry voxel or a lower intervening free
+    /// surface. The caller supplies a hard subdivision ceiling and an edge exceeding it refuses conservatively.</summary>
+    public bool IsSegmentInsideMedium(int field, in FixedVector3 from, in FixedVector3 to, FixedQ4816 clearance, int maximumSubdivisions) {
+        if (maximumSubdivisions <= 0) {
+            return false;
+        }
+        var delta = (to - from);
+        var maximum = FixedQ4816.Max(
+            x: FixedQ4816.Abs(value: delta.X),
+            y: FixedQ4816.Max(x: FixedQ4816.Abs(value: delta.Y), y: FixedQ4816.Abs(value: delta.Z))
+        );
+        var interval = (m_cellSize / FixedQ4816.FromInteger(value: 2));
+        var subdivisions = (maximum.Value / interval.Value) + ((maximum.Value % interval.Value) == 0L ? 0L : 1L);
+        if (subdivisions > maximumSubdivisions) {
+            return false;
+        }
+        var count = Math.Max(1, checked((int)subdivisions));
+        for (var index = 0; index <= count; index++) {
+            var amount = (FixedQ4816.FromInteger(value: index) / FixedQ4816.FromInteger(value: count));
+            var sample = FixedVector3.Lerp(from: from, to: to, amount: amount);
+            if (!IsInsideMedium(field: field, position: sample, clearance: clearance)) {
+                return false;
+            }
+        }
+        return true;
+    }
     /// <summary>Resolves a declared field's index by name.</summary>
     /// <param name="name">The field name.</param>
     /// <param name="field">The field index.</param>

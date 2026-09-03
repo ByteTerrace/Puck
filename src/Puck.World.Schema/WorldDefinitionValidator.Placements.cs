@@ -842,6 +842,14 @@ public static partial class WorldDefinitionValidator {
                 path: $"{path}.producers",
                 errors: errors
             );
+            ValidateNavigatedProducerMobility(
+                definition: definition,
+                kit: kit,
+                motionProgram: motionProgram,
+                programRows: programRows,
+                path: $"{path}.producers",
+                errors: errors
+            );
 
             // Actions is a channel-NAME-keyed map now (never a fixed Primary/Secondary pair): a kit naming an
             // undeclared or non-composition channel is a dead reference; a declared composition channel with no

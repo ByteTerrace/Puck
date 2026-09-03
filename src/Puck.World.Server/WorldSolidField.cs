@@ -82,6 +82,8 @@ public sealed class WorldSolidField : IContactField {
     /// <summary>Gets the field evaluator the <c>world.collision.probe</c> verb reads distance/material/gradient from, so the
     /// surface the simulation itself solves against is directly observable.</summary>
     public IFieldEvaluator Evaluator => m_evaluator;
+    /// <summary>Gets the deterministic gameplay-query view over the same compiled solid program.</summary>
+    public IWorldQuery Query => m_evaluator;
     /// <summary>Gets a value indicating whether this field's collision tuning authors <see cref="WorldContactRequirement.GradientDerivedUp"/>.</summary>
     public bool GradientUp => m_solver.GradientUp;
     /// <summary>Gets the compiled program's instruction count — the <c>world.collision.status</c> read-back (a rough size of

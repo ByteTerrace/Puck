@@ -993,9 +993,11 @@ public sealed partial class WorldBody {
             : FixedQ4816.Zero
         );
         var strafe = producer.Scalar(name: "orbit");
-        var up = (m_bodyMotionProgram.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)
+        var followsVolume = producer.Target is { Source: BodyTargetSource.Navigated, NavigationKind: not WorldNavigationKind.Surface };
+        var preferredAltitude = (followsVolume ? scratch.SensorTarget.Position.Y : scratch.ProducerState.PreferredAltitude);
+        var up = (followsVolume || m_bodyMotionProgram.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)
             ? FixedQ4816.Clamp(
-                value: ((scratch.ProducerState.PreferredAltitude - m_position.Y) * producer.Scalar(name: "altitudeGain")),
+                value: ((preferredAltitude - m_position.Y) * producer.Scalar(name: "altitudeGain")),
                 minimum: NegativeOne,
                 maximum: FixedQ4816.One
             )

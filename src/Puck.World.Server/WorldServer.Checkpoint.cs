@@ -494,6 +494,9 @@ public sealed partial class WorldServer {
         }
 
         m_population.Fields?.ValidateCheckpoint(checkpoint: checkpoint.Fields!);
+        // Population validation is deliberately before any server field changes below. A malformed cached route
+        // must refuse the entire restore atomically, not fail after the definition, clocks, or journal were replaced.
+        m_population.ValidateCheckpoint(checkpoint: checkpoint.Population);
 
         m_definition = WorldDefinitionSerialization.Deserialize(utf8Json: server.DefinitionJson);
         m_base = WorldDefinitionSerialization.Deserialize(utf8Json: server.BaseDefinitionJson);

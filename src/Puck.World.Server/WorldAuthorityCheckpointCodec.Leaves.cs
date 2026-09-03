@@ -22,10 +22,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             writeItem(writer, item);
         }
     }
-    private static T[] ReadArray<T>(ref WireReader reader, string field, ReadItem<T> readItem) {
+    private static T[] ReadArray<T>(ref WireReader reader, string field, ReadItem<T> readItem, int maximum = MaxCollectionCount) {
         var count = reader.ReadCount(
             field: field,
-            maximum: MaxCollectionCount,
+            maximum: maximum,
             minimum: 0
         );
         var items = new T[count];

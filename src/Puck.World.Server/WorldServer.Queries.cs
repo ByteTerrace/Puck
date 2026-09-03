@@ -416,6 +416,13 @@ public sealed partial class WorldServer {
     )
         ? 1
         : 0), kind: CellKind.Bool),
+        WorldRuleFactKind.Navigation => Finite(
+            value: m_population.NavigationFact(
+                index: ResolveBodyRef(bodyRef: operand.BodyA!.Value, tick: tick),
+                facet: operand.Row!
+            ),
+            kind: CellKind.Int
+        ),
         // Preserve the reserved channel's authored contract: $parked reports the population deadline's own
         // SIMULATION-tick unit. Engine-tick countdown rows use countdownState instead; changing this unrelated
         // channel's unit would silently retune every existing raw compareState threshold and fromState copy.

@@ -830,6 +830,13 @@ distance with its reach multiplier, horizon-ray step tax, and far-plane fog
 remnant, the field lattice program's node/cadence counts and exact
 full-cell/body-slot pass costs, and the state row count —
 how an authored choice's price becomes legible instead of a silent frame tax.
+Navigation adds its compiled cell count, fixed A* workspace bytes, summed
+per-search expansion caps, live follower count, and last-search expansions to
+that sheet, plus the simultaneous-replan ceiling across current followers.
+`world.navigation` lists each surface/volume/medium domain and
+`body.targets <body>` includes the selected route's status and waypoint. Both
+`world.navigation` and `world.budget` are server-safe under `--headless`;
+the latter names the absent renderer while retaining all authoritative costs.
 
 `render.farDistance` is the depth every camera march ends at (default 40 when
 unauthored; 1..8192), re-read on every definition revision like the lighting

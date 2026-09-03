@@ -11,6 +11,7 @@ public sealed partial class WorldPopulation {
         if (resetPhase) {
             entry.ProducerState.AcquiredTarget = -1;
             entry.ProducerState.CurveArcRaw = 0L;
+            entry.NavigationState.Clear();
             entry.ProducerState.Phase = phase;
             entry.ProducerState.ActivityPhase = (phase + (TwoPi * activityUnit));
             entry.ProducerState.ActivityRate = (producer.Scalar(name: "activityRateBase") + (producer.Scalar(name: "activityRateRange") * activityUnit));
@@ -161,6 +162,12 @@ public sealed partial class WorldPopulation {
                     distanceSquared: (position - self).LengthSquared
                 );
             }
+        } else if (targetSource?.Source is BodyTargetSource.Navigated) {
+            candidate = ReadNavigatedTarget(
+                entry: entry,
+                self: self,
+                target: targetSource.Value
+            );
         }
 
         var current = (((currentTarget >= 0) && (currentTarget < Capacity) && m_entries[currentTarget].Active && (m_entries[currentTarget].Body is { } held))
@@ -176,6 +183,86 @@ public sealed partial class WorldPopulation {
             Candidate: candidate,
             CurrentTarget: current
         );
+    }
+    private BodySensorTarget ReadNavigatedTarget(Entry entry, in FixedVector3 self, in FixedBodyTargetSource target) {
+        var state = entry.NavigationState;
+        var designation = entry.Designations[target.RegisterIndex];
+        FixedVector3 goal;
+        var targetIndex = WorldTargetDesignation.PointIndex;
+
+        if (designation.IsPoint) {
+            goal = designation.Point;
+        } else if (
+            designation.HasBody &&
+            designation.Index < Capacity &&
+            m_entries[designation.Index].Active &&
+            m_entries[designation.Index].Body is { } designatedBody
+        ) {
+            goal = designatedBody.FixedPosition;
+            targetIndex = designation.Index;
+        } else {
+            state.Clear(status: WorldNavigationStatus.NoTarget);
+            return BodySensorTarget.None;
+        }
+
+        if ((uint)target.NavigationDomainIndex >= (uint)m_navigation.Count) {
+            state.Clear(status: WorldNavigationStatus.OutsideDomain);
+            return BodySensorTarget.None;
+        }
+
+        var domain = m_navigation[target.NavigationDomainIndex];
+        if (!domain.TryCell(position: in self, node: out var start) || !domain.TryCell(position: in goal, node: out var goalCell)) {
+            state.Clear(status: WorldNavigationStatus.OutsideDomain);
+            return BodySensorTarget.None;
+        }
+
+        var onCachedRoute = state.PathLength != 0 && state.DomainIndex == target.NavigationDomainIndex && state.GoalCell == goalCell;
+        if (onCachedRoute) {
+            var previous = Math.Max(0, state.Waypoint - 1);
+            onCachedRoute = state.Path[previous] == start || (state.Waypoint < state.PathLength && state.Path[state.Waypoint] == start);
+            if (onCachedRoute && state.Waypoint < state.PathLength) {
+                onCachedRoute = domain.IsTraversableEdge(current: state.Path[previous], next: state.Path[state.Waypoint]);
+            }
+        }
+Replan:
+        if (!onCachedRoute) {
+            state.DomainIndex = target.NavigationDomainIndex;
+            state.GoalCell = goalCell;
+            state.Waypoint = 1;
+            state.Status = domain.FindPath(
+                start: start,
+                goal: goalCell,
+                path: state.WritablePath(),
+                pathLength: out state.PathLength,
+                expanded: out state.ExpandedLast
+            );
+            if (state.PathLength == 0) {
+                state.Waypoint = 0;
+                return BodySensorTarget.None;
+            }
+        }
+
+        var arrivalSquared = (domain.Tuning.ArrivalDistance * domain.Tuning.ArrivalDistance);
+        while (state.Waypoint < state.PathLength) {
+            if (state.Waypoint > 0 && !domain.IsTraversableEdge(current: state.Path[state.Waypoint - 1], next: state.Path[state.Waypoint])) {
+                onCachedRoute = false;
+                goto Replan;
+            }
+            var waypoint = domain.Position(node: state.Path[state.Waypoint]);
+            if ((waypoint - self).LengthSquared > arrivalSquared) {
+                state.Status = WorldNavigationStatus.Active;
+                return new BodySensorTarget(
+                    Index: targetIndex,
+                    Position: waypoint,
+                    DistanceSquared: (waypoint - self).LengthSquared
+                );
+            }
+            state.Waypoint++;
+        }
+
+        var distanceSquared = (goal - self).LengthSquared;
+        state.Status = (distanceSquared <= arrivalSquared ? WorldNavigationStatus.Arrived : WorldNavigationStatus.Active);
+        return new BodySensorTarget(Index: targetIndex, Position: goal, DistanceSquared: distanceSquared);
     }
     // Advances a curve-follow arc position by one compiled step, then wraps (closed) or clamps (open) it back inside
     // [0, totalLengthRaw] — the persisted state never grows past the curve's own length, so it stays bounded across
@@ -394,6 +481,16 @@ public sealed partial class WorldPopulation {
             value: out var producer
         )
         ) {
+            // Leaving the producer lane is itself a producer transition. Do not let a prior route (or curve
+            // station) remain observable through rule facts while the body is idle, live-driven, or names a
+            // producer that the current kit does not carry.
+            if (entry.ProducerState.ActiveProducerName is not null) {
+                entry.ProducerState.ActiveProducerName = null;
+                entry.ProducerState.ActiveProducerCurveIndex = -1;
+                entry.ProducerState.ActiveProducerNavigationDomainIndex = -1;
+                entry.ProducerState.CurveArcRaw = 0L;
+                entry.NavigationState.Clear(status: WorldNavigationStatus.NoTarget);
+            }
             return;
         }
 
@@ -401,18 +498,24 @@ public sealed partial class WorldPopulation {
         // curve row, resets the travelled arc rather than resuming a foreign curve's station — see
         // BodyProducerState.ActiveProducerName's remarks.
         var curveIndex = -1;
+        var navigationDomainIndex = -1;
 
         if (producer.Target?.Source is BodyTargetSource.CurveFollow) {
             curveIndex = producer.Target.Value.CurveIndex;
+        } else if (producer.Target?.Source is BodyTargetSource.Navigated) {
+            navigationDomainIndex = producer.Target.Value.NavigationDomainIndex;
         }
 
         if (
             !string.Equals(a: entry.ProducerState.ActiveProducerName, b: name, comparisonType: StringComparison.Ordinal) ||
-            (entry.ProducerState.ActiveProducerCurveIndex != curveIndex)
+            (entry.ProducerState.ActiveProducerCurveIndex != curveIndex) ||
+            (entry.ProducerState.ActiveProducerNavigationDomainIndex != navigationDomainIndex)
         ) {
             entry.ProducerState.ActiveProducerCurveIndex = curveIndex;
             entry.ProducerState.ActiveProducerName = name;
             entry.ProducerState.CurveArcRaw = 0L;
+            entry.ProducerState.ActiveProducerNavigationDomainIndex = navigationDomainIndex;
+            entry.NavigationState.Clear();
         }
 
         var sensors = ReadProducerSensors(

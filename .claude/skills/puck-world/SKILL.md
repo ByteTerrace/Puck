@@ -119,6 +119,15 @@ re-record any persisted tape it invalidates in the same change. Client-side
 (`src/Puck.World/Client/`) is presentation: floats are fine there, nothing
 feeds back into the tick.
 
+**Navigation is authored world truth.** `navigation.domains` owns bounded
+`surface`, collision-free `volume`, and live-field-constrained `medium` grids.
+A `BodyTargetSource.Navigated` producer points at one domain and one ordinary
+authority-checked target register. Keep A* fixed-point, budgeted, stable-tied,
+checkpointed, and hashed; bake static solid clearance once, but recheck a
+medium field before traversing its cached edge. Extend this vocabulary for
+engine-integral movement semantics; addons/agent extensions remain the home
+for arbitrary policy and planning, not collision/path correctness.
+
 **Enforce the acting-principal rule.** Make every mutating ingress consult the ACTING
 principal before any mutation. The ingress stamps identity
 (`SubmissionEnvelope.Principal` on the wire, `CommandContext.Principal` for

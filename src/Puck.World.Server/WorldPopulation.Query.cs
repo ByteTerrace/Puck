@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Maths;
+using Puck.Physics.Motion;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -26,6 +27,7 @@ public sealed partial class WorldPopulation {
             array: entry.Designations,
             value: WorldTargetDesignation.None
         );
+        entry.NavigationState.Clear(status: WorldNavigationStatus.NoTarget);
         entry.DesignationRefusal = string.Empty;
     }
     private int CountActiveCensus() {
@@ -250,12 +252,94 @@ public sealed partial class WorldPopulation {
             : entry.DesignationRefusal
         );
 
+        var navigation = entry.NavigationState;
+        var navigationStatus = navigation.Status.ToString().ToLowerInvariant();
+        var navigationName = (((uint)navigation.DomainIndex < (uint)m_navigation.Count) ? m_navigation[navigation.DomainIndex].Name : "none");
+
         return $"[body.targets: body:{bodyIndex} {((rows.Length == 0)
             ? "registers=none"
             : string.Join(
                 separator: "; ",
                 values: rows
-            ))} lastRefusal={refusal}]";
+            ))} navigation={navigationStatus},domain={navigationName},waypoint={navigation.Waypoint}/{navigation.PathLength},expanded={navigation.ExpandedLast} lastRefusal={refusal}]";
+    }
+    /// <summary>Describes the authored navigation domains and their compiled occupancy/cost envelopes.</summary>
+    public string DescribeNavigation() {
+        if (m_navigation.Count == 0) {
+            return "[world.navigation: none]";
+        }
+        var rows = new string[m_navigation.Count];
+        for (var index = 0; index < rows.Length; index++) {
+            var domain = m_navigation[index];
+            var tuning = domain.Tuning;
+            rows[index] = $"{domain.Name}:{tuning.Kind.ToString().ToLowerInvariant()} {tuning.Width}x{tuning.Depth}x{tuning.Layers} clear={domain.WalkableCellCount}/{domain.CellCount} connectivity={tuning.Connectivity.ToString().ToLowerInvariant()} search<={tuning.MaxExpandedNodes} path<={tuning.MaxPathNodes} medium={(tuning.Medium ?? "none")}";
+        }
+        return $"[world.navigation: {string.Join(separator: "; ", values: rows)}]";
+    }
+    /// <summary>Gets the compiled navigation cell total.</summary>
+    public long NavigationCellCount => m_navigation.CellCount;
+    /// <summary>Gets the fixed domain-search workspace allocated at compile time.</summary>
+    public long NavigationWorkspaceBytes => m_navigation.WorkspaceBytes;
+    /// <summary>Gets the sum of hard per-search expansion caps across declared domains.</summary>
+    public long NavigationDeclaredSearchWork => m_navigation.Count == 0 ? 0L : Enumerable.Range(start: 0, count: m_navigation.Count).Sum(selector: index => (long)m_navigation[index].Tuning.MaxExpandedNodes);
+    /// <summary>Gets active navigated producers, their most recent expansion total, and the maximum work they could
+    /// consume together if every follower had to replan on the same tick.</summary>
+    public (int Followers, long LastExpanded, long WorstExpanded) NavigationWork() {
+        var followers = 0;
+        var expanded = 0L;
+        var worst = 0L;
+        for (var index = 0; index < Capacity; index++) {
+            var entry = m_entries[index];
+            if (!entry.Active || entry.Body?.Source.ProducerName is not { } name) {
+                continue;
+            }
+            var kitIndex = (entry.Kind == PopulationKind.LocalSeat ? m_seatKit : entry.KitIndex);
+            if (m_kits[kitIndex].Producers.TryGetValue(key: name, value: out var producer) && producer.Target?.Source is BodyTargetSource.Navigated) {
+                followers++;
+                expanded += entry.NavigationState.ExpandedLast;
+                var domainIndex = producer.Target.Value.NavigationDomainIndex;
+                if ((uint)domainIndex < (uint)m_navigation.Count) {
+                    worst += m_navigation[domainIndex].Tuning.MaxExpandedNodes;
+                }
+            }
+        }
+        return (followers, expanded, worst);
+    }
+    /// <summary>Reads one rule-facing navigation facet for a body.</summary>
+    public long NavigationFact(int index, string facet) {
+        if ((uint)index >= (uint)Capacity || !m_entries[index].Active) {
+            return 0L;
+        }
+        var state = m_entries[index].NavigationState;
+        return facet switch {
+            "hasPath" => (state.PathLength != 0 ? 1L : 0L),
+            "active" => (state.Status == WorldNavigationStatus.Active ? 1L : 0L),
+            "arrived" => (state.Status == WorldNavigationStatus.Arrived ? 1L : 0L),
+            "unreachable" => (state.Status is WorldNavigationStatus.Unreachable or WorldNavigationStatus.SearchLimit or WorldNavigationStatus.PathLimit or WorldNavigationStatus.OutsideDomain ? 1L : 0L),
+            "remaining" => Math.Max(0, state.PathLength - state.Waypoint),
+            _ => 0L,
+        };
+    }
+    /// <summary>Appends route state that can affect rule reads and subsequent producer motion.</summary>
+    internal void AppendNavigationStateHash(ref Fnv1aHash hash) {
+        hash.Add(value: ((uint)Capacity));
+        for (var index = 0; index < Capacity; index++) {
+            var entry = m_entries[index];
+            hash.Add(value: ((byte)(entry.Active ? 1 : 0)));
+            if (!entry.Active) {
+                continue;
+            }
+            var state = entry.NavigationState;
+            hash.Add(value: entry.ProducerState.ActiveProducerNavigationDomainIndex);
+            hash.Add(value: ((byte)state.Status));
+            hash.Add(value: state.DomainIndex);
+            hash.Add(value: state.GoalCell);
+            hash.Add(value: state.Waypoint);
+            hash.Add(value: state.PathLength);
+            for (var pathIndex = 0; pathIndex < state.PathLength; pathIndex++) {
+                hash.Add(value: state.Path[pathIndex]);
+            }
+        }
     }
     /// <summary>Re-resolves a proposed body subject against one designation envelope.</summary>
     public bool DesignationWithinEnvelope(int sourceIndex, int targetIndex, WorldTargetRegister register, float rangeValue, float halfAngleDegrees, out string reason) {

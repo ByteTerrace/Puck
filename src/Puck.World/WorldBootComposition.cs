@@ -316,8 +316,9 @@ internal static class WorldBootComposition {
             );
         });
 
-        // The participant/census verb surface — world.players/.devices/.population. Split out of WorldCommandModule
-        // (which stays presentation-only) because these three read pure roster/population/document state.
+        // The participant/census and authoritative-diagnostic surface — world.players/.devices/.population plus
+        // world.navigation/.budget. Split out of WorldCommandModule (which stays presentation-only) because these
+        // read roster/population/document state headless too; budget's optional render probe only enriches it.
         services.AddSingleton<ICommandModule, WorldPopulationCommandModule>();
         // The world-mutation verb surface — world.kit.default, world.population.defaults, world.placement.get,
         // world.grant.set/.remove, world.reset/.load/.reload/.undo/.save/.status/.references. A separate

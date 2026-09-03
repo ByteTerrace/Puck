@@ -182,6 +182,9 @@
     "curves": {
       "$ref": "./schema/curves.schema.json"
     },
+    "navigation": {
+      "$ref": "./schema/navigation.schema.json"
+    },
     "basis": {
       "$ref": "./schema/basis.schema.json"
     },

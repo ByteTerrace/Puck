@@ -65,6 +65,7 @@ public sealed partial class WorldPopulation {
         entry.ProducerState.PreferredAltitude = altitude;
         entry.ProducerState.AcquiredTarget = -1;
         entry.ProducerState.CurveArcRaw = 0L;
+        entry.NavigationState.Clear();
         ClearDesignations(entry: entry);
         entry.Generation = checked((entry.Generation + 1));
         entry.Active = true;
@@ -173,6 +174,7 @@ public sealed partial class WorldPopulation {
         entry.Active = false;
         entry.ProducerState.AcquiredTarget = -1;
         entry.ProducerState.CurveArcRaw = 0L;
+        entry.NavigationState.Clear();
         ClearDesignations(entry: entry);
     }
     private bool TryAdmitTransferredEntityAtCore(int slot, IntentSource source, bool remoteHuman, bool authorityTransferred, IReadOnlyList<WorldAdmissionGrant> grantTemplates, string identityDomain, string identitySubject, out WorldPeerEventEntry admitted, out string refusal) {

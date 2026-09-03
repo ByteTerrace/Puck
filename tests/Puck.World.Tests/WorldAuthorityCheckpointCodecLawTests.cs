@@ -431,6 +431,24 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         Assert.Contains(actualString: reason, expectedSubstring: "version 5");
     }
     [Fact]
+    public void Version_six_envelope_refuses_by_name() {
+        var checkpoint = CapturedCheckpoint();
+        var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
+        var downgraded = ((byte[])encoded.Clone());
+
+        // Version 6 predates cached navigation routes. Refuse that shorter population entry rather than allowing a
+        // resumed producer to silently choose a different continuation after restore.
+        downgraded[4] = 6;
+        downgraded[5] = 0;
+
+        Assert.False(condition: WorldAuthorityCheckpointCodec.TryDecode(
+            bytes: downgraded,
+            checkpoint: out _,
+            reason: out var reason
+        ));
+        Assert.Contains(actualString: reason, expectedSubstring: "version 6");
+    }
+    [Fact]
     public async Task Capture_encode_write_load_decode_restore_reaches_an_identical_second_checkpoint() {
         var checkpoint = CapturedCheckpoint();
         var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);

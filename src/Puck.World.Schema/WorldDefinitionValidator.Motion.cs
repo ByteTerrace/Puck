@@ -89,7 +89,7 @@ public static partial class WorldDefinitionValidator {
 
         return rows;
     }
-    private static Dictionary<string, CompiledBodyMotionProgram> ValidateBodyMotionPrograms(IReadOnlyList<BodyMotionProgram> programs, ISet<string> targetRegisterNames, ISet<string> curveNames, int simulationRateHz, List<string> errors) {
+    private static Dictionary<string, CompiledBodyMotionProgram> ValidateBodyMotionPrograms(IReadOnlyList<BodyMotionProgram> programs, ISet<string> targetRegisterNames, ISet<string> navigationDomainNames, ISet<string> curveNames, int simulationRateHz, List<string> errors) {
         var compiled = new Dictionary<string, CompiledBodyMotionProgram>(comparer: StringComparer.Ordinal);
 
         for (var index = 0; (index < programs.Count); index++) {
@@ -182,6 +182,14 @@ public static partial class WorldDefinitionValidator {
                                 errors.Add(item: $"{path}.target.curve '{curve.Curve}' cannot compile — the world authors no simulation rate (simulation.rateHz), and a curve-follow target's per-tick arc step is bound to one.");
                             }
 
+                            break;
+                        case BodyTargetSource.Navigated navigated:
+                            if (string.IsNullOrWhiteSpace(value: navigated.Domain) || !navigationDomainNames.Contains(item: navigated.Domain)) {
+                                errors.Add(item: $"{path}.target.domain '{navigated.Domain}' names no navigation domain.");
+                            }
+                            if (string.IsNullOrWhiteSpace(value: navigated.Register) || !targetRegisterNames.Contains(item: navigated.Register)) {
+                                errors.Add(item: $"{path}.target.register '{navigated.Register}' names no target register.");
+                            }
                             break;
                     }
                 } else if (program.Target is not null) {
@@ -751,6 +759,50 @@ public static partial class WorldDefinitionValidator {
                         value: orbit
                     );
                 }
+            }
+        }
+    }
+    private static void ValidateNavigatedProducerMobility(WorldDefinition definition, WorldKit kit, CompiledBodyMotionProgram? motionProgram, IReadOnlyDictionary<string, BodyMotionProgram> programRows, string path, List<string> errors) {
+        foreach (var (name, parameters) in kit.Producers) {
+            if (
+                parameters is null ||
+                parameters.Scalars is null ||
+                !programRows.TryGetValue(key: name, value: out var producerProgram) ||
+                producerProgram.Target is not BodyTargetSource.Navigated navigated ||
+                definition.Navigation.Rows.FirstOrDefault(predicate: domain => string.Equals(a: domain.Name, b: navigated.Domain, comparisonType: StringComparison.Ordinal)) is not { } domain
+            ) {
+                continue;
+            }
+
+            var producerPath = $"{path}[{name}]";
+            RequirePositiveScalar(errors: errors, name: "approach", parameters: parameters, path: producerPath);
+            RequirePositiveScalar(errors: errors, name: "standoffRadius", parameters: parameters, path: producerPath);
+            if (
+                TryScalar(name: "standoffRadius", parameters: parameters, value: out var standoff) &&
+                float.IsFinite(f: standoff) &&
+                standoff > domain.ArrivalDistance
+            ) {
+                errors.Add(item: $"{producerPath}.scalars[standoffRadius] ({standoff}) cannot exceed navigation domain '{domain.Name}' arrivalDistance ({domain.ArrivalDistance}); otherwise the producer stops before advancing its waypoint.");
+            }
+
+            if (domain.Kind == WorldNavigationKind.Surface) {
+                if (motionProgram is not null && !motionProgram.RequiresRole(role: ChannelRole.MoveAdvance)) {
+                    errors.Add(item: $"{producerPath} targets surface navigation domain '{domain.Name}', but kit '{kit.Name}' bodyMotionProgram consumes no MoveAdvance role.");
+                }
+                continue;
+            }
+
+            RequirePositiveScalar(errors: errors, name: "altitudeGain", parameters: parameters, path: producerPath);
+            var directVertical = motionProgram is not null && (
+                motionProgram.Contains(operation: BodyMotionOp.ComputeLocalTargetVelocity) ||
+                motionProgram.Contains(operation: BodyMotionOp.ApplyVerticalDrive)
+            );
+            var mediumVertical = domain.Kind == WorldNavigationKind.Medium && motionProgram?.Contains(operation: BodyMotionOp.ApplyHold) == true && kit.Motion.DeclaredHolds.Any(predicate: hold => hold.Bond == BodyHoldBond.Medium);
+            if (!directVertical && !mediumVertical) {
+                errors.Add(item: $"{producerPath} targets {domain.Kind.ToString().ToLowerInvariant()} navigation domain '{domain.Name}', but kit '{kit.Name}' bodyMotionProgram has no compatible vertical consumer (ComputeLocalTargetVelocity, ApplyVerticalDrive, or a medium ApplyHold).");
+            }
+            if (!definition.Channels.Any(predicate: channel => channel.Role == ChannelRole.MoveUp)) {
+                errors.Add(item: $"{producerPath} targets {domain.Kind.ToString().ToLowerInvariant()} navigation domain '{domain.Name}', but the world declares no MoveUp channel.");
             }
         }
     }

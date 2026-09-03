@@ -41,7 +41,18 @@ public sealed partial class WorldPopulation {
         FixedQ4816 Yaw,
         WorldBody.TransferState DynamicState,
         WorldBody.IntegrationResidue Residue,
-        WorldIdentityProjection? Profile
+        WorldIdentityProjection? Profile,
+        WorldPopulationNavigationCheckpoint? Navigation = null
+    );
+    /// <summary>One body's cached deterministic route and producer binding.</summary>
+    public readonly record struct WorldPopulationNavigationCheckpoint(
+        int ActiveProducerDomainIndex,
+        int DomainIndex,
+        int GoalCell,
+        int Waypoint,
+        int ExpandedLast,
+        WorldNavigationStatus Status,
+        int[] Path
     );
     /// <summary>The population's own checkpointed state — see <see cref="Capture"/>.</summary>
     public sealed record WorldPopulationCheckpoint(int SimulatedCount, int Revision, byte SeatKit, IReadOnlyList<WorldPopulationEntryCheckpoint> Entries);
@@ -112,7 +123,16 @@ public sealed partial class WorldPopulation {
                 Yaw: body.FixedYaw,
                 DynamicState: body.CaptureTransferState(),
                 Residue: body.CaptureIntegrationResidue(),
-                Profile: body.Profile?.Project()
+                Profile: body.Profile?.Project(),
+                Navigation: new WorldPopulationNavigationCheckpoint(
+                    ActiveProducerDomainIndex: entry.ProducerState.ActiveProducerNavigationDomainIndex,
+                    DomainIndex: entry.NavigationState.DomainIndex,
+                    GoalCell: entry.NavigationState.GoalCell,
+                    Waypoint: entry.NavigationState.Waypoint,
+                    ExpandedLast: entry.NavigationState.ExpandedLast,
+                    Status: entry.NavigationState.Status,
+                    Path: [.. entry.NavigationState.Path.AsSpan(start: 0, length: entry.NavigationState.PathLength)]
+                )
             ));
         }
 
@@ -140,6 +160,10 @@ public sealed partial class WorldPopulation {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
         ArgumentNullException.ThrowIfNull(argument: defaults);
 
+        ValidateCheckpoint(checkpoint: checkpoint);
+
+        // Restore is replacement. All caller-controlled entry and route addresses were preflighted above, before
+        // this destructive phase starts.
         for (var index = 0; (index < Capacity); index++) {
             var entry = m_entries[index];
 
@@ -156,6 +180,7 @@ public sealed partial class WorldPopulation {
             entry.AdmissionRevokedKeys = [];
             entry.IdentityDomain = string.Empty;
             entry.IdentitySubject = string.Empty;
+            entry.NavigationState.Clear();
             ClearDesignations(entry: entry);
         }
 
@@ -221,6 +246,7 @@ public sealed partial class WorldPopulation {
                 AcquiredTarget = captured.ProducerAcquiredTarget,
                 ActiveProducerCurveIndex = captured.ProducerActiveCurveIndex,
                 ActiveProducerName = captured.ProducerActiveName,
+                ActiveProducerNavigationDomainIndex = (captured.Navigation?.ActiveProducerDomainIndex ?? -1),
                 ActivityPhase = captured.ProducerActivityPhase,
                 ActivityRate = captured.ProducerActivityRate,
                 CurveArcRaw = captured.ProducerCurveArcRaw,
@@ -228,6 +254,17 @@ public sealed partial class WorldPopulation {
                 PreferredAltitude = captured.ProducerPreferredAltitude,
                 WeaveFrequency = captured.ProducerWeaveFrequency,
             };
+            if (captured.Navigation is { } navigation) {
+                entry.NavigationState.DomainIndex = navigation.DomainIndex;
+                entry.NavigationState.GoalCell = navigation.GoalCell;
+                entry.NavigationState.Waypoint = navigation.Waypoint;
+                entry.NavigationState.ExpandedLast = navigation.ExpandedLast;
+                entry.NavigationState.Status = navigation.Status;
+                entry.NavigationState.PathLength = navigation.Path.Length;
+                if (navigation.Path.Length != 0) {
+                    navigation.Path.AsSpan().CopyTo(destination: entry.NavigationState.WritablePath());
+                }
+            }
 
             if (
                 entry.IsRemoteHuman &&
@@ -256,5 +293,89 @@ public sealed partial class WorldPopulation {
         m_simulatedCount = checkpoint.SimulatedCount;
         m_seatKit = checkpoint.SeatKit;
         m_revision = checkpoint.Revision;
+    }
+
+    /// <summary>Preflights caller-controlled population and route addresses without mutating live state.</summary>
+    internal void ValidateCheckpoint(WorldPopulationCheckpoint checkpoint) {
+        ArgumentNullException.ThrowIfNull(argument: checkpoint);
+
+        var restored = new bool[Capacity];
+        foreach (var captured in checkpoint.Entries) {
+            if ((uint)captured.Index >= (uint)Capacity) {
+                throw new InvalidOperationException(message: $"population checkpoint entry index {captured.Index} lies outside capacity {Capacity}.");
+            }
+            if (restored[captured.Index]) {
+                throw new InvalidOperationException(message: $"population checkpoint repeats entry index {captured.Index}.");
+            }
+            restored[captured.Index] = true;
+            ValidateNavigationCheckpoint(navigation: captured.Navigation);
+        }
+    }
+
+    private void ValidateNavigationCheckpoint(WorldPopulationNavigationCheckpoint? navigation) {
+        if (navigation is not { } state) {
+            return;
+        }
+        if (state.Path is null) {
+            throw new InvalidOperationException(message: "population checkpoint navigation path is null.");
+        }
+        if (!Enum.IsDefined(value: state.Status)) {
+            throw new InvalidOperationException(message: $"population checkpoint navigation status '{state.Status}' is not defined.");
+        }
+        if (state.ActiveProducerDomainIndex < -1 || state.ActiveProducerDomainIndex >= m_navigation.Count) {
+            throw new InvalidOperationException(message: $"population checkpoint producer navigation domain {state.ActiveProducerDomainIndex} lies outside the compiled domain table.");
+        }
+        if (state.DomainIndex < -1 || state.DomainIndex >= m_navigation.Count) {
+            throw new InvalidOperationException(message: $"population checkpoint navigation domain {state.DomainIndex} lies outside the compiled domain table.");
+        }
+        if (state.Path.Length > WorldNavigationCapacity.MaxPathNodes) {
+            throw new InvalidOperationException(message: $"population checkpoint navigation path carries {state.Path.Length} nodes; the maximum is {WorldNavigationCapacity.MaxPathNodes}.");
+        }
+        if (state.DomainIndex < 0) {
+            if (state.GoalCell != -1 || state.Path.Length != 0 || state.Waypoint != 0 || state.ExpandedLast != 0) {
+                throw new InvalidOperationException(message: "population checkpoint navigation state carries route data without a domain.");
+            }
+            if (state.Status is not (WorldNavigationStatus.None or WorldNavigationStatus.NoTarget or WorldNavigationStatus.OutsideDomain)) {
+                throw new InvalidOperationException(message: $"population checkpoint navigation status '{state.Status}' requires a domain.");
+            }
+            return;
+        }
+
+        var domain = m_navigation[state.DomainIndex];
+        if (state.ActiveProducerDomainIndex != state.DomainIndex) {
+            throw new InvalidOperationException(message: $"population checkpoint route domain {state.DomainIndex} does not match active producer domain {state.ActiveProducerDomainIndex}.");
+        }
+        if ((uint)state.GoalCell >= (uint)domain.CellCount) {
+            throw new InvalidOperationException(message: $"population checkpoint navigation goal {state.GoalCell} lies outside domain '{domain.Name}'.");
+        }
+        if (state.ExpandedLast < 0 || state.ExpandedLast > domain.Tuning.MaxExpandedNodes) {
+            throw new InvalidOperationException(message: $"population checkpoint navigation expansion count {state.ExpandedLast} exceeds domain '{domain.Name}' budget {domain.Tuning.MaxExpandedNodes}.");
+        }
+        if (state.Path.Length > domain.Tuning.MaxPathNodes) {
+            throw new InvalidOperationException(message: $"population checkpoint navigation path carries {state.Path.Length} nodes; domain '{domain.Name}' permits {domain.Tuning.MaxPathNodes}.");
+        }
+        if (state.Waypoint < 0 || state.Waypoint > state.Path.Length) {
+            throw new InvalidOperationException(message: $"population checkpoint navigation waypoint {state.Waypoint} lies outside its {state.Path.Length}-node path.");
+        }
+        if (state.Path.Length == 0) {
+            if (state.Status is not (WorldNavigationStatus.Unreachable or WorldNavigationStatus.SearchLimit or WorldNavigationStatus.PathLimit)) {
+                throw new InvalidOperationException(message: $"population checkpoint navigation status '{state.Status}' requires a stored path.");
+            }
+        } else {
+            if (state.Waypoint == 0) {
+                throw new InvalidOperationException(message: "population checkpoint navigation path has not advanced past its start node.");
+            }
+            if (state.Status is not (WorldNavigationStatus.Active or WorldNavigationStatus.Arrived)) {
+                throw new InvalidOperationException(message: $"population checkpoint stored path cannot carry status '{state.Status}'.");
+            }
+        }
+        for (var index = 0; index < state.Path.Length; index++) {
+            if ((uint)state.Path[index] >= (uint)domain.CellCount) {
+                throw new InvalidOperationException(message: $"population checkpoint navigation path node {state.Path[index]} at index {index} lies outside domain '{domain.Name}'.");
+            }
+        }
+        if (state.Path.Length != 0 && state.Path[^1] != state.GoalCell) {
+            throw new InvalidOperationException(message: $"population checkpoint navigation path ends at {state.Path[^1]}, not goal {state.GoalCell}.");
+        }
     }
 }

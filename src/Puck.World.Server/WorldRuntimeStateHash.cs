@@ -52,7 +52,7 @@ public static class WorldRuntimeStateHash {
     }
 
     /// <summary>Hashes the state system's authoritative live lanes: world rows and traits, fields, rule/interaction
-    /// latches, body action state, and poses. The rest of the world document, grants, presentation caches, pending
+    /// latches, body action and cached navigation state, and poses. The rest of the world document, grants, presentation caches, pending
     /// transport work, diagnostics, and screen-machine cores are deliberately outside this boundary.</summary>
     public static ulong HashAuthoritative(WorldServer server, ulong tick) {
         ArgumentNullException.ThrowIfNull(argument: server);

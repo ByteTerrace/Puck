@@ -123,9 +123,9 @@ public sealed record WorldRule(
 );
 /// <summary>The reserved <see cref="ActionPredicate.CompareState"/> channels a world rule may compare against instead
 /// of a declared <see cref="WorldStateRow"/> — time, population, region occupancy, a screen-machine's live memory,
-/// row aggregates/extrema, spatial facts between named bodies, a body's own reconnect-park state, and a local seat's
-/// own channel value, all folded into the same string channel <c>State</c> already carries, never a new fact enum and
-/// never a scheduler subsystem.
+/// row aggregates/extrema, spatial and navigation facts for named bodies, a body's own reconnect-park state, and a
+/// local seat's own channel value, all folded into the same string channel <c>State</c> already carries, never a
+/// second predicate language or scheduler subsystem.
 /// </summary>
 /// <remarks>Every one of them carries the <see cref="WorldStateRow.ReservedNamePrefix"/> that no authored row name may
 /// spell, so a reserved channel can never be shadowed by (or mistaken for) a real row — the validator refuses such a
@@ -208,6 +208,9 @@ public static class WorldRuleFacts {
     /// <see cref="DistancePrefix"/>'s deliberately-inverted sentinel (a boolean has no "too far" failure mode to
     /// guard against).</summary>
     public const string LineOfSightPrefix = "$los:";
+    /// <summary>The prefix; <c>$nav:&lt;bodyRef&gt;:&lt;facet&gt;</c> reads one body's live route state. Facets are
+    /// <c>hasPath</c>, <c>active</c>, <c>arrived</c>, <c>unreachable</c>, and <c>remaining</c> waypoints.</summary>
+    public const string NavigationPrefix = "$nav:";
     /// <summary>The prefix; <c>$link:&lt;adjacencyName&gt;</c> reads how many simulation ticks have passed since the
     /// named <c>adjacencies</c> row last received a delivered neighbour refresh — <c>0</c> the tick a refresh landed,
     /// rising by one per tick while nothing arrives. The neutral-falsy convention
@@ -440,6 +443,9 @@ public enum WorldRuleFactKind : byte {
 
     /// <summary>A <see cref="WorldRuleFacts.SymmetryPrefix"/> read: a cell's node through one symmetry-lattice map.</summary>
     Symmetry,
+
+    /// <summary>One body's navigation status or remaining waypoint count.</summary>
+    Navigation,
 }
 /// <summary>One resolved operand of a world-rule comparison — the (<see cref="Kind"/>, <see cref="Row"/>,
 /// <see cref="Key"/>) address plus the <see cref="Screen"/>/<see cref="Address"/> machine coordinates, the live
@@ -450,7 +456,8 @@ public enum WorldRuleFactKind : byte {
 /// <param name="Kind">Which live quantity this operand reads.</param>
 /// <param name="Row">The state row name for <see cref="WorldRuleFactKind.StateCell"/>, the placement id for
 /// <see cref="WorldRuleFactKind.RegionOccupancy"/>, the adjacency row name for
-/// <see cref="WorldRuleFactKind.LinkStaleness"/>, or <see langword="null"/> otherwise.</param>
+/// <see cref="WorldRuleFactKind.LinkStaleness"/>, or the facet name for
+/// <see cref="WorldRuleFactKind.Navigation"/>; <see langword="null"/> otherwise.</param>
 /// <param name="Key">The cell key inside <paramref name="Row"/> for <see cref="WorldRuleFactKind.StateCell"/>,
 /// <see langword="null"/> otherwise.</param>
 /// <param name="Screen">The declared screen index for <see cref="WorldRuleFactKind.MachineMemory"/>; unused otherwise.</param>
@@ -461,7 +468,7 @@ public enum WorldRuleFactKind : byte {
 /// only); <see cref="WorldStateReduceOp.None"/> otherwise.</param>
 /// <param name="BodyA">The first named body for <see cref="WorldRuleFactKind.BodyDistance"/>/
 /// <see cref="WorldRuleFactKind.LineOfSight"/>, or the one named body for <see cref="WorldRuleFactKind.Parked"/>
-/// (which reads no second body); <see langword="null"/> otherwise.</param>
+/// and <see cref="WorldRuleFactKind.Navigation"/> (which read no second body); <see langword="null"/> otherwise.</param>
 /// <param name="BodyB">The second named body for <see cref="WorldRuleFactKind.BodyDistance"/>/
 /// <see cref="WorldRuleFactKind.LineOfSight"/>; <see langword="null"/> otherwise (including
 /// <see cref="WorldRuleFactKind.Parked"/>, which is single-body).</param>
