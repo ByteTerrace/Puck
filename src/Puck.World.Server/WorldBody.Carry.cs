@@ -121,8 +121,10 @@ public sealed partial class WorldBody {
     }
 
     /// <summary>Derives this carried body's pose and rigid velocity from <paramref name="carrier"/>'s own frame for
-    /// the tick that just completed — called once per tick, after both advance passes, so it reads the carrier's
-    /// FRESH pose rather than last tick's. A no-op when <paramref name="carrier"/>'s kit carries no carry facet
+    /// the tick that just completed — called once per tick, after both advance passes and BEFORE
+    /// <see cref="WorldPopulation.ResolveDynamicContacts"/>, so it reads the carrier's post-movement pose for this
+    /// tick; a carrier that later pass depenetrates this same tick hands its passenger a one-tick-stale position,
+    /// corrected the following tick. A no-op when <paramref name="carrier"/>'s kit carries no carry facet
     /// (its own <see cref="RecompileKit"/> retuned away from one while this body stayed attached — the caller is
     /// still responsible for tearing down the relationship in that case).</summary>
     internal void FollowCarrier(WorldBody carrier) {

@@ -365,6 +365,90 @@ public sealed class WorldCarryCommandLawTests {
         _ = ball;
     }
 
+    // A checkpoint whose residue names a carry partner outside the population, below the -1 "none" sentinel, or the
+    // body itself refuses at restore — the same door a doctored flock target already refuses through — rather than
+    // indexing out of range on the next tick's UpdateCarriedBodies sweep. The undoctored capture is the control: it
+    // restores with the live relationship intact on both sides.
+    [Fact]
+    public void CheckpointNamingAnInvalidCarryPartnerRefusesAtRestoreAndControlRestoresIntact() {
+        using var fixture = JoinedCarrier(definition: CarryTestDocument());
+
+        Assert.True(condition: fixture.Server.Population.TryBeginCarry(
+            carrierIndex: CarrierIndex,
+            targetIndex: BallIndex,
+            reason: out var beginReason
+        ), userMessage: beginReason);
+        fixture.Step();
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(
+            checkpoint: out var checkpoint,
+            hostRow: EmptyHostRow(),
+            reason: out var refusal
+        ), userMessage: refusal);
+
+        var restoredDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint!.Server.DefinitionJson);
+        using var controlMachines = new WorldMachineHost(engines: [], screens: restoredDefinition.Screens);
+        var (control, _) = WorldServer.FromCheckpoint(
+            checkpoint: checkpoint,
+            instanceIdentity: "boot",
+            machines: controlMachines,
+            profiles: FreshProfiles(definition: restoredDefinition)
+        );
+
+        Assert.Equal(expected: BallIndex, actual: control.Body(index: CarrierIndex)!.Carrying);
+        Assert.Equal(expected: CarrierIndex, actual: control.Body(index: BallIndex)!.CarriedBy);
+
+        var capacity = fixture.Server.Population.Capacity;
+
+        foreach (var (carrying, carriedBy) in new (int Carrying, int CarriedBy)[] {
+            (capacity, -1),
+            (-2, -1),
+            (CarrierIndex, -1),
+            (BallIndex, capacity),
+            (BallIndex, CarrierIndex),
+        }) {
+            var doctored = (checkpoint with {
+                Population = (checkpoint.Population with {
+                    Entries = checkpoint.Population.Entries
+                        .Select(selector: entry => ((entry.Index == CarrierIndex)
+                            ? (entry with { Residue = (entry.Residue with { Carrying = carrying, CarriedBy = carriedBy }) })
+                            : entry))
+                        .ToArray(),
+                }),
+            });
+            using var machines = new WorldMachineHost(engines: [], screens: restoredDefinition.Screens);
+            var exception = Assert.Throws<InvalidOperationException>(testCode: () => WorldServer.FromCheckpoint(
+                checkpoint: doctored,
+                instanceIdentity: "boot",
+                machines: machines,
+                profiles: FreshProfiles(definition: restoredDefinition)
+            ));
+
+            Assert.Contains(actualString: exception.Message, comparisonType: StringComparison.Ordinal, expectedSubstring: "invalid carr");
+        }
+    }
+
+    private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
+        AnnouncedCrossingHolds: [],
+        AppliedTransferHighWater: null,
+        AppliedTransferIds: [],
+        ElapsedEngineTicks: 0,
+        ForwardedBodies: [],
+        FreshCounter: 0,
+        InDoubtTransfers: [],
+        IsPaused: false,
+        NextTransferId: 1,
+        PortalOccupancy: [],
+        Retained: false,
+        ScheduleAccumulatorTicks: 0,
+        SeededArrivals: []
+    );
+
+    private static WorldOwnedWorlds FreshProfiles(WorldDefinition definition) => new(
+        directory: Directory.CreateTempSubdirectory(prefix: "puck-carry-tests-").FullName,
+        machineId: Guid.NewGuid(),
+        template: definition
+    );
+
     [Fact]
     public void CarryBodyWireLeafRoundTripsThroughSubmissionCodec() {
         var command = new WorldCommand.CarryBody(

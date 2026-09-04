@@ -63,7 +63,8 @@ public sealed partial class WorldPopulation {
     }
 
     /// <summary>Derives every carried body's pose from its carrier, once per tick, after both advance passes have
-    /// run — so a carried body reads the carrier's FRESH pose rather than last tick's (see
+    /// run and before <see cref="ResolveDynamicContacts"/> — so a carried body reads the carrier's post-movement
+    /// pose for this tick, one tick behind any depenetration that later pass applies to the carrier (see
     /// <see cref="WorldBody.FollowCarrier"/>). Also self-heals a relationship whose mirror broke without going
     /// through <see cref="TryEndCarry"/> — a body going inactive or a live kit retune away from the facet the
     /// relationship depends on are the only paths that can leave one half dangling. A no-op world (no kit ever
