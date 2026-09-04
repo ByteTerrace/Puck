@@ -88,10 +88,12 @@
           "holds": [
             {
               "bond": "Free",
+              "envelope": {
+                "sinkSpeed": 20
+              },
               "gravity": {
                 "fall": 23,
-                "rise": 14,
-                "terminal": 20
+                "rise": 14
               },
               "hold": "Gravity",
               "name": "air"

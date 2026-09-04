@@ -10,7 +10,7 @@ namespace Puck.World.Tests;
 /// <summary>
 /// CONTRACT UNDER TEST: the <c>drive</c> row — the anisotropic drive facets a kit authors beside the motion
 /// row, read by <c>ResolveDriveFrame</c>/<c>ShapeVelocity</c>. The trace law drives one body 240 ticks through
-/// every drive facet (throttle, speed-scaled steering, brake, reverse, a held drift stretch, a held sprint stretch,
+/// every drive facet (throttle, speed-scaled steering, reversal, backward travel, a held drift stretch, a held sprint stretch,
 /// a pitched frame) and pins the fixed-point result raw value for raw value; its discriminating control perturbs a
 /// single drive facet and requires the trace to move. The facet law proves a drive program refuses by name against a
 /// kit authoring no row, where the same kit with one is admitted.
@@ -268,23 +268,23 @@ public sealed class DriveLawTests {
         "fffffffffffd2583 fffffffffff31fdd fffffffffff55d49 fffffffffff62afb 0000000000027e14 ffffffffffedd197 ffffffffffe60000 0000000000007ee7 0000000000001eb8",
     ];
 
-    // The drive decomposition, spelled as two shaping rows: a held-gated drift row authored first (its own grip
-    // and turnScale apply while the drift channel reads held), and the ordinary row behind it (unconditional,
+    // The drive decomposition, spelled as two shaping rows: a held-gated drift row authored first (its own lateral
+    // rate and turnScale apply while the drift channel reads held), and the ordinary row behind it (unconditional,
     // last) — the FIRST open row governs, so the drift row's own facets replace the ordinary row's whenever it
-    // wins. Both rows share the same longitudinal along facet; only across.grip and turnScale differ.
-    private static WorldShaping[] Shaping(float grip = 22f) => [
+    // wins. Both rows share the same longitudinal along facet; only across.lateral and turnScale differ.
+    private static WorldShaping[] Shaping(float lateral = 22f) => [
         new WorldShaping(
             When: new ActionPredicate.Held(Channel: "drift"),
-            Along: new WorldShapingAlong(Engage: 96f, Brake: 120f, Release: 20f, Reverse: 5f),
-            Across: new WorldShapingAcross(Grip: 6f),
+            Along: new WorldShapingAlong(Engage: 96f, ReversalRate: 120f, Release: 20f, BackwardSpeed: 5f),
+            Across: new WorldShapingAcross(Lateral: 6f),
             TurnScale: 1.4f
         ),
         new WorldShaping(
-            Along: new WorldShapingAlong(Engage: 96f, Brake: 120f, Release: 20f, Reverse: 5f),
-            Across: new WorldShapingAcross(Grip: grip)
+            Along: new WorldShapingAlong(Engage: 96f, ReversalRate: 120f, Release: 20f, BackwardSpeed: 5f),
+            Across: new WorldShapingAcross(Lateral: lateral)
         ),
     ];
-    private static WorldDefinition BuildDriveDocument(float grip = 22f, bool authorDrive = true) {
+    private static WorldDefinition BuildDriveDocument(float lateral = 22f, bool authorDrive = true) {
         var channels = new WorldChannel[] {
             new(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveAdvance),
             new(Name: "strafe", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveStrafe),
@@ -326,13 +326,14 @@ public sealed class DriveLawTests {
                 Holds: [
                     new WorldHold(
                         Bond: BodyHoldBond.Free,
-                        Gravity: new WorldHoldGravity(Fall: 26f, Rise: 14f, Terminal: 30f),
+                        Envelope: new WorldHoldEnvelope(SinkSpeed: 30f),
+                        Gravity: new WorldHoldGravity(Fall: 26f, Rise: 14f),
                         Hold: BodyHoldKind.Gravity,
                         Name: "air"
                     ),
                 ],
                 Shaping: (authorDrive
-                ? Shaping(grip: grip)
+                ? Shaping(lateral: lateral)
                 : [])
             ),
             ProducersRaw: new Dictionary<string, BodyProgramParameters>(),
@@ -348,7 +349,7 @@ public sealed class DriveLawTests {
         };
     }
     // The scripted intent, one span per tick range: throttle to the pinned speed, steer while moving (where lateral
-    // grip bites), back-throttle through a brake into reverse, a held drift stretch, a held sprint stretch, and a
+    // lateral bites), back-throttle through a reversal into backward, a held drift stretch, a held sprint stretch, and a
     // pitched climb.
     private static PlayerIntent IntentAt(int tick) {
         var intent = default(PlayerIntent);
@@ -429,7 +430,7 @@ public sealed class DriveLawTests {
             actual: Trace(definition: BuildDriveDocument())
         );
 
-        var perturbed = Trace(definition: BuildDriveDocument(grip: 9f));
+        var perturbed = Trace(definition: BuildDriveDocument(lateral: 9f));
         var moved = 0;
 
         for (var tick = 0; (tick < DriveTrace240.Length); tick++) {
@@ -442,7 +443,7 @@ public sealed class DriveLawTests {
             }
         }
 
-        Assert.True(condition: (moved > 0), userMessage: "a slidier drive grip must move the trace, or the trace pins nothing about grip");
+        Assert.True(condition: (moved > 0), userMessage: "a slidier drive lateral rate must move the trace, or the trace pins nothing about it");
     }
     [Fact]
     public void ADriveProgramOnAKitAuthoringNoShapingRow_RefusesValidationNamingTheFacet() {
@@ -463,15 +464,15 @@ public sealed class DriveLawTests {
     public void AShapingRowsOwnRatesAndDriftAreRangeCheckedByName() {
         foreach (var (mutate, token) in new (Func<WorldMotion, WorldMotion> Mutate, string Token)[] {
             (motion => motion with { Shaping = [motion.Shaping![0], motion.Shaping[1] with { Along = motion.Shaping[1].Along! with { Engage = 0f } }] }, "along.engage"),
-            (motion => motion with { Shaping = [motion.Shaping![0], motion.Shaping[1] with { Along = motion.Shaping[1].Along! with { Brake = -1f } }] }, "along.brake"),
+            (motion => motion with { Shaping = [motion.Shaping![0], motion.Shaping[1] with { Along = motion.Shaping[1].Along! with { ReversalRate = -1f } }] }, "along.reversalRate"),
             (motion => motion with { Shaping = [motion.Shaping![0], motion.Shaping[1] with { Along = motion.Shaping[1].Along! with { Release = 0f } }] }, "along.release"),
-            (motion => motion with { Shaping = [motion.Shaping![0], motion.Shaping[1] with { Across = motion.Shaping[1].Across! with { Grip = 0f } }] }, "across.grip"),
+            (motion => motion with { Shaping = [motion.Shaping![0], motion.Shaping[1] with { Across = motion.Shaping[1].Across! with { Lateral = 0f } }] }, "across.lateral"),
             (motion => motion with { Turn = motion.Turn with { ReferenceSpeed = 0f } }, "turn.referenceSpeed"),
             (motion => motion with { Turn = motion.Turn with { Falloff = 1.5f } }, "turn.falloff"),
-            (motion => motion with { Shaping = [motion.Shaping![0], motion.Shaping[1] with { Along = motion.Shaping[1].Along! with { Reverse = -1f } }] }, "along.reverse"),
+            (motion => motion with { Shaping = [motion.Shaping![0], motion.Shaping[1] with { Along = motion.Shaping[1].Along! with { BackwardSpeed = -1f } }] }, "along.backwardSpeed"),
             (motion => motion with { Turn = motion.Turn with { PitchRate = -1f } }, "turn.pitchRate"),
             (motion => motion with { Shaping = [motion.Shaping![0] with { When = new ActionPredicate.Held(Channel: "nope") }, motion.Shaping[1]] }, "shaping[0].when.channel"),
-            (motion => motion with { Shaping = [motion.Shaping![0] with { Across = motion.Shaping[0].Across! with { Grip = 0f } }, motion.Shaping[1]] }, "shaping[0].across.grip"),
+            (motion => motion with { Shaping = [motion.Shaping![0] with { Across = motion.Shaping[0].Across! with { Lateral = 0f } }, motion.Shaping[1]] }, "shaping[0].across.lateral"),
             (motion => motion with { Shaping = [motion.Shaping![0] with { TurnScale = 0f }, motion.Shaping[1]] }, "shaping[0].turnScale"),
         }) {
             var document = BuildDriveDocument();

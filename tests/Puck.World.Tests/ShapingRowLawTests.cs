@@ -74,7 +74,8 @@ public sealed class ShapingRowLawTests {
                 Holds: [
                     new WorldHold(
                         Bond: BodyHoldBond.Free,
-                        Gravity: new WorldHoldGravity(Fall: 32f, Rise: 32f, Terminal: 24f),
+                        Envelope: new WorldHoldEnvelope(SinkSpeed: 24f),
+                        Gravity: new WorldHoldGravity(Fall: 32f, Rise: 32f),
                         Hold: BodyHoldKind.Gravity,
                         Name: "air"
                     ),
@@ -136,7 +137,8 @@ public sealed class ShapingRowLawTests {
                 Holds: [
                     new WorldHold(
                         Bond: BodyHoldBond.Free,
-                        Gravity: new WorldHoldGravity(Fall: 23f, Rise: 14f, Terminal: 20f),
+                        Envelope: new WorldHoldEnvelope(SinkSpeed: 20f),
+                        Gravity: new WorldHoldGravity(Fall: 23f, Rise: 14f),
                         Hold: BodyHoldKind.Gravity,
                         Name: "air"
                     ),
@@ -336,7 +338,7 @@ public sealed class ShapingRowLawTests {
                     Speed: new WorldSpeed(Value: 4f),
                     Turn: new WorldTurn(Rate: 2.5f),
                     Holds: [
-                        new WorldHold(Bond: BodyHoldBond.Free, Gravity: new WorldHoldGravity(Fall: 23f, Rise: 14f, Terminal: 20f), Hold: BodyHoldKind.Gravity, Name: "air"),
+                        new WorldHold(Bond: BodyHoldBond.Free, Envelope: new WorldHoldEnvelope(SinkSpeed: 20f), Gravity: new WorldHoldGravity(Fall: 23f, Rise: 14f), Hold: BodyHoldKind.Gravity, Name: "air"),
                     ],
                     Shaping: shaping
                 ),

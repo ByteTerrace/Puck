@@ -861,47 +861,51 @@
           "radius": 0.22
         },
         "motion": {
-          "speed": {
-            "value": 1.4
-          },
-          "turn": {
-            "rate": 2.0
-          },
-          "shaping": [
-            {
-              "along": {}
-            }
-          ],
           "facingSnap": true,
           "holds": [
             {
-              "name": "ground",
               "bond": "Surface",
               "cone": [
                 0,
                 60
               ],
-              "hold": "Gravity",
-              "reach": 1.2,
-              "gravity": {
-                "rise": 28,
-                "fall": 46,
-                "terminal": 40
+              "envelope": {
+                "sinkSpeed": 40
               },
+              "gravity": {
+                "fall": 46,
+                "rise": 28
+              },
+              "hold": "Gravity",
+              "name": "ground",
+              "reach": 1.2,
               "thrust": 1
             },
             {
-              "name": "air",
               "bond": "Free",
-              "hold": "Gravity",
-              "gravity": {
-                "rise": 28,
-                "fall": 46,
-                "terminal": 40
+              "envelope": {
+                "sinkSpeed": 40
               },
+              "gravity": {
+                "fall": 46,
+                "rise": 28
+              },
+              "hold": "Gravity",
+              "name": "air",
               "thrust": 1
             }
-          ]
+          ],
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "speed": {
+            "value": 1.4
+          },
+          "turn": {
+            "rate": 2.0
+          }
         },
         "name": "critterKit",
         "producers": {
@@ -938,42 +942,45 @@
           "radius": 0.2
         },
         "motion": {
-          "speed": {
-            "value": 1.0
-          },
-          "turn": {
-            "rate": 1.5
-          },
-          "shaping": [
-            {
-              "along": {}
-            }
-          ],
           "facingSnap": true,
           "holds": [
             {
               "bond": "Medium",
+              "envelope": {
+                "riseSpeed": 1.0,
+                "sinkSpeed": 1.0
+              },
               "hold": "None",
               "medium": {
-                "buoyancy": 0.6,
-                "floatDepth": 0.6,
-                "maxRiseSpeed": 1.0,
-                "maxSinkSpeed": 1.0,
-                "surfaceSettleRate": 0.8
+                "equilibriumOffset": 0.6,
+                "idleDrift": 0.6
               },
               "name": "water"
             },
             {
               "bond": "Free",
+              "envelope": {
+                "sinkSpeed": 1
+              },
               "gravity": {
-                "rise": 1,
                 "fall": 1,
-                "terminal": 1
+                "rise": 1
               },
               "hold": "Gravity",
               "name": "air"
             }
-          ]
+          ],
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "speed": {
+            "value": 1.0
+          },
+          "turn": {
+            "rate": 1.5
+          }
         },
         "name": "fishKit",
         "producers": {

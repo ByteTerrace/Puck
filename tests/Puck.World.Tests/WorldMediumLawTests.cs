@@ -21,7 +21,7 @@ namespace Puck.World.Tests;
 /// resolves for <c>emit</c>/<c>expose</c>. See <see cref="WorldFieldLatticeLawTests"/> for the coupling/surface-math
 /// laws at the lattice level; this suite proves the validator's refusals and the full server-tier wiring
 /// (<see cref="WorldPopulation.SampleMediumSurfaces"/> → <c>WorldBody.SetMediumSurface</c> → the medium
-/// hold's <c>Submerged</c> fact).
+/// hold's <c>InMedium</c> fact).
 /// </summary>
 public sealed class WorldMediumLawTests {
     // The medium law's own 240-tick answer, recorded in raw Q48.16 so the law keeps answering it whatever spelling
@@ -204,7 +204,7 @@ public sealed class WorldMediumLawTests {
 
     // The medium spelled as a hold row on an ordinary grounded kit — the one authoring spelling of the law, and the
     // document MediumTrace240 was recorded against.
-    private static WorldDefinition BuildMediumHoldDocument(WorldStateLatticeTopology topology, float buoyancy = 0.5f) {
+    private static WorldDefinition BuildMediumHoldDocument(WorldStateLatticeTopology topology, float idleDrift = 0.5f) {
         var channels = new WorldChannel[] {
             new(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveAdvance),
             new(Name: "strafe", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveStrafe),
@@ -241,13 +241,11 @@ public sealed class WorldMediumLawTests {
                 Holds: [
                     new WorldHold(
                         Bond: BodyHoldBond.Medium,
+                        Envelope: new WorldHoldEnvelope(RiseSpeed: 2.4f, SinkSpeed: 3f),
                         Hold: BodyHoldKind.None,
                         Medium: new WorldHoldMedium(
-                            Buoyancy: buoyancy,
-                            FloatDepth: 1f,
-                            MaxRiseSpeed: 2.4f,
-                            MaxSinkSpeed: 3f,
-                            SurfaceSettleRate: 6f
+                            EquilibriumOffset: 1f,
+                            IdleDrift: idleDrift
                         ),
                         Name: "water",
                         Thrust: 0.75f
@@ -258,7 +256,8 @@ public sealed class WorldMediumLawTests {
                     // through.
                     new WorldHold(
                         Bond: BodyHoldBond.Free,
-                        Gravity: new WorldHoldGravity(Fall: 1f, Rise: 1f, Terminal: 1f),
+                        Envelope: new WorldHoldEnvelope(SinkSpeed: 1f),
+                        Gravity: new WorldHoldGravity(Fall: 1f, Rise: 1f),
                         Hold: BodyHoldKind.Gravity,
                         Name: "air"
                     ),
@@ -324,7 +323,7 @@ public sealed class WorldMediumLawTests {
         // Not "similar": the recorded control is the law's own answer tick by tick, in raw fixed point.
         Assert.Equal(expected: MediumTrace240, actual: Encode(trace: MediumTrace(definition: BuildMediumHoldDocument(topology: topology))));
         // The discriminating control — one facet of the medium's own law, moved.
-        Assert.NotEqual(expected: MediumTrace240, actual: Encode(trace: MediumTrace(definition: BuildMediumHoldDocument(buoyancy: -0.5f, topology: topology))));
+        Assert.NotEqual(expected: MediumTrace240, actual: Encode(trace: MediumTrace(definition: BuildMediumHoldDocument(idleDrift: -0.5f, topology: topology))));
     }
     [Fact]
     public void AMediumHoldInADryWorld_RefusesByName_WhereTheSameHoldWithAMediumRowIsAdmitted() {
@@ -360,14 +359,12 @@ public sealed class WorldMediumLawTests {
         var misplaced = WithHolds(new WorldHold(
             Bond: BodyHoldBond.Surface,
             Cone: new Vector2(x: 0f, y: 60f),
-            Gravity: new WorldHoldGravity(Fall: 1f, Rise: 1f, Terminal: 1f),
+            Envelope: new WorldHoldEnvelope(SinkSpeed: 1f),
+            Gravity: new WorldHoldGravity(Fall: 1f, Rise: 1f),
             Hold: BodyHoldKind.Gravity,
             Medium: new WorldHoldMedium(
-                Buoyancy: 0.5f,
-                FloatDepth: 1f,
-                MaxRiseSpeed: 2.4f,
-                MaxSinkSpeed: 3f,
-                SurfaceSettleRate: 6f
+                EquilibriumOffset: 1f,
+                IdleDrift: 0.5f
             ),
             Name: "floor",
             Reach: 1f,
@@ -378,7 +375,7 @@ public sealed class WorldMediumLawTests {
         Assert.Contains(actualString: misplacedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "medium is refused");
     }
     [Fact]
-    public void ABodyStandingInAMediumCellGetsSubmergedAfterAStep_AndABodyOnDryCellsDoesNot() {
+    public void ABodyStandingInAMediumCellReadsInMediumAfterAStep_AndABodyOnDryCellsDoesNot() {
         // A 2x2 lattice at the origin covers seat-1's spawn (0,0,0) but not seat-2's (2,0,0) — the "same lattice,
         // in vs out of coverage" contrast a single fixture proves both halves through, since every local seat runs
         // the SAME resolved seat kit (see the puck-world skill's own seat/kit remarks).
@@ -395,9 +392,9 @@ public sealed class WorldMediumLawTests {
         var dryBody = fixture.Server.Body(index: dry.Index)!;
 
         // Spawn Y (0) sits below the medium's surface (origin.Y 0 + value 1 * heightScale 5 = 5), so the coupled
-        // seat is submerged from the very first step with no drive needed.
-        Assert.True(condition: wetBody.Submerged);
-        Assert.False(condition: dryBody.Submerged);
+        // seat reads in-medium from the very first step with no drive needed.
+        Assert.True(condition: wetBody.InMedium);
+        Assert.False(condition: dryBody.InMedium);
     }
     [Fact]
     public void AMediumRowSurvivesCompileDecompileRoundTripExactly() {
@@ -461,7 +458,7 @@ public sealed class WorldMediumLawTests {
                 Motion = (motion with {
                     Holds = [
                         (water with {
-                            Gravity = new WorldHoldGravity(Fall: 1f, Rise: 1f, Terminal: 1f),
+                            Gravity = new WorldHoldGravity(Fall: 1f, Rise: 1f),
                             Hold = BodyHoldKind.Gravity,
                         }),
                         .. motion.Holds.Skip(count: 1),
@@ -472,5 +469,81 @@ public sealed class WorldMediumLawTests {
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: arced, reason: out var arcedReason));
         Assert.Contains(actualString: arcedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "is refused on a Medium bond");
+    }
+    /// <summary>The medium law measures displacement along the body's own resolved gravity-up (a ray/plane
+    /// intersection against the field's own point-and-normal), not a raw world-Y difference — proved by tilting the
+    /// world's own gravity area 30 degrees off vertical and letting a body with no commanded input settle under the
+    /// medium's own law alone. The control is the OLD Y-scalar law's prediction (surface minus equilibriumOffset,
+    /// ignoring the tilt entirely): the settled height must land near the tilted-up prediction and clearly away from
+    /// the untilted one.</summary>
+    [Fact]
+    public void AMediumRowUnderATiltedGravityArea_SettlesAtEquilibriumOffsetAlongItsOwnUp_WhereTheOldYOnlyLawWouldMiss() {
+        const double TiltDegrees = 30.0;
+        var tiltRadians = (TiltDegrees * (Math.PI / 180.0));
+        var sinTilt = (float)Math.Sin(tiltRadians);
+        var cosTilt = (float)Math.Cos(tiltRadians);
+        // Wide and centered: reaching equilibrium mixes a horizontal excursion into the settle (the vertical
+        // channel integrates along the body's own tilted up, not literally world Y — see IntegratePlanarAndVerticalVelocity),
+        // so the spawn needs room on every side, not just headroom above the pool.
+        var topology = new WorldStateLatticeTopology(
+            Name: "world",
+            Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f),
+            CellSize: 1f,
+            Width: 12,
+            Depth: 12,
+            Layers: 1
+        );
+        // A uniform field tilted 30 degrees off vertical toward +X: acceleration points "down" along
+        // (sin, -cos, 0), so gravity-up resolves to (-sin, cos, 0) rather than world +Y.
+        var document = BuildMediumHoldDocument(topology: topology) with {
+            GravityRaw = new WorldGravity(
+                Attractors: [],
+                GravitationalConstant: 0f,
+                SofteningLength: 1f,
+                Solver: WorldGravitySolver.Pairwise,
+                Uniform: new DocumentVector3(x: (10f * sinTilt), y: (-10f * cosTilt), z: 0f)
+            ),
+            SpawnPointsRaw = [
+                new WorldSpawnPoint(Id: "seat-1", Position: new DocumentVector3(x: 6f, y: 0f, z: 6f)),
+                new WorldSpawnPoint(Id: "seat-2", Position: new DocumentVector3(x: 2f, y: 0f, z: 0f)),
+                new WorldSpawnPoint(Id: "seat-3", Position: new DocumentVector3(x: 0f, y: 0f, z: 2f)),
+                new WorldSpawnPoint(Id: "seat-4", Position: new DocumentVector3(x: 2f, y: 0f, z: 2f)),
+            ],
+        };
+
+        using var fixture = Fixtures.FreshServer(definition: document);
+        var actor = WorldPrincipal.Seat(slot: 0);
+
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: actor, Slot: actor.Index, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);
+
+        var body = fixture.Server.Body(index: actor.Index)!;
+
+        // No commanded input at all — the medium's own settle law is the only thing moving the body, so the
+        // settled height is a pure read of the law rather than of any thrust interaction. 5000 ticks is well past
+        // convergence (the body is bit-stable by ~4000 in the recorded trace this law was checked against).
+        for (var tick = 0; (tick < 5000); tick++) {
+            body.SubmitIntent(intent: default);
+            fixture.Step();
+        }
+
+        var settledY = (double)body.FixedPosition.Y;
+        // The medium surface sits at world Y 5 (lattice origin 0 + value 1 * heightScale 5); the row's own
+        // equilibriumOffset is 1 — see BuildMediumHoldDocument.
+        const double SurfaceY = 5.0;
+        const double EquilibriumOffset = 1.0;
+        var expectedTiltedY = (SurfaceY - (EquilibriumOffset * cosTilt));
+        var untiltedLawPrediction = (SurfaceY - EquilibriumOffset);
+
+        Assert.True(
+            condition: (Math.Abs(value: (settledY - expectedTiltedY)) < 0.01),
+            userMessage: $"expected the body to settle at y={expectedTiltedY:0.####} (equilibriumOffset projected along the tilted up), but it settled at y={settledY:0.####}"
+        );
+        // The control: the untilted Y-scalar law's own equilibrium — surface minus equilibriumOffset, ignoring the
+        // tilt entirely — is a materially different height, proving the settled position actually reads the tilt
+        // rather than landing near it by coincidence.
+        Assert.True(
+            condition: (Math.Abs(value: (settledY - untiltedLawPrediction)) > 0.1),
+            userMessage: $"the settled y={settledY:0.####} must diverge from the untilted Y-scalar law's prediction y={untiltedLawPrediction:0.####}, or the tilt is not actually being read"
+        );
     }
 }

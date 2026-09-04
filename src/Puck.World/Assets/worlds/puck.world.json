@@ -618,10 +618,10 @@
               ],
               "driveAlignment": 0.5,
               "forward": "Heading",
-              "grip": 1.0,
-              "hold": "Grip",
+              "hold": "Pull",
               "name": "wall",
               "onDrive": true,
+              "pull": 1.0,
               "reach": 0.8,
               "release": "jump",
               "speed": 2.0,
@@ -637,10 +637,12 @@
                 0,
                 60
               ],
+              "envelope": {
+                "sinkSpeed": 40
+              },
               "gravity": {
                 "fall": 46,
-                "rise": 28,
-                "terminal": 40
+                "rise": 28
               },
               "hold": "Gravity",
               "name": "ground",
@@ -648,10 +650,12 @@
             },
             {
               "bond": "Free",
+              "envelope": {
+                "sinkSpeed": 40
+              },
               "gravity": {
                 "fall": 46,
-                "rise": 28,
-                "terminal": 40
+                "rise": 28
               },
               "hold": "Gravity",
               "name": "air"
@@ -694,10 +698,10 @@
               ],
               "driveAlignment": 0.3,
               "forward": "Heading",
-              "grip": 1.0,
-              "hold": "Grip",
+              "hold": "Pull",
               "name": "ceiling",
               "onDrive": true,
+              "pull": 1.0,
               "reach": 0.5,
               "speed": 1.6,
               "upLean": 1.0
@@ -710,10 +714,10 @@
               ],
               "driveAlignment": 0.3,
               "forward": "Heading",
-              "grip": 1.0,
-              "hold": "Grip",
+              "hold": "Pull",
               "name": "any",
               "onDrive": true,
+              "pull": 1.0,
               "reach": 0.5,
               "speed": 1.6,
               "upLean": 1.0
@@ -724,10 +728,12 @@
                 0,
                 60
               ],
+              "envelope": {
+                "sinkSpeed": 40
+              },
               "gravity": {
                 "fall": 46,
-                "rise": 28,
-                "terminal": 40
+                "rise": 28
               },
               "hold": "Gravity",
               "name": "ground",
@@ -735,10 +741,12 @@
             },
             {
               "bond": "Free",
+              "envelope": {
+                "sinkSpeed": 40
+              },
               "gravity": {
                 "fall": 46,
-                "rise": 28,
-                "terminal": 40
+                "rise": 28
               },
               "hold": "Gravity",
               "name": "air"
@@ -833,8 +841,7 @@
               "forward": "Heading",
               "gravity": {
                 "fall": 46,
-                "rise": 28,
-                "terminal": 40
+                "rise": 28
               },
               "hold": "Lift",
               "lift": 1.0,
@@ -849,10 +856,12 @@
                 0,
                 60
               ],
+              "envelope": {
+                "sinkSpeed": 40
+              },
               "gravity": {
                 "fall": 46,
-                "rise": 28,
-                "terminal": 40
+                "rise": 28
               },
               "hold": "Gravity",
               "name": "ground",
@@ -945,10 +954,12 @@
                 0,
                 60
               ],
+              "envelope": {
+                "sinkSpeed": 40
+              },
               "gravity": {
                 "fall": 46,
-                "rise": 28,
-                "terminal": 40
+                "rise": 28
               },
               "hold": "Gravity",
               "name": "ground",
@@ -956,10 +967,12 @@
             },
             {
               "bond": "Free",
+              "envelope": {
+                "sinkSpeed": 40
+              },
               "gravity": {
                 "fall": 46,
-                "rise": 28,
-                "terminal": 40
+                "rise": 28
               },
               "hold": "Gravity",
               "name": "air"
@@ -1078,22 +1091,25 @@
           "holds": [
             {
               "bond": "Medium",
+              "envelope": {
+                "riseSpeed": 1.0,
+                "sinkSpeed": 1.0
+              },
               "hold": "None",
               "medium": {
-                "buoyancy": 0.6,
-                "floatDepth": 0.6,
-                "maxRiseSpeed": 1.0,
-                "maxSinkSpeed": 1.0,
-                "surfaceSettleRate": 0.8
+                "equilibriumOffset": 0.6,
+                "idleDrift": 0.6
               },
               "name": "water"
             },
             {
               "bond": "Free",
+              "envelope": {
+                "sinkSpeed": 1
+              },
               "gravity": {
                 "fall": 1,
-                "rise": 1,
-                "terminal": 1
+                "rise": 1
               },
               "hold": "Gravity",
               "name": "air"
@@ -1171,10 +1187,12 @@
           "holds": [
             {
               "bond": "Free",
+              "envelope": {
+                "sinkSpeed": 40
+              },
               "gravity": {
                 "fall": 46,
-                "rise": 28,
-                "terminal": 40
+                "rise": 28
               },
               "hold": "Gravity",
               "name": "air"
@@ -1214,10 +1232,12 @@
           "holds": [
             {
               "bond": "Free",
+              "envelope": {
+                "sinkSpeed": 40
+              },
               "gravity": {
                 "fall": 46,
-                "rise": 28,
-                "terminal": 40
+                "rise": 28
               },
               "hold": "Gravity",
               "name": "air"
@@ -1262,10 +1282,12 @@
           "holds": [
             {
               "bond": "Free",
+              "envelope": {
+                "sinkSpeed": 40
+              },
               "gravity": {
                 "fall": 46,
-                "rise": 28,
-                "terminal": 40
+                "rise": 28
               },
               "hold": "Gravity",
               "name": "air"
@@ -1310,10 +1332,12 @@
           "holds": [
             {
               "bond": "Free",
+              "envelope": {
+                "sinkSpeed": 40
+              },
               "gravity": {
                 "fall": 46,
-                "rise": 28,
-                "terminal": 40
+                "rise": 28
               },
               "hold": "Gravity",
               "name": "air"

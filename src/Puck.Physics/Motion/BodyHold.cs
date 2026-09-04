@@ -33,7 +33,7 @@ public enum BodyHoldKind : byte {
 
     /// <summary>A pull toward the surface at the hold's own rate, applied as a positional standoff rather than a
     /// force; gravity is not applied while the hold is held.</summary>
-    Grip,
+    Pull,
 
     /// <summary>A fraction of gravity cancelled — one cancels it whole and the body hovers.</summary>
     Lift,
@@ -53,31 +53,38 @@ public enum BodyHoldForward : byte {
 }
 /// <summary>The compiled displacement law of a <see cref="BodyHoldBond.Medium"/> hold — what the medium does to a
 /// body that is in it, independent of what the body itself thrusts. Meaningless, and left zeroed, on every other
-/// bond.</summary>
-/// <param name="Buoyancy">The medium's idle vertical drift velocity below the bob band, signed (u/s): positive
-/// drifts the body up toward its float line, negative sinks it, zero holds depth.</param>
-/// <param name="MaxRiseSpeed">The terminal ascent speed (u/s) the vertical channel is clamped to.</param>
-/// <param name="MaxSinkSpeed">The terminal descent speed (u/s) the vertical channel is clamped to.</param>
-/// <param name="SurfaceSettleRate">The proportional settle gain toward the float line (1/s), applied inside the bob
-/// band and above it.</param>
-/// <param name="FloatDepth">How far below the medium surface the body rests when floating, and the bob band's
+/// bond. Convergence toward the equilibrium line is NOT this law's own: the governing shaping row's own along/
+/// dynamics facet is the one convergence source, so this carries only the raw signal that facet converges toward,
+/// bounded by the hold's own <see cref="FixedBodyHold.Envelope"/>.</summary>
+/// <param name="IdleDrift">The medium's idle vertical drift velocity below the equilibrium band, signed (u/s):
+/// positive drifts the body up toward equilibrium, negative sinks it, zero holds depth.</param>
+/// <param name="EquilibriumOffset">How far below the medium surface the body rests at equilibrium, and the band's
 /// half-width around that line (u).</param>
 public readonly record struct FixedBodyMedium(
-    FixedQ4816 Buoyancy,
-    FixedQ4816 MaxRiseSpeed,
-    FixedQ4816 MaxSinkSpeed,
-    FixedQ4816 SurfaceSettleRate,
-    FixedQ4816 FloatDepth
+    FixedQ4816 IdleDrift,
+    FixedQ4816 EquilibriumOffset
 );
 /// <summary>The compiled vertical arc a <see cref="BodyHoldKind.Gravity"/> or <see cref="BodyHoldKind.Lift"/> row
-/// falls under — zeroed on every other kind and on a <see cref="BodyHoldBond.Medium"/> row.</summary>
+/// falls under — zeroed on every other kind and on a <see cref="BodyHoldBond.Medium"/> row. The terminal fall speed
+/// this arc is clamped to is not its own: it reads <see cref="FixedBodyHold.Envelope"/>'s sink speed, the same
+/// shared vertical-channel bound a medium row's terminal speeds are.</summary>
 /// <param name="Rise">The downward acceleration while rising (u/s²).</param>
 /// <param name="Fall">The downward acceleration while falling (u/s²).</param>
-/// <param name="Terminal">The terminal fall speed (u/s) the descent is clamped to.</param>
 public readonly record struct FixedBodyHoldGravity(
     FixedQ4816 Rise,
-    FixedQ4816 Fall,
-    FixedQ4816 Terminal
+    FixedQ4816 Fall
+);
+/// <summary>The vertical-channel envelope a hold's vertical law is bounded by — shared by a
+/// <see cref="BodyHoldKind.Gravity"/>/<see cref="BodyHoldKind.Lift"/> row's own terminal fall speed and a
+/// <see cref="BodyHoldBond.Medium"/> row's terminal rise/sink speeds, so a document-wide speed ceiling reads one
+/// field family rather than three.</summary>
+/// <param name="RiseSpeed">The terminal upward speed (u/s) — bounds a medium row's rise. A gravity/lift row's own
+/// arc never rises against a clamp, so this reads as the compiled "uncapped" sentinel there.</param>
+/// <param name="SinkSpeed">The terminal downward speed (u/s) — a gravity/lift row's own terminal fall speed, or a
+/// medium row's terminal sink speed.</param>
+public readonly record struct FixedVerticalEnvelope(
+    FixedQ4816 RiseSpeed,
+    FixedQ4816 SinkSpeed
 );
 /// <summary>
 /// One compiled hold: the fixed-point form of an authored hold row, in the ordered list a kit's motion row
@@ -94,7 +101,7 @@ public readonly record struct FixedBodyHoldGravity(
 /// under the body and a downward probe is worth casting.</param>
 /// <param name="ConeAdmitsAbove">Whether the cone reaches at or above a right angle, so a face inside it can sit
 /// over the body and an upward probe is worth casting.</param>
-/// <param name="Grip">The inward pull rate, world units per second, under <see cref="BodyHoldKind.Grip"/>.</param>
+/// <param name="Pull">The inward pull rate, world units per second, under <see cref="BodyHoldKind.Pull"/>.</param>
 /// <param name="Lift">The fraction of gravity cancelled under <see cref="BodyHoldKind.Lift"/>.</param>
 /// <param name="Speed">The travel speed along the hold's tangent plane, or zero to ride the kit's own resolved move
 /// speed.</param>
@@ -115,6 +122,10 @@ public readonly record struct FixedBodyHoldGravity(
 /// other.</param>
 /// <param name="Gravity">The vertical arc a <see cref="BodyHoldKind.Gravity"/> or <see cref="BodyHoldKind.Lift"/>
 /// row falls under; zeroed on every other kind and on a <see cref="BodyHoldBond.Medium"/> row.</param>
+/// <param name="Envelope">The vertical-channel envelope <see cref="Gravity"/>'s terminal fall speed and
+/// <see cref="Medium"/>'s terminal rise/sink speeds share; zeroed on a row with no vertical law
+/// (<see cref="BodyHoldKind.None"/>, <see cref="BodyHoldKind.Pull"/>, or a full <see cref="BodyHoldKind.Lift"/>,
+/// whose channel decays rather than clamps).</param>
 /// <param name="Thrust">The fraction of the kit's resolved move speed the <c>MoveUp</c> role commands vertically
 /// while this row holds, in every bond; <c>0</c> is no thrust at all.</param>
 public readonly record struct FixedBodyHold(
@@ -125,7 +136,7 @@ public readonly record struct FixedBodyHold(
     FixedQ4816 ConeCosFar,
     bool ConeAdmitsBelow,
     bool ConeAdmitsAbove,
-    FixedQ4816 Grip,
+    FixedQ4816 Pull,
     FixedQ4816 Lift,
     FixedQ4816 Speed,
     FixedQ4816 Reach,
@@ -139,6 +150,7 @@ public readonly record struct FixedBodyHold(
     FixedQ4816 SpendPerSecond,
     FixedBodyMedium Medium,
     FixedBodyHoldGravity Gravity,
+    FixedVerticalEnvelope Envelope,
     FixedQ4816 Thrust
 ) {
     /// <summary>Reports whether a candidate face's alignment with gravity-up falls inside this hold's cone.</summary>

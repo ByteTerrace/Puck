@@ -1086,8 +1086,8 @@ public sealed partial class WorldBody {
 
         // A hard teleport also clears observations about the prior support/medium.
         Array.Clear(array: m_motionRecency);
-        m_submerged = false;
-        m_atSurface = false;
+        m_inMedium = false;
+        m_atMediumBand = false;
     }
 
     // Stops integrated locomotion without claiming a teleport, changing support facts, or cancelling timed actions.
@@ -1825,13 +1825,13 @@ public sealed partial class WorldBody {
     // converge each at its own authored rate, and recompose — the anisotropy a kart's feel needs and the isotropic
     // MoveToward cannot express. Longitudinal follows the bipolar throttle (accelerate toward the commanded fraction
     // of scratch.MoveSpeed — the resolved, envelope-clamped move speed, the same value EffectiveMoveSpeed echoes;
-    // back-throttle brakes while moving forward and reverses from rest at the unenveloped reverse speed; the
-    // over-speed excess bleeds at release, which is also the centered-throttle coast). A held speed multiplier
-    // applies to scratch.MoveSpeed AFTER the clamp, on top of the resolved base rate, never inside it — the envelope
-    // pins the base, the boost rides on top. Lateral and residual slip converge to zero at the row's own grip — a
-    // held-gated drift row authored ahead of the ordinary anisotropic row is how a kart's grip swaps while held. A
-    // contact-pinned variant (turn.pitchRate zero) has no drive or grip authority while airborne: a launched kart
-    // holds its velocity and gravity owns the arc.
+    // back-throttle reverses sign while moving forward and travels backward from rest at the unenveloped backward
+    // speed; the over-speed excess bleeds at release, which is also the centered-throttle coast). A held speed
+    // multiplier applies to scratch.MoveSpeed AFTER the clamp, on top of the resolved base rate, never inside it —
+    // the envelope pins the base, the boost rides on top. Lateral and residual slip converge to zero at the row's
+    // own lateral rate — a held-gated drift row authored ahead of the ordinary anisotropic row is how a kart's
+    // lateral grip swaps while held. A contact-pinned variant (turn.pitchRate zero) has no drive or lateral
+    // authority while airborne: a launched kart holds its velocity and gravity owns the arc.
     private void ShapeAnisotropicVelocityRow(in FixedShapingAlong along, in FixedShapingAcross across, ref BodyMotionScratch scratch) {
         var throttle = Role(
             intent: in scratch.Intent,
@@ -1871,10 +1871,10 @@ public sealed partial class WorldBody {
             } else if (throttle < FixedQ4816.Zero) {
                 if (longitudinal > FixedQ4816.Zero) {
                     target = FixedQ4816.Zero;
-                    rate = along.Brake;
-                    instant = ShapingInstant.Brake;
+                    rate = along.ReversalRate;
+                    instant = ShapingInstant.Reversal;
                 } else {
-                    target = (throttle * along.Reverse);
+                    target = (throttle * along.BackwardSpeed);
                     rate = along.Engage;
                     instant = ShapingInstant.Engage;
                 }
@@ -1909,7 +1909,7 @@ public sealed partial class WorldBody {
                     target: FixedQ4816.Zero,
                     maxDelta: m_driveLatAccumulator.Integrate(
                         elapsedTicks: scratch.StepTicks,
-                        ratePerSecond: across.Grip
+                        ratePerSecond: across.Lateral
                     )
                 );
                 residual = FixedVector3.MoveToward(
@@ -1917,7 +1917,7 @@ public sealed partial class WorldBody {
                     target: default,
                     maxDelta: m_driveResidualAccumulator.Integrate(
                         elapsedTicks: scratch.StepTicks,
-                        ratePerSecond: across.Grip
+                        ratePerSecond: across.Lateral
                     )
                 );
             }

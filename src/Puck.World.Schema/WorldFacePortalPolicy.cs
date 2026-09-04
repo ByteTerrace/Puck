@@ -54,8 +54,8 @@ public static class WorldFacePortalPolicy {
     /// profileless motion default and, per kit, its speed row's ceiling (the authored <c>speed.envelope</c> upper
     /// bound where one is declared, its own <c>speed.value</c> otherwise, scaled by its held multiplier), its
     /// holds' fastest authored vertical speed (a terminal fall speed or a medium's rise/sink terminal — zero for a
-    /// kit whose holds are all Grip or None, which folds into this maximum as a no-op rather than lowering it), and
-    /// a drive-decomposition shaping row's <c>along.reverse</c> where one is authored.</summary>
+    /// kit whose holds are all Pull or None, which folds into this maximum as a no-op rather than lowering it), and
+    /// a drive-decomposition shaping row's <c>along.backwardSpeed</c> where one is authored.</summary>
     /// <param name="definition">The document to read.</param>
     /// <returns>The declared speed ceiling.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
@@ -80,12 +80,12 @@ public static class WorldFacePortalPolicy {
             );
             ceiling = FixedQ4816.Max(
                 x: ceiling,
-                y: Magnitude(value: WorldHoldFactory.MaxTerminalFallSpeed(holds: motion.Holds))
+                y: Magnitude(value: WorldHoldFactory.MaxEnvelopeSpeed(holds: motion.Holds))
             );
 
             // An anisotropic shaping row's along facet travels backwards at its own rate, which no forward bound covers.
             foreach (var row in (motion.Shaping ?? [])) {
-                if ((row?.Across is not null) && (row.Along?.Reverse is { } reverse)) {
+                if ((row?.Across is not null) && (row.Along?.BackwardSpeed is { } reverse)) {
                     ceiling = FixedQ4816.Max(
                         x: ceiling,
                         y: Magnitude(value: reverse)

@@ -156,12 +156,13 @@
               "name": "water",
               "bond": "Medium",
               "hold": "None",
+              "envelope": {
+                "riseSpeed": 2.4,
+                "sinkSpeed": 3
+              },
               "medium": {
-                "buoyancy": 0.5,
-                "maxRiseSpeed": 2.4,
-                "maxSinkSpeed": 3,
-                "surfaceSettleRate": 6,
-                "floatDepth": 1
+                "idleDrift": 0.5,
+                "equilibriumOffset": 1
               },
               "thrust": 0.75
             },
@@ -169,10 +170,12 @@
               "name": "air",
               "bond": "Free",
               "hold": "Gravity",
+              "envelope": {
+                "sinkSpeed": 1
+              },
               "gravity": {
                 "rise": 1,
-                "fall": 1,
-                "terminal": 1
+                "fall": 1
               }
             }
           ]

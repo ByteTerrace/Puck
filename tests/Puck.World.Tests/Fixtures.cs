@@ -141,7 +141,8 @@ internal static class Fixtures {
                 Holds: [
                     new WorldHold(
                         Bond: BodyHoldBond.Free,
-                        Gravity: new WorldHoldGravity(Fall: 23f, Rise: 14f, Terminal: 20f),
+                        Envelope: new WorldHoldEnvelope(SinkSpeed: 20f),
+                        Gravity: new WorldHoldGravity(Fall: 23f, Rise: 14f),
                         Hold: BodyHoldKind.Gravity,
                         Name: "air"
                     ),

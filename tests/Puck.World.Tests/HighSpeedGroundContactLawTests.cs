@@ -199,7 +199,7 @@ public sealed class HighSpeedGroundContactLawTests {
             KitRowsRaw = source.Kits.Select(selector: kit => kit with {
                 Motion = kit.Motion with {
                     Holds = [
-                        kit.Motion.Holds![0] with { Gravity = (kit.Motion.Holds![0].Gravity! with { Terminal = 40f }) },
+                        kit.Motion.Holds![0] with { Envelope = new WorldHoldEnvelope(SinkSpeed: 40f) },
                     ],
                 },
             }).ToArray(),

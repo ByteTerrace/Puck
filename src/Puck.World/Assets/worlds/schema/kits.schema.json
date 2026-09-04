@@ -147,8 +147,8 @@
                           ],
                           "default": null
                         },
-                        "brake": {
-                          "description": "The drive\u0027s sign-reversal (brake) rate (u/s\u00B2) while back-throttle opposes forward travel. null means brake immediately. Refused without a paired Across.",
+                        "reversalRate": {
+                          "description": "The drive\u0027s sign-reversal rate (u/s\u00B2) while back-throttle opposes forward travel. null means reverse sign immediately. Refused without a paired Across.",
                           "type": [
                             "number",
                             "null"
@@ -163,8 +163,8 @@
                           ],
                           "default": null
                         },
-                        "reverse": {
-                          "description": "The reverse speed (u/s) full back-throttle converges on from rest; absence forbids reversing. Refused whenever authored without a paired Across.",
+                        "backwardSpeed": {
+                          "description": "The backward speed (u/s) full back-throttle converges on from rest; absence forbids travelling backward. Refused whenever authored without a paired Across.",
                           "type": [
                             "number",
                             "null"
@@ -182,7 +182,7 @@
                         "null"
                       ],
                       "properties": {
-                        "grip": {
+                        "lateral": {
                           "description": "The lateral convergence rate (u/s\u00B2) toward zero slip while this row governs, or null to remove slip immediately.",
                           "type": [
                             "number",
@@ -255,7 +255,7 @@
                       "enum": [
                         "None",
                         "Gravity",
-                        "Grip",
+                        "Pull",
                         "Lift"
                       ]
                     },
@@ -263,8 +263,8 @@
                       "description": "The inclusive angle band, in degrees, between an admitted surface normal and gravity-up: [0, 60] is floors, [60, 120] walls, [0, 180] everything. Required for Surface, refused for Free.",
                       "default": null
                     },
-                    "grip": {
-                      "description": "The inward pull, world units per second, under Grip. Applied as a positional standoff, so it closes a gap the surface opens without ever pushing the body through it.",
+                    "pull": {
+                      "description": "The inward pull, world units per second, under Pull. Applied as a positional standoff, so it closes a gap the surface opens without ever pushing the body through it.",
                       "type": "number",
                       "default": 0
                     },
@@ -348,39 +348,24 @@
                         "null"
                       ],
                       "properties": {
-                        "buoyancy": {
-                          "description": "The idle vertical drift velocity below the bob band, signed (u/s).",
+                        "idleDrift": {
+                          "description": "The idle vertical drift velocity below the equilibrium band, signed (u/s).",
                           "type": "number"
                         },
-                        "maxRiseSpeed": {
-                          "description": "The terminal ascent speed (u/s).",
-                          "type": "number"
-                        },
-                        "maxSinkSpeed": {
-                          "description": "The terminal descent speed (u/s).",
-                          "type": "number"
-                        },
-                        "surfaceSettleRate": {
-                          "description": "The proportional settle gain toward the float line (1/s).",
-                          "type": "number"
-                        },
-                        "floatDepth": {
-                          "description": "The float line\u0027s depth below the medium surface, and the bob band\u0027s half-width (u).",
+                        "equilibriumOffset": {
+                          "description": "The equilibrium line\u0027s depth below the medium surface, and the band\u0027s half-width (u).",
                           "type": "number"
                         }
                       },
                       "required": [
-                        "buoyancy",
-                        "maxRiseSpeed",
-                        "maxSinkSpeed",
-                        "surfaceSettleRate",
-                        "floatDepth"
+                        "idleDrift",
+                        "equilibriumOffset"
                       ],
                       "additionalProperties": false,
                       "default": null
                     },
                     "gravity": {
-                      "description": "The vertical arc this row falls under. Required for Gravity and Lift; refused for Grip, None, and every Medium row.",
+                      "description": "The vertical arc this row falls under. Required for Gravity and Lift; refused for Pull, None, and every Medium row.",
                       "type": [
                         "object",
                         "null"
@@ -393,17 +378,36 @@
                         "fall": {
                           "description": "The downward acceleration while falling (u/s\u00B2) \u2014 the snappy descent (heavier than the rise). The world\u0027s own solved gravity field, where one is authored, overrides the MAGNITUDE but keeps this row\u0027s rise-to-fall ratio as the arc\u0027s asymmetry.",
                           "type": "number"
-                        },
-                        "terminal": {
-                          "description": "The terminal fall speed the descent is clamped to (u/s).",
-                          "type": "number"
                         }
                       },
                       "required": [
                         "rise",
-                        "fall",
-                        "terminal"
+                        "fall"
                       ],
+                      "additionalProperties": false,
+                      "default": null
+                    },
+                    "envelope": {
+                      "description": "The vertical-channel envelope Gravity\u0027s terminal fall speed and Medium\u0027s terminal rise/sink speeds share. Required for a Medium bond and for a Gravity/Lift hold short of full lift; refused otherwise.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "riseSpeed": {
+                          "description": "The terminal upward speed (u/s). Required for a Medium bond; refused (the arc never clamps a rise) for Gravity/Lift.",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "sinkSpeed": {
+                          "description": "The terminal downward speed (u/s) \u2014 a Gravity/Lift row\u0027s own terminal fall speed, or a Medium row\u0027s terminal sink speed.",
+                          "type": "number",
+                          "default": 0
+                        }
+                      },
                       "additionalProperties": false,
                       "default": null
                     },

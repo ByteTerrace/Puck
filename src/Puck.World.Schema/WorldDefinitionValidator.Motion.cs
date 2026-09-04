@@ -433,32 +433,17 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{rowPath}.bond 'Medium' requires a medium lattice row (state.world[].lattice.medium) — a medium hold implies a medium to stand in.");
                 }
                 if (hold.Medium is not { } medium) {
-                    errors.Add(item: $"{rowPath}.medium is required for a medium hold — buoyancy, the terminal speeds, the settle rate and the float depth are its whole law.");
+                    errors.Add(item: $"{rowPath}.medium is required for a medium hold — the idle drift and the equilibrium offset are its whole law.");
                 } else {
                     RequirePositive(
                         errors: errors,
-                        name: $"{rowPath}.medium.maxRiseSpeed",
-                        value: medium.MaxRiseSpeed
-                    );
-                    RequirePositive(
-                        errors: errors,
-                        name: $"{rowPath}.medium.maxSinkSpeed",
-                        value: medium.MaxSinkSpeed
-                    );
-                    RequirePositive(
-                        errors: errors,
-                        name: $"{rowPath}.medium.surfaceSettleRate",
-                        value: medium.SurfaceSettleRate
-                    );
-                    RequirePositive(
-                        errors: errors,
-                        name: $"{rowPath}.medium.floatDepth",
-                        value: medium.FloatDepth
+                        name: $"{rowPath}.medium.equilibriumOffset",
+                        value: medium.EquilibriumOffset
                     );
                     RequireFinite(
                         errors: errors,
-                        name: $"{rowPath}.medium.buoyancy",
-                        value: medium.Buoyancy
+                        name: $"{rowPath}.medium.idleDrift",
+                        value: medium.IdleDrift
                     );
                 }
             } else if (hold.Medium is not null) {
@@ -470,19 +455,19 @@ public static partial class WorldDefinitionValidator {
             ) {
                 errors.Add(item: $"{rowPath}.hold '{hold.Hold}' is refused on a Medium bond — a medium displaces a body by its own law, so a medium row applies no arc.");
             }
+            // ApplyHoldGravityDecay owns a full-lift row's vertical channel outright and bleeds it at Rise alone (a
+            // symmetric bleed, never the asymmetric arc), so Fall and the envelope go unread there — requiring them
+            // would demand fields nothing reads.
+            var fullLift = ((hold.Hold == BodyHoldKind.Lift) && (hold.Lift >= 1f));
+
             if (
                 (hold.Bond != BodyHoldBond.Medium) &&
                 (hold.Hold is BodyHoldKind.Gravity or BodyHoldKind.Lift)
             ) {
-                // ApplyHoldGravityDecay owns a full-lift row's vertical channel outright and bleeds it at Rise alone
-                // (a symmetric bleed, never the asymmetric arc), so Fall and Terminal go unread there — requiring them
-                // would demand a pair nothing reads.
-                var fullLift = ((hold.Hold == BodyHoldKind.Lift) && (hold.Lift >= 1f));
-
                 if (hold.Gravity is not { } gravity) {
                     errors.Add(item: (fullLift
                         ? $"{rowPath}.gravity is required for a full-lift hold — its Rise is the bleed rate the channel decays at."
-                        : $"{rowPath}.gravity is required for a {hold.Hold} hold — the rise, fall and terminal speed are its whole vertical arc."
+                        : $"{rowPath}.gravity is required for a {hold.Hold} hold — the rise and fall are its whole vertical arc."
                     ));
                 } else {
                     RequirePositive(
@@ -497,15 +482,41 @@ public static partial class WorldDefinitionValidator {
                             name: $"{rowPath}.gravity.fall",
                             value: gravity.Fall
                         );
-                        RequirePositive(
-                            errors: errors,
-                            name: $"{rowPath}.gravity.terminal",
-                            value: gravity.Terminal
-                        );
                     }
                 }
             } else if (hold.Gravity is not null) {
                 errors.Add(item: $"{rowPath}.gravity is refused for a {hold.Hold} hold on a {hold.Bond} bond — only a Gravity or Lift hold falls under an arc.");
+            }
+            // The vertical-channel envelope: required for a medium (both directions) and for a gravity/lift hold
+            // short of full lift (sink only — the rise direction is never clamped by that arc); refused otherwise.
+            var needsEnvelope = ((hold.Bond == BodyHoldBond.Medium) || ((hold.Hold is BodyHoldKind.Gravity or BodyHoldKind.Lift) && !fullLift));
+
+            if (needsEnvelope) {
+                if (hold.Envelope is not { } envelope) {
+                    errors.Add(item: $"{rowPath}.envelope is required for a {((hold.Bond == BodyHoldBond.Medium) ? "medium" : hold.Hold.ToString())} hold — the terminal speed(s) it is bounded by.");
+                } else {
+                    RequirePositive(
+                        errors: errors,
+                        name: $"{rowPath}.envelope.sinkSpeed",
+                        value: envelope.SinkSpeed
+                    );
+
+                    if (hold.Bond == BodyHoldBond.Medium) {
+                        if (envelope.RiseSpeed is not { } riseSpeed) {
+                            errors.Add(item: $"{rowPath}.envelope.riseSpeed is required for a medium hold — a medium bounds both directions.");
+                        } else {
+                            RequirePositive(
+                                errors: errors,
+                                name: $"{rowPath}.envelope.riseSpeed",
+                                value: riseSpeed
+                            );
+                        }
+                    } else if (envelope.RiseSpeed is not null) {
+                        errors.Add(item: $"{rowPath}.envelope.riseSpeed is refused for a {hold.Hold} hold — its own arc never clamps a rise.");
+                    }
+                }
+            } else if (hold.Envelope is not null) {
+                errors.Add(item: $"{rowPath}.envelope is refused for a {hold.Hold} hold on a {hold.Bond} bond — nothing here reads a vertical bound.");
             }
             RequireRange(
                 errors: errors,
@@ -520,15 +531,15 @@ public static partial class WorldDefinitionValidator {
             ) {
                 errors.Add(item: $"{rowPath}.thrust is positive but the world declares no MoveUp channel — a row's thrust reads the MoveUp role, so nothing could ever command it.");
             }
-            if (hold.Hold == BodyHoldKind.Grip) {
+            if (hold.Hold == BodyHoldKind.Pull) {
                 RequirePositive(
                     errors: errors,
-                    name: $"{rowPath}.grip",
-                    value: hold.Grip
+                    name: $"{rowPath}.pull",
+                    value: hold.Pull
                 );
 
                 if (hold.Bond != BodyHoldBond.Surface) {
-                    errors.Add(item: $"{rowPath}.hold 'Grip' requires bond 'Surface' — a grip pulls toward a surface normal.");
+                    errors.Add(item: $"{rowPath}.hold 'Pull' requires bond 'Surface' — a pull draws toward a surface normal.");
                 }
             }
             if (hold.Hold == BodyHoldKind.Lift) {
@@ -958,10 +969,10 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{rowPath}.across is authored without along — the drive decomposition needs a longitudinal facet to pair with.");
                 }
 
-                if (row.Across.Grip is { } grip) {
+                if (row.Across.Lateral is { } lateral) {
                     RequirePositive(
-                        value: grip,
-                        name: $"{rowPath}.across.grip",
+                        value: lateral,
+                        name: $"{rowPath}.across.lateral",
                         errors: errors
                     );
                 }
@@ -984,26 +995,26 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 if (row.Across is not null) {
-                    if (along.Brake is { } brake) {
+                    if (along.ReversalRate is { } reversalRate) {
                         RequirePositive(
-                            value: brake,
-                            name: $"{rowPath}.along.brake",
+                            value: reversalRate,
+                            name: $"{rowPath}.along.reversalRate",
                             errors: errors
                         );
                     }
-                    if (along.Reverse is { } reverse) {
+                    if (along.BackwardSpeed is { } backwardSpeed) {
                         RequireNonNegative(
-                            value: reverse,
-                            name: $"{rowPath}.along.reverse",
+                            value: backwardSpeed,
+                            name: $"{rowPath}.along.backwardSpeed",
                             errors: errors
                         );
                     }
                 } else {
-                    if (along.Brake is not null) {
-                        errors.Add(item: $"{rowPath}.along.brake is authored without across — whole-vector shaping never reads a drive brake rate; omit it.");
+                    if (along.ReversalRate is not null) {
+                        errors.Add(item: $"{rowPath}.along.reversalRate is authored without across — whole-vector shaping never reads a drive reversal rate; omit it.");
                     }
-                    if (along.Reverse is not null) {
-                        errors.Add(item: $"{rowPath}.along.reverse is authored without across — whole-vector shaping never reads a drive reverse speed; omit it.");
+                    if (along.BackwardSpeed is not null) {
+                        errors.Add(item: $"{rowPath}.along.backwardSpeed is authored without across — whole-vector shaping never reads a drive backward speed; omit it.");
                     }
                 }
             }

@@ -437,7 +437,7 @@ public sealed class CreationAnimationLawTests {
         var gatedSeeded = false;
         var gatedSpeed = 0f;
         var gatedAddress = FirstBody;
-        var gated = new[] { Stride(cadence: 1f, signal: CreationDriverDocument.SignalTime, when: [nameof(BodyFacts.Submerged)]) };
+        var gated = new[] { Stride(cadence: 1f, signal: CreationDriverDocument.SignalTime, when: [nameof(BodyFacts.InMedium)]) };
 
         for (var frame = 0; (frame < 20); frame++) {
             WorldGaitDrivers.Advance(

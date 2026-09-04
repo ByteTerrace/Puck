@@ -365,15 +365,16 @@ facing its travel, `Heading` body-relative with `Turn` steering — the stick's
 beside stick-in-camera is one document), and the seat rig's own `dynamics` op
 (a named `dynamics` row shaping the boom ease). Beside `holds`, the motion row's
 `shaping` table admits a row carrying an `across` facet — the anisotropic drive
-decomposition (longitudinal accel/brake/coast via `along`, lateral grip via
-`across`, a held drift row authored ahead of the ordinary one, `Turn`'s own
-speed-scaled steering authority, optional pitched flight) `ShapeVelocity` reads
-alongside `ResolveDriveFrame`. A kart is the same motion row plus an `across`
-shaping row exactly as a swimmer is the same motion row plus a `Medium` hold
-row; a program selecting `ShapeVelocity` against a kit authoring no shaping row
-refuses by the `Shaping` tuning facet's name. An omitted engage/release/brake/
-grip rate means exact convergence, while an explicit rate must be positive;
-drive-only brake/reverse values are refused on a whole-vector row. The retired `arcade` world's
+decomposition (longitudinal accel/reversalRate/coast via `along`, lateral
+convergence via `across`, a held drift row authored ahead of the ordinary one,
+`Turn`'s own speed-scaled steering authority, optional pitched flight)
+`ShapeVelocity` reads alongside `ResolveDriveFrame`. A kart is the same motion
+row plus an `across` shaping row exactly as a swimmer is the same motion row
+plus a `Medium` hold row; a program selecting `ShapeVelocity` against a kit
+authoring no shaping row refuses by the `Shaping` tuning facet's name. An
+omitted engage/release/reversalRate/lateral rate means exact convergence,
+while an explicit rate must be positive; drive-only reversalRate/backwardSpeed
+values are refused on a whole-vector row. The retired `arcade` world's
 `gaming-brick`-cabinet + region-gated prompt/prize + `rules`-driven `state`
 reaction ladder (originally a document-mounted addon, ported to a world rule
 before the world itself was retired) survives only in git history; no shipped world exercises the `rules` section
@@ -1726,8 +1727,8 @@ just minted fresh — never inherits a previous occupant's value nor sits at the
 unscaled default the row itself disagrees with. `Scale` multiplies the body's
 collider volumes (about its own root — contact resolution and hold probes/
 standoff/reach alike), its resolved move speed and turn rate, a hold's own
-gravity fall/rise/terminal magnitudes, a wall hold's travel speed, and a
-grip's pull rate (`WorldBody.Hold.cs`) — so a shrunk body settles onto and
+gravity fall/rise magnitudes and its own vertical-channel envelope, a wall
+hold's travel speed, and a pull's own rate (`WorldBody.Hold.cs`) — so a shrunk body settles onto and
 depenetrates from the ground at a proportionally gentler rate too, rather than
 free-falling one tick of full-scale gravity into a collider whose own skin
 margin it can no longer absorb — and, client-side, reading the same row live,

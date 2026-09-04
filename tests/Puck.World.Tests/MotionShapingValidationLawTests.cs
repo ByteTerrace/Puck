@@ -100,17 +100,17 @@ public sealed class MotionShapingValidationLawTests {
         var motion = kit.Motion;
         var row = motion.Shaping![0];
         var clean = row with { Along = new WorldShapingAlong(Engage: 8f, Release: 8f), Across = null };
-        var withBrake = clean with { Along = clean.Along! with { Brake = 0f } };
-        var withReverse = clean with { Along = clean.Along! with { Reverse = 0f } };
+        var withReversalRate = clean with { Along = clean.Along! with { ReversalRate = 0f } };
+        var withBackwardSpeed = clean with { Along = clean.Along! with { BackwardSpeed = 0f } };
 
         WorldDefinition With(WorldShaping shaping) => document with {
             KitRowsRaw = [kit with { Motion = motion with { Shaping = [shaping] } }],
         };
 
-        Assert.False(condition: TryValidate(definition: With(shaping: withBrake), reason: out var brakeReason));
-        Assert.Contains(actualString: brakeReason, comparisonType: StringComparison.Ordinal, expectedSubstring: ".along.brake is authored without across");
-        Assert.False(condition: TryValidate(definition: With(shaping: withReverse), reason: out var reverseReason));
-        Assert.Contains(actualString: reverseReason, comparisonType: StringComparison.Ordinal, expectedSubstring: ".along.reverse is authored without across");
+        Assert.False(condition: TryValidate(definition: With(shaping: withReversalRate), reason: out var reversalRateReason));
+        Assert.Contains(actualString: reversalRateReason, comparisonType: StringComparison.Ordinal, expectedSubstring: ".along.reversalRate is authored without across");
+        Assert.False(condition: TryValidate(definition: With(shaping: withBackwardSpeed), reason: out var backwardSpeedReason));
+        Assert.Contains(actualString: backwardSpeedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: ".along.backwardSpeed is authored without across");
         Assert.True(condition: TryValidate(definition: With(shaping: clean), reason: out var cleanReason), userMessage: cleanReason);
     }
     [Fact]
