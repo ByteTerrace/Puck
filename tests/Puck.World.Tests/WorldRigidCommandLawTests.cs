@@ -117,6 +117,79 @@ public sealed class WorldRigidCommandLawTests {
         };
     }
 
+    // FallingRigidBallDocument plus an authored bodies.scaleRow naming a keyed kind=fixed "scale" row for body 0 —
+    // the same shape BodyScaleLawTests.WithScaleRow builds, added onto the falling-ball fixture rather than the
+    // bare-locomotion one so the scaled body actually has a rigid facet to advance.
+    private static WorldDefinition ScaledFallingRigidBallDocument(FixedQ4816 cellValue) {
+        var source = FallingRigidBallDocument();
+        var scaleRow = new WorldStateRow(
+            Name: WorldCellName.Parse(candidate: "scale"),
+            Kind: CellKind.Fixed,
+            Min: FixedQ4816.FromDouble(value: 0.05).Value,
+            Max: FixedQ4816.One.Value,
+            Capacity: 8,
+            Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: cellValue.Value)]
+        );
+
+        return (source with {
+            PopulationRaw = (source.Population with { ScaleRow = "scale" }),
+            StateRaw = ((source.StateRaw ?? new WorldStateSection()) with {
+                World = [.. (source.StateRaw?.World ?? []), scaleRow],
+            }),
+        });
+    }
+
+    [Fact]
+    public void ScaleRigidMassAndBoundingRadiusFollowScaleCubedAndScaleAgainstTheScaleOneControl() {
+        var authoredMass = FixedQ4816.One;
+        var authoredRadius = FixedQ4816.FromDouble(value: 0.4);
+        var half = FixedQ4816.FromDouble(value: 0.5);
+
+        using var control = Fixtures.FreshServer(definition: FallingRigidBallDocument());
+        var seat = WorldPrincipal.Seat(slot: 0);
+
+        Assert.True(condition: control.Server.ApplySession(request: new SessionRequest.Join(seat, seat.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+
+        var controlBall = control.Server.Body(index: 0)!;
+
+        Assert.Equal(expected: authoredMass, actual: controlBall.RigidMass);
+        Assert.Equal(expected: authoredRadius, actual: controlBall.RigidBoundingRadius);
+
+        using var shrunk = Fixtures.FreshServer(definition: ScaledFallingRigidBallDocument(cellValue: half));
+
+        Assert.True(condition: shrunk.Server.ApplySession(request: new SessionRequest.Join(seat, seat.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+
+        var shrunkBall = shrunk.Server.Body(index: 0)!;
+
+        Assert.Equal(expected: half, actual: shrunkBall.Scale);
+        // mass ∝ Scale³: 1 · 0.5³ = 0.125. Bounding radius ∝ Scale: 0.4 · 0.5 = 0.2.
+        Assert.Equal(expected: FixedQ4816.FromDouble(value: 0.125), actual: shrunkBall.RigidMass);
+        Assert.Equal(expected: FixedQ4816.FromDouble(value: 0.2), actual: shrunkBall.RigidBoundingRadius);
+    }
+
+    // Scale 0.05 is the garden's own authored envelope floor (state.world 'scale' row's own min); its scale^5
+    // rounds to a zero raw at Q16, the case ScaleRigid's reciprocal-of-scale construction must not divide by. A
+    // shrunk body also takes more static-contact substeps per tick (its bounding radius bounds the substep travel),
+    // so the miss-streak grace this proves against is the harder case, not merely the scale-one control
+    // PhysicsQuiescentReadsFalseWhileFallingAndTrueOnceEveryRigidBodyRests already covers.
+    [Fact]
+    public void ScaledRigidBallAtTheAuthoredEnvelopeFloorFallsAndSettlesWithoutThrowing() {
+        using var fixture = Fixtures.FreshServer(definition: ScaledFallingRigidBallDocument(cellValue: FixedQ4816.FromDouble(value: 0.05)));
+        var seat = WorldPrincipal.Seat(slot: 0);
+
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(seat, seat.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+
+        var ball = fixture.Server.Body(index: 0)!;
+
+        ball.Pose(x: 0f, y: 3f, z: 0f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+
+        for (var tick = 0; (tick < 4000); tick++) {
+            fixture.Step();
+        }
+
+        Assert.True(condition: ball.Resting, userMessage: $"the scale-0.05 ball never settled — resting={ball.Resting} v={ball.RigidVelocity} pos={ball.FixedPosition}");
+    }
+
     [Fact]
     public void PhysicsQuiescentReadsFalseWhileFallingAndTrueOnceEveryRigidBodyRests() {
         using var fixture = Fixtures.FreshServer(definition: FallingRigidBallDocument());

@@ -438,6 +438,8 @@ public sealed partial class WorldBody {
             m_restingHoldTicks = 0UL;
             m_rigidGroundContacting = false;
             m_rigidObstructionContacting = false;
+            m_rigidGroundMissStreak = 0;
+            m_rigidObstructionMissStreak = 0;
         }
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {

@@ -58,6 +58,16 @@ public sealed partial class WorldBody {
     // hit as a continuation of the unrelated floor contact.
     private bool m_rigidGroundContacting;
     private bool m_rigidObstructionContacting;
+    // Consecutive substeps a latched contact has gone unconfirmed by a fresh push — a body sitting depenetrated
+    // EXACTLY at its contact skin's minimum distance reads no push (distance >= minimum) for a run of substeps even
+    // while still touching, only re-closing the gap once gravity's own per-substep pull exceeds the fixed-point
+    // rounding left at the surface; a smaller collider (AdvanceRigid's own derivedSubsteps grows as BoundingRadius
+    // shrinks) takes proportionally more such substeps to do it. AdvanceRigid tolerates a miss streak up to that
+    // same tick's own derivedSubsteps — one full engine tick's worth of grace, however finely this tick happened to
+    // be substepped — without dropping the latch; a departure spanning MORE than one tick's substeps still clears
+    // it, so a real landing still restitutes.
+    private int m_rigidGroundMissStreak;
+    private int m_rigidObstructionMissStreak;
 
     /// <summary>Gets the number of substeps the most recent <see cref="AdvanceRigid"/> call took — the
     /// derived-count read-back <c>world.budget</c> echoes. Zero for a locomotion kit or a body never yet advanced.</summary>
@@ -84,6 +94,13 @@ public sealed partial class WorldBody {
     /// <summary>Gets whether the previous substep already had a non-walkable (obstruction) contact — the
     /// obstruction-channel restitution edge latch <see cref="AdvanceRigid"/> reads.</summary>
     public bool RigidObstructionContacting => m_rigidObstructionContacting;
+    /// <summary>Gets the ground-channel contact's current run of consecutive substeps missed without dropping its
+    /// latch — a miss streak that reaches the current tick's own derived substep count drops the latch (see
+    /// <see cref="AdvanceRigid"/>).</summary>
+    public int RigidGroundMissStreak => m_rigidGroundMissStreak;
+    /// <summary>Gets the obstruction-channel contact's current miss streak, on the same terms as
+    /// <see cref="RigidGroundMissStreak"/>.</summary>
+    public int RigidObstructionMissStreak => m_rigidObstructionMissStreak;
     /// <summary>Gets the rigid facet's mass at this body's live <see cref="Scale"/> — the authored mass at scale 1,
     /// scaled by <c>Scale³</c> (see <see cref="ScaleRigid"/>). Zero for a locomotion kit.</summary>
     public FixedQ4816 RigidMass => (m_rigid is { } rigid ? ScaleRigid(rigid: rigid).Mass : FixedQ4816.Zero);
@@ -114,9 +131,24 @@ public sealed partial class WorldBody {
 
         var scaleSquared = (m_scale * m_scale);
         var scaleCubed = (scaleSquared * m_scale);
-        var scaleFifth = (scaleCubed * scaleSquared);
-        var inverseScaleCubed = (FixedQ4816.One / scaleCubed);
-        var inverseScaleFifth = (FixedQ4816.One / scaleFifth);
+
+        // inverseScale^3 / inverseScale^5 are built by INVERTING SCALE ITSELF ONCE and then multiplying that
+        // reciprocal (>= 1 for every authored Scale <= 1) by itself — never by inverting the scale^3/scale^5
+        // magnitude directly, which underflows to a zero raw well inside the authored envelope (Scale = 0.05 has
+        // scale^5 ≈ 3.125e-7, below Q16's smallest representable positive value 2^-16 ≈ 1.526e-5) and divides by
+        // that zero. TryScaledReciprocal refuses rather than dividing by a non-positive raw (Scale is always
+        // validated positive; guarded here regardless), and every power below multiplies a value that only grows,
+        // so it wraps rather than divides if it overflows. Either refusal falls the corresponding inverse factor
+        // back to One (unscaled) — the SAME "keep the unscaled component" fallback ScaleRaw's own callers already
+        // apply per field below.
+        var inverseScale = (FusedArithmetic.TryScaledReciprocal(
+            value: m_scale.Value,
+            fractionBitsIn: FixedQ4816.FractionBitCount,
+            fractionBitsOut: FixedQ4816.FractionBitCount,
+            result: out var inverseScaleRaw
+        ) ? FixedQ4816.FromRawBits(value: inverseScaleRaw) : FixedQ4816.One);
+        var inverseScaleCubed = PositiveIntegerPower(baseValue: inverseScale, exponent: 3);
+        var inverseScaleFifth = PositiveIntegerPower(baseValue: inverseScale, exponent: 5);
 
         static long ScaleRaw(long raw, int fractionBits, FixedQ4816 factor) => (FusedArithmetic.TryMixedScaleProduct(
             a: raw,
@@ -152,6 +184,29 @@ public sealed partial class WorldBody {
             CenterOffset = (rigid.CenterOffset * m_scale),
             BoundingRadius = (rigid.BoundingRadius * m_scale),
         };
+    }
+    // baseValue^exponent by repeated single-rounding multiplication, refusing rather than wrapping on overflow —
+    // falls back to One (identity) on the first refusal, so a caller multiplying a raw by this factor leaves that
+    // raw unscaled rather than corrupted by a partially-applied power.
+    private static FixedQ4816 PositiveIntegerPower(FixedQ4816 baseValue, int exponent) {
+        var accumulatorRaw = FixedQ4816.One.Value;
+
+        for (var step = 0; (step < exponent); step++) {
+            if (!FusedArithmetic.TryMixedScaleProduct(
+                a: accumulatorRaw,
+                fractionBitsA: FixedQ4816.FractionBitCount,
+                b: baseValue.Value,
+                fractionBitsB: FixedQ4816.FractionBitCount,
+                fractionBitsOut: FixedQ4816.FractionBitCount,
+                result: out var scaled
+            )) {
+                return FixedQ4816.One;
+            }
+
+            accumulatorRaw = scaled;
+        }
+
+        return FixedQ4816.FromRawBits(value: accumulatorRaw);
     }
     /// <summary>Gets the rigid facet's world-space centre of mass — <c>root + orientation·CenterOffset</c>, the
     /// point every substep actually rotates and translates about (see <see cref="AdvanceRigid"/>). For a rolling or
@@ -440,26 +495,30 @@ public sealed partial class WorldBody {
             // its own coupled slip-friction solve, so a wall hit bounces on its own first contact even while the
             // floor contact underneath has been continuous for many ticks (see the two latch fields above).
             if (resolution.ObstructionNormal != FixedVector3.Zero) {
+                m_rigidObstructionMissStreak = 0;
+
                 ResolveRigidContact(
                     normal: resolution.ObstructionNormal,
                     preVelocity: preVelocity,
                     contacting: ref m_rigidObstructionContacting,
                     rigid: in rigid
                 );
+            } else if (m_rigidObstructionMissStreak < derivedSubsteps) {
+                m_rigidObstructionMissStreak++;
             } else {
                 m_rigidObstructionContacting = false;
             }
 
             if (resolution.Grounded) {
-                // Grounded (standing on a walkable surface) and pushed (this substep actually needed a depenetration
-                // correction) are different questions: a resting or rolling body sits exactly at the surface most
-                // substeps, needing no push, so GroundNormal reads Zero there even though Grounded stays true. Keying
-                // the rising-edge latch on GroundNormal != Zero (rather than Grounded) let every such no-push substep
-                // read as the body having LEFT the ground, so the very next pushed substep read as a fresh landing and
-                // re-fired restitution — a resting/rolling body's vertical velocity never reached zero. UnitY is the
-                // same up this call's own ResolveSweep already assumes, so it stands in for the surface normal on a
-                // no-push substep, where friction/rolling-resistance still apply against a still-true contact.
+                // GroundNormal reads Zero on a genuinely grounded substep only through WorldAdjacencyContactField's
+                // own cross-authority merge (its `return new ContactResolution(Grounded: ..., ObstructionNormal: ...)`
+                // omits GroundNormal, defaulting it) — the local-only FixedFieldContactSolver always sets a walkable
+                // GroundNormal together with Grounded. UnitY is the same up ResolveSweep already assumes, so it
+                // stands in for the surface normal on that path, where friction/rolling-resistance still apply
+                // against the still-true contact.
                 var groundNormal = ((resolution.GroundNormal != FixedVector3.Zero) ? resolution.GroundNormal : UnitY);
+
+                m_rigidGroundMissStreak = 0;
 
                 ResolveRigidContact(
                     normal: groundNormal,
@@ -474,6 +533,8 @@ public sealed partial class WorldBody {
                     rate: rigid.RollingFriction,
                     seconds: subSeconds
                 );
+            } else if (m_rigidGroundMissStreak < derivedSubsteps) {
+                m_rigidGroundMissStreak++;
             } else {
                 m_rigidGroundContacting = false;
             }

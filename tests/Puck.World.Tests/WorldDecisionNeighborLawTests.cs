@@ -249,8 +249,13 @@ public sealed class WorldDecisionNeighborLawTests {
             }
         }
         Populate(subject); Populate(control);
+        // Wide enough that every hot callee the measured window below allocates against has already promoted to
+        // Tier1 before that window opens — a background tier-up recompilation landing inside the measured window
+        // reads as extra allocation on whichever of subject/control's own Run it lands in, even though steady-state
+        // allocation is identical (the same JIT-tiering flake WorldFlockScaleLawTests' own dense-social-flock case
+        // widened past).
         static (long Bytes, TimeSpan Time) Run(WorldFixture f) {
-            for (var i = 0; i < 512; i++) { f.Step(504); _ = WorldRuntimeStateHash.HashAuthoritative(f.Server, 0); }
+            for (var i = 0; i < 2048; i++) { f.Step(504); _ = WorldRuntimeStateHash.HashAuthoritative(f.Server, 0); }
             var bytes = GC.GetAllocatedBytesForCurrentThread(); var start = Stopwatch.GetTimestamp();
             for (var i = 0; i < 1000; i++) { f.Step(504); _ = WorldRuntimeStateHash.HashAuthoritative(f.Server, 0); }
             return (GC.GetAllocatedBytesForCurrentThread() - bytes, Stopwatch.GetElapsedTime(start));

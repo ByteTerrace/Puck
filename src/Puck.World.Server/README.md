@@ -441,16 +441,27 @@ time it clips a wall — so each carries its OWN rising-edge restitution latch
 (`m_rigidGroundContacting`/`m_rigidObstructionContacting`, `WorldBody.ResolveRigidContact`):
 restitution fires only on a genuine impact on THAT channel, never on
 continued contact, which would read gravity's own per-tick pull (or ongoing
-sliding contact) as a fresh hit and never let the body settle. The ground
-latch keys on `ContactResolution.Grounded` (standing on a walkable surface),
-never on whether THIS substep actually needed a depenetration push
-(`GroundNormal != Zero`) — a resting or rolling body sits exactly at the
-surface most substeps, needing no push, so gating the latch on the push alone
-read every such substep as having left the ground and the next pushed one as
-a fresh landing, re-firing restitution and keeping a rolling body's vertical
-velocity from ever settling to zero. A no-push grounded substep still runs
-friction/rolling-resistance, against the same `UnitY` the static sweep's own
-up axis already assumes. Tangential
+sliding contact) as a fresh hit and never let the body settle. A body
+depenetrated exactly to its contact skin's minimum distance reads no push
+(`distance >= minimum`) for a run of substeps even while still touching,
+until gravity's own per-substep pull re-closes the gap past fixed-point
+rounding — a smaller collider needs proportionally more such substeps
+(`AdvanceRigid`'s own derived substep count grows as `BoundingRadius`
+shrinks). Dropping the latch on the first such miss read every one of those
+substeps as having left the surface and the next contacting one as a fresh
+landing, re-firing restitution on a body that never actually left the ground.
+`m_rigidGroundMissStreak`/`m_rigidObstructionMissStreak` (`WorldBody.RigidGroundMissStreak`/
+`RigidObstructionMissStreak`) count each channel's run of consecutive misses;
+the latch drops only once a streak reaches that SAME tick's own derived
+substep count — one full engine tick's worth of grace, however finely the
+tick happened to be substepped — so a boundary miss rides it out while a
+departure spanning more than one tick's substeps still clears it and a real
+landing still restitutes. `GroundNormal` reads Zero on a genuinely grounded
+substep only through `WorldAdjacencyContactField`'s own cross-authority
+merge, which omits it from the `ContactResolution` it returns — the
+local-only solver always sets a walkable `GroundNormal` together with
+`Grounded`; that path's friction/rolling-resistance run against the same
+`UnitY` the static sweep's own up axis already assumes instead. Tangential
 (slip) friction at either contact is a real coupled Coulomb impulse, not a
 decay curve: the contact-point velocity (linear plus the rotational
 contribution `ω × r`, `r` the collider's bounding radius along the contact
@@ -521,12 +532,13 @@ quiescent verdict; the compiled rest/substep/pair-restitution policy and the
 last tick's solver work (pair resolutions, worst substep count) are
 `world.budget`'s own `rigid` segment. Checkpoint (`IntegrationResidue`)
 and the authoritative pose hash (`WorldReplaySnapshot.HashState`) both cover
-linear/angular velocity, the resting latch and hold-tick counter, and BOTH
-restitution edge latches. A kit swap that adds or drops the `rigid` facet
-resets every rigid-solver field (`WorldBody.RecompileKit`) rather than
-leaking the other kind of body's stale state forward; a live retune that
-keeps the facet carries its velocity through unchanged. Cross-world transfer
-of a rigid body is refused by name (`WorldInstanceHost.Transfers.cs`).
+linear/angular velocity, the resting latch and hold-tick counter, BOTH
+restitution edge latches, and both channels' miss streaks. A kit swap that
+adds or drops the `rigid` facet resets every rigid-solver field
+(`WorldBody.RecompileKit`) rather than leaking the other kind of body's stale
+state forward; a live retune that keeps the facet carries its velocity
+through unchanged. Cross-world transfer of a rigid body is refused by name
+(`WorldInstanceHost.Transfers.cs`).
 
 World rules can carry [decision policies](../Puck.World.Schema/README.md#decision-policies).
 `WorldServer.Decisions.cs` owns each binding's selected option, local PCG state,
