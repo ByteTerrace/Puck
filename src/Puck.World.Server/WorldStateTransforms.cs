@@ -21,6 +21,7 @@ public static partial class WorldStateTransforms {
         WorldStateTransform.SetMask setMask => [setMask.Row],
         WorldStateTransform.Combine combine => [combine.Target],
         WorldStateTransform.Push push => [push.Row],
+        WorldStateTransform.MapBoard mapped => [mapped.Target],
         _ => [],
     };
 
@@ -52,6 +53,7 @@ public static partial class WorldStateTransforms {
                 WorldStateTransform.SetMask setMask => TrySetMask(definition, rows, setMask, out reason),
                 WorldStateTransform.Combine combine => TryCombine(definition, rows, combine, out reason),
                 WorldStateTransform.Push push => TryPush(rows, push, out reason),
+                WorldStateTransform.MapBoard mapped => TryMapBoard(definition, rows, mapped, out reason),
                 _ => Refuse("unknown state transform", out reason),
             };
         } catch (OverflowException exception) {

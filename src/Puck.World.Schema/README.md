@@ -46,6 +46,9 @@ Rule operands accept these bounded channels:
 | `$board:line:<row>:<length>:<value>:<exact\|atLeast>` | 1 when a matching line exists, otherwise 0 |
 | `$board:pathCost:<row>:<target>:<maxCost>:<maxVisits>` | Minimum terrain entry cost, -1 when unreachable/unaffordable, -2 when the visit budget is exhausted |
 | `$board:mask:<row>:<min>:<max>` | The 64-bit mask of cells whose value lies in min..max (bit c is cell ordinal c); the topology holds at most 64 cells |
+| `$board:image:<row>:<element>:<min>:<max>` | That mask carried through one point-group element of the topology |
+| `$board:canonicalMask:<row>:<min>:<max>` | The least image mask over every element: one number for a position and all its rotations and mirrors |
+| `$board:canonical:<row>` | The least 64-bit fingerprint of the whole board's values over every element, for boards of any size: pushed into a history ring, repetition up to symmetry is a pattern |
 | `$board:cellOf:<row>:<bodyRef>` | The Grid cell a body's resolved world position falls in, or -1 |
 | `$board:offset:<row>:<dx>:<dz>` | The cell reached by an arbitrary (dx, dz) grid step from the key cell, or -1 |
 | `$phase:<row>:<current\|active\|ready\|sequence\|round\|deadline\|direction\|skipped>` | Persisted phase fact; active is -1 outside sequential phases |
@@ -58,6 +61,16 @@ key — `cellOf` takes a `bodyRef` in its place, the same `body:<n>`/
 topology — the only kind carrying a rectangular world-space frame
 (`CompiledWorldTopology.Origin`/`CellSize`, the same origin/cellSize every
 topology declares); a `Hex`/`Ring` row refuses them by name at compile.
+Every discrete topology carries its point group, derived from its shape and
+never authored: a square grid the eight elements `identity`, `rot90`,
+`rot180`, `rot270`, `mirrorX`, `mirrorZ`, `mirrorMain`, `mirrorAnti`; a
+rectangle the four without quarter turns; a hex board `rot60`..`rot300` and
+`mirror0`..`mirror5`; a ring the identity alone. `world.topology <topology>
+[<cell>]` lists them and a cell's image under each. `mapBoard` (`target`,
+`source`, `element`) writes a board carried through an element, which is how
+rules authored from one side's view read the other side's position through
+`rot180`; the `boardImage` (`topology`, `element`) token does the same to a
+mask inside an expression.
 A grid's `band` is the vertical half-extent about its origin's Y a position
 must lie within for `cellOf` to answer a cell; 0 (the default) answers any
 height, so a table's board authors a band and a piece on the floor beneath
@@ -81,7 +94,7 @@ serialized as exactly 64 hexadecimal digits, and supports 256 dealt entries.
 
 The closed `transformState` effect and transaction step carry one of `transfer`,
 `setRay`, `moveToken`, `completePhase`, `turnOrder`, `shuffle`, `sort`,
-`setMask`, `combine`, `push`, or `observe`. `setMask` (`row`, `mask`, `maskKey`,
+`setMask`, `combine`, `push`, `mapBoard`, or `observe`. `setMask` (`row`, `mask`, `maskKey`,
 `value`) writes one value into every cell of a board (at most 64 cells) whose
 bit is set in a mask read from an integer cell, so a mask built by
 `$board:mask`, `boardShift`, and the bit operators lands back on the board;

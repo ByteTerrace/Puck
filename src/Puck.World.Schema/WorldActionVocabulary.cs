@@ -134,6 +134,7 @@ public sealed record WorldValueExpression(IReadOnlyList<WorldValueToken> Tokens)
 [JsonDerivedType(typeof(WorldValueToken.BitField), typeDiscriminator: "bitField")]
 [JsonDerivedType(typeof(WorldValueToken.BitInsert), typeDiscriminator: "bitInsert")]
 [JsonDerivedType(typeof(WorldValueToken.BoardShift), typeDiscriminator: "boardShift")]
+[JsonDerivedType(typeof(WorldValueToken.BoardImage), typeDiscriminator: "boardImage")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldValueToken {
     /// <summary>A directed impression query, with its facet's declared numeric kind.</summary>
@@ -254,6 +255,12 @@ public abstract record WorldValueToken {
     /// <param name="Topology">A discrete topology of <c>state.lattices</c> with at most 64 cells.</param>
     /// <param name="Direction">A direction of that topology.</param>
     public sealed record BoardShift(string Topology, string Direction) : WorldValueToken;
+    /// <summary>Consumes one Int mask over the named topology's cells and pushes it carried through a point-group
+    /// element of that topology (a rotation or mirror of the board), so a rule authored from one side's view reads
+    /// the other side's board through the half turn. Int only.</summary>
+    /// <param name="Topology">A discrete topology of <c>state.lattices</c> with at most 64 cells.</param>
+    /// <param name="Element">An element name <c>world.topology</c> lists for that topology.</param>
+    public sealed record BoardImage(string Topology, string Element) : WorldValueToken;
 }
 
 /// <summary>How a rule-triggered body designation chooses its target.</summary>

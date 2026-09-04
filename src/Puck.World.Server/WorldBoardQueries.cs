@@ -28,6 +28,19 @@ public static class WorldBoardQueries {
         if (query.Kind == WorldBoardQueryKind.Line) {
             return HasLine(query, values) ? 1 : 0;
         }
+        if (query.Kind == WorldBoardQueryKind.Image) {
+            return ImageMask(topology, values, query.Direction, query.Value, query.Upper);
+        }
+        if (query.Kind == WorldBoardQueryKind.CanonicalMask) {
+            var least = long.MaxValue;
+            for (var element = 0; element < topology.ElementCount; element++) {
+                least = Math.Min(least, ImageMask(topology, values, element, query.Value, query.Upper));
+            }
+            return least;
+        }
+        if (query.Kind == WorldBoardQueryKind.Canonical) {
+            return CanonicalFingerprint(topology, values);
+        }
         if (query.Kind == WorldBoardQueryKind.Mask) {
             var mask = 0L;
             for (var ordinal = 0; ordinal < topology.CellCount && ordinal < WorldBoardMask.MaxCells; ordinal++) {
@@ -57,6 +70,62 @@ public static class WorldBoardQueries {
             }
         }
         return -1;
+    }
+
+    // The mask of the range's cells carried through one element: bit image(c) for every c in range.
+    private static long ImageMask(CompiledWorldTopology topology, ReadOnlySpan<long> values, int element, long lower, long upper) {
+        var mask = 0L;
+        for (var cell = 0; cell < topology.CellCount && cell < WorldBoardMask.MaxCells; cell++) {
+            if (values[cell] >= lower && values[cell] <= upper) {
+                var image = topology.Image(element, cell);
+                if (image < WorldBoardMask.MaxCells) {
+                    mask |= 1L << image;
+                }
+            }
+        }
+        return mask;
+    }
+
+    // The least FNV-1a fingerprint of the board's values over every element: the same number for every board in
+    // one symmetry orbit, so a ring of fingerprints answers repetition up to symmetry.
+    private static long CanonicalFingerprint(CompiledWorldTopology topology, ReadOnlySpan<long> values) {
+        var least = ulong.MaxValue;
+        for (var element = 0; element < topology.ElementCount; element++) {
+            // The image board holds value[c] at image(c). The fold is a commutative sum of per-pair mixes, so it
+            // depends only on the set of (image ordinal, value) pairs and not on the order cells are walked.
+            var hash = 0UL;
+            for (var cell = 0; cell < topology.CellCount; cell++) {
+                var pair = (((ulong)topology.Image(element, cell)) * 0x9E3779B97F4A7C15UL) ^ ((ulong)values[cell]);
+                pair *= 0xBF58476D1CE4E5B9UL;
+                pair ^= pair >> 31;
+                pair *= 0x94D049BB133111EBUL;
+                pair ^= pair >> 29;
+                hash += pair;
+            }
+            least = Math.Min(least, hash);
+        }
+        return (long)least;
+    }
+
+    /// <summary>Carries every set bit of a cell mask through a point-group element.</summary>
+    /// <param name="topology">The compiled topology.</param>
+    /// <param name="element">The element ordinal.</param>
+    /// <param name="mask">Bit c set for cell ordinal c.</param>
+    /// <returns>The image mask.</returns>
+    public static long ImageOfMask(CompiledWorldTopology topology, int element, long mask) {
+        var bits = (ulong)mask;
+        var image = 0UL;
+        while (bits != 0UL) {
+            var cell = System.Numerics.BitOperations.TrailingZeroCount(bits);
+            bits &= bits - 1UL;
+            if (cell < topology.CellCount) {
+                var carried = topology.Image(element, cell);
+                if (carried < WorldBoardMask.MaxCells) {
+                    image |= 1UL << carried;
+                }
+            }
+        }
+        return (long)image;
     }
 
     /// <summary>Moves every set bit of a cell mask to its neighbour in the query's direction, dropping a bit whose

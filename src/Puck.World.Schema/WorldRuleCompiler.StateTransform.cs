@@ -87,6 +87,14 @@ public static partial class WorldRuleCompiler {
                     throw Invalid($"setMask requires a board of at most {WorldBoardMask.MaxCells} cells, an integer mask cell, and an admitted value");
                 }
                 break;
+            case WorldStateTransform.MapBoard mapped:
+                var mappedTarget = Row(mapped.Target);
+                var mappedSource = Row(mapped.Source);
+                if (mappedTarget.Board is not { } mappedBoard || WorldTopologyCompilation.Find(definition.StateRaw, mappedBoard.Topology) is not { } mappedTopology ||
+                    mappedSource.Board?.Topology != mappedBoard.Topology || mappedSource.Kind != mappedTarget.Kind || mappedTopology.Element(mapped.Element ?? string.Empty) < 0) {
+                    throw Invalid("mapBoard requires source and target boards of one kind over one topology and a symmetry element of that topology");
+                }
+                break;
             case WorldStateTransform.Push push:
                 var ring = Row(push.Row);
                 if (ring.History is null || ring.ClampToEnvelope(push.Value) != push.Value) {

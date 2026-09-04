@@ -927,6 +927,10 @@ public sealed partial class WorldServer {
                     stack[top - 1] = WorldBoardQueries.ShiftMask(token.Board!, stack[top - 1]);
                     continue;
                 }
+                if (token.Operation == WorldExpressionOp.BoardImage) {
+                    stack[top - 1] = WorldBoardQueries.ImageOfMask(token.Board!.Topology, token.Board.Direction, stack[top - 1]);
+                    continue;
+                }
                 if (token.Operation == WorldExpressionOp.BitInsert) {
                     var width = stack[--top];
                     var offset = stack[--top];

@@ -134,6 +134,49 @@ public static partial class WorldStateTransforms {
         }
     }
 
+    // The image board holds source[c] at image(c); cells at the source's empty value are omitted when the target's
+    // empty value agrees, so a sparse board stays sparse.
+    private static bool TryMapBoard(WorldDefinition definition, WorldStateRow[] rows, WorldStateTransform.MapBoard mapped, out string reason) {
+        if (!TryFind(rows, mapped.Target, out var targetIndex, out reason) || !TryFind(rows, mapped.Source, out var sourceIndex, out reason)) {
+            return false;
+        }
+        var target = rows[targetIndex];
+        var source = rows[sourceIndex];
+        if (target.Board is not { } board || WorldTopologyCompilation.Find(definition.StateRaw, board.Topology) is not { } topology ||
+            source.Board?.Topology != board.Topology || target.Kind != source.Kind) {
+            return Refuse("mapBoard requires source and target boards of one kind over one topology", out reason);
+        }
+        var element = topology.Element(mapped.Element ?? string.Empty);
+        if (element < 0) {
+            return Refuse($"'{mapped.Element}' is not a symmetry element of '{board.Topology}'", out reason);
+        }
+        var count = topology.CellCount;
+        var scratch = ArrayPool<long>.Shared.Rent(count);
+        try {
+            var values = scratch.AsSpan(0, count);
+            WorldBoardQueries.Read(source, topology, values);
+            var dense = board.Empty != source.Board.Empty;
+            var written = 0;
+            for (var cell = 0; cell < count; cell++) {
+                if (dense || values[cell] != source.Board.Empty) {
+                    written++;
+                }
+            }
+            var cells = new WorldStateCell[written];
+            var next = 0;
+            for (var cell = 0; cell < count; cell++) {
+                if (dense || values[cell] != source.Board.Empty) {
+                    cells[next++] = new(topology.CellName(topology.Image(element, cell)), values[cell]);
+                }
+            }
+            Array.Sort(cells, static (a, b) => string.CompareOrdinal(a.Key.Value, b.Key.Value));
+            rows[targetIndex] = target with { Cells = cells };
+            return true;
+        } finally {
+            ArrayPool<long>.Shared.Return(scratch);
+        }
+    }
+
     private static bool Member(WorldBoardCombine operation, bool a, bool b) => operation switch {
         WorldBoardCombine.And => a && b,
         WorldBoardCombine.Or => a || b,

@@ -64,6 +64,19 @@ public sealed partial class WorldStateCommandModule {
                 return new CommandResult(Output: server.DescribePatterns());
             });
         yield return CommandDefinition.WithWireArgs(
+            name: "world.topology", bindability: CommandBindability.Unbindable,
+            description: "Lists a discrete topology's point-group elements, and with a cell key, that cell's image under each: world.topology <topology> [<cell>].",
+            routing: CommandRouting.Immediate,
+            handler: (context, args) => {
+                if (args.Count is < 1 or > 2) {
+                    return CommandResult.Usage("world.topology", "<topology> [<cell>]");
+                }
+                if (!authority.TryResolveServer(context, "world.topology", out var server, out var error)) {
+                    return error;
+                }
+                return new CommandResult(Output: server.DescribeSymmetry(topologyName: args[0].ToString(), cellKey: (args.Count == 2) ? args[1].ToString() : null));
+            });
+        yield return CommandDefinition.WithWireArgs(
             name: "world.match", bindability: CommandBindability.Unbindable,
             description: "Walks one word through a pattern and narrates it: world.match <pattern> <row> [<attribute>] for a keyed row or zone, world.match <pattern> <board-row> <origin-cell> <direction|any> for a board.",
             routing: CommandRouting.Immediate,

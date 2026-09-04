@@ -5217,6 +5217,27 @@
                                           "direction"
                                         ],
                                         "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes one Int mask over the named topology\u0027s cells and pushes it carried through a point-group element of that topology (a rotation or mirror of the board), so a rule authored from one side\u0027s view reads the other side\u0027s board through the half turn. Int only.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "boardImage"
+                                          },
+                                          "topology": {
+                                            "description": "A discrete topology of state.lattices with at most 64 cells.",
+                                            "type": "string"
+                                          },
+                                          "element": {
+                                            "description": "An element name world.symmetry lists for that topology.",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "topology",
+                                          "element"
+                                        ],
+                                        "additionalProperties": false
                                       }
                                     ]
                                   }
@@ -12215,6 +12236,32 @@
                               "additionalProperties": false
                             },
                             {
+                              "description": "Writes a board carried through one point-group element of its topology into another board over the same topology: the half turn is how one side\u0027s rules read the other side\u0027s position.",
+                              "properties": {
+                                "$type": {
+                                  "const": "mapBoard"
+                                },
+                                "target": {
+                                  "description": "The board row written.",
+                                  "type": "string"
+                                },
+                                "source": {
+                                  "description": "The board row read.",
+                                  "type": "string"
+                                },
+                                "element": {
+                                  "description": "An element name world.symmetry lists for the topology.",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "target",
+                                "source",
+                                "element"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
                               "description": "Moves a token along an affordable route, debiting movement points in the same candidate.",
                               "properties": {
                                 "$type": {
@@ -13025,6 +13072,32 @@
                                         "required": [
                                           "row",
                                           "value"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Writes a board carried through one point-group element of its topology into another board over the same topology: the half turn is how one side\u0027s rules read the other side\u0027s position.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "mapBoard"
+                                          },
+                                          "target": {
+                                            "description": "The board row written.",
+                                            "type": "string"
+                                          },
+                                          "source": {
+                                            "description": "The board row read.",
+                                            "type": "string"
+                                          },
+                                          "element": {
+                                            "description": "An element name world.symmetry lists for the topology.",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "target",
+                                          "source",
+                                          "element"
                                         ],
                                         "additionalProperties": false
                                       },

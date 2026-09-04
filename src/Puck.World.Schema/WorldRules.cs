@@ -696,6 +696,8 @@ public enum WorldExpressionOp : byte {
     /// <summary>Topology-aware mask shift: every set bit moves to its neighbour in the compiled direction, and a bit
     /// with no neighbour that way is dropped rather than wrapped (Int, unary).</summary>
     BoardShift,
+    /// <summary>A mask carried through one point-group element of the compiled topology (Int, unary).</summary>
+    BoardImage,
     /// <summary>Sign as Int -1, 0, 1 (unary, either kind).</summary>
     Sign,
 }

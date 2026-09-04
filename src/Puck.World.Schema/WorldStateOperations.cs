@@ -94,6 +94,7 @@ public enum WorldZoneSelector : byte {
 [JsonDerivedType(typeof(WorldStateTransform.SetMask), "setMask")]
 [JsonDerivedType(typeof(WorldStateTransform.Combine), "combine")]
 [JsonDerivedType(typeof(WorldStateTransform.Push), "push")]
+[JsonDerivedType(typeof(WorldStateTransform.MapBoard), "mapBoard")]
 [JsonDerivedType(typeof(WorldStateTransform.MoveToken), "moveToken")]
 [JsonDerivedType(typeof(WorldStateTransform.Observe), "observe")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -168,6 +169,13 @@ public abstract record WorldStateTransform {
     /// <param name="MaskKey">The cell of that row, or null for its slot cell.</param>
     /// <param name="Value">The value written to every masked cell.</param>
     public sealed record SetMask(string Row, string Mask, string? MaskKey = null, long Value = 0) : WorldStateTransform;
+
+    /// <summary>Writes a board carried through one point-group element of its topology into another board over the
+    /// same topology: the half turn is how one side's rules read the other side's position.</summary>
+    /// <param name="Target">The board row written.</param>
+    /// <param name="Source">The board row read.</param>
+    /// <param name="Element">An element name <c>world.topology</c> lists for the topology.</param>
+    public sealed record MapBoard(string Target, string Source, string Element) : WorldStateTransform;
 
     /// <summary>Appends one value to a history row's ring, overwriting the oldest slot once the ring is full, and
     /// advances its cursor by one.</summary>

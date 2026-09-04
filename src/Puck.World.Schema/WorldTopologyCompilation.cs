@@ -40,7 +40,7 @@ public sealed record WorldStateBoard(string Topology, long Empty = 0);
 
 /// <summary>A compiled immutable adjacency table. Absent neighbours are -1. Grid directions are N, NE, E, SE,
 /// S, SW, W, NW; hex directions are E, NE, NW, W, SW, SE; ring directions are forward and backward.</summary>
-public sealed class CompiledWorldTopology {
+public sealed partial class CompiledWorldTopology {
     private readonly int[] m_neighbours;
     private readonly string[] m_keys;
     private readonly WorldCellName[] m_names;
@@ -52,8 +52,11 @@ public sealed class CompiledWorldTopology {
     private readonly FixedQ4816 m_band;
 
     internal CompiledWorldTopology(WorldTopologyKind kind, int count, int directions, int[] neighbours,
-        int width, int depth, WorldTopologyWrap wrap, FixedVector3 origin, FixedQ4816 cellSize, FixedQ4816 band) {
+        int width, int depth, WorldTopologyWrap wrap, FixedVector3 origin, FixedQ4816 cellSize, FixedQ4816 band,
+        int[][] images, string[] elementNames) {
         m_band = band;
+        m_images = images;
+        m_elementNames = elementNames;
         Kind = kind;
         CellCount = count;
         DirectionCount = directions;
@@ -315,6 +318,7 @@ public static class WorldTopologyCompilation {
                 neighbours[cell * directions.Length + direction] = indices.TryGetValue((x,y), out var next) ? next : -1;
             }
         }
+        var (images, elementNames) = CompiledWorldTopology.BuildSymmetry(topology.Kind, topology.Width, topology.Depth, coordinates, indices);
         return new(topology.Kind, coordinates.Count, directions.Length, neighbours, topology.Width, topology.Depth, topology.Wrap,
             new FixedVector3(
                 X: FixedQ4816.FromDouble(topology.Origin.X),
@@ -322,6 +326,8 @@ public static class WorldTopologyCompilation {
                 Z: FixedQ4816.FromDouble(topology.Origin.Z)
             ),
             FixedQ4816.FromDouble(topology.CellSize),
-            FixedQ4816.FromDouble(topology.Band));
+            FixedQ4816.FromDouble(topology.Band),
+            images,
+            elementNames);
     }
 }

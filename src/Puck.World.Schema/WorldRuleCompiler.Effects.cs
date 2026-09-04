@@ -699,6 +699,7 @@ public static partial class WorldRuleCompiler {
                 WorldValueToken.BitField => IntArity(WorldExpressionOp.BitField, 3),
                 WorldValueToken.BitInsert => IntArity(WorldExpressionOp.BitInsert, 4),
                 WorldValueToken.BoardShift shift => ResolveBoardShift(shift),
+                WorldValueToken.BoardImage image => ResolveBoardImage(image),
                 null => throw Malformed("contains a null token"),
                 _ => throw Malformed($"contains unsupported token '{authored[index].GetType().Name}'"),
             };
@@ -791,6 +792,20 @@ public static partial class WorldRuleCompiler {
             Require(WorldExpressionOp.BoardShift, 1);
             RequireKind(WorldExpressionOp.BoardShift, depth - 1, CellKind.Int);
             return new CompiledWorldExpressionToken(Operation: WorldExpressionOp.BoardShift, Board: new CompiledWorldBoardQuery(topology, WorldBoardQueryKind.Neighbour, Direction: direction));
+        }
+        CompiledWorldExpressionToken ResolveBoardImage(WorldValueToken.BoardImage image) {
+            if (kind != CellKind.Int) { throw Malformed("token 'BoardImage' is admitted in kind=int expressions only"); }
+            if (WorldTopologyCompilation.Find(definition.StateRaw, image.Topology ?? string.Empty) is not { } topology) {
+                throw Malformed($"token 'BoardImage' names no discrete topology '{image.Topology}'");
+            }
+            if (topology.CellCount > WorldBoardMask.MaxCells) {
+                throw Malformed($"token 'BoardImage' carries a mask of at most {WorldBoardMask.MaxCells} cells; '{image.Topology}' has {topology.CellCount}");
+            }
+            var element = topology.Element(image.Element ?? string.Empty);
+            if (element < 0) { throw Malformed($"token 'BoardImage' names no symmetry element '{image.Element}' of '{image.Topology}'"); }
+            Require(WorldExpressionOp.BoardImage, 1);
+            RequireKind(WorldExpressionOp.BoardImage, depth - 1, CellKind.Int);
+            return new CompiledWorldExpressionToken(Operation: WorldExpressionOp.BoardImage, Board: new CompiledWorldBoardQuery(topology, WorldBoardQueryKind.Image, Direction: element));
         }
         CompiledWorldExpressionToken IntArity(WorldExpressionOp operation, int arity) {
             if (kind != CellKind.Int) { throw Malformed($"token '{operation}' is admitted in kind=int expressions only"); }

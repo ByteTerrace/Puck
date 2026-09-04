@@ -349,4 +349,28 @@ public sealed partial class WorldServer {
             return $"patterns {m_patterns.Count} compiled, {states} state(s), word <= {WorldPatternCapacity.MaxWord} token(s) per read";
         }
     }
+
+    /// <summary>Echoes a topology's point group: every element by name, and with a cell, that cell's image under each.</summary>
+    /// <param name="topologyName">A discrete topology of <c>state.lattices</c>.</param>
+    /// <param name="cellKey">A cell key, or null for the element list alone.</param>
+    /// <returns>A deterministic, headless-safe read-back, or a refusal by name.</returns>
+    public string DescribeSymmetry(string topologyName, string? cellKey) {
+        lock (m_authorityGate) {
+            if (WorldTopologyCompilation.Find(m_definition.StateRaw, topologyName) is not { } topology) {
+                return $"[world.topology: '{topologyName}' names no discrete topology]";
+            }
+
+            var parts = new List<string>();
+            var cell = -1;
+
+            if (cellKey is not null && !topology.TryCell(cellKey, out cell)) {
+                return $"[world.topology: '{cellKey}' is not a cell of '{topologyName}']";
+            }
+            for (var element = 0; element < topology.ElementCount; element++) {
+                parts.Add((cell < 0) ? topology.ElementName(element) : $"{topology.ElementName(element)}→{topology.Key(topology.Image(element, cell))}");
+            }
+
+            return $"[world.topology: {topologyName} kind={topology.Kind} elements={topology.ElementCount} | {string.Join(' ', parts)}]";
+        }
+    }
 }

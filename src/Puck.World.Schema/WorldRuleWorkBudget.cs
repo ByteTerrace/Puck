@@ -227,6 +227,10 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 var ring = WorldDefinitionRows.FindStateRow(definition.State, push.Row)!;
                 cost += 2L * (ring.History?.Capacity ?? 1);
                 break;
+            case WorldStateTransform.MapBoard mapped:
+                var mappedTarget = WorldDefinitionRows.FindStateRow(definition.State, mapped.Target)!;
+                cost += 2L * WorldTopologyCompilation.Find(definition.StateRaw, mappedTarget.Board!.Topology)!.CellCount;
+                break;
             case WorldStateTransform.Combine combine:
                 var combined = WorldDefinitionRows.FindStateRow(definition.State, combine.Target)!;
                 cost += 4L * WorldTopologyCompilation.Find(definition.StateRaw, combined.Board!.Topology)!.CellCount;
@@ -253,6 +257,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
             var visits = board.Kind switch {
                 WorldBoardQueryKind.Line => (long)board.Topology.CellCount * board.Topology.DirectionCount * (board.Length + 2),
                 WorldBoardQueryKind.PathCost => (long)(board.MaxVisits + 1) * (board.Topology.CellCount + board.Topology.DirectionCount),
+                WorldBoardQueryKind.Canonical or WorldBoardQueryKind.CanonicalMask => (long)board.Topology.CellCount * board.Topology.ElementCount,
                 _ => board.Topology.CellCount,
             };
             return board.Topology.CellCount + visits;
