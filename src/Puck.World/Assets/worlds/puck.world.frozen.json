@@ -476,7 +476,7 @@
       "kind": "Producer",
       "name": "wander",
       "operations": [
-        "ProduceWanderIntent"
+        "ProduceSteeringIntent"
       ],
       "version": "puck.body-motion.v1"
     },

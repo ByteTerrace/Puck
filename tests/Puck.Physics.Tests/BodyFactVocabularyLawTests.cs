@@ -39,12 +39,12 @@ public sealed class BodyFactVocabularyLawTests {
 
         // Bit order, not the order the caller happened to write them in.
         Assert.Equal(
-            actual: BodyFactVocabulary.Describe(facts: (BodyFacts.Climbing | BodyFacts.Falling | BodyFacts.Airborne)),
-            expected: "airborne|falling|climbing"
+            actual: BodyFactVocabulary.Describe(facts: (BodyFacts.HoldingUnwalkable | BodyFacts.Falling | BodyFacts.Airborne)),
+            expected: "airborne|falling|holdingunwalkable"
         );
         Assert.Equal(
             actual: BodyFactVocabulary.Describe(facts: BodyFacts.All),
-            expected: "grounded|airborne|rising|falling|inmedium|atmediumband|climbing|flying|resting"
+            expected: "grounded|airborne|rising|falling|inmedium|atmediumband|holdingunwalkable|unsupported|resting"
         );
     }
     [Fact]

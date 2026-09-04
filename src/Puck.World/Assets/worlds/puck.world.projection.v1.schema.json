@@ -4576,8 +4576,8 @@
                                 "AffectedBy",
                                 "InMedium",
                                 "AtMediumBand",
-                                "Climbing",
-                                "Flying",
+                                "HoldingUnwalkable",
+                                "Unsupported",
                                 "Resting"
                               ]
                             }
@@ -4602,8 +4602,8 @@
                                 "AffectedBy",
                                 "InMedium",
                                 "AtMediumBand",
-                                "Climbing",
-                                "Flying",
+                                "HoldingUnwalkable",
+                                "Unsupported",
                                 "Resting"
                               ]
                             },
@@ -5343,8 +5343,8 @@
                                           "AffectedBy",
                                           "InMedium",
                                           "AtMediumBand",
-                                          "Climbing",
-                                          "Flying",
+                                          "HoldingUnwalkable",
+                                          "Unsupported",
                                           "Resting"
                                         ]
                                       }
@@ -5369,8 +5369,8 @@
                                           "AffectedBy",
                                           "InMedium",
                                           "AtMediumBand",
-                                          "Climbing",
-                                          "Flying",
+                                          "HoldingUnwalkable",
+                                          "Unsupported",
                                           "Resting"
                                         ]
                                       },
@@ -5562,8 +5562,8 @@
                                                   "AffectedBy",
                                                   "InMedium",
                                                   "AtMediumBand",
-                                                  "Climbing",
-                                                  "Flying",
+                                                  "HoldingUnwalkable",
+                                                  "Unsupported",
                                                   "Resting"
                                                 ]
                                               }
@@ -5588,8 +5588,8 @@
                                                   "AffectedBy",
                                                   "InMedium",
                                                   "AtMediumBand",
-                                                  "Climbing",
-                                                  "Flying",
+                                                  "HoldingUnwalkable",
+                                                  "Unsupported",
                                                   "Resting"
                                                 ]
                                               },

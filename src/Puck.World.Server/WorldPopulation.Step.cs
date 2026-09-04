@@ -8,7 +8,7 @@ public sealed partial class WorldPopulation {
     /// <summary>Gets the latest peer-advance cadence work. Counts only bodies whose kit authors a nonzero cadence.</summary>
     public WorldAutonomyStatistics AutonomyStatistics { get; private set; }
     private static void ApplyVariation(Entry entry, CompiledBodyProducer producer, FixedQ4816 phase, FixedQ4816 weaveUnit, FixedQ4816 activityUnit, bool resetPhase) {
-        entry.ProducerState.WeaveFrequency = (producer.Scalar(name: "weaveFrequencyBase") + (producer.Scalar(name: "weaveFrequencyRange") * weaveUnit));
+        entry.ProducerState.WeaveFrequency = (producer.Scalar(BodyProducerParameter.WeaveFrequencyBase) + (producer.Scalar(BodyProducerParameter.WeaveFrequencyRange) * weaveUnit));
 
         if (resetPhase) {
             entry.ProducerState.AcquiredTarget = -1;
@@ -16,7 +16,7 @@ public sealed partial class WorldPopulation {
             entry.NavigationState.Clear();
             entry.ProducerState.Phase = phase;
             entry.ProducerState.ActivityPhase = (phase + (TwoPi * activityUnit));
-            entry.ProducerState.ActivityRate = (producer.Scalar(name: "activityRateBase") + (producer.Scalar(name: "activityRateRange") * activityUnit));
+            entry.ProducerState.ActivityRate = (producer.Scalar(BodyProducerParameter.ActivityRateBase) + (producer.Scalar(BodyProducerParameter.ActivityRateRange) * activityUnit));
         }
     }
     internal bool HasLineOfSight(in FixedVector3 from, in FixedQuaternion fromOrientation, in FixedVector3 to, in FixedQuaternion toOrientation) {
@@ -60,7 +60,7 @@ public sealed partial class WorldPopulation {
     }
     private FixedQ4816 PreferredAltitudeFor(in FixedWorldKit kit, CompiledBodyProducer producer, FixedQ4816 altitudeUnit) {
         return (kit.BodyMotionProgram.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)
-            ? (producer.Scalar(name: "altitudeBase") + (producer.Scalar(name: "altitudeRange") * altitudeUnit))
+            ? (producer.Scalar(BodyProducerParameter.AltitudeBase) + (producer.Scalar(BodyProducerParameter.AltitudeRange) * altitudeUnit))
             : FixedQ4816.Zero
         );
     }
@@ -334,7 +334,7 @@ Replan:
     // The altitude a wander entity holds: a free kit's authored base plus its per-index range sample; a grounded kit
     // starts at the authored spawn point or the world origin and lets contact geometry settle it.
     private static CompiledBodyProducer? SeedProducer(in FixedWorldKit kit) =>
-        kit.Producers.Values.FirstOrDefault(predicate: producer => producer.Program.Contains(operation: BodyMotionOp.ProduceWanderIntent));
+        kit.Producers.Values.FirstOrDefault(predicate: producer => producer.Program.Contains(operation: BodyMotionOp.ProduceSteeringIntent));
     // Seed a seat's wander-producer dynamics from its slot alone (no RNG) — the parameters body.control producer:<name>
     // steers by, parallel to the independently authored peer variation. A seat has no wander spawn/color seeding — the
     // definition spawns it and its profile colors it.

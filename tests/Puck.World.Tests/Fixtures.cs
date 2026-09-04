@@ -118,6 +118,8 @@ internal static class Fixtures {
             ["pressThreshold"] = 0f,
             ["altitudeBase"] = 0f,
             ["altitudeRange"] = 0f,
+            // standoffRadius/approach/orbit are omitted: this producer's program has no SenseNearestInCone, so
+            // ProduceSteeringIntent's approach shape can never govern it and the compiler does not require them.
         },
         Channels: new Dictionary<string, string>()
     );
@@ -201,7 +203,7 @@ internal static class Fixtures {
                 Name: "wander",
                 Version: "puck.body-motion.v1",
                 Kind: BodyProgramKind.Producer,
-                Operations: [BodyMotionOp.ProduceWanderIntent]
+                Operations: [BodyMotionOp.ProduceSteeringIntent]
             ),
         };
 

@@ -156,7 +156,7 @@ public sealed partial class WorldBody {
     }
     /// <summary>Formats the standalone <c>body.where</c> echo — the bracket-tagged, index-prefixed line a piped run
     /// asserts against — as the full 6DOF pose plus the fact mask:
-    /// <c>[body.where: body:{N} pos=(x.xx, y.yy, z.zz) yaw=ddd° pitch=ddd° roll=ddd° facts=grounded|climbing
+    /// <c>[body.where: body:{N} pos=(x.xx, y.yy, z.zz) yaw=ddd° pitch=ddd° roll=ddd° facts=grounded|holdingunwalkable
     /// home=(x.xx, y.yy, z.zz) scale=s.ss com=(x.xx, y.yy, z.zz)]</c>. One format always. A grounded entity keeps a
     /// canonical level orientation — <c>pitch=0 roll=0</c> — while <c>y</c> is its resolved ground foot point
     /// (<c>0.00</c> on the flat plane, following the contact field where solids lift it). <c>facts=</c> is
@@ -861,8 +861,8 @@ public sealed partial class WorldBody {
     public bool Grounded => m_grounded;
     /// <summary>Gets this body's publishable fact mask this tick — evaluated through the SAME predicate the kit's
     /// action gates read (<c>FactHolds</c>), so the snapshot, the gates, and the <c>body.where</c> echo can never
-    /// disagree. Facts are not mutually exclusive: a body can be grounded and rising in one tick, and a climbing
-    /// body keeps whichever grounded/airborne answer its last contact resolve produced.</summary>
+    /// disagree. Facts are not mutually exclusive: a body can be grounded and rising in one tick, and a body holding
+    /// an unwalkable surface keeps whichever grounded/airborne answer its last contact resolve produced.</summary>
     public BodyFacts Facts {
         get {
             var facts = BodyFacts.None;

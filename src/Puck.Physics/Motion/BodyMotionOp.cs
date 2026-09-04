@@ -7,8 +7,14 @@ namespace Puck.Physics.Motion;
 [JsonConverter(typeof(StrictEnumConverter<BodyMotionOp>))]
 public enum BodyMotionOp : byte {
     SenseNearestInCone,
-    ProduceWanderIntent,
-    ProduceAttendIntent,
+
+    /// <summary>A steering intent: an oscillator weave, a radial restoring term toward a reference point, and a
+    /// yaw-rate clamp, resolved into an advance/strafe/up (and, under <see cref="IntegrateLocalAttitude"/>,
+    /// pitch/roll) triple. The reference is the currently sensed target when this tick's
+    /// <see cref="SenseNearestInCone"/> found one, otherwise the body's own home register — so a program pairing
+    /// this with <see cref="SenseNearestInCone"/> approaches while a target is sensed and roams home the rest of the
+    /// time, and a program selecting this alone always roams.</summary>
+    ProduceSteeringIntent,
     FaceSensorTarget,
     /// <summary>Translates a bounded flock steering preference into ordinary motion channels.</summary>
     ProduceFlockIntent,

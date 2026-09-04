@@ -523,7 +523,7 @@
       "version": "puck.body-motion.v1",
       "kind": "Producer",
       "operations": [
-        "ProduceWanderIntent"
+        "ProduceSteeringIntent"
       ]
     },
     {
@@ -539,8 +539,7 @@
       },
       "operations": [
         "SenseNearestInCone",
-        "ProduceWanderIntent",
-        "ProduceAttendIntent",
+        "ProduceSteeringIntent",
         "FaceSensorTarget"
       ]
     },
@@ -554,7 +553,7 @@
       },
       "operations": [
         "SenseNearestInCone",
-        "ProduceAttendIntent",
+        "ProduceSteeringIntent",
         "FaceSensorTarget"
       ]
     }
@@ -1016,7 +1015,22 @@
               "orbit": 0,
               "altitudeGain": 0,
               "inwardGain": 1.6,
-              "turnScale": 2.5
+              "turnScale": 2.5,
+              "forward": 0,
+              "softRadius": 1000000,
+              "weaveAmplitude": 0,
+              "weaveFrequencyBase": 0,
+              "weaveFrequencyRange": 0,
+              "activityRateBase": 0,
+              "activityRateRange": 0,
+              "strafeWave": 0,
+              "turnWave": 0,
+              "upWave": 0,
+              "pitchWave": 0,
+              "rollTurn": 0,
+              "pressThreshold": 0,
+              "altitudeBase": 0,
+              "altitudeRange": 0
             },
             "channels": {}
           }

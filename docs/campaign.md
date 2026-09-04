@@ -204,7 +204,7 @@ leaves `body.where` at the ramp foot (y = −0.48), from x = 1.5/3.5/5.5 it cres
 `body.pose 0 0 3 0 0 0` + `body.fly -1 0 0 0 0 0 1` ends on the net at y = −15.98 inside the pit. The second
 (2026-09-02): climbing and a limbed avatar, built on two primitives that name no game at all. The
 sim publishes a per-body FACT MASK (`BodyFacts`, one bit per `ActionFact` — grounded, airborne,
-rising, falling, inMedium, atMediumBand, climbing, flying — derived from the same predicates the action
+rising, falling, inMedium, atMediumBand, holdingUnwalkable, unsupported — derived from the same predicates the action
 gates read; `EntitySnapshot.Facts`, echoed by `body.where`'s `facts=`), never a regime enum, so a
 submarine is a vehicle body that is submerged and a plane one that is airborne. A creation look
 binds DRIVERS to signals (`drivers[]`: planar travel, travel, time, speed, vertical speed, turn rate;
@@ -239,7 +239,7 @@ they shape velocity rather than hold a body, so they are an `along` + `across` r
 `DriveLawTests` pins that fold to the row's recorded 240-tick trace. The pip carries two arms and
 two legs on `stride` (contralateral, about X) and `reach` (diagonal pairs, in the wall plane). The
 checks: `body.pose spawn:wall`, `body.fly 0 1 0 0 0 0 2.5` (drive into the wall), then
-`body.fly 1 0 0 0 0 0 2.5` — `body.where` reads `facts=grounded|climbing` at the standoff, rises
+`body.fly 1 0 0 0 0 0 2.5` — `body.where` reads `facts=grounded|holdingunwalkable` at the standoff, rises
 1 m per 0.5 s, and ends `grounded` at y = 2.57 on the wall top; `body.press jump 1 0.2` mid-climb
 ends `grounded` on the floor; `world.screenshot` mid-climb shows the limbs spread in the wall plane
 and mid-walk shows them swung fore and aft, vertical when standing. The avatar since became `wren` — an original
@@ -254,7 +254,7 @@ sampling the world's `curves` table (her stride is an overshooting curve, not a 
 passing: a numeric draw landed in a fixed row as raw Q48.16 bits (7 read as 7/65536) — promoted to
 whole units at both landing sites. A `constant` waveform is the pose blend (`amplitude · w`): Wren's climb is a
 posture — arms overhead with hands at the wall, elbows slightly bent, knees frogged — blended in on
-a `cling` driver gated `Climbing`, with a `reach` driver alternating the limbs up and down the wall
+a `cling` driver gated `HoldingUnwalkable`, with a `reach` driver alternating the limbs up and down the wall
 about the sagittal axis; the sideways flail of swinging about the into-wall axis is gone. The
 checks: `world.state strideCadence` reads an integer in [5, 8] after boot; `body.fly 1 0 0 0 0 0 3`
 mid-walk shows knees and elbows bent through the chain; on the wall (`body.pose spawn:wall`, strafe
@@ -264,7 +264,7 @@ ordered `holds` list (`bond` surface/free, a `cone` of surface normals against g
 gravity/pull/lift, reach, speed, `upLean`, `forward`, `onDrive`, `release`, `spend` against a body
 state slot), and two program ops — `ResolveHold` picks the hold the world offers each tick and sets
 the frame, `ApplyHold` is its vertical law; the attachment section's climb members are gone
-(grapple stays a tether), `BodyFacts.Flying` joins the mask, and `body.hold` reads the hold back. A
+(grapple stays a tether), `BodyFacts.Unsupported` joins the mask, and `body.hold` reads the hold back. A
 ledge is the next hold, not a mantle state; stamina is the world's own body slot, refilled by its
 `resetFact`. On the rig, `effectors` solve a joint chain to a target (two-bone analytic, CCD beyond)
 from a surface probe, a body, or a state cell, gated on facts, with `plant` windows that latch a foot
@@ -306,6 +306,40 @@ so); carrying a separate mode enum alongside it was a second spelling of the sam
 `modeState` row a camera program selects on is now resolved to an ordinal at kit compile time, not a
 runtime name scan on every transition. Read back per body with `body.tether`, per kit with
 `world.kits`.
+
+**Wander and attend collapsed into one steering primitive.** They were never two opcodes the world needed —
+`ProduceSteeringIntent` dispatches, every tick, on whether that tick's `SenseNearestInCone` found a target: the
+approach shape (a standoff/approach/orbit steer plus its own altitude term) when it did, the roam shape (an
+oscillator weave plus a radial restoring term toward the body's own home register, yaw-rate clamped) otherwise —
+the garden's own spider `stalk` program already ran both opcodes back to back as this exact fallback chain, which
+was the tell. The roam shape's oscillator runs every tick regardless of which shape is governing that tick's
+Intent — the same way the old two-opcode program ran wander every tick and let attend overwrite its output only
+when a target existed — so a body that loses its sensed target resumes roaming from the phase the oscillator would
+already be at, not one frozen for the sensed window's length; `SteeringIntentLawTests` pins this with a synthetic
+hunter/prey pair whose approach-shape Intent is forced to zero, isolating the oscillator's own state from
+everything else the trajectory could reveal. The approach-only scalars (`standoffRadius`/`approach`/`orbit`) are
+required exactly when a producer's program also selects `SenseNearestInCone` — never on a bare roam producer,
+which can never reach that shape. The altitude term generalized alongside it, from a literal world-Y read
+to a distance along the body's own resolved up axis (`Dot(position, up)`, which reduces to `.Y` exactly under the
+ordinary `UnitY` up every world still runs under). Producer scalars/channels compile to
+`Puck.Physics.Motion.BodyProducerParameter` ordinals at kit-compile time now, the same resolved-
+outside/consumed-as-ordinal seam `FixedSpeed.HeldOrdinal` uses for a channel name — a missing or
+unknown authored key refuses by name at boot rather than reading a runtime dictionary miss on first
+tick. The published facts `Climbing`/`Flying` are `HoldingUnwalkable`/`Unsupported` — mechanism names
+for what they already measure (a held face outside the walkable cone; a free hold with lift), not the
+creature-AI nouns that named them originally.
+
+**The garden's own `spider`/`hound` state rows named the wrong bodies.** Both keyed the population
+indices of an earlier layout (spiders 54-57, hounds 58-63) — rigid billiard balls under today's
+layout — so the `stalk-visitor` rule's designation and every `hound`-scoped social rule
+(`witness-claim`/`rumor`/`first-witness`/`choose-companion`) silently governed inert bodies instead of
+the real creatures (spiders 86-89, hounds 90-95); no spider ever sensed a quarry in a default boot, and
+the social rules never observed a live hound. Corrected to the real indices in the same change: the
+`stalk-visitor` gate still never opens for the default seat (it spawns outside the pond's proximity
+range), so the garden's population state hash is unchanged by that half of the fix alone, but the hound
+rules now run against live bodies every tick, which moves the 300/600-tick hash
+(`e04606d46ac2631e`/`2fc248117e349d2a` before, `e07cc3b82127cdf1`/`26a3266ce57c98d8` after) — the
+corrected mapping, not a regression.
 
 **The foundation is complete and overshot.** One flat motion row containing its `holds` and `shaping` rows; the portal
 lane end to end — step into a frame and the whole party transfers, all-or-nothing across capacity

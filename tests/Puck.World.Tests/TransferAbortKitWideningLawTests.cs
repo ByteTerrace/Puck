@@ -56,7 +56,7 @@ public sealed class TransferAbortKitWideningLawTests {
         // BodyMotionProgramName's own law needs: a name distinct from the kit's own default to switch TO and prove
         // the switch survives an abort/restore.
         var driveGroundAlt = driveGround with { Name = "drive-ground-alt" };
-        var wander = new BodyMotionProgram(Name: "wander", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceWanderIntent]);
+        var wander = new BodyMotionProgram(Name: "wander", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
 
         var kit = new WorldKit(
             Name: "kart-test",
@@ -135,7 +135,7 @@ public sealed class TransferAbortKitWideningLawTests {
             ]
         );
         var mediumAlt = medium with { Name = "medium-alt" };
-        var wander = new BodyMotionProgram(Name: "wander", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceWanderIntent]);
+        var wander = new BodyMotionProgram(Name: "wander", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
 
         var kit = new WorldKit(
             Name: "diver-test",

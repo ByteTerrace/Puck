@@ -1303,8 +1303,8 @@ public sealed partial class WorldBody {
             : reach
         ));
     }
-    // Whether the body is holding a surface the contact resolve would refuse to stand it on — the published Climbing
-    // fact, stated over the world's own walkable threshold rather than any creature's idea of a wall.
+    // Whether the body is holding a surface the contact resolve would refuse to stand it on — the published
+    // HoldingUnwalkable fact, stated over the world's own walkable threshold rather than any creature's idea of a wall.
     private bool HoldsUnwalkableSurface() {
         if (
             !TryCurrentHold(hold: out var hold) ||
@@ -1319,7 +1319,7 @@ public sealed partial class WorldBody {
             right: UnitY
         ) < m_walkableThreshold);
     }
-    // Whether the body is holding itself up with no surface at all — the published Flying fact.
+    // Whether the body is holding itself up with no surface at all — the published Unsupported fact.
     private bool HoldsFree() => (TryCurrentHold(hold: out var hold) && (hold.Bond == BodyHoldBond.Free) && (hold.Lift > FixedQ4816.Zero));
     // The commanded WORLD move direction, unit length, or false when nothing is commanded. Reads the world-frame
     // MoveX/Y/Z triple when the world declares it (the seat has already resolved its camera into those axes), and

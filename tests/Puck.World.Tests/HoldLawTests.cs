@@ -802,12 +802,12 @@ public sealed class HoldLawTests {
         );
     }
     [Fact]
-    public void TheFactMask_ReportsClimbingOnAWallRow_AndFlyingOnALiftRow() {
+    public void TheFactMask_ReportsHoldingUnwalkableOnAWallRow_AndUnsupportedOnALiftRow() {
         using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Ground(), Wall(), Air()]));
         var body = JoinBody(fixture: fixture);
 
-        Assert.Equal(expected: BodyFacts.None, actual: (body.Facts & (BodyFacts.Climbing | BodyFacts.Flying)));
-        Assert.DoesNotContain(actualString: body.DescribeWhere(index: 0), expectedSubstring: "climbing");
+        Assert.Equal(expected: BodyFacts.None, actual: (body.Facts & (BodyFacts.HoldingUnwalkable | BodyFacts.Unsupported)));
+        Assert.DoesNotContain(actualString: body.DescribeWhere(index: 0), expectedSubstring: "holdingunwalkable");
         Assert.NotNull(@object: DriveIntoWall(
             body: body,
             fixture: fixture
@@ -819,8 +819,8 @@ public sealed class HoldLawTests {
             ticks: 20
         );
 
-        Assert.Equal(expected: BodyFacts.Climbing, actual: (body.Facts & BodyFacts.Climbing));
-        Assert.Contains(actualString: body.DescribeWhere(index: 0), expectedSubstring: "climbing");
+        Assert.Equal(expected: BodyFacts.HoldingUnwalkable, actual: (body.Facts & BodyFacts.HoldingUnwalkable));
+        Assert.Contains(actualString: body.DescribeWhere(index: 0), expectedSubstring: "holdingunwalkable");
         Assert.Equal(expected: BodyFactVocabulary.Describe(facts: body.Facts), actual: body.DescribeWhere(index: 0).Split(separator: "facts=")[1].Split(separator: " home=")[0]);
 
         using var flight = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Air(kind: BodyHoldKind.Lift, lift: 1f)]));
@@ -838,8 +838,8 @@ public sealed class HoldLawTests {
             ticks: 4
         );
 
-        Assert.Equal(expected: BodyFacts.Flying, actual: (flier.Facts & BodyFacts.Flying));
-        Assert.Equal(expected: BodyFacts.None, actual: (flier.Facts & BodyFacts.Climbing));
+        Assert.Equal(expected: BodyFacts.Unsupported, actual: (flier.Facts & BodyFacts.Unsupported));
+        Assert.Equal(expected: BodyFacts.None, actual: (flier.Facts & BodyFacts.HoldingUnwalkable));
     }
     [Fact]
     public void AHeldWallRow_IsEchoedByBodyHold_AndSurvivesAReplayReDriveWhereOmittingTheDriveDiverges() {

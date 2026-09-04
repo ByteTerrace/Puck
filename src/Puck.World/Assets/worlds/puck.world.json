@@ -106,7 +106,7 @@
       "kind": "Producer",
       "name": "wander",
       "operations": [
-        "ProduceWanderIntent"
+        "ProduceSteeringIntent"
       ],
       "version": "puck.body-motion.v1"
     },
@@ -160,8 +160,7 @@
       "name": "stalk",
       "operations": [
         "SenseNearestInCone",
-        "ProduceWanderIntent",
-        "ProduceAttendIntent",
+        "ProduceSteeringIntent",
         "FaceSensorTarget"
       ],
       "target": {
@@ -4787,7 +4786,7 @@
             "name": "reach",
             "signal": "travel",
             "when": [
-              "Climbing",
+              "HoldingUnwalkable",
               "moving"
             ]
           },
@@ -4796,7 +4795,7 @@
             "name": "cling",
             "signal": "time",
             "when": [
-              "Climbing"
+              "HoldingUnwalkable"
             ]
           },
           {
@@ -4891,7 +4890,7 @@
             },
             "tip": "handLeft",
             "when": [
-              "Climbing"
+              "HoldingUnwalkable"
             ]
           },
           {
@@ -4912,7 +4911,7 @@
             },
             "tip": "handRight",
             "when": [
-              "Climbing"
+              "HoldingUnwalkable"
             ]
           }
         ],
@@ -7867,7 +7866,7 @@
             "name": "wingbeat",
             "signal": "time",
             "when": [
-              "Flying"
+              "Unsupported"
             ]
           },
           {
@@ -7875,7 +7874,7 @@
             "name": "hover",
             "signal": "time",
             "when": [
-              "Flying"
+              "Unsupported"
             ]
           }
         ],
@@ -16088,27 +16087,27 @@
         "capacity": 64,
         "cells": [
           {
-            "key": "58",
+            "key": "90",
             "value": 1
           },
           {
-            "key": "59",
+            "key": "91",
             "value": 1
           },
           {
-            "key": "60",
+            "key": "92",
             "value": 1
           },
           {
-            "key": "61",
+            "key": "93",
             "value": 1
           },
           {
-            "key": "62",
+            "key": "94",
             "value": 1
           },
           {
-            "key": "63",
+            "key": "95",
             "value": 1
           }
         ],
@@ -16119,19 +16118,19 @@
         "capacity": 64,
         "cells": [
           {
-            "key": "54",
+            "key": "86",
             "value": 1
           },
           {
-            "key": "55",
+            "key": "87",
             "value": 1
           },
           {
-            "key": "56",
+            "key": "88",
             "value": 1
           },
           {
-            "key": "57",
+            "key": "89",
             "value": 1
           }
         ],

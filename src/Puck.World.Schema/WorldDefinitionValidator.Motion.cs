@@ -107,21 +107,18 @@ public static partial class WorldDefinitionValidator {
                 if (compiledProgram.Kind == BodyProgramKind.Producer) {
                     var senses = compiledProgram.Contains(operation: BodyMotionOp.SenseNearestInCone);
                     var flocks = compiledProgram.Contains(operation: BodyMotionOp.ProduceFlockIntent);
-                    if (flocks && (compiledProgram.Contains(BodyMotionOp.ProduceAttendIntent) || compiledProgram.Contains(BodyMotionOp.ProduceWanderIntent) || compiledProgram.Contains(BodyMotionOp.FaceSensorTarget))) {
+                    if (flocks && (compiledProgram.Contains(BodyMotionOp.ProduceSteeringIntent) || compiledProgram.Contains(BodyMotionOp.FaceSensorTarget))) {
                         errors.Add($"{path} ProduceFlockIntent owns the movement preference and cannot combine with another intent or facing producer.");
                     }
 
-                    if (
-                        compiledProgram.Contains(operation: BodyMotionOp.ProduceAttendIntent) &&
-                        !senses
-                    ) {
-                        errors.Add(item: $"{path} producer opcode '{BodyMotionOp.ProduceAttendIntent}' requires '{BodyMotionOp.SenseNearestInCone}'.");
-                    }
+                    // ProduceSteeringIntent's own runtime shape is roam-only unless this program also senses a
+                    // target (SenseNearestInCone) — no separate opcode-pairing rule needed; a bare
+                    // ProduceSteeringIntent is a legitimate roam-only producer.
                     if (
                         compiledProgram.Contains(operation: BodyMotionOp.FaceSensorTarget) &&
-                        !compiledProgram.Contains(operation: BodyMotionOp.ProduceAttendIntent)
+                        !senses
                     ) {
-                        errors.Add(item: $"{path} producer opcode '{BodyMotionOp.FaceSensorTarget}' requires '{BodyMotionOp.ProduceAttendIntent}'.");
+                        errors.Add(item: $"{path} producer opcode '{BodyMotionOp.FaceSensorTarget}' requires '{BodyMotionOp.SenseNearestInCone}'.");
                     }
                     if (
                         senses &&
@@ -753,11 +750,6 @@ public static partial class WorldDefinitionValidator {
 
             ValidateFlockProfile(parameters.Flock, program, itemPath, errors);
 
-            var required = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-            if (program.Contains(operation: BodyMotionOp.ProduceWanderIntent)) {
-                required.UnionWith(other: WanderScalars);
-            }
             var target = (programRows.TryGetValue(
                 key: name,
                 value: out var programRow
@@ -765,19 +757,32 @@ public static partial class WorldDefinitionValidator {
                 ? programRow.Target
                 : null
             );
+            var senses = program.Contains(operation: BodyMotionOp.SenseNearestInCone);
 
-            if (program.Contains(operation: BodyMotionOp.ProduceAttendIntent)) {
-                required.UnionWith(other: AttendScalars);
-                if (target is BodyTargetSource.Sensed) {
-                    required.Add(item: "releaseRadius");
+            // Each selected op's own declared read set, unioned — the single table BodyProducerParameterVocabulary
+            // owns (never a per-caller literal list). ProduceSteeringIntent's roam shape runs every tick regardless
+            // of sensing, so its scalars are always required; its approach shape is reachable only when the program
+            // also senses, so that scalar set is required exactly then — never on a bare roam producer.
+            var required = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+            foreach (var op in Enum.GetValues<BodyMotionOp>()) {
+                if (!program.Contains(operation: op)) {
+                    continue;
+                }
+                foreach (var parameter in BodyProducerParameterVocabulary.RequiredScalars(op: op)) {
+                    required.Add(item: BodyProducerParameterVocabulary.Name(parameter: parameter));
                 }
             }
-            // An op's parameter set is its full runtime read set, kit-independent (the WanderScalars precedent):
-            // WorldBody.FaceSensorTarget reads both scalars on every fire, and Scalar's dictionary read throws on a
-            // missing name — a producer this validator admitted without them would crash the sim on first target.
-            if (program.Contains(operation: BodyMotionOp.FaceSensorTarget)) {
-                required.Add(item: "inwardGain");
-                required.Add(item: "turnScale");
+            if (senses && program.Contains(operation: BodyMotionOp.ProduceSteeringIntent)) {
+                foreach (var parameter in BodyProducerParameterVocabulary.SteeringApproachScalars) {
+                    required.Add(item: BodyProducerParameterVocabulary.Name(parameter: parameter));
+                }
+            }
+            // SenseTarget's own release-radius hysteresis (WorldBody.Step.cs) reads this scalar only for a
+            // NON-flock producer sensing a Sensed source — a flock's own bounded-perception cadence retains
+            // observations by a different mechanism and never reads it.
+            if (senses && (target is BodyTargetSource.Sensed) && (parameters.Flock is null)) {
+                required.Add(item: BodyProducerParameterVocabulary.Name(parameter: BodyProducerParameter.ReleaseRadius));
             }
 
             foreach (var scalar in required) {
@@ -800,10 +805,10 @@ public static partial class WorldDefinitionValidator {
                 if (
                     !string.Equals(
                     a: argument,
-                    b: "press",
+                    b: BodyProducerParameterVocabulary.Name(parameter: BodyProducerParameter.Press),
                     comparisonType: StringComparison.Ordinal
                 ) ||
-                    !program.Contains(operation: BodyMotionOp.ProduceWanderIntent)
+                    !program.Contains(operation: BodyMotionOp.ProduceSteeringIntent)
                 ) {
                     errors.Add(item: $"{itemPath}.channels contains unknown instruction parameter '{argument}'.");
                 } else if (
@@ -814,7 +819,7 @@ public static partial class WorldDefinitionValidator {
                 }
             }
 
-            if (program.Contains(operation: BodyMotionOp.ProduceWanderIntent)) {
+            if (program.Contains(operation: BodyMotionOp.ProduceSteeringIntent)) {
                 RequirePositiveScalar(
                     errors: errors,
                     name: "softRadius",
@@ -891,7 +896,10 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{itemPath} radii must satisfy releaseRadius > the target source range >= standoffRadius.");
                 }
             }
-            if (program.Contains(operation: BodyMotionOp.ProduceAttendIntent)) {
+            // The approach shape is reachable only once a target can be sensed — the presence check above already
+            // requires standoffRadius/approach/orbit exactly when senses holds, so a bare roam producer authors
+            // none of them; these value checks run under the same condition.
+            if (senses && program.Contains(operation: BodyMotionOp.ProduceSteeringIntent)) {
                 RequirePositiveScalar(
                     errors: errors,
                     name: "standoffRadius",
@@ -1127,13 +1135,6 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} [{envelope.Min}, {envelope.Max}] does not contain the kit's own {ownValueName} ({ownValue}).");
         }
     }
-    private static readonly string[] WanderScalars = [
-        "forward", "softRadius", "weaveAmplitude", "inwardGain", "turnScale",
-        "weaveFrequencyBase", "weaveFrequencyRange", "altitudeGain", "activityRateBase", "activityRateRange",
-        "strafeWave", "turnWave", "upWave", "pitchWave", "rollTurn", "pressThreshold", "altitudeBase", "altitudeRange",
-    ];
-    private static readonly string[] AttendScalars = ["standoffRadius", "approach", "orbit", "altitudeGain"];
-
     /// <summary>The tuning facets a body motion program's selected operations read from a kit's declared
     /// <see cref="WorldMotion"/> row — the validator's own mapping (never convention; see
     /// <see cref="RequiredMotionTuningFacets"/>/<see cref="SuppliedMotionTuningFacets"/>) that a new operation must

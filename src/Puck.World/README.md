@@ -842,7 +842,8 @@ shows that camera's own feed as the framed canvas. An `axis` binding publishes
 the `faerie` probe's own `portal` channel as `probe.faerie-portal`; a binding
 overlay routes it onto the world's `portal` command channel, and a
 `compareState($channel:1:portal, GreaterOrEqual, 1)` world rule upserts a
-`faerie-glow` placement (kit `faerieKit`, an `attend` producer) once
+`faerie-glow` placement (kit `faerieKit`, a steering producer that approaches
+a sensed target) once
 `probe.set faerie journey 1` carries the light into the painting far enough to
 cross the kind's own `portalThreshold`. Screen 0 shows the faerie probe's
 output beside the raw infrared and color feeds:
