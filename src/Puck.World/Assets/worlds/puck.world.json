@@ -3697,78 +3697,6 @@
       },
       "symbols": [
         {
-          "max": 0,
-          "min": 0,
-          "name": "s"
-        }
-      ]
-    },
-    {
-      "kind": "int",
-      "name": "suitAtLeast5_1",
-      "pattern": {
-        "$type": "sequence",
-        "items": [
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "s"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "s"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "s"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "s"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "s"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          }
-        ]
-      },
-      "symbols": [
-        {
           "max": 1,
           "min": 1,
           "name": "s"
@@ -3777,7 +3705,7 @@
     },
     {
       "kind": "int",
-      "name": "suitAtLeast5_2",
+      "name": "suitAtLeast5_1",
       "pattern": {
         "$type": "sequence",
         "items": [
@@ -3849,7 +3777,7 @@
     },
     {
       "kind": "int",
-      "name": "suitAtLeast5_3",
+      "name": "suitAtLeast5_2",
       "pattern": {
         "$type": "sequence",
         "items": [
@@ -3921,6 +3849,78 @@
     },
     {
       "kind": "int",
+      "name": "suitAtLeast5_3",
+      "pattern": {
+        "$type": "sequence",
+        "items": [
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "s"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "s"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "s"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "s"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "s"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          }
+        ]
+      },
+      "symbols": [
+        {
+          "max": 4,
+          "min": 4,
+          "name": "s"
+        }
+      ]
+    },
+    {
+      "kind": "int",
       "name": "raiseAfterTwoChecks",
       "pattern": {
         "$type": "sequence",
@@ -3961,6 +3961,421 @@
           "max": 1,
           "min": 1,
           "name": "raise"
+        }
+      ]
+    },
+    {
+      "kind": "int",
+      "maxStates": 256,
+      "name": "pairAny",
+      "pattern": {
+        "$type": "choice",
+        "items": [
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r2"
+                },
+                "max": 7,
+                "min": 2
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r3"
+                },
+                "max": 7,
+                "min": 2
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r4"
+                },
+                "max": 7,
+                "min": 2
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r5"
+                },
+                "max": 7,
+                "min": 2
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r6"
+                },
+                "max": 7,
+                "min": 2
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r7"
+                },
+                "max": 7,
+                "min": 2
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r8"
+                },
+                "max": 7,
+                "min": 2
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r9"
+                },
+                "max": 7,
+                "min": 2
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r10"
+                },
+                "max": 7,
+                "min": 2
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r11"
+                },
+                "max": 7,
+                "min": 2
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r12"
+                },
+                "max": 7,
+                "min": 2
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r13"
+                },
+                "max": 7,
+                "min": 2
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r14"
+                },
+                "max": 7,
+                "min": 2
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "symbols": [
+        {
+          "max": 2,
+          "min": 2,
+          "name": "r2"
+        },
+        {
+          "max": 3,
+          "min": 3,
+          "name": "r3"
+        },
+        {
+          "max": 4,
+          "min": 4,
+          "name": "r4"
+        },
+        {
+          "max": 5,
+          "min": 5,
+          "name": "r5"
+        },
+        {
+          "max": 6,
+          "min": 6,
+          "name": "r6"
+        },
+        {
+          "max": 7,
+          "min": 7,
+          "name": "r7"
+        },
+        {
+          "max": 8,
+          "min": 8,
+          "name": "r8"
+        },
+        {
+          "max": 9,
+          "min": 9,
+          "name": "r9"
+        },
+        {
+          "max": 10,
+          "min": 10,
+          "name": "r10"
+        },
+        {
+          "max": 11,
+          "min": 11,
+          "name": "r11"
+        },
+        {
+          "max": 12,
+          "min": 12,
+          "name": "r12"
+        },
+        {
+          "max": 13,
+          "min": 13,
+          "name": "r13"
+        },
+        {
+          "max": 14,
+          "min": 14,
+          "name": "r14"
         }
       ]
     }
@@ -17846,13 +18261,6 @@
           }
         },
         {
-          "$type": "transformState",
-          "transform": {
-            "$type": "completePhase",
-            "row": "pokerTurn"
-          }
-        },
-        {
           "$type": "setState",
           "state": "dealRequest",
           "value": 0
@@ -17864,40 +18272,26 @@
         },
         {
           "$type": "setState",
-          "state": "strength1",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "state": "strength2",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "state": "showdownRequest",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "state": "revealed",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "state": "pot",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "state": "betAction",
-          "value": -1
+          "state": "pokerTurn",
+          "value": 1
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "dealRequest",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "dealRequest",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "pokerTurn",
+            "value": 0
+          }
+        ]
       },
       "mode": "Edge",
       "name": "poker-deal"
@@ -17972,6 +18366,92 @@
     {
       "effects": [
         {
+          "$type": "transformState",
+          "transform": {
+            "$type": "sort",
+            "descending": false,
+            "row": "combinedByRank1"
+          }
+        },
+        {
+          "$type": "transformState",
+          "transform": {
+            "$type": "sort",
+            "descending": false,
+            "row": "combinedByRank2"
+          }
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "derivePending",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "poker-sort"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "$match:pairAny:combinedByRank1"
+              },
+              {
+                "$type": "constant",
+                "value": 1
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "select"
+              }
+            ]
+          },
+          "state": "strength1"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "derivePending",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "poker-strength1"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "$match:pairAny:combinedByRank2"
+              },
+              {
+                "$type": "constant",
+                "value": 1
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "select"
+              }
+            ]
+          },
+          "state": "strength2"
+        },
+        {
           "$type": "setState",
           "state": "derivePending",
           "value": 0
@@ -17984,7 +18464,7 @@
         "value": 1
       },
       "mode": "Edge",
-      "name": "poker-derive-complete"
+      "name": "poker-strength2"
     },
     {
       "effects": [
@@ -18020,6 +18500,12 @@
             "comparison": "Equal",
             "state": "revealed",
             "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "pokerTurn",
+            "value": 1
           }
         ]
       },
@@ -18030,28 +18516,99 @@
       "effects": [
         {
           "$type": "pushState",
-          "fromState": "betAction",
+          "fromState": "betAction1",
           "state": "bets"
         },
         {
           "$type": "addState",
-          "fromState": "betAction",
+          "fromState": "betAction1",
           "state": "pot"
         },
         {
           "$type": "setState",
-          "state": "betAction",
+          "state": "betAction1",
           "value": -1
+        },
+        {
+          "$type": "setState",
+          "state": "bettor",
+          "value": 2
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "NotEqual",
-        "state": "betAction",
-        "value": -1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "state": "betAction1",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "pokerTurn",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "bettor",
+            "value": 1
+          }
+        ]
       },
       "mode": "Edge",
-      "name": "poker-bet-action"
+      "name": "poker-bet-action-seat1"
+    },
+    {
+      "effects": [
+        {
+          "$type": "pushState",
+          "fromState": "betAction2",
+          "state": "bets"
+        },
+        {
+          "$type": "addState",
+          "fromState": "betAction2",
+          "state": "pot"
+        },
+        {
+          "$type": "setState",
+          "state": "betAction2",
+          "value": -1
+        },
+        {
+          "$type": "setState",
+          "state": "bettor",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "state": "betAction2",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "pokerTurn",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "bettor",
+            "value": 2
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "poker-bet-action-seat2"
     }
   ],
   "schema": "puck.world.def.v1",
@@ -20965,19 +21522,13 @@
         "value": false
       },
       {
-        "kind": "int",
-        "max": 1,
-        "min": -1,
-        "name": "betAction",
-        "value": -1
-      },
-      {
         "history": {
           "capacity": 8,
           "empty": -1
         },
         "kind": "int",
-        "name": "bets"
+        "name": "bets",
+        "visibility": {}
       },
       {
         "kind": "int",
@@ -21001,24 +21552,248 @@
       {
         "kind": "int",
         "name": "pokerTurn",
-        "phase": {
-          "participants": [
-            "seat1",
-            "seat2"
-          ],
-          "phases": [
-            {
-              "mode": "Resolution",
-              "name": "deal",
-              "next": "showdown"
-            },
-            {
-              "mode": "Resolution",
-              "name": "showdown",
-              "next": "deal"
-            }
-          ]
+        "value": 0,
+        "visibility": {}
+      },
+      {
+        "cells": [
+          {
+            "key": "2C",
+            "value": 1
+          },
+          {
+            "key": "2D",
+            "value": 2
+          },
+          {
+            "key": "2H",
+            "value": 3
+          },
+          {
+            "key": "2S",
+            "value": 4
+          },
+          {
+            "key": "3C",
+            "value": 1
+          },
+          {
+            "key": "3D",
+            "value": 2
+          },
+          {
+            "key": "3H",
+            "value": 3
+          },
+          {
+            "key": "3S",
+            "value": 4
+          },
+          {
+            "key": "4C",
+            "value": 1
+          },
+          {
+            "key": "4D",
+            "value": 2
+          },
+          {
+            "key": "4H",
+            "value": 3
+          },
+          {
+            "key": "4S",
+            "value": 4
+          },
+          {
+            "key": "5C",
+            "value": 1
+          },
+          {
+            "key": "5D",
+            "value": 2
+          },
+          {
+            "key": "5H",
+            "value": 3
+          },
+          {
+            "key": "5S",
+            "value": 4
+          },
+          {
+            "key": "6C",
+            "value": 1
+          },
+          {
+            "key": "6D",
+            "value": 2
+          },
+          {
+            "key": "6H",
+            "value": 3
+          },
+          {
+            "key": "6S",
+            "value": 4
+          },
+          {
+            "key": "7C",
+            "value": 1
+          },
+          {
+            "key": "7D",
+            "value": 2
+          },
+          {
+            "key": "7H",
+            "value": 3
+          },
+          {
+            "key": "7S",
+            "value": 4
+          },
+          {
+            "key": "8C",
+            "value": 1
+          },
+          {
+            "key": "8D",
+            "value": 2
+          },
+          {
+            "key": "8H",
+            "value": 3
+          },
+          {
+            "key": "8S",
+            "value": 4
+          },
+          {
+            "key": "9C",
+            "value": 1
+          },
+          {
+            "key": "9D",
+            "value": 2
+          },
+          {
+            "key": "9H",
+            "value": 3
+          },
+          {
+            "key": "9S",
+            "value": 4
+          },
+          {
+            "key": "TC",
+            "value": 1
+          },
+          {
+            "key": "TD",
+            "value": 2
+          },
+          {
+            "key": "TH",
+            "value": 3
+          },
+          {
+            "key": "TS",
+            "value": 4
+          },
+          {
+            "key": "JC",
+            "value": 1
+          },
+          {
+            "key": "JD",
+            "value": 2
+          },
+          {
+            "key": "JH",
+            "value": 3
+          },
+          {
+            "key": "JS",
+            "value": 4
+          },
+          {
+            "key": "QC",
+            "value": 1
+          },
+          {
+            "key": "QD",
+            "value": 2
+          },
+          {
+            "key": "QH",
+            "value": 3
+          },
+          {
+            "key": "QS",
+            "value": 4
+          },
+          {
+            "key": "KC",
+            "value": 1
+          },
+          {
+            "key": "KD",
+            "value": 2
+          },
+          {
+            "key": "KH",
+            "value": 3
+          },
+          {
+            "key": "KS",
+            "value": 4
+          },
+          {
+            "key": "AC",
+            "value": 1
+          },
+          {
+            "key": "AD",
+            "value": 2
+          },
+          {
+            "key": "AH",
+            "value": 3
+          },
+          {
+            "key": "AS",
+            "value": 4
+          }
+        ],
+        "keysFrom": "cards",
+        "kind": "int",
+        "name": "suit",
+        "visibility": {
+          "hidden": "Placeholder"
         }
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": -1,
+        "name": "betAction1",
+        "value": -1,
+        "visibility": {}
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": -1,
+        "name": "betAction2",
+        "value": -1,
+        "visibility": {}
+      },
+      {
+        "kind": "int",
+        "name": "bettor",
+        "value": 1,
+        "visibility": {}
       }
     ]
   },

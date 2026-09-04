@@ -455,42 +455,60 @@ physically there).
 
 The garden also carries a hidden-hand poker table, state only — no card
 bodies — beside the chess set: a `cards` token domain (52 identities, `rank`
-attribute row) with a `deck`/`hand1`/`hand2`/`community` zone family, a
-`cardStream` streamDraw site, a two-phase `pokerTurn` (`deal`/`showdown`)
-over `seat1`/`seat2`, a `bets` history ring, and a `pot`. `poker-deal` draws
-each card at random off the deck (`Transfer`'s own `Random` selector, three
-calls off the one streamDraw site in turn — statistically a shuffle, one
-fewer `transformState` effect) straight through to the `showdown` phase in
-one rule; `poker-derive-from-hand1`/`-hand2`/`-community` (`forEach`) then
-copy each dealt card's rank into `combinedByRank1`/`2`, the seven-card words
-`world.match` and the shipped `pairAtRankN`/`hasTripAny`/`hasQuadAny`/
-`straightAny`/`suitAtLeast5_<S>` patterns read hand strength off. Hidden
-cards are placeholders through the `rank` row's own public, `Hidden:
-Placeholder` visibility: each cell resolves through its OWNING zone's own
-visibility (`WorldStateDisclosure.Observer.CanRead`'s nested zones-by-domain
-lookup) — `deck` is authority-only and `hand1`/`hand2` are each their own
-seat until a rule (`poker-showdown-reveal`) writes the other seat's token
-into `audience1`/`audience2`, the same `readersFrom` widening the tabletop's
-own `plan` row reserves for an addon. `hand1`/`hand2` themselves stay each
-seat's own direct, whole-row read of its own two cards (`WorldStateVisibility`
-is all-or-nothing at ROW scope, never partial — see the [Schema
+and `suit` attribute rows, each keeping `keysFrom: cards` so a hidden card's
+value inherits its owning zone's own visibility — see below) with a
+`deck`/`hand1`/`hand2`/`community` zone family, a `cardStream` streamDraw
+site, a plain int `pokerTurn` (0 = deal, 1 = bet — not the `phase` trait; its
+own `completePhase` transform would have cost as much as a whole extra deal),
+a `bettor` turn-alternation row over `seat1`/`seat2`, a `bets` history ring,
+and a `pot`. `poker-deal` draws each card at random off the deck (`Transfer`'s
+own `Random` selector, three calls off the one streamDraw site) and sets
+`pokerTurn = 1`, gated on `pokerTurn == 0` — a gate that, once closed, never
+reopens, because nothing in the document ever sets `pokerTurn` back to 0: the
+table plays exactly one hand per boot, deliberately (see the budget remarks
+below), and a second `dealRequest` is refused outright rather than partially
+applying (each of its three transfers would individually refuse against an
+already-full destination zone, which is why the gate is the one guard, not a
+per-transfer retry). `poker-derive-from-hand1`/`-hand2`/`-community`
+(`forEach`) copy each dealt card's rank into `combinedByRank1`/`2`; `poker-sort`
+then sorts each into ascending order (needed because the shipped
+`hasTripAny`/`hasQuadAny`/`straightAny` patterns are adjacency-based and read
+wrong off an unsorted deal), and `poker-strength1`/`poker-strength2` — declared
+*after* the sort but *before* the reset that would otherwise close their own
+`derivePending` gate first — fold the sorted words through the shipped
+`pairAny` pattern into `strength1`/`strength2`, a genuine rule-derived value,
+not a console fixture. `pairAtRank2..14`, `hasTripAny`, `hasQuadAny`,
+`straightAny`, and `suitAtLeast5_0..3` all remain shipped, compiled, and
+correct against a sorted or order-independent word respectively, reachable via
+`world.match`, but only `pairAny` feeds `strength1`/`strength2` live: chess's
+own rules already spend most of `world.budget`'s 1,000,000-unit per-tick
+ceiling, and `WorldRuleWorkBudget.TransformCost` prices every `transformState`
+effect — a `sort`, a `transfer`, a `completePhase` alike — against the WHOLE
+document's declared cell storage (`suit` and `rank`'s privacy-required
+`keysFrom` each add a full topology-sized share to that storage on their own),
+so the deal's three transfers plus the two sorts already spend nearly the
+whole ceiling; trip/quad/straight/flush reads, a second per-seat suit union,
+and a full house/two-pair tally are each individually affordable but not
+together. `poker-bet-action-seat1`/`-seat2` fold a console-set `betAction1`/
+`betAction2` (0 = check, 1 = raise) into `bets`/`pot`, each gated on
+`pokerTurn == 1` and on `bettor` naming its own seat, flipping `bettor` to the
+other seat on success — a real turn order, not a free-for-all. Hidden cards
+are placeholders through `rank`/`suit`'s own public, `Hidden: Placeholder`
+visibility: each cell resolves through its OWNING zone's own visibility
+(`WorldStateDisclosure.Observer.CanRead`'s nested zones-by-domain lookup,
+which is *why* `keysFrom` cannot be dropped to save budget on either row) —
+`deck` is authority-only and `hand1`/`hand2` are each their own seat until a
+rule (`poker-showdown-reveal`) writes the other seat's token into
+`audience1`/`audience2`, the same `readersFrom` widening the tabletop's own
+`plan` row reserves for an addon. `hand1`/`hand2` themselves stay each seat's
+own direct, whole-row read of its own two cards (`WorldStateVisibility` is
+all-or-nothing at ROW scope, never partial — see the [Schema
 reference](../Puck.World.Schema/README.md#discrete-boards-cards-and-turns)),
-which is why a hand never authors its own `Placeholder` policy. `strength1`/
-`strength2` are console-written, not rule-derived: the chess table beside
-this one already spends most of `world.budget`'s 1,000,000-unit per-tick
-ceiling (`WorldRuleWorkBudget.TransformCost` prices every `transformState`
-effect — a `sort` included — against the WHOLE document's declared cell
-storage, and `transaction` prices its wrapped effects twice over, preflight
-and apply), so `poker-deal`'s four transforms already spend what a fifth
-(a per-seat sort, or `bet1`'s own `completePhase`) would need; the pattern
-match a live rule would have run instead runs from the console (`world.match`)
-or a law test (`tests/Puck.World.Tests/PokerHandStrengthLawTests.cs`), and
-`world.observe <principal>` (see the [console
+which is why a hand never authors its own `Placeholder` policy. `world.observe
+<principal>` (see the [console
 reference](../../.claude/skills/puck-world/references/console.md)) is the
 read-back that lets one session inspect both seats' disclosures without
-submitting as either. `poker-bet-action` folds a console-set `betAction`
-(0=check, 1=raise) into `bets`/`pot`, ungated by a turn order this budget has
-no room to complete a phase over.
+submitting as either.
 
 World-space creation text uses the document's optional `text` catalog. Every
 font row has a stable name, a path relative to the world document, a
