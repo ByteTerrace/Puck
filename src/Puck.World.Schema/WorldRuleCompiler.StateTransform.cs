@@ -41,15 +41,22 @@ public static partial class WorldRuleCompiler {
                 var row = Row(ray.Row);
                 if (row.Board is not { } board || WorldTopologyCompilation.Find(definition.StateRaw, board.Topology) is not { } topology ||
                     !topology.TryCell(ray.From, out _) || topology.Direction(ray.Direction) < 0 || ray.Through == ray.Until ||
-                    row.ClampToEnvelope(ray.Value) != ray.Value || (row.Kind == CellKind.Bool && ray.Value is not (0 or 1)) ||
-                    ray.Value < WorldStateCapacity.MinIntCellValue || ray.Value > WorldStateCapacity.MaxIntCellValue) {
+                    row.ClampToEnvelope(ray.Value) != ray.Value || (row.Kind == CellKind.Bool && ray.Value is not (0 or 1))) {
                     throw Invalid("setRay requires valid board addressing, distinct through/until values, and an admitted replacement");
                 }
                 break;
             case WorldStateTransform.CompletePhase complete:
                 if (Row(complete.Row).Phase is not { } phase || complete.ExpectedSequence < 0 ||
-                    (complete.Participant is not null && !(phase.Participants ?? []).Contains(complete.Participant, StringComparer.Ordinal))) {
-                    throw Invalid("completePhase requires a phase row, valid sequence and declared participant");
+                    (complete.Participant is not null && !(phase.Participants ?? []).Contains(complete.Participant, StringComparer.Ordinal)) ||
+                    (complete.Next is not null && !(phase.Phases ?? []).Any(candidate => candidate.Name == complete.Next))) {
+                    throw Invalid("completePhase requires a phase row, valid sequence, declared participant, and a declared next phase");
+                }
+                break;
+            case WorldStateTransform.TurnOrder order:
+                if (Row(order.Row).Phase is not { } ordered || order.Direction is not (null or 1 or -1) ||
+                    (order.Skip ?? []).Concat(order.Unskip ?? []).Concat(order.Active is null ? [] : [order.Active])
+                        .Any(token => !(ordered.Participants ?? []).Contains(token, StringComparer.Ordinal))) {
+                    throw Invalid("turnOrder requires a phase row, a direction of 1 or -1, and declared participants");
                 }
                 break;
             default:

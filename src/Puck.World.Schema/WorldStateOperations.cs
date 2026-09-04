@@ -43,9 +43,14 @@ public sealed record WorldPhaseDefinition(string Name, WorldPhaseMode Mode, stri
 /// <param name="Sequence">The generation incremented on changing activation or phase; readiness alone preserves it.</param>
 /// <param name="Round">The round, incremented on returning to phase zero.</param>
 /// <param name="DeadlineTick">The absolute deadline; zero at sequence zero derives from the initial phase timeout.</param>
+/// <param name="Direction">The sequential activation step, 1 or -1; a sequential phase ends when the turn passes the
+/// last participant in this direction.</param>
+/// <param name="Skipped">The participant bits activation passes over and readiness never waits for (a fold, an
+/// elimination); persists across phases until a <c>turnOrder</c> transform clears them.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldStatePhase(IReadOnlyList<string> Participants, IReadOnlyList<WorldPhaseDefinition> Phases,
-    int Current = 0, int Active = 0, uint Ready = 0, long Sequence = 0, long Round = 0, long DeadlineTick = 0);
+    int Current = 0, int Active = 0, uint Ready = 0, long Sequence = 0, long Round = 0, long DeadlineTick = 0,
+    int Direction = 1, uint Skipped = 0);
 
 /// <summary>Admission guard for a submitted gameplay operation.</summary>
 /// <param name="Row">The phase row.</param>
@@ -72,6 +77,7 @@ public enum WorldZoneSelector : byte {
 [JsonDerivedType(typeof(WorldStateTransform.Transfer), "transfer")]
 [JsonDerivedType(typeof(WorldStateTransform.SetRay), "setRay")]
 [JsonDerivedType(typeof(WorldStateTransform.CompletePhase), "completePhase")]
+[JsonDerivedType(typeof(WorldStateTransform.TurnOrder), "turnOrder")]
 [JsonDerivedType(typeof(WorldStateTransform.MoveToken), "moveToken")]
 [JsonDerivedType(typeof(WorldStateTransform.Observe), "observe")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -110,5 +116,17 @@ public abstract record WorldStateTransform {
     /// <param name="ExpectedSequence">The exact observed progression sequence; only the world program may omit it.</param>
     /// <param name="Timeout">World-only completion after the current deadline.</param>
     /// <param name="Participant">World-only named participant on whose completion the authored rule acts.</param>
-    public sealed record CompletePhase(string Row, long? ExpectedSequence = null, bool Timeout = false, string? Participant = null) : WorldStateTransform;
+    /// <param name="Next">World-only branch: the declared phase a transition enters instead of the current phase's
+    /// authored <c>next</c>. Ignored when the completion does not transition.</param>
+    public sealed record CompletePhase(string Row, long? ExpectedSequence = null, bool Timeout = false, string? Participant = null,
+        string? Next = null) : WorldStateTransform;
+    /// <summary>Reshapes a phase row's turn order without completing anything. World-only.</summary>
+    /// <param name="Row">The phase row.</param>
+    /// <param name="Direction">The new sequential step, 1 or -1, or null to keep it.</param>
+    /// <param name="Skip">Participant tokens activation passes over from now on.</param>
+    /// <param name="Unskip">Participant tokens restored to the order.</param>
+    /// <param name="Active">A participant token to activate now in a sequential phase, or null to keep the current
+    /// activation (moved past a newly skipped participant when it was the one active).</param>
+    public sealed record TurnOrder(string Row, int? Direction = null, IReadOnlyList<string>? Skip = null, IReadOnlyList<string>? Unskip = null,
+        string? Active = null) : WorldStateTransform;
 }

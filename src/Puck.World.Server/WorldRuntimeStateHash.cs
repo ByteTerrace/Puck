@@ -370,6 +370,8 @@ public static partial class WorldRuntimeStateHash {
                 hash.Add(value: phase.Sequence);
                 hash.Add(value: phase.Round);
                 hash.Add(value: phase.DeadlineTick);
+                hash.Add(value: phase.Direction);
+                hash.Add(value: phase.Skipped);
             }
             var decks = row.DrawDecks ?? [];
 

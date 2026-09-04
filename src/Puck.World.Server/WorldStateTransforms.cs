@@ -14,6 +14,7 @@ public static partial class WorldStateTransforms {
         WorldStateTransform.Observe observe => [observe.Row],
         WorldStateTransform.MoveToken move => [move.Positions, move.Allowance],
         WorldStateTransform.CompletePhase phase => [phase.Row],
+        WorldStateTransform.TurnOrder order => [order.Row],
         _ => [],
     };
 
@@ -45,6 +46,9 @@ public static partial class WorldStateTransforms {
                     break;
                 case WorldStateTransform.CompletePhase complete:
                     Complete(definition, rows, complete, actor, tick);
+                    break;
+                case WorldStateTransform.TurnOrder order:
+                    Order(rows, order, actor);
                     break;
                 default:
                     throw new InvalidOperationException("unknown state transform");
@@ -210,26 +214,42 @@ public static partial class WorldStateTransforms {
                 throw new InvalidOperationException("actor is not eligible to complete this phase");
             }
         }
+        if (complete.Next is not null && actor != WorldPrincipal.World) {
+            throw new InvalidOperationException("only the world program may branch a phase transition");
+        }
         var next = phase;
         var transition = complete.Timeout || node.Mode == WorldPhaseMode.Resolution;
         if (!transition && node.Mode == WorldPhaseMode.Sequential) {
-            next = next with { Active = phase.Active + 1 };
-            transition = next.Active == phase.Participants.Count;
+            // The turn walks in the row's direction over the participants it does not skip; passing either end of
+            // the order ends the phase.
+            var cursor = phase.Active;
+            while (true) {
+                cursor += phase.Direction;
+                if ((uint)cursor >= (uint)phase.Participants.Count) {
+                    transition = true;
+                    break;
+                }
+                if (!IsSkipped(phase, cursor)) {
+                    next = next with { Active = cursor };
+                    break;
+                }
+            }
         } else if (!transition) {
             next = next with { Ready = phase.Ready | (1u << participant) };
-            transition = next.Ready == (phase.Participants.Count == 32 ? uint.MaxValue : (1u << phase.Participants.Count) - 1);
+            transition = (next.Ready | phase.Skipped) == AllParticipants(phase);
         }
         if (transition) {
+            var targetName = complete.Next ?? node.Next;
             var target = -1;
             for (var i = 0; i < phase.Phases.Count; i++) {
-                if (phase.Phases[i].Name == node.Next) {
+                if (phase.Phases[i].Name == targetName) {
                     target = i;
                 }
             }
             if (target < 0) {
                 throw new InvalidOperationException("next phase is not declared");
             }
-            next = next with { Current = target, Active = 0, Ready = 0, Round = checked(phase.Round + (target == 0 ? 1 : 0)) };
+            next = next with { Current = target, Active = FirstActive(phase, phase.Direction), Ready = 0, Round = checked(phase.Round + (target == 0 ? 1 : 0)) };
         }
         if (transition || node.Mode == WorldPhaseMode.Sequential) {
             next = next with { Sequence = checked(phase.Sequence + 1) };
@@ -240,6 +260,58 @@ public static partial class WorldStateTransforms {
             next = next with { DeadlineTick = delay == 0 ? 0 : checked((long)tick + delay) };
         } else {
             next = next with { DeadlineTick = deadline };
+        }
+        rows[index] = row with { Phase = next };
+    }
+
+    private static uint AllParticipants(WorldStatePhase phase) => phase.Participants.Count == 32 ? uint.MaxValue : (1u << phase.Participants.Count) - 1;
+    private static bool IsSkipped(WorldStatePhase phase, int participant) => (phase.Skipped & (1u << participant)) != 0;
+    // The first participant a fresh sequential phase activates: the first unskipped one from the leading end in the
+    // walk direction, or that end itself when every participant is skipped.
+    private static int FirstActive(WorldStatePhase phase, int direction) {
+        var count = phase.Participants.Count;
+        var start = direction > 0 ? 0 : count - 1;
+        for (var cursor = start; (uint)cursor < (uint)count; cursor += direction) {
+            if (!IsSkipped(phase, cursor)) { return cursor; }
+        }
+        return start;
+    }
+    private static int ParticipantOrdinal(WorldStatePhase phase, string token) {
+        for (var i = 0; i < phase.Participants.Count; i++) {
+            if (phase.Participants[i] == token) { return i; }
+        }
+        throw new InvalidOperationException($"'{token}' is not a declared participant");
+    }
+
+    private static void Order(WorldStateRow[] rows, WorldStateTransform.TurnOrder order, WorldPrincipal actor) {
+        if (actor != WorldPrincipal.World) {
+            throw new InvalidOperationException("only the world program may reshape turn order");
+        }
+        var index = Find(rows, order.Row);
+        var row = rows[index];
+        var phase = row.Phase ?? throw new InvalidOperationException("turn order requires a phase row");
+        if (order.Direction is { } direction && direction is not (1 or -1)) {
+            throw new InvalidOperationException("turn order direction must be 1 or -1");
+        }
+        var next = phase with { Direction = order.Direction ?? phase.Direction };
+        foreach (var token in order.Skip ?? []) { next = next with { Skipped = next.Skipped | (1u << ParticipantOrdinal(phase, token)) }; }
+        foreach (var token in order.Unskip ?? []) { next = next with { Skipped = next.Skipped & ~(1u << ParticipantOrdinal(phase, token)) }; }
+        if (order.Active is { } activeToken) {
+            var active = ParticipantOrdinal(phase, activeToken);
+            if (IsSkipped(next, active)) {
+                throw new InvalidOperationException("the activated participant is skipped");
+            }
+            next = next with { Active = active };
+        } else if (phase.Phases[phase.Current].Mode == WorldPhaseMode.Sequential && IsSkipped(next, next.Active)) {
+            // The active participant left the order: hand the turn to the next unskipped one around the ring.
+            var cursor = next.Active;
+            for (var step = 0; step < phase.Participants.Count; step++) {
+                cursor = ((cursor + next.Direction) % phase.Participants.Count + phase.Participants.Count) % phase.Participants.Count;
+                if (!IsSkipped(next, cursor)) { next = next with { Active = cursor }; break; }
+            }
+        }
+        if (next.Active != phase.Active) {
+            next = next with { Sequence = checked(phase.Sequence + 1) };
         }
         rows[index] = row with { Phase = next };
     }

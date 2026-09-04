@@ -63,11 +63,6 @@ public static partial class WorldDefinitionValidator {
             return false;
         }
 
-        if ((row.Kind == CellKind.Int) && ((cell.Value < WorldStateCapacity.MinIntCellValue) || (cell.Value > WorldStateCapacity.MaxIntCellValue))) {
-            reason = $"state row '{rowName}' cell '{key}' value {cell.Value} is outside the representable int range {WorldStateCapacity.MinIntCellValue}..{WorldStateCapacity.MaxIntCellValue}";
-            return false;
-        }
-
         // The value checks above are the cheap prefix; the state section's own walk is what refuses the shapes a
         // cell write can still produce — a keyed cell minted beside a row-level advance, dynamics or cycle, the
         // reserved slot key on a keyed row, cells on a lattice row, a lattice-node phase out of range — so a write the
@@ -378,9 +373,8 @@ public static partial class WorldDefinitionValidator {
 
         var (domainLow, domainHigh) = (row.Kind switch {
             CellKind.Bool => (0L, 1L),
-            // A fixed cell carries RAW FixedQ4816 bits and legitimately spans the whole long (see MaxIntCellValue).
-            CellKind.Fixed => (long.MinValue, long.MaxValue),
-            _ => (WorldStateCapacity.MinIntCellValue, WorldStateCapacity.MaxIntCellValue),
+            // A fixed cell carries RAW FixedQ4816 bits; an int cell is a whole long. Both span the carrier.
+            _ => (long.MinValue, long.MaxValue),
         });
 
         // The site's admissible domain is the row's OWN — the declared envelope and the non-negative floor included,
@@ -1293,17 +1287,6 @@ public static partial class WorldDefinitionValidator {
                     )}.");
                 }
 
-                // An INT cell is read as fixed point wherever the engine reads it at all (a world rule's gate, its
-                // comparand, its live copy operand), and that lift throws outside FixedQ4816's integer band. Refused
-                // HERE so every ingress meets the same door: without it an ordinary authored number kills the process
-                // on the first tick a rule touches the row, with no refusal anywhere. A FIXED cell carries raw bits
-                // and spans the whole long, so it is exempt by construction.
-                if (
-                    (row.Kind == CellKind.Int) &&
-                    ((cell.Value < WorldStateCapacity.MinIntCellValue) || (cell.Value > WorldStateCapacity.MaxIntCellValue))
-                ) {
-                    errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' value {cell.Value} is outside the representable int range {WorldStateCapacity.MinIntCellValue}..{WorldStateCapacity.MaxIntCellValue} — every engine read of an int cell lifts it to fixed point.");
-                }
             }
         }
 

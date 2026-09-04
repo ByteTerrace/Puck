@@ -199,10 +199,9 @@ public sealed partial class WorldServer {
                 return null;
         }
     }
-    // The house fee on a settled amount, in basis points — bounded well inside `long` (amount is capped at
-    // WorldStateCapacity.MaxIntCellValue and feeBasisPoints at WorldMarketCapacity.MaxFeeBasisPoints, so the
-    // intermediate product can never overflow).
-    private static long MarketFee(long amount, int feeBasisPoints) => ((amount * feeBasisPoints) / 10_000L);
+    // The house fee on a settled amount, in basis points; the product is widened so a whole-long amount cannot
+    // overflow the intermediate.
+    private static long MarketFee(long amount, int feeBasisPoints) => ((long)(((Int128)amount * feeBasisPoints) / 10_000L));
     // Market retention sweep — the same "recovery is a lifetime rule" shape ReclaimExpiredEscrows/
     // SettleExpiredMarketListings establish: once a terminal row has stood past market.retentionSeconds, fires
     // exactly one PruneMarketListings mutation (never one per row — its own compose arm removes every eligible row

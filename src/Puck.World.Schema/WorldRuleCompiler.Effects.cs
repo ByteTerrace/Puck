@@ -645,6 +645,9 @@ public static partial class WorldRuleCompiler {
         }
 
         var tokens = new CompiledWorldExpressionToken[authored.Count];
+        // The proof is a typed stack: every slot's kind is known at compile time, so an Int comparison result can
+        // feed a select inside a Fixed expression while never reaching an arithmetic operator of the wrong kind.
+        var kinds = new CellKind[authored.Count];
         var depth = 0;
 
         for (var index = 0; index < authored.Count; index++) {
@@ -652,7 +655,7 @@ public static partial class WorldRuleCompiler {
                 WorldValueToken.Constant constant => Push(new CompiledWorldExpressionToken(
                         Operation: WorldExpressionOp.Constant,
                         Constant: LiteralToRaw(kind: kind, literal: constant.Value, ruleName: ruleName, verb: verb)
-                    )),
+                    ), kind),
                 WorldValueToken.State state => ResolveState(state),
                 WorldValueToken.Social social => ResolveSocialToken(social.Query),
                 WorldValueToken.SocialClock => ResolveSocialMetadata(WorldRuleFactKind.SocialClock),
@@ -663,7 +666,34 @@ public static partial class WorldRuleCompiler {
                 WorldValueToken.Divide => Binary(WorldExpressionOp.Divide),
                 WorldValueToken.Min => Binary(WorldExpressionOp.Minimum),
                 WorldValueToken.Max => Binary(WorldExpressionOp.Maximum),
+                WorldValueToken.Modulo => Binary(WorldExpressionOp.Modulo),
                 WorldValueToken.Clamp => Ternary(WorldExpressionOp.Clamp),
+                WorldValueToken.BitAnd => IntBinary(WorldExpressionOp.BitAnd),
+                WorldValueToken.BitOr => IntBinary(WorldExpressionOp.BitOr),
+                WorldValueToken.BitXor => IntBinary(WorldExpressionOp.BitXor),
+                WorldValueToken.ShiftLeft => IntBinary(WorldExpressionOp.ShiftLeft),
+                WorldValueToken.ShiftRight => IntBinary(WorldExpressionOp.ShiftRight),
+                WorldValueToken.ShiftRightLogical => IntBinary(WorldExpressionOp.ShiftRightLogical),
+                WorldValueToken.BitNot => IntUnary(WorldExpressionOp.BitNot),
+                WorldValueToken.Equal => Comparison(WorldExpressionOp.Equal),
+                WorldValueToken.NotEqual => Comparison(WorldExpressionOp.NotEqual),
+                WorldValueToken.Less => Comparison(WorldExpressionOp.Less),
+                WorldValueToken.LessOrEqual => Comparison(WorldExpressionOp.LessOrEqual),
+                WorldValueToken.Greater => Comparison(WorldExpressionOp.Greater),
+                WorldValueToken.GreaterOrEqual => Comparison(WorldExpressionOp.GreaterOrEqual),
+                WorldValueToken.Select => Select(),
+                WorldValueToken.PopCount => IntUnary(WorldExpressionOp.PopCount),
+                WorldValueToken.LeadingZeroCount => IntUnary(WorldExpressionOp.LeadingZeroCount),
+                WorldValueToken.TrailingZeroCount => IntUnary(WorldExpressionOp.TrailingZeroCount),
+                WorldValueToken.LowestSetBit => IntUnary(WorldExpressionOp.LowestSetBit),
+                WorldValueToken.ClearLowestSetBit => IntUnary(WorldExpressionOp.ClearLowestSetBit),
+                WorldValueToken.ByteSwap => IntUnary(WorldExpressionOp.ByteSwap),
+                WorldValueToken.BitReverse => IntUnary(WorldExpressionOp.BitReverse),
+                WorldValueToken.RotateLeft => IntBinary(WorldExpressionOp.RotateLeft),
+                WorldValueToken.RotateRight => IntBinary(WorldExpressionOp.RotateRight),
+                WorldValueToken.Negate => Unary(WorldExpressionOp.Negate),
+                WorldValueToken.Abs => Unary(WorldExpressionOp.Abs),
+                WorldValueToken.Sign => SignOf(),
                 null => throw Malformed("contains a null token"),
                 _ => throw Malformed($"contains unsupported token '{authored[index].GetType().Name}'"),
             };
@@ -672,18 +702,21 @@ public static partial class WorldRuleCompiler {
         if (depth != 1) {
             throw Malformed($"leaves {depth} values on the postfix stack instead of exactly one");
         }
+        if (kinds[0] != kind) {
+            throw Malformed($"leaves a kind={DescribeCellKind(kind: kinds[0])} value where kind={DescribeCellKind(kind: kind)} is required");
+        }
 
         return tokens;
 
         CompiledWorldExpressionToken ResolveSocialMetadata(WorldRuleFactKind fact) {
             _ = RequireSocialPolicy(ruleName, definition);
             if (kind != CellKind.Int) { throw Malformed($"{fact} requires kind Int"); }
-            return Push(new(WorldExpressionOp.Operand, Operand: new(fact, null, null, ValueKind: CellKind.Int)));
+            return Push(new(WorldExpressionOp.Operand, Operand: new(fact, null, null, ValueKind: CellKind.Int)), CellKind.Int);
         }
         CompiledWorldExpressionToken ResolveSocialToken(WorldSocialQuery query) {
             var compiled = ResolveSocialQuery(query, ruleName, definition);
             if (compiled.Kind != kind) { throw Malformed($"social facet {query.Facet} requires kind {compiled.Kind}"); }
-            return Push(new(WorldExpressionOp.Operand, Operand: new(WorldRuleFactKind.Social, null, null, ValueKind: kind, Social: compiled)));
+            return Push(new(WorldExpressionOp.Operand, Operand: new(WorldRuleFactKind.Social, null, null, ValueKind: kind, Social: compiled)), kind);
         }
         CompiledWorldExpressionToken ResolveState(WorldValueToken.State state) {
             var resolved = ResolveOperand(
@@ -705,26 +738,81 @@ public static partial class WorldRuleCompiler {
                 );
             }
 
-            depth++;
-            return new CompiledWorldExpressionToken(
+            return Push(new CompiledWorldExpressionToken(
                 Operation: WorldExpressionOp.Operand,
                 Operand: resolved.Operand
-            );
+            ), kind);
         }
 
-        CompiledWorldExpressionToken Push(CompiledWorldExpressionToken token) {
-            depth++;
+        CompiledWorldExpressionToken Push(CompiledWorldExpressionToken token, CellKind pushed) {
+            kinds[depth++] = pushed;
             return token;
         }
+        void Require(WorldExpressionOp operation, int arity) {
+            if (depth < arity) { throw Malformed($"token '{operation}' underflows the postfix stack"); }
+        }
+        void RequireKind(WorldExpressionOp operation, int slot, CellKind required) {
+            if (kinds[slot] != required) {
+                throw Malformed($"token '{operation}' needs a kind={DescribeCellKind(kind: required)} operand but found kind={DescribeCellKind(kind: kinds[slot])}");
+            }
+        }
         CompiledWorldExpressionToken Binary(WorldExpressionOp operation) {
-            if (depth < 2) { throw Malformed($"token '{operation}' underflows the postfix stack"); }
+            Require(operation, 2);
+            RequireKind(operation, depth - 2, kind);
+            RequireKind(operation, depth - 1, kind);
             depth--;
             return new CompiledWorldExpressionToken(Operation: operation);
         }
+        CompiledWorldExpressionToken IntBinary(WorldExpressionOp operation) {
+            if (kind != CellKind.Int) { throw Malformed($"token '{operation}' is admitted in kind=int expressions only"); }
+            return Binary(operation);
+        }
+        CompiledWorldExpressionToken IntUnary(WorldExpressionOp operation) {
+            if (kind != CellKind.Int) { throw Malformed($"token '{operation}' is admitted in kind=int expressions only"); }
+            Require(operation, 1);
+            RequireKind(operation, depth - 1, CellKind.Int);
+            return new CompiledWorldExpressionToken(Operation: operation);
+        }
+        CompiledWorldExpressionToken Unary(WorldExpressionOp operation) {
+            Require(operation, 1);
+            RequireKind(operation, depth - 1, kind);
+            return new CompiledWorldExpressionToken(Operation: operation);
+        }
+        CompiledWorldExpressionToken SignOf() {
+            Require(WorldExpressionOp.Sign, 1);
+            if (kinds[depth - 1] is not (CellKind.Int or CellKind.Fixed)) {
+                throw Malformed("token 'Sign' needs a numeric operand");
+            }
+            kinds[depth - 1] = CellKind.Int;
+            return new CompiledWorldExpressionToken(Operation: WorldExpressionOp.Sign);
+        }
         CompiledWorldExpressionToken Ternary(WorldExpressionOp operation) {
-            if (depth < 3) { throw Malformed($"token '{operation}' underflows the postfix stack"); }
+            Require(operation, 3);
+            RequireKind(operation, depth - 3, kind);
+            RequireKind(operation, depth - 2, kind);
+            RequireKind(operation, depth - 1, kind);
             depth -= 2;
             return new CompiledWorldExpressionToken(Operation: operation);
+        }
+        CompiledWorldExpressionToken Comparison(WorldExpressionOp operation) {
+            Require(operation, 2);
+            if (kinds[depth - 2] != kinds[depth - 1]) {
+                throw Malformed($"token '{operation}' compares kind={DescribeCellKind(kind: kinds[depth - 2])} against kind={DescribeCellKind(kind: kinds[depth - 1])}");
+            }
+            depth--;
+            kinds[depth - 1] = CellKind.Int;
+            return new CompiledWorldExpressionToken(Operation: operation);
+        }
+        CompiledWorldExpressionToken Select() {
+            Require(WorldExpressionOp.Select, 3);
+            RequireKind(WorldExpressionOp.Select, depth - 3, CellKind.Int);
+            if (kinds[depth - 2] != kinds[depth - 1]) {
+                throw Malformed($"token 'Select' branches disagree: kind={DescribeCellKind(kind: kinds[depth - 2])} against kind={DescribeCellKind(kind: kinds[depth - 1])}");
+            }
+            var result = kinds[depth - 1];
+            depth -= 2;
+            kinds[depth - 1] = result;
+            return new CompiledWorldExpressionToken(Operation: WorldExpressionOp.Select);
         }
         WorldRuleException Malformed(string detail) => new(refusal: WorldRuleRefusal.EffectSourceAmbiguous, ruleName: ruleName, detail: $"'{verb}' expression {detail}");
     }

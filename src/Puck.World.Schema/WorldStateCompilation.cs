@@ -27,8 +27,7 @@ public enum WorldStateStorageShape : byte {
 }
 /// <summary>Identifies the deterministic value domain selected by a compiled state descriptor.</summary>
 public enum WorldStateValueKind : byte {
-    /// <summary>A whole signed integer within <see cref="WorldStateCapacity.MinIntCellValue"/> through
-    /// <see cref="WorldStateCapacity.MaxIntCellValue"/>, the range every engine read can lift to fixed point.</summary>
+    /// <summary>A whole signed 64-bit integer, carried and compared as a raw <see cref="long"/>.</summary>
     Int = ((byte)CellKind.Int),
 
     /// <summary>A Q48.16 fixed-point value carried as raw deterministic bits.</summary>

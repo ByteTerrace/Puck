@@ -31,8 +31,7 @@ public static partial class WorldDefinitionValidator {
                 errors.Add($"state row '{row.Name}': board requires plain integer or boolean cells without other storage or time traits.");
             }
             if (row.ClampToEnvelope(board.Empty) != board.Empty ||
-                (row.Kind == CellKind.Bool && board.Empty is not (0 or 1)) ||
-                board.Empty < WorldStateCapacity.MinIntCellValue || board.Empty > WorldStateCapacity.MaxIntCellValue) {
+                (row.Kind == CellKind.Bool && board.Empty is not (0 or 1))) {
                 errors.Add($"state row '{row.Name}': board.empty is outside the value domain.");
             }
             var compiled = WorldTopologyCompilation.Find(definition.StateRaw, board.Topology);
@@ -132,7 +131,7 @@ public static partial class WorldDefinitionValidator {
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var phaseRow in phases) {
             if (phaseRow is null || !WorldCellName.TryParse(phaseRow.Name, out _, out _) || !names.Add(phaseRow.Name) || !Enum.IsDefined(phaseRow.Mode) ||
-                phaseRow.TimeoutSeconds < 0 || phaseRow.TimeoutSeconds > (decimal)WorldStateCapacity.MaxIntCellValue / rate) {
+                phaseRow.TimeoutSeconds < 0 || phaseRow.TimeoutSeconds > (decimal)long.MaxValue / rate) {
                 errors.Add($"state row '{row.Name}': invalid phase name, mode, or timeout.");
             }
         }
@@ -141,9 +140,9 @@ public static partial class WorldDefinitionValidator {
                 errors.Add($"state row '{row.Name}': phase '{phaseRow.Name}' names no next phase '{phaseRow.Next}'.");
             }
         }
-        if ((uint)phase.Current >= phases.Count || (uint)phase.Active >= participants.Count || phase.Sequence < 0 || phase.Sequence > WorldStateCapacity.MaxIntCellValue ||
-            phase.Round < 0 || phase.Round > WorldStateCapacity.MaxIntCellValue || phase.DeadlineTick < 0 || phase.DeadlineTick > WorldStateCapacity.MaxIntCellValue ||
-            (participants.Count < 32 && (phase.Ready >> participants.Count) != 0)) {
+        if ((uint)phase.Current >= phases.Count || (uint)phase.Active >= participants.Count || phase.Sequence < 0 ||
+            phase.Round < 0 || phase.DeadlineTick < 0 || phase.Direction is not (1 or -1) ||
+            (participants.Count < 32 && ((phase.Ready | phase.Skipped) >> participants.Count) != 0)) {
             errors.Add($"state row '{row.Name}': phase progression is outside its declared domain.");
         }
     }

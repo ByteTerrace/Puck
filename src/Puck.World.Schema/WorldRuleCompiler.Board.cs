@@ -62,14 +62,13 @@ public static partial class WorldRuleCompiler {
         if (kind == WorldBoardQueryKind.Line) {
             if (tokens.Length != 6 || !int.TryParse(tokens[3], NumberStyles.None, CultureInfo.InvariantCulture, out var length) ||
                 length < 1 || length > topology.CellCount || !long.TryParse(tokens[4], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var value) ||
-                value < WorldStateCapacity.MinIntCellValue || value > WorldStateCapacity.MaxIntCellValue ||
                 tokens[5] is not ("exact" or "atLeast")) {
                 throw Invalid("line requires <length>:<integerValue>:<exact|atLeast>");
             }
             query = query with { Length = length, Value = value, Exact = tokens[5] == "exact" };
         } else if (kind == WorldBoardQueryKind.PathCost) {
             if (tokens.Length != 6 || row.Kind != CellKind.Int || !topology.TryCell(tokens[3], out var target) ||
-                !long.TryParse(tokens[4], NumberStyles.None, CultureInfo.InvariantCulture, out var cost) || cost < 0 || cost > WorldStateCapacity.MaxIntCellValue ||
+                !long.TryParse(tokens[4], NumberStyles.None, CultureInfo.InvariantCulture, out var cost) || cost < 0 ||
                 !int.TryParse(tokens[5], NumberStyles.None, CultureInfo.InvariantCulture, out var visits) || visits < 1 || visits > topology.CellCount) {
                 throw Invalid("pathCost requires <targetCell>:<maxCost>:<maxVisits> on an integer terrain row");
             }

@@ -45,7 +45,7 @@ Rule operands accept these bounded channels:
 | `$board:rayDistance:<row>:<direction>` | Distance to that cell, or -1 |
 | `$board:line:<row>:<length>:<value>:<exact\|atLeast>` | 1 when a matching line exists, otherwise 0 |
 | `$board:pathCost:<row>:<target>:<maxCost>:<maxVisits>` | Minimum terrain entry cost, -1 when unreachable/unaffordable, -2 when the visit budget is exhausted |
-| `$phase:<row>:<current\|active\|ready\|sequence\|round\|deadline>` | Persisted phase fact; active is -1 outside sequential phases |
+| `$phase:<row>:<current\|active\|ready\|sequence\|round\|deadline\|direction\|skipped>` | Persisted phase fact; active is -1 outside sequential phases |
 
 Board operands use the ordinary predicate/source `key` for their origin,
 including the existing `$cell:` dynamic-key form; `line` accepts no key.
@@ -64,7 +64,7 @@ are separate from these piles: each `drawDecks` mask is four 64-bit words,
 serialized as exactly 64 hexadecimal digits, and supports 256 dealt entries.
 
 The closed `transformState` effect and transaction step carry one of `transfer`,
-`setRay`, `moveToken`, `completePhase`, or `observe`. The same operation travels
+`setRay`, `moveToken`, `completePhase`, `turnOrder`, or `observe`. The same operation travels
 as the `TransformState` document mutation. Transfers preserve keys and accept
 `Key`, `First`, `Last`, or `Random` selectors; random selection names a
 redrawable integer `streamDraw` site. A cursor advances only with the committed
@@ -78,6 +78,17 @@ partial transfer, ray, cursor, allowance, or phase change after refusal.
 A `phase` row declares up to 32 authenticated participants and 32 named phases.
 `Sequential` activates participants in order; `Together` accepts actions until
 a participant becomes ready; `Resolution` admits only world-program completion.
+The order is state, not structure: the row carries `direction` (1 or -1) and a
+`skipped` participant mask, both persisted across phases, and the world-only
+`turnOrder` transform rewrites them (`direction`, `skip`, `unskip`, `active`)
+without completing anything — a reverse card, a fold, an elimination, a
+"play again". A sequential turn walks in `direction` over unskipped
+participants and the phase ends when it passes either end; a `Together` phase
+never waits on a skipped participant; skipping the active participant hands
+the turn onward around the ring. A transition enters the phase's authored
+`next` unless the world program's `completePhase` carries its own `next` — the
+branch (one player left standing goes to `showdown`, otherwise `deal`). Rules
+read `$phase:<row>:direction` and `:skipped` beside the other phase facts.
 Readiness alone preserves `sequence`; changing activation or phase increments
 it. Returning to phase zero increments `round`. A timeout expires at its exact
 deadline tick and takes precedence over a player action at that tick; a world
@@ -1351,10 +1362,25 @@ engine-tick `ValueSeconds`, a live copy `(FromState, FromKey)`, or a numeric
 the same `ResolveOperand`/`ReadWorldFact` path the comparand uses, and every
 operand must match the destination's `int` or `fixed` kind. Expressions are
 postfix token lists with a 64-token ceiling; they provide constants, state or
-reserved-channel reads, add, subtract, multiply, divide, minimum, maximum, and
-clamp. The compiler proves stack shape. Runtime overflow, division by zero, or
-an inverted clamp range refuses the effect instead of producing a wrapped or
-undefined result. This is
+reserved-channel reads, `add`, `subtract`, `multiply`, `divide`, `modulo`
+(remainder toward zero; in `fixed` the raw remainder, so `2.5 modulo 1` is
+`0.5`), `min`, `max`, `clamp`, the comparisons `equal`/`notEqual`/`less`/
+`lessOrEqual`/`greater`/`greaterOrEqual` (two same-kind values in, `int` 1 or 0
+out), `select` (condition, whenTrue, whenFalse — an `int` condition picks
+between two same-kind branches, the inline conditional), and, in `int`
+expressions only, `bitAnd`/`bitOr`/`bitXor`/`bitNot`/`shiftLeft`/`shiftRight`
+(arithmetic)/`shiftRightLogical`/`rotateLeft`/`rotateRight` with counts 0..63,
+the bit census `popCount`/`leadingZeroCount`/`trailingZeroCount` (64 for zero;
+`63 - leadingZeroCount` is the integer log2, `trailingZeroCount` the lowest
+occupied square), the piece walk `lowestSetBit`/`clearLowestSetBit`, and the
+8x8 board symmetries `byteSwap` (rank mirror) and `bitReverse` (half turn).
+`negate`/`abs` keep their operand's kind and refuse the carrier's minimum;
+`sign` reads either kind and pushes `int` -1/0/1. The compiler proves
+the stack's shape AND each slot's kind, so a comparison's `int` result may feed
+a `select` inside a `fixed` expression but never an arithmetic operator of the
+wrong kind. Runtime overflow, division by zero, a shift count outside 0..63,
+or an inverted clamp range refuses the effect instead of producing a wrapped
+or undefined result. This is
 what closes the round-reset gap the comparand alone cannot: a rule REACTING to a
 counter someone else advances (`compareState round != roundReflect`) can reset a
 whole set of other rows to authored literals AND resync `roundReflect` to
@@ -1373,9 +1399,12 @@ unchanged; `fixed` literals lower through the invariant decimal parser rather
 than binary floating point. The copy path likewise moves the source cell's bits
 unchanged — an exact shift for `int`/`bool`, verbatim raw bits for `fixed`, no
 float anywhere. An out-of-carrier literal refuses by the rule's name. An
-`int` cell is refused outside `WorldStateCapacity.MinIntCellValue`..
-`MaxIntCellValue` (`FixedQ4816`'s own integer band) at the document validator,
-because every engine read of one lifts it to fixed point.
+`int` cell spans the whole signed 64-bit carrier and is compared, copied, and
+computed as a raw `long` (a bitboard's bit 63 is an ordinary value); the few
+readers that need a continuous quantity from an `int` cell (a symmetry node, a
+dynamics target, a body-reference key) lift it through
+`WorldStateReader.LiftSaturating`, clamping at `FixedQ4816`'s integer band
+rather than faulting.
 
 Ordering is declaration order, on both sides: a later rule's copy operand reads
 an earlier rule's same-tick write exactly as a later gate does. Within one rule,

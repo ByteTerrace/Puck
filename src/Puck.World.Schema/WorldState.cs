@@ -1007,14 +1007,6 @@ public static class WorldStateCapacity {
     /// construction, never by author diligence). An authored <see cref="WorldStateRow.Capacity"/> may only narrow
     /// this, never widen it.</summary>
     public const int MaxCellsPerRow = 128;
-    /// <summary>The greatest value a <see cref="CellKind.Int"/> cell may carry — <see cref="FixedQ4816"/>'s own
-    /// integer ceiling, because every engine read of an int cell lifts it to fixed point through
-    /// <see cref="FixedQ4816.FromInteger(long)"/>, which throws outside this band. Enforced at every ingress — boot
-    /// file, console verb, addon decode, rule write-back, undo replay — so an unrepresentable cell is refused by
-    /// name at the one validator rather than admitting a value that kills the process on the first tick a rule reads
-    /// it. A <see cref="CellKind.Fixed"/> cell carries raw <see cref="FixedQ4816"/> bits and legitimately spans the
-    /// whole <see cref="long"/>, so this band is an int-cell rule alone.</summary>
-    public const long MaxIntCellValue = (long.MaxValue >> FixedQ4816.FractionBitCount);
     /// <summary>A cell's <see cref="WorldStateCell.Provenance"/> length ceiling, in UTF-16 code units — bounded like
     /// <see cref="MaxTextValueLength"/> since it is likewise a free-form issuer label, never a validated-identifier
     /// type.</summary>
@@ -1023,6 +1015,4 @@ public static class WorldStateCapacity {
     public const int MaxRows = 128;
     /// <summary>A <see cref="CellKind.Text"/> cell's value-length ceiling, in UTF-16 code units.</summary>
     public const int MaxTextValueLength = 256;
-    /// <summary>The least value a <see cref="CellKind.Int"/> cell may carry — see <see cref="MaxIntCellValue"/>.</summary>
-    public const long MinIntCellValue = (long.MinValue >> FixedQ4816.FractionBitCount);
 }

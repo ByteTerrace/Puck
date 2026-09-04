@@ -241,8 +241,19 @@ public static class WorldStateReader {
 
         return ((kind == CellKind.Fixed)
             ? FixedQ4816.FromRawBits(value: raw)
-            : FixedQ4816.FromInteger(value: raw));
+            : LiftSaturating(raw: raw));
     }
+    /// <summary>Lifts a whole-number cell to fixed point, saturating at <see cref="FixedQ4816"/>'s integer band.
+    /// An int cell spans the whole <see cref="long"/>; the few readers that need a continuous quantity (a symmetry
+    /// node, a dynamics target, a body-reference key) clamp rather than throw, so no authored value can fault a
+    /// tick.</summary>
+    /// <param name="raw">The int cell's whole value.</param>
+    /// <returns>The value as fixed point, clamped to the representable integer band.</returns>
+    public static FixedQ4816 LiftSaturating(long raw) => FixedQ4816.FromInteger(value: Math.Clamp(
+        value: raw,
+        min: (long.MinValue >> FixedQ4816.FractionBitCount),
+        max: (long.MaxValue >> FixedQ4816.FractionBitCount)
+    ));
 
     /// <summary>Reduces a resolved row directly in its native raw encoding. Each declared cell is read once, so the
     /// walk is linear in cell count.</summary>
@@ -522,7 +533,7 @@ public static class WorldStateReader {
     /// lifted as a whole number for every other kind.</returns>
     public static FixedQ4816 DynamicsRowRawToFixed(WorldStateRow row, long raw) => ((row.Kind == CellKind.Fixed)
         ? FixedQ4816.FromRawBits(value: raw)
-        : FixedQ4816.FromInteger(value: raw));
+        : LiftSaturating(raw: raw));
     /// <summary>Reads fixed-native dynamics state from its raw carrier.</summary>
     public static FixedQ4816 DynamicsTraitRawToFixed(long raw) => FixedQ4816.FromRawBits(value: raw);
     /// <summary>Writes continuous dynamics state to its fixed-native raw carrier without narrowing.</summary>

@@ -28,7 +28,7 @@ public static partial class WorldDefinitionValidator {
                     errors.Add($"state row '{row.Name}': slot visibility belongs on the row.");
                 }
 
-                if (cell.Observation is { } observation && (row.Knowledge is null || observation.Tick < 0 || observation.Tick > WorldStateCapacity.MaxIntCellValue)) {
+                if (cell.Observation is { } observation && (row.Knowledge is null || observation.Tick < 0)) {
                     errors.Add($"state row '{row.Name}': observation stamps require a knowledge board and a bounded nonnegative tick.");
                 }
 

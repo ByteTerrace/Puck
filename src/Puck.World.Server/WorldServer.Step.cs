@@ -879,6 +879,21 @@ public sealed partial class WorldServer {
                     stack[top++] = Math.Clamp(value: input, min: minimum, max: maximum);
                     continue;
                 }
+                if (token.Operation == WorldExpressionOp.Select) {
+                    var whenFalse = stack[--top];
+                    var whenTrue = stack[--top];
+                    var condition = stack[--top];
+                    stack[top++] = ((condition != 0L) ? whenTrue : whenFalse);
+                    continue;
+                }
+                if (WorldExpressionArithmetic.IsUnary(token.Operation)) {
+                    if (!WorldExpressionArithmetic.TryUnary(token.Operation, kind, stack[top - 1], out var unary)) {
+                        value = 0L;
+                        return false;
+                    }
+                    stack[top - 1] = unary;
+                    continue;
+                }
 
                 var right = stack[--top];
                 var left = stack[--top];

@@ -4909,6 +4909,249 @@
                                           }
                                         },
                                         "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes two values and pushes the remainder of left divided by right, truncating toward zero (Int: 37 % 40 = 37; Fixed: the raw remainder, so 2.5 % 1 = 0.5). A zero divisor fails evaluation; a divisor of -1 yields zero.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "modulo"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes two Int values and pushes their bitwise AND. Int expressions only.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "bitAnd"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes two Int values and pushes their bitwise OR. Int expressions only.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "bitOr"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes two Int values and pushes their bitwise XOR. Int expressions only.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "bitXor"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes one Int value and pushes its bitwise complement. Int expressions only.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "bitNot"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes value, count and pushes value shifted left by count bits; bits leave the top without refusal, so 1 shiftLeft 63 is the sign bit. A count outside 0..63 fails evaluation. Int only.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "shiftLeft"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes value, count and pushes the arithmetic (sign-propagating) right shift. A count outside 0..63 fails evaluation. Int only.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "shiftRight"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes value, count and pushes the logical (zero-filling) right shift, the bitboard walk. A count outside 0..63 fails evaluation. Int only.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "shiftRightLogical"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes two same-kind values and pushes Int 1 when equal, else 0.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "equal"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes two same-kind values and pushes Int 1 when unequal, else 0.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "notEqual"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes two same-kind values and pushes Int 1 when left is less than right, else 0.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "less"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes two same-kind values and pushes Int 1 when left is at most right, else 0.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "lessOrEqual"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes two same-kind values and pushes Int 1 when left is greater than right, else 0.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "greater"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes two same-kind values and pushes Int 1 when left is at least right, else 0.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "greaterOrEqual"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes condition, whenTrue, whenFalse (in that authored order) and pushes whenTrue when the Int condition is nonzero, else whenFalse. The two branches must share a kind; the result takes it.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "select"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes one Int value and pushes the number of set bits (0..64): a bitboard\u0027s piece count. Int only.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "popCount"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes one Int value and pushes the count of zero bits above the highest set bit (64 for zero): 63 - leadingZeroCount is the highest set square, the integer log2. Int only.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "leadingZeroCount"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes one Int value and pushes the count of zero bits below the lowest set bit (64 for zero): the lowest occupied square\u0027s index. Int only.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "trailingZeroCount"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes one Int value and pushes its lowest set bit alone (x \u0026 -x; zero for zero): the next piece to visit. Int only.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "lowestSetBit"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes one Int value and pushes it with its lowest set bit cleared (x \u0026 (x - 1)): the remaining pieces after a visit. Int only.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "clearLowestSetBit"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes value, count and pushes the 64-bit left rotation; a count outside 0..63 fails evaluation. Int only.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "rotateLeft"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes value, count and pushes the 64-bit right rotation; a count outside 0..63 fails evaluation. Int only.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "rotateRight"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes one Int value and pushes its eight bytes in reverse order: on an 8x8 bitboard, the board flipped rank for rank (a vertical mirror). Int only.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "byteSwap"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes one Int value and pushes its 64 bits in reverse order: on an 8x8 bitboard, the board rotated a half turn. Int only.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "bitReverse"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes one value and pushes its negation in the same kind; the carrier\u0027s minimum fails evaluation.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "negate"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes one value and pushes its magnitude in the same kind; the carrier\u0027s minimum fails evaluation.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "abs"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Consumes one value of either kind and pushes Int -1, 0, or 1 by its sign.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "sign"
+                                          }
+                                        },
+                                        "additionalProperties": false
                                       }
                                     ]
                                   }
@@ -11508,6 +11751,74 @@
                                     "null"
                                   ],
                                   "default": null
+                                },
+                                "next": {
+                                  "description": "World-only branch: the declared phase a transition enters instead of the current phase\u0027s authored next. Ignored when the completion does not transition.",
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "default": null
+                                }
+                              },
+                              "required": [
+                                "row"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "Reshapes a phase row\u0027s turn order without completing anything. World-only.",
+                              "properties": {
+                                "$type": {
+                                  "const": "turnOrder"
+                                },
+                                "row": {
+                                  "description": "The phase row.",
+                                  "type": "string"
+                                },
+                                "direction": {
+                                  "description": "The new sequential step, 1 or -1, or null to keep it.",
+                                  "type": [
+                                    "integer",
+                                    "null"
+                                  ],
+                                  "default": null
+                                },
+                                "skip": {
+                                  "description": "Participant tokens activation passes over from now on.",
+                                  "type": [
+                                    "array",
+                                    "null"
+                                  ],
+                                  "items": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "default": null
+                                },
+                                "unskip": {
+                                  "description": "Participant tokens restored to the order.",
+                                  "type": [
+                                    "array",
+                                    "null"
+                                  ],
+                                  "items": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "default": null
+                                },
+                                "active": {
+                                  "description": "A participant token to activate now in a sequential phase, or null to keep the current activation (moved past a newly skipped participant when it was the one active).",
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "default": null
                                 }
                               },
                               "required": [
@@ -12119,6 +12430,54 @@
                                           },
                                           "participant": {
                                             "description": "World-only named participant on whose completion the authored rule acts.",
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ],
+                                            "default": null
+                                          },
+                                          "next": {
+                                            "description": "World-only branch: the declared phase a transition enters instead of the current phase\u0027s authored next. Ignored when the completion does not transition.",
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ],
+                                            "default": null
+                                          }
+                                        },
+                                        "required": [
+                                          "row"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Reshapes a phase row\u0027s turn order without completing anything. World-only.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "turnOrder"
+                                          },
+                                          "row": {
+                                            "description": "The phase row.",
+                                            "type": "string"
+                                          },
+                                          "direction": {
+                                            "description": "The new sequential step, 1 or -1, or null to keep it.",
+                                            "type": [
+                                              "integer",
+                                              "null"
+                                            ],
+                                            "default": null
+                                          },
+                                          "skip": {
+                                            "$ref": "#/properties/interactions/properties/interactions/items/properties/effects/items/anyOf/5/properties/transform/anyOf/3/properties/skip",
+                                            "default": null
+                                          },
+                                          "unskip": {
+                                            "$ref": "#/properties/interactions/properties/interactions/items/properties/effects/items/anyOf/5/properties/transform/anyOf/3/properties/unskip",
+                                            "default": null
+                                          },
+                                          "active": {
+                                            "description": "A participant token to activate now in a sequential phase, or null to keep the current activation (moved past a newly skipped participant when it was the one active).",
                                             "type": [
                                               "string",
                                               "null"

@@ -330,7 +330,7 @@ public sealed partial class WorldServer {
 
         return ((declared.Kind == CellKind.Fixed)
             ? FixedQ4816.FromRawBits(value: raw)
-            : FixedQ4816.FromInteger(value: raw)
+            : WorldStateReader.LiftSaturating(raw: raw)
         );
     }
     // $symmetry: — the source cell read through the same resolver as an ordinary cell, its whole part taken as a
@@ -781,6 +781,8 @@ public sealed partial class WorldServer {
             "sequence" => phase.Sequence,
             "round" => phase.Round,
             "deadline" => WorldStateTransforms.Deadline(phase, m_definition.SimulationRateHz),
+            "direction" => phase.Direction,
+            "skipped" => phase.Skipped,
             _ => -1,
         };
     }
