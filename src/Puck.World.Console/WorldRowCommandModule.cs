@@ -757,7 +757,13 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
     }
     private static string DescribeMotion(WorldMotion motion) => string.Create(
         provider: CultureInfo.InvariantCulture,
-        handler: $"speed={motion.Speed.Value:0.###} turn={motion.Turn.Rate:0.###} {DescribeHolds(motion: motion)} {DescribeShaping(motion: motion)}"
+        handler: $"speed={motion.Speed.Value:0.###} turn={motion.Turn.Rate:0.###}{DescribeMaxPitch(turn: motion.Turn)} upTurn=({motion.UpTurn.Field:0.###}/{motion.UpTurn.Contact:0.###}) obstruction=({motion.Obstruction.Displacement:0.###}/{motion.Obstruction.IdleThreshold:0.###}/{motion.Obstruction.GraceSeconds:0.###}) {DescribeHolds(motion: motion)} {DescribeShaping(motion: motion)}"
+    );
+    // maxPitch is unread while pitchRate is zero (a planar drive frame), so the census omits it there rather than
+    // echoing a clamp that governs nothing.
+    private static string DescribeMaxPitch(WorldTurn turn) => (turn.PitchRate > 0f
+        ? string.Create(provider: CultureInfo.InvariantCulture, handler: $" pitchMax={turn.MaxPitch:0.###}")
+        : string.Empty
     );
     private CommandResult HandleAssign(CommandContext context, WireArgs args) {
         if (args.Count < 2) {

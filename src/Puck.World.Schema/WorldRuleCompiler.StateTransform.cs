@@ -27,8 +27,8 @@ public static partial class WorldRuleCompiler {
                     !Enum.IsDefined(transfer.Selector) || (transfer.Selector == WorldZoneSelector.Key) != (transfer.Key is not null) ||
                     (transfer.Selector == WorldZoneSelector.Random) != (transfer.Draw is not null) ||
                     ((transfer.Selector is WorldZoneSelector.First or WorldZoneSelector.Last) && !source.Ordered) || transfer.InsertFirst && !destination.Ordered ||
-                    transfer.Count < 1 || transfer.Count > WorldStateTokens.MaxCapacity || (transfer.Selector == WorldZoneSelector.Key && transfer.Count != 1)) {
-                    throw Invalid($"transfer requires compatible token zones, selector arguments, ordered positional operations, and a count of 1..{WorldStateTokens.MaxCapacity} (exactly 1 by key)");
+                    transfer.Count < 1 || transfer.Count > WorldStateTokens.MaxTransferCount || (transfer.Selector == WorldZoneSelector.Key && transfer.Count != 1)) {
+                    throw Invalid($"transfer requires compatible token zones, selector arguments, ordered positional operations, and a count of 1..{WorldStateTokens.MaxTransferCount} (exactly 1 by key)");
                 }
                 if (transfer.Draw is { } drawName) {
                     var drawRow = Row(drawName);

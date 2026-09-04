@@ -36,14 +36,60 @@ namespace Puck.World;
 /// <c>ResolveHold</c>/<c>ApplyHold</c> operations. A Motion-kind kit authoring none refuses validation by name: the
 /// hold list is the only spelling of a vertical channel, so a kit with no vertical law of its own still authors
 /// one row of kind <see cref="BodyHoldKind.None"/>.</param>
+/// <param name="UpTurnRaw">How fast a solved gravity field and a measured contact normal may each turn the body's
+/// up axis — see <see cref="WorldUpTurnRates"/>. Omitted (<see langword="null"/>) reproduces the engine's own
+/// steering rates exactly; read the effective rates from <see cref="UpTurn"/>.</param>
+/// <param name="ObstructionRaw">The non-walkable contact witness's latch tuning — see
+/// <see cref="WorldObstructionLatch"/>. Omitted (<see langword="null"/>) reproduces the engine's own latch exactly;
+/// read the effective latch from <see cref="Obstruction"/>.</param>
 public sealed record WorldMotion(
     WorldSpeed Speed,
     WorldTurn Turn,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldShaping>? Shaping = null,
     MotionMoveFrame MoveFrame = MotionMoveFrame.World,
     bool FacingSnap = true,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldHold>? Holds = null
-);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldHold>? Holds = null,
+    [property: JsonPropertyName("upTurn"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldUpTurnRates? UpTurnRaw = null,
+    [property: JsonPropertyName("obstruction"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldObstructionLatch? ObstructionRaw = null
+) {
+    /// <summary>Gets the up-axis steering rates, defaulted when the kit authors none.</summary>
+    [JsonIgnore]
+    public WorldUpTurnRates UpTurn => (UpTurnRaw ?? WorldUpTurnRates.Default);
+    /// <summary>Gets the obstruction witness latch tuning, defaulted when the kit authors none.</summary>
+    [JsonIgnore]
+    public WorldObstructionLatch Obstruction => (ObstructionRaw ?? WorldObstructionLatch.Default);
+}
+/// <summary>How fast a body's up axis may turn to follow ambient gravity versus a measured ground contact, both as
+/// the HALF angle the steering rotor is built from (a rate of <c>r</c> turns the body a half angle of <c>r</c>
+/// radians in one second — an actual reorientation of <c>2r</c> radians).</summary>
+/// <param name="Field">The ceiling on how fast a solved gravity field may turn the up axis. Crossing this rate lets
+/// an attractor's pull replace the world's own as one continuous roll rather than a single-tick inversion; every
+/// ordinary reorientation turns far slower and is untouched.</param>
+/// <param name="Contact">The ceiling on how fast a measured ground-contact normal may turn the up axis — a
+/// discontinuity filter, not a smoothing rate: it should sit an order of magnitude above the fastest curvature this
+/// kit's own top speed can walk, so ordinary running adopts the surface exactly and only a collider crease is spread
+/// across a few ticks.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldUpTurnRates(float Field = 1.5707963267948966f, float Contact = 6.283185307179586f) {
+    /// <summary>Gets the rates every kit authoring none advances under.</summary>
+    public static WorldUpTurnRates Default { get; } = new();
+}
+/// <summary>The non-walkable contact witness's persistence — see <c>WorldBody.UpdateObstructionWitness</c>. The
+/// witness is the last non-walkable push's normal, held across ticks while the body stays actively driven and
+/// hasn't moved since, so a solver tick that happens not to re-register the push cannot flicker the witness back to
+/// "none" mid-obstruction.</summary>
+/// <param name="Displacement">World units a body must move from where the witness last (re)latched before it is
+/// considered to have genuinely moved on.</param>
+/// <param name="IdleThreshold">The raw <c>MoveAdvance</c>/<c>MoveStrafe</c> role-channel magnitude (each reads in
+/// <c>[-1, 1]</c>) below which the body counts as not actively driving.</param>
+/// <param name="GraceSeconds">How long, in real time, an un-refreshed latch survives a solver pass reporting no push
+/// at all — absorbs ordinary query noise near a surface (a gradient/quantization boundary, or a body settled into a
+/// wall/ground corner under blended contact geometry).</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldObstructionLatch(float Displacement = 2f, float IdleThreshold = 0.05f, float GraceSeconds = 0.5f) {
+    /// <summary>Gets the latch every kit authoring none advances under.</summary>
+    public static WorldObstructionLatch Default { get; } = new();
+}
 /// <summary>The world's motion defaults — the profileless locomotion speeds a stand-in with no seated profile advances on.
 /// This is the whole top-level motion section: shaping and holds are per-kit
 /// (<see cref="WorldKit.Motion"/>), which is the only place
@@ -120,11 +166,15 @@ public sealed record WorldSpeedHeld(string Channel, float Multiplier);
 /// <param name="PitchRate">The pitch rate (rad/s) a drive kit's Pitch channel commands; <c>0</c> (the default)
 /// locks the drive frame planar (the ground and hover variants). Positive selects the flying variant's pitched
 /// facing, clamped inside the integrator so the frame can never flip past vertical.</param>
+/// <param name="MaxPitch">The drive pitch clamp (radians): how far the flying variant's facing may climb or dive
+/// before the integrator holds it, so it can never flip past vertical and invert the yaw frame mid-flight. Unread
+/// while <paramref name="PitchRate"/> is zero.</param>
 public sealed record WorldTurn(
     float Rate,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? ReferenceSpeed = null,
     float Falloff = 1f,
-    float PitchRate = 0f
+    float PitchRate = 0f,
+    float MaxPitch = 1.2f
 );
 /// <summary>The along-the-target (whole vector) or along-the-heading (drive longitudinal) facet of one
 /// <see cref="WorldShaping"/> row. An absent convergence rate means exact, immediate convergence; zero is never a
@@ -316,13 +366,23 @@ public static class WorldMotionTuningFactory {
                 Rate: FixedQ4816.FromDouble(value: tuning.Turn.Rate),
                 ReferenceSpeed: FixedQ4816.FromDouble(value: (tuning.Turn.ReferenceSpeed ?? 0f)),
                 Falloff: FixedQ4816.FromDouble(value: tuning.Turn.Falloff),
-                PitchRate: FixedQ4816.FromDouble(value: tuning.Turn.PitchRate)
+                PitchRate: FixedQ4816.FromDouble(value: tuning.Turn.PitchRate),
+                MaxPitch: FixedQ4816.FromDouble(value: tuning.Turn.MaxPitch)
             ),
             Shaping: shaping,
             ShapingRecencyFacts: recencyFacts.ToArray(),
             ShapingRecencyWindows: recencyWindows.ToArray(),
             MoveFrame: tuning.MoveFrame,
-            FacingSnap: tuning.FacingSnap
+            FacingSnap: tuning.FacingSnap,
+            UpTurn: new FixedUpTurnRates(
+                Field: FixedQ4816.FromDouble(value: tuning.UpTurn.Field),
+                Contact: FixedQ4816.FromDouble(value: tuning.UpTurn.Contact)
+            ),
+            Obstruction: new FixedObstructionLatch(
+                DisplacementSquared: FixedQ4816.FromDouble(value: ((double)tuning.Obstruction.Displacement * tuning.Obstruction.Displacement)),
+                IdleThreshold: FixedQ4816.FromDouble(value: tuning.Obstruction.IdleThreshold),
+                GraceTicks: FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: tuning.Obstruction.GraceSeconds))
+            )
         );
     }
 }

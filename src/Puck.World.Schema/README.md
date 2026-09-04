@@ -357,7 +357,10 @@ are non-game adjacency/federation stress content — each a `basis` delta over
 the `quilt-base` template (see "Document composition" below). Reusable defaults
 live in `standard.basis.json`. The movement platform
 every kit rides is documented on its kit's `WorldMotion`
-row (`Speed`/`Turn`, `MoveFrame`/`FacingSnap`), the
+row (`Speed`/`Turn`, `MoveFrame`/`FacingSnap`, the up-axis steering ceilings
+`upTurn` (field/contact) and the obstruction-witness latch `obstruction`
+(displacement/idleThreshold/graceSeconds) — both default to the engine's own
+rates; `Turn.MaxPitch` is the drive frame's own pitch clamp), the
 frame its MoveAdvance/MoveStrafe channel rows are authored in
 (`channels[].frame`, `ChannelFrame`: `World` raw, `Camera` camera-relative and
 facing its travel, `Heading` body-relative with `Turn` steering — the stick's

@@ -45,6 +45,7 @@ public sealed record WorldStateBoard(string Topology, long Empty = 0);
 /// S, SW, W, NW; hex directions are E, NE, NW, W, SW, SE; ring directions are forward and backward.</summary>
 public sealed partial class CompiledWorldTopology {
     private readonly int[] m_neighbours;
+    private readonly int[] m_opposite;
     private readonly string[] m_keys;
     private readonly WorldCellName[] m_names;
     private readonly int m_width;
@@ -56,7 +57,7 @@ public sealed partial class CompiledWorldTopology {
     private readonly FixedQ4816 m_cellSize;
     private readonly FixedQ4816 m_band;
 
-    internal CompiledWorldTopology(WorldTopologyKind kind, int count, int directions, int[] neighbours,
+    internal CompiledWorldTopology(WorldTopologyKind kind, int count, int directions, int[] neighbours, int[] opposite,
         int width, int depth, WorldTopologyWrap wrap, FixedVector3 origin, FixedQ4816 cellSize, FixedQ4816 band,
         int[][] images, string[] elementNames, int layers, FixedQ4816 layerHeight) {
         m_band = band;
@@ -68,6 +69,7 @@ public sealed partial class CompiledWorldTopology {
         CellCount = count;
         DirectionCount = directions;
         m_neighbours = neighbours;
+        m_opposite = opposite;
         m_width = width;
         m_depth = depth;
         m_wrap = wrap;
@@ -188,6 +190,13 @@ public sealed partial class CompiledWorldTopology {
     public int Neighbour(int cell, int direction) => (uint)cell < CellCount && (uint)direction < DirectionCount
         ? m_neighbours[cell * DirectionCount + direction] : -1;
 
+    /// <summary>Reads the direction ordinal whose step vector is the negation of <paramref name="direction"/>'s —
+    /// compiled once from each direction's own offset rather than assumed from ordinal arithmetic, so an
+    /// asymmetrically-ordered direction table (a <see cref="WorldTopologyKind.Box"/>'s 26) still resolves correctly.</summary>
+    /// <param name="direction">The direction ordinal.</param>
+    /// <returns>The opposite direction ordinal, or -1 for an invalid address.</returns>
+    public int Opposite(int direction) => (uint)direction < DirectionCount ? m_opposite[direction] : -1;
+
     /// <summary>Returns a precompiled canonical cell key.</summary>
     /// <param name="cell">The cell ordinal.</param>
     /// <returns>The decimal key.</returns>
@@ -218,6 +227,19 @@ public static class WorldTopologyCompilation {
     public const int MaxCells = 4096;
     /// <summary>The maximum named topologies in one document.</summary>
     public const int MaxTopologies = 16;
+    /// <summary>The document-wide board storage ceiling — every declared topology at its own <see cref="MaxCells"/>.</summary>
+    public const int MaxTotalCells = (MaxTopologies * MaxCells);
+    /// <summary>The greatest axial hexagon radius whose cell count (<c>1 + 3r(r + 1)</c>) still fits
+    /// <see cref="MaxCells"/>, computed rather than authored so the two bounds can never drift apart.</summary>
+    public static readonly int MaxHexRadius = ComputeMaxHexRadius();
+
+    private static int ComputeMaxHexRadius() {
+        var radius = 0;
+        while ((1L + (3L * (radius + 1) * (radius + 2))) <= MaxCells) {
+            radius++;
+        }
+        return radius;
+    }
     private static readonly ConditionalWeakTable<WorldStateLatticeTopology, CompiledWorldTopology> s_cache = new();
 
     /// <summary>Finds the physical topology, if any. Discrete boards never allocate a fluid field.</summary>
@@ -271,8 +293,8 @@ public static class WorldTopologyCompilation {
             return false;
         }
         if (topology.Kind == WorldTopologyKind.Hex) {
-            if (topology.Radius < 0 || topology.Radius > 36 || topology.Wrap != WorldTopologyWrap.None || topology.Width != 1 || topology.Depth != 1) {
-                reason = "hex requires radius 0..36, default width/depth, and no wrapping";
+            if (topology.Radius < 0 || topology.Radius > MaxHexRadius || topology.Wrap != WorldTopologyWrap.None || topology.Width != 1 || topology.Depth != 1) {
+                reason = $"hex requires radius 0..{MaxHexRadius}, default width/depth, and no wrapping";
                 return false;
             }
             count = 1L + 3L * topology.Radius * (topology.Radius + 1);
@@ -362,8 +384,17 @@ public static class WorldTopologyCompilation {
                 neighbours[cell * directions.Length + direction] = indices.TryGetValue((x,y,z), out var next) ? next : -1;
             }
         }
+        var opposite = new int[directions.Length];
+        for (var direction = 0; direction < directions.Length; direction++) {
+            var negated = (X: -directions[direction].X, Y: -directions[direction].Y, Z: -directions[direction].Z);
+            var found = Array.IndexOf(directions, negated);
+            if (found < 0) {
+                throw new InvalidOperationException($"{topology.Kind} direction {direction} has no opposite in its own direction table.");
+            }
+            opposite[direction] = found;
+        }
         var (images, elementNames) = CompiledWorldTopology.BuildSymmetry(topology.Kind, topology.Width, topology.Depth, topology.Layers, coordinates, indices);
-        return new(topology.Kind, coordinates.Count, directions.Length, neighbours, topology.Width, topology.Depth, topology.Wrap,
+        return new(topology.Kind, coordinates.Count, directions.Length, neighbours, opposite, topology.Width, topology.Depth, topology.Wrap,
             new FixedVector3(
                 X: FixedQ4816.FromDouble(topology.Origin.X),
                 Y: FixedQ4816.FromDouble(topology.Origin.Y),

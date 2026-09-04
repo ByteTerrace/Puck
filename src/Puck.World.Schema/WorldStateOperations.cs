@@ -7,8 +7,10 @@ namespace Puck.World;
 /// <param name="Capacity">The greatest token count, 1 through 4096.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldStateTokens(int Capacity = 256) {
-    /// <summary>The most tokens one domain declares, and the most one transfer moves.</summary>
-    public const int MaxCapacity = 256;
+    /// <summary>The most tokens one transfer moves in a single mutation — no transfer can move more than could ever
+    /// exist in a domain, so this is <see cref="WorldTopologyCompilation.MaxCells"/>, the domain capacity
+    /// ceiling <see cref="Capacity"/> is itself validated against.</summary>
+    public const int MaxTransferCount = WorldTopologyCompilation.MaxCells;
 }
 
 /// <summary>A ring of the last <paramref name="Capacity"/> values pushed into the row, oldest overwritten first:
@@ -158,7 +160,8 @@ public abstract record WorldStateTransform {
     /// first key deciding and each later key breaking the ties before it; a keyed numeric row by its own cell values.
     /// The canonical order a pattern reads a hand in.</summary>
     /// <param name="Row">The ordered zone or keyed numeric row.</param>
-    /// <param name="By">The attribute keys for a zone, 1..8 in precedence order; null (required) for a keyed row.</param>
+    /// <param name="By">The attribute keys for a zone, 1..<see cref="WorldStateCapacity.MaxSortKeys"/> in precedence
+    /// order; null (required) for a keyed row.</param>
     /// <param name="Descending">Whether a keyed row's greatest value comes first; a zone's direction sits on each key.</param>
     public sealed record Sort(string Row, IReadOnlyList<WorldSortKey>? By = null, bool Descending = false) : WorldStateTransform;
 

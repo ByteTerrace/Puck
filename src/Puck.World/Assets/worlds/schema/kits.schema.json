@@ -107,6 +107,11 @@
                     "description": "The pitch rate (rad/s) a drive kit\u0027s Pitch channel commands; 0 (the default) locks the drive frame planar (the ground and hover variants). Positive selects the flying variant\u0027s pitched facing, clamped inside the integrator so the frame can never flip past vertical.",
                     "type": "number",
                     "default": 0
+                  },
+                  "maxPitch": {
+                    "description": "The drive pitch clamp (radians): how far the flying variant\u0027s facing may climb or dive before the integrator holds it, so it can never flip past vertical and invert the yaw frame mid-flight. Unread while PitchRate is zero.",
+                    "type": "number",
+                    "default": 1.2
                   }
                 },
                 "required": [
@@ -420,6 +425,53 @@
                   ],
                   "additionalProperties": false
                 },
+                "default": null
+              },
+              "upTurn": {
+                "description": "How fast a solved gravity field and a measured contact normal may each turn the body\u0027s up axis \u2014 see WorldUpTurnRates. Omitted (null) reproduces the engine\u0027s own steering rates exactly; read the effective rates from UpTurn.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "field": {
+                    "description": "The ceiling on how fast a solved gravity field may turn the up axis. Crossing this rate lets an attractor\u0027s pull replace the world\u0027s own as one continuous roll rather than a single-tick inversion; every ordinary reorientation turns far slower and is untouched.",
+                    "type": "number",
+                    "default": 1.5707964
+                  },
+                  "contact": {
+                    "description": "The ceiling on how fast a measured ground-contact normal may turn the up axis \u2014 a discontinuity filter, not a smoothing rate: it should sit an order of magnitude above the fastest curvature this kit\u0027s own top speed can walk, so ordinary running adopts the surface exactly and only a collider crease is spread across a few ticks.",
+                    "type": "number",
+                    "default": 6.2831855
+                  }
+                },
+                "additionalProperties": false,
+                "default": null
+              },
+              "obstruction": {
+                "description": "The non-walkable contact witness\u0027s latch tuning \u2014 see WorldObstructionLatch. Omitted (null) reproduces the engine\u0027s own latch exactly; read the effective latch from Obstruction.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "displacement": {
+                    "description": "World units a body must move from where the witness last (re)latched before it is considered to have genuinely moved on.",
+                    "type": "number",
+                    "default": 2
+                  },
+                  "idleThreshold": {
+                    "description": "The raw MoveAdvance/MoveStrafe role-channel magnitude (each reads in [-1, 1]) below which the body counts as not actively driving.",
+                    "type": "number",
+                    "default": 0.05
+                  },
+                  "graceSeconds": {
+                    "description": "How long, in real time, an un-refreshed latch survives a solver pass reporting no push at all \u2014 absorbs ordinary query noise near a surface (a gradient/quantization boundary, or a body settled into a wall/ground corner under blended contact geometry).",
+                    "type": "number",
+                    "default": 0.5
+                  }
+                },
+                "additionalProperties": false,
                 "default": null
               }
             },
