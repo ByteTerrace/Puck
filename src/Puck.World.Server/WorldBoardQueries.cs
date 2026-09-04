@@ -159,14 +159,23 @@ public static class WorldBoardQueries {
 public sealed partial class WorldServer {
     private long ReadBoardFact(CompiledWorldOperand operand, ulong tick) {
         var query = operand.Board!;
+        if (query.Kind == WorldBoardQueryKind.CellOf) {
+            var index = ResolveBodyRef(bodyRef: operand.BodyA!.Value, tick: tick);
+            return Body(index: index) is { } body && query.Topology.TryCellOf(position: body.FixedPosition, cell: out var cell) ? cell : -1;
+        }
         var row = WorldDefinitionRows.FindStateRow(m_definition.State, operand.Row!);
         if (row?.Board is null) {
             return -1;
         }
+        if (query.Kind == WorldBoardQueryKind.Offset) {
+            var originKey = ResolveOperandKey(operand.Key, operand.KeyFrom, tick);
+            var origin = originKey is not null && query.Topology.TryCell(originKey, out var originCell) ? originCell : -1;
+            return origin >= 0 && query.Topology.TryOffset(origin, query.Dx, query.Dz, out var offset) ? offset : -1;
+        }
         Span<long> values = stackalloc long[query.Topology.CellCount];
         WorldBoardQueries.Read(row, query.Topology, values);
         var key = ResolveOperandKey(operand.Key, operand.KeyFrom, tick);
-        var source = key is not null && query.Topology.TryCell(key, out var cell) ? cell : -1;
+        var source = key is not null && query.Topology.TryCell(key, out var sourceCell) ? sourceCell : -1;
         return WorldBoardQueries.Evaluate(query, values, row.Board.Empty, source);
     }
 }

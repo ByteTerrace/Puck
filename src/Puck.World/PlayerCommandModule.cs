@@ -111,7 +111,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "body.where",
-            description: "Echoes a body's FULL 6DOF pose and its authoritative fact mask — [body.where: body:<n> pos=(x.xx, y.yy, z.zz) yaw=ddd° pitch=ddd° roll=ddd° facts=grounded|climbing home=(x.xx, y.yy, z.zz) scale=s.ss] — so a piped run can assert it moved or changed regime: facts= is the lower-case, |-joined set of the body facts the simulation's own action gates read (grounded, airborne, rising, falling, submerged, atsurface, climbing, flying, resting), or none. scale= is the body's live scale multiplier (1.00 unless bodies.scaleRow names a state row carrying this body's own cell) — the collider, resolved move speed, turn rate, and hold probes all read the same value. body.where [body] (optional body index 0..4095, default 0 — 0..3 local seats, 4..4095 simulated entries). Grounded entities print y=0.00 pitch=0 roll=0. A LOCAL seat's echo also carries anchor=body:<n> — the 0-based body index that seat's presentation (camera eye, audio listener, seat.<n>.position.* HUD bindings) derives from: the seat's bound body, or the routed body while possessing (a Control route targeting a body with capture on). A trailing instance:<name> token reads OUT OF a NAMED running instance's OWN tick snapshot instead — body.where <slot> instance:<name> (slot REQUIRED, 1..WorldBodiesLimits.LocalSeatCount, the instance form's own 1-based seat convention); no anchor rides that form (a spawned instance's seat has no client perceiving from it).",
+            description: "Echoes a body's FULL 6DOF pose and its authoritative fact mask — [body.where: body:<n> pos=(x.xx, y.yy, z.zz) yaw=ddd° pitch=ddd° roll=ddd° facts=grounded|climbing home=(x.xx, y.yy, z.zz) scale=s.ss com=(x.xx, y.yy, z.zz)] — so a piped run can assert it moved or changed regime: facts= is the lower-case, |-joined set of the body facts the simulation's own action gates read (grounded, airborne, rising, falling, submerged, atsurface, climbing, flying, resting), or none. scale= is the body's live scale multiplier (1.00 unless bodies.scaleRow names a state row carrying this body's own cell) — the collider, resolved move speed, turn rate, and hold probes all read the same value. com= trails only for a rigid-kit body — its live centre of mass, which orbits away from pos= (always the root) for a rolling or tumbling body. body.where [body] (optional body index 0..4095, default 0 — 0..3 local seats, 4..4095 simulated entries). A grounded entity prints pitch=0 roll=0; its y= reads the local ground height under it, not necessarily 0.00 (the garden's deck top sits at y=-0.50). A LOCAL seat's echo also carries anchor=body:<n> — the 0-based body index that seat's presentation (camera eye, audio listener, seat.<n>.position.* HUD bindings) derives from: the seat's bound body, or the routed body while possessing (a Control route targeting a body with capture on). A trailing instance:<name> token reads OUT OF a NAMED running instance's OWN tick snapshot instead — body.where <slot> instance:<name> (slot REQUIRED, 1..WorldBodiesLimits.LocalSeatCount, the instance form's own 1-based seat convention); no anchor rides that form (a spawned instance's seat has no client perceiving from it).",
             handler: WhereHandler
         );
         yield return CommandDefinition.WithWireArgs(
@@ -184,6 +184,20 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             name: "body.impulse",
             description: "Applies an instantaneous world-space impulse to a rigid-kit body's linear velocity: body.impulse <x> <y> <z> [body] (Δv = impulse / mass). Refused by name for a body whose kit carries no 'rigid' facet — see world.rigid. The optional trailing body index is 0..4095 (default 0); local population only, no instance:<name> routing.",
             handler: ImpulseHandler,
+            ackOnly: true
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
+            name: "body.carry",
+            description: "Begins one body carrying another: body.carry <carrier> <target> (both body indices REQUIRED and explicit — no optional-trailing default). The carrier's kit must author a carry facet and the target a rigid one; refused by name when either body is already a party to another carry relationship, the target sits outside the carrier's own live-scaled reach, or the target's own live-scaled mass exceeds the carrier's live-scaled carry ceiling. On success the target's pose and rigid velocity are derived from the carrier's frame every tick — see body.where's carrying=/carriedBy= read-back — and its own rigid integration is suspended until body.release.",
+            handler: CarryHandler,
+            ackOnly: true
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
+            name: "body.release",
+            description: "Ends a body's active carry, if any: body.release [body] (optional trailing body index, default 0). The released body re-enters the rigid solver carrying the carrier's own current velocity. A friendly no-op refusal when the body is not carrying anything.",
+            handler: ReleaseHandler,
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(

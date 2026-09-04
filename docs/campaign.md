@@ -364,9 +364,18 @@ pull rate all scale with it on the server — a shrunk body's fall and depenetra
 gentle rather than free-falling one tick of full-scale gravity into a collider whose own contact skin
 margin it can no longer absorb; the client reads the same live cell into the rendered rig and the seat
 chase camera's orbit distance and look-at height, so a shrunk body stays framed rather than shrinking to
-a speck on screen. Body-vs-body contact, overlap events, and adjacency transfer still read a kit's
-shared UNSCALED collider volumes — a shrunk body's contact with the world is correct, its contact with
-other bodies is not yet, a known gap rather than a silent claim. `WorldServer.RestoreCheckpoint` and
+a speck on screen. Body-vs-body contact (`WorldPopulation.ResolveDynamicContacts`), overlap events
+(`WorldEventFeed`), the cross-boundary continuum trajectory (`WorldBody.ApplyContinuumTrajectory`), the
+adjacency sweep's LOCAL side (`WorldAdjacencyContactField`), and a rigid body's own static-contact sweep
+(`WorldBody.AdvanceRigid`) all read each body's live-scaled collider volumes now — a shrunk body's
+contact with another body agrees with its contact with the world. A rigid body's mass and inertia scale
+with it too (mass ∝ Scale³ against the authored mass at scale 1, inertia ∝ Scale⁵, so inverse mass ∝
+Scale⁻³ and inverse inertia ∝ Scale⁻⁵ — `WorldBody.ScaleRigid`), along with its bounding radius, centre
+of mass, and the linear (never angular) rest threshold. The one residual gap: the adjacency sweep's
+REMOTE side still reads a neighbour authority's unscaled shared collider, because a delivered
+`EntitySnapshot`/`IWorldAdjacencyNeighbour` carries no per-entity Scale on the wire yet — a shrunk body's
+contact against a body standing in a neighbouring authority is not yet scale-consistent, unlike every
+same-authority case above. `WorldServer.RestoreCheckpoint` and
 every other door that mints a `WorldBody` (a detached-seat/peer restore, a silo's checkpoint boot)
 resync the live value from the row, the same catch-up every other admission door already gives a
 freshly minted body — a restored session's bodies never disagree with their own `scale` row cells. A
@@ -490,10 +499,73 @@ value decays identically at any simulation rate. Each substep rotates and
 translates the body about its own centre of mass, never its root, so a
 rolling collider's rendered position does not orbit the root as it spins.
 Cross-world transfer of a rigid body is
-out of scope and refused by name. The garden's `billiardsTray`/`bowlingLane`
+out of scope and refused by name — a carrier holding one refuses its OWN
+transfer for the same reason, rather than dropping or orphaning what it
+holds. The garden's `billiardsTray`/`bowlingLane`
 placements are the proof fixture; see the
 [server](../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)
 and [schema](../src/Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs) references.
+
+**Carry, as attachment (owner decision).** Picking up a rigid body is not a
+second attachment primitive beside the surface-hold system — it is a
+carrier-declared kit facet (`carry`: a body-local frame offset, a
+mass-equivalent, and a reach) authored the same "presence is the whole
+switch" way `rigid` is. While carried, the target's own rigid integration is
+suspended entirely — its pose is derived from the carrier's frame every tick,
+never solved — and it re-enters the solver with the carrier's own velocity on
+release, never snapped to rest. A body may carry at most one other body at a
+time; a candidate must sit within the carrier's own live-scaled reach and its
+own live-scaled mass must not exceed the carrier's mass-equivalent times an
+authored fraction — the same mass ∝ Scale³ law a rigid body's own mass scales
+under, so a shrunk carrier's ceiling shrinks with it rather than staying a
+free constant. `body.carry`/`body.release` are the console/wire surface (the
+same shape `body.impulse` already established for a rigid-solver-facing
+verb); a rule effect and an authored chord are follow-on work, not yet built.
+
+**The tabletop primitive (owner decisions, Lane D).** Physics-first extends to
+board games: a chess set is 32 ordinary rigid bodies on a shared `piece` kit —
+no second entity kind, no engine-level "piece" concept. A placement's `board`
+facet (`WorldPlacementBoard`) anchors a discrete Grid topology (already
+carrying its own world-space origin/cellSize — no second frame member) to the
+placement, and a world rule derives an occupancy row from each piece's
+resting cell (`$board:cellOf:<row>:body:<n>`, a new reserved channel, Grid-
+only) on `$physics:quiescent`'s rising edge — never every tick. Legality is
+authorable, not engine-adjudicated: the shipped garden default checks
+occupancy and turn order only, over the piece whose own resting cell changed
+between two occupied board cells — a piece that leaves the board entirely
+(captured, knocked clear) never itself registers as a mover, since it has no
+destination cell to rule on; the capturing piece's own move records the
+whole event, and lifting a piece off the board without a compensating move
+records nothing, leaving `turn`/`lastLegal` untouched. A full piece-
+movement-geometry vocabulary (sliding pieces via `$board:rayCell`, leapers
+via the new `$board:offset` channel, check/castling/en passant/promotion) is
+the reserved authorable extension, not built. Illegal moves are recorded — `illegalCount` counts them,
+`verdict` names the last ruling — and never rejected, undone, or repositioned;
+the table remembers the last legal position (`lastLegal`) for a human or a
+future AI body to act on. `plan` is the addon seam for candidate-highlight
+rendering: an ordinary board-typed row nothing in the engine writes, proved
+from the console (`world.state.cell.set plan <cell> 1`) rather than built.
+Boards are a primitive the catalog reuses (checkers, go, cards on a table),
+never a chess-specific engine feature, and a topology is carried by at most
+one placement. The shipped `body.carry` facet is a separate primitive: it
+picks up a rigid body, never a placement or board. See
+the [schema reference](../src/Puck.World.Schema/README.md#discrete-boards-cards-and-turns)
+and `world.tabletop`'s console read-back.
+
+The board itself renders as 64 ordinary placements (`boardSquareLight`/
+`boardSquareDark`, one per cell, colors from a `boardColors` text row) rather
+than a bespoke board-rendering feature — the same placement/prototype and
+`state.<row>.<key>` palette-binding vocabulary the pieces already use, so a
+future board (checkers, go) needs no new client code either. Deriving N
+independent pieces' occupancy needs N separately-authored rules, one write
+per piece: a rule's own contiguous run of effects preflights and applies as
+one atomic candidate, so bundling every piece's write into one rule means a
+single piece leaving the frame (a capture, a knock clear off the table)
+rejects every other piece's write in the same settle. A walker's own capsule
+reach already exceeds a 0.2 m cell, so no body can stand on the 1.6 m board
+itself without risking contact; the garden's proof keeps Wren at a safe
+standoff beside the table and moves pieces by console verb, never by having
+her body touch one.
 
 ## After this arc
 

@@ -400,6 +400,59 @@ are the garden's proof fixture — see the
 for the mechanics and the [schema reference](../Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs)
 for the authored facet.
 
+A kit carrying a `carry` facet may pick up another kit's rigid body:
+`body.carry <carrier> <target>` begins it (within an authored reach and mass
+ceiling, both scaling with the carrier's own live `Scale`), `body.release
+[carrier]` ends it; a carried body's own rigid integration is suspended and
+its pose is derived from the carrier's frame every tick, re-entering the
+solver with the carrier's own velocity on release. `body.where` echoes
+`carrying=`/`carriedBy=` while the relationship holds. The garden's `walker`
+kit (Wren) is the worked example — see the [server reference](../Puck.World.Server/README.md#carry-as-attachment-worldbodycarrycs-worldpopulationcarrycs).
+
+The `tabletop` placement carries a `board` facet (the tabletop primitive —
+see the [schema reference](../Puck.World.Schema/README.md#discrete-boards-cards-and-turns))
+anchoring an 8x8 `chessBoard` Grid topology, and 32 `piece`-kit rigid bodies
+(the garden's chess set, shrunk-Wren scale beside the `drinkMe`/`eatMe`
+regions, now sited clear of the table's own footprint so the shrink and the
+approach never jostle a resting piece) prove it: one `pieceCell`-derive rule
+reads every piece's `$board:cellOf` unconditionally, then one PER-PIECE
+`board`-write rule (never a single rule spanning every piece) commits that
+piece's own cell — a piece whose body has left the frame (captured, knocked
+clear) refuses only its own write; it never costs its neighbours theirs, since
+a rule's own contiguous run of state effects preflights and applies as one
+atomic candidate. A `body.pose`-driven proof at the piece's resting height must
+pair the pose with a negligible `body.impulse` wake — a bare pose that leaves
+the piece on its support is a kinematic write that does not disturb the rigid
+census, so nothing re-derives from it alone; a pose that drops the piece onto
+or above its support un-rests it and crosses `$physics:quiescent`'s Edge on
+settle with no impulse at all. Wake a piece along Y: the `piece` kit's own high
+rolling/Coulomb
+friction couples a horizontal wake into spin (the ball's known
+rolling-friction overshoot, here on a lighter body), so the unsettled window
+can run long enough to drift the piece across a cell boundary before it
+rests; a small vertical impulse re-settles in place instead.
+`$physics:quiescent` is POPULATION-WIDE — any other rigid body still
+settling (a just-released `carry` target tumbling, say) holds every board's
+own Edge-gated rules at bay too, so a board proof run alongside unrelated
+rigid activity can see two moves land on the same settle. A `verdict`
+records occupancy and turn order
+— the shipped default; per-kind movement geometry is the reserved authorable
+extension — and `lastLegal`/`turn` update only on a legal move, over the
+piece whose own cellOf changed between two occupied board cells: a piece that
+resolves to no cell, before or after (captured, lifted off, knocked clear),
+never itself qualifies as the mover, so its disappearance never registers a
+verdict, a turn change, or a `lastLegal` write under its own color — a
+capture is carried entirely by the capturing piece's own move.
+`world.tabletop` reads the frame, live occupancy, and the bound convenience
+rows back. `boardSquareLight`/`boardSquareDark` placements (paired one to a
+cell, colors from the `boardColors` text row) render the board itself; the
+`plan` row is echoed and console-writable but unrendered — reserved for an
+addon to paint move highlights, per the lane's own scope. One known limit
+carries from the per-body scale primitive's own contract: two pieces landing
+on one cell in the same settle leave only the last-written piece's code in
+the `board` row (the other's cell reads empty even though its body is still
+physically there).
+
 World-space creation text uses the document's optional `text` catalog. Every
 font row has a stable name, a path relative to the world document, a
 `sha256-64/...` content pin, explicit Unicode scalar ranges, and an optional

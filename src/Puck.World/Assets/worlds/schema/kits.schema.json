@@ -745,7 +745,7 @@
             ],
             "properties": {
               "mass": {
-                "description": "The body\u0027s mass, in the same units gravity.attractors masses use. Must be strictly positive \u2014 a rigid body with no mass is not a rigid body, it is a decoration.",
+                "description": "The body\u0027s mass, in the same units gravity.attractors masses use. Must be strictly positive after fixed-point compilation and yield representable room-scale mass/inertia properties \u2014 a rigid body with no compiled mass is not a rigid body, it is a decoration.",
                 "type": "number"
               },
               "restitution": {
@@ -776,6 +776,37 @@
             },
             "required": [
               "mass"
+            ],
+            "additionalProperties": false,
+            "default": null
+          },
+          "carry": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "offset": {
+                "description": "The full-scale carry point, in the carrier\u0027s own body-local axes: a carried body\u0027s world pose tracks root \u002B orientation\u00B7(Offset \u00D7 Scale) every tick it stays attached."
+              },
+              "massEquivalent": {
+                "description": "The carrier\u0027s own notional mass, in the same units Mass uses. A locomotion kit authors no mass of its own (Mass is gravitational, not inertial), so this stands in for it when deriving MaxCarryFraction\u0027s ceiling. Must be strictly positive.",
+                "type": "number"
+              },
+              "maxCarryFraction": {
+                "description": "The fraction of MassEquivalent \u2014 scaled by the carrier\u0027s own live Scale under the same mass \u221D Scale\u00B3 law WorldRigid derives against \u2014 a candidate body\u0027s own scaled Mass may not exceed. Non-negative; 1 (the default) admits a body up to the carrier\u0027s own mass-equivalent.",
+                "type": "number",
+                "default": 1
+              },
+              "maxReach": {
+                "description": "The greatest distance, in world units, between the carrier\u0027s and the target\u0027s positions body.carry admits. Must be strictly positive.",
+                "type": "number",
+                "default": 1.5
+              }
+            },
+            "required": [
+              "offset",
+              "massEquivalent"
             ],
             "additionalProperties": false,
             "default": null

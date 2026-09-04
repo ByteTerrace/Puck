@@ -90,6 +90,11 @@
             "$ref": "./common.schema.json#/$defs/WorldPlacementGrip",
             "description": "The placement\u0027s grip facet (see WorldPlacementGrip) \u2014 overrides the world\u0027s default hold policy for this row\u0027s compiled surface(s), or null to inherit the world default. Omitted from the wire when null. Requires Solid (validated).",
             "default": null
+          },
+          "board": {
+            "$ref": "./common.schema.json#/$defs/WorldPlacementBoard",
+            "description": "The placement\u0027s board facet (see WorldPlacementBoard) \u2014 the tabletop primitive, or null for no anchored topology. Omitted from the wire when null.",
+            "default": null
           }
         },
         "required": [

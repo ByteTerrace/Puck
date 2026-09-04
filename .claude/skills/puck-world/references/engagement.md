@@ -265,7 +265,7 @@ body at that index. The player defaults to 1 and is bounded to 1..128.
   recorded intent list, exactly like a mounted addon's driving. It is RE-DERIVED
   at replay from the taped `ComposeControl` command (which fixes the
   target/exclusivity/kit/reach) plus the source seat's own taped submissions.
-- The pose hash needs NO format change: it already hashes every active body's
+- The population hash needs NO format change: it already hashes every active body's
   position/orientation each tick, so a possessed body's motion and a captured
   source's stillness are both covered.
 

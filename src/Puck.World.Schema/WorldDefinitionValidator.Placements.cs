@@ -284,6 +284,65 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.{name} must be finite and non-negative.");
             }
         }
+
+        if (
+            ColliderCanDeriveRigidMass(collider: collider) &&
+            (FixedWorldCollider.Compile(collider: collider, creations: []) is { } fixedCollider) &&
+            !FixedWorldRigid.TryCompile(
+                rigid: rigid,
+                collider: fixedCollider,
+                compiled: out _,
+                reason: out var reason
+            )
+        ) {
+            errors.Add(item: $"{path} cannot compile deterministic mass properties: {reason}");
+        }
+    }
+    private static bool ColliderCanDeriveRigidMass(WorldCollider? collider) => (collider switch {
+        WorldCollider.Sphere sphere => float.IsFinite(f: sphere.Radius) && (sphere.Radius > 0f),
+        WorldCollider.Capsule capsule => float.IsFinite(f: capsule.Radius) &&
+            (capsule.Radius > 0f) &&
+            IsFinite(value: capsule.Endpoint) &&
+            (capsule.Endpoint.LengthSquared() > 0f),
+        WorldCollider.Box box => IsFinite(value: box.HalfExtents) &&
+            (box.HalfExtents.X > 0f) &&
+            (box.HalfExtents.Y > 0f) &&
+            (box.HalfExtents.Z > 0f) &&
+            float.IsFinite(f: box.Rotation.LengthSquared()) &&
+            (box.Rotation.LengthSquared() > 0f),
+        _ => false,
+    });
+    private static void ValidateCarry(WorldCarry? carry, string path, List<string> errors) {
+        if (carry is null) {
+            return;
+        }
+
+        if (!IsFinite(value: carry.Offset)) {
+            errors.Add(item: $"{path}.offset must be finite.");
+        }
+
+        RequirePositive(
+            value: carry.MassEquivalent,
+            name: $"{path}.massEquivalent",
+            errors: errors
+        );
+
+        if (
+            !float.IsFinite(f: carry.MaxCarryFraction) ||
+            (carry.MaxCarryFraction < 0f)
+        ) {
+            errors.Add(item: $"{path}.maxCarryFraction must be finite and non-negative.");
+        }
+
+        RequirePositive(
+            value: carry.MaxReach,
+            name: $"{path}.maxReach",
+            errors: errors
+        );
+
+        if (!FixedWorldCarry.TryCompile(carry: carry, compiled: out _, reason: out var reason)) {
+            errors.Add(item: $"{path} cannot compile deterministically: {reason}");
+        }
     }
     private static void ValidateCollider(WorldCollider? collider, IReadOnlyList<WorldPrototype> creations, string path, List<string> errors) {
         if (collider is null) {
@@ -981,6 +1040,11 @@ public static partial class WorldDefinitionValidator {
                 path: $"{path}.rigid",
                 errors: errors
             );
+            ValidateCarry(
+                carry: kit.Carry,
+                path: $"{path}.carry",
+                errors: errors
+            );
         }
 
         // ABSENT (kitNames empty) derives DefaultSeatKit to "" (WorldDefinition.DefaultSeatKit), which names no kit
@@ -1255,6 +1319,9 @@ public static partial class WorldDefinitionValidator {
         var dynamicInstanceCount = 0;
         var staticPlacementInstanceCount = 0L;
         var solidPlacementColliderCount = 0L;
+        // The BOARD facet carries a tabletop's frame; a topology admits at most one carrying placement (see
+        // WorldPlacementBoard's own doc) — tracked across the whole loop, never re-scanned per row.
+        var boardTopologies = new HashSet<string>(comparer: StringComparer.Ordinal);
         // The one face derivation, read for both the per-face portal refusals below and the screen budget after the
         // loop — never a second walk of (placements x declared faces) to answer the same questions.
         var faces = WorldFaceCatalog.For(definition: definition);
@@ -1572,6 +1639,15 @@ public static partial class WorldDefinitionValidator {
             ) {
                 errors.Add(item: $"{path}.grip requires .solid — a placement with no solidity facet compiles no collider for a grip override to apply to.");
             }
+
+            // The BOARD facet anchors a discrete Grid topology's frame to this placement — the tabletop primitive.
+            ValidateBoardFacet(
+                board: placement.Board,
+                definition: definition,
+                path: path,
+                boardTopologies: boardTopologies,
+                errors: errors
+            );
 
             // The ATTACH facet binds the row's resolved pose to a live population body (see WorldPlacementAttach).
             // BodyIndex uses the same 0-based entity indexing as WorldAnchor.Entity and the body:<n> grant subject —

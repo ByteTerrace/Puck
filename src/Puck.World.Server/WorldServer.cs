@@ -360,7 +360,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// authority list from the moment <see cref="ScreenOpTap"/> attaches (recording-arm time onward) — never
     /// retroactively. Left ungated, offline replay reconstruction (a fresh
     /// <see cref="WorldMachineHost"/> booted from that snapshot alone) would simply lack the machine/link/eject
-    /// entirely, a divergence the pose-only hash cannot see. Latched the instant any op applies and never cleared,
+    /// entirely, a divergence the population hash cannot see. Latched the instant any op applies and never cleared,
     /// mirroring <see cref="AnyMachineEverPumped"/>'s own shape exactly. Only ever added to a recording's own
     /// authority list from the moment <see cref="ScreenOpTap"/> attaches (recording-arm time) onward — never
     /// retroactively for an op that already applied before that.</summary>

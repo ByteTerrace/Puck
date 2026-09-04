@@ -317,7 +317,7 @@ add-a-kind procedure: [references/mutations.md](references/mutations.md).
 | Invisible reciprocal boundaries, derived overlap/corner peers, frame isometries, generation-addressed authority routes, reserve/commit handoff, action continuity, neighbour contact, seam liveness (`livenessGraceSeconds`, the `$link:` reserved rule channel, `world.links`), and the five-authority quilt | [references/adjacency-and-federation.md](references/adjacency-and-federation.md) |
 | `body.engage`, control applications (the (target, kit) set a principal holds; capture as own-body membership), the kit pad map, server-internal merged pads, possession's co-drive path, machines | [references/engagement.md](references/engagement.md) |
 | Join/leave (local seat and peer), park-with-grace, the `$parked:` reserved rule channel, body-resume's identity match rule | [references/session-lifecycle.md](references/session-lifecycle.md) |
-| The replay tape: version-1 format, capture scope, pose hash, verify semantics, receipts | [references/replay.md](references/replay.md) |
+| The replay tape: version-1 format, capture scope, population hash, verify semantics, receipts | [references/replay.md](references/replay.md) |
 | Addon rows, the prepare/commit mount transaction, pump points, channels, fuel, ABI verdicts, `world.row.set addons`/`.remove` | [references/addons.md](references/addons.md) |
 | Command modules, routing, the stdin barrier, output contract, verb grammar, screenshots | [references/console.md](references/console.md) |
 
@@ -341,7 +341,31 @@ choosing fixed-point primitives on sim value paths.
   for the authored `collision.bodyContacts` rigid fields, and the
   [server](../../../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)/[schema](../../../src/Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs)
   references for the mechanics. The shipped garden's `billiardsTray`/
-  `bowlingLane` placements are the worked example.
+  `bowlingLane` placements are the worked example. A DISTINCT kit facet,
+  `carry` (`Puck.World.Schema.WorldCarry`), lets a body pick up another
+  rigid one — `body.carry <carrier> <target>`/`body.release [carrier]`,
+  `WorldBody.Carry.cs`/`WorldPopulation.Carry.cs`; a carried body's own
+  integration is suspended and its pose is derived from the carrier's frame
+  every tick. The garden's `walker` kit (Wren) carries this facet.
+- The tabletop primitive: a placement's `board` facet (`WorldPlacementBoard`)
+  anchors a discrete `Grid` `state.lattices` topology (only `Grid` carries the
+  rectangular X/Z frame `$board:cellOf`/`offset` resolve against; `Ring`/`Hex`
+  refuse the facet) to a physical row/body game (`$board:cellOf`/`offset`,
+  `world.tabletop`). A `Grid` topology's `cellSize` must quantize to a
+  positive Q48.16 value — it is the divisor `$board:cellOf` resolves world
+  positions against, so a zero or negative edge is refused at validation, not
+  left to crash the per-tick rule path. A
+  contiguous run of a rule's own `setState`/`addState`/etc. effects
+  preflights and applies as ONE atomic candidate (`WorldServer.Step`'s
+  `PreflightWorldRuleStateEffects`) — deriving N independent pieces' cells
+  needs N separately-authored rules (one write can refuse, alone, only when
+  it owns its own rule), never one rule spanning every piece, or a single
+  piece leaving the frame (captured, knocked clear) rejects every sibling's
+  write in the same settle; a piece resolving to no cell of its own (captured,
+  lifted off) never itself registers as the mover on either side of a settle.
+  See [references/documents.md](references/documents.md)'s
+  `state.lattices` section and `Puck.World.Schema/README.md`'s
+  tabletop-primitive section; the garden's `chessBoard` is the worked example.
 - `WorldBodiesLimits.CapacityCeiling` is 4096 (the largest authored
   `population.capacity` the validator admits), and `WorldClient.EntityCapacity`
   is SINGLE-SOURCED from it (`= WorldBodiesLimits.CapacityCeiling`, the F3

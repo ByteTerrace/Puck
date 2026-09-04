@@ -5,9 +5,9 @@ namespace Puck.World.Server;
 
 /// <summary>The named live-state boundaries exposed by <c>world.state.hash</c>.</summary>
 public enum WorldStateHashScope : byte {
-    /// <summary>The historical capture digest: the pose digest followed by resolved <c>state.world</c> values.</summary>
+    /// <summary>The historical capture digest: the population digest followed by resolved <c>state.world</c> values.</summary>
     Capture,
-    /// <summary>Only active-body authoritative poses, identical to <see cref="WorldReplaySnapshot.HashState"/>.</summary>
+    /// <summary>Every active body's authoritative pose, rigid residue, and carry relationship, identical to <see cref="WorldReplaySnapshot.HashState"/>.</summary>
     Pose,
     /// <summary>The complete document-owned <c>state.world</c> substrate and its values at the requested tick.</summary>
     World,

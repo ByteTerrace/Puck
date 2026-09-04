@@ -686,6 +686,79 @@ internal sealed partial class PlayerCommandModule {
             handler: $"[body.impulse: body:{index} <- ({impulse[0]:0.###}, {impulse[1]:0.###}, {impulse[2]:0.###})]"
         );
     }
+    // body.carry <carrier> <target> — begins <carrier> carrying <target>. Both indices required and explicit
+    // (never an optional trailing default) — there is no sensible "carry myself" default the way body.impulse's
+    // single-body verbs read a bare 0.
+    private CommandResult CarryHandler(CommandContext context, WireArgs args) {
+        if (args.Count != 2) {
+            return CommandResult.Usage(
+                form: "<carrier> <target>",
+                verb: "body.carry"
+            );
+        }
+
+        var (carrier, carrierIndex, carrierError) = ResolveTarget(
+            args: in args,
+            requiredCount: 0,
+            verb: "body.carry"
+        );
+
+        if (carrier is null) {
+            return CommandResult.Error(output: carrierError!);
+        }
+
+        var (target, targetIndex, targetError) = ResolveTarget(
+            args: in args,
+            requiredCount: 1,
+            verb: "body.carry"
+        );
+
+        if (target is null) {
+            return CommandResult.Error(output: targetError!);
+        }
+
+        if (ReplayDriveError(verb: "body.carry") is { } driveError) {
+            return driveError;
+        }
+
+        m_link.SubmitCommand(command: new WorldCommand.CarryBody(
+            Principal: context.ActingPrincipal(),
+            EntityIndex: carrierIndex,
+            TargetIndex: targetIndex
+        ));
+
+        return Echoed(
+            args: in args,
+            handler: $"[body.carry: body:{carrierIndex} <- body:{targetIndex}]"
+        );
+    }
+    // body.release [body] — ends the target's active carry, if any. [body] the SAME optional-trailing-index shape
+    // every single-target drive verb (body.impulse included) already reads.
+    private CommandResult ReleaseHandler(CommandContext context, WireArgs args) {
+        var (player, index, error) = ResolveTarget(
+            args: in args,
+            requiredCount: 0,
+            verb: "body.release"
+        );
+
+        if (player is null) {
+            return CommandResult.Error(output: error!);
+        }
+
+        if (ReplayDriveError(verb: "body.release") is { } driveError) {
+            return driveError;
+        }
+
+        m_link.SubmitCommand(command: new WorldCommand.ReleaseCarry(
+            Principal: context.ActingPrincipal(),
+            EntityIndex: index
+        ));
+
+        return Echoed(
+            args: in args,
+            handler: $"[body.release: body:{index}]"
+        );
+    }
     private CommandResult StopHandler(CommandContext context, WireArgs args) {
         if (!TryStripInstanceToken(
             args: in args,

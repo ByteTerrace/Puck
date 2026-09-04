@@ -96,6 +96,23 @@ public sealed record WorldPlacementFace(
 /// sphere follows the carrier, and an inactive carrier senses nobody rather than sensing at a stale point.</summary>
 /// <param name="Radius">The sensing radius, world units. Must be finite and positive (validated).</param>
 public sealed record WorldPlacementRegion(float Radius);
+/// <summary>A placement's board facet — the tabletop primitive. Anchors a <c>state.lattices</c> Grid topology
+/// (which already carries its own world-space <c>origin</c>/<c>cellSize</c> frame) to this placement, so a chess
+/// set, a checkers board, or a card table is one placement/body carrying one topology — carriable as a unit once an
+/// attachment primitive picks it up. A topology is carried by at most one placement (validated). <paramref
+/// name="Occupancy"/> is the only row the engine reads; <paramref name="Turn"/>/<paramref name="Verdict"/>/
+/// <paramref name="Move"/>/<paramref name="Plan"/> are author-named convenience bindings <c>world.tabletop</c>
+/// echoes together — ordinary declared rows, never engine-interpreted, so this facet stays a reusable primitive
+/// rather than a chess-specific feature.</summary>
+/// <param name="Topology">The state.lattices Grid topology this placement anchors.</param>
+/// <param name="Occupancy">The board-typed row over <paramref name="Topology"/> holding current occupant codes.</param>
+/// <param name="Turn">An optional phase row read back beside the frame.</param>
+/// <param name="Verdict">An optional row read back beside the frame (a ruling on the last recorded change).</param>
+/// <param name="Move">An optional keyed row (conventionally cells "from"/"to") read back beside the frame.</param>
+/// <param name="Plan">An optional board-typed row over <paramref name="Topology"/> a future addon paints candidate
+/// cells into for highlight rendering — the seam, not the addon.</param>
+public sealed record WorldPlacementBoard(string Topology, string Occupancy, string? Turn = null, string? Verdict = null,
+    string? Move = null, string? Plan = null);
 /// <summary>A placement's grip facet — overrides the world's <see cref="WorldCollision.DefaultHold"/> hold
 /// policy for every collider this row compiles, composing as the tighter authoring layer: present, it decides;
 /// absent, the row's colliders fall back to the world default. Requires <see cref="WorldPlacement.Solid"/> (nothing
@@ -203,6 +220,8 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// <param name="Grip">The placement's grip facet (see <see cref="WorldPlacementGrip"/>) — overrides the world's
 /// default hold policy for this row's compiled surface(s), or <see langword="null"/> to inherit the world default.
 /// Omitted from the wire when null. Requires <paramref name="Solid"/> (validated).</param>
+/// <param name="Board">The placement's board facet (see <see cref="WorldPlacementBoard"/>) — the tabletop
+/// primitive, or <see langword="null"/> for no anchored topology. Omitted from the wire when null.</param>
 public sealed record WorldPlacement(
     string Id,
     string PrototypeId,
@@ -219,7 +238,8 @@ public sealed record WorldPlacement(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementAttach? Attach = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementContribution? Contribution = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPlacementResponse>? Respond = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementGrip? Grip = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementGrip? Grip = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementBoard? Board = null
 );
 /// <summary>Adapts placement document facets to the shared creation-stamp vocabulary.</summary>
 public static class WorldPlacementStamp {

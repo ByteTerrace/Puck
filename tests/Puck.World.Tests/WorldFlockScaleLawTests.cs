@@ -78,7 +78,9 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
         Assert.InRange(burst.Updates, 1, 172);
         Assert.InRange(burst.Candidates, 0, expected * 32);
 
-        for (var tick = 0; tick < 30; tick++) { fixture.Step(); }
+        // Keep the measured window beyond background Tier1 promotion under full-suite load. A late promotion adds
+        // runtime bookkeeping bytes to this thread and can otherwise look like a flock-path allocation burst.
+        for (var tick = 0; tick < 240; tick++) { fixture.Step(); }
         var candidates = 0;
         var retained = 0;
         var updates = 0;
@@ -104,7 +106,7 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
         using var replay = Fixtures.FreshServer(DenseDocument());
         Assert.Equal(expected, replay.Server.Population.SetSimulatedCount(expected));
         Coincide(replay);
-        for (var tick = 0; tick < 151; tick++) { replay.Step(); }
+        for (var tick = 0; tick < 361; tick++) { replay.Step(); }
         Assert.Equal(first, WorldRuntimeStateHash.HashAuthoritative(replay.Server, 120));
     }
 
@@ -136,7 +138,12 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
         var count = WorldBodiesLimits.CapacityCeiling - fixture.Server.Population.LocalSeatCount;
         Assert.Equal(count, fixture.Server.Population.SetSimulatedCount(count));
         Coincide(fixture);
-        for (var tick = 0; tick < 30; tick++) { fixture.Step(); }
+        // Wide enough that every hot callee the measured window below allocates against has already promoted to
+        // Tier1 before that window opens — a background tier-up recompilation landing INSIDE the measured window
+        // reads as extra allocation under a busy full-suite run even though steady-state is unchanged (the same
+        // JIT-tiering flake WorldSocialMemoryLawTests' own ImportScratchDoesNotScaleWithSourcePolicyCapacity hit and
+        // was widened past).
+        for (var tick = 0; tick < 240; tick++) { fixture.Step(); }
 
         var before = GC.GetAllocatedBytesForCurrentThread();
         var start = Stopwatch.GetTimestamp();

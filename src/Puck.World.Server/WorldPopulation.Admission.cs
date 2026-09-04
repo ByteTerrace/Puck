@@ -23,6 +23,7 @@ public sealed partial class WorldPopulation {
             actionState: kit.ActionState,
             collider: kit.Collider,
             rigid: kit.Rigid,
+            carry: kit.Carry,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             holds: kit.Holds
         );
@@ -91,6 +92,7 @@ public sealed partial class WorldPopulation {
             actionState: kit.ActionState,
             collider: kit.Collider,
             rigid: kit.Rigid,
+            carry: kit.Carry,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             holds: kit.Holds
         );
@@ -261,6 +263,7 @@ public sealed partial class WorldPopulation {
             actionState: m_kits[m_seatKit].ActionState,
             collider: m_kits[m_seatKit].Collider,
             rigid: m_kits[m_seatKit].Rigid,
+            carry: m_kits[m_seatKit].Carry,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             holds: m_kits[m_seatKit].Holds
         ) {
@@ -697,6 +700,7 @@ public sealed partial class WorldPopulation {
                 programs: m_bodyMotionPrograms,
                 collider: m_kits[kitIndex].Collider,
                 rigid: m_kits[kitIndex].Rigid,
+                carry: m_kits[kitIndex].Carry,
                 maxSmoothError: m_fixedMotion.MaxSmoothError,
                 holds: m_kits[kitIndex].Holds
             );
@@ -858,6 +862,7 @@ public sealed partial class WorldPopulation {
             actionState: m_kits[m_seatKit].ActionState,
             collider: m_kits[m_seatKit].Collider,
             rigid: m_kits[m_seatKit].Rigid,
+            carry: m_kits[m_seatKit].Carry,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             holds: m_kits[m_seatKit].Holds
         ) {

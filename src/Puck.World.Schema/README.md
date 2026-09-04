@@ -46,10 +46,21 @@ Rule operands accept these bounded channels:
 | `$board:line:<row>:<length>:<value>:<exact\|atLeast>` | 1 when a matching line exists, otherwise 0 |
 | `$board:pathCost:<row>:<target>:<maxCost>:<maxVisits>` | Minimum terrain entry cost, -1 when unreachable/unaffordable, -2 when the visit budget is exhausted |
 | `$board:mask:<row>:<min>:<max>` | The 64-bit mask of cells whose value lies in min..max (bit c is cell ordinal c); the topology holds at most 64 cells |
+| `$board:cellOf:<row>:<bodyRef>` | The Grid cell a body's resolved world position falls in, or -1 |
+| `$board:offset:<row>:<dx>:<dz>` | The cell reached by an arbitrary (dx, dz) grid step from the key cell, or -1 |
 | `$phase:<row>:<current\|active\|ready\|sequence\|round\|deadline\|direction\|skipped>` | Persisted phase fact; active is -1 outside sequential phases |
 
 Board operands use the ordinary predicate/source `key` for their origin,
-including the existing `$cell:` dynamic-key form; `line` accepts no key.
+including the existing `$cell:` dynamic-key form; `line`, `cellOf` accept no
+key — `cellOf` takes a `bodyRef` in its place, the same `body:<n>`/
+`argmax:<row>`/`argmin:<row>`/`cell:<row>:<key>` vocabulary `$distance:`/
+`$los:`/`$nearest:` read. Both `cellOf` and `offset` require a `Grid`
+topology — the only kind carrying a rectangular world-space frame
+(`CompiledWorldTopology.Origin`/`CellSize`, the same origin/cellSize every
+topology declares); a `Hex`/`Ring` row refuses them by name at compile.
+`offset` is the arbitrary-`(dx, dz)` sibling of `neighbour`'s fixed eight
+directions — what a leaper (a knight, or any piece whose reach is not a ray)
+authors its geometry against.
 Path search uses all topology neighbours, including grid diagonals, at the
 destination cell's entry cost. Negative terrain is impassable. Equal-cost
 nodes settle by ordinal; the visit bound counts settled nodes. A path budget
@@ -183,6 +194,52 @@ contract. Use a fresh unpredictable secret per game and keep authority saves,
 replays, and replica access private. The simulation draws no system entropy.
 No hidden keys, generator definitions, cursors, or dealt masks enter observation
 payloads. Publicly authored seeds alone are unsuitable for hidden deals.
+
+**The tabletop primitive.** A placement's `board` facet (`WorldPlacementBoard`)
+anchors a discrete `Grid` topology's own world-space frame (its declared
+`origin`/`cellSize` — no separate frame member) to a physical row/body-based
+game. `cellSize` is the divisor `$board:cellOf` resolves world positions
+against, so `WorldTopologyCompilation.TryValidate` refuses a `Grid` whose
+`cellSize` does not quantize to a positive Q48.16 value, or whose `origin`
+does not fit one, at document validation rather than at the per-tick rule
+path. `topology` names the anchored Grid; `occupancy` names the board row the
+engine reads back; `turn`/`verdict`/`move`/`plan` are author-named convenience
+rows a `world.tabletop` read-back echoes together, never engine-interpreted —
+any tabletop game names whichever it needs. A topology is carried by at most
+one placement (validated). The shipped `body.carry` facet (`WorldCarry`) is a
+separate primitive: it picks up a rigid body, never a placement or board. The
+bridge from rigid bodies to this row is authored, not built
+in: a world rule reads each piece's `$board:cellOf:<occupancy row>:body:<n>`
+on `$physics:quiescent`'s rising edge (a settle, never every tick) and writes
+its code into the occupancy row at that resolved cell — see the garden's own
+`puck.world.json` tabletop rules for the worked pattern (snapshot the prior
+board before clearing, derive fresh occupancy, detect which single piece
+moved between two occupied board cells — a piece whose cell resolves to no
+cell, before or after (captured, lifted off, knocked clear), never itself
+qualifies as the mover, so its own disappearance is never ruled legal or
+illegal by its own color — then a verdict any authored predicate — occupancy, turn order,
+a `$board:rayCell`/`$board:offset` movement-geometry check — may set to 0
+without touching the mover; a legal verdict alone advances turn and adopts the
+new position into `lastLegal`). Illegal moves are recorded, never undone —
+the world never rejects or repositions a physical piece. A rule's own
+contiguous run of `setState`/`addState`/etc. effects preflights and applies
+as ONE atomic candidate — deriving N independent pieces' occupancy therefore
+needs N separately-authored derive rules, one per piece, never a single rule
+spanning every piece: one piece's body leaving the frame (captured, knocked
+clear) refuses only its own write when it owns its own rule, but rejects
+every sibling piece's write too when they share one. A `body.pose` reposition
+is a kinematic write: one that leaves the piece resting on its support (its
+authored resting height) does not itself disturb the rigid census and leaves
+the board unrevised, while one that drops the piece onto or above its
+support un-rests it and crosses `$physics:quiescent`'s Edge on settle with no
+impulse needed at all — pair a resting-height pose with a negligible
+`body.impulse` (or drive the whole move by impulse) to trigger a derive
+without relying on drop height. Wake a piece along its own up axis where
+the kit's rigid friction is high — a horizontal wake couples into spin under
+Coulomb/rolling friction and can drift the piece across a cell boundary
+before the census re-quiesces. The quiescent census is population-wide: an
+unrelated rigid body still settling elsewhere holds every board's derive at
+bay too.
 
 The [tabletop state fixture](../../tests/Puck.World.Canaries/tabletop-state/fixture.world.json)
 and its [positive script](../../tests/Puck.World.Canaries/tabletop-state/positive.script.txt)
@@ -1604,9 +1661,13 @@ world's own declared scale envelope, and the render capacity probe's worst
 case must cover the largest live body — refused by name otherwise) whose
 cells, keyed by 0-based body index, carry each body's live scale multiplier:
 absent (the default) leaves every body's `Server.WorldBody.Scale` at `1`
-forever, at no per-tick cost. A cell may not declare an `advance`/`cycle`/
-`dynamics` value-over-time trait — every resync reads at tick 0, so such a
-cell would read its base value forever instead of progressing. A `Region`
+forever, at no per-tick cost. Every cell key must parse as an integer inside
+`0..bodies.capacity-1` — the SAME parse `WorldPopulation.SyncBodyScale` runs at
+every resync, which silently skips a key that fails it; refusing the mismatch
+at validation instead of leaving an authored cell nothing ever reads. A cell
+may not declare an `advance`/`cycle`/`dynamics` value-over-time trait — every
+resync reads at tick 0, so such a cell would read its base value forever
+instead of progressing. A `Region`
 INTERACTION scoped to the one affected body (`left` a one-cell carrier
 property naming it, `right` the placement) is the trigger shape for "this
 specific body standing in this region": the `$region:<placementId>` reserved
@@ -1648,12 +1709,28 @@ different, presentation-only per-look constant layered on top (appearance
 only; it never touches collision or motion tuning) — the two multiply
 together, never one standing in for the other.
 
-Body-vs-body contact resolution, overlap/collision events, adjacency transfer
-sweeps, and the cross-boundary continuum trajectory all still read a kit's
-SHARED, unscaled collider volumes — only the self-collision sweep
-(`WorldBody.Step.cs`'s `ResolveProgramContacts`) reads the scaled copy. A
-shrunk body's own contact with the WORLD is correct; its contact with OTHER
-bodies is not yet — a known gap, not a silent claim.
+Body-vs-body contact resolution (`WorldPopulation.ResolveDynamicContacts`),
+overlap/collision events (`WorldEventFeed`), the cross-boundary continuum
+trajectory (`WorldBody.ApplyContinuumTrajectory`), the adjacency sweep's LOCAL
+side (`WorldAdjacencyContactField`), and the self-collision sweep
+(`WorldBody.Step.cs`'s `ResolveProgramContacts`) all read each body's own
+live-scaled collider volumes now (`WorldBody.ScaledColliderVolumes`), so a
+shrunk body's contact with another body agrees with its contact with the
+world. Only the adjacency sweep's REMOTE side (a neighbour authority's own
+entities) still reads an unscaled collider — no delivered snapshot carries a
+remote entity's live Scale on the wire yet.
+
+A rigid facet (`Rigid` below) scales with the body too: mass ∝ `Scale`³
+against the authored mass at scale 1 (so a bigger body of the same material is
+heavier by its volume ratio), inertia ∝ `Scale`⁵, and the derived bounding
+radius/centre of mass ∝ `Scale` — `Server.WorldBody.ScaleRigid` derives this
+once per read from the compiled facet rather than re-deriving mass properties
+from the collider every tick. Restitution, friction, rolling friction, and
+both damping rates are dimensionless coefficients, unaffected by `Scale`. The
+grounded rest-hold window's LINEAR speed threshold scales with the body (a
+spatial rate, like a hold's own travel speed); its ANGULAR threshold does not
+(a rotational rate carries no length dimension). `body.where` echoes a rigid
+body's centre of mass as `com=` — see `Rigid` below.
 
 `collision.events` bounds overlap-event sensing without changing physical world
 contact. `candidateBudget` limits inspected broadphase candidates per body,
@@ -1676,7 +1753,9 @@ bounding radius one substep may travel) floored by `rigidSubstepMinimumTravel`
 ceiling only bounds worst-case cost. `rigidRestLinearSpeed`/`rigidRestAngularSpeed`
 (default 0.05/0.1, non-negative) and `rigidRestHoldSeconds` (default 0.25,
 non-negative) are the thresholds and hold window that decide when a grounded
-rigid body's `Resting` fact latches. `rigidPairRestitutionSpeed` (default
+rigid body's `Resting` fact latches — `rigidRestLinearSpeed` scales with each
+body's own live `Scale` (see "Body scale" above); `rigidRestAngularSpeed` does
+not. `rigidPairRestitutionSpeed` (default
 0.05, non-negative) is the closing-speed floor below which a rigid-vs-rigid
 contact restitutes at zero rather than the authored coefficient — a rigid
 pair carries no rising-edge latch, so without this floor two touching bodies
@@ -1701,9 +1780,29 @@ simulation rate). A rigid kit REQUIRES `collider` (sphere, capsule, or box — n
 `bodyContact: solid` (a rigid body that never depenetrates is inert). Mass and
 inertia derive from the collider's own shape and the authored mass through
 `Puck.Maths.FixedMassProperties` — density and the inertia tensor are never
-authored directly, matching the engine's derived-limits convention. See the
+authored directly, matching the engine's derived-limits convention. The
+validator also proves the authored coefficients and the collider-derived
+room-scale mass/inertia fit the engine's fixed-point placements; values that
+would quantize to zero, saturate, or overflow are refused before world boot.
+See the
 [server reference](../Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)
 for integration, contact, and checkpoint/hash coverage.
+
+A kit's optional `carry` facet (`WorldCarry.cs`: `offset`, `massEquivalent`,
+`maxCarryFraction` default 1, `maxReach` default 1.5) is a distinct facet
+from `rigid` — presence lets a body pick up another one via
+`body.carry`/`body.release`. `offset` is the full-scale carry point in the
+carrier's own body-local axes and scales with the carrier's live `Scale`;
+`massEquivalent` stands in for a locomotion kit's own
+inertial mass, which `WorldKit.Mass` (gravitational) does not carry;
+`maxCarryFraction` scales `massEquivalent` into the carry-mass ceiling
+`WorldBody.TryBeginCarry` compares a candidate's own live-scaled `RigidMass`
+against; `maxReach` bounds the carrier-to-target distance the same call
+admits. All four must fit the engine's fixed-point representation (including
+the derived mass product); `massEquivalent`/`maxReach` are strictly positive
+after fixed-point compilation, and `maxCarryFraction` is non-negative. See the
+[server reference](../Puck.World.Server/README.md#carry-as-attachment-worldbodycarrycs-worldpopulationcarrycs)
+for the attachment mechanics.
 
 ## The `probes` section — probe and binding rows
 

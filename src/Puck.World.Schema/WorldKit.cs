@@ -32,6 +32,7 @@ public sealed record WorldKit(
     WorldBodyContactMode BodyContact = WorldBodyContactMode.Overlap,
     float Mass = 0f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRigid? Rigid = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCarry? Carry = null,
     [property: JsonPropertyName("pad"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, WorldPadElement>? PadRaw = null,
     [property: JsonPropertyName("autonomy"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldAutonomyCadence? AutonomyRaw = null
 ) {
@@ -110,6 +111,8 @@ public enum WorldBodyContactMode : byte {
 /// <param name="AutonomousMotionTicks">The non-human motion cadence in engine ticks; zero means every authority tick.</param>
 /// <param name="AutonomousSteeringTicks">The non-human producer cadence in engine ticks; zero means every authority tick.</param>
 /// <param name="Rigid">The kit's compiled rigid-dynamics facet, or <see langword="null"/> for a locomotion kit.</param>
+/// <param name="Carry">The kit's compiled carry facet, or <see langword="null"/> for a kit that cannot pick up a
+/// rigid body.</param>
 public readonly record struct FixedWorldKit(
     CompiledBodyMotionProgram BodyMotionProgram,
     IReadOnlyDictionary<string, CompiledBodyProducer> Producers,
@@ -126,7 +129,8 @@ public readonly record struct FixedWorldKit(
     FixedMotionTuning Tuning,
     ulong AutonomousMotionTicks,
     ulong AutonomousSteeringTicks,
-    FixedWorldRigid? Rigid = null
+    FixedWorldRigid? Rigid = null,
+    FixedWorldCarry? Carry = null
 ) {
     private static (CompiledActionStateSlot[] Slots, Dictionary<string, int> ByName) CompileActionState(IReadOnlyList<ActionStateSlot> bodyState, IReadOnlyList<ActionStateSlot> identityState) {
         var slots = new List<CompiledActionStateSlot>();
@@ -295,6 +299,10 @@ public readonly record struct FixedWorldKit(
             )
             : (FixedWorldRigid?)null
         );
+        var carry = ((kit.Carry is { } carryRow)
+            ? FixedWorldCarry.Compile(carry: carryRow)
+            : (FixedWorldCarry?)null
+        );
 
         var tuning = WorldMotionTuningFactory.Compile(
             channels: channels,
@@ -349,7 +357,8 @@ public readonly record struct FixedWorldKit(
             AutonomousSteeringTicks: ((kit.Autonomy.SteeringSeconds > 0f)
                 ? FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: kit.Autonomy.SteeringSeconds))
                 : 0UL),
-            Rigid: rigid
+            Rigid: rigid,
+            Carry: carry
         );
     }
 }

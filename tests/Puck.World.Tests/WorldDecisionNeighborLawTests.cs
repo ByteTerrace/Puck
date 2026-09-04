@@ -249,11 +249,29 @@ public sealed class WorldDecisionNeighborLawTests {
             }
         }
         Populate(subject); Populate(control);
+        // Warm the hot callees, then take the lower envelope of three identical windows. Tier promotion and runtime
+        // bookkeeping can still land once inside a window under full-suite load after thousands of warm-up calls;
+        // those transients only add bytes, so the minimum is the steady-state allocation. A real decision-path
+        // allocation repeats in every window and therefore still fails against the no-decisions control.
         static (long Bytes, TimeSpan Time) Run(WorldFixture f) {
-            for (var i = 0; i < 512; i++) { f.Step(504); _ = WorldRuntimeStateHash.HashAuthoritative(f.Server, 0); }
-            var bytes = GC.GetAllocatedBytesForCurrentThread(); var start = Stopwatch.GetTimestamp();
-            for (var i = 0; i < 1000; i++) { f.Step(504); _ = WorldRuntimeStateHash.HashAuthoritative(f.Server, 0); }
-            return (GC.GetAllocatedBytesForCurrentThread() - bytes, Stopwatch.GetElapsedTime(start));
+            for (var i = 0; i < 2048; i++) { f.Step(504); _ = WorldRuntimeStateHash.HashAuthoritative(f.Server, 0); }
+            var bestBytes = long.MaxValue;
+            var bestTime = TimeSpan.MaxValue;
+
+            for (var sample = 0; sample < 3; sample++) {
+                var bytes = GC.GetAllocatedBytesForCurrentThread();
+                var start = Stopwatch.GetTimestamp();
+
+                for (var i = 0; i < 1000; i++) { f.Step(504); _ = WorldRuntimeStateHash.HashAuthoritative(f.Server, 0); }
+
+                var allocated = (GC.GetAllocatedBytesForCurrentThread() - bytes);
+                if (allocated < bestBytes) {
+                    bestBytes = allocated;
+                    bestTime = Stopwatch.GetElapsedTime(start);
+                }
+            }
+
+            return (bestBytes, bestTime);
         }
         var measured = Run(subject); var baseline = Run(control);
         TestContext.Current.TestOutputHelper!.WriteLine($"128 coincident bodies, budget32/max16, rejectAll={rejectAll}: x1000 steps+hash {measured.Time.TotalMilliseconds:F3}ms/{measured.Bytes}B; no-decisions {baseline.Time.TotalMilliseconds:F3}ms/{baseline.Bytes}B");

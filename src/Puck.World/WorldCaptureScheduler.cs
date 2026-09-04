@@ -514,11 +514,12 @@ internal sealed class WorldCaptureScheduler {
         return counts;
     }
 
-    // Reuses WorldReplaySnapshot.HashState (the pose trajectory replay.verify pins) as the pose half, then chains
+    // Reuses WorldReplaySnapshot.HashState (the population trajectory's diagnostic fold) as the population half,
+    // then chains
     // state.world's every declared row/cell in document order onto the SAME running fold — extending the summary
     // WorldReplayTape already trusts rather than inventing a second one. Body/identity state lanes are ephemeral
     // per-body counters/timers outside the world-scoped decision surface a capture cares about (state.world is what
-    // a rule/capture-station row lives in) and are left out, same as the pose hash's own documented scope.
+    // a rule/capture-station row lives in) and are left out, same as the population hash's own documented scope.
     internal static ulong ComputeStateHash(WorldServer server, ulong tick) => WorldRuntimeStateHash.Hash(
         scope: WorldStateHashScope.Capture,
         server: server,

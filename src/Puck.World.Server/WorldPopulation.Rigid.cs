@@ -4,12 +4,19 @@ using Puck.Physics;
 namespace Puck.World.Server;
 
 public sealed partial class WorldPopulation {
-    private static readonly FixedQ4816 RigidPairFrictionHalf = FixedQ4816.FromDouble(value: 0.5d);
+    private static readonly FixedQ4816 RigidPairHalf = FixedQ4816.FromDouble(value: 0.5d);
 
     /// <summary>Gets the number of active dynamic-body pairs the most recent <see cref="ResolveDynamicContacts"/>
     /// resolved through the rigid impulse path (at least one side a rigid kit) rather than plain positional
     /// depenetration.</summary>
     public int RigidPairResolvedCount { get; private set; }
+
+    /// <summary>Gets the document-derived speed a <c>body.impulse</c> command's resulting velocity may not exceed —
+    /// <see cref="WorldFacePortalPolicy.SpeedCeiling"/>, the same fastest travel the document already declares for
+    /// crossing a face. <see cref="WorldBody.TryApplyRigidImpulse"/> refuses by name rather than applying a delta
+    /// that would carry a rigid body past it, so a degenerate impulse magnitude never reaches the solver as an
+    /// unrepresentable velocity.</summary>
+    public FixedQ4816 RigidVelocityCeiling => m_rigidVelocityCeiling;
 
     /// <summary>Describes the rigid solver's current census and last-tick work — the <c>world.budget</c> cost-sheet
     /// segment: active rigid body count, resting count, dynamic-pair resolutions, the highest per-body substep count
@@ -35,7 +42,7 @@ public sealed partial class WorldPopulation {
             worstSubsteps = Math.Max(val1: worstSubsteps, val2: body.RigidStaticSubstepsThisTick);
         }
 
-        return $"rigid {rigidCount} body/bodies ({restingCount} resting), pairsResolved={RigidPairResolvedCount}, worstSubsteps={worstSubsteps}/{m_bodyContactPolicy.RigidSubstepCeiling}, restLinear<={m_bodyContactPolicy.RigidRestLinearSpeed:0.###} restAngular<={m_bodyContactPolicy.RigidRestAngularSpeed:0.###} restHold={m_bodyContactPolicy.RigidRestHoldSeconds:0.###}s substepFraction={m_bodyContactPolicy.RigidSubstepTravelFraction:0.###} substepMinTravel={m_bodyContactPolicy.RigidSubstepMinimumTravel:0.####} pairRestitutionSpeed={m_bodyContactPolicy.RigidPairRestitutionSpeed:0.###}";
+        return $"rigid {rigidCount} body/bodies ({restingCount} resting), pairsResolved={RigidPairResolvedCount}, worstSubsteps={worstSubsteps}/{m_bodyContactPolicy.RigidSubstepCeiling}, restLinear<={m_bodyContactPolicy.RigidRestLinearSpeed:0.###} restAngular<={m_bodyContactPolicy.RigidRestAngularSpeed:0.###} restHold={m_bodyContactPolicy.RigidRestHoldSeconds:0.###}s substepFraction={m_bodyContactPolicy.RigidSubstepTravelFraction:0.###} substepMinTravel={m_bodyContactPolicy.RigidSubstepMinimumTravel:0.####} pairRestitutionSpeed={m_bodyContactPolicy.RigidPairRestitutionSpeed:0.###} impulseVelocityCeiling={(double)m_rigidVelocityCeiling:0.###}";
     }
 
     /// <summary>Resolves one already-detected overlapping pair where at least one side is a rigid kit: an
@@ -94,7 +101,7 @@ public sealed partial class WorldPopulation {
         )
         ) {
             var restitution = ((closingSpeed < -m_rigidContactPolicy.PairRestitutionThreshold)
-                ? ((left.RigidRestitution + right.RigidRestitution) * RigidPairFrictionHalf)
+                ? ((left.RigidRestitution + right.RigidRestitution) * RigidPairHalf)
                 : FixedQ4816.Zero
             );
             var impulseScalar = ((FixedQ4816.One + restitution) * -closingSpeed);
@@ -127,9 +134,9 @@ public sealed partial class WorldPopulation {
                     anchorB: anchorB,
                     normal: normal,
                     normalImpulseRaw: impulseRaw,
-                    frictionCoefficient: FixedQ4816.Max(
-                        x: FixedQ4816.Zero,
-                        y: ((left.RigidFriction + right.RigidFriction) * RigidPairFrictionHalf)
+                    frictionCoefficient: AverageNonnegative(
+                        left: left.RigidFriction,
+                        right: right.RigidFriction
                     ),
                     refusals: ref refusals
                 );
@@ -208,7 +215,10 @@ public sealed partial class WorldPopulation {
             return;
         }
 
-        var maxTangentImpulseRaw = (FixedQ4816.FromRawBits(value: normalImpulseRaw) * frictionCoefficient).Value;
+        var maxTangentImpulseRaw = WorldBody.SaturatingNonnegativeProduct(
+            left: FixedQ4816.FromRawBits(value: normalImpulseRaw),
+            right: frictionCoefficient
+        ).Value;
         var clampedImpulseRaw = Math.Clamp(
             value: stickImpulseRaw,
             min: -maxTangentImpulseRaw,
@@ -229,5 +239,16 @@ public sealed partial class WorldPopulation {
             scales: FixedWorldRigid.Scales,
             refusals: ref refusals
         );
+    }
+    // (left + right) / 2 rounded to nearest, ties to even — the same value (left + right) * 0.5 yields through the
+    // fixed-point multiply — computed on the halves so the intermediate sum can never leave the raw.
+    private static FixedQ4816 AverageNonnegative(FixedQ4816 left, FixedQ4816 right) {
+        var leftRaw = Math.Max(val1: 0L, val2: left.Value);
+        var rightRaw = Math.Max(val1: 0L, val2: right.Value);
+        var halvesRaw = ((leftRaw >> 1) + (rightRaw >> 1));
+        var lowBits = ((leftRaw & 1L) + (rightRaw & 1L));
+        var averageRaw = (halvesRaw + ((lowBits == 2L) ? 1L : ((lowBits == 1L) ? (halvesRaw & 1L) : 0L)));
+
+        return FixedQ4816.FromRawBits(value: averageRaw);
     }
 }

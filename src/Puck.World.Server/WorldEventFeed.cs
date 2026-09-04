@@ -370,6 +370,10 @@ public sealed class WorldEventFeed {
 
         var bodyCount = 0;
         if (policy.MaxPairsPerBody > 0) {
+            // Hoisted out of the loop below (CA2014): one reused stack buffer, fully overwritten by
+            // ScaledColliderVolumes on every call, never read across bodies.
+            Span<FixedBodyColliderVolume> broadphaseScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
+
             for (var index = 0; index < population.Capacity; index++) {
                 if (
                     !population.IsActive(index: index) ||
@@ -378,7 +382,10 @@ public sealed class WorldEventFeed {
                     continue;
                 }
 
-                var radius = FixedDynamicBodyContacts.BroadphaseRadius(volumes: collider.Volumes);
+                var radius = FixedDynamicBodyContacts.BroadphaseRadius(volumes: body.ScaledColliderVolumes(
+                    volumes: collider.Volumes,
+                    scratch: broadphaseScratch
+                ));
                 m_collisionBodies[bodyCount++] = new BroadphaseBody(
                     Index: index,
                     MinimumX: (body.FixedPosition.X - radius),
@@ -675,8 +682,19 @@ public sealed class WorldEventFeed {
             return false;
         }
 
-        foreach (var left in aVolume.Volumes) {
-            foreach (var right in bVolume.Volumes) {
+        Span<FixedBodyColliderVolume> leftScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
+        Span<FixedBodyColliderVolume> rightScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
+        var leftVolumes = a.ScaledColliderVolumes(
+            volumes: aVolume.Volumes,
+            scratch: leftScratch
+        );
+        var rightVolumes = b.ScaledColliderVolumes(
+            volumes: bVolume.Volumes,
+            scratch: rightScratch
+        );
+
+        foreach (var left in leftVolumes) {
+            foreach (var right in rightVolumes) {
                 if (Overlaps(
                     leftPosition: a.FixedPosition,
                     leftOrientation: a.FixedOrientation,

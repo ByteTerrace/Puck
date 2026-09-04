@@ -20,7 +20,7 @@ public readonly record struct WorldReplayLoad(WorldReplaySnapshot Recording, uin
 /// <summary>
 /// The tape's read-back — what <c>replay.inspect</c> renders. A tape nobody can read is evidence nobody can weigh, so
 /// this walks a saved <see cref="WorldReplaySnapshot"/> and prints its header facts (shape, rate, tick count, the
-/// pinned seats and mounted-addon receipts) and then, per tick, the recorded pose hash beside whatever CHANGED that
+/// pinned seats and mounted-addon receipts) and then, per tick, the recorded population hash beside whatever CHANGED that
 /// tick: every authority/server-event entry, compactly named, and every intent channel whose value moved from the
 /// entity's previous submission. The default walk prints only ticks carrying such an edge (an unchanged held stick
 /// across 90 ticks is one line, not ninety); <c>--all</c> prints every tick.
@@ -106,7 +106,7 @@ public sealed class WorldReplayInspector {
     /// unless <paramref name="all"/>.</summary>
     /// <param name="lines">The line sink.</param>
     /// <param name="ticks">The tape's per-tick input.</param>
-    /// <param name="hashes">The tape's recorded per-tick pose hashes (one per tick).</param>
+    /// <param name="hashes">The tape's recorded per-tick population hashes (one per tick).</param>
     /// <param name="channels">The recorded world's compiled channel table — what names an intent ordinal.</param>
     /// <param name="from">The first tick to print (inclusive).</param>
     /// <param name="to">The last tick to print (inclusive; clamped to the tape).</param>

@@ -136,6 +136,26 @@ public abstract record WorldCommand(WorldPrincipal Principal, int EntityIndex) {
         Principal,
         EntityIndex
     );
+    /// <summary>Begins <see cref="EntityIndex"/> carrying <see cref="TargetIndex"/> — the <c>body.carry</c> wire
+    /// path. Refused (by the server, never here) for a carrier whose kit carries no <c>carry</c> facet, a target
+    /// whose kit carries no <c>rigid</c> facet, either body already a party to another carry relationship, a target
+    /// out of reach, or a target's live-scaled mass over the carrier's own live-scaled carry ceiling.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="EntityIndex">The carrier's 0-based entity index.</param>
+    /// <param name="TargetIndex">The candidate target's 0-based entity index.</param>
+    public sealed record CarryBody(WorldPrincipal Principal, int EntityIndex, int TargetIndex) : WorldCommand(
+        Principal,
+        EntityIndex
+    );
+    /// <summary>Ends <see cref="EntityIndex"/>'s active carry, handing the target back to the rigid solver with the
+    /// carrier's own current velocity — the <c>body.release</c> wire path. A friendly no-op refusal (never a thrown
+    /// exception) when the carrier is not currently carrying anything.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="EntityIndex">The carrier's 0-based entity index.</param>
+    public sealed record ReleaseCarry(WorldPrincipal Principal, int EntityIndex) : WorldCommand(
+        Principal,
+        EntityIndex
+    );
 }
 /// <summary>One named value crossing the durable action-state input boundary.</summary>
 /// <param name="Name">The authored slot name.</param>

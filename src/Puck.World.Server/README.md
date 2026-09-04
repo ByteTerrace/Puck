@@ -416,13 +416,52 @@ floored by `collision.bodyContacts.rigidSubstepMinimumTravel`), capped by
 `collision.bodyContacts.rigidSubstepCeiling`; the derived count is echoed in
 `world.budget`'s `rigid` segment and `RigidStaticSubstepsThisTick`.
 
+`WorldBody.ScaleRigid` derives a scale-consistent copy of the compiled facet
+from the body's own live `Scale` (`Server.WorldBody.Scale.cs`) on every read:
+mass ∝ `Scale`³ against the authored mass at scale 1 (a uniformly bigger body
+of the same material is heavier by its volume ratio), inertia (mass·length²)
+∝ `Scale`⁵ so inverse mass/inertia scale by `Scale`⁻³/`Scale`⁻⁵, and the
+centre-of-mass offset and bounding radius ∝ `Scale` — the same linear rule
+`ScaledColliderVolumes` applies to the collider itself. Restitution, friction,
+rolling friction, and both damping rates are dimensionless coefficients,
+unaffected by `Scale`. `Scale == One` (the overwhelming common case) returns
+the facet unchanged, touching no arithmetic. `AdvanceRigid` reassigns its own
+local `rigid` to the scaled copy once at entry, so every downstream read in
+that call — including the reference `ResolveRigidContact` receives — is
+already scale-consistent; `TwoBodyHandle`, `TryApplyRigidImpulse`, and the
+`RigidMass`/`RigidBoundingRadius`/`RigidCenterOfMass` read-backs each derive
+their own scaled copy independently. `RigidCenterOfMass` (`body.where`'s
+`com=`) is `root + orientation·(CenterOffset × Scale)` — the point a rolling
+or tumbling rigid body's substeps actually rotate and translate about, which
+orbits away from the root `body.where`'s `pos=` always echoes.
+
 The ground (walkable) and obstruction (wall) contacts `IContactField.Resolve`
 reports are independent channels — a grounded body still bounces the first
 time it clips a wall — so each carries its OWN rising-edge restitution latch
 (`m_rigidGroundContacting`/`m_rigidObstructionContacting`, `WorldBody.ResolveRigidContact`):
 restitution fires only on a genuine impact on THAT channel, never on
 continued contact, which would read gravity's own per-tick pull (or ongoing
-sliding contact) as a fresh hit and never let the body settle. Tangential
+sliding contact) as a fresh hit and never let the body settle. A body
+depenetrated exactly to its contact skin's minimum distance reads no push
+(`distance >= minimum`) for a run of substeps even while still touching,
+until gravity's own per-substep pull re-closes the gap past fixed-point
+rounding — a smaller collider needs proportionally more such substeps
+(`AdvanceRigid`'s own derived substep count grows as `BoundingRadius`
+shrinks). Dropping the latch on the first such miss read every one of those
+substeps as having left the surface and the next contacting one as a fresh
+landing, re-firing restitution on a body that never actually left the ground.
+`m_rigidGroundMissStreak`/`m_rigidObstructionMissStreak` (`WorldBody.RigidGroundMissStreak`/
+`RigidObstructionMissStreak`) count each channel's run of consecutive misses;
+the latch drops only once a streak reaches that SAME tick's own derived
+substep count — one full engine tick's worth of grace, however finely the
+tick happened to be substepped — so a boundary miss rides it out while a
+departure spanning more than one tick's substeps still clears it and a real
+landing still restitutes. `GroundNormal` reads Zero on a genuinely grounded
+substep only through `WorldAdjacencyContactField`'s own cross-authority
+merge, which omits it from the `ContactResolution` it returns — the
+local-only solver always sets a walkable `GroundNormal` together with
+`Grounded`; that path's friction/rolling-resistance run against the same
+`UnitY` the static sweep's own up axis already assumes instead. Tangential
 (slip) friction at either contact is a real coupled Coulomb impulse, not a
 decay curve: the contact-point velocity (linear plus the rotational
 contribution `ω × r`, `r` the collider's bounding radius along the contact
@@ -478,22 +517,86 @@ latched velocity said a moment ago.
 
 A body settles to `Puck.Physics.Motion.ActionFact.Resting` (`BodyFacts.Resting`,
 published by `WorldBody.FactHolds`) after its linear and angular speed stay
-below threshold for a short hold window while grounded; `body.impulse`
+below threshold for a short hold window while grounded — the LINEAR threshold
+scales with the body's own live `Scale` (a spatial rate, like a hold's own
+travel speed), the ANGULAR one does not (no length dimension); `body.impulse`
 (`WorldCommand.RigidImpulse`, checked for `IsRigid` server-side and refused
-by name otherwise) wakes it. `$physics:quiescent`
+by name otherwise, then `WorldBody.TryApplyRigidImpulse` — refused by name a
+second way when the impulse's scaled velocity delta overflows the fixed-point
+representation, leaving velocity entirely unchanged rather than applying a
+wrapped or partial result) wakes it. `$physics:quiescent`
 (`WorldPopulation.RigidBodiesQuiescent`) reads 1 when every active rigid body
 rests, vacuously 1 for a world authoring none. `world.rigid` echoes the live
 per-body census (mass, velocity, angular velocity, resting) plus the
 quiescent verdict; the compiled rest/substep/pair-restitution policy and the
 last tick's solver work (pair resolutions, worst substep count) are
 `world.budget`'s own `rigid` segment. Checkpoint (`IntegrationResidue`)
-and the authoritative pose hash (`WorldReplaySnapshot.HashState`) both cover
-linear/angular velocity, the resting latch and hold-tick counter, and BOTH
-restitution edge latches. A kit swap that adds or drops the `rigid` facet
-resets every rigid-solver field (`WorldBody.RecompileKit`) rather than
-leaking the other kind of body's stale state forward; a live retune that
-keeps the facet carries its velocity through unchanged. Cross-world transfer
-of a rigid body is refused by name (`WorldInstanceHost.Transfers.cs`).
+and the diagnostic population hash (`WorldReplaySnapshot.HashState`) both cover
+linear/angular velocity, the resting latch and hold-tick counter, BOTH
+restitution edge latches, and both channels' miss streaks. A kit swap that
+adds or drops the `rigid` facet resets every rigid-solver field
+(`WorldBody.RecompileKit`) rather than leaking the other kind of body's stale
+state forward; a live retune that keeps the facet carries its velocity
+through unchanged. Cross-world transfer of a rigid body is refused by name
+(`WorldInstanceHost.Transfers.cs`); a carrier holding one refuses its OWN
+transfer for the same reason (see Carry below).
+
+`TryApplyRigidImpulse` refuses by name a second way beyond a raw fixed-point
+overflow: the resulting velocity's magnitude may not exceed
+`WorldPopulation.RigidVelocityCeiling` — the document's own declared speed
+ceiling (`WorldFacePortalPolicy.SpeedCeiling`, the same fastest travel a
+crossing face already reads), so a degenerate `body.impulse` magnitude is
+refused before it can reach the solver as an unrepresentable per-tick
+position delta rather than accepted and left to overflow deeper in the
+sweep. `world.budget`'s `rigid` segment echoes the compiled ceiling as
+`impulseVelocityCeiling=`.
+
+`WorldBody.ScaleRigid`'s inverse-mass/inverse-inertia scaling saturates to a
+representable ceiling rather than reverting to the unscaled component when
+the correctly rounded `Scale⁻³`/`Scale⁻⁵` product overflows the signed
+64-bit raw — inverse inertia's fifth-power law reaches
+`FixedRigidScales.RoomScale`'s placement well before inverse mass's
+third-power one does, and reverting only the overflowing component would
+leave it at the FULL-SIZE body's magnitude while every sibling component
+already reflects the shrunk one, an inconsistency severe enough to read as
+a light body friction can decelerate but that resists spinning as if it
+were still heavy. Saturating both components the same way keeps every
+scaled quantity moving in the SAME direction (lighter, easier to spin) past
+the point the exact magnitude stops fitting.
+
+### Carry, as attachment (`WorldBody.Carry.cs`, `WorldPopulation.Carry.cs`)
+
+A kit's `carry` facet (`FixedWorldCarry`: a body-local frame offset, a
+carrier mass-equivalent, an authored carry-mass fraction, and a reach) is a
+distinct facet from `rigid` — the seam `body.carry <carrier> <target>` and
+`body.release [carrier]` use. `WorldBody.TryBeginCarry` refuses by name: a
+carrier kit with no `carry` facet, a target with no `rigid` facet, either
+body already a party to another carry relationship, a target outside the
+carrier's own live-scaled reach (`MaxReach × Scale`), or a target whose own
+live-scaled `RigidMass` exceeds the carrier's live-scaled ceiling
+(`MassEquivalent × MaxCarryFraction × Scale³` — the same mass ∝ `Scale`³ law
+`ScaleRigid` derives against). The body-local carry offset scales linearly
+with the carrier too, matching its collider and reach. A carried body's own `Advance` is a no-op —
+its rigid integration is suspended, never solved — and
+`WorldPopulation.PrepareCarriedBodies` first releases invalidated relationships
+before integration; `UpdateCarriedBodies` then runs after both advance passes,
+dynamic-body contact, and tether correction, so it derives position
+and orientation from the carrier's final authoritative pose for that tick:
+`carrier.root + carrier.orientation·(Offset × Scale)`. It derives rigid
+velocity from the carrier's own `ApproximateWorldVelocity`. A carried body is excluded from `ResolveDynamicContacts`'
+broadphase and from `$physics:quiescent`'s census (`CarriedBy: null` on both).
+`body.release`
+hands the target back to the solver with the carrier's own current
+velocity rather than snapping it to rest. `Carrying`/`CarriedBy` are `int?`
+population indices (`-1` raw, on the same "never a boolean fact" terms
+`AffectingSubject` already carries) folded into checkpoint
+(`IntegrationResidue`) and the authoritative hash; a relationship whose
+mirror breaks (a body going inactive, or a live kit retune away from the
+facet either side depends on) self-heals in the same per-tick pass rather
+than leaking a dangling reference forward. That pass walks a sorted,
+preallocated table of active relationships, not the full population capacity.
+`body.where` echoes
+`carrying=<index>`/`carriedBy=<index>` only while set.
 
 World rules can carry [decision policies](../Puck.World.Schema/README.md#decision-policies).
 `WorldServer.Decisions.cs` owns each binding's selected option, local PCG state,
@@ -1175,7 +1278,7 @@ host state before a single tick has run, which the other two latches would
 miss) — offline replay reconstructs a FRESH `WorldMachineHost` from the
 tape's embedded definition, so a machine's accumulated core state (or a
 screen op's effect) from before recording began can never be re-established,
-and the pose hash covers no machine state to catch the divergence.
+and the population hash covers no machine state to catch the divergence.
 `Puck.World.WorldScreenBinder` is a
 pure reader of this type's outputs for presentation (framebuffer
 handle/light, `PublishFrame`) and still owns the genuinely presentation
@@ -1372,7 +1475,7 @@ live-vs-recorded hash divergence is narrated on stderr without stopping.
 whose leading tick groups are the parent's, with `ForkedFrom` in the header;
 the child is standalone. `replay.record <name>` captures the running session's record-start definition,
 active seats, mounted-guest receipts, and the per-tick server-input stream,
-while sampling both the LIVE population's pose hash and authoritative state-system
+while sampling both the LIVE population hash and authoritative state-system
 hash; `replay.stop`
 persists `<name>.puckreplay` and re-drives it once; `replay.verify <name>`
 rehydrates a fresh boot-image world, re-drives the stream offline, and

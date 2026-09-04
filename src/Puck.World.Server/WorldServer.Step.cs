@@ -1467,6 +1467,10 @@ public sealed partial class WorldServer {
 
         var stepStartEngineTick = (context.ElapsedTicks - context.StepTicks);
 
+        // Release every carry relationship this tick's drain invalidated (a partner gone inactive, a kit retune away
+        // from the facet either side needs) BEFORE the advance passes, so an orphaned target re-enters rigid
+        // integration and contact in the same tick its carrier disappeared rather than skipping one.
+        m_population.PrepareCarriedBodies();
         // Sample every active body's medium surface BEFORE either half of the tick advances it, so a medium
         // hold's phase-4 law (inside AdvanceSimulated/AdvanceSeats' own body.Advance calls) reads this tick's
         // surface, never last tick's.
@@ -1485,6 +1489,7 @@ public sealed partial class WorldServer {
         );
         m_population.ResolveDynamicContacts();
         m_population.ResolveTethers();
+        m_population.UpdateCarriedBodies();
         m_population.CompleteStep(tick: tick);
         foreach (var designation in m_population.DesignationOutputs) {
             _ = ApplyDesignationCore(

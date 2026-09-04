@@ -8272,6 +8272,61 @@
             ],
             "additionalProperties": false,
             "default": null
+          },
+          "board": {
+            "description": "The placement\u0027s board facet (see WorldPlacementBoard) \u2014 the tabletop primitive, or null for no anchored topology. Omitted from the wire when null.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "topology": {
+                "description": "The state.lattices Grid topology this placement anchors.",
+                "type": "string"
+              },
+              "occupancy": {
+                "description": "The board-typed row over Topology holding current occupant codes.",
+                "type": "string"
+              },
+              "turn": {
+                "description": "An optional phase row read back beside the frame.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "verdict": {
+                "description": "An optional row read back beside the frame (a ruling on the last recorded change).",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "move": {
+                "description": "An optional keyed row (conventionally cells \u0022from\u0022/\u0022to\u0022) read back beside the frame.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "plan": {
+                "description": "An optional board-typed row over Topology a future addon paints candidate cells into for highlight rendering \u2014 the seam, not the addon.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              }
+            },
+            "required": [
+              "topology",
+              "occupancy"
+            ],
+            "additionalProperties": false,
+            "default": null
           }
         },
         "required": [
@@ -12470,6 +12525,10 @@
                             "grip": {
                               "$ref": "#/properties/placements/items/properties/grip",
                               "default": null
+                            },
+                            "board": {
+                              "$ref": "#/properties/placements/items/properties/board",
+                              "default": null
                             }
                           },
                           "required": [
@@ -13401,6 +13460,10 @@
                                       },
                                       "grip": {
                                         "$ref": "#/properties/placements/items/properties/grip",
+                                        "default": null
+                                      },
+                                      "board": {
+                                        "$ref": "#/properties/placements/items/properties/board",
                                         "default": null
                                       }
                                     },
