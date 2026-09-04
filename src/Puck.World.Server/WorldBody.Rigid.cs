@@ -161,14 +161,17 @@ public sealed partial class WorldBody {
             fractionBitsOut: FixedQ4816.FractionBitCount,
             result: out var inverseScaleRaw
         ) ? FixedQ4816.FromRawBits(value: inverseScaleRaw) : FixedQ4816.One);
-        var inverseScaleCubed = PositiveIntegerPower(baseValue: inverseScale, exponent: 3);
-        var inverseScaleFifth = PositiveIntegerPower(baseValue: inverseScale, exponent: 5);
+        // The powers are accumulated at the inverse quantities' own 40-bit placement, not Q16: at Q16 a grown body's
+        // Scale⁻⁵ (1e-5 at Scale 10) is below the smallest positive value and would zero the inverse inertia, freezing
+        // its orientation; at 40 bits the same power keeps 15 significant bits.
+        var inverseScaleCubed = InversePower(inverseScaleRaw: inverseScale.Value, exponent: 3);
+        var inverseScaleFifth = InversePower(inverseScaleRaw: inverseScale.Value, exponent: 5);
 
-        static long ScaleRaw(long raw, int fractionBits, FixedQ4816 factor) => (FusedArithmetic.TryMixedScaleProduct(
+        static long ScaleRaw(long raw, int fractionBits, long factorRaw) => (FusedArithmetic.TryMixedScaleProduct(
             a: raw,
             fractionBitsA: fractionBits,
-            b: factor.Value,
-            fractionBitsB: FixedQ4816.FractionBitCount,
+            b: factorRaw,
+            fractionBitsB: InverseFractionBits,
             fractionBitsOut: fractionBits,
             result: out var scaled
         ) ? scaled : RepresentableInverseCeiling);
@@ -178,30 +181,57 @@ public sealed partial class WorldBody {
             InverseMassRaw = ScaleRaw(
                 raw: rigid.InverseMassRaw,
                 fractionBits: FixedWorldRigid.Scales.InverseMass,
-                factor: inverseScaleCubed
+                factorRaw: inverseScaleCubed
             ),
             InverseInertiaXX = ScaleRaw(
                 raw: rigid.InverseInertiaXX,
                 fractionBits: FixedWorldRigid.Scales.InverseInertia,
-                factor: inverseScaleFifth
+                factorRaw: inverseScaleFifth
             ),
             InverseInertiaYY = ScaleRaw(
                 raw: rigid.InverseInertiaYY,
                 fractionBits: FixedWorldRigid.Scales.InverseInertia,
-                factor: inverseScaleFifth
+                factorRaw: inverseScaleFifth
             ),
             InverseInertiaZZ = ScaleRaw(
                 raw: rigid.InverseInertiaZZ,
                 fractionBits: FixedWorldRigid.Scales.InverseInertia,
-                factor: inverseScaleFifth
+                factorRaw: inverseScaleFifth
             ),
             CenterOffset = (rigid.CenterOffset * m_scale),
             BoundingRadius = (rigid.BoundingRadius * m_scale),
         };
     }
-    // baseValue^exponent by repeated single-rounding multiplication, saturating on overflow. An inverse scale only
-    // grows as a body shrinks, so reverting to One at the representation edge would move inverse mass/inertia in the
-    // physically wrong direction (back to the full-size value).
+    // The fraction bits the inverse-scale powers are carried at: the inverse mass and inverse inertia placements
+    // share it, so a power lands on the raw it scales without a second rounding.
+    private const int InverseFractionBits = 40;
+
+    // inverseScale^exponent at InverseFractionBits by repeated single-rounding multiplication of a Q16 base,
+    // saturating on overflow. An inverse scale only grows as a body shrinks, so reverting to One at the
+    // representation edge would move inverse mass/inertia in the physically wrong direction (back to the full-size
+    // value).
+    private static long InversePower(long inverseScaleRaw, int exponent) {
+        var accumulatorRaw = (1L << InverseFractionBits);
+
+        for (var step = 0; (step < exponent); step++) {
+            if (!FusedArithmetic.TryMixedScaleProduct(
+                a: accumulatorRaw,
+                fractionBitsA: InverseFractionBits,
+                b: inverseScaleRaw,
+                fractionBitsB: FixedQ4816.FractionBitCount,
+                fractionBitsOut: InverseFractionBits,
+                result: out var scaled
+            )) {
+                return long.MaxValue;
+            }
+
+            accumulatorRaw = scaled;
+        }
+
+        return accumulatorRaw;
+    }
+
+    // baseValue^exponent by repeated single-rounding multiplication, saturating on overflow.
     private static FixedQ4816 PositiveIntegerPower(FixedQ4816 baseValue, int exponent) {
         var accumulatorRaw = FixedQ4816.One.Value;
 

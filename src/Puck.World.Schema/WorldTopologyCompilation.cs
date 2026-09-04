@@ -49,9 +49,11 @@ public sealed class CompiledWorldTopology {
     private readonly WorldTopologyWrap m_wrap;
     private readonly FixedVector3 m_origin;
     private readonly FixedQ4816 m_cellSize;
+    private readonly FixedQ4816 m_band;
 
     internal CompiledWorldTopology(WorldTopologyKind kind, int count, int directions, int[] neighbours,
-        int width, int depth, WorldTopologyWrap wrap, FixedVector3 origin, FixedQ4816 cellSize) {
+        int width, int depth, WorldTopologyWrap wrap, FixedVector3 origin, FixedQ4816 cellSize, FixedQ4816 band) {
+        m_band = band;
         Kind = kind;
         CellCount = count;
         DirectionCount = directions;
@@ -99,6 +101,12 @@ public sealed class CompiledWorldTopology {
         cell = -1;
         if (Kind != WorldTopologyKind.Grid) {
             return false;
+        }
+        if (m_band > FixedQ4816.Zero) {
+            var localY = ((Int128)position.Y.Value) - m_origin.Y.Value;
+            if (localY > m_band.Value || localY < -(Int128)m_band.Value) {
+                return false;
+            }
         }
         var localX = ((Int128)position.X.Value) - m_origin.X.Value;
         var localZ = ((Int128)position.Z.Value) - m_origin.Z.Value;
@@ -260,6 +268,10 @@ public static class WorldTopologyCompilation {
             reason = "grid.origin must fit Q48.16";
             return false;
         }
+        if (!FitsFixed(topology.Band) || topology.Band < 0f) {
+            reason = $"grid.band must be a nonnegative Q48.16 half-extent (was {topology.Band})";
+            return false;
+        }
         reason = string.Empty;
         return true;
     }
@@ -309,6 +321,7 @@ public static class WorldTopologyCompilation {
                 Y: FixedQ4816.FromDouble(topology.Origin.Y),
                 Z: FixedQ4816.FromDouble(topology.Origin.Z)
             ),
-            FixedQ4816.FromDouble(topology.CellSize));
+            FixedQ4816.FromDouble(topology.CellSize),
+            FixedQ4816.FromDouble(topology.Band));
     }
 }

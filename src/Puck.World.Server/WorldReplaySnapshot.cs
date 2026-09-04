@@ -1736,6 +1736,8 @@ public sealed class WorldReplaySnapshot {
             // the relationship itself is state a hashed pose does not otherwise cover. -1 means no relationship.
             hash.Add(value: unchecked((uint)(body.Carrying ?? -1)));
             hash.Add(value: unchecked((uint)(body.CarriedBy ?? -1)));
+            // Scale changes every scaled quantity a later tick reads (colliders, speed, mass) before pose diverges.
+            hash.Add(value: unchecked((ulong)body.Scale.Value));
         }
 
         return hash.Value;

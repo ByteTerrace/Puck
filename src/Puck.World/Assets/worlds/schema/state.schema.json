@@ -333,6 +333,11 @@
             "description": "The axial hexagon radius; zero for other kinds.",
             "type": "integer",
             "default": 0
+          },
+          "band": {
+            "description": "For a Grid, the vertical half-extent about the origin\u0027s Y a position must lie within to resolve to a cell (cellOf); 0 resolves any height, so a piece on the floor beneath a table still reads as on its square.",
+            "type": "number",
+            "default": 0
           }
         },
         "required": [

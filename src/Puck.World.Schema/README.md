@@ -58,6 +58,10 @@ key — `cellOf` takes a `bodyRef` in its place, the same `body:<n>`/
 topology — the only kind carrying a rectangular world-space frame
 (`CompiledWorldTopology.Origin`/`CellSize`, the same origin/cellSize every
 topology declares); a `Hex`/`Ring` row refuses them by name at compile.
+A grid's `band` is the vertical half-extent about its origin's Y a position
+must lie within for `cellOf` to answer a cell; 0 (the default) answers any
+height, so a table's board authors a band and a piece on the floor beneath
+it reads as off the board.
 `offset` is the arbitrary-`(dx, dz)` sibling of `neighbour`'s fixed eight
 directions — what a leaper (a knight, or any piece whose reach is not a ray)
 authors its geometry against.

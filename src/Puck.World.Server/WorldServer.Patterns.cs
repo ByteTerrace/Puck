@@ -184,12 +184,8 @@ public sealed partial class WorldServer {
         var slot = (int)((row.HistoryCursor - 1L - age) % history.Capacity);
         var cells = row.Cells;
 
-        if (cells is null || slot >= cells.Count) {
-            return history.Empty;
-        }
-
-        WorldStateReader.ReadCell(row: row, key: cells[slot].Key.Value, tick: tick, rawValue: out var raw, text: out _);
-        return raw ?? history.Empty;
+        // Ring slots carry no time trait (the validator's rule), so the stored raw IS the live value.
+        return (cells is null || slot >= cells.Count) ? history.Empty : cells[slot].Value;
     }
 
     // $history:<row>:<age> through the compiled row handle.

@@ -35,13 +35,19 @@ public sealed class TabletopBoardLawTests {
             }
         }
 
-        // TryCellOf is X/Z-only BY DESIGN (a board carries one layer): the same cell-0 center, hundreds of units
-        // above or below the declared origin's Y, still resolves to cell 0 — a piece over the wrong table entirely,
-        // or one that has fallen through the floor beneath this one, reads as standing on this board regardless.
+        // Without a band, TryCellOf is X/Z-only: the same cell-0 center hundreds of units above or below still
+        // resolves to cell 0. With a band, only positions within the half-extent of the origin's Y resolve, so a
+        // piece on the floor beneath the table reads as off the board.
         Assert.True(topology.TryCellOf(position: new FixedVector3(FixedQ4816.FromDouble(10.25d), FixedQ4816.FromDouble(502d), FixedQ4816.FromDouble(-4.75d)), cell: out var highCell));
         Assert.Equal(0, highCell);
         Assert.True(topology.TryCellOf(position: new FixedVector3(FixedQ4816.FromDouble(10.25d), FixedQ4816.FromDouble(-498d), FixedQ4816.FromDouble(-4.75d)), cell: out var lowCell));
         Assert.Equal(0, lowCell);
+        var banded = WorldTopologyCompilation.Find(new WorldStateSection(Lattices: [.. state.Lattices!.Select(t => t.Name == "board" ? t with { Band = 0.3f } : t)]), "board")!;
+        Assert.True(banded.TryCellOf(position: new FixedVector3(FixedQ4816.FromDouble(10.25d), FixedQ4816.FromDouble(2.2d), FixedQ4816.FromDouble(-4.75d)), cell: out var nearCell));
+        Assert.Equal(0, nearCell);
+        Assert.False(banded.TryCellOf(position: new FixedVector3(FixedQ4816.FromDouble(10.25d), FixedQ4816.FromDouble(1.5d), FixedQ4816.FromDouble(-4.75d)), cell: out _));
+        Assert.False(WorldTopologyCompilation.TryValidate(state.Lattices![0] with { Band = -1f }, out var bandReason));
+        Assert.Contains("band", bandReason);
 
         // Below the origin corner: outside the frame on both axes.
         Assert.False(topology.TryCellOf(position: new FixedVector3(FixedQ4816.FromDouble(9d), FixedQ4816.Zero, FixedQ4816.FromDouble(-6d)), cell: out _));

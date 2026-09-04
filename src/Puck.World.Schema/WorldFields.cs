@@ -311,6 +311,9 @@ public sealed record WorldFieldsSection(
 /// <param name="Kind">Physical fields or a discrete grid, ring, or axial hexagon.</param>
 /// <param name="Wrap">Wrapped axes for a discrete grid; rings always wrap.</param>
 /// <param name="Radius">The axial hexagon radius; zero for other kinds.</param>
+/// <param name="Band">For a <see cref="WorldTopologyKind.Grid"/>, the vertical half-extent about the origin's Y a
+/// position must lie within to resolve to a cell (<c>cellOf</c>); 0 resolves any height, so a piece on the floor
+/// beneath a table still reads as on its square.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldStateLatticeTopology(
     string Name,
@@ -323,7 +326,8 @@ public sealed record WorldStateLatticeTopology(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldReaction>? Reactions = null,
     WorldTopologyKind Kind = WorldTopologyKind.Field,
     WorldTopologyWrap Wrap = WorldTopologyWrap.None,
-    int Radius = 0
+    int Radius = 0,
+    float Band = 0f
 );
 /// <summary>A state row's <c>lattice</c> trait -- the row holds one <see cref="CellKind.Fixed"/> scalar per cell of
 /// the named topology instead of slot/keyed cells. Values are authored DECIMAL (like every lattice quantity), not

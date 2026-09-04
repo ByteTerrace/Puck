@@ -15723,6 +15723,7 @@
         "width": 16
       },
       {
+        "band": 0.3,
         "cellSize": 0.2,
         "depth": 8,
         "kind": "Grid",

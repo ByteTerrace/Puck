@@ -117,48 +117,114 @@ public static class WorldBoardQueries {
         return false;
     }
 
+    // Dijkstra over a binary heap keyed (distance, cell ordinal): the same settle order as a linear scan (least
+    // distance, lowest ordinal on ties), at O((V + E) log V) instead of O(V²) per query. Stale heap entries are
+    // skipped on pop; the visit budget counts settled cells exactly as before.
     private static long PathCost(CompiledWorldBoardQuery query, ReadOnlySpan<long> costs, int source) {
         var topology = query.Topology;
-        var rented = System.Buffers.ArrayPool<long>.Shared.Rent(topology.CellCount);
-        var distances = rented.AsSpan(0, topology.CellCount);
+        var count = topology.CellCount;
+        var capacity = count * (topology.DirectionCount + 1);
+        var distancePool = System.Buffers.ArrayPool<long>.Shared.Rent(count + capacity);
+        var cellPool = System.Buffers.ArrayPool<int>.Shared.Rent(capacity);
+        var settledPool = System.Buffers.ArrayPool<byte>.Shared.Rent(count);
         try {
-        Span<byte> settled = stackalloc byte[topology.CellCount];
-        distances.Fill(long.MaxValue);
-        settled.Clear();
-        distances[source] = 0;
-        for (var visited = 0; visited <= query.MaxVisits; visited++) {
-            var best = -1;
-            var distance = long.MaxValue;
-            // Ascending ordinal is the stable tie-break. Zero-cost edges are admitted; negative cells block entry.
-            for (var cell = 0; cell < topology.CellCount; cell++) {
-                if (settled[cell] == 0 && distances[cell] < distance) {
-                    best = cell;
-                    distance = distances[cell];
+            var distances = distancePool.AsSpan(0, count);
+            var heapDistance = distancePool.AsSpan(count, capacity);
+            var heapCell = cellPool.AsSpan(0, capacity);
+            var settled = settledPool.AsSpan(0, count);
+            distances.Fill(long.MaxValue);
+            settled.Clear();
+            distances[source] = 0;
+            var size = 0;
+            Push(heapDistance, heapCell, ref size, 0, source);
+            for (var visited = 0; visited <= query.MaxVisits; visited++) {
+                var best = -1;
+                var distance = long.MaxValue;
+                while (size > 0) {
+                    Pop(heapDistance, heapCell, ref size, out var candidateDistance, out var candidate);
+                    if (settled[candidate] != 0 || candidateDistance != distances[candidate]) {
+                        continue;
+                    }
+                    best = candidate;
+                    distance = candidateDistance;
+                    break;
+                }
+                if (best < 0 || distance > query.MaxCost) {
+                    return -1;
+                }
+                if (visited == query.MaxVisits) {
+                    return -2;
+                }
+                if (best == query.Target) {
+                    return distance;
+                }
+                settled[best] = 1;
+                for (var direction = 0; direction < topology.DirectionCount; direction++) {
+                    var neighbour = topology.Neighbour(best, direction);
+                    if (neighbour < 0 || settled[neighbour] != 0 || costs[neighbour] < 0 || costs[neighbour] > query.MaxCost - distance) {
+                        continue;
+                    }
+                    var relaxed = distance + costs[neighbour];
+                    if (relaxed < distances[neighbour]) {
+                        distances[neighbour] = relaxed;
+                        Push(heapDistance, heapCell, ref size, relaxed, neighbour);
+                    }
                 }
             }
-            if (best < 0 || distance > query.MaxCost) {
-                return -1;
-            }
-            if (visited == query.MaxVisits) {
-                return -2;
-            }
-            if (best == query.Target) {
-                return distance;
-            }
-            settled[best] = 1;
-            for (var direction = 0; direction < topology.DirectionCount; direction++) {
-                var neighbour = topology.Neighbour(best, direction);
-                if (neighbour < 0 || settled[neighbour] != 0 || costs[neighbour] < 0 || costs[neighbour] > query.MaxCost - distance) {
-                    continue;
-                }
-                distances[neighbour] = Math.Min(distances[neighbour], distance + costs[neighbour]);
-            }
-        }
-        return -2;
+            return -2;
         } finally {
-            System.Buffers.ArrayPool<long>.Shared.Return(rented);
+            System.Buffers.ArrayPool<long>.Shared.Return(distancePool);
+            System.Buffers.ArrayPool<int>.Shared.Return(cellPool);
+            System.Buffers.ArrayPool<byte>.Shared.Return(settledPool);
         }
     }
+
+    private static bool Before(long distanceA, int cellA, long distanceB, int cellB) =>
+        distanceA < distanceB || (distanceA == distanceB && cellA < cellB);
+
+    private static void Push(Span<long> distance, Span<int> cell, ref int size, long value, int ordinal) {
+        var index = size++;
+        while (index > 0) {
+            var parent = (index - 1) / 2;
+            if (!Before(value, ordinal, distance[parent], cell[parent])) {
+                break;
+            }
+            distance[index] = distance[parent];
+            cell[index] = cell[parent];
+            index = parent;
+        }
+        distance[index] = value;
+        cell[index] = ordinal;
+    }
+
+    private static void Pop(Span<long> distance, Span<int> cell, ref int size, out long value, out int ordinal) {
+        value = distance[0];
+        ordinal = cell[0];
+        size--;
+        if (size == 0) {
+            return;
+        }
+        var lastDistance = distance[size];
+        var lastCell = cell[size];
+        var index = 0;
+        while (true) {
+            var left = (2 * index) + 1;
+            if (left >= size) {
+                break;
+            }
+            var right = left + 1;
+            var child = (right < size && Before(distance[right], cell[right], distance[left], cell[left])) ? right : left;
+            if (!Before(distance[child], cell[child], lastDistance, lastCell)) {
+                break;
+            }
+            distance[index] = distance[child];
+            cell[index] = cell[child];
+            index = child;
+        }
+        distance[index] = lastDistance;
+        cell[index] = lastCell;
+    }
+
 }
 
 public sealed partial class WorldServer {
