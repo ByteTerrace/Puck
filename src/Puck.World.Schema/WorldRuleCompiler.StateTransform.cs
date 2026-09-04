@@ -56,9 +56,9 @@ public static partial class WorldRuleCompiler {
                 if (Row(sort.Row) is not { } sortedRow ||
                     (sortedRow.Zone is not null
                         ? (!sortedRow.Zone.Ordered || sort.Descending || sort.By is not { Count: >= 1 and <= WorldStateCapacity.MaxSortKeys } ||
-                            sort.By.Any(key => key is null || Row(key.Row) is not { IsKeyed: true, Kind: CellKind.Int or CellKind.Fixed }))
+                            sort.By.Any(key => key is null || Row(key.Row) is not { IsKeyed: true, Kind: CellKind.Int or CellKind.Fixed } || Row(key.Row).KeysFrom != sortedRow.Zone.Tokens))
                         : (!sortedRow.IsKeyed || sort.By is not null || sortedRow.Kind is not (CellKind.Int or CellKind.Fixed)))) {
-                    throw Invalid($"sort requires an ordered zone with 1..{WorldStateCapacity.MaxSortKeys} keyed numeric attribute keys (direction per key), or a keyed numeric row alone");
+                    throw Invalid($"sort requires an ordered zone with 1..{WorldStateCapacity.MaxSortKeys} numeric attribute keys over the zone's token domain (direction per key), or a keyed numeric row alone");
                 }
                 break;
             case WorldStateTransform.Shuffle shuffle:

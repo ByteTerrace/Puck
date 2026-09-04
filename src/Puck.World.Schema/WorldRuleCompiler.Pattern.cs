@@ -42,8 +42,8 @@ public static partial class WorldRuleCompiler {
                 }
                 attribute = pattern.Attribute ?? throw Invalid($"pattern '{pattern.Name}' reads a zone and so needs an attribute row");
                 var attributeRow = WorldDefinitionRows.FindStateRow(definition.State, attribute) ?? throw Invalid($"attribute '{attribute}' names no state row");
-                if (!attributeRow.IsKeyed || attributeRow.Kind is not (CellKind.Int or CellKind.Fixed)) {
-                    throw Invalid($"attribute '{attribute}' must be a keyed numeric row");
+                if (!attributeRow.IsKeyed || attributeRow.Kind is not (CellKind.Int or CellKind.Fixed) || attributeRow.KeysFrom != zone.Tokens) {
+                    throw Invalid($"attribute '{attribute}' must be a numeric row keyed over token domain '{zone.Tokens}'");
                 }
                 kind = attributeRow.Kind;
             } else {

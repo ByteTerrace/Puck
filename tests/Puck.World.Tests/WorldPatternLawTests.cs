@@ -40,6 +40,17 @@ public sealed class WorldPatternLawTests {
         Assert.Equal(new[] { "c1", "c5", "c3", "c4", "c2" }, Find(suited, "hand").Cells!.Select(c => c.Key.Value));
         Assert.False(WorldStateTransforms.TryApply(unsorted, new WorldStateTransform.Sort("hand", By: [new("rank")], Descending: true), WorldPrincipal.World, 0, "test", out _, out var flagReason));
         Assert.Contains("its own direction", flagReason);
+        // An attribute keyed over another token domain never sorts silently as zeroes.
+        var foreign = unsorted with { StateRaw = unsorted.StateRaw! with { World = [.. unsorted.State,
+            new(Name("seats"), CellKind.Int, Capacity: 2, Cells: [Cell("s1"), Cell("s2")], Tokens: new()),
+            new(Name("score"), CellKind.Int, KeysFrom: "seats", Cells: [Cell("s1", 3), Cell("s2", 1)])] } };
+        Assert.False(WorldStateTransforms.TryApply(foreign, new WorldStateTransform.Sort("hand", By: [new("score")]), WorldPrincipal.World, 0, "test", out _, out var domainReason));
+        Assert.Contains("token domain 'cards'", domainReason);
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(foreign with { Rules = [new WorldRule(Name("bad"), [new ActionEffect.TransformState(new WorldStateTransform.Sort("hand", By: [new("score")]))])] }, out var compileReason));
+        Assert.Contains("token domain", compileReason);
+        var foreignPattern = new WorldPatternRow(Name("far"), CellKind.Int, Attribute: "score", Symbols: [new(Name("one"), 1, 1)], Pattern: new WorldPatternNode.Symbol("one"));
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(foreign with { PatternsRaw = [.. foreign.Patterns, foreignPattern], Rules = [Mirror("straight", "$match:far:hand")] }, out var attributeReason));
+        Assert.Contains("token domain", attributeReason);
 
         using var before = Fixtures.FreshServer(definition: unsorted);
         before.Step();

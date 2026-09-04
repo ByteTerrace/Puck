@@ -14,13 +14,25 @@ public sealed partial class WorldServer {
         }
 
         m_patterns = patterns;
+        m_patternWord = (patterns.Count == 0) ? [] : new long[WordCeiling(definition)];
+    }
+
+    // The longest word any source in this document can produce: the widest row ceiling, capped at the word cap.
+    private static int WordCeiling(WorldDefinition definition) {
+        var ceiling = 1;
+
+        foreach (var row in definition.State) {
+            ceiling = Math.Max(ceiling, row.Capacity ?? row.CellCeiling);
+        }
+
+        return Math.Min(ceiling, WorldPatternCapacity.MaxWord);
     }
 
     // $match: — the word is read at this tick through the same (row, key) seam every other state read uses, so an
     // advancing attribute cell reads its live value. The verdict is 1 or 0 and nothing else: every source fits the
     // word buffer, and a board origin that names no cell reads the empty word, which the pattern decides like any
     // other.
-    private readonly long[] m_patternWord = new long[WorldPatternCapacity.MaxWord];
+    private long[] m_patternWord = [];
 
     private long ReadPatternFact(CompiledWorldOperand operand, ulong tick) {
         if (!m_patterns.TryGet(name: operand.Pattern!, pattern: out var pattern) ||

@@ -302,21 +302,27 @@ public static partial class WorldStateTransforms {
         return true;
     }
 
-    // Each key's values are gathered once through a dictionary over its attribute row, then the cells are ordered
-    // by the key tuple with the original position as the final tiebreak, which is what makes the sort stable.
+    // The zone's cells are indexed by key once; each attribute row is then walked once to fill its column of the
+    // key table, and the cells are ordered by the key tuple with the original position as the final tiebreak, which
+    // is what makes the sort stable. Keys are in column-major order: column k occupies [k * n, (k + 1) * n).
     private static bool TrySort(WorldStateRow[] rows, WorldStateTransform.Sort sort, out string reason) {
         if (!TryFind(rows, sort.Row, out var index, out reason)) {
             return false;
         }
         var row = rows[index];
         var cells = (row.Cells ?? []).ToArray();
-        long[][] keys;
+        var count = cells.Length;
+        long[] keys;
         bool[] descending;
         if (row.Zone is { } zone) {
             if (!zone.Ordered || sort.By is not { Count: >= 1 and <= WorldStateCapacity.MaxSortKeys } || sort.Descending) {
                 return Refuse($"sorting a zone requires an ordered zone and 1..{WorldStateCapacity.MaxSortKeys} attribute keys, each carrying its own direction", out reason);
             }
-            keys = new long[sort.By.Count][];
+            var position = new Dictionary<WorldCellName, int>(count);
+            for (var cellIndex = 0; cellIndex < count; cellIndex++) {
+                position[cells[cellIndex].Key] = cellIndex;
+            }
+            keys = new long[sort.By.Count * count];
             descending = new bool[sort.By.Count];
             for (var keyIndex = 0; keyIndex < sort.By.Count; keyIndex++) {
                 var key = sort.By[keyIndex];
@@ -324,16 +330,13 @@ public static partial class WorldStateTransforms {
                     return Refuse("a sort key names no state row", out reason);
                 }
                 var by = rows[byIndex];
-                if (!by.IsKeyed || by.Kind is not (CellKind.Int or CellKind.Fixed)) {
-                    return Refuse("a sort attribute must be a keyed numeric row", out reason);
+                if (!by.IsKeyed || by.Kind is not (CellKind.Int or CellKind.Fixed) || by.KeysFrom != zone.Tokens) {
+                    return Refuse($"a sort attribute must be a numeric row keyed over token domain '{zone.Tokens}'", out reason);
                 }
-                var values = new Dictionary<WorldCellName, long>(by.Cells?.Count ?? 0);
                 foreach (var cell in by.Cells ?? []) {
-                    values[cell.Key] = cell.Value;
-                }
-                keys[keyIndex] = new long[cells.Length];
-                for (var cellIndex = 0; cellIndex < cells.Length; cellIndex++) {
-                    keys[keyIndex][cellIndex] = values.TryGetValue(cells[cellIndex].Key, out var value) ? value : 0L;
+                    if (position.TryGetValue(cell.Key, out var cellIndex)) {
+                        keys[(keyIndex * count) + cellIndex] = cell.Value;
+                    }
                 }
                 descending[keyIndex] = key.Descending;
             }
@@ -341,19 +344,19 @@ public static partial class WorldStateTransforms {
             if (!row.IsKeyed || sort.By is not null || row.Kind is not (CellKind.Int or CellKind.Fixed)) {
                 return Refuse("sorting a keyed row orders its own numeric values and takes no attribute", out reason);
             }
-            keys = [new long[cells.Length]];
+            keys = new long[count];
             descending = [sort.Descending];
-            for (var cellIndex = 0; cellIndex < cells.Length; cellIndex++) {
-                keys[0][cellIndex] = cells[cellIndex].Value;
+            for (var cellIndex = 0; cellIndex < count; cellIndex++) {
+                keys[cellIndex] = cells[cellIndex].Value;
             }
         }
-        var order = new int[cells.Length];
-        for (var cellIndex = 0; cellIndex < order.Length; cellIndex++) {
+        var order = new int[count];
+        for (var cellIndex = 0; cellIndex < count; cellIndex++) {
             order[cellIndex] = cellIndex;
         }
         Array.Sort(order, (left, right) => {
-            for (var keyIndex = 0; keyIndex < keys.Length; keyIndex++) {
-                var comparison = keys[keyIndex][left].CompareTo(keys[keyIndex][right]);
+            for (var keyIndex = 0; keyIndex < descending.Length; keyIndex++) {
+                var comparison = keys[(keyIndex * count) + left].CompareTo(keys[(keyIndex * count) + right]);
                 if (comparison != 0) {
                     return descending[keyIndex] ? -comparison : comparison;
                 }
