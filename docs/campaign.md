@@ -485,9 +485,29 @@ grounded ball's continuous floor contact mask a fresh wall impact. A
 rigid-vs-rigid pair carries no such latch, so its restitution is instead
 floored to zero below a small closing-speed threshold — the same "settle,
 don't chatter" intent applied to a contact with no rising-edge state of its
-own — the threshold is an authored field, not a C# constant. A pair's contact
-anchor is a real off-center surface point, never the body center, so a strike
-carries real torque; its tangential response is a real Coulomb impulse
+own — the threshold is an authored field, not a C# constant. A contact
+anchor — static (ground/obstruction) or pair alike — is the struck shape's
+own true WITNESS POINT (the real support point of its box/capsule/sphere
+geometry oriented by the body's quaternion), never a point on the
+conservative bounding sphere and never the body center, so a strike carries
+the real lever arm its own surface implies. A grounded box or capsule
+resolves over its own support MANIFOLD (up to four box corners, or two
+capsule cap points when it lies on its side) with a few authored
+sequential-impulse passes rather than one witness point — the thing that
+keeps an upright body's centre of mass over its support polygon without an
+artificial extra damping term standing in for real contact geometry. A
+struck pair's own normal impulse propagates further than one pair-hop per
+tick too: the dynamic-contact solver runs a few EXTRA full broadphase-plus-
+narrowphase sweeps over the same tick — never a replay of only the pairs the
+first pass happened to find, since a pair's own positional split can move a
+body into a third one only a later sweep discovers — the count itself derived
+down from an authored ceiling by how many pairs that first pass routed
+through the rigid impulse path, so a rack break or a falling line of dominoes
+spreads within the tick it happens rather than one body-hop per tick. Every
+one of these counts — manifold passes, extra sweeps, the sweep ceiling itself
+— is an authored field
+echoed in `world.budget`, never a free per-tick knob. A pair's tangential
+response is a real Coulomb impulse
 through the two-body kernel, clamped to the friction coefficient against the
 normal impulse just applied, never an independent rescale of either body's
 whole velocity (which would burn or invent momentum along the normal).
@@ -501,7 +521,7 @@ rolling collider's rendered position does not orbit the root as it spins.
 Cross-world transfer of a rigid body is
 out of scope and refused by name — a carrier holding one refuses its OWN
 transfer for the same reason, rather than dropping or orphaning what it
-holds. The garden's `billiardsTray`/`bowlingLane`
+holds. The garden's `billiardsTray`/`bowlingLane`/`dominoes`
 placements are the proof fixture; see the
 [server](../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)
 and [schema](../src/Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs) references.
@@ -511,8 +531,19 @@ second attachment primitive beside the surface-hold system — it is a
 carrier-declared kit facet (`carry`: a body-local frame offset, a
 mass-equivalent, and a reach) authored the same "presence is the whole
 switch" way `rigid` is. While carried, the target's own rigid integration is
-suspended entirely — its pose is derived from the carrier's frame every tick,
-never solved — and it re-enters the solver with the carrier's own velocity on
+suspended entirely — never solved — but its pose is not an unconditional
+follow either: TANGIBLE carry sweeps the target's own collider from its
+previous pose to the carrier-derived one against static geometry every tick,
+and separately resolves it against every other active solid body on the same
+positional-split terms an ordinary contact pair already uses, so a carried
+body pushes and is blocked rather than passing through walls or other
+bodies — and whichever correction either sweep applies is handed back to the
+CARRIER too, so holding something that cannot advance stops the carrier, not
+only the object. `body.release` refuses by name, leaving the relationship
+untouched, when the target's current pose still overlaps geometry or another
+body — the backstop for the rare case the continuous sweep above did not
+already prevent. It re-enters the solver with the carrier's own velocity on a
+successful
 release, never snapped to rest. A body may carry at most one other body at a
 time; a candidate must sit within the carrier's own live-scaled reach and its
 own live-scaled mass must not exceed the carrier's mass-equivalent times an

@@ -42,17 +42,19 @@ public sealed partial class WorldPopulation {
             worstSubsteps = Math.Max(val1: worstSubsteps, val2: body.RigidStaticSubstepsThisTick);
         }
 
-        return $"rigid {rigidCount} body/bodies ({restingCount} resting), pairsResolved={RigidPairResolvedCount}, worstSubsteps={worstSubsteps}/{m_bodyContactPolicy.RigidSubstepCeiling}, restLinear<={m_bodyContactPolicy.RigidRestLinearSpeed:0.###} restAngular<={m_bodyContactPolicy.RigidRestAngularSpeed:0.###} restHold={m_bodyContactPolicy.RigidRestHoldSeconds:0.###}s substepFraction={m_bodyContactPolicy.RigidSubstepTravelFraction:0.###} substepMinTravel={m_bodyContactPolicy.RigidSubstepMinimumTravel:0.####} pairRestitutionSpeed={m_bodyContactPolicy.RigidPairRestitutionSpeed:0.###} impulseVelocityCeiling={(double)m_rigidVelocityCeiling:0.###}";
+        return $"rigid {rigidCount} body/bodies ({restingCount} resting), pairsResolved={RigidPairResolvedCount}, pairPasses={RigidPairPassesThisTick}/{m_bodyContactPolicy.RigidPairIterationCeiling} pairBudget={m_bodyContactPolicy.RigidPairIterationBudget}, manifoldIterations={m_bodyContactPolicy.RigidManifoldIterations}, worstSubsteps={worstSubsteps}/{m_bodyContactPolicy.RigidSubstepCeiling}, restLinear<={m_bodyContactPolicy.RigidRestLinearSpeed:0.###} restAngular<={m_bodyContactPolicy.RigidRestAngularSpeed:0.###} restHold={m_bodyContactPolicy.RigidRestHoldSeconds:0.###}s substepFraction={m_bodyContactPolicy.RigidSubstepTravelFraction:0.###} substepMinTravel={m_bodyContactPolicy.RigidSubstepMinimumTravel:0.####} pairRestitutionSpeed={m_bodyContactPolicy.RigidPairRestitutionSpeed:0.###} impulseVelocityCeiling={(double)m_rigidVelocityCeiling:0.###}";
     }
 
     /// <summary>Resolves one already-detected overlapping pair where at least one side is a rigid kit: an
     /// impulse-based restitution/friction response through <see cref="FixedTwoBodyKernel"/> (real angular coupling
-    /// when both sides are rigid — the contact anchor is approximated at each rigid side's own bounding-radius
-    /// surface point facing the other body, never the body-center anchor a torque-free response would imply; a
-    /// kinematic side contributes its own velocity but is never itself pushed — see
-    /// <see cref="WorldBody.TwoBodyHandle"/>), plus the SAME positional split <see cref="ResolveDynamicContacts"/>
-    /// already applies to a kinematic-vs-kinematic pair, restricted to the rigid side(s) only: a kinematic body is
-    /// never repositioned by a rigid body it did not choose to contact physically.</summary>
+    /// when both sides are rigid — the contact anchor is each rigid side's own true witness point
+    /// (<see cref="FixedRigidWitness.Anchor"/>) facing the other body, never the body-center anchor a torque-free
+    /// response would imply and never a point on the conservative bounding sphere either; a kinematic side
+    /// contributes its own velocity but is never itself pushed — see <see cref="WorldBody.TwoBodyHandle"/>), plus the
+    /// SAME positional split <see cref="ResolveDynamicContacts"/> already applies to a kinematic-vs-kinematic pair,
+    /// restricted to the rigid side(s) only: a kinematic body is never repositioned by a rigid body it did not choose
+    /// to contact physically. May be replayed more than once in the same tick — see
+    /// <see cref="ResolveDynamicContacts"/>'s own extra-pass replay.</summary>
     /// <param name="left">The first body in the pair.</param>
     /// <param name="right">The second body in the pair.</param>
     /// <param name="correction">The pair's already-computed overlap correction — its direction points from
@@ -72,12 +74,20 @@ public sealed partial class WorldPopulation {
         var normal = correction.Normalize();
         var aHandle = right.TwoBodyHandle();
         var bHandle = left.TwoBodyHandle();
-        // Each rigid side's own contact-point anchor: straight out from its center, at its bounding radius, facing
-        // the other body — never the body-center (zero) anchor, which would carry no lever and so no torque, no
-        // matter how far off-center a strike actually lands. A kinematic side's anchor is irrelevant (its handle
-        // carries zero inverse inertia, so its own angular term is always zero) and left at zero.
-        var anchorA = (right.IsRigid ? (normal * right.RigidBoundingRadius) : FixedVector3.Zero);
-        var anchorB = (left.IsRigid ? (-normal * left.RigidBoundingRadius) : FixedVector3.Zero);
+        // Each rigid side's own contact-point anchor: the true witness point of ITS shape facing the other body —
+        // never the body-center (zero) anchor, which would carry no lever and so no torque, no matter how far
+        // off-center a strike actually lands, and never a point on the conservative bounding sphere either (a struck
+        // capsule or box needs the lever arm its own true surface carries, not its enclosing sphere's). A kinematic
+        // side's anchor is irrelevant (its handle carries zero inverse inertia, so its own angular term is always
+        // zero) and left at zero.
+        var anchorA = (right.IsRigid
+            ? FixedRigidWitness.Anchor(centerOffset: right.RigidCenterOffset, orientation: right.FixedOrientation, volume: right.RigidWitnessVolume(), worldDirection: normal)
+            : FixedVector3.Zero
+        );
+        var anchorB = (left.IsRigid
+            ? FixedRigidWitness.Anchor(centerOffset: left.RigidCenterOffset, orientation: left.FixedOrientation, volume: left.RigidWitnessVolume(), worldDirection: -normal)
+            : FixedVector3.Zero
+        );
         var refusals = 0;
         var closingSpeed = FixedTwoBodyKernel.RelativeNormalVelocity(
             bodyA: aHandle,

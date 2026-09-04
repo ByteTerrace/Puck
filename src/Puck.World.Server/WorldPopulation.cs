@@ -91,8 +91,16 @@ public sealed partial class WorldPopulation {
     public int DynamicContactLimitedBodies { get; private set; }
     /// <summary>Number of solid-body pairs before broadphase pruning in the most recently completed solve.</summary>
     public int DynamicContactPotentialPairs { get; private set; }
-    /// <summary>Number of overlaps resolved by the most recently completed dynamic-body solve.</summary>
+    /// <summary>Number of overlaps resolved by the most recently completed dynamic-body solve, summed over every
+    /// pass <see cref="RigidPairPassesThisTick"/> counts.</summary>
     public int DynamicContactResolvedPairs { get; private set; }
+    /// <summary>Number of full broadphase-plus-narrowphase sweeps the most recently completed dynamic-body solve
+    /// actually ran: one first pass, plus up to <c>collision.bodyContacts.rigidPairIterationCeiling - 1</c> extra
+    /// sweeps over the SAME bodies' now-current positions — the count is derived DOWN from that ceiling by how many
+    /// pairs the first pass resolved through the rigid impulse path (<c>collision.bodyContacts.rigidPairIterationBudget</c>
+    /// divided by that count), so a lightly loaded tick gets every authored pass and a crowded one stays bounded; an
+    /// extra sweep that resolves nothing stops the run early.</summary>
+    public int RigidPairPassesThisTick { get; private set; }
     /// <summary>The <c>generate</c> effect firings staged by the most recently completed tick's advance — drained and
     /// enqueued through the ordinary mutation pipeline by <c>WorldServer.Step</c>, mirroring
     /// <see cref="DesignationOutputs"/>'s own shape.</summary>

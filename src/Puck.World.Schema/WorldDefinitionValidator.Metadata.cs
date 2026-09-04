@@ -465,6 +465,27 @@ public static partial class WorldDefinitionValidator {
             name: "collision.bodyContacts.rigidPairRestitutionSpeed",
             errors: errors
         );
+        RequireIntRange(
+            value: bodyContacts.RigidManifoldIterations,
+            min: 1,
+            max: WorldBodyContactPolicy.MaximumRigidManifoldIterations,
+            name: "collision.bodyContacts.rigidManifoldIterations",
+            errors: errors
+        );
+        RequireIntRange(
+            value: bodyContacts.RigidPairIterationCeiling,
+            min: 1,
+            max: WorldBodyContactPolicy.MaximumRigidPairIterationCeiling,
+            name: "collision.bodyContacts.rigidPairIterationCeiling",
+            errors: errors
+        );
+        RequireIntRange(
+            value: bodyContacts.RigidPairIterationBudget,
+            min: 1,
+            max: WorldBodyContactPolicy.MaximumRigidPairIterationBudget,
+            name: "collision.bodyContacts.rigidPairIterationBudget",
+            errors: errors
+        );
     }
     private static void ValidateDistribution(WorldDistribution distribution, string path, HashSet<string> spawnPointIds, bool allowDisc, bool allowPoints, bool allowLattice, bool allowZeroDisc, List<string> errors, bool allowNoise = false, bool allowScatter = false) {
         if (

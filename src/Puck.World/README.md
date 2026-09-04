@@ -387,15 +387,22 @@ The fixed collider vocabulary and generic contact geometry live in
 grounding/walkability, obstruction reporting, and body-state writes.
 
 A kit carrying a `rigid` facet is a passive physical entity — a billiard ball,
-a bowling pin — advanced by the rigid solver instead of a locomotion program:
-gravity, restitution/friction/rolling against the world, real angular
-velocity, and momentum transfer against another rigid body or a kinematic
-character (which contributes its own velocity but is never itself pushed).
-`body.impulse <x> <y> <z> [body]` applies an instantaneous world-space impulse
+a bowling pin, a domino — advanced by the rigid solver instead of a
+locomotion program: gravity, restitution/friction/rolling against the world,
+real angular velocity, and momentum transfer against another rigid body or a
+kinematic character (which contributes its own velocity but is never itself
+pushed). Every contact anchor is the struck shape's own true witness point
+(never a point on the conservative bounding sphere), and a grounded box or
+capsule resolves over its own support manifold rather than one witness
+point, so an upright piece stands on physical coefficients alone; a struck
+rigid pair's own impulse can cross more than one pair-hop within the same
+tick, so a rack break or a falling line of dominoes spreads immediately
+rather than one body-hop per tick. `body.impulse <x> <y> <z> [body]` applies
+an instantaneous world-space impulse
 and wakes a resting body; `world.rigid` reads the live census (mass,
 velocity, resting) and the same `quiescent` flag the `$physics:quiescent` rule
-operand reads. The shipped world's `billiardsTray`/`bowlingLane` placements
-are the garden's proof fixture — see the
+operand reads. The shipped world's `billiardsTray`/`bowlingLane`/`dominoes`
+placements are the garden's proof fixture — see the
 [server reference](../Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)
 for the mechanics and the [schema reference](../Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs)
 for the authored facet.
@@ -403,9 +410,14 @@ for the authored facet.
 A kit carrying a `carry` facet may pick up another kit's rigid body:
 `body.carry <carrier> <target>` begins it (within an authored reach and mass
 ceiling, both scaling with the carrier's own live `Scale`), `body.release
-[carrier]` ends it; a carried body's own rigid integration is suspended and
-its pose is derived from the carrier's frame every tick, re-entering the
-solver with the carrier's own velocity on release. `body.where` echoes
+[carrier]` ends it; a carried body's own rigid integration is suspended, but
+its pose is not an unconditional follow — its own collider sweeps against
+static geometry and every other active body every tick, so it pushes and is
+blocked rather than passing through, and whatever correction that sweep
+applies is handed back to the carrier too, so the carrier itself is stopped
+by what it is holding. `body.release` refuses by name when the carried
+body's current pose still overlaps geometry or another body. A released body
+re-enters the solver with the carrier's own velocity. `body.where` echoes
 `carrying=`/`carriedBy=` while the relationship holds. The garden's `walker`
 kit (Wren) is the worked example — see the [server reference](../Puck.World.Server/README.md#carry-as-attachment-worldbodycarrycs-worldpopulationcarrycs).
 
