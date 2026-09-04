@@ -143,8 +143,8 @@ public sealed partial class WorldBody {
             return rigid;
         }
 
-        var scaleSquared = (m_scale * m_scale);
-        var scaleCubed = (scaleSquared * m_scale);
+        var scaleSquared = SaturatingNonnegativeProduct(left: m_scale, right: m_scale);
+        var scaleCubed = SaturatingNonnegativeProduct(left: scaleSquared, right: m_scale);
 
         // inverseScale^3 / inverseScale^5 are built by INVERTING SCALE ITSELF ONCE and then multiplying that
         // reciprocal (>= 1 for every authored Scale <= 1) by itself — never by inverting the scale^3/scale^5
@@ -152,9 +152,9 @@ public sealed partial class WorldBody {
         // scale^5 ≈ 3.125e-7, below Q16's smallest representable positive value 2^-16 ≈ 1.526e-5) and divides by
         // that zero. TryScaledReciprocal refuses rather than dividing by a non-positive raw (Scale is always
         // validated positive; guarded here regardless), and every power below multiplies a value that only grows,
-        // so it wraps rather than divides if it overflows. Either refusal falls the corresponding inverse factor
-        // back to One (unscaled) — the SAME "keep the unscaled component" fallback ScaleRaw's own callers already
-        // apply per field below.
+        // so it cannot divide by an underflowed zero. A reciprocal refusal falls back to One only for a corrupt
+        // non-positive Scale; a power overflow saturates upward, preserving the inverse quantity's direction before
+        // ScaleRaw applies its solver-safe ceiling.
         var inverseScale = (FusedArithmetic.TryScaledReciprocal(
             value: m_scale.Value,
             fractionBitsIn: FixedQ4816.FractionBitCount,
@@ -174,7 +174,7 @@ public sealed partial class WorldBody {
         ) ? scaled : RepresentableInverseCeiling);
 
         return rigid with {
-            Mass = (rigid.Mass * scaleCubed),
+            Mass = SaturatingNonnegativeProduct(left: rigid.Mass, right: scaleCubed),
             InverseMassRaw = ScaleRaw(
                 raw: rigid.InverseMassRaw,
                 fractionBits: FixedWorldRigid.Scales.InverseMass,
@@ -199,9 +199,9 @@ public sealed partial class WorldBody {
             BoundingRadius = (rigid.BoundingRadius * m_scale),
         };
     }
-    // baseValue^exponent by repeated single-rounding multiplication, refusing rather than wrapping on overflow —
-    // falls back to One (identity) on the first refusal, so a caller multiplying a raw by this factor leaves that
-    // raw unscaled rather than corrupted by a partially-applied power.
+    // baseValue^exponent by repeated single-rounding multiplication, saturating on overflow. An inverse scale only
+    // grows as a body shrinks, so reverting to One at the representation edge would move inverse mass/inertia in the
+    // physically wrong direction (back to the full-size value).
     private static FixedQ4816 PositiveIntegerPower(FixedQ4816 baseValue, int exponent) {
         var accumulatorRaw = FixedQ4816.One.Value;
 
@@ -214,7 +214,7 @@ public sealed partial class WorldBody {
                 fractionBitsOut: FixedQ4816.FractionBitCount,
                 result: out var scaled
             )) {
-                return FixedQ4816.One;
+                return FixedQ4816.MaxValue;
             }
 
             accumulatorRaw = scaled;
@@ -256,7 +256,9 @@ public sealed partial class WorldBody {
             return false;
         }
 
-        var candidate = (m_rigidVelocity + delta);
+        if (!TryAdd(left: m_rigidVelocity, right: delta, sum: out var candidate)) {
+            return false;
+        }
 
         if (candidate.Length > velocityCeiling) {
             return false;
@@ -271,10 +273,72 @@ public sealed partial class WorldBody {
     // (1 - rate*seconds), clamped to [0, 1] so an aggressive rate at a wide step never reverses the quantity it
     // damps. Shared by linear/angular damping and (contact) friction/rolling friction — the same rate authored once
     // means the same physical decay whatever the world's simulation rate.
-    private static FixedQ4816 RateDecay(FixedQ4816 rate, FixedQ4816 seconds) => FixedQ4816.Max(
-        x: FixedQ4816.Zero,
-        y: (FixedQ4816.One - (rate * seconds))
-    );
+    private static FixedQ4816 RateDecay(FixedQ4816 rate, FixedQ4816 seconds) {
+        if (
+            (rate <= FixedQ4816.Zero) ||
+            (seconds <= FixedQ4816.Zero)
+        ) {
+            return FixedQ4816.One;
+        }
+
+        if (!FusedArithmetic.TryMixedScaleProduct(
+            a: rate.Value,
+            fractionBitsA: FixedQ4816.FractionBitCount,
+            b: seconds.Value,
+            fractionBitsB: FixedQ4816.FractionBitCount,
+            fractionBitsOut: FixedQ4816.FractionBitCount,
+            result: out var decayRaw
+        )) {
+            return FixedQ4816.Zero;
+        }
+
+        return FixedQ4816.Max(
+            x: FixedQ4816.Zero,
+            y: (FixedQ4816.One - FixedQ4816.FromRawBits(value: decayRaw))
+        );
+    }
+    /// <summary>Multiplies non-negative Q48.16 quantities without wraparound, saturating only when the exact
+    /// rounded product leaves the representation. Used for scale-derived mass/reach and Coulomb impulse ceilings,
+    /// where saturation preserves the quantity's monotone physical direction.</summary>
+    internal static FixedQ4816 SaturatingNonnegativeProduct(FixedQ4816 left, FixedQ4816 right) {
+        if (
+            (left <= FixedQ4816.Zero) ||
+            (right <= FixedQ4816.Zero)
+        ) {
+            return FixedQ4816.Zero;
+        }
+
+        return (FusedArithmetic.TryMixedScaleProduct(
+            a: left.Value,
+            fractionBitsA: FixedQ4816.FractionBitCount,
+            b: right.Value,
+            fractionBitsB: FixedQ4816.FractionBitCount,
+            fractionBitsOut: FixedQ4816.FractionBitCount,
+            result: out var product
+        ) ? FixedQ4816.FromRawBits(value: product) : FixedQ4816.MaxValue);
+    }
+    private static bool TryAdd(FixedVector3 left, FixedVector3 right, out FixedVector3 sum) {
+        static bool TryAddRaw(long left, long right, out long result) {
+            result = unchecked((left + right));
+            return (((left ^ result) & (right ^ result)) >= 0L);
+        }
+
+        if (
+            !TryAddRaw(left: left.X.Value, right: right.X.Value, result: out var x) ||
+            !TryAddRaw(left: left.Y.Value, right: right.Y.Value, result: out var y) ||
+            !TryAddRaw(left: left.Z.Value, right: right.Z.Value, result: out var z)
+        ) {
+            sum = FixedVector3.Zero;
+            return false;
+        }
+
+        sum = new FixedVector3(
+            X: FixedQ4816.FromRawBits(value: x),
+            Y: FixedQ4816.FromRawBits(value: y),
+            Z: FixedQ4816.FromRawBits(value: z)
+        );
+        return true;
+    }
     // impulse * inverseMass, both at their own declared scales, rounded once to FixedQ4816. Refuses (rather than
     // silently reading a zero raw) when any axis's correctly-rounded product overflows the signed 64-bit raw.
     private static bool TryImpulseToVelocity(FixedVector3 impulse, long inverseMassRaw, out FixedVector3 delta) {
@@ -686,7 +750,10 @@ public sealed partial class WorldBody {
             return;
         }
 
-        var maxTangentImpulseRaw = (rigid.Mass * normalSpeedRemoved * rigid.Friction).Value;
+        var maxTangentImpulseRaw = SaturatingNonnegativeProduct(
+            left: SaturatingNonnegativeProduct(left: rigid.Mass, right: normalSpeedRemoved),
+            right: rigid.Friction
+        ).Value;
         var clampedImpulseRaw = Math.Clamp(
             value: stickImpulseRaw,
             min: -maxTangentImpulseRaw,

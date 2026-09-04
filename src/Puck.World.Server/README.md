@@ -531,7 +531,7 @@ per-body census (mass, velocity, angular velocity, resting) plus the
 quiescent verdict; the compiled rest/substep/pair-restitution policy and the
 last tick's solver work (pair resolutions, worst substep count) are
 `world.budget`'s own `rigid` segment. Checkpoint (`IntegrationResidue`)
-and the authoritative pose hash (`WorldReplaySnapshot.HashState`) both cover
+and the diagnostic population hash (`WorldReplaySnapshot.HashState`) both cover
 linear/angular velocity, the resting latch and hold-tick counter, BOTH
 restitution edge latches, and both channels' miss streaks. A kit swap that
 adds or drops the `rigid` facet resets every rigid-solver field
@@ -575,17 +575,15 @@ body already a party to another carry relationship, a target outside the
 carrier's own live-scaled reach (`MaxReach × Scale`), or a target whose own
 live-scaled `RigidMass` exceeds the carrier's live-scaled ceiling
 (`MassEquivalent × MaxCarryFraction × Scale³` — the same mass ∝ `Scale`³ law
-`ScaleRigid` derives against). A carried body's own `Advance` is a no-op —
+`ScaleRigid` derives against). The body-local carry offset scales linearly
+with the carrier too, matching its collider and reach. A carried body's own `Advance` is a no-op —
 its rigid integration is suspended, never solved — and
-`WorldPopulation.UpdateCarriedBodies` (run once per tick, after both advance
-passes, so it reads the carrier's pose from after this tick's movement) derives
-its position and orientation from `carrier.root + carrier.orientation·Offset`
-and its rigid velocity from the carrier's own `ApproximateWorldVelocity`; the
-sweep runs before `ResolveDynamicContacts`, so when the carrier itself is
-depenetrated from another dynamic body this same tick, the passenger's pose
-was derived from the carrier's pre-depenetration position — a one-tick lag
-bounded and deterministic like every other derived-state ordering, corrected
-the following tick. A carried body is excluded from `ResolveDynamicContacts`'
+`WorldPopulation.PrepareCarriedBodies` first releases invalidated relationships
+before integration; `UpdateCarriedBodies` then runs after both advance passes,
+dynamic-body contact, and tether correction, so it derives position
+and orientation from the carrier's final authoritative pose for that tick:
+`carrier.root + carrier.orientation·(Offset × Scale)`. It derives rigid
+velocity from the carrier's own `ApproximateWorldVelocity`. A carried body is excluded from `ResolveDynamicContacts`'
 broadphase and from `$physics:quiescent`'s census (`CarriedBy: null` on both).
 `body.release`
 hands the target back to the solver with the carrier's own current
@@ -594,8 +592,10 @@ population indices (`-1` raw, on the same "never a boolean fact" terms
 `AffectingSubject` already carries) folded into checkpoint
 (`IntegrationResidue`) and the authoritative hash; a relationship whose
 mirror breaks (a body going inactive, or a live kit retune away from the
-facet either side depends on) self-heals in the same per-tick sweep rather
-than leaking a dangling reference forward. `body.where` echoes
+facet either side depends on) self-heals in the same per-tick pass rather
+than leaking a dangling reference forward. That pass walks a sorted,
+preallocated table of active relationships, not the full population capacity.
+`body.where` echoes
 `carrying=<index>`/`carriedBy=<index>` only while set.
 
 World rules can carry [decision policies](../Puck.World.Schema/README.md#decision-policies).
@@ -1278,7 +1278,7 @@ host state before a single tick has run, which the other two latches would
 miss) — offline replay reconstructs a FRESH `WorldMachineHost` from the
 tape's embedded definition, so a machine's accumulated core state (or a
 screen op's effect) from before recording began can never be re-established,
-and the pose hash covers no machine state to catch the divergence.
+and the population hash covers no machine state to catch the divergence.
 `Puck.World.WorldScreenBinder` is a
 pure reader of this type's outputs for presentation (framebuffer
 handle/light, `PublishFrame`) and still owns the genuinely presentation
@@ -1475,7 +1475,7 @@ live-vs-recorded hash divergence is narrated on stderr without stopping.
 whose leading tick groups are the parent's, with `ForkedFrom` in the header;
 the child is standalone. `replay.record <name>` captures the running session's record-start definition,
 active seats, mounted-guest receipts, and the per-tick server-input stream,
-while sampling both the LIVE population's pose hash and authoritative state-system
+while sampling both the LIVE population hash and authoritative state-system
 hash; `replay.stop`
 persists `<name>.puckreplay` and re-drives it once; `replay.verify <name>`
 rehydrates a fresh boot-image world, re-drives the stream offline, and

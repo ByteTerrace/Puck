@@ -296,6 +296,30 @@ public sealed class WorldRigidCommandLawTests {
     }
 
     [Fact]
+    public void TryApplyRigidImpulseRefusesComponentAdditionOverflowWithoutChangingVelocity() {
+        using var fixture = Fixtures.FreshServer(definition: FallingRigidBallDocument());
+        var seat = WorldPrincipal.Seat(slot: 0);
+
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(seat, seat.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+
+        var ball = fixture.Server.Body(index: 0)!;
+        var nearMaximum = FixedQ4816.FromRawBits(value: (long.MaxValue - 32L));
+
+        Assert.True(condition: ball.TryApplyRigidImpulse(
+            impulse: new FixedVector3(X: nearMaximum, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero),
+            velocityCeiling: FixedQ4816.MaxValue
+        ), userMessage: "the representable control impulse must establish the near-limit velocity");
+
+        var before = ball.RigidVelocity;
+
+        Assert.False(condition: ball.TryApplyRigidImpulse(
+            impulse: new FixedVector3(X: FixedQ4816.FromRawBits(value: 64L), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero),
+            velocityCeiling: FixedQ4816.MaxValue
+        ), userMessage: "adding a representable delta to a near-limit velocity must refuse instead of wrapping negative");
+        Assert.Equal(expected: before, actual: ball.RigidVelocity);
+    }
+
+    [Fact]
     public void PhysicsQuiescentReadsFalseWhileFallingAndTrueOnceEveryRigidBodyRests() {
         using var fixture = Fixtures.FreshServer(definition: FallingRigidBallDocument());
         var seat = WorldPrincipal.Seat(slot: 0);

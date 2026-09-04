@@ -11,10 +11,12 @@ public sealed partial class WorldBody {
     /// <summary>Gets the population index of the rigid body this body is currently carrying, or
     /// <see langword="null"/> when it is carrying nothing.</summary>
     public int? Carrying => ((m_carryingIndex >= 0) ? m_carryingIndex : null);
+    /// <summary>Gets whether the currently compiled kit still owns the carry facet an active relationship needs.</summary>
+    internal bool HasCarryFacet => (m_carry is not null);
     /// <summary>Gets the population index of the body currently carrying this one, or <see langword="null"/> when
     /// this body is not carried. A carried body's own <see cref="Advance"/> call is a no-op — its pose and rigid
     /// velocity are DERIVED from the carrier every tick by <see cref="FollowCarrier"/> instead, called from
-    /// <see cref="WorldPopulation"/> after both advance passes complete.</summary>
+    /// <see cref="WorldPopulation"/> after movement and correction passes complete.</summary>
     public int? CarriedBy => ((m_carriedByIndex >= 0) ? m_carriedByIndex : null);
 
     /// <summary>Attempts to begin carrying <paramref name="target"/>: this body's kit must author a carry facet,
@@ -59,9 +61,9 @@ public sealed partial class WorldBody {
             return false;
         }
 
-        var scaleSquared = (m_scale * m_scale);
-        var scaleCubed = (scaleSquared * m_scale);
-        var reach = (carry.MaxReach * m_scale);
+        var scaleSquared = SaturatingNonnegativeProduct(left: m_scale, right: m_scale);
+        var scaleCubed = SaturatingNonnegativeProduct(left: scaleSquared, right: m_scale);
+        var reach = SaturatingNonnegativeProduct(left: carry.MaxReach, right: m_scale);
         var distance = (target.m_position - m_position).Length;
 
         if (distance > reach) {
@@ -69,7 +71,7 @@ public sealed partial class WorldBody {
             return false;
         }
 
-        var ceiling = (carry.MaxCarryMass * scaleCubed);
+        var ceiling = SaturatingNonnegativeProduct(left: carry.MaxCarryMass, right: scaleCubed);
         var targetMass = target.RigidMass;
 
         if (targetMass > ceiling) {
@@ -121,10 +123,9 @@ public sealed partial class WorldBody {
     }
 
     /// <summary>Derives this carried body's pose and rigid velocity from <paramref name="carrier"/>'s own frame for
-    /// the tick that just completed — called once per tick, after both advance passes and BEFORE
-    /// <see cref="WorldPopulation.ResolveDynamicContacts"/>, so it reads the carrier's post-movement pose for this
-    /// tick; a carrier that later pass depenetrates this same tick hands its passenger a one-tick-stale position,
-    /// corrected the following tick. A no-op when <paramref name="carrier"/>'s kit carries no carry facet
+    /// the tick that just completed — called once per tick after movement, dynamic contact, and tether correction,
+    /// so it reads the carrier's final authoritative pose for that tick. The body-local carry point scales with the
+    /// carrier on the same geometric terms as its collider and reach. A no-op when <paramref name="carrier"/>'s kit carries no carry facet
     /// (its own <see cref="RecompileKit"/> retuned away from one while this body stayed attached — the caller is
     /// still responsible for tearing down the relationship in that case).</summary>
     internal void FollowCarrier(WorldBody carrier) {
@@ -132,7 +133,9 @@ public sealed partial class WorldBody {
             return;
         }
 
-        m_position = (carrier.m_position + carrier.m_orientation.Rotate(vector: carry.Offset));
+        m_position = (carrier.m_position + carrier.m_orientation.Rotate(
+            vector: (carry.Offset * carrier.m_scale)
+        ));
         m_orientation = carrier.m_orientation;
         m_rigidVelocity = carrier.ApproximateWorldVelocity();
         m_angularVelocity = FixedVector3.Zero;

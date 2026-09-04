@@ -76,10 +76,6 @@ public sealed partial class WorldPopulation {
             );
         }
 
-        m_anyCarryCapableKit = Array.Exists(
-            array: m_kits,
-            match: static kit => (kit.Carry is not null)
-        );
 
         CompileFlocks();
 

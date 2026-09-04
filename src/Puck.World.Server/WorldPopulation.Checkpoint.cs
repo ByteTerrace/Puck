@@ -203,6 +203,7 @@ public sealed partial class WorldPopulation {
 
         // Restore is replacement. All caller-controlled entry and route addresses were preflighted above, before
         // this destructive phase starts.
+        m_activeCarryCount = 0;
         for (var index = 0; (index < Capacity); index++) {
             var entry = m_entries[index];
 
@@ -232,6 +233,7 @@ public sealed partial class WorldPopulation {
 
         foreach (var captured in checkpoint.Entries) {
             var entry = m_entries[captured.Index];
+            var bodyKitIndex = ((captured.Index < LocalSeatCount) ? checkpoint.SeatKit : captured.KitIndex);
             var profile = ((captured.Profile is { } projection)
                 ? WorldIdentity.FromProjection(
                     defaults: defaults,
@@ -240,7 +242,7 @@ public sealed partial class WorldPopulation {
                 : null
             );
             var body = BuildBodyForKit(
-                kitIndex: captured.KitIndex,
+                kitIndex: bodyKitIndex,
                 profile: profile
             );
 
@@ -316,8 +318,7 @@ public sealed partial class WorldPopulation {
                 SteeringIntent = captured.Autonomy.SteeringIntent,
                 SteeringSeeded = captured.Autonomy.SteeringSeeded,
             };
-            var producerKit = captured.Index < LocalSeatCount ? checkpoint.SeatKit : captured.KitIndex;
-            if (captured.ProducerActiveName is { } activeName && m_kits[producerKit].Producers.TryGetValue(activeName, out var binding)) {
+            if (captured.ProducerActiveName is { } activeName && m_kits[bodyKitIndex].Producers.TryGetValue(activeName, out var binding)) {
                 entry.ProducerState.FlockBinding = binding;
             }
             if (captured.Navigation is { } navigation) {
@@ -359,6 +360,7 @@ public sealed partial class WorldPopulation {
         m_simulatedCount = checkpoint.SimulatedCount;
         m_seatKit = checkpoint.SeatKit;
         m_revision = checkpoint.Revision;
+        RebuildCarryRelationships();
     }
 
     /// <summary>Preflights caller-controlled population shape, counts, kits, cadence, and route addresses without mutating live state.</summary>
@@ -378,15 +380,15 @@ public sealed partial class WorldPopulation {
             throw new InvalidOperationException("population checkpoint must carry every slot's nonnegative generation.");
         }
 
-        var restored = new bool[Capacity];
+        var restored = new WorldPopulationEntryCheckpoint?[Capacity];
         foreach (var captured in checkpoint.Entries) {
             if ((uint)captured.Index >= (uint)Capacity) {
                 throw new InvalidOperationException(message: $"population checkpoint entry index {captured.Index} lies outside capacity {Capacity}.");
             }
-            if (restored[captured.Index]) {
+            if (restored[captured.Index] is not null) {
                 throw new InvalidOperationException(message: $"population checkpoint repeats entry index {captured.Index}.");
             }
-            restored[captured.Index] = true;
+            restored[captured.Index] = captured;
             if ((uint)captured.KitIndex >= (uint)m_kits.Length) {
                 throw new InvalidOperationException($"population checkpoint entry {captured.Index} names kit {captured.KitIndex} outside {m_kits.Length} compiled kits.");
             }
@@ -409,8 +411,46 @@ public sealed partial class WorldPopulation {
             if (captured.Residue.CarriedBy < -1 || captured.Residue.CarriedBy >= Capacity || captured.Residue.CarriedBy == captured.Index) {
                 throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} names an invalid carrier index {captured.Residue.CarriedBy}.");
             }
-            ValidateAutonomyCheckpoint(captured.Autonomy, m_kits[captured.KitIndex]);
+            var bodyKitIndex = ((captured.Index < LocalSeatCount) ? checkpoint.SeatKit : captured.KitIndex);
+
+            ValidateAutonomyCheckpoint(captured.Autonomy, m_kits[bodyKitIndex]);
             ValidateNavigationCheckpoint(navigation: captured.Navigation);
+        }
+
+        foreach (var captured in checkpoint.Entries) {
+            var carrying = captured.Residue.Carrying;
+            var carriedBy = captured.Residue.CarriedBy;
+
+            if (
+                (carrying >= 0) &&
+                (carriedBy >= 0)
+            ) {
+                throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} cannot be both a carrier and carried.");
+            }
+
+            if (carrying >= 0) {
+                if (
+                    (restored[carrying] is not { } target) ||
+                    (target.Residue.CarriedBy != captured.Index) ||
+                    (target.Residue.Carrying >= 0) ||
+                    (m_kits[((captured.Index < LocalSeatCount) ? checkpoint.SeatKit : captured.KitIndex)].Carry is null) ||
+                    (m_kits[((target.Index < LocalSeatCount) ? checkpoint.SeatKit : target.KitIndex)].Rigid is null)
+                ) {
+                    throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} carries body {carrying} without one valid mirrored carry relationship.");
+                }
+            }
+
+            if (carriedBy >= 0) {
+                if (
+                    (restored[carriedBy] is not { } carrier) ||
+                    (carrier.Residue.Carrying != captured.Index) ||
+                    (carrier.Residue.CarriedBy >= 0) ||
+                    (m_kits[((carrier.Index < LocalSeatCount) ? checkpoint.SeatKit : carrier.KitIndex)].Carry is null) ||
+                    (m_kits[((captured.Index < LocalSeatCount) ? checkpoint.SeatKit : captured.KitIndex)].Rigid is null)
+                ) {
+                    throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} names carrier {carriedBy} without one valid mirrored carry relationship.");
+                }
+            }
         }
     }
 

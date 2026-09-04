@@ -448,21 +448,11 @@ public sealed partial class WorldBody {
             m_rigidObstructionContacting = false;
             m_rigidGroundMissStreak = 0;
             m_rigidObstructionMissStreak = 0;
-            // Losing the rigid facet mid-carry drops this body's OWN half of the relationship on the same terms as
-            // the carry-facet branch above; the carrier's mirrored Carrying is left for a population-level sweep.
-            m_carriedByIndex = -1;
         }
 
-        // A live kit retune away from carry-capable while this body is mid-carry drops its OWN half of the
-        // relationship (Carrying reads null, the census stops counting it); the target's mirrored CarriedBy is left
-        // for a population-level sweep to notice and release, since only WorldPopulation holds both sides.
-        if (
-            (m_carry is not null) &&
-            (carry is null)
-        ) {
-            m_carryingIndex = -1;
-        }
-
+        // A facet loss (rigid above, carry here) leaves both carry relationship indices in place: only
+        // WorldPopulation holds both sides, and its active-relationship pass clears the pair together on its next
+        // visit.
         m_carry = carry;
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {

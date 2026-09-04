@@ -1,6 +1,8 @@
 namespace Puck.World.Server;
 
 public sealed partial class WorldPopulation {
+    private readonly record struct CarryRelationship(int CarrierIndex, int TargetIndex);
+
     /// <summary>Attempts to begin <paramref name="carrierIndex"/> carrying <paramref name="targetIndex"/> — see
     /// <see cref="WorldBody.TryBeginCarry"/> for the full refusal set (a carrier kit with no carry facet, a target
     /// with no rigid facet, either body already a party to another carry relationship, out of reach, over the
@@ -24,12 +26,17 @@ public sealed partial class WorldPopulation {
             return false;
         }
 
-        return carrier.TryBeginCarry(
+        if (!carrier.TryBeginCarry(
             target: target,
             targetIndex: targetIndex,
             selfIndex: carrierIndex,
             reason: out reason
-        );
+        )) {
+            return false;
+        }
+
+        RegisterCarry(carrierIndex: carrierIndex, targetIndex: targetIndex);
+        return true;
     }
 
     /// <summary>Ends <paramref name="carrierIndex"/>'s active carry, handing the target back to the rigid solver
@@ -53,42 +60,64 @@ public sealed partial class WorldPopulation {
             // The carried body went inactive out from under the carrier (despawn, capacity reclaim) without going
             // through this path — drop the carrier's own half; there is nothing left to hand a release velocity to.
             carrier.ForceDropCarrying();
+            RemoveCarry(carrierIndex: carrierIndex);
             reason = $"body:{targetIndex} is no longer active — carry dropped";
             return false;
         }
 
         carrier.EndCarry(target: target);
+        RemoveCarry(carrierIndex: carrierIndex);
         reason = "";
         return true;
     }
 
-    /// <summary>Derives every carried body's pose from its carrier, once per tick, after both advance passes have
-    /// run and before <see cref="ResolveDynamicContacts"/> — so a carried body reads the carrier's post-movement
-    /// pose for this tick, one tick behind any depenetration that later pass applies to the carrier (see
-    /// <see cref="WorldBody.FollowCarrier"/>). Also self-heals a relationship whose mirror broke without going
-    /// through <see cref="TryEndCarry"/> — a body going inactive or a live kit retune away from the facet the
-    /// relationship depends on are the only paths that can leave one half dangling. A no-op world (no kit ever
-    /// authors a carry facet — the overwhelming common case) never reaches the loop body.</summary>
-    public void UpdateCarriedBodies() {
-        if (!m_anyCarryCapableKit) {
-            return;
-        }
+    /// <summary>Reconciles invalidated active relationships before body integration, so an orphaned target re-enters
+    /// rigid advance and contact in the same tick its carrier disappears or either required facet is removed.</summary>
+    public void PrepareCarriedBodies() => ReconcileCarriedBodies(follow: false);
+    /// <summary>Updates valid attachments from their carriers' final pose after movement, dynamic contact, and tether
+    /// correction, then performs the same bounded consistency check. Both carry passes walk the sorted,
+    /// preallocated active-relationship table, so a no-carry tick is O(1) and allocation-free rather than scanning
+    /// population capacity.</summary>
+    public void UpdateCarriedBodies() => ReconcileCarriedBodies(follow: true);
+    private void ReconcileCarriedBodies(bool follow) {
+        var relationshipIndex = 0;
 
-        for (var index = 0; (index < Capacity); index++) {
-            if (m_entries[index] is not { Active: true, Body: { CarriedBy: { } carrierIndex } target }) {
-                continue;
-            }
-
+        while (relationshipIndex < m_activeCarryCount) {
+            var relationship = m_activeCarries[relationshipIndex];
             if (
-                (m_entries[carrierIndex] is not { Active: true, Body: { } carrier }) ||
-                (carrier.Carrying != index)
+                (m_entries[relationship.CarrierIndex] is not { Active: true, Body: { } carrier }) ||
+                (m_entries[relationship.TargetIndex] is not { Active: true, Body: { } target }) ||
+                !carrier.HasCarryFacet ||
+                !target.IsRigid ||
+                (carrier.Carrying != relationship.TargetIndex) ||
+                (target.CarriedBy != relationship.CarrierIndex)
             ) {
-                target.ForceRelease();
+                if (
+                    (m_entries[relationship.CarrierIndex] is { Active: true, Body: { } orphanedCarrier }) &&
+                    (orphanedCarrier.Carrying == relationship.TargetIndex)
+                ) {
+                    orphanedCarrier.ForceDropCarrying();
+                }
+                if (
+                    (m_entries[relationship.TargetIndex] is { Active: true, Body: { } orphanedTarget }) &&
+                    (orphanedTarget.CarriedBy == relationship.CarrierIndex)
+                ) {
+                    orphanedTarget.ForceRelease();
+                }
+
+                RemoveCarryAt(index: relationshipIndex);
                 continue;
             }
 
-            target.FollowCarrier(carrier: carrier);
+            if (follow) {
+                target.FollowCarrier(carrier: carrier);
+            }
+            relationshipIndex++;
         }
+    }
+
+    private void RebuildCarryRelationships() {
+        m_activeCarryCount = 0;
 
         for (var index = 0; (index < Capacity); index++) {
             if (m_entries[index] is not { Active: true, Body: { Carrying: { } targetIndex } carrier }) {
@@ -96,11 +125,74 @@ public sealed partial class WorldPopulation {
             }
 
             if (
-                (m_entries[targetIndex] is not { Active: true, Body: { CarriedBy: { } backIndex } }) ||
-                (backIndex != index)
+                (m_entries[targetIndex] is { Active: true, Body: { } target }) &&
+                carrier.HasCarryFacet &&
+                target.IsRigid &&
+                (target.CarriedBy == index)
             ) {
+                RegisterCarry(carrierIndex: index, targetIndex: targetIndex);
+            } else {
                 carrier.ForceDropCarrying();
             }
         }
+
+        // Restore can legitimately remove a captured remote carrier when reconnect grace is zero after checkpoint
+        // validation has proved the image. This is a restore-time reconciliation scan, never part of the tick path.
+        for (var index = 0; (index < Capacity); index++) {
+            if (
+                (m_entries[index] is { Active: true, Body: { CarriedBy: { } carrierIndex } target }) &&
+                ((m_entries[carrierIndex] is not { Active: true, Body: { Carrying: { } targetIndex } }) ||
+                    (targetIndex != index))
+            ) {
+                target.ForceRelease();
+            }
+        }
+    }
+    private void RegisterCarry(int carrierIndex, int targetIndex) {
+        var index = 0;
+
+        while (
+            (index < m_activeCarryCount) &&
+            (m_activeCarries[index].CarrierIndex < carrierIndex)
+        ) {
+            index++;
+        }
+
+        if (
+            (index < m_activeCarryCount) &&
+            (m_activeCarries[index].CarrierIndex == carrierIndex)
+        ) {
+            m_activeCarries[index] = new CarryRelationship(CarrierIndex: carrierIndex, TargetIndex: targetIndex);
+            return;
+        }
+
+        Array.Copy(
+            sourceArray: m_activeCarries,
+            sourceIndex: index,
+            destinationArray: m_activeCarries,
+            destinationIndex: (index + 1),
+            length: (m_activeCarryCount - index)
+        );
+        m_activeCarries[index] = new CarryRelationship(CarrierIndex: carrierIndex, TargetIndex: targetIndex);
+        m_activeCarryCount++;
+    }
+    private void RemoveCarry(int carrierIndex) {
+        for (var index = 0; (index < m_activeCarryCount); index++) {
+            if (m_activeCarries[index].CarrierIndex == carrierIndex) {
+                RemoveCarryAt(index: index);
+                return;
+            }
+        }
+    }
+    private void RemoveCarryAt(int index) {
+        m_activeCarryCount--;
+        Array.Copy(
+            sourceArray: m_activeCarries,
+            sourceIndex: (index + 1),
+            destinationArray: m_activeCarries,
+            destinationIndex: index,
+            length: (m_activeCarryCount - index)
+        );
+        m_activeCarries[m_activeCarryCount] = default;
     }
 }

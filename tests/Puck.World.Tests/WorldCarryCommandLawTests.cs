@@ -179,6 +179,23 @@ public sealed class WorldCarryCommandLawTests {
 
         return fixture;
     }
+    private static WorldDefinition WithCarrierScale(WorldDefinition source, FixedQ4816 scale) {
+        var row = new WorldStateRow(
+            Name: WorldCellName.Parse(candidate: "scale"),
+            Kind: CellKind.Fixed,
+            Min: FixedQ4816.FromDouble(value: 0.05d).Value,
+            Max: FixedQ4816.One.Value,
+            Capacity: 8,
+            Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: scale.Value)]
+        );
+
+        return source with {
+            PopulationRaw = source.Population with { ScaleRow = "scale" },
+            StateRaw = (source.StateRaw ?? new WorldStateSection()) with {
+                World = [.. (source.StateRaw?.World ?? []), row],
+            },
+        };
+    }
 
     [Fact]
     public void CarryFacetRoundTripsThroughDocumentSerialization() {
@@ -246,6 +263,95 @@ public sealed class WorldCarryCommandLawTests {
 
         Assert.NotEqual(expected: movedCarrierPose, actual: ball.FixedPosition);
         _ = releasedPosition;
+    }
+
+    [Fact]
+    public void CarryUsesTheCarrierFinalPostContactPoseInTheSameTick() {
+        using var fixture = JoinedCarrier(definition: MutualCarryTestDocument());
+        var carrier = fixture.Server.Body(index: CarrierIndex)!;
+        var passenger = fixture.Server.Body(index: DualIndex)!;
+        var obstacle = fixture.Server.Body(index: DualBallIndex)!;
+
+        Assert.True(condition: fixture.Server.Population.TryBeginCarry(
+            carrierIndex: CarrierIndex,
+            targetIndex: DualIndex,
+            reason: out var beginReason
+        ), userMessage: beginReason);
+
+        carrier.Pose(
+            x: (float)(double)obstacle.FixedPosition.X,
+            y: (float)(double)obstacle.FixedPosition.Y,
+            z: (float)(double)obstacle.FixedPosition.Z,
+            yawRadians: 0f,
+            pitchRadians: 0f,
+            rollRadians: 0f
+        );
+        var overlappingPosition = carrier.FixedPosition;
+
+        fixture.Step();
+
+        Assert.NotEqual(expected: overlappingPosition, actual: carrier.FixedPosition);
+        Assert.Equal(
+            expected: (carrier.FixedPosition + carrier.FixedOrientation.Rotate(vector: new FixedVector3(
+                X: FixedQ4816.Zero,
+                Y: FixedQ4816.One,
+                Z: FixedQ4816.FromDouble(value: -0.6d)
+            ))),
+            actual: passenger.FixedPosition
+        );
+    }
+
+    [Fact]
+    public void CarryOffsetScalesWithCarrierGeometry() {
+        var half = FixedQ4816.FromDouble(value: 0.5d);
+        using var fixture = JoinedCarrier(definition: WithCarrierScale(
+            source: CarryTestDocument(ballDistance: 0.5f),
+            scale: half
+        ));
+        var carrier = fixture.Server.Body(index: CarrierIndex)!;
+        var ball = fixture.Server.Body(index: BallIndex)!;
+
+        Assert.True(condition: fixture.Server.Population.TryBeginCarry(
+            carrierIndex: CarrierIndex,
+            targetIndex: BallIndex,
+            reason: out var beginReason
+        ), userMessage: beginReason);
+
+        fixture.Step();
+
+        Assert.Equal(
+            expected: (carrier.FixedPosition + carrier.FixedOrientation.Rotate(vector: new FixedVector3(
+                X: FixedQ4816.Zero,
+                Y: FixedQ4816.FromDouble(value: 0.5d),
+                Z: FixedQ4816.FromDouble(value: -0.3d)
+            ))),
+            actual: ball.FixedPosition
+        );
+    }
+
+    [Fact]
+    public void ActiveCarryPassesAllocateNothingInSteadyState() {
+        using var fixture = JoinedCarrier(definition: CarryTestDocument());
+
+        Assert.True(condition: fixture.Server.Population.TryBeginCarry(
+            carrierIndex: CarrierIndex,
+            targetIndex: BallIndex,
+            reason: out var beginReason
+        ), userMessage: beginReason);
+
+        for (var warmup = 0; warmup < 32; warmup++) {
+            fixture.Server.Population.PrepareCarriedBodies();
+            fixture.Server.Population.UpdateCarriedBodies();
+        }
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+
+        for (var iteration = 0; iteration < 1_000; iteration++) {
+            fixture.Server.Population.PrepareCarriedBodies();
+            fixture.Server.Population.UpdateCarriedBodies();
+        }
+
+        Assert.Equal(expected: 0L, actual: (GC.GetAllocatedBytesForCurrentThread() - before));
     }
 
     [Fact]
@@ -384,8 +490,12 @@ public sealed class WorldCarryCommandLawTests {
             hostRow: EmptyHostRow(),
             reason: out var refusal
         ), userMessage: refusal);
+        Assert.Equal(expected: BallIndex, actual: checkpoint!.Population.Entries.Single(predicate: entry => entry.Index == CarrierIndex).Residue.Carrying);
+        Assert.Equal(expected: CarrierIndex, actual: checkpoint.Population.Entries.Single(predicate: entry => entry.Index == BallIndex).Residue.CarriedBy);
 
-        var restoredDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint!.Server.DefinitionJson);
+        var restoredDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint.Server.DefinitionJson);
+        Assert.NotNull(@object: restoredDefinition.Kits[checkpoint.Population.SeatKit].Carry);
+        Assert.NotNull(@object: restoredDefinition.Kits[checkpoint.Population.Entries.Single(predicate: entry => entry.Index == BallIndex).KitIndex].Rigid);
         using var controlMachines = new WorldMachineHost(engines: [], screens: restoredDefinition.Screens);
         var (control, _) = WorldServer.FromCheckpoint(
             checkpoint: checkpoint,
@@ -425,6 +535,46 @@ public sealed class WorldCarryCommandLawTests {
 
             Assert.Contains(actualString: exception.Message, comparisonType: StringComparison.Ordinal, expectedSubstring: "invalid carr");
         }
+
+        var brokenMirror = (checkpoint with {
+            Population = (checkpoint.Population with {
+                Entries = checkpoint.Population.Entries
+                    .Select(selector: entry => ((entry.Index == BallIndex)
+                        ? (entry with { Residue = (entry.Residue with { CarriedBy = -1 }) })
+                        : entry))
+                    .ToArray(),
+            }),
+        });
+        using var mirrorMachines = new WorldMachineHost(engines: [], screens: restoredDefinition.Screens);
+        var mirrorException = Assert.Throws<InvalidOperationException>(testCode: () => WorldServer.FromCheckpoint(
+            checkpoint: brokenMirror,
+            instanceIdentity: "boot",
+            machines: mirrorMachines,
+            profiles: FreshProfiles(definition: restoredDefinition)
+        ));
+
+        Assert.Contains(actualString: mirrorException.Message, comparisonType: StringComparison.Ordinal, expectedSubstring: "without one valid mirrored carry relationship");
+
+        var chained = (checkpoint with {
+            Population = (checkpoint.Population with {
+                Entries = checkpoint.Population.Entries
+                    .Select(selector: entry => ((entry.Index == CarrierIndex)
+                        ? (entry with { Residue = (entry.Residue with { CarriedBy = BallIndex }) })
+                        : ((entry.Index == BallIndex)
+                            ? (entry with { Residue = (entry.Residue with { Carrying = CarrierIndex }) })
+                            : entry)))
+                    .ToArray(),
+            }),
+        });
+        using var chainMachines = new WorldMachineHost(engines: [], screens: restoredDefinition.Screens);
+        var chainException = Assert.Throws<InvalidOperationException>(testCode: () => WorldServer.FromCheckpoint(
+            checkpoint: chained,
+            instanceIdentity: "boot",
+            machines: chainMachines,
+            profiles: FreshProfiles(definition: restoredDefinition)
+        ));
+
+        Assert.Contains(actualString: chainException.Message, comparisonType: StringComparison.Ordinal, expectedSubstring: "cannot be both a carrier and carried");
     }
 
     private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(

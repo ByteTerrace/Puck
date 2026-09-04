@@ -1628,10 +1628,15 @@ public sealed partial class WorldServer {
                     break;
                 }
 
-                if (!body.TryApplyRigidImpulse(
-                    impulse: FixedVector3.FromVector3(value: impulse.Impulse),
-                    velocityCeiling: m_population.RigidVelocityCeiling
-                )) {
+                if (
+                    !float.IsFinite(f: impulse.Impulse.X) ||
+                    !float.IsFinite(f: impulse.Impulse.Y) ||
+                    !float.IsFinite(f: impulse.Impulse.Z) ||
+                    !body.TryApplyRigidImpulse(
+                        impulse: FixedVector3.FromVector3(value: impulse.Impulse),
+                        velocityCeiling: m_population.RigidVelocityCeiling
+                    )
+                ) {
                     var overflowDenial = $"body:{command.EntityIndex} impulse is not representable or would exceed the world's declared speed ceiling ({(double)m_population.RigidVelocityCeiling:0.###})";
 
                     Console.Error.WriteLine(value: $"[body.impulse denied: {overflowDenial}]");

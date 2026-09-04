@@ -144,6 +144,10 @@ public sealed partial class WorldPopulation {
     // preserves allocation-free ticks and sizes the storage to the authored census rather than the global ceiling.
     private readonly DynamicContactBody[] m_dynamicContactBodies;
     private readonly byte[] m_dynamicContactDegrees;
+    // Active carry relationships, sorted by carrier index. The backing store is population-sized and reused so the
+    // per-tick attachment pass visits only actual relationships and allocates nothing; it never scans Capacity.
+    private readonly CarryRelationship[] m_activeCarries;
+    private int m_activeCarryCount;
 
     private IWorldAdjacencySource? m_adjacencies;
     private WorldDefinition? m_adjacencyDefinition;
@@ -175,9 +179,6 @@ public sealed partial class WorldPopulation {
     // The document-derived speed ceiling (WorldFacePortalPolicy.SpeedCeiling) a rigid impulse's resulting velocity
     // is refused past — see RigidVelocityCeiling.
     private FixedQ4816 m_rigidVelocityCeiling;
-    // Whether ANY compiled kit authors a carry facet — UpdateCarriedBodies' whole-population sweep is a no-op
-    // (never even enters its loop) for a world where this is false, the overwhelming common case.
-    private bool m_anyCarryCapableKit;
     // The fixed-point derived tables — recompiled in place by Rebuild when a sim-affecting section mutates (a live kit
     // tune, motion/wander retune, seat-kit or assignment change), so they are no longer readonly.
     private FixedMotionDefaults m_fixedMotion;
@@ -284,6 +285,7 @@ public sealed partial class WorldPopulation {
         m_entries = new Entry[definition.Population.Capacity];
         m_dynamicContactBodies = new DynamicContactBody[m_entries.Length];
         m_dynamicContactDegrees = new byte[m_entries.Length];
+        m_activeCarries = new CarryRelationship[m_entries.Length];
 
         m_seatSpawns = CompileSeatSpawns(
             spawnPoints: definition.SpawnPoints,
