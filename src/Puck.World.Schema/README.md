@@ -140,10 +140,11 @@ and intersections are exact at any word length; `maxStates` (1..256, default
 64) is the state budget the compile refuses past, by name, at validation. The
 word is a board ray from the operand key's origin (exclusive) in the named
 direction, an ordered zone's cells read through the pattern's `attribute` row
-in pile order, or a keyed numeric row's own cells; a word longer than 256
-tokens reads -1 (undecided), never a false no. `sort` (`row`, `by`, `descending`) puts a
-zone in canonical order by an attribute row, or a keyed row by its values,
-stably, which is what turns a multiset question into a regular one: Reversi's
+in pile order, or a keyed numeric row's own cells; the verdict is always 1 or
+0, and a board origin that names no cell reads the empty word. `sort` puts a
+zone in canonical order by `by`, 1..8 attribute keys (`row`, `descending`) in
+precedence order, or a keyed row by its own values under `descending`, stably,
+which is what turns a multiset question into a regular one: Reversi's
 flank is `them+ me` on a ray, a straight is five consecutive rank symbols over
 a sorted hand, Yahtzee's large straight is a `choice` of two sequences over a
 sorted tray. `world.patterns` echoes each compiled table; `world.budget`

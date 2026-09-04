@@ -4043,8 +4043,39 @@
       ],
       "additionalProperties": false
     },
+    "WorldSortKey": {
+      "description": "One key of a zone sort: a keyed numeric attribute row over the zone\u0027s token domain.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "row": {
+          "description": "The attribute row.",
+          "type": "string"
+        },
+        "descending": {
+          "description": "Whether the greatest value comes first under this key.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "row"
+      ],
+      "additionalProperties": false
+    },
+    "WorldSortKeyList": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/WorldSortKey"
+      }
+    },
     "WorldStateTransformSort": {
-      "description": "Reorders a row\u0027s cells by value, stably: an ordered zone by the named keyed attribute row over its token domain, a keyed numeric row by its own cell values. The canonical order a pattern reads a hand in.",
+      "description": "Reorders a row\u0027s cells by value, stably: an ordered zone by attribute rows over its token domain, the first key deciding and each later key breaking the ties before it; a keyed numeric row by its own cell values. The canonical order a pattern reads a hand in.",
       "properties": {
         "$type": {
           "const": "sort"
@@ -4054,15 +4085,12 @@
           "type": "string"
         },
         "by": {
-          "description": "The attribute row for a zone; null (required) for a keyed row.",
-          "type": [
-            "string",
-            "null"
-          ],
+          "$ref": "#/$defs/WorldSortKeyList",
+          "description": "The attribute keys for a zone, 1..8 in precedence order; null (required) for a keyed row.",
           "default": null
         },
         "descending": {
-          "description": "Whether the greatest value comes first.",
+          "description": "Whether a keyed row\u0027s greatest value comes first; a zone\u0027s direction sits on each key.",
           "type": "boolean",
           "default": false
         }

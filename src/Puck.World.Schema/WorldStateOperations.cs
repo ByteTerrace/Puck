@@ -137,10 +137,17 @@ public abstract record WorldStateTransform {
     /// <param name="Row">The ordered zone.</param>
     /// <param name="Draw">The integer streamDraw site supplying the samples.</param>
     public sealed record Shuffle(string Row, string Draw) : WorldStateTransform;
-    /// <summary>Reorders a row's cells by value, stably: an ordered zone by the named keyed attribute row over its
-    /// token domain, a keyed numeric row by its own cell values. The canonical order a pattern reads a hand in.</summary>
+    /// <summary>Reorders a row's cells by value, stably: an ordered zone by attribute rows over its token domain, the
+    /// first key deciding and each later key breaking the ties before it; a keyed numeric row by its own cell values.
+    /// The canonical order a pattern reads a hand in.</summary>
     /// <param name="Row">The ordered zone or keyed numeric row.</param>
-    /// <param name="By">The attribute row for a zone; null (required) for a keyed row.</param>
-    /// <param name="Descending">Whether the greatest value comes first.</param>
-    public sealed record Sort(string Row, string? By = null, bool Descending = false) : WorldStateTransform;
+    /// <param name="By">The attribute keys for a zone, 1..8 in precedence order; null (required) for a keyed row.</param>
+    /// <param name="Descending">Whether a keyed row's greatest value comes first; a zone's direction sits on each key.</param>
+    public sealed record Sort(string Row, IReadOnlyList<WorldSortKey>? By = null, bool Descending = false) : WorldStateTransform;
 }
+
+/// <summary>One key of a zone <c>sort</c>: a keyed numeric attribute row over the zone's token domain.</summary>
+/// <param name="Row">The attribute row.</param>
+/// <param name="Descending">Whether the greatest value comes first under this key.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldSortKey(string Row, bool Descending = false);

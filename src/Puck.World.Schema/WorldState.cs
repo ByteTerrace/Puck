@@ -1001,6 +1001,8 @@ public static class WorldStateCapacity {
     /// <summary>The combined body- and identity-state slot ceiling. Compilation allocates fixed parallel arrays of
     /// this authored length per body, so the document gate bounds both memory and checkpoint width before runtime.</summary>
     public const int MaxBodySlots = 128;
+    /// <summary>The most attribute keys one zone sort orders by.</summary>
+    public const int MaxSortKeys = 8;
     /// <summary>The implicit per-row cell-count ceiling — applies to every <see cref="WorldStateRow.Cells"/>,
     /// slot-shaped or keyed alike (a slot never approaches it: exactly one cell), even when the author omits
     /// <see cref="WorldStateRow.Capacity"/>, so a row can never state no bound at all (unbounded growth is refused by

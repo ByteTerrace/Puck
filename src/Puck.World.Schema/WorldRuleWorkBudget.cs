@@ -207,7 +207,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 break;
             case WorldStateTransform.Sort sort:
                 var sorted = WorldDefinitionRows.FindStateRow(definition.State, sort.Row)!;
-                cost += 2L * (sorted.Capacity ?? sorted.CellCeiling);
+                cost += 2L * (sorted.Capacity ?? sorted.CellCeiling) * Math.Max(1, sort.By?.Count ?? 1);
                 break;
             case WorldStateTransform.Shuffle shuffle:
                 var pile = WorldDefinitionRows.FindStateRow(definition.State, shuffle.Row)!;

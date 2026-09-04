@@ -31,10 +31,15 @@ public sealed class WorldPatternLawTests {
     [Fact]
     public void ASortedHandReadsItsAttributeWordAndAStraightMatchesOnlyAfterSorting() {
         var unsorted = Hand();
-        var sorted = Apply(unsorted, new WorldStateTransform.Sort("hand", By: "rank"));
+        var sorted = Apply(unsorted, new WorldStateTransform.Sort("hand", By: [new("rank")]));
         Assert.Equal(new[] { "c2", "c4", "c3", "c5", "c1" }, Find(sorted, "hand").Cells!.Select(c => c.Key.Value));
-        var descending = Apply(unsorted, new WorldStateTransform.Sort("hand", By: "rank", Descending: true));
+        var descending = Apply(unsorted, new WorldStateTransform.Sort("hand", By: [new("rank", Descending: true)]));
         Assert.Equal("c1", Find(descending, "hand").Cells![0].Key.Value);
+        // Suit first, rank descending inside a suit, stable across cards with equal keys.
+        var suited = Apply(unsorted, new WorldStateTransform.Sort("hand", By: [new("suit"), new("rank", Descending: true)]));
+        Assert.Equal(new[] { "c1", "c5", "c3", "c4", "c2" }, Find(suited, "hand").Cells!.Select(c => c.Key.Value));
+        Assert.False(WorldStateTransforms.TryApply(unsorted, new WorldStateTransform.Sort("hand", By: [new("rank")], Descending: true), WorldPrincipal.World, 0, "test", out _, out var flagReason));
+        Assert.Contains("its own direction", flagReason);
 
         using var before = Fixtures.FreshServer(definition: unsorted);
         before.Step();
@@ -65,7 +70,7 @@ public sealed class WorldPatternLawTests {
         fixture.Step();
         Assert.Equal(1L, Value(fixture, "hit"));
 
-        Assert.False(WorldStateTransforms.TryApply(definition, new WorldStateTransform.Sort("dice", By: "dice"), WorldPrincipal.World, 0, "test", out _, out var reason));
+        Assert.False(WorldStateTransforms.TryApply(definition, new WorldStateTransform.Sort("dice", By: [new("dice")]), WorldPrincipal.World, 0, "test", out _, out var reason));
         Assert.Contains("takes no attribute", reason);
     }
 
@@ -118,14 +123,15 @@ public sealed class WorldPatternLawTests {
                 new WorldPatternNode.Repeat(new WorldPatternNode.Symbol("b"), 0, 1),
                 new WorldPatternNode.Complement(new WorldPatternNode.Both([new WorldPatternNode.Symbol("a"), new WorldPatternNode.AnySymbol()])),
             ]), MaxStates: 12);
-        var definition = Hand() with { PatternsRaw = [.. Hand().Patterns, every], Rules = [.. Hand().Rules!, new WorldRule(Name("order"), [new ActionEffect.TransformState(new WorldStateTransform.Sort("hand", By: "rank", Descending: true))])] };
+        var definition = Hand() with { PatternsRaw = [.. Hand().Patterns, every], Rules = [.. Hand().Rules!, new WorldRule(Name("order"), [new ActionEffect.TransformState(new WorldStateTransform.Sort("hand", By: [new("suit"), new("rank", Descending: true)]))])] };
 
         var parsed = WorldDefinitionSerialization.Deserialize(utf8Json: WorldDefinitionSerialization.Serialize(definition: definition));
         Assert.Equal(2, parsed.Patterns.Count);
         Assert.Equal(12, parsed.Patterns[1].MaxStates);
         Assert.IsType<WorldPatternNode.Sequence>(parsed.Patterns[1].Pattern);
         var sort = Assert.IsType<WorldStateTransform.Sort>(Assert.IsType<ActionEffect.TransformState>(parsed.Rules![1].Effects[0]).Transform);
-        Assert.True(sort.Descending);
+        Assert.Equal(2, sort.By!.Count);
+        Assert.True(sort.By[1].Descending);
         Assert.True(WorldDefinitionValidator.TryValidateLocally(parsed, out var reason), reason);
     }
 
@@ -139,6 +145,7 @@ public sealed class WorldPatternLawTests {
         return Document([
             new(Name("cards"), CellKind.Int, Capacity: 5, Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4"), Cell("c5")], Tokens: new()),
             new(Name("rank"), CellKind.Int, KeysFrom: "cards", Cells: [Cell("c1", 9), Cell("c2", 5), Cell("c3", 7), Cell("c4", 6), Cell("c5", 8)]),
+            new(Name("suit"), CellKind.Int, KeysFrom: "cards", Cells: [Cell("c1", 1), Cell("c2", 2), Cell("c3", 1), Cell("c4", 2), Cell("c5", 1)]),
             new(Name("hand"), CellKind.Bool, Capacity: 5, Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4"), Cell("c5")], Zone: new("cards", Ordered: true)),
             Slot("straight"),
         ], [straight], [Mirror("straight", "$match:straight:hand")]);

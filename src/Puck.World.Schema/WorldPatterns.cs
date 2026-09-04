@@ -77,8 +77,8 @@ public sealed record WorldPatternRow(
 public static class WorldPatternCapacity {
     /// <summary>The most pattern rows a document declares.</summary>
     public const int MaxRows = 64;
-    /// <summary>The longest word one read walks; a longer source reads -1 (undecided).</summary>
-    public const int MaxWord = 256;
+    /// <summary>The longest word one read walks: every source row fits, so a read is always decided.</summary>
+    public const int MaxWord = WorldTopologyCompilation.MaxCells;
     /// <summary>The most named symbols in one alphabet.</summary>
     public const int MaxSymbols = 32;
     /// <summary>The most times a <c>repeat</c> node may unroll its item.</summary>
@@ -257,7 +257,7 @@ public sealed class CompiledWorldPattern {
 
         private readonly record struct Term(Kind Kind, ulong Mask, int Left, int Right, int[] Items);
         private readonly List<Term> m_terms = [];
-        private readonly Dictionary<string, int> m_identities = new(StringComparer.Ordinal);
+        private readonly Dictionary<Term, int> m_identities = new(TermComparer.Instance);
         private readonly Dictionary<(int Term, int Letter), int> m_derivatives = [];
         private readonly int m_letterCount;
         private readonly ulong m_all;
@@ -415,14 +415,22 @@ public sealed class CompiledWorldPattern {
                 Kind.Concat => Nullable(node.Left)
                     ? Or([Concat(Derivative(node.Left, letter), node.Right), Derivative(node.Right, letter)])
                     : Concat(Derivative(node.Left, letter), node.Right),
-                Kind.Or => Or([.. node.Items.Select(item => Derivative(item, letter))]),
-                Kind.And => And([.. node.Items.Select(item => Derivative(item, letter))]),
+                Kind.Or => Or(Derivatives(node.Items, letter)),
+                Kind.And => And(Derivatives(node.Items, letter)),
                 Kind.Star => Concat(Derivative(node.Left, letter), term),
                 Kind.Not => Not(Derivative(node.Left, letter)),
                 _ => Empty,
             };
 
             m_derivatives[(term, letter)] = result;
+            return result;
+        }
+
+        private int[] Derivatives(int[] items, int letter) {
+            var result = new int[items.Length];
+            for (var index = 0; index < items.Length; index++) {
+                result[index] = Derivative(items[index], letter);
+            }
             return result;
         }
 
@@ -497,15 +505,30 @@ public sealed class CompiledWorldPattern {
         }
 
         private int Intern(Term term) {
-            var key = $"{(byte)term.Kind}:{term.Mask}:{term.Left}:{term.Right}:{string.Join(',', term.Items)}";
-
-            if (!m_identities.TryGetValue(key, out var identity)) {
+            if (!m_identities.TryGetValue(term, out var identity)) {
                 identity = m_terms.Count;
                 m_terms.Add(term);
-                m_identities[key] = identity;
+                m_identities[term] = identity;
             }
 
             return identity;
+        }
+
+        // Structural identity: two terms are one term when every field and every item agrees.
+        private sealed class TermComparer : IEqualityComparer<Term> {
+            public static TermComparer Instance { get; } = new();
+
+            public bool Equals(Term x, Term y) => x.Kind == y.Kind && x.Mask == y.Mask && x.Left == y.Left && x.Right == y.Right && x.Items.AsSpan().SequenceEqual(y.Items);
+
+            public int GetHashCode(Term term) {
+                var hash = new HashCode();
+                hash.Add(term.Kind);
+                hash.Add(term.Mask);
+                hash.Add(term.Left);
+                hash.Add(term.Right);
+                foreach (var item in term.Items) { hash.Add(item); }
+                return hash.ToHashCode();
+            }
         }
     }
 }
