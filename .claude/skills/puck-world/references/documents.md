@@ -543,7 +543,7 @@ arc-length follower feeding the SAME planar target-consuming op vocabulary a
 range, separation radius, candidate budget, maximum retained neighbors,
 perception interval in seconds, tangent/volume space, cone/line-of-sight policy,
 and separation/alignment/cohesion/goal/inertia weights. It is mutually exclusive
-with wander/attend/facing producers. Target sources remain optional; when
+with `ProduceSteeringIntent`/`FaceSensorTarget`. Target sources remain optional; when
 present they use the ordinary sensing/target-register vocabulary.
 
 The population freezes position/orientation/travel before any body advances.
@@ -628,7 +628,7 @@ not just corners or point samples that can miss dry pockets.
 Volume connectivity is authored as 6/18/26 neighbours, with blocked-axis
 corner cutting refused. A `BodyTargetSource.Navigated(domain, register)` keeps
 the ordinary authority-checked designation as its goal and supplies bounded
-fixed-point A* waypoints to `ProduceAttendIntent`; volume and medium targets
+fixed-point A* waypoints to `ProduceSteeringIntent`'s approach shape; volume and medium targets
 also drive `MoveUp`. Stable ties are `(f, h, nodeOrdinal)`. Static edges bake
 once, search arrays are reused, and a body's route array allocates on first
 use. Domain/cell/search/path ceilings are representation bounds, reported by
@@ -1032,7 +1032,7 @@ must all hold — a `Puck.Physics.Motion.BodyFacts` name, `always`, or the clien
 `["Grounded", "moving"]` returns its limbs to rest on a stop with no sim fact involved), and
 per-shape `swings`/`slides` (≤ 4 each) naming a driver, an `axis` (plus a
 `pivot` for a swing), an `amplitude`, a `phase`, and a `wave` (`sine`/`halfSine`/`linear`/`constant` —
-`constant` is the POSE BLEND, `amplitude · w`, how a climbing posture comes in on the `Climbing` gate;
+`constant` is the POSE BLEND, `amplitude · w`, how a climbing posture comes in on the `HoldingUnwalkable` gate;
 `curve:<row>` samples the world's `curves` row by arc fraction, Z as the value), plus a per-shape
 `parent` naming an EARLIER shape whose motion carries it (pivots included — the joint chain of a
 limb). A driver's `cadence` and a facet's `amplitude`/`phase` may reference a numeric state cell

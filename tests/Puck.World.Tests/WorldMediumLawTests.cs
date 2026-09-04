@@ -225,7 +225,7 @@ public sealed class WorldMediumLawTests {
                 BodyMotionOp.CommitPose,
             ]
         );
-        var wander = new BodyMotionProgram(Name: "wander", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceWanderIntent]);
+        var wander = new BodyMotionProgram(Name: "wander", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
         var kit = new WorldKit(
             Name: "diver-test",
             BodyMotionProgram: "medium",

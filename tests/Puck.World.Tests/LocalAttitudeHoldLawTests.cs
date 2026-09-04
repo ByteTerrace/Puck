@@ -68,7 +68,7 @@ public sealed class LocalAttitudeHoldLawTests {
                 BodyMotionOp.CommitPose,
             ]
         );
-        var wander = new BodyMotionProgram(Name: "wander", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceWanderIntent]);
+        var wander = new BodyMotionProgram(Name: "wander", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
         var kit = new WorldKit(
             Name: "flyer-test",
             BodyMotionProgram: "free",

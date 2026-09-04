@@ -4571,8 +4571,8 @@
                                 "AffectedBy",
                                 "Submerged",
                                 "AtSurface",
-                                "Climbing",
-                                "Flying",
+                                "HoldingUnwalkable",
+                                "Unsupported",
                                 "Resting"
                               ]
                             }
@@ -4597,8 +4597,8 @@
                                 "AffectedBy",
                                 "Submerged",
                                 "AtSurface",
-                                "Climbing",
-                                "Flying",
+                                "HoldingUnwalkable",
+                                "Unsupported",
                                 "Resting"
                               ]
                             },
@@ -5338,8 +5338,8 @@
                                           "AffectedBy",
                                           "Submerged",
                                           "AtSurface",
-                                          "Climbing",
-                                          "Flying",
+                                          "HoldingUnwalkable",
+                                          "Unsupported",
                                           "Resting"
                                         ]
                                       }
@@ -5364,8 +5364,8 @@
                                           "AffectedBy",
                                           "Submerged",
                                           "AtSurface",
-                                          "Climbing",
-                                          "Flying",
+                                          "HoldingUnwalkable",
+                                          "Unsupported",
                                           "Resting"
                                         ]
                                       },
@@ -5557,8 +5557,8 @@
                                                   "AffectedBy",
                                                   "Submerged",
                                                   "AtSurface",
-                                                  "Climbing",
-                                                  "Flying",
+                                                  "HoldingUnwalkable",
+                                                  "Unsupported",
                                                   "Resting"
                                                 ]
                                               }
@@ -5583,8 +5583,8 @@
                                                   "AffectedBy",
                                                   "Submerged",
                                                   "AtSurface",
-                                                  "Climbing",
-                                                  "Flying",
+                                                  "HoldingUnwalkable",
+                                                  "Unsupported",
                                                   "Resting"
                                                 ]
                                               },

@@ -106,7 +106,7 @@
       "kind": "Producer",
       "name": "wander",
       "operations": [
-        "ProduceWanderIntent"
+        "ProduceSteeringIntent"
       ],
       "version": "puck.body-motion.v1"
     },
@@ -160,8 +160,7 @@
       "name": "stalk",
       "operations": [
         "SenseNearestInCone",
-        "ProduceWanderIntent",
-        "ProduceAttendIntent",
+        "ProduceSteeringIntent",
         "FaceSensorTarget"
       ],
       "target": {
@@ -792,12 +791,15 @@
               "altitudeBase": 0.0,
               "altitudeGain": 0.5,
               "altitudeRange": 0.0,
+              "approach": 0.0,
               "forward": 1.0,
               "inwardGain": 3.0,
+              "orbit": 0.0,
               "pitchWave": 0.0,
               "pressThreshold": 0.0,
               "rollTurn": 0.0,
               "softRadius": 2.5,
+              "standoffRadius": 1.0,
               "strafeWave": 0.0,
               "turnScale": 3.0,
               "turnWave": 0.0,
@@ -903,12 +905,15 @@
               "altitudeBase": 0.0,
               "altitudeGain": 0.6,
               "altitudeRange": 0.0,
+              "approach": 0.0,
               "forward": 1.0,
               "inwardGain": 3.0,
+              "orbit": 0.0,
               "pitchWave": 0.0,
               "pressThreshold": 0.0,
               "rollTurn": 0.0,
               "softRadius": 2.5,
+              "standoffRadius": 1.0,
               "strafeWave": 0.0,
               "turnScale": 3.0,
               "turnWave": 0.0,
@@ -1045,12 +1050,15 @@
               "altitudeBase": 0.0,
               "altitudeGain": 0.5,
               "altitudeRange": 0.0,
+              "approach": 0.0,
               "forward": 1.0,
               "inwardGain": 3.0,
+              "orbit": 0.0,
               "pitchWave": 0.0,
               "pressThreshold": 0.0,
               "rollTurn": 0.0,
               "softRadius": 2.5,
+              "standoffRadius": 1.0,
               "strafeWave": 0.0,
               "turnScale": 3.0,
               "turnWave": 0.0,
@@ -1142,12 +1150,15 @@
               "altitudeBase": 0.0,
               "altitudeGain": 0.5,
               "altitudeRange": 0.0,
+              "approach": 0.0,
               "forward": 0.6,
               "inwardGain": 0.8,
+              "orbit": 0.0,
               "pitchWave": 0.0,
               "pressThreshold": 0.0,
               "rollTurn": 0.0,
               "softRadius": 5.0,
+              "standoffRadius": 1.0,
               "strafeWave": 0.0,
               "turnScale": 3.0,
               "turnWave": 0.0,
@@ -4722,7 +4733,7 @@
             "name": "reach",
             "signal": "travel",
             "when": [
-              "Climbing",
+              "HoldingUnwalkable",
               "moving"
             ]
           },
@@ -4731,7 +4742,7 @@
             "name": "cling",
             "signal": "time",
             "when": [
-              "Climbing"
+              "HoldingUnwalkable"
             ]
           },
           {
@@ -4826,7 +4837,7 @@
             },
             "tip": "handLeft",
             "when": [
-              "Climbing"
+              "HoldingUnwalkable"
             ]
           },
           {
@@ -4847,7 +4858,7 @@
             },
             "tip": "handRight",
             "when": [
-              "Climbing"
+              "HoldingUnwalkable"
             ]
           }
         ],
@@ -7802,7 +7813,7 @@
             "name": "wingbeat",
             "signal": "time",
             "when": [
-              "Flying"
+              "Unsupported"
             ]
           },
           {
@@ -7810,7 +7821,7 @@
             "name": "hover",
             "signal": "time",
             "when": [
-              "Flying"
+              "Unsupported"
             ]
           }
         ],

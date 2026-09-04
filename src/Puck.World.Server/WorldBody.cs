@@ -176,8 +176,8 @@ public sealed partial class WorldBody {
     private FixedQ4816 m_verticalPreviousTarget;
     private bool m_verticalFollowerSeeded;
     // Where this body belongs — the position its activation placed it at. Producers measure their own steering
-    // against it (see ProduceWanderIntent), so it is simulation state: it decides trajectories. A teleport never
-    // moves it, which is what separates "where the body is" from "where the body is from".
+    // against it (see ProduceSteeringIntent's roam shape), so it is simulation state: it decides trajectories. A
+    // teleport never moves it, which is what separates "where the body is" from "where the body is from".
     private FixedVector3 m_home;
     // The avatar's simulation position. See Position.
     private FixedVector3 m_position;

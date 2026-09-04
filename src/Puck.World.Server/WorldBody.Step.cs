@@ -516,11 +516,8 @@ public sealed partial class WorldBody {
                     scratch: ref scratch
                 );
                 break;
-            case BodyMotionOp.ProduceWanderIntent:
-                ProduceWanderIntent(scratch: ref scratch);
-                break;
-            case BodyMotionOp.ProduceAttendIntent:
-                ProduceAttendIntent(scratch: ref scratch);
+            case BodyMotionOp.ProduceSteeringIntent:
+                ProduceSteeringIntent(scratch: ref scratch);
                 break;
             case BodyMotionOp.ProduceFlockIntent:
                 ProduceFlockIntent(scratch: ref scratch);
@@ -742,9 +739,9 @@ public sealed partial class WorldBody {
             x: -dz,
             y: -dx
         );
-        var yawRate = (scratch.Producer!.Scalar(name: "inwardGain") * WrapPi(angle: (targetYaw - FixedYaw)));
+        var yawRate = (scratch.Producer!.Scalar(BodyProducerParameter.InwardGain) * WrapPi(angle: (targetYaw - FixedYaw)));
         var turn = FixedQ4816.Clamp(
-            value: (yawRate / scratch.Producer.Scalar(name: "turnScale")),
+            value: (yawRate / scratch.Producer.Scalar(BodyProducerParameter.TurnScale)),
             minimum: NegativeOne,
             maximum: FixedQ4816.One
         );
@@ -923,23 +920,37 @@ public sealed partial class WorldBody {
 
         return (value / FixedQ4816.FromInteger(value: checked((long)(EngineTicks.PerSecond / stepTicks))));
     }
-    private void ProduceAttendIntent(ref BodyMotionScratch scratch) {
-        if (!scratch.SensorTarget.Exists) {
-            return;
+    // The body's own resolved up may differ from world Y (a tilted planetoid surface, a wall run) — a producer's
+    // "preferred altitude" is a distance from the world origin along that axis, not a literal world-Y coordinate.
+    // Under the ordinary UnitY up this is exactly the .Y component every world read before the term generalized.
+    private FixedQ4816 AlongUp(in FixedVector3 point) => FixedVector3.Dot(
+        left: point,
+        right: m_up
+    );
+    // One steering intent, dispatched per tick on whether this tick's SenseNearestInCone found a target: approach it
+    // when it did, otherwise roam the body's own home register. A program pairing this op with sensing (a stalking
+    // predator) takes both shapes across its lifetime; a program selecting this op alone always roams (SensorTarget
+    // never exists without SenseNearestInCone in the same program).
+    private void ProduceSteeringIntent(ref BodyMotionScratch scratch) {
+        if (scratch.SensorTarget.Exists) {
+            ProduceApproachIntent(scratch: ref scratch);
+        } else {
+            ProduceRoamIntent(scratch: ref scratch);
         }
-
+    }
+    private void ProduceApproachIntent(ref BodyMotionScratch scratch) {
         var producer = scratch.Producer!;
-        var standoff = producer.Scalar(name: "standoffRadius");
+        var standoff = producer.Scalar(BodyProducerParameter.StandoffRadius);
         var forward = ((scratch.SensorTarget.DistanceSquared > (standoff * standoff))
-            ? producer.Scalar(name: "approach")
+            ? producer.Scalar(BodyProducerParameter.Approach)
             : FixedQ4816.Zero
         );
-        var strafe = producer.Scalar(name: "orbit");
+        var strafe = producer.Scalar(BodyProducerParameter.Orbit);
         var followsVolume = producer.Target is { Source: BodyTargetSource.Navigated, NavigationKind: not WorldNavigationKind.Surface };
-        var preferredAltitude = (followsVolume ? scratch.SensorTarget.Position.Y : scratch.ProducerState.PreferredAltitude);
+        var preferredAltitude = (followsVolume ? AlongUp(point: scratch.SensorTarget.Position) : scratch.ProducerState.PreferredAltitude);
         var up = (followsVolume || m_bodyMotionProgram.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)
             ? FixedQ4816.Clamp(
-                value: ((preferredAltitude - m_position.Y) * producer.Scalar(name: "altitudeGain")),
+                value: ((preferredAltitude - AlongUp(point: m_position)) * producer.Scalar(BodyProducerParameter.AltitudeGain)),
                 minimum: NegativeOne,
                 maximum: FixedQ4816.One
             )
@@ -974,7 +985,7 @@ public sealed partial class WorldBody {
             );
         }
     }
-    private void ProduceWanderIntent(ref BodyMotionScratch scratch) {
+    private void ProduceRoamIntent(ref BodyMotionScratch scratch) {
         var producer = scratch.Producer!;
         var state = scratch.ProducerState;
 
@@ -992,52 +1003,52 @@ public sealed partial class WorldBody {
         // A body with no home (the zero default) reads exactly as it did when the origin was the only anchor.
         var planarX = (m_position.X - m_home.X);
         var planarZ = (m_position.Z - m_home.Z);
-        var yawRate = (producer.Scalar(name: "weaveAmplitude") * FixedQ4816.Sin(angle: state.Phase));
+        var yawRate = (producer.Scalar(BodyProducerParameter.WeaveAmplitude) * FixedQ4816.Sin(angle: state.Phase));
         var radius = FixedQ4816.Sqrt(value: ((planarX * planarX) + (planarZ * planarZ)));
 
-        if (radius > producer.Scalar(name: "softRadius")) {
+        if (radius > producer.Scalar(BodyProducerParameter.SoftRadius)) {
             var inwardYaw = FixedQ4816.Atan2(
                 x: planarZ,
                 y: planarX
             );
 
-            yawRate += (producer.Scalar(name: "inwardGain") * WrapPi(angle: (inwardYaw - FixedYaw)));
+            yawRate += (producer.Scalar(BodyProducerParameter.InwardGain) * WrapPi(angle: (inwardYaw - FixedYaw)));
         }
 
         var turn = FixedQ4816.Clamp(
-            value: (yawRate / producer.Scalar(name: "turnScale")),
+            value: (yawRate / producer.Scalar(BodyProducerParameter.TurnScale)),
             minimum: NegativeOne,
             maximum: FixedQ4816.One
         );
         var wave = FixedQ4816.Sin(angle: state.ActivityPhase);
         var altitudeCorrection = FixedQ4816.Clamp(
-            value: ((state.PreferredAltitude - m_position.Y) * producer.Scalar(name: "altitudeGain")),
+            value: ((state.PreferredAltitude - AlongUp(point: m_position)) * producer.Scalar(BodyProducerParameter.AltitudeGain)),
             minimum: NegativeOne,
             maximum: FixedQ4816.One
         );
 
         if (m_bodyMotionProgram.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)) {
             scratch.Intent = m_roleOrdinals.Intent(
-                moveAdvance: producer.Scalar(name: "forward"),
-                moveStrafe: (wave * producer.Scalar(name: "strafeWave")),
+                moveAdvance: producer.Scalar(BodyProducerParameter.Forward),
+                moveStrafe: (wave * producer.Scalar(BodyProducerParameter.StrafeWave)),
                 turn: turn,
-                moveUp: (altitudeCorrection + (wave * producer.Scalar(name: "upWave"))),
-                pitch: (wave * producer.Scalar(name: "pitchWave")),
-                roll: (-turn * producer.Scalar(name: "rollTurn"))
+                moveUp: (altitudeCorrection + (wave * producer.Scalar(BodyProducerParameter.UpWave))),
+                pitch: (wave * producer.Scalar(BodyProducerParameter.PitchWave)),
+                roll: (-turn * producer.Scalar(BodyProducerParameter.RollTurn))
             );
         } else {
             var angularIntent = FixedQ4816.Clamp(
-                value: (turn + (wave * producer.Scalar(name: "turnWave"))),
+                value: (turn + (wave * producer.Scalar(BodyProducerParameter.TurnWave))),
                 minimum: NegativeOne,
                 maximum: FixedQ4816.One
             );
-            var forward = producer.Scalar(name: "forward");
-            var strafe = (wave * producer.Scalar(name: "strafeWave"));
+            var forward = producer.Scalar(BodyProducerParameter.Forward);
+            var strafe = (wave * producer.Scalar(BodyProducerParameter.StrafeWave));
 
             if (m_tuning.MoveFrame == MotionMoveFrame.World) {
                 // A producer owns a body-relative steering decision even when a seat-facing kit consumes world-frame
                 // axes. Resolve that decision through the same yaw convention SnapYawToPlanarIntent reads; otherwise
-                // the Turn channel is deliberately inert under World and every wanderer can only march toward -Z.
+                // the Turn channel is deliberately inert under World and every roamer can only march toward -Z.
                 var targetYaw = (FixedYaw + PerStep(
                     stepTicks: scratch.StepTicks,
                     value: (angularIntent * scratch.TurnSpeed)
@@ -1045,7 +1056,7 @@ public sealed partial class WorldBody {
 
                 var (sinYaw, cosYaw) = FixedQ4816.SinCos(angle: targetYaw);
                 // The Turn role carries the same angular intent, so the heading integrates toward targetYaw (the
-                // facing snap turns the ATTITUDE only; without this the wanderer's heading would never advance).
+                // facing snap turns the ATTITUDE only; without this the roamer's heading would never advance).
                 scratch.Intent = m_roleOrdinals.Intent(
                     moveAdvance: ((forward * cosYaw) + (strafe * sinYaw)),
                     moveStrafe: ((-forward * sinYaw) + (strafe * cosYaw)),
@@ -1059,8 +1070,8 @@ public sealed partial class WorldBody {
                 );
             }
 
-            var press = producer.Channel(name: "press");
-            var threshold = producer.Scalar(name: "pressThreshold");
+            var press = producer.Channel(BodyProducerParameter.Press);
+            var threshold = producer.Scalar(BodyProducerParameter.PressThreshold);
 
             if (
                 (press >= 0) &&
@@ -1722,7 +1733,7 @@ public sealed partial class WorldBody {
         if (producer.Flock is not null || producer.Target?.Source is not BodyTargetSource.Sensed) {
             scratch.SensorTarget = candidate;
         } else {
-            var release = producer.Scalar(name: "releaseRadius");
+            var release = producer.Scalar(BodyProducerParameter.ReleaseRadius);
 
             if (
                 current.Exists &&

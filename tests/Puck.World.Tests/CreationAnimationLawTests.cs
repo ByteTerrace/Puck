@@ -852,8 +852,8 @@ public sealed class CreationAnimationLawTests {
             Assert.True(condition: uint.IsPow2(value: ((uint)gate)), userMessage: $"BodyFacts.{fact} is not a single bit.");
         }
 
-        Assert.True(condition: BodyFactVocabulary.TryResolve(gate: out var climbing, name: nameof(BodyFacts.Climbing)));
-        Assert.Equal(expected: BodyFacts.Climbing, actual: climbing);
+        Assert.True(condition: BodyFactVocabulary.TryResolve(gate: out var climbing, name: nameof(BodyFacts.HoldingUnwalkable)));
+        Assert.Equal(expected: BodyFacts.HoldingUnwalkable, actual: climbing);
         // The controls: the ungated token resolves to no bit, and an unrecognized token resolves to nothing at all.
         Assert.True(condition: BodyFactVocabulary.TryResolve(gate: out var always, name: BodyFactVocabulary.Always));
         Assert.Equal(expected: BodyFacts.None, actual: always);

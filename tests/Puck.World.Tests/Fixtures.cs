@@ -118,6 +118,11 @@ internal static class Fixtures {
             ["pressThreshold"] = 0f,
             ["altitudeBase"] = 0f,
             ["altitudeRange"] = 0f,
+            // ProduceSteeringIntent's approach shape never governs this producer (no SenseNearestInCone in its
+            // program), but the op reads the full parameter set regardless of which shape a given tick takes.
+            ["standoffRadius"] = 1f,
+            ["approach"] = 0f,
+            ["orbit"] = 0f,
         },
         Channels: new Dictionary<string, string>()
     );
@@ -200,7 +205,7 @@ internal static class Fixtures {
                 Name: "wander",
                 Version: "puck.body-motion.v1",
                 Kind: BodyProgramKind.Producer,
-                Operations: [BodyMotionOp.ProduceWanderIntent]
+                Operations: [BodyMotionOp.ProduceSteeringIntent]
             ),
         };
 

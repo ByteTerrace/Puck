@@ -315,7 +315,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
             Name: "follow",
             Version: "puck.body-motion.v1",
             Kind: BodyProgramKind.Producer,
-            Operations: [BodyMotionOp.SenseNearestInCone, BodyMotionOp.FaceSensorTarget, BodyMotionOp.ProduceAttendIntent],
+            Operations: [BodyMotionOp.SenseNearestInCone, BodyMotionOp.FaceSensorTarget, BodyMotionOp.ProduceSteeringIntent],
             Target: new BodyTargetSource.CurveFollow(Curve: "path", Rate: 2f)
         );
 
@@ -331,6 +331,21 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
                             ["altitudeGain"] = 0f,
                             ["inwardGain"] = 3f,
                             ["turnScale"] = 3f,
+                            ["forward"] = 0f,
+                            ["softRadius"] = 1f,
+                            ["weaveAmplitude"] = 0f,
+                            ["weaveFrequencyBase"] = 0f,
+                            ["weaveFrequencyRange"] = 0f,
+                            ["activityRateBase"] = 0f,
+                            ["activityRateRange"] = 0f,
+                            ["strafeWave"] = 0f,
+                            ["turnWave"] = 0f,
+                            ["upWave"] = 0f,
+                            ["pitchWave"] = 0f,
+                            ["rollTurn"] = 0f,
+                            ["pressThreshold"] = 0f,
+                            ["altitudeBase"] = 0f,
+                            ["altitudeRange"] = 0f,
                         },
                         Channels: new Dictionary<string, string>()
                     ),

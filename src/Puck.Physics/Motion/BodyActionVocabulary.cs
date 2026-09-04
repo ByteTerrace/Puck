@@ -37,10 +37,10 @@ public enum ActionFact : byte {
     /// <summary>The body holds a surface the contact resolve would refuse to stand it on — a face outside the
     /// world's own walkable cone. Not mutually exclusive with <see cref="Grounded"/>/<see cref="Airborne"/>: a gate
     /// wanting "on a wall only" names this fact rather than negating the other two.</summary>
-    Climbing,
+    HoldingUnwalkable,
 
     /// <summary>The body holds itself up with no surface at all — a free hold with lift.</summary>
-    Flying,
+    Unsupported,
 
     /// <summary>A rigid body's linear and angular velocity have latched to zero after settling — written by the
     /// rigid solver, never by a locomotion program.</summary>
@@ -75,51 +75,56 @@ public enum BodyFacts : ushort {
     /// <inheritdoc cref="ActionFact.AtSurface"/>
     AtSurface = (1 << 5),
 
-    /// <inheritdoc cref="ActionFact.Climbing"/>
-    Climbing = (1 << 6),
+    /// <inheritdoc cref="ActionFact.HoldingUnwalkable"/>
+    HoldingUnwalkable = (1 << 6),
 
-    /// <inheritdoc cref="ActionFact.Flying"/>
-    Flying = (1 << 7),
+    /// <inheritdoc cref="ActionFact.Unsupported"/>
+    Unsupported = (1 << 7),
 
     /// <inheritdoc cref="ActionFact.Resting"/>
     Resting = (1 << 8),
 
     /// <summary>Every declared bit — the decoder's admission mask.</summary>
-    All = (Grounded | Airborne | Rising | Falling | Submerged | AtSurface | Climbing | Flying | Resting),
+    All = (Grounded | Airborne | Rising | Falling | Submerged | AtSurface | HoldingUnwalkable | Unsupported | Resting),
 }
-/// <summary>The one mapping between the predicate vocabulary and its publishable bit, plus the wire spelling every
-/// read-back echoes.</summary>
+/// <summary>The one mapping between the predicate vocabulary, its publishable bit, and the wire spelling every
+/// read-back echoes — a single ordered table, so a new fact is added in exactly one place.</summary>
 public static class BodyFactVocabulary {
+    // Bit order is the wire order: Publishable's iteration order and Describe's joined order both derive from this
+    // table's declaration order, so reordering a row changes the wire.
+    private static readonly (ActionFact Fact, BodyFacts Bit, string Token)[] s_rows = [
+        (ActionFact.Grounded, BodyFacts.Grounded, "grounded"),
+        (ActionFact.Airborne, BodyFacts.Airborne, "airborne"),
+        (ActionFact.Rising, BodyFacts.Rising, "rising"),
+        (ActionFact.Falling, BodyFacts.Falling, "falling"),
+        (ActionFact.Submerged, BodyFacts.Submerged, "submerged"),
+        (ActionFact.AtSurface, BodyFacts.AtSurface, "atsurface"),
+        (ActionFact.HoldingUnwalkable, BodyFacts.HoldingUnwalkable, "holdingunwalkable"),
+        (ActionFact.Unsupported, BodyFacts.Unsupported, "unsupported"),
+        (ActionFact.Resting, BodyFacts.Resting, "resting"),
+    ];
+    private static readonly ActionFact[] s_publishable = Array.ConvertAll(
+        array: s_rows,
+        converter: static row => row.Fact
+    );
+
     /// <summary>The body-state facts carrying a <see cref="BodyFacts"/> bit, in bit order — the order every echo
     /// joins them in.</summary>
-    public static ReadOnlySpan<ActionFact> Publishable => [
-        ActionFact.Grounded,
-        ActionFact.Airborne,
-        ActionFact.Rising,
-        ActionFact.Falling,
-        ActionFact.Submerged,
-        ActionFact.AtSurface,
-        ActionFact.Climbing,
-        ActionFact.Flying,
-        ActionFact.Resting,
-    ];
+    public static ReadOnlySpan<ActionFact> Publishable => s_publishable;
 
     /// <summary>Returns the mask bit a publishable fact carries, or <see cref="BodyFacts.None"/> for a fact with no
     /// bit (<see cref="ActionFact.AffectedBy"/>).</summary>
     /// <param name="fact">The fact to map.</param>
     /// <returns>The bit.</returns>
-    public static BodyFacts Bit(ActionFact fact) => fact switch {
-        ActionFact.Grounded => BodyFacts.Grounded,
-        ActionFact.Airborne => BodyFacts.Airborne,
-        ActionFact.Rising => BodyFacts.Rising,
-        ActionFact.Falling => BodyFacts.Falling,
-        ActionFact.Submerged => BodyFacts.Submerged,
-        ActionFact.AtSurface => BodyFacts.AtSurface,
-        ActionFact.Climbing => BodyFacts.Climbing,
-        ActionFact.Flying => BodyFacts.Flying,
-        ActionFact.Resting => BodyFacts.Resting,
-        _ => BodyFacts.None,
-    };
+    public static BodyFacts Bit(ActionFact fact) {
+        foreach (var row in s_rows) {
+            if (row.Fact == fact) {
+                return row.Bit;
+            }
+        }
+
+        return BodyFacts.None;
+    }
     /// <summary>Formats a mask as lower-case, <c>|</c>-joined tokens in bit order, or <c>none</c> when empty — the
     /// read-back spelling <c>body.where</c> echoes.</summary>
     /// <param name="facts">The mask to spell.</param>
@@ -187,18 +192,15 @@ public static class BodyFactVocabulary {
     /// <summary>Returns a publishable fact's lower-case wire spelling.</summary>
     /// <param name="fact">The fact to spell.</param>
     /// <returns>The token.</returns>
-    public static string Token(ActionFact fact) => fact switch {
-        ActionFact.Grounded => "grounded",
-        ActionFact.Airborne => "airborne",
-        ActionFact.Rising => "rising",
-        ActionFact.Falling => "falling",
-        ActionFact.Submerged => "submerged",
-        ActionFact.AtSurface => "atsurface",
-        ActionFact.Climbing => "climbing",
-        ActionFact.Flying => "flying",
-        ActionFact.Resting => "resting",
-        _ => "affectedby",
-    };
+    public static string Token(ActionFact fact) {
+        foreach (var row in s_rows) {
+            if (row.Fact == fact) {
+                return row.Token;
+            }
+        }
+
+        return "affectedby";
+    }
 }
 /// <summary>The entity an action effect addresses.</summary>
 [JsonConverter(typeof(StrictEnumConverter<ActionTarget>))]

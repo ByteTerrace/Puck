@@ -15,7 +15,8 @@ internal readonly record struct BodySensorTarget(int Index, FixedVector3 Positio
     );
 
     // A designated world-space point ridden by the same sensor-target shape a body target uses: FaceSensorTarget
-    // and ProduceAttendIntent read only Position/DistanceSquared, so a point steers identically. The index sentinel
+    // and ProduceSteeringIntent's approach shape read only Position/DistanceSquared, so a point steers identically.
+    // The index sentinel
     // keeps AcquiredTarget's body-index reads (>= 0 guarded) treating it as no acquired body.
     public static BodySensorTarget Point(FixedVector3 position, FixedQ4816 distanceSquared) => new(
         DistanceSquared: distanceSquared,
