@@ -9,9 +9,9 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>Law coverage for the grapple attachment surface: intent-to-attach determinism, the tether pipeline,
-/// checkpoint continuation, and the validator's channel/grip-composition refusals.</summary>
-public sealed class AttachmentLawTests {
+/// <summary>Law coverage for a kit's tether facet: intent-to-attach determinism, the tether pipeline, checkpoint
+/// continuation, and the validator's channel/grip-composition refusals.</summary>
+public sealed class TetherLawTests {
     private const int AttachOrdinal = 3;
     private const int DetachOrdinal = 4;
     private const int ForwardOrdinal = 0;
@@ -33,7 +33,7 @@ public sealed class AttachmentLawTests {
     }
 
     // A body standing at the origin resolves the wall's near face (a clean X-only clamp — see
-    // BuildAttachmentDocument's remarks) within this tolerance of world X 1.8: exactly the half-extent margin plus
+    // BuildTetherDocument's remarks) within this tolerance of world X 1.8: exactly the half-extent margin plus
     // whatever the creation-stamp/collider compile chain's own float-to-fixed rounding carries. Y and Z stay exact
     // zero (the probe's own unclamped coordinates on those axes).
     private static void AssertOnWallFace(FixedVector3? anchor) {
@@ -69,15 +69,15 @@ public sealed class AttachmentLawTests {
 
         return new WorldPrototype(Id: id, Document: canonical.Document, HashRaw: canonical.Hash);
     }
-    // Extends Fixtures.BuildDocument with a grapple-ready world: a wall placement centered at (2,0,0) with
+    // Extends Fixtures.BuildDocument with a tether-ready world: a wall placement centered at (2,0,0) with
     // half-extents (0.2,3,3) and three composition channels (attach/detach/reel) appended after the base document's
-    // forward/strafe/turn roles (ordinals 0..2), landing at 3/4/5.
-    private static WorldDefinition BuildAttachmentDocument(bool wallHoldable = true, string? attachChannelName = "attach", bool declareAttachChannel = true, bool includeWall = true, float wallHalfHeight = 3f) {
+    // forward/strafe/turn roles (ordinals 0..2), landing at 3/4/5, and the fixture's one kit given a tether facet.
+    private static WorldDefinition BuildTetherDocument(bool wallHoldable = true, string? attachChannelName = "attach", bool declareAttachChannel = true, bool includeWall = true, float wallHalfHeight = 3f) {
         var wall = BuildBoxCreation(
             halfExtents: new Vector3(x: 0.2f, y: wallHalfHeight, z: 3f),
             id: "wall"
         );
-        // The grapple target, directly ahead of a body's default facing (yaw 0 faces -Z) so the directed aim query
+        // The tether target, directly ahead of a body's default facing (yaw 0 faces -Z) so the directed aim query
         // finds it without needing a turn.
         var post = BuildBoxCreation(
             halfExtents: new Vector3(x: 1f, y: 1f, z: 1f),
@@ -115,23 +115,26 @@ public sealed class AttachmentLawTests {
             ));
         }
 
+        var kit = document.Kits[0] with {
+            Tether = new WorldTether(
+                AimHalfAngleDegrees: 30f,
+                AttachChannel: attachChannelName,
+                DetachChannel: "detach",
+                LengthRate: 2f,
+                MaxAnchorDistance: 20f,
+                MinLength: 1f,
+                ReelChannel: "reel",
+                ReleaseVelocityScale: 1f
+            ),
+        };
+
         return document with {
             ChannelsRaw = channels,
             CreationsRaw = [wall, post],
+            KitRowsRaw = [kit],
             PlacementsRaw = (document.PlacementsRaw! with {
                 Rows = rows,
             }),
-            AttachmentRaw = new WorldAttachmentSection(
-                AttachChannel: attachChannelName,
-                DetachChannel: "detach",
-                Enabled: true,
-                GrappleAssistHalfAngleDegrees: 30f,
-                GrappleMaxDistance: 20f,
-                ReelChannel: "reel",
-                ReelInFloor: 1f,
-                ReelRate: 2f,
-                ReleaseMomentumScale: 1f
-            ),
         };
     }
     private static WorldBody JoinBody(WorldFixture fixture, int slot = 0) {
@@ -176,7 +179,7 @@ public sealed class AttachmentLawTests {
 
         var definition = WorldDefinitionSerialization.Deserialize(utf8Json: decoded!.Server.DefinitionJson);
         var machines = new WorldMachineHost(engines: [], screens: definition.Screens);
-        var stateDirectory = Directory.CreateTempSubdirectory(prefix: "puck-attachment-checkpoint-").FullName;
+        var stateDirectory = Directory.CreateTempSubdirectory(prefix: "puck-tether-checkpoint-").FullName;
         var profiles = new WorldOwnedWorlds(
             directory: stateDirectory,
             machineId: Guid.NewGuid(),
@@ -198,8 +201,8 @@ public sealed class AttachmentLawTests {
     }
 
     [Fact]
-    public void GrappleAttach_ConstrainsThroughTheOrdinaryTetherPipeline() {
-        var document = BuildAttachmentDocument(includeWall: false);
+    public void TetherAttach_ConstrainsThroughTheOrdinaryTetherPipeline() {
+        var document = BuildTetherDocument(includeWall: false);
 
         using var fixture = Fixtures.FreshServer(definition: document);
         var body = JoinBody(fixture: fixture);
@@ -208,13 +211,11 @@ public sealed class AttachmentLawTests {
         fixture.Step();
 
         // The attach channel's rising edge runs the directed aim query and anchors the tether to the post ahead.
-        Assert.Equal(expected: WorldBodyAttachmentMode.Grapple, actual: body.AttachmentMode);
-        Assert.NotNull(@object: body.AttachmentRopeLength);
         Assert.NotNull(@object: body.TetherLength);
     }
     [Fact]
-    public void GrappleCheckpointRestore_PreservesRopeAnchorAndReelFractionAndContinuesBitIdentically() {
-        using var fixture = Fixtures.FreshServer(definition: BuildAttachmentDocument(includeWall: false));
+    public void TetherCheckpointRestore_PreservesRopeAnchorAndReelFractionAndContinuesBitIdentically() {
+        using var fixture = Fixtures.FreshServer(definition: BuildTetherDocument(includeWall: false));
         var uninterruptedBody = JoinBody(fixture: fixture);
 
         uninterruptedBody.SubmitIntent(intent: Attach());
@@ -226,11 +227,11 @@ public sealed class AttachmentLawTests {
 
         using var restored = Restore(
             fixture: fixture,
-            identity: "grapple-checkpoint"
+            identity: "tether-checkpoint"
         );
         var restoredBody = restored.Server.Body(index: 0)!;
 
-        Assert.Equal(expected: WorldBodyAttachmentMode.Grapple, actual: restoredBody.AttachmentMode);
+        Assert.NotNull(@object: restoredBody.TetherLength);
         Assert.Equal(expected: uninterruptedBody.CaptureIntegrationResidue(), actual: restoredBody.CaptureIntegrationResidue());
 
         var elapsed = 0UL;
@@ -251,8 +252,95 @@ public sealed class AttachmentLawTests {
         }
     }
     [Fact]
+    public void AimBeyondMaxAnchorDistance_LeavesTheBodyUnattached_WhereAnAnchorInReachAttaches() {
+        var farDocument = BuildTetherDocument(includeWall: false);
+        // The fixture's post sits at world Z -5; move it past the facet's authored maxAnchorDistance (20) so the
+        // directed aim query finds nothing.
+        var farPlacements = farDocument.Placements.Select(selector: row => ((row.Id == "post1")
+            ? (row with { Position = new Vector3(x: 0f, y: 0f, z: -25f) })
+            : row
+        )).ToList();
+        var far = farDocument with {
+            PlacementsRaw = (farDocument.PlacementsRaw! with { Rows = farPlacements }),
+        };
+
+        using var farFixture = Fixtures.FreshServer(definition: far);
+        var farBody = JoinBody(fixture: farFixture);
+
+        farBody.SubmitIntent(intent: Attach());
+        farFixture.Step();
+
+        Assert.Null(@object: farBody.TetherLength);
+
+        using var nearFixture = Fixtures.FreshServer(definition: BuildTetherDocument(includeWall: false));
+        var nearBody = JoinBody(fixture: nearFixture);
+
+        nearBody.SubmitIntent(intent: Attach());
+        nearFixture.Step();
+
+        Assert.NotNull(@object: nearBody.TetherLength);
+    }
+    // DetachTether is private (the channel-driven path always runs it ahead of the SAME tick's ordinary motion
+    // program, which would otherwise mask the scale under its own shaping/gravity), so this reaches it directly —
+    // the same reflection idiom Win32ProbeKernelBenchCleanupTests already uses for a unit assertion the public
+    // surface cannot isolate.
+    private static void InvokeDetachTether(WorldBody body) => typeof(WorldBody).GetMethod(
+        name: "DetachTether",
+        bindingAttr: (System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+    )!.Invoke(obj: body, parameters: null);
+    [Fact]
+    public void Detach_ScalesSurvivingVelocityByReleaseVelocityScale_WhereAUnitScalePreservesIt() {
+        var seeded = new FixedVector3(X: FixedQ4816.FromInteger(value: 6L), Y: FixedQ4816.Zero, Z: FixedQ4816.FromInteger(value: 2L));
+        var seededVertical = FixedQ4816.FromInteger(value: -4L);
+
+        var scaledDocument = BuildTetherDocument(includeWall: false);
+        var scaledKit = scaledDocument.Kits[0] with {
+            Tether = (scaledDocument.Kits[0].Tether! with { ReleaseVelocityScale = 0.5f }),
+        };
+        var scaled = scaledDocument with { KitRowsRaw = [scaledKit] };
+
+        using var scaledFixture = Fixtures.FreshServer(definition: scaled);
+        var scaledBody = JoinBody(fixture: scaledFixture);
+
+        scaledBody.SetTetherToWorldPoint(
+            anchor: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: FixedQ4816.FromInteger(value: -5L)),
+            length: FixedQ4816.FromInteger(value: 5L),
+            minLength: FixedQ4816.One
+        );
+        scaledBody.ApplyTransferState(state: (scaledBody.CaptureTransferState() with { PlanarVelocity = seeded, VerticalVelocity = seededVertical }));
+
+        InvokeDetachTether(body: scaledBody);
+
+        var scaledSurvivor = scaledBody.CaptureTransferState();
+
+        Assert.Null(@object: scaledBody.TetherLength);
+        Assert.Equal(expected: FixedQ4816.FromInteger(value: 3L), actual: scaledSurvivor.PlanarVelocity.X);
+        Assert.Equal(expected: FixedQ4816.FromInteger(value: 1L), actual: scaledSurvivor.PlanarVelocity.Z);
+        Assert.Equal(expected: FixedQ4816.FromInteger(value: -2L), actual: scaledSurvivor.VerticalVelocity);
+
+        var unitDocument = BuildTetherDocument(includeWall: false);
+
+        using var unitFixture = Fixtures.FreshServer(definition: unitDocument);
+        var unitBody = JoinBody(fixture: unitFixture);
+
+        unitBody.SetTetherToWorldPoint(
+            anchor: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: FixedQ4816.FromInteger(value: -5L)),
+            length: FixedQ4816.FromInteger(value: 5L),
+            minLength: FixedQ4816.One
+        );
+        unitBody.ApplyTransferState(state: (unitBody.CaptureTransferState() with { PlanarVelocity = seeded, VerticalVelocity = seededVertical }));
+
+        InvokeDetachTether(body: unitBody);
+
+        var unitSurvivor = unitBody.CaptureTransferState();
+
+        Assert.Null(@object: unitBody.TetherLength);
+        Assert.Equal(expected: seeded, actual: unitSurvivor.PlanarVelocity);
+        Assert.Equal(expected: seededVertical, actual: unitSurvivor.VerticalVelocity);
+    }
+    [Fact]
     public void AttachChannelNamingAnUndeclaredChannel_RefusesValidation_WhereADeclaredNameIsAdmitted() {
-        var denied = BuildAttachmentDocument(attachChannelName: "no-such-channel", declareAttachChannel: false);
+        var denied = BuildTetherDocument(attachChannelName: "no-such-channel", declareAttachChannel: false);
 
         Assert.False(
             condition: WorldDefinitionValidator.TryValidateLocally(definition: denied, reason: out var deniedReason),
@@ -260,9 +348,25 @@ public sealed class AttachmentLawTests {
         );
         Assert.Contains(actualString: deniedReason, expectedSubstring: "attachChannel");
 
-        var admitted = BuildAttachmentDocument();
+        var admitted = BuildTetherDocument();
 
         Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: admitted, reason: out var admittedReason), userMessage: admittedReason);
+    }
+    [Fact]
+    public void KitWithNoTetherFacet_RefusesAttach_WhereATetherFacetIsAdmitted() {
+        var withoutFacet = Fixtures.BuildDocument();
+
+        using var fixture = Fixtures.FreshServer(definition: withoutFacet);
+        var body = JoinBody(fixture: fixture);
+
+        Assert.False(condition: body.HasTetherFacet);
+
+        var withFacet = BuildTetherDocument(includeWall: false);
+
+        using var tetheredFixture = Fixtures.FreshServer(definition: withFacet);
+        var tetheredBody = JoinBody(fixture: tetheredFixture);
+
+        Assert.True(condition: tetheredBody.HasTetherFacet);
     }
     [Fact]
     public void PlacementGripWithoutSolid_RefusesValidation_WhereGripPairedWithSolidIsAdmitted() {

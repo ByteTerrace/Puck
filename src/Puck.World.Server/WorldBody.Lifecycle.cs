@@ -166,7 +166,9 @@ public sealed partial class WorldBody {
     /// which orbits away from <c>pos=</c> (the root) for a rolling or tumbling rigid body while <c>pos=</c> itself
     /// stays the root every kit shares. <c>carrying=</c> trails only while <see cref="Carrying"/> is set, and
     /// <c>carriedBy=</c> only while <see cref="CarriedBy"/> is — both absent for every body outside a carry
-    /// relationship. The bare planar fragment is <see cref="DescribePose"/>.</summary>
+    /// relationship. <c>tether=</c>/<c>anchor=</c> trail only while <see cref="TetherLength"/> is set — absent for
+    /// every body carrying no tether facet, or one that authors the facet but is not currently attached. The bare
+    /// planar fragment is <see cref="DescribePose"/>.</summary>
     /// <param name="index">The 0-based body index to tag the line with.</param>
     /// <returns>The full bracketed <c>body.where</c> echo line.</returns>
     public string DescribeWhere(int index) {
@@ -186,10 +188,17 @@ public sealed partial class WorldBody {
             (Carrying is { } carrying ? $" carrying={carrying}" : string.Empty),
             (CarriedBy is { } carriedBy ? $" carriedBy={carriedBy}" : string.Empty)
         );
+        var tetherSuffix = ((TetherLength is { } ropeLength)
+            ? string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $" tether={((double)ropeLength):0.00} anchor=({((double)TetherAnchorPointOrLocalOffset.X):0.00}, {((double)TetherAnchorPointOrLocalOffset.Y):0.00}, {((double)TetherAnchorPointOrLocalOffset.Z):0.00})"
+            )
+            : string.Empty
+        );
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[body.where: body:{index} pos=({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: yaw):0}° pitch={CompassDegrees(radians: pitch):0}° roll={CompassDegrees(radians: roll):0}° facts={BodyFactVocabulary.Describe(facts: Facts)} home=({home.X:0.00}, {home.Y:0.00}, {home.Z:0.00}) scale={scale:0.00}{comSuffix}{carrySuffix}]"
+            handler: $"[body.where: body:{index} pos=({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: yaw):0}° pitch={CompassDegrees(radians: pitch):0}° roll={CompassDegrees(radians: roll):0}° facts={BodyFactVocabulary.Describe(facts: Facts)} home=({home.X:0.00}, {home.Y:0.00}, {home.Z:0.00}) scale={scale:0.00}{comSuffix}{carrySuffix}{tetherSuffix}]"
         );
     }
     /// <summary>Enqueues a timed scripted segment onto the tape: while it is live it drives the avatar with
@@ -414,7 +423,9 @@ public sealed partial class WorldBody {
     /// <see langword="null"/> for a locomotion kit.</param>
     /// <param name="carry">The kit's compiled carry facet (<see cref="FixedWorldKit.Carry"/>), or
     /// <see langword="null"/> for a kit that can never pick up a rigid body.</param>
-    public void RecompileKit(FixedMotionTuning tuning, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, FixedBodyHold[]? holds = null, FixedWorldRigid? rigid = null, FixedWorldCarry? carry = null) {
+    /// <param name="tether">The kit's compiled tether facet (<see cref="FixedWorldKit.Tether"/>), or
+    /// <see langword="null"/> for a kit that carries no rope.</param>
+    public void RecompileKit(FixedMotionTuning tuning, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, FixedBodyHold[]? holds = null, FixedWorldRigid? rigid = null, FixedWorldCarry? carry = null, FixedWorldTether? tether = null) {
         SetTuning(
             holds: holds,
             tuning: tuning
@@ -454,6 +465,18 @@ public sealed partial class WorldBody {
         // WorldPopulation holds both sides, and its active-relationship pass clears the pair together on its next
         // visit.
         m_carry = carry;
+
+        var hadTetherFacet = (m_tetherFacet is not null);
+
+        m_tetherFacet = tether;
+
+        if (hadTetherFacet != (tether is not null)) {
+            // The tether facet's own presence just changed (a document mutation swapped this slot's kit) — drop any
+            // live attach rather than let it dangle against ordinals a new (or absent) facet no longer resolves.
+            ClearTether();
+            m_attachPreviousBit = false;
+            m_detachPreviousBit = false;
+        }
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
             m_laneActions[lane] = default;

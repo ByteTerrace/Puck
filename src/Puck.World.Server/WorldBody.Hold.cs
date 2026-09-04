@@ -1294,4 +1294,46 @@ public sealed partial class WorldBody {
     }
     // Whether the body is holding itself up with no surface at all — the published Flying fact.
     private bool HoldsFree() => (TryCurrentHold(hold: out var hold) && (hold.Bond == BodyHoldBond.Free) && (hold.Lift > FixedQ4816.Zero));
+    // The commanded WORLD move direction, unit length, or false when nothing is commanded. Reads the world-frame
+    // MoveX/Y/Z triple when the world declares it (the seat has already resolved its camera into those axes), and
+    // otherwise resolves the heading-framed advance/strafe pair against the body's own attitude — the same two
+    // sources ComputePlanarTargetVelocity chooses between, so a hold taken on drive agrees with the walk that
+    // produced it.
+    private bool TryCommandedDirection(in PlayerIntent intent, out FixedVector3 direction) {
+        direction = FixedVector3.Zero;
+
+        var commanded = FixedVector3.Zero;
+
+        if (m_roleOrdinals.HasMoveDirection) {
+            commanded = new FixedVector3(
+                X: Role(
+                    intent: in intent,
+                    role: ChannelRole.MoveX
+                ),
+                Y: Role(
+                    intent: in intent,
+                    role: ChannelRole.MoveY
+                ),
+                Z: Role(
+                    intent: in intent,
+                    role: ChannelRole.MoveZ
+                )
+            );
+        }
+        if (commanded.LengthSquared <= FixedQ4816.Zero) {
+            var (forward, strafe) = PlanarIntent(intent: in intent);
+
+            commanded = ((m_orientation.Rotate(vector: -UnitZ) * forward) + (m_orientation.Rotate(vector: UnitX) * strafe));
+        }
+
+        var length = commanded.Length;
+
+        if (length <= FixedQ4816.Zero) {
+            return false;
+        }
+
+        direction = (commanded / length);
+
+        return true;
+    }
 }

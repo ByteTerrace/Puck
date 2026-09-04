@@ -230,6 +230,21 @@
       "name": "rise",
       "role": "MoveUp",
       "shape": "Bipolar"
+    },
+    {
+      "composition": true,
+      "name": "tetherAttach",
+      "shape": "Binary"
+    },
+    {
+      "composition": true,
+      "name": "tetherDetach",
+      "shape": "Binary"
+    },
+    {
+      "composition": true,
+      "name": "tetherReel",
+      "shape": "Bipolar"
     }
   ],
   "collision": {
@@ -669,7 +684,18 @@
             "rate": 2.5
           }
         },
-        "name": "walker"
+        "name": "walker",
+        "tether": {
+          "aimHalfAngleDegrees": 20.0,
+          "attachChannel": "tetherAttach",
+          "detachChannel": "tetherDetach",
+          "lengthRate": 3.0,
+          "maxAnchorDistance": 15.0,
+          "minLength": 1.0,
+          "modeState": "tethered",
+          "reelChannel": "tetherReel",
+          "releaseVelocityScale": 0.5
+        }
       },
       {
         "bodyContact": "Solid",
@@ -4186,6 +4212,20 @@
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "tetherPost1",
+        "position": [
+          -20,
+          0,
+          15
+        ],
+        "prototypeId": "tetherPost",
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        },
         "yawDegrees": 0
       }
     ]
@@ -10236,6 +10276,39 @@
         ]
       },
       "id": "boardSquareDark"
+    },
+    {
+      "document": {
+        "name": "tetherPost",
+        "palette": [
+          {
+            "color": "state.colors.groundPrimary"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "post",
+            "position": [
+              0,
+              3,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              1,
+              3,
+              1
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "tetherPost"
     }
   ],
   "render": {
@@ -15731,6 +15804,14 @@
         19
       ],
       "yawDegrees": 0
+    },
+    {
+      "id": "tether",
+      "position": [
+        -20,
+        0,
+        18
+      ]
     }
   ],
   "state": {
@@ -15740,6 +15821,10 @@
         "kind": "Counter",
         "name": "stamina",
         "resetFact": "Grounded"
+      },
+      {
+        "kind": "Counter",
+        "name": "tethered"
       }
     ],
     "lattices": [

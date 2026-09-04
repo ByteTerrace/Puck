@@ -56,6 +56,9 @@ public sealed partial class WorldBody {
     private FixedWorldRigid? m_rigid;
     // The kit's carry facet, or null for a kit that can never pick up a rigid body — see WorldBody.Carry.cs.
     private FixedWorldCarry? m_carry;
+    // The kit's tether facet, or null for a kit that carries no rope — see WorldBody.Tether.cs. Null makes
+    // body.attach/body.detach/body.reel refuse by name; the runtime attach state is m_tether itself.
+    private FixedWorldTether? m_tetherFacet;
     // Rigid-only state: a locomotion body's velocity lives in m_planarVelocity/m_verticalVelocity instead, and never
     // both at once for the same body.
     private FixedVector3 m_rigidVelocity;
@@ -359,8 +362,10 @@ public sealed partial class WorldBody {
     /// <see langword="null"/> for a locomotion kit.</param>
     /// <param name="carry">The kit's compiled carry facet (<see cref="FixedWorldKit.Carry"/>), or
     /// <see langword="null"/> for a kit that can never pick up a rigid body.</param>
+    /// <param name="tether">The kit's compiled tether facet (<see cref="FixedWorldKit.Tether"/>), or
+    /// <see langword="null"/> for a kit that carries no rope.</param>
     /// <exception cref="ArgumentNullException"><paramref name="program"/> or <paramref name="programs"/> is <see langword="null"/>.</exception>
-    public WorldBody(FixedMotionTuning tuning, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedQ4816 maxSmoothError, CompiledActionSpec?[]? actions = null, FixedQ4816[]? actionThresholds = null, ChannelShape[]? actionShapes = null, bool[]? roleMask = null, RoleChannelOrdinals roleOrdinals = default, CompiledActionStateSlot[]? actionState = null, FixedWorldCollider? collider = null, FixedBodyHold[]? holds = null, FixedWorldRigid? rigid = null, FixedWorldCarry? carry = null) {
+    public WorldBody(FixedMotionTuning tuning, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedQ4816 maxSmoothError, CompiledActionSpec?[]? actions = null, FixedQ4816[]? actionThresholds = null, ChannelShape[]? actionShapes = null, bool[]? roleMask = null, RoleChannelOrdinals roleOrdinals = default, CompiledActionStateSlot[]? actionState = null, FixedWorldCollider? collider = null, FixedBodyHold[]? holds = null, FixedWorldRigid? rigid = null, FixedWorldCarry? carry = null, FixedWorldTether? tether = null) {
         SetTuning(holds: holds, tuning: tuning);
         m_bodyMotionProgram = (program ?? throw new ArgumentNullException(paramName: nameof(program)));
         m_bodyMotionPrograms = (programs ?? throw new ArgumentNullException(paramName: nameof(programs)));
@@ -375,6 +380,7 @@ public sealed partial class WorldBody {
         m_collider = collider;
         m_rigid = rigid;
         m_carry = carry;
+        m_tetherFacet = tether;
         m_maxSmoothError = maxSmoothError;
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {

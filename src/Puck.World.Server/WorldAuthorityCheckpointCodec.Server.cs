@@ -956,9 +956,9 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteInt64(value: residue.ContactUpTurnRemainder);
         writer.WriteBoolean(value: residue.PlanarFollowerSeeded);
         writer.WriteBoolean(value: residue.VerticalFollowerSeeded);
-        WriteAttachmentResidue(
+        WriteTetherResidue(
             writer: writer,
-            residue: residue.Attachment
+            residue: residue.Tether
         );
         writer.WriteInt32(value: residue.HoldIndex);
         writer.WriteFixedVector(value: residue.HoldAnchor);
@@ -1004,7 +1004,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var contactUpTurnRemainder = reader.ReadInt64();
         var planarFollowerSeeded = reader.ReadBoolean();
         var verticalFollowerSeeded = reader.ReadBoolean();
-        var attachment = ReadAttachmentResidue(reader: ref reader);
+        var tether = ReadTetherResidue(reader: ref reader);
         var holdIndex = reader.ReadInt32();
         var holdAnchor = reader.ReadFixedVector();
         var holdNormal = reader.ReadFixedVector();
@@ -1026,7 +1026,7 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         return new WorldBody.IntegrationResidue(
             AffectingSubject: affectingSubject,
-            Attachment: attachment,
+            Tether: tether,
             HoldAnchor: holdAnchor,
             HoldIndex: holdIndex,
             HoldNormal: holdNormal,
@@ -1067,8 +1067,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             CarriedBy: carriedBy
         );
     }
-    private static void WriteAttachmentResidue(WireWriter writer, WorldBody.AttachmentResidue residue) {
-        writer.WriteByte(value: ((byte)residue.Mode));
+    private static void WriteTetherResidue(WireWriter writer, WorldBody.TetherResidue residue) {
         writer.WriteBoolean(value: residue.AttachPreviousBit);
         writer.WriteBoolean(value: residue.DetachPreviousBit);
         writer.WriteBoolean(value: residue.Tether.HasValue);
@@ -1082,19 +1081,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteInt32(value: residue.TetherAnchorBodyIndex);
         writer.WriteFixedVector(value: residue.TetherAnchorPointOrLocalOffset);
     }
-    private static WorldBody.AttachmentResidue ReadAttachmentResidue(ref WireReader reader) {
-        var mode = ((WorldBodyAttachmentMode)reader.ReadByte());
-
-        if (
-            !reader.Failed &&
-            !Enum.IsDefined(value: mode)
-        ) {
-            reader.Fail(
-                detail: $"{nameof(WorldBodyAttachmentMode)} wire value {((byte)mode)} is not declared",
-                refusal: WireRefusal.EnumValueUnknown
-            );
-        }
-
+    private static WorldBody.TetherResidue ReadTetherResidue(ref WireReader reader) {
         var attachPreviousBit = reader.ReadBoolean();
         var detachPreviousBit = reader.ReadBoolean();
         var tether = (reader.ReadBoolean()
@@ -1108,10 +1095,9 @@ public static partial class WorldAuthorityCheckpointCodec {
         var tetherAnchorBodyIndex = reader.ReadInt32();
         var tetherAnchorPointOrLocalOffset = reader.ReadFixedVector();
 
-        return new WorldBody.AttachmentResidue(
+        return new WorldBody.TetherResidue(
             AttachPreviousBit: attachPreviousBit,
             DetachPreviousBit: detachPreviousBit,
-            Mode: mode,
             Tether: tether,
             TetherAnchorBodyIndex: tetherAnchorBodyIndex,
             TetherAnchorPointOrLocalOffset: tetherAnchorPointOrLocalOffset

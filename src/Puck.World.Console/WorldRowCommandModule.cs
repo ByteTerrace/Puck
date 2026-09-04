@@ -680,11 +680,23 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
                 provider: CultureInfo.InvariantCulture,
                 handler: $"{((index == 0)
                 ? " "
-                : " | ")}{kit.Name} program={kit.BodyMotionProgram} {DescribeMotion(motion: kit.Motion)}"
+                : " | ")}{kit.Name} program={kit.BodyMotionProgram} {DescribeMotion(motion: kit.Motion)} {DescribeTether(tether: kit.Tether)}"
             );
         }
 
         return builder.Append(value: ']').ToString();
+    }
+    // A kit's tether facet: the aim/rope tuning and its named channels — "tether=none" for a kit that carries no
+    // rope at all (body.attach/body.detach/body.reel refuse it by name).
+    private static string DescribeTether(WorldTether? tether) {
+        if (tether is not { } facet) {
+            return "tether=none";
+        }
+
+        return string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"tether(maxAnchorDistance={facet.MaxAnchorDistance:0.#####} aimHalfAngleDegrees={facet.AimHalfAngleDegrees:0.#####} lengthRate={facet.LengthRate:0.#####} minLength={facet.MinLength:0.#####} releaseVelocityScale={facet.ReleaseVelocityScale:0.#####} attach={(facet.AttachChannel ?? "none")} detach={(facet.DetachChannel ?? "none")} reel={(facet.ReelChannel ?? "none")} modeState={(facet.ModeState ?? "none")})"
+        );
     }
     // A kit's shaping table: each row's mechanism in order — a named dynamics follower, the anisotropic decomposition (with
     // its own key scalars), or the whole-vector response law — echoed alongside the motion row so world.kits answers
@@ -1134,7 +1146,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.kits",
-            description: "Reports the kit census (Immediate): one segment per declared kit row — name, body motion program, and the motion row's key movement scalars, holds, and planar shaping. The kits section's own read-back (world.row.set kits/world.row.remove kits has no listing of its own otherwise).",
+            description: "Reports the kit census (Immediate): one segment per declared kit row — name, body motion program, the motion row's key movement scalars, holds, and planar shaping, and the kit's tether facet ('tether=none' for a kit that carries no rope). The kits section's own read-back (world.row.set kits/world.row.remove kits has no listing of its own otherwise).",
             handler: (context, args) => {
                 if (args.Count != 0) {
                     return CommandResult.Error(output: "[world.kits: no arguments — reports the kit census]");
