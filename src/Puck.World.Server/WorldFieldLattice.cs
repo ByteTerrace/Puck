@@ -668,10 +668,12 @@ public sealed class WorldFieldLattice {
         maximum = high / count + (high % count > 0 ? 1 : 0) + clearance;
     }
 
-    // A field's free surface (value * heightScale over the origin) is unbounded by its own topology's layer count,
-    // so the box's Y span is bounded by the body-coupling ceiling (the same reach TryBodyCellOf admits) and its
-    // cell lookup clamped onto the top layer, then compared straight against the coupled column's surface height —
-    // never against a per-layer voxel slice, which would undercount a surface taller than one cell.
+    // Every voxel layer the box actually spans is checked on its own value: a dry cap between wet layers must
+    // still refuse. Only the TOP visited layer is special: a field's free surface (value * heightScale over the
+    // origin) is unbounded by its own topology's layer count — the same reach TryBodyCellOf admits for reaction
+    // coupling — so a box whose top rises past the voxel grid (up to the body-coupling ceiling) checks that
+    // layer's value against the box's true top rather than the layer's own slab top; every layer below it must
+    // be wet clear to ITS own slab top, since the box continues past it regardless of what lies above.
     private bool IsMediumBox(int field, Int128 minX, Int128 minY, Int128 minZ, Int128 maxX, Int128 maxY, Int128 maxZ) {
         if ((uint)field >= (uint)m_isMedium.Length || !m_isMedium[field]) { return false; }
         minX -= m_origin.X.Value; maxX -= m_origin.X.Value;
@@ -682,11 +684,15 @@ public sealed class WorldFieldLattice {
             maxY > m_bodyCouplingCeiling.Value || maxZ >= (Int128)size * m_depth) { return false; }
         var x0 = (int)(minX / size); var x1 = (int)(maxX / size);
         var z0 = (int)(minZ / size); var z1 = (int)(maxZ / size);
-        var y = (int)Int128.Min(minY / size, m_layers - 1);
+        var y0 = (int)Int128.Min(minY / size, m_layers - 1);
+        var y1 = (int)Int128.Min(maxY / size, m_layers - 1);
         for (var z = z0; z <= z1; z++) {
-            for (var x = x0; x <= x1; x++) {
-                var value = m_values[field][CellIndex(x, y, z)];
-                if (value <= FixedQ4816.Zero || maxY > (value * m_heightScale[field]).Value) { return false; }
+            for (var y = y0; y <= y1; y++) {
+                var requiredHeight = (y == m_layers - 1) ? maxY : Int128.Min(maxY, (Int128)(y + 1) * size);
+                for (var x = x0; x <= x1; x++) {
+                    var value = m_values[field][CellIndex(x, y, z)];
+                    if (value <= FixedQ4816.Zero || requiredHeight > (value * m_heightScale[field]).Value) { return false; }
+                }
             }
         }
         return true;

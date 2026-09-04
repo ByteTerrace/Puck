@@ -614,8 +614,8 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         m_slotBase = context.SlotBase;
 
         if (context.Probe) {
-            // The ONE construction-time worst case (never rendered): 128 detailed avatars plus every remaining
-            // coarse crowd body, the reserved placement instances,
+            // The ONE construction-time worst case (never rendered): WorldRigCatalog.DetailedAvatarCapacity
+            // detailed avatars plus every remaining coarse crowd body, the reserved placement instances,
             // the worst-case animated pool, and the authoring headroom (screens and placement stamps) so a
             // live editor can add rows up to the reserved ceilings. Reads the client's definition live because the
             // probe runs exactly once, inside the composition host's constructor, before any delivery can land.

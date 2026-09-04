@@ -273,8 +273,8 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         );
         m_audio.ReconcileSpeakers(definition: definition);
         m_fields = new WorldFieldEmitter(client: client);
-        // Composing the emitter runs the ONE capacity probe (its worst-case branch: 128 detailed avatars plus the
-        // remaining coarse crowd bodies, the reserved
+        // Composing the emitter runs the ONE capacity probe (its worst-case branch: WorldRigCatalog.DetailedAvatarCapacity
+        // detailed avatars plus the remaining coarse crowd bodies, the reserved
         // placement instances, the worst-case animated pool, and the authoring headroom), freezing the word, instance,
         // and dynamic-transform envelopes every live rebuild fits inside by construction.
         try {
