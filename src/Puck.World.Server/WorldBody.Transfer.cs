@@ -99,6 +99,12 @@ public sealed partial class WorldBody {
             (m_contactField is { } field) &&
             (m_collider is { } collider)
         ) {
+            Span<FixedBodyColliderVolume> continuumScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
+            var volumes = ScaledColliderVolumes(
+                volumes: collider.Volumes,
+                scratch: continuumScratch
+            );
+
             resolution = ((field is IEntityContactField entityField)
                 ? entityField.ResolveEntitySweep(
                     entityIndex: entityIndex,
@@ -107,7 +113,7 @@ public sealed partial class WorldBody {
                     up: in m_up,
                     velocity: ref velocity,
                     orientation: in m_orientation,
-                    volumes: collider.Volumes
+                    volumes: volumes
                 )
                 : field.ResolveSweep(
                     previousPosition: trajectory.PreviousPosition,
@@ -115,7 +121,7 @@ public sealed partial class WorldBody {
                     up: in m_up,
                     velocity: ref velocity,
                     orientation: in m_orientation,
-                    volumes: collider.Volumes
+                    volumes: volumes
                 )
             );
         }

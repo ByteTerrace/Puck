@@ -136,7 +136,12 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
         var count = WorldBodiesLimits.CapacityCeiling - fixture.Server.Population.LocalSeatCount;
         Assert.Equal(count, fixture.Server.Population.SetSimulatedCount(count));
         Coincide(fixture);
-        for (var tick = 0; tick < 30; tick++) { fixture.Step(); }
+        // Wide enough that every hot callee the measured window below allocates against has already promoted to
+        // Tier1 before that window opens — a background tier-up recompilation landing INSIDE the measured window
+        // reads as extra allocation under a busy full-suite run even though steady-state is unchanged (the same
+        // JIT-tiering flake WorldSocialMemoryLawTests' own ImportScratchDoesNotScaleWithSourcePolicyCapacity hit and
+        // was widened past).
+        for (var tick = 0; tick < 240; tick++) { fixture.Step(); }
 
         var before = GC.GetAllocatedBytesForCurrentThread();
         var start = Stopwatch.GetTimestamp();

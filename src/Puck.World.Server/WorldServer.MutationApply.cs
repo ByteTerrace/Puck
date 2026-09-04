@@ -1617,18 +1617,26 @@ public sealed partial class WorldServer {
                 break;
             case WorldCommand.RigidImpulse impulse:
                 if (!body.IsRigid) {
-                    var denial = $"body:{command.EntityIndex} carries no rigid kit facet";
+                    var notRigidDenial = $"body:{command.EntityIndex} carries no rigid kit facet";
 
-                    Console.Error.WriteLine(value: $"[body.impulse denied: {denial}]");
+                    Console.Error.WriteLine(value: $"[body.impulse denied: {notRigidDenial}]");
                     NoteDriveRefusalIfTracked(
                         command: command,
-                        reason: denial
+                        reason: notRigidDenial
                     );
 
                     break;
                 }
 
-                body.ApplyRigidImpulse(impulse: FixedVector3.FromVector3(value: impulse.Impulse));
+                if (!body.TryApplyRigidImpulse(impulse: FixedVector3.FromVector3(value: impulse.Impulse))) {
+                    var overflowDenial = $"body:{command.EntityIndex} impulse scale exceeds representable range";
+
+                    Console.Error.WriteLine(value: $"[body.impulse denied: {overflowDenial}]");
+                    NoteDriveRefusalIfTracked(
+                        command: command,
+                        reason: overflowDenial
+                    );
+                }
 
                 break;
             case WorldCommand.EnqueueSegment segment:

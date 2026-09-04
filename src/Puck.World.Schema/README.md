@@ -1570,9 +1570,13 @@ world's own declared scale envelope, and the render capacity probe's worst
 case must cover the largest live body — refused by name otherwise) whose
 cells, keyed by 0-based body index, carry each body's live scale multiplier:
 absent (the default) leaves every body's `Server.WorldBody.Scale` at `1`
-forever, at no per-tick cost. A cell may not declare an `advance`/`cycle`/
-`dynamics` value-over-time trait — every resync reads at tick 0, so such a
-cell would read its base value forever instead of progressing. A `Region`
+forever, at no per-tick cost. Every cell key must parse as an integer inside
+`0..bodies.capacity-1` — the SAME parse `WorldPopulation.SyncBodyScale` runs at
+every resync, which silently skips a key that fails it; refusing the mismatch
+at validation instead of leaving an authored cell nothing ever reads. A cell
+may not declare an `advance`/`cycle`/`dynamics` value-over-time trait — every
+resync reads at tick 0, so such a cell would read its base value forever
+instead of progressing. A `Region`
 INTERACTION scoped to the one affected body (`left` a one-cell carrier
 property naming it, `right` the placement) is the trigger shape for "this
 specific body standing in this region": the `$region:<placementId>` reserved
@@ -1614,12 +1618,28 @@ different, presentation-only per-look constant layered on top (appearance
 only; it never touches collision or motion tuning) — the two multiply
 together, never one standing in for the other.
 
-Body-vs-body contact resolution, overlap/collision events, adjacency transfer
-sweeps, and the cross-boundary continuum trajectory all still read a kit's
-SHARED, unscaled collider volumes — only the self-collision sweep
-(`WorldBody.Step.cs`'s `ResolveProgramContacts`) reads the scaled copy. A
-shrunk body's own contact with the WORLD is correct; its contact with OTHER
-bodies is not yet — a known gap, not a silent claim.
+Body-vs-body contact resolution (`WorldPopulation.ResolveDynamicContacts`),
+overlap/collision events (`WorldEventFeed`), the cross-boundary continuum
+trajectory (`WorldBody.ApplyContinuumTrajectory`), the adjacency sweep's LOCAL
+side (`WorldAdjacencyContactField`), and the self-collision sweep
+(`WorldBody.Step.cs`'s `ResolveProgramContacts`) all read each body's own
+live-scaled collider volumes now (`WorldBody.ScaledColliderVolumes`), so a
+shrunk body's contact with another body agrees with its contact with the
+world. Only the adjacency sweep's REMOTE side (a neighbour authority's own
+entities) still reads an unscaled collider — no delivered snapshot carries a
+remote entity's live Scale on the wire yet.
+
+A rigid facet (`Rigid` below) scales with the body too: mass ∝ `Scale`³
+against the authored mass at scale 1 (so a bigger body of the same material is
+heavier by its volume ratio), inertia ∝ `Scale`⁵, and the derived bounding
+radius/centre of mass ∝ `Scale` — `Server.WorldBody.ScaleRigid` derives this
+once per read from the compiled facet rather than re-deriving mass properties
+from the collider every tick. Restitution, friction, rolling friction, and
+both damping rates are dimensionless coefficients, unaffected by `Scale`. The
+grounded rest-hold window's LINEAR speed threshold scales with the body (a
+spatial rate, like a hold's own travel speed); its ANGULAR threshold does not
+(a rotational rate carries no length dimension). `body.where` echoes a rigid
+body's centre of mass as `com=` — see `Rigid` below.
 
 `collision.events` bounds overlap-event sensing without changing physical world
 contact. `candidateBudget` limits inspected broadphase candidates per body,
@@ -1642,7 +1662,9 @@ bounding radius one substep may travel) floored by `rigidSubstepMinimumTravel`
 ceiling only bounds worst-case cost. `rigidRestLinearSpeed`/`rigidRestAngularSpeed`
 (default 0.05/0.1, non-negative) and `rigidRestHoldSeconds` (default 0.25,
 non-negative) are the thresholds and hold window that decide when a grounded
-rigid body's `Resting` fact latches. `rigidPairRestitutionSpeed` (default
+rigid body's `Resting` fact latches — `rigidRestLinearSpeed` scales with each
+body's own live `Scale` (see "Body scale" above); `rigidRestAngularSpeed` does
+not. `rigidPairRestitutionSpeed` (default
 0.05, non-negative) is the closing-speed floor below which a rigid-vs-rigid
 contact restitutes at zero rather than the authored coefficient — a rigid
 pair carries no rising-edge latch, so without this floor two touching bodies

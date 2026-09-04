@@ -25,11 +25,18 @@ public sealed partial class WorldBody {
         m_scale = ((value > FixedQ4816.Zero) ? value : FixedQ4816.One);
     }
 
-    // The kit-shared compiled collider's volumes, scaled uniformly about the body root for this body's live Scale —
-    // written into the caller's own stackalloc'd scratch span, never onto the heap and never mutated in place
-    // (volumes is shared by every body wearing this kit). The common case (Scale == One, every body under a world
-    // authoring no scaleRow) returns the shared array unchanged and never touches scratch.
-    private ReadOnlySpan<FixedBodyColliderVolume> ScaledColliderVolumes(FixedBodyColliderVolume[] volumes, Span<FixedBodyColliderVolume> scratch) {
+    /// <summary>Scales the kit-shared compiled collider's volumes uniformly about the body root for this body's live
+    /// <see cref="Scale"/> — written into the caller's own stackalloc'd scratch span, never onto the heap and never
+    /// mutated in place (<paramref name="volumes"/> is shared by every body wearing this kit). The common case
+    /// (<see cref="Scale"/> == One, every body under a world authoring no <c>bodies.scaleRow</c> or one that has not
+    /// yet shrunk this body) returns <paramref name="volumes"/> unchanged and never touches <paramref name="scratch"/>.
+    /// Every caller that resolves contact against another body — dynamic depenetration, overlap events, the
+    /// cross-boundary continuum trajectory, the adjacency sweep, and a rigid body's own static-contact sweep — reads
+    /// THIS, never the kit's raw <paramref name="volumes"/> directly, so a shrunk or grown body's contact geometry
+    /// agrees everywhere.</summary>
+    /// <param name="volumes">The kit-shared, unscaled compiled collider volumes.</param>
+    /// <param name="scratch">Caller-owned scratch storage at least <paramref name="volumes"/>'s length.</param>
+    internal ReadOnlySpan<FixedBodyColliderVolume> ScaledColliderVolumes(FixedBodyColliderVolume[] volumes, Span<FixedBodyColliderVolume> scratch) {
         if (m_scale == FixedQ4816.One) {
             return volumes;
         }

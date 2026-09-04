@@ -416,13 +416,41 @@ floored by `collision.bodyContacts.rigidSubstepMinimumTravel`), capped by
 `collision.bodyContacts.rigidSubstepCeiling`; the derived count is echoed in
 `world.budget`'s `rigid` segment and `RigidStaticSubstepsThisTick`.
 
+`WorldBody.ScaleRigid` derives a scale-consistent copy of the compiled facet
+from the body's own live `Scale` (`Server.WorldBody.Scale.cs`) on every read:
+mass ∝ `Scale`³ against the authored mass at scale 1 (a uniformly bigger body
+of the same material is heavier by its volume ratio), inertia (mass·length²)
+∝ `Scale`⁵ so inverse mass/inertia scale by `Scale`⁻³/`Scale`⁻⁵, and the
+centre-of-mass offset and bounding radius ∝ `Scale` — the same linear rule
+`ScaledColliderVolumes` applies to the collider itself. Restitution, friction,
+rolling friction, and both damping rates are dimensionless coefficients,
+unaffected by `Scale`. `Scale == One` (the overwhelming common case) returns
+the facet unchanged, touching no arithmetic. `AdvanceRigid` reassigns its own
+local `rigid` to the scaled copy once at entry, so every downstream read in
+that call — including the reference `ResolveRigidContact` receives — is
+already scale-consistent; `TwoBodyHandle`, `TryApplyRigidImpulse`, and the
+`RigidMass`/`RigidBoundingRadius`/`RigidCenterOfMass` read-backs each derive
+their own scaled copy independently. `RigidCenterOfMass` (`body.where`'s
+`com=`) is `root + orientation·(CenterOffset × Scale)` — the point a rolling
+or tumbling rigid body's substeps actually rotate and translate about, which
+orbits away from the root `body.where`'s `pos=` always echoes.
+
 The ground (walkable) and obstruction (wall) contacts `IContactField.Resolve`
 reports are independent channels — a grounded body still bounces the first
 time it clips a wall — so each carries its OWN rising-edge restitution latch
 (`m_rigidGroundContacting`/`m_rigidObstructionContacting`, `WorldBody.ResolveRigidContact`):
 restitution fires only on a genuine impact on THAT channel, never on
 continued contact, which would read gravity's own per-tick pull (or ongoing
-sliding contact) as a fresh hit and never let the body settle. Tangential
+sliding contact) as a fresh hit and never let the body settle. The ground
+latch keys on `ContactResolution.Grounded` (standing on a walkable surface),
+never on whether THIS substep actually needed a depenetration push
+(`GroundNormal != Zero`) — a resting or rolling body sits exactly at the
+surface most substeps, needing no push, so gating the latch on the push alone
+read every such substep as having left the ground and the next pushed one as
+a fresh landing, re-firing restitution and keeping a rolling body's vertical
+velocity from ever settling to zero. A no-push grounded substep still runs
+friction/rolling-resistance, against the same `UnitY` the static sweep's own
+up axis already assumes. Tangential
 (slip) friction at either contact is a real coupled Coulomb impulse, not a
 decay curve: the contact-point velocity (linear plus the rotational
 contribution `ω × r`, `r` the collider's bounding radius along the contact
@@ -478,9 +506,14 @@ latched velocity said a moment ago.
 
 A body settles to `Puck.Physics.Motion.ActionFact.Resting` (`BodyFacts.Resting`,
 published by `WorldBody.FactHolds`) after its linear and angular speed stay
-below threshold for a short hold window while grounded; `body.impulse`
+below threshold for a short hold window while grounded — the LINEAR threshold
+scales with the body's own live `Scale` (a spatial rate, like a hold's own
+travel speed), the ANGULAR one does not (no length dimension); `body.impulse`
 (`WorldCommand.RigidImpulse`, checked for `IsRigid` server-side and refused
-by name otherwise) wakes it. `$physics:quiescent`
+by name otherwise, then `WorldBody.TryApplyRigidImpulse` — refused by name a
+second way when the impulse's scaled velocity delta overflows the fixed-point
+representation, leaving velocity entirely unchanged rather than applying a
+wrapped or partial result) wakes it. `$physics:quiescent`
 (`WorldPopulation.RigidBodiesQuiescent`) reads 1 when every active rigid body
 rests, vacuously 1 for a world authoring none. `world.rigid` echoes the live
 per-body census (mass, velocity, angular velocity, resting) plus the

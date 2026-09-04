@@ -50,7 +50,7 @@ public sealed class WorldRigidDynamicsLawTests {
 
         var approachVelocity = FixedQ4816.FromDouble(value: 4d);
 
-        mover.ApplyRigidImpulse(impulse: new FixedVector3(
+        mover.TryApplyRigidImpulse(impulse: new FixedVector3(
             X: (approachVelocity * mover.RigidMass),
             Y: FixedQ4816.Zero,
             Z: FixedQ4816.Zero
@@ -134,7 +134,7 @@ public sealed class WorldRigidDynamicsLawTests {
         var ball = fixture.Server.Body(index: 0)!;
 
         ball.Pose(x: 0f, y: 3f, z: 0f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
-        ball.ApplyRigidImpulse(impulse: new FixedVector3(
+        ball.TryApplyRigidImpulse(impulse: new FixedVector3(
             X: FixedQ4816.FromDouble(value: 2d),
             Y: FixedQ4816.Zero,
             Z: FixedQ4816.FromDouble(value: 0.7d)

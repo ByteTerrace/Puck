@@ -364,9 +364,18 @@ pull rate all scale with it on the server — a shrunk body's fall and depenetra
 gentle rather than free-falling one tick of full-scale gravity into a collider whose own contact skin
 margin it can no longer absorb; the client reads the same live cell into the rendered rig and the seat
 chase camera's orbit distance and look-at height, so a shrunk body stays framed rather than shrinking to
-a speck on screen. Body-vs-body contact, overlap events, and adjacency transfer still read a kit's
-shared UNSCALED collider volumes — a shrunk body's contact with the world is correct, its contact with
-other bodies is not yet, a known gap rather than a silent claim. `WorldServer.RestoreCheckpoint` and
+a speck on screen. Body-vs-body contact (`WorldPopulation.ResolveDynamicContacts`), overlap events
+(`WorldEventFeed`), the cross-boundary continuum trajectory (`WorldBody.ApplyContinuumTrajectory`), the
+adjacency sweep's LOCAL side (`WorldAdjacencyContactField`), and a rigid body's own static-contact sweep
+(`WorldBody.AdvanceRigid`) all read each body's live-scaled collider volumes now — a shrunk body's
+contact with another body agrees with its contact with the world. A rigid body's mass and inertia scale
+with it too (mass ∝ Scale³ against the authored mass at scale 1, inertia ∝ Scale⁵, so inverse mass ∝
+Scale⁻³ and inverse inertia ∝ Scale⁻⁵ — `WorldBody.ScaleRigid`), along with its bounding radius, centre
+of mass, and the linear (never angular) rest threshold. The one residual gap: the adjacency sweep's
+REMOTE side still reads a neighbour authority's unscaled shared collider, because a delivered
+`EntitySnapshot`/`IWorldAdjacencyNeighbour` carries no per-entity Scale on the wire yet — a shrunk body's
+contact against a body standing in a neighbouring authority is not yet scale-consistent, unlike every
+same-authority case above. `WorldServer.RestoreCheckpoint` and
 every other door that mints a `WorldBody` (a detached-seat/peer restore, a silo's checkpoint boot)
 resync the live value from the row, the same catch-up every other admission door already gives a
 freshly minted body — a restored session's bodies never disagree with their own `scale` row cells. A

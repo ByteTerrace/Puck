@@ -603,6 +603,11 @@ public sealed partial class WorldPopulation {
         var two = FixedQ4816.FromInteger(value: 2L);
         var contacts = m_dynamicContactBodies;
         var count = 0;
+        // Hoisted out of every loop below (CA2014): one reused stack buffer per role, its contents fully overwritten
+        // by ScaledColliderVolumes on every call, never read across bodies.
+        Span<FixedBodyColliderVolume> broadphaseScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
+        Span<FixedBodyColliderVolume> leftScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
+        Span<FixedBodyColliderVolume> rightScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
 
         for (var index = 0; (index < Capacity); index++) {
             if (
@@ -613,7 +618,10 @@ public sealed partial class WorldPopulation {
                 continue;
             }
 
-            var radius = FixedDynamicBodyContacts.BroadphaseRadius(volumes: collider.Volumes);
+            var radius = FixedDynamicBodyContacts.BroadphaseRadius(volumes: body.ScaledColliderVolumes(
+                volumes: collider.Volumes,
+                scratch: broadphaseScratch
+            ));
 
             contacts[count++] = new DynamicContactBody(
                 Index: index,
@@ -674,10 +682,16 @@ public sealed partial class WorldPopulation {
                 if (FixedDynamicBodyContacts.TryCorrection(
                     leftPosition: left.FixedPosition,
                     leftOrientation: left.FixedOrientation,
-                    leftVolumes: leftCollider.Volumes,
+                    leftVolumes: left.ScaledColliderVolumes(
+                        volumes: leftCollider.Volumes,
+                        scratch: leftScratch
+                    ),
                     rightPosition: right.FixedPosition,
                     rightOrientation: right.FixedOrientation,
-                    rightVolumes: rightCollider.Volumes,
+                    rightVolumes: right.ScaledColliderVolumes(
+                        volumes: rightCollider.Volumes,
+                        scratch: rightScratch
+                    ),
                     tieBreaker: leftIndex ^ rightIndex,
                     correction: out var correction
                 )) {

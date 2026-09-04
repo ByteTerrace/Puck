@@ -84,30 +84,107 @@ public sealed partial class WorldBody {
     /// <summary>Gets whether the previous substep already had a non-walkable (obstruction) contact — the
     /// obstruction-channel restitution edge latch <see cref="AdvanceRigid"/> reads.</summary>
     public bool RigidObstructionContacting => m_rigidObstructionContacting;
-    /// <summary>Gets the rigid facet's authored mass, or zero for a locomotion kit.</summary>
-    public FixedQ4816 RigidMass => (m_rigid?.Mass ?? FixedQ4816.Zero);
-    /// <summary>Gets the rigid facet's authored restitution against another rigid body, or zero for a locomotion kit.</summary>
+    /// <summary>Gets the rigid facet's mass at this body's live <see cref="Scale"/> — the authored mass at scale 1,
+    /// scaled by <c>Scale³</c> (see <see cref="ScaleRigid"/>). Zero for a locomotion kit.</summary>
+    public FixedQ4816 RigidMass => (m_rigid is { } rigid ? ScaleRigid(rigid: rigid).Mass : FixedQ4816.Zero);
+    /// <summary>Gets the rigid facet's authored restitution against another rigid body — a dimensionless coefficient,
+    /// unaffected by <see cref="Scale"/>. Zero for a locomotion kit.</summary>
     public FixedQ4816 RigidRestitution => (m_rigid?.Restitution ?? FixedQ4816.Zero);
-    /// <summary>Gets the rigid facet's authored friction against another rigid body, or zero for a locomotion kit.</summary>
+    /// <summary>Gets the rigid facet's authored friction against another rigid body — a dimensionless coefficient,
+    /// unaffected by <see cref="Scale"/>. Zero for a locomotion kit.</summary>
     public FixedQ4816 RigidFriction => (m_rigid?.Friction ?? FixedQ4816.Zero);
-    /// <summary>Gets the rigid facet's derived conservative bounding radius — the same radius the pair-contact
-    /// anchor approximation and the static-contact substep bound both read. Zero for a locomotion kit.</summary>
-    public FixedQ4816 RigidBoundingRadius => (m_rigid?.BoundingRadius ?? FixedQ4816.Zero);
+    /// <summary>Gets the rigid facet's conservative bounding radius at this body's live <see cref="Scale"/> — the
+    /// same radius the pair-contact anchor approximation and the static-contact substep bound both read, scaled
+    /// linearly with <see cref="Scale"/> (see <see cref="ScaleRigid"/>). Zero for a locomotion kit.</summary>
+    public FixedQ4816 RigidBoundingRadius => (m_rigid is { } rigid ? ScaleRigid(rigid: rigid).BoundingRadius : FixedQ4816.Zero);
+    // Derives a scale-consistent copy of a compiled rigid facet for this body's live Scale: mass ∝ Scale³ against the
+    // authored mass at scale 1 (a uniformly bigger body of the same material is heavier by its volume ratio), inertia
+    // (mass·length²) ∝ Scale⁵ so inverse inertia ∝ Scale⁻⁵, and CenterOffset/BoundingRadius ∝ Scale — the SAME linear
+    // rule ScaledColliderVolumes applies to the collider itself, so a rigid body's mass distribution and its collider
+    // stay geometrically consistent. Restitution, friction, rolling friction, and both damping rates are dimensionless
+    // per-second/coefficient quantities — unaffected by Scale. Scale == One (the overwhelming common case) returns
+    // rigid unchanged, touching no arithmetic. A ratio that overflows the signed 64-bit raw at REPRESENTABLE
+    // scale/mass/inertia combinations falls back to the unscaled component rather than crashing a live body — the
+    // validated scale envelope (bodies.scaleRow's own min/max, refused past authoring.maxPlacementScale) keeps this
+    // path cold in practice.
+    private FixedWorldRigid ScaleRigid(FixedWorldRigid rigid) {
+        if (m_scale == FixedQ4816.One) {
+            return rigid;
+        }
+
+        var scaleSquared = (m_scale * m_scale);
+        var scaleCubed = (scaleSquared * m_scale);
+        var scaleFifth = (scaleCubed * scaleSquared);
+        var inverseScaleCubed = (FixedQ4816.One / scaleCubed);
+        var inverseScaleFifth = (FixedQ4816.One / scaleFifth);
+
+        static long ScaleRaw(long raw, int fractionBits, FixedQ4816 factor) => (FusedArithmetic.TryMixedScaleProduct(
+            a: raw,
+            fractionBitsA: fractionBits,
+            b: factor.Value,
+            fractionBitsB: FixedQ4816.FractionBitCount,
+            fractionBitsOut: fractionBits,
+            result: out var scaled
+        ) ? scaled : raw);
+
+        return rigid with {
+            Mass = (rigid.Mass * scaleCubed),
+            InverseMassRaw = ScaleRaw(
+                raw: rigid.InverseMassRaw,
+                fractionBits: FixedWorldRigid.Scales.InverseMass,
+                factor: inverseScaleCubed
+            ),
+            InverseInertiaXX = ScaleRaw(
+                raw: rigid.InverseInertiaXX,
+                fractionBits: FixedWorldRigid.Scales.InverseInertia,
+                factor: inverseScaleFifth
+            ),
+            InverseInertiaYY = ScaleRaw(
+                raw: rigid.InverseInertiaYY,
+                fractionBits: FixedWorldRigid.Scales.InverseInertia,
+                factor: inverseScaleFifth
+            ),
+            InverseInertiaZZ = ScaleRaw(
+                raw: rigid.InverseInertiaZZ,
+                fractionBits: FixedWorldRigid.Scales.InverseInertia,
+                factor: inverseScaleFifth
+            ),
+            CenterOffset = (rigid.CenterOffset * m_scale),
+            BoundingRadius = (rigid.BoundingRadius * m_scale),
+        };
+    }
+    /// <summary>Gets the rigid facet's world-space centre of mass — <c>root + orientation·CenterOffset</c>, the
+    /// point every substep actually rotates and translates about (see <see cref="AdvanceRigid"/>). For a rolling or
+    /// tumbling body this orbits away from <see cref="WorldBody.FixedPosition"/> (the root); the pose <c>body.where</c>
+    /// echoes stays the root, with <c>com=</c> the read-back for this. Equal to the root for a locomotion kit.</summary>
+    public FixedVector3 RigidCenterOfMass => (m_rigid is { } rigid
+        ? (m_position + m_orientation.Rotate(vector: ScaleRigid(rigid: rigid).CenterOffset))
+        : m_position
+    );
 
     /// <summary>Applies an instantaneous world-space impulse to this rigid body's linear velocity
     /// (<c>Δv = impulse / mass</c>) and wakes it from rest. A no-op for a locomotion kit.</summary>
     /// <param name="impulse">The impulse, in mass·length/time units.</param>
-    public void ApplyRigidImpulse(FixedVector3 impulse) {
+    /// <returns><see langword="true"/> when every axis's scaled velocity delta fit the fixed-point representation
+    /// and was applied; <see langword="false"/> when any axis overflowed, leaving velocity entirely unchanged (no
+    /// partial application) — the caller refuses the command by name in that case.</returns>
+    public bool TryApplyRigidImpulse(FixedVector3 impulse) {
         if (m_rigid is not { } rigid) {
-            return;
+            return true;
         }
 
-        m_rigidVelocity += ImpulseToVelocity(
+        if (!TryImpulseToVelocity(
             impulse: impulse,
-            inverseMassRaw: rigid.InverseMassRaw
-        );
+            inverseMassRaw: ScaleRigid(rigid: rigid).InverseMassRaw,
+            delta: out var delta
+        )) {
+            return false;
+        }
+
+        m_rigidVelocity += delta;
         m_resting = false;
         m_restingHoldTicks = 0UL;
+        return true;
     }
     // The tick-rate-independent decay factor an authored per-second rate applies over an elapsed duration:
     // (1 - rate*seconds), clamped to [0, 1] so an aggressive rate at a wide step never reverses the quantity it
@@ -117,26 +194,41 @@ public sealed partial class WorldBody {
         x: FixedQ4816.Zero,
         y: (FixedQ4816.One - (rate * seconds))
     );
-    // impulse * inverseMass, both at their own declared scales, rounded once to FixedQ4816.
-    private static FixedVector3 ImpulseToVelocity(FixedVector3 impulse, long inverseMassRaw) {
-        FixedQ4816 Scale(FixedQ4816 component) {
-            _ = FusedArithmetic.TryMixedScaleProduct(
+    // impulse * inverseMass, both at their own declared scales, rounded once to FixedQ4816. Refuses (rather than
+    // silently reading a zero raw) when any axis's correctly-rounded product overflows the signed 64-bit raw.
+    private static bool TryImpulseToVelocity(FixedVector3 impulse, long inverseMassRaw, out FixedVector3 delta) {
+        bool TryScale(FixedQ4816 component, out FixedQ4816 result) {
+            if (!FusedArithmetic.TryMixedScaleProduct(
                 a: component.Value,
                 fractionBitsA: FixedQ4816.FractionBitCount,
                 b: inverseMassRaw,
                 fractionBitsB: FixedWorldRigid.Scales.InverseMass,
                 fractionBitsOut: FixedQ4816.FractionBitCount,
                 result: out var raw
-            );
+            )) {
+                result = FixedQ4816.Zero;
+                return false;
+            }
 
-            return FixedQ4816.FromRawBits(value: raw);
+            result = FixedQ4816.FromRawBits(value: raw);
+            return true;
         }
 
-        return new FixedVector3(
-            X: Scale(component: impulse.X),
-            Y: Scale(component: impulse.Y),
-            Z: Scale(component: impulse.Z)
+        if (
+            !TryScale(component: impulse.X, result: out var x) ||
+            !TryScale(component: impulse.Y, result: out var y) ||
+            !TryScale(component: impulse.Z, result: out var z)
+        ) {
+            delta = FixedVector3.Zero;
+            return false;
+        }
+
+        delta = new FixedVector3(
+            X: x,
+            Y: y,
+            Z: z
         );
+        return true;
     }
     /// <summary>Gets a best-effort world-space linear velocity for a KINEMATIC body — the tangent planar velocity
     /// plus the vertical channel along the body's own up axis. Used only so a kinematic body pushing a rigid one
@@ -160,12 +252,14 @@ public sealed partial class WorldBody {
         handle.Orientation = m_orientation;
 
         if (m_rigid is { } rigid) {
+            var scaledRigid = ScaleRigid(rigid: rigid);
+
             handle.LinearVelocity = m_rigidVelocity;
             handle.AngularVelocity = m_angularVelocity;
-            handle.InverseMassRaw = rigid.InverseMassRaw;
-            handle.InverseInertiaXX = rigid.InverseInertiaXX;
-            handle.InverseInertiaYY = rigid.InverseInertiaYY;
-            handle.InverseInertiaZZ = rigid.InverseInertiaZZ;
+            handle.InverseMassRaw = scaledRigid.InverseMassRaw;
+            handle.InverseInertiaXX = scaledRigid.InverseInertiaXX;
+            handle.InverseInertiaYY = scaledRigid.InverseInertiaYY;
+            handle.InverseInertiaZZ = scaledRigid.InverseInertiaZZ;
         } else {
             handle.LinearVelocity = ApproximateWorldVelocity();
             handle.AngularVelocity = FixedVector3.Zero;
@@ -246,6 +340,11 @@ public sealed partial class WorldBody {
             return;
         }
 
+        // Every subsequent read of `rigid` in this call — including the reference ResolveRigidContact receives below
+        // — is this body's live-Scale-consistent copy (see ScaleRigid's own remarks), never the kit-shared authored
+        // facet: a shrunk body's mass, inertia, substep bound, and contact-point lever arm all shrink with it.
+        rigid = ScaleRigid(rigid: rigid);
+
         var tickSeconds = (FixedQ4816.FromInteger(value: unchecked((long)stepTicks)) / FixedQ4816.FromInteger(value: EngineTicksPerSecond));
 
         // Every one of the four rigid coefficients (damping x2, friction, rolling friction) is authored as a
@@ -286,6 +385,13 @@ public sealed partial class WorldBody {
         var subTicks = (stepTicks / unchecked((ulong)derivedSubsteps));
         var leftoverTicks = (stepTicks - (subTicks * unchecked((ulong)derivedSubsteps)));
         var grounded = false;
+        // Hoisted out of the substep loop: the local-frame collider volumes are constant for the whole tick (only
+        // position/orientation move per substep), so this scales once rather than up to SubstepCeiling times.
+        Span<FixedBodyColliderVolume> staticContactScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
+        var scaledColliderVolumes = ScaledColliderVolumes(
+            volumes: collider.Volumes,
+            scratch: staticContactScratch
+        );
 
         for (var sub = 0; (sub < derivedSubsteps); sub++) {
             // The remainder rides the first substep so the sum of every substep's ticks is exactly stepTicks.
@@ -322,7 +428,7 @@ public sealed partial class WorldBody {
                     previousPosition: in previousBodyOrigin,
                     up: in UnitY,
                     velocity: ref velocity,
-                    volumes: collider.Volumes
+                    volumes: scaledColliderVolumes
                 );
             }
 
@@ -344,9 +450,19 @@ public sealed partial class WorldBody {
                 m_rigidObstructionContacting = false;
             }
 
-            if (resolution.GroundNormal != FixedVector3.Zero) {
+            if (resolution.Grounded) {
+                // Grounded (standing on a walkable surface) and pushed (this substep actually needed a depenetration
+                // correction) are different questions: a resting or rolling body sits exactly at the surface most
+                // substeps, needing no push, so GroundNormal reads Zero there even though Grounded stays true. Keying
+                // the rising-edge latch on GroundNormal != Zero (rather than Grounded) let every such no-push substep
+                // read as the body having LEFT the ground, so the very next pushed substep read as a fresh landing and
+                // re-fired restitution — a resting/rolling body's vertical velocity never reached zero. UnitY is the
+                // same up this call's own ResolveSweep already assumes, so it stands in for the surface normal on a
+                // no-push substep, where friction/rolling-resistance still apply against a still-true contact.
+                var groundNormal = ((resolution.GroundNormal != FixedVector3.Zero) ? resolution.GroundNormal : UnitY);
+
                 ResolveRigidContact(
-                    normal: resolution.GroundNormal,
+                    normal: groundNormal,
                     preVelocity: preVelocity,
                     contacting: ref m_rigidGroundContacting,
                     rigid: in rigid
@@ -367,10 +483,14 @@ public sealed partial class WorldBody {
 
         var linearSpeed = m_rigidVelocity.Length;
         var angularSpeed = m_angularVelocity.Length;
+        // Linear speed is a spatial rate (u/s), so its rest threshold scales with the body exactly like a hold's own
+        // travel speed does (Server.WorldBody.Scale's remarks) — a shrunk body settles at a proportionally smaller
+        // absolute wobble. Angular speed (rad/s) carries no length dimension, so its threshold is unaffected by Scale.
+        var restLinearThreshold = (policy.RestLinearThreshold * m_scale);
 
         if (
             grounded &&
-            (linearSpeed <= policy.RestLinearThreshold) &&
+            (linearSpeed <= restLinearThreshold) &&
             (angularSpeed <= policy.RestAngularThreshold)
         ) {
             m_restingHoldTicks += stepTicks;
