@@ -78,7 +78,9 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
         Assert.InRange(burst.Updates, 1, 172);
         Assert.InRange(burst.Candidates, 0, expected * 32);
 
-        for (var tick = 0; tick < 30; tick++) { fixture.Step(); }
+        // Keep the measured window beyond background Tier1 promotion under full-suite load. A late promotion adds
+        // runtime bookkeeping bytes to this thread and can otherwise look like a flock-path allocation burst.
+        for (var tick = 0; tick < 240; tick++) { fixture.Step(); }
         var candidates = 0;
         var retained = 0;
         var updates = 0;
@@ -104,7 +106,7 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
         using var replay = Fixtures.FreshServer(DenseDocument());
         Assert.Equal(expected, replay.Server.Population.SetSimulatedCount(expected));
         Coincide(replay);
-        for (var tick = 0; tick < 151; tick++) { replay.Step(); }
+        for (var tick = 0; tick < 361; tick++) { replay.Step(); }
         Assert.Equal(first, WorldRuntimeStateHash.HashAuthoritative(replay.Server, 120));
     }
 
