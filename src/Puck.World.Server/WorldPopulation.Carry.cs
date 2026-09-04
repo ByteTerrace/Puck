@@ -1,3 +1,6 @@
+using Puck.Maths;
+using Puck.Physics;
+
 namespace Puck.World.Server;
 
 public sealed partial class WorldPopulation {
@@ -65,10 +68,59 @@ public sealed partial class WorldPopulation {
             return false;
         }
 
+        if (IsCarriedTargetPenetrating(carrierIndex: carrierIndex, target: target, targetIndex: targetIndex)) {
+            reason = $"body:{targetIndex}'s released pose penetrates geometry or another body";
+            return false;
+        }
+
         carrier.EndCarry(target: target);
         RemoveCarry(carrierIndex: carrierIndex);
         reason = "";
         return true;
+    }
+    /// <summary>Gets whether <paramref name="target"/>'s CURRENT pose (already the tangibly-blocked pose
+    /// <see cref="WorldBody.FollowCarrier"/> and <see cref="ResolveCarriedBodyPush"/> left it at) overlaps static
+    /// geometry or any other active solid body — the released-pose check <see cref="TryEndCarry"/> refuses a release
+    /// by name against, so letting go never drops a body inside a wall or another body.</summary>
+    private bool IsCarriedTargetPenetrating(int carrierIndex, WorldBody target, int targetIndex) {
+        if (target.IsPenetratingStaticGeometry()) {
+            return true;
+        }
+
+        if (target.Collider is not { } targetCollider) {
+            return false;
+        }
+
+        Span<FixedBodyColliderVolume> targetScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
+        Span<FixedBodyColliderVolume> otherScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
+        var targetVolumes = target.ScaledColliderVolumes(volumes: targetCollider.Volumes, scratch: targetScratch);
+
+        for (var otherIndex = 0; (otherIndex < Capacity); otherIndex++) {
+            if (
+                (otherIndex == targetIndex) ||
+                (otherIndex == carrierIndex) ||
+                !m_entries[otherIndex].Active ||
+                (BodyContact(index: otherIndex) != WorldBodyContactMode.Solid) ||
+                (m_entries[otherIndex].Body is not { Collider: { } otherCollider, OrdinaryAdvanceAdmitted: true, CarriedBy: null } other)
+            ) {
+                continue;
+            }
+
+            if (FixedDynamicBodyContacts.TryCorrection(
+                leftPosition: target.FixedPosition,
+                leftOrientation: target.FixedOrientation,
+                leftVolumes: targetVolumes,
+                rightPosition: other.FixedPosition,
+                rightOrientation: other.FixedOrientation,
+                rightVolumes: other.ScaledColliderVolumes(volumes: otherCollider.Volumes, scratch: otherScratch),
+                tieBreaker: (targetIndex ^ otherIndex),
+                correction: out _
+            )) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Reconciles invalidated active relationships before body integration, so an orphaned target re-enters
@@ -111,8 +163,60 @@ public sealed partial class WorldPopulation {
 
             if (follow) {
                 target.FollowCarrier(carrier: carrier);
+                ResolveCarriedBodyPush(
+                    carrier: carrier,
+                    carrierIndex: relationship.CarrierIndex,
+                    target: target,
+                    targetIndex: relationship.TargetIndex
+                );
             }
             relationshipIndex++;
+        }
+    }
+    /// <summary>Pushes, and is blocked by, every other active solid body a carried target's own (already static-
+    /// geometry-blocked — see <see cref="WorldBody.FollowCarrier"/>) position would overlap: the SAME positional
+    /// split every plain dynamic pair applies, folded back onto the carrier too so it feels a body it is holding get
+    /// stopped exactly as it already feels a wall. Physics owns the pairwise overlap geometry
+    /// (<see cref="FixedDynamicBodyContacts.TryCorrection"/>); which bodies pair is this population's own call, on
+    /// the same terms as <see cref="ResolveDynamicContacts"/>.</summary>
+    private void ResolveCarriedBodyPush(WorldBody carrier, int carrierIndex, WorldBody target, int targetIndex) {
+        if (target.Collider is not { } targetCollider) {
+            return;
+        }
+
+        var half = FixedQ4816.FromInteger(value: 2L);
+        Span<FixedBodyColliderVolume> targetScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
+        Span<FixedBodyColliderVolume> otherScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
+
+        for (var otherIndex = 0; (otherIndex < Capacity); otherIndex++) {
+            if (
+                (otherIndex == targetIndex) ||
+                (otherIndex == carrierIndex) ||
+                !m_entries[otherIndex].Active ||
+                (BodyContact(index: otherIndex) != WorldBodyContactMode.Solid) ||
+                (m_entries[otherIndex].Body is not { Collider: { } otherCollider, OrdinaryAdvanceAdmitted: true, CarriedBy: null } other)
+            ) {
+                continue;
+            }
+
+            if (!FixedDynamicBodyContacts.TryCorrection(
+                leftPosition: target.FixedPosition,
+                leftOrientation: target.FixedOrientation,
+                leftVolumes: target.ScaledColliderVolumes(volumes: targetCollider.Volumes, scratch: targetScratch),
+                rightPosition: other.FixedPosition,
+                rightOrientation: other.FixedOrientation,
+                rightVolumes: other.ScaledColliderVolumes(volumes: otherCollider.Volumes, scratch: otherScratch),
+                tieBreaker: (targetIndex ^ otherIndex),
+                correction: out var correction
+            )) {
+                continue;
+            }
+
+            var shared = (correction / half);
+
+            target.ApplyRigidPositionalCorrection(correction: shared);
+            other.ApplyDynamicContact(correction: -shared);
+            carrier.ApplyDynamicContact(correction: shared);
         }
     }
 

@@ -113,6 +113,21 @@
           "description": "Below this closing speed (world units/second), a rigid-vs-rigid contact restitutes at zero rather than the authored coefficient \u2014 a pure momentum-conserving separation. A rigid pair carries no rising-edge latch (unlike a body-vs-static-world contact), so without this floor two touching bodies at rest would restitute a hair apart every tick they are found overlapping, separating, and falling back together \u2014 a stable micro-bounce that never reaches either rest threshold. Non-negative; small enough that a real strike is unaffected.",
           "type": "number",
           "default": 0.05
+        },
+        "rigidManifoldIterations": {
+          "description": "The sequential-impulse pass count a box or capsule rigid body\u0027s own ground support manifold (SupportManifold \u2014 up to four box corners or two capsule cap points) resolves over each substep, distributing the normal impulse across every manifold point rather than one. Strictly positive.",
+          "type": "integer",
+          "default": 4
+        },
+        "rigidPairIterationCeiling": {
+          "description": "The most EXTRA solver passes WorldPopulation.ResolveDynamicContacts replays over the rigid pairs its first pass actually resolved, so an impulse crosses more than one pair-hop within the same tick (a rack break, a falling domino line). The count actually run is derived DOWN from this ceiling by RigidPairIterationBudget divided by the first pass\u0027s own resolved-pair count, so a lightly loaded tick gets every authored pass and a crowded one stays bounded. Strictly positive.",
+          "type": "integer",
+          "default": 4
+        },
+        "rigidPairIterationBudget": {
+          "description": "The total pair-pass work one tick\u0027s extra rigid-pair replay passes may spend, before RigidPairIterationCeiling caps it \u2014 see that field. Strictly positive.",
+          "type": "integer",
+          "default": 64
         }
       },
       "additionalProperties": false,

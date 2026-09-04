@@ -333,20 +333,41 @@ choosing fixed-point primitives on sim value paths.
   mass/inertia from the kit's own sphere/capsule/box collider, never a free
   density or tensor. `WorldBody.AdvanceRigid` (`WorldBody.Rigid.cs`) hands the
   whole step to the rigid solver instead of the grounded/free motion
-  program; dynamic-vs-dynamic contact rides the existing
-  `ResolveDynamicContacts` broadphase (`WorldPopulation.Rigid.cs`) through
-  `Puck.Physics.FixedTwoBodyKernel`. `body.impulse`, `world.rigid`, and the
+  program. Every contact anchor — static (ground/obstruction) and pair alike —
+  is the shape's own true witness point (`Puck.Physics.FixedRigidWitness.Anchor`),
+  never a point on the conservative bounding sphere, so an off-centre strike
+  carries a real lever arm into `Puck.Physics.FixedTwoBodyKernel`. A box or
+  capsule resting on a near-horizontal surface additionally resolves over its
+  own support MANIFOLD (`FixedRigidWitness.SupportManifold` — up to four box
+  corners, or two capsule cap points lying on a side) with a few sequential-
+  impulse passes (`collision.bodyContacts.rigidManifoldIterations`), which is
+  what keeps an upright body's centre of mass over its support polygon without
+  artificial damping. Dynamic-vs-dynamic contact rides the existing
+  `ResolveDynamicContacts` broadphase (`WorldPopulation.Rigid.cs`); the rigid
+  pairs its first pass resolves are replayed for a derived-down count of extra
+  passes over the SAME tick (`collision.bodyContacts.rigidPairIterationCeiling`/
+  `rigidPairIterationBudget`), so an impulse chain (a rack break, a falling
+  domino line) crosses more than one pair-hop within one tick instead of one
+  body per tick. `body.impulse`, `world.rigid`, `world.budget`, and the
   `$physics:quiescent` rule operand are the console/rule surface; see
   [references/documents.md](references/documents.md#crowd-scale-policies)
   for the authored `collision.bodyContacts` rigid fields, and the
   [server](../../../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)/[schema](../../../src/Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs)
   references for the mechanics. The shipped garden's `billiardsTray`/
-  `bowlingLane` placements are the worked example. A DISTINCT kit facet,
-  `carry` (`Puck.World.Schema.WorldCarry`), lets a body pick up another
+  `bowlingLane`/`dominoes` placements are the worked example. A DISTINCT kit
+  facet, `carry` (`Puck.World.Schema.WorldCarry`), lets a body pick up another
   rigid one — `body.carry <carrier> <target>`/`body.release [carrier]`,
   `WorldBody.Carry.cs`/`WorldPopulation.Carry.cs`; a carried body's own
   integration is suspended and its pose is derived from the carrier's frame
-  every tick. The garden's `walker` kit (Wren) carries this facet.
+  every tick, but TANGIBLY: its own collider sweeps from its previous pose to
+  that frame-derived one against static geometry (`WorldBody.FollowCarrier`)
+  and against every other active solid body (`WorldPopulation.ResolveCarriedBodyPush`),
+  so it pushes and is blocked rather than passing through — whatever
+  correction either sweep applies is handed back to the carrier too, so the
+  carrier itself is stopped, not just the object it holds. `body.release`
+  refuses by name when the carried body's CURRENT pose still overlaps static
+  geometry or another body. The garden's `walker` kit (Wren) carries this
+  facet.
 - The tabletop primitive: a placement's `board` facet (`WorldPlacementBoard`)
   anchors a discrete `Grid` `state.lattices` topology (only `Grid` carries the
   rectangular X/Z frame `$board:cellOf`/`offset` resolve against; `Ring`/`Hex`

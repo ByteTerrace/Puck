@@ -1,4 +1,5 @@
 using Puck.Maths;
+using Puck.Physics;
 
 namespace Puck.World.Server;
 
@@ -89,6 +90,38 @@ public sealed partial class WorldBody {
         return true;
     }
 
+    /// <summary>Gets whether this body's own collider, at its CURRENT pose, overlaps the static contact field — a
+    /// zero-displacement probe sweep (previous position equal to current) that still reports a correction exactly
+    /// when the pose is already embedded. Used to refuse a carry release whose left-behind pose would penetrate a
+    /// wall — see <c>WorldPopulation.TryEndCarry</c>. <see langword="false"/> for a body with no collider or contact
+    /// field, since there is nothing there to embed in.</summary>
+    internal bool IsPenetratingStaticGeometry() {
+        if (
+            (m_contactField is not { } field) ||
+            (m_collider is not { } collider)
+        ) {
+            return false;
+        }
+
+        Span<FixedBodyColliderVolume> scratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
+        var volumes = ScaledColliderVolumes(
+            scratch: scratch,
+            volumes: collider.Volumes
+        );
+        var probePosition = m_position;
+        var probeVelocity = FixedVector3.Zero;
+
+        field.ResolveSweep(
+            orientation: in m_orientation,
+            position: ref probePosition,
+            previousPosition: in m_position,
+            up: in UnitY,
+            velocity: ref probeVelocity,
+            volumes: volumes
+        );
+
+        return (probePosition != m_position);
+    }
     /// <summary>Ends this body's active carry, handing <paramref name="target"/> back to the rigid solver with this
     /// body's own current world velocity (<see cref="ApproximateWorldVelocity"/>) — a released body leaves with the
     /// carrier's motion rather than snapping to rest. A no-op (never a refusal) when this body carries nothing;
@@ -125,18 +158,59 @@ public sealed partial class WorldBody {
     /// <summary>Derives this carried body's pose and rigid velocity from <paramref name="carrier"/>'s own frame for
     /// the tick that just completed — called once per tick after movement, dynamic contact, and tether correction,
     /// so it reads the carrier's final authoritative pose for that tick. The body-local carry point scales with the
-    /// carrier on the same geometric terms as its collider and reach. A no-op when <paramref name="carrier"/>'s kit carries no carry facet
-    /// (its own <see cref="RecompileKit"/> retuned away from one while this body stayed attached — the caller is
-    /// still responsible for tearing down the relationship in that case).</summary>
+    /// carrier on the same geometric terms as its collider and reach. TANGIBLE: the carrier's frame names a desired
+    /// pose, never an unconditional one — this body's own collider is swept from its previous position to that
+    /// desired one against static geometry, so it is BLOCKED at a wall rather than passing through it as the carrier
+    /// keeps walking; whatever correction the sweep applied is handed straight back to the carrier
+    /// (<see cref="ApplyDynamicContact"/>), so the carrier is stopped too, not just the object it is holding. A
+    /// no-op when <paramref name="carrier"/>'s kit carries no carry facet (its own <see cref="RecompileKit"/> retuned
+    /// away from one while this body stayed attached — the caller is still responsible for tearing down the
+    /// relationship in that case). Pushing and being blocked by another BODY (rather than static geometry) is the
+    /// caller's own separate pass — see <c>WorldPopulation.ResolveCarriedBodyPush</c> — since only the population
+    /// can see every other body.</summary>
     internal void FollowCarrier(WorldBody carrier) {
         if (carrier.m_carry is not { } carry) {
             return;
         }
 
-        m_position = (carrier.m_position + carrier.m_orientation.Rotate(
+        var previousPosition = m_position;
+        var desiredPosition = (carrier.m_position + carrier.m_orientation.Rotate(
             vector: (carry.Offset * carrier.m_scale)
         ));
+
         m_orientation = carrier.m_orientation;
+
+        if (
+            (m_contactField is { } field) &&
+            (m_collider is { } collider)
+        ) {
+            Span<FixedBodyColliderVolume> scratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
+            var volumes = ScaledColliderVolumes(
+                scratch: scratch,
+                volumes: collider.Volumes
+            );
+            var sweptPosition = desiredPosition;
+            var sweptVelocity = (desiredPosition - previousPosition);
+
+            field.ResolveSweep(
+                orientation: in m_orientation,
+                position: ref sweptPosition,
+                previousPosition: in previousPosition,
+                up: in UnitY,
+                velocity: ref sweptVelocity,
+                volumes: volumes
+            );
+
+            var blockCorrection = (sweptPosition - desiredPosition);
+
+            desiredPosition = sweptPosition;
+
+            if (blockCorrection != FixedVector3.Zero) {
+                carrier.ApplyDynamicContact(correction: blockCorrection);
+            }
+        }
+
+        m_position = desiredPosition;
         m_rigidVelocity = carrier.ApproximateWorldVelocity();
         m_angularVelocity = FixedVector3.Zero;
     }

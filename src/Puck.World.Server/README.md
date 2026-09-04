@@ -469,11 +469,27 @@ normal) is arrested toward zero through `Puck.Physics.FixedTwoBodyKernel`,
 clamped to the authored `friction` coefficient times the normal impulse the
 sweep just applied to stop the substep's own inward motion — the SAME
 meaning `friction` carries against another rigid body (below), never a
-speed-independent rate. The world is modeled as an infinite-mass static
-phantom (`WorldBody.GroundPhantomHandle`), so linear and angular motion stay
-coupled exactly as inertia dictates and a spinning ball can genuinely start
-rolling (or a rolling one stop spinning) rather than the two evolving
-independently. `rollingFriction` remains a separate pure angular-velocity
+speed-independent rate. `r`, the contact anchor, is the shape's own true
+witness point along the normal (`Puck.Physics.FixedRigidWitness.Anchor`) —
+the real support point of the collider's box/capsule/sphere geometry oriented
+by the body's own quaternion — never a point on the conservative bounding
+sphere, so an off-centre wall clip carries a real lever arm. A GROUNDED box or
+capsule additionally resolves over its own support MANIFOLD instead of one
+witness point (`WorldBody.ResolveRigidGroundManifold`,
+`FixedRigidWitness.SupportManifold` — up to four box corners, or two capsule
+cap points when it lies on its side): `collision.bodyContacts.rigidManifoldIterations`
+sequential-impulse passes distribute the normal impulse across every
+manifold point still closing, then friction clamps per point to THAT point's
+own accumulated normal impulse — never the manifold's total — which is what
+keeps an upright body's centre of mass over its support polygon without an
+artificial extra damping term; a standing capsule or any other single-point
+volume falls back to the ordinary witness-point path, which already carries
+the same torque over the one point that actually touches. The world is
+modeled as an infinite-mass static phantom (`WorldBody.GroundPhantomHandle`),
+so linear and angular motion stay coupled exactly as inertia dictates and a
+spinning ball can genuinely start rolling (or a rolling one stop spinning)
+rather than the two evolving independently. `rollingFriction` remains a
+separate pure angular-velocity
 decay while grounded — rolling resistance, not slip friction. Rolling
 friction and both damping coefficients are authored per-second RATES,
 applied as `(1 - rate·dt)` each tick so the same value decays identically at
@@ -491,9 +507,20 @@ with an impulse computed through `Puck.Physics.FixedTwoBodyKernel` — the
 kernel's own contract names its "A" side the body the contact normal points
 AWAY FROM, so the pair's roles are assigned to match that direction exactly
 (swap them and an approaching pair reads as a positive, separating, closing
-speed). Each rigid side's contact anchor is its own bounding-radius surface
-point facing the other body, never the body center — real torque, not a
-torque-free strike, reaches both sides when both are rigid. A resolved
+speed). Each rigid side's contact anchor is its own true witness point facing
+the other body (`Puck.Physics.FixedRigidWitness.Anchor`), never the body
+center and never a point on the conservative bounding sphere — real torque,
+not a torque-free strike, reaches both sides when both are rigid, exactly
+matching the true surface a struck capsule or box actually contacts. The
+first broadphase pass's own resolved rigid pairs are replayed — against each
+pair's now-current positions and velocities — for a derived-down count of
+EXTRA passes in the SAME tick (`RigidPairPassesThisTick`, capped by
+`collision.bodyContacts.rigidPairIterationCeiling` and derived down from
+`rigidPairIterationBudget` divided by the first pass's own resolved-pair
+count), so an impulse chain (a rack break, a falling domino line) crosses
+more than one pair-hop within the tick instead of propagating one body-hop
+per tick; both counts are echoed in `world.budget`'s `rigid` segment. A
+resolved
 pair's tangential (friction) impulse is likewise a real Coulomb impulse
 through the kernel — the full-stick impulse that would zero the relative
 tangential velocity, clamped to the pair's average friction coefficient
@@ -580,12 +607,26 @@ with the carrier too, matching its collider and reach. A carried body's own `Adv
 its rigid integration is suspended, never solved — and
 `WorldPopulation.PrepareCarriedBodies` first releases invalidated relationships
 before integration; `UpdateCarriedBodies` then runs after both advance passes,
-dynamic-body contact, and tether correction, so it derives position
+dynamic-body contact, and tether correction, so it derives a DESIRED position
 and orientation from the carrier's final authoritative pose for that tick:
-`carrier.root + carrier.orientation·(Offset × Scale)`. It derives rigid
-velocity from the carrier's own `ApproximateWorldVelocity`. A carried body is excluded from `ResolveDynamicContacts`'
-broadphase and from `$physics:quiescent`'s census (`CarriedBy: null` on both).
-`body.release`
+`carrier.root + carrier.orientation·(Offset × Scale)`. That desired position is
+never taken unconditionally — TANGIBLE carry: the target's own collider is
+swept from its previous position to the desired one against static geometry
+(`WorldBody.FollowCarrier`, the same `IContactField.ResolveSweep` a rigid
+body's own static contact uses), and `WorldPopulation.ResolveCarriedBodyPush`
+then resolves the swept position against every other active solid body on the
+same positional-split terms `ResolveDynamicContacts` already applies to a
+plain pair, pushing the other body away. Whichever correction either sweep
+applied is handed straight back to the carrier (`WorldBody.ApplyDynamicContact`),
+so the carrier itself is stopped by what it is holding, not just the held
+body. It derives rigid velocity from the carrier's own `ApproximateWorldVelocity`.
+A carried body is excluded from `ResolveDynamicContacts`'
+broadphase and from `$physics:quiescent`'s census (`CarriedBy: null` on both) —
+its own tangibility sweep above is the ONLY contact path it participates in.
+`body.release` refuses by name (`WorldPopulation.TryEndCarry`, leaving the
+relationship untouched) when the target's CURRENT pose still overlaps static
+geometry (`WorldBody.IsPenetratingStaticGeometry` — a zero-displacement probe
+sweep) or another active body; otherwise it
 hands the target back to the solver with the carrier's own current
 velocity rather than snapping it to rest. `Carrying`/`CarriedBy` are `int?`
 population indices (`-1` raw, on the same "never a boolean fact" terms

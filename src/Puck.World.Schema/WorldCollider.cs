@@ -139,15 +139,33 @@ public sealed record WorldCollisionEvents(int CandidateBudget = 32, int MaxPairs
 /// at rest would restitute a hair apart every tick they are found overlapping, separating, and falling back
 /// together — a stable micro-bounce that never reaches either rest threshold. Non-negative; small enough that a
 /// real strike is unaffected.</param>
+/// <param name="RigidManifoldIterations">The sequential-impulse pass count a box or capsule rigid body's own ground
+/// support manifold (<see cref="Puck.Physics.FixedRigidWitness.SupportManifold"/> — up to four box corners or two
+/// capsule cap points) resolves over each substep, distributing the normal impulse across every manifold point
+/// rather than one. Strictly positive.</param>
+/// <param name="RigidPairIterationCeiling">The most EXTRA solver passes <c>WorldPopulation.ResolveDynamicContacts</c>
+/// replays over the rigid pairs its first pass actually resolved, so an impulse crosses more than one pair-hop
+/// within the same tick (a rack break, a falling domino line). The count actually run is derived DOWN from this
+/// ceiling by <see cref="RigidPairIterationBudget"/> divided by the first pass's own resolved-pair count, so a
+/// lightly loaded tick gets every authored pass and a crowded one stays bounded. Strictly positive.</param>
+/// <param name="RigidPairIterationBudget">The total pair-pass work one tick's extra rigid-pair replay passes may
+/// spend, before <see cref="RigidPairIterationCeiling"/> caps it — see that field. Strictly positive.</param>
 public sealed record WorldBodyContactPolicy(int CandidateBudget = 16, int MaxPairsPerBody = 8, int RigidSubstepCeiling = 8,
     float RigidRestLinearSpeed = 0.05f, float RigidRestAngularSpeed = 0.1f, float RigidRestHoldSeconds = 0.25f,
-    float RigidSubstepTravelFraction = 0.5f, float RigidSubstepMinimumTravel = 0.001f, float RigidPairRestitutionSpeed = 0.05f) {
+    float RigidSubstepTravelFraction = 0.5f, float RigidSubstepMinimumTravel = 0.001f, float RigidPairRestitutionSpeed = 0.05f,
+    int RigidManifoldIterations = 4, int RigidPairIterationCeiling = 4, int RigidPairIterationBudget = 64) {
     /// <summary>The largest accepted candidate budget per solid body.</summary>
     public const int MaximumCandidateBudget = 32;
     /// <summary>The largest accepted resolved-contact degree per solid body.</summary>
     public const int MaximumPairsPerBody = 16;
     /// <summary>The largest accepted rigid-body substep ceiling.</summary>
     public const int MaximumRigidSubstepCeiling = 32;
+    /// <summary>The largest accepted ground-manifold sequential-impulse pass count.</summary>
+    public const int MaximumRigidManifoldIterations = 16;
+    /// <summary>The largest accepted rigid-pair extra-pass ceiling.</summary>
+    public const int MaximumRigidPairIterationCeiling = 16;
+    /// <summary>The largest accepted rigid-pair extra-pass work budget.</summary>
+    public const int MaximumRigidPairIterationBudget = 4096;
     /// <summary>The policy used when <c>collision.bodyContacts</c> is absent.</summary>
     public static WorldBodyContactPolicy Default { get; } = new();
 }
