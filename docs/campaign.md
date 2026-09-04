@@ -497,12 +497,15 @@ sequential-impulse passes rather than one witness point — the thing that
 keeps an upright body's centre of mass over its support polygon without an
 artificial extra damping term standing in for real contact geometry. A
 struck pair's own normal impulse propagates further than one pair-hop per
-tick too: the first broadphase pass's resolved rigid pairs are replayed for a
-few EXTRA passes over the same tick, the count itself derived down from an
-authored ceiling by how many pairs that first pass actually resolved, so a
-rack break or a falling line of dominoes spreads within the tick it happens
-rather than one body-hop per tick. Every one of these counts — manifold
-passes, replay passes, the replay ceiling itself — is an authored field
+tick too: the dynamic-contact solver runs a few EXTRA full broadphase-plus-
+narrowphase sweeps over the same tick — never a replay of only the pairs the
+first pass happened to find, since a pair's own positional split can move a
+body into a third one only a later sweep discovers — the count itself derived
+down from an authored ceiling by how many pairs that first pass routed
+through the rigid impulse path, so a rack break or a falling line of dominoes
+spreads within the tick it happens rather than one body-hop per tick. Every
+one of these counts — manifold passes, extra sweeps, the sweep ceiling itself
+— is an authored field
 echoed in `world.budget`, never a free per-tick knob. A pair's tangential
 response is a real Coulomb impulse
 through the two-body kernel, clamped to the friction coefficient against the

@@ -511,15 +511,18 @@ speed). Each rigid side's contact anchor is its own true witness point facing
 the other body (`Puck.Physics.FixedRigidWitness.Anchor`), never the body
 center and never a point on the conservative bounding sphere — real torque,
 not a torque-free strike, reaches both sides when both are rigid, exactly
-matching the true surface a struck capsule or box actually contacts. The
-first broadphase pass's own resolved rigid pairs are replayed — against each
-pair's now-current positions and velocities — for a derived-down count of
-EXTRA passes in the SAME tick (`RigidPairPassesThisTick`, capped by
-`collision.bodyContacts.rigidPairIterationCeiling` and derived down from
-`rigidPairIterationBudget` divided by the first pass's own resolved-pair
-count), so an impulse chain (a rack break, a falling domino line) crosses
-more than one pair-hop within the tick instead of propagating one body-hop
-per tick; both counts are echoed in `world.budget`'s `rigid` segment. A
+matching the true surface a struck capsule or box actually contacts. `ResolveDynamicContacts` runs a derived-down count of EXTRA full
+broadphase-plus-narrowphase sweeps in the SAME tick (`RigidPairPassesThisTick`,
+capped by `collision.bodyContacts.rigidPairIterationCeiling` and derived down
+from `rigidPairIterationBudget` divided by the first pass's own count of pairs
+routed through the rigid impulse path), each re-scanning every solid body's
+CURRENT (already corrected) position rather than replaying only the pairs the
+first pass happened to find — a rigid pair's own positional split can move a
+body into a third one only a later sweep discovers — so an impulse chain (a
+rack break, a falling domino line) crosses more than one pair-hop within the
+tick instead of propagating one body-hop per tick; an extra sweep that
+resolves nothing stops the run early, and both counts are echoed in
+`world.budget`'s `rigid` segment. A
 resolved
 pair's tangential (friction) impulse is likewise a real Coulomb impulse
 through the kernel — the full-stick impulse that would zero the relative

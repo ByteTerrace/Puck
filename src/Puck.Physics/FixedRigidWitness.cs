@@ -83,18 +83,27 @@ public static class FixedRigidWitness {
     // point and two.
     private static readonly FixedQ4816 LyingOnSideAlignmentCeiling = FixedQ4816.FromDouble(value: 0.70710678d);
 
+    // The fraction of a box's own half-extent span (HalfExtents.Length) two candidate corners' depths along the
+    // contact normal may differ by and still count as the same support point. A geometric classification threshold,
+    // not an authored tunable, on the same terms as LyingOnSideAlignmentCeiling above — scaled by the shape rather
+    // than a flat world-unit slack so it never swallows a thin body's own critical tipping range.
+    private static readonly FixedQ4816 DepthToleranceFraction = FixedQ4816.FromDouble(value: 0.0625d);
+
     /// <summary>Builds the resting support manifold for <paramref name="volume"/> against a near-horizontal contact
-    /// <paramref name="normal"/>: the box's own face closest to the surface (its four corners) or, for a capsule
-    /// lying on its side, its two end-sphere centres offset out to the surface — each anchor on the same terms as
-    /// <see cref="Anchor"/> (relative to the body's centre of mass, world axes). A standing capsule, a sphere, or any
-    /// other volume kind writes exactly the single point <see cref="Anchor"/> itself would compute — a manifold
-    /// caller can always read the returned count as "the manifold, one point or many" without a separate branch.</summary>
+    /// <paramref name="normal"/>: the box's own true support corners near its face closest to the surface (up to
+    /// four; fewer once the body is tilted enough that not every corner of that face is still the deepest — see
+    /// <see cref="DepthToleranceFraction"/>) or, for a capsule lying on its side, its two end-sphere centres offset
+    /// out to the surface — each anchor on the same terms as <see cref="Anchor"/> (relative to the body's centre of
+    /// mass, world axes). A standing capsule, a sphere, or any other volume kind writes exactly the single point
+    /// <see cref="Anchor"/> itself would compute — a manifold caller can always read the returned count as "the
+    /// manifold, one point or many" without a separate branch.</summary>
     /// <param name="volume">The body-local collider volume (already scaled for the body's live scale).</param>
     /// <param name="centerOffset">The collider's own centre-of-mass offset from the body root, body-local axes.</param>
     /// <param name="orientation">The body's current world orientation.</param>
     /// <param name="normal">The contact normal, world axes, pointing away from the surface toward the body.</param>
     /// <param name="anchors">Receives the manifold's anchors; must hold at least 4.</param>
-    /// <returns>The number of anchors written: 4 for a box, 2 for a side-lying capsule, 1 otherwise.</returns>
+    /// <returns>The number of anchors written: 1-4 for a box (fewer once tilted), 2 for a side-lying capsule, 1
+    /// otherwise.</returns>
     public static int SupportManifold(FixedBodyColliderVolume volume, FixedVector3 centerOffset, FixedQuaternion orientation, FixedVector3 normal, Span<FixedVector3> anchors) {
         var into = -normal;
         var localInto = orientation.RotateInverse(vector: into).Normalize();
@@ -130,13 +139,37 @@ public static class FixedRigidWitness {
                     corners[3] = new FixedVector3(X: -half.X, Y: -half.Y, Z: z);
                 }
 
+                // The four corners share the box's dominant-axis coordinate, so they are coplanar in the box's LOCAL
+                // frame; under any tilt they sit at different world depths along `into`, and only the deepest one
+                // (or, for a single-axis tilt, the deepest edge pair) is the true support point — the others are a
+                // torque-free rectangle only at exact rest. Keep candidates within DepthToleranceFraction of the
+                // deepest, scaled by the box's own half-extent span rather than a fixed world-unit slack (which
+                // would cover a thin body's whole tipping range — see DepthToleranceFraction).
+                Span<FixedVector3> candidates = stackalloc FixedVector3[4];
+                Span<FixedQ4816> depths = stackalloc FixedQ4816[4];
+                var deepest = FixedQ4816.MinValue;
+
                 for (var index = 0; (index < 4); index++) {
                     var local = (volume.Center + volume.Rotation.Rotate(vector: corners[index]));
+                    var anchor = orientation.Rotate(vector: (local - centerOffset));
+                    var depth = FixedVector3.Dot(left: anchor, right: into);
 
-                    anchors[index] = orientation.Rotate(vector: (local - centerOffset));
+                    candidates[index] = anchor;
+                    depths[index] = depth;
+                    deepest = FixedQ4816.Max(x: deepest, y: depth);
                 }
 
-                return 4;
+                var depthTolerance = (half.Length * DepthToleranceFraction);
+                var written = 0;
+
+                for (var index = 0; (index < 4); index++) {
+                    if ((deepest - depths[index]) <= depthTolerance) {
+                        anchors[written] = candidates[index];
+                        written++;
+                    }
+                }
+
+                return written;
             }
 
             case FixedBodyColliderKind.Capsule: {

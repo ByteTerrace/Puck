@@ -565,8 +565,12 @@ public sealed partial class WorldBody {
 
         // Continuous collision, by derived substep count: a fast ball must not tunnel through a thin wall at the
         // authority rate, so the travel this tick is bounded against an authored fraction of the collider's own
-        // bounding radius rather than a fixed knob.
-        var travel = (m_rigidVelocity.Length * tickSeconds);
+        // bounding radius rather than a fixed knob. "Travel" is the fastest a point on the collider's own SURFACE
+        // moves, not just the centre: angularVelocity·BoundingRadius is a spinning body's own surface speed from
+        // rotation alone, added to the centre's own linear speed — a light, thin body pivoting in place can carry
+        // tens of radians/second from a single ground-manifold impulse while its centre barely translates, and
+        // without this term its ground contact would re-resolve only once a whole tick's rotation late.
+        var travel = ((m_rigidVelocity.Length + SaturatingNonnegativeProduct(left: m_angularVelocity.Length, right: rigid.BoundingRadius)) * tickSeconds);
         var perSubstepBound = FixedQ4816.Max(
             x: (rigid.BoundingRadius * policy.SubstepTravelFraction),
             y: policy.SubstepMinimumTravel
@@ -857,25 +861,22 @@ public sealed partial class WorldBody {
     }
     /// <summary>Resolves a box or capsule rigid body's ground contact over its own support manifold
     /// (<see cref="FixedRigidWitness.SupportManifold"/> — up to four box corners, or two capsule cap points lying on
-    /// a side) instead of one witness point: a rising-edge restitution exactly as <see cref="ResolveRigidContact"/>
-    /// applies, then <paramref name="iterations"/> sequential-impulse passes distributing the normal impulse over
-    /// every manifold point that is still closing, then a per-point Coulomb friction impulse clamped to THAT point's
-    /// own accumulated normal impulse — never the manifold's total, so one heavily loaded corner cannot license slip
-    /// at a corner carrying none. Distributing the normal impulse this way is what keeps an upright body's centre of
-    /// mass over its support polygon without an artificial extra damping term: a body tipping past that polygon has
-    /// no manifold point left to close against, so nothing here holds it up.</summary>
+    /// a side, down to a single true corner once the body is tilted enough) instead of one CoM-anchored witness
+    /// point: <paramref name="iterations"/> sequential-impulse passes distribute a real NORMAL impulse — reflected by
+    /// restitution on a rising edge, targeting zero closing speed otherwise, on the same terms
+    /// <see cref="ResolveRigidContact"/>'s own restitution branch uses — over every manifold point still closing,
+    /// each carrying its own lever arm off the body's centre of mass, then a per-point Coulomb friction impulse
+    /// clamped to THAT point's own accumulated normal impulse — never the manifold's total, so one heavily loaded
+    /// corner cannot license slip at a corner carrying none. A normal impulse applied through an off-centre corner is
+    /// what produces real torque: an upright body's weight, reacting only against the corner(s) still under it, is
+    /// what keeps its centre of mass over its support polygon (or topples it once that polygon no longer reaches
+    /// under the centre) without an artificial extra damping term.</summary>
     private void ResolveRigidGroundManifold(FixedVector3 normal, FixedVector3 preVelocity, ref bool contacting, in FixedWorldRigid rigid, FixedBodyColliderVolume volume, int iterations) {
         var incoming = FixedVector3.Dot(
             left: preVelocity,
             right: normal
         );
-
-        if (
-            !contacting &&
-            (incoming < FixedQ4816.Zero)
-        ) {
-            m_rigidVelocity += (normal * (rigid.Restitution * -incoming));
-        }
+        var wasContacting = contacting;
 
         contacting = true;
 
@@ -892,20 +893,20 @@ public sealed partial class WorldBody {
             volume: volume
         );
 
-        if (pointCount <= 1) {
-            // A standing capsule (or a degenerate volume): the ordinary single-witness path already carries the
-            // torque this manifold exists to add, over the one point that actually touches.
-            ResolveRigidContact(
-                contacting: ref contacting,
-                normal: normal,
-                preVelocity: preVelocity,
-                rigid: in rigid,
-                volume: volume
-            );
-            return;
-        }
-
+        // AdvanceRigid's earlier field.ResolveSweep call already zeroed this substep's centre-of-mass velocity along
+        // `normal` (translational CCD, no lever arm). Reading m_rigidVelocity here would hand every manifold point
+        // that already-zeroed value and this loop would apply no impulse at all, so the target normal speed is
+        // derived from the substep's own pre-sweep velocity instead: reflected by restitution on a rising edge, the
+        // raw pre-sweep value otherwise (so gravity's next per-substep increment is what this loop cancels, not a
+        // value the sweep already discarded).
+        var targetNormalSpeed = (((!wasContacting) && (incoming < FixedQ4816.Zero))
+            ? (rigid.Restitution * -incoming)
+            : incoming
+        );
         var ballHandle = TwoBodyHandle();
+
+        ballHandle.LinearVelocity = (preVelocity + (normal * (targetNormalSpeed - incoming)));
+
         var groundHandle = GroundPhantomHandle();
         var refusals = 0;
         Span<long> accumulatedNormalImpulseRaw = stackalloc long[4];

@@ -600,10 +600,15 @@ public sealed partial class WorldPopulation {
     /// <summary>
     /// Resolves active local body pairs after every body has integrated. Pair order is deterministic sweep order with
     /// population index as the complete tie-breaker; each body's own authority remains its sole pose writer and an
-    /// overlap is shared equally between the pair. The pairs this FIRST pass resolves through the rigid impulse path
-    /// are then replayed against their own now-current positions/velocities for a derived-down count of EXTRA passes
-    /// (<see cref="RigidPairPassesThisTick"/>, <see cref="WorldBodyContactPolicy.RigidPairIterationCeiling"/>), so an
-    /// impulse chain (a rack break, a falling domino line) crosses more than one pair-hop within the same tick.
+    /// overlap is shared equally between the pair. The FIRST pass's own resolved rigid-pair count derives how many
+    /// EXTRA full sweeps run (<see cref="RigidPairPassesThisTick"/>, <see cref="WorldBodyContactPolicy.RigidPairIterationCeiling"/>):
+    /// every pass re-runs broadphase and narrowphase from scratch, over the SAME bodies' now-current positions and
+    /// velocities, so a pair a strike's own positional correction newly brings into contact (the next ball down a
+    /// rack, the next domino down a falling line) is discovered and resolved in a LATER pass of the same tick,
+    /// rather than only ever replaying the pairs the first pass happened to find — a fixed replay set can never grow
+    /// past what one broadphase saw before any impulse moved anything. An extra pass with zero rigid pairs to
+    /// resolve stops the run early rather than spending the rest of the authored ceiling re-confirming a settled
+    /// population.
     /// </summary>
     public void ResolveDynamicContacts() {
         var two = FixedQ4816.FromInteger(value: 2L);
@@ -637,152 +642,130 @@ public sealed partial class WorldPopulation {
             );
         }
 
-        // Introspective sort keeps a badly reshuffled few-thousand-body frame O(n log n), while the body index is a
-        // complete tie-breaker that makes its result deterministic. The reused array keeps this allocation-free.
-        Array.Sort(array: contacts, index: 0, length: count);
-
         DynamicContactPotentialPairs = ((count * (count - 1)) / 2);
         DynamicContactCandidates = 0;
         DynamicContactLimitedBodies = 0;
         DynamicContactNarrowPairs = 0;
         DynamicContactResolvedPairs = 0;
         RigidPairResolvedCount = 0;
-        Array.Clear(array: m_dynamicContactDegrees);
+        RigidPairPassesThisTick = 0;
 
-        var replay = m_rigidPairReplay;
-        var replayCount = 0;
+        // One full broadphase-plus-narrowphase sweep over the CURRENT contacts[]/count captured above: reused,
+        // unmodified, for the first pass and every extra pass, since a rigid pair's own positional correction can
+        // move a body into a THIRD one a later pass needs to see. The scratch spans are parameters, not captures —
+        // a local function cannot close over a ref struct. Returns candidate pairs routed to the rigid impulse path
+        // (used only to derive the extra-pass count below) — RigidPairResolvedCount is ResolveRigidPairContact's own
+        // to increment, one call at a time, never assigned here directly.
+        int RunSweep(Span<FixedBodyColliderVolume> leftScratch, Span<FixedBodyColliderVolume> rightScratch) {
+            var rigidResolvedThisPass = 0;
 
-        for (var leftOrdinal = 0; (leftOrdinal < count); leftOrdinal++) {
-            var leftContact = contacts[leftOrdinal];
-            var leftIndex = leftContact.Index;
-            var left = m_entries[leftIndex].Body!;
-            var leftCollider = left.Collider!.Value;
-            if (m_dynamicContactDegrees[leftIndex] >= m_bodyContactPolicy.MaxPairsPerBody) {
-                continue;
-            }
+            // Introspective sort keeps a badly reshuffled few-thousand-body frame O(n log n), while the body index
+            // is a complete tie-breaker that makes its result deterministic. Re-sorting every pass keeps the sweep
+            // valid after a previous pass's own positional corrections moved bodies along X.
+            Array.Sort(array: contacts, index: 0, length: count);
+            Array.Clear(array: m_dynamicContactDegrees);
 
-            var inspected = 0;
-            for (var rightOrdinal = (leftOrdinal + 1); ((rightOrdinal < count) && (contacts[rightOrdinal].MinimumX <= leftContact.MaximumX)); rightOrdinal++) {
-                if (inspected >= m_bodyContactPolicy.CandidateBudget) {
-                    DynamicContactLimitedBodies++;
-                    break;
-                }
-                inspected++;
-                DynamicContactCandidates++;
-                var rightContact = contacts[rightOrdinal];
-                var rightIndex = rightContact.Index;
-                if (m_dynamicContactDegrees[rightIndex] >= m_bodyContactPolicy.MaxPairsPerBody) {
-                    continue;
-                }
-                var right = m_entries[rightIndex].Body!;
-                var rightCollider = right.Collider!.Value;
-                var radius = (leftContact.Radius + rightContact.Radius);
-                var delta = (left.FixedPosition - right.FixedPosition);
-
-                if (
-                    (FixedQ4816.Abs(value: delta.Y) > radius) ||
-                    (FixedQ4816.Abs(value: delta.Z) > radius)
-                ) {
+            for (var leftOrdinal = 0; (leftOrdinal < count); leftOrdinal++) {
+                var leftContact = contacts[leftOrdinal];
+                var leftIndex = leftContact.Index;
+                var left = m_entries[leftIndex].Body!;
+                var leftCollider = left.Collider!.Value;
+                if (m_dynamicContactDegrees[leftIndex] >= m_bodyContactPolicy.MaxPairsPerBody) {
                     continue;
                 }
 
-                DynamicContactNarrowPairs++;
-
-                if (FixedDynamicBodyContacts.TryCorrection(
-                    leftPosition: left.FixedPosition,
-                    leftOrientation: left.FixedOrientation,
-                    leftVolumes: left.ScaledColliderVolumes(
-                        volumes: leftCollider.Volumes,
-                        scratch: leftScratch
-                    ),
-                    rightPosition: right.FixedPosition,
-                    rightOrientation: right.FixedOrientation,
-                    rightVolumes: right.ScaledColliderVolumes(
-                        volumes: rightCollider.Volumes,
-                        scratch: rightScratch
-                    ),
-                    tieBreaker: leftIndex ^ rightIndex,
-                    correction: out var correction
-                )) {
-                    var pairIsRigid = (left.IsRigid || right.IsRigid);
-
-                    if (pairIsRigid) {
-                        ResolveRigidPairContact(
-                            left: left,
-                            right: right,
-                            correction: correction
-                        );
-
-                        if (replayCount < replay.Length) {
-                            replay[replayCount++] = (leftIndex, rightIndex);
-                        }
-                    } else {
-                        var shared = (correction / two);
-
-                        left.ApplyDynamicContact(correction: shared);
-                        right.ApplyDynamicContact(correction: -shared);
-                    }
-                    m_dynamicContactDegrees[leftIndex]++;
-                    m_dynamicContactDegrees[rightIndex]++;
-                    DynamicContactResolvedPairs++;
-                    if (m_dynamicContactDegrees[leftIndex] >= m_bodyContactPolicy.MaxPairsPerBody) {
+                var inspected = 0;
+                for (var rightOrdinal = (leftOrdinal + 1); ((rightOrdinal < count) && (contacts[rightOrdinal].MinimumX <= leftContact.MaximumX)); rightOrdinal++) {
+                    if (inspected >= m_bodyContactPolicy.CandidateBudget) {
+                        DynamicContactLimitedBodies++;
                         break;
                     }
+                    inspected++;
+                    DynamicContactCandidates++;
+                    var rightContact = contacts[rightOrdinal];
+                    var rightIndex = rightContact.Index;
+                    if (m_dynamicContactDegrees[rightIndex] >= m_bodyContactPolicy.MaxPairsPerBody) {
+                        continue;
+                    }
+                    var right = m_entries[rightIndex].Body!;
+                    var rightCollider = right.Collider!.Value;
+                    var radius = (leftContact.Radius + rightContact.Radius);
+                    var delta = (left.FixedPosition - right.FixedPosition);
+
+                    if (
+                        (FixedQ4816.Abs(value: delta.Y) > radius) ||
+                        (FixedQ4816.Abs(value: delta.Z) > radius)
+                    ) {
+                        continue;
+                    }
+
+                    DynamicContactNarrowPairs++;
+
+                    if (FixedDynamicBodyContacts.TryCorrection(
+                        leftPosition: left.FixedPosition,
+                        leftOrientation: left.FixedOrientation,
+                        leftVolumes: left.ScaledColliderVolumes(
+                            volumes: leftCollider.Volumes,
+                            scratch: leftScratch
+                        ),
+                        rightPosition: right.FixedPosition,
+                        rightOrientation: right.FixedOrientation,
+                        rightVolumes: right.ScaledColliderVolumes(
+                            volumes: rightCollider.Volumes,
+                            scratch: rightScratch
+                        ),
+                        tieBreaker: leftIndex ^ rightIndex,
+                        correction: out var correction
+                    )) {
+                        var pairIsRigid = (left.IsRigid || right.IsRigid);
+
+                        if (pairIsRigid) {
+                            ResolveRigidPairContact(
+                                left: left,
+                                right: right,
+                                correction: correction
+                            );
+                            rigidResolvedThisPass++;
+                        } else {
+                            var shared = (correction / two);
+
+                            left.ApplyDynamicContact(correction: shared);
+                            right.ApplyDynamicContact(correction: -shared);
+                        }
+                        m_dynamicContactDegrees[leftIndex]++;
+                        m_dynamicContactDegrees[rightIndex]++;
+                        DynamicContactResolvedPairs++;
+                        if (m_dynamicContactDegrees[leftIndex] >= m_bodyContactPolicy.MaxPairsPerBody) {
+                            break;
+                        }
+                    }
                 }
             }
+
+            return rigidResolvedThisPass;
         }
+
+        var firstPassRigidResolved = RunSweep(leftScratch, rightScratch);
 
         RigidPairPassesThisTick = 1;
 
-        // The first pass's own resolved rigid-pair count derives how many EXTRA passes replay: a lightly loaded tick
+        // The first pass's own resolved rigid-pair count derives how many EXTRA sweeps run: a lightly loaded tick
         // (few clustered pairs — a rack break, a falling domino line) gets every authored pass, so the impulse chain
         // crosses more than one pair-hop within THIS tick instead of propagating one body per tick; a heavily loaded
-        // one is bounded by RigidPairIterationBudget so a crowded tick's total replay work stays capped.
+        // one is bounded by RigidPairIterationBudget so a crowded tick's total extra-sweep work stays capped.
         var extraIterations = (Math.Clamp(
-            value: (m_bodyContactPolicy.RigidPairIterationBudget / Math.Max(val1: 1, val2: replayCount)),
+            value: (m_bodyContactPolicy.RigidPairIterationBudget / Math.Max(val1: 1, val2: firstPassRigidResolved)),
             min: 1,
             max: Math.Max(val1: 1, val2: m_bodyContactPolicy.RigidPairIterationCeiling)
         ) - 1);
 
-        for (var extra = 0; ((extra < extraIterations) && (replayCount > 0)); extra++) {
+        for (var extra = 0; ((extra < extraIterations) && (firstPassRigidResolved > 0)); extra++) {
             RigidPairPassesThisTick++;
 
-            for (var replayIndex = 0; (replayIndex < replayCount); replayIndex++) {
-                var (leftIndex, rightIndex) = replay[replayIndex];
+            var thisPassRigidResolved = RunSweep(leftScratch, rightScratch);
 
-                if (
-                    !m_entries[leftIndex].Active ||
-                    !m_entries[rightIndex].Active ||
-                    (m_entries[leftIndex].Body is not { Collider: { } leftCollider } left) ||
-                    (m_entries[rightIndex].Body is not { Collider: { } rightCollider } right) ||
-                    !(left.IsRigid || right.IsRigid)
-                ) {
-                    continue;
-                }
-
-                if (FixedDynamicBodyContacts.TryCorrection(
-                    leftPosition: left.FixedPosition,
-                    leftOrientation: left.FixedOrientation,
-                    leftVolumes: left.ScaledColliderVolumes(
-                        volumes: leftCollider.Volumes,
-                        scratch: leftScratch
-                    ),
-                    rightPosition: right.FixedPosition,
-                    rightOrientation: right.FixedOrientation,
-                    rightVolumes: right.ScaledColliderVolumes(
-                        volumes: rightCollider.Volumes,
-                        scratch: rightScratch
-                    ),
-                    tieBreaker: leftIndex ^ rightIndex,
-                    correction: out var correction
-                )) {
-                    ResolveRigidPairContact(
-                        left: left,
-                        right: right,
-                        correction: correction
-                    );
-                    DynamicContactResolvedPairs++;
-                }
+            if (thisPassRigidResolved <= 0) {
+                break;
             }
         }
     }

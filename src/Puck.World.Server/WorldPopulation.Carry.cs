@@ -215,7 +215,17 @@ public sealed partial class WorldPopulation {
             var shared = (correction / half);
 
             target.ApplyRigidPositionalCorrection(correction: shared);
-            other.ApplyDynamicContact(correction: -shared);
+
+            // A rigid other body must wake through the SAME door WorldPopulation.Rigid.cs's own pair path uses
+            // (ApplyRigidPositionalCorrection) — ApplyDynamicContact is the locomotion body's own planar/vertical-
+            // velocity channels, which a rigid body does not read, so a push through it would move the body's pose
+            // while leaving world.rigid and $physics:quiescent reporting it resting at zero velocity.
+            if (other.IsRigid) {
+                other.ApplyRigidPositionalCorrection(correction: -shared);
+            } else {
+                other.ApplyDynamicContact(correction: -shared);
+            }
+
             carrier.ApplyDynamicContact(correction: shared);
         }
     }

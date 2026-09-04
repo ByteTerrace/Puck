@@ -606,7 +606,21 @@ an authored `rigidSubstepTravelFraction` (default 0.5) — the count itself is
 derived per body per tick from speed and collider size, never authored
 directly. `rigidRestLinearSpeed`/`rigidRestAngularSpeed`/`rigidRestHoldSeconds`
 (defaults 0.05/0.1/0.25) are the thresholds and hold window a grounded rigid
-body's `Resting` fact latches against.
+body's `Resting` fact latches against. `rigidManifoldIterations` (default 4,
+maximum 16) bounds the sequential-impulse passes a box or capsule's own ground
+support manifold (up to four box corners, or two capsule cap points, fewer
+once tilted enough — `FixedRigidWitness.SupportManifold`) resolves over each
+substep, so a normal impulse off-centre carries torque instead of only
+friction. `rigidPairRestitutionSpeed` (default 0.05) floors a rigid-vs-rigid
+pair's restitution at zero below that closing speed, so two resting bodies do
+not micro-bounce apart every tick they are found touching.
+`rigidPairIterationCeiling`/`rigidPairIterationBudget` (defaults 4/64) bound
+how many EXTRA full broadphase-plus-narrowphase sweeps `ResolveDynamicContacts`
+runs after its first pass in one tick — the count actually run is derived DOWN
+from the ceiling by the budget divided by how many pairs the first pass routed
+through the rigid impulse path, so an impulse chain (a rack break, a falling
+domino line) can cross more than one pair-hop within the same tick instead of
+propagating one body-hop per tick.
 
 A kit's `rigid` facet (`mass`, `restitution`, `friction`, `rollingFriction`,
 `linearDamping`, `angularDamping`) hands its bodies to the rigid solver

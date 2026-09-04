@@ -94,11 +94,12 @@ public sealed partial class WorldPopulation {
     /// <summary>Number of overlaps resolved by the most recently completed dynamic-body solve, summed over every
     /// pass <see cref="RigidPairPassesThisTick"/> counts.</summary>
     public int DynamicContactResolvedPairs { get; private set; }
-    /// <summary>Number of broadphase-plus-replay passes the most recently completed dynamic-body solve actually ran:
-    /// one full broadphase pass, plus up to <c>collision.bodyContacts.rigidPairIterationCeiling - 1</c> replay passes
-    /// over the rigid pairs that first pass resolved — the count is derived DOWN from that ceiling by how many pairs
-    /// the first pass resolved (<c>collision.bodyContacts.rigidPairIterationBudget</c> divided by that count), so a
-    /// lightly loaded tick gets every authored pass and a crowded one stays bounded.</summary>
+    /// <summary>Number of full broadphase-plus-narrowphase sweeps the most recently completed dynamic-body solve
+    /// actually ran: one first pass, plus up to <c>collision.bodyContacts.rigidPairIterationCeiling - 1</c> extra
+    /// sweeps over the SAME bodies' now-current positions — the count is derived DOWN from that ceiling by how many
+    /// pairs the first pass resolved through the rigid impulse path (<c>collision.bodyContacts.rigidPairIterationBudget</c>
+    /// divided by that count), so a lightly loaded tick gets every authored pass and a crowded one stays bounded; an
+    /// extra sweep that resolves nothing stops the run early.</summary>
     public int RigidPairPassesThisTick { get; private set; }
     /// <summary>The <c>generate</c> effect firings staged by the most recently completed tick's advance — drained and
     /// enqueued through the ordinary mutation pipeline by <c>WorldServer.Step</c>, mirroring
@@ -151,10 +152,6 @@ public sealed partial class WorldPopulation {
     // preserves allocation-free ticks and sizes the storage to the authored census rather than the global ceiling.
     private readonly DynamicContactBody[] m_dynamicContactBodies;
     private readonly byte[] m_dynamicContactDegrees;
-    // The rigid pairs the tick's FIRST broadphase pass actually resolved, replayed for its own derived-down extra
-    // passes (see ResolveDynamicContacts) so an impulse crosses more than one pair-hop within the tick — capacity-
-    // bounded rather than grown, so an extreme crowd degrades by replaying fewer pairs rather than allocating.
-    private readonly (int Left, int Right)[] m_rigidPairReplay;
     // Active carry relationships, sorted by carrier index. The backing store is population-sized and reused so the
     // per-tick attachment pass visits only actual relationships and allocates nothing; it never scans Capacity.
     private readonly CarryRelationship[] m_activeCarries;
@@ -296,7 +293,6 @@ public sealed partial class WorldPopulation {
         m_entries = new Entry[definition.Population.Capacity];
         m_dynamicContactBodies = new DynamicContactBody[m_entries.Length];
         m_dynamicContactDegrees = new byte[m_entries.Length];
-        m_rigidPairReplay = new (int Left, int Right)[m_entries.Length];
         m_activeCarries = new CarryRelationship[m_entries.Length];
 
         m_seatSpawns = CompileSeatSpawns(
