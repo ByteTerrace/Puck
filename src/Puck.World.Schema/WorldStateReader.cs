@@ -332,7 +332,14 @@ public static class WorldStateReader {
         return true;
     }
 
-    private static void ReadCell(WorldStateRow row, string? key, ulong tick, out long? rawValue, out string? text) {
+    /// <summary>Reads one cell of an already resolved row: the live raw value as of <paramref name="tick"/> under the
+    /// row's value-over-time trait, or <see langword="null"/> when the key names no cell.</summary>
+    /// <param name="row">The resolved row.</param>
+    /// <param name="key">The cell key, or <see langword="null"/> for the slot cell.</param>
+    /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="rawValue">The addressed live raw value, or <see langword="null"/> when absent.</param>
+    /// <param name="text">The addressed text payload, or <see langword="null"/>.</param>
+    public static void ReadCell(WorldStateRow row, string? key, ulong tick, out long? rawValue, out string? text) {
         rawValue = null;
         text = null;
         var target = (key ?? WorldStateRow.SlotKey.Value);

@@ -28,16 +28,19 @@ public sealed partial class WorldServer {
         return Math.Min(ceiling, WorldPatternCapacity.MaxWord);
     }
 
-    // $match: — the word is read at this tick through the same (row, key) seam every other state read uses, so an
-    // advancing attribute cell reads its live value. The verdict is 1 or 0 and nothing else: every source fits the
-    // word buffer, and a board origin that names no cell reads the empty word, which the pattern decides like any
-    // other.
+    // $match: — the word is read at this tick through compiled row handles (no name scan) and the same per-cell
+    // read every other state read uses, so an advancing attribute cell reads its live value. The verdict is 1 or 0
+    // and nothing else: every source fits the word buffer, and a board origin that names no cell reads the empty
+    // word, which the pattern decides like any other.
     private long[] m_patternWord = [];
 
     private long ReadPatternFact(CompiledWorldOperand operand, ulong tick) {
-        if (!m_patterns.TryGet(name: operand.Pattern!, pattern: out var pattern) ||
-            WorldDefinitionRows.FindStateRow(rows: m_definition.State, name: operand.Row!) is not { } row) {
-            throw new InvalidOperationException($"pattern operand '{operand.Pattern}' over '{operand.Row}' outlived the compiled rules");
+        if (!m_patterns.TryGet(name: operand.Pattern!, pattern: out var pattern)) {
+            throw new InvalidOperationException($"pattern operand '{operand.Pattern}' outlived the compiled rules");
+        }
+
+        if (!WorldStateReader.TryReadHandle(definition: m_definition, catalog: m_definition.StateCatalog, handle: operand.StateHandle, key: null, tick: tick, row: out var row, rawValue: out _, text: out _)) {
+            throw new InvalidOperationException($"pattern operand over '{operand.Row}' outlived its compiled row handle");
         }
 
         Span<long> word = m_patternWord;
@@ -66,18 +69,15 @@ public sealed partial class WorldServer {
                 }
             }
         } else {
-            var sourceRow = ((row.Zone is not null) ? operand.FilterRow! : row.Name.Value);
+            var source = row;
+
+            if (row.Zone is not null && !WorldStateReader.TryReadHandle(definition: m_definition, catalog: m_definition.StateCatalog, handle: operand.FilterHandle, key: null, tick: tick, row: out source, rawValue: out _, text: out _)) {
+                throw new InvalidOperationException($"pattern attribute '{operand.FilterRow}' outlived its compiled row handle");
+            }
 
             foreach (var cell in (row.Cells ?? [])) {
-                word[length++] = (WorldStateReader.TryRead(
-                    definition: m_definition,
-                    rowName: sourceRow,
-                    key: cell.Key.Value,
-                    tick: tick,
-                    row: out _,
-                    rawValue: out var raw,
-                    text: out _
-                ) ? (raw ?? 0L) : 0L);
+                WorldStateReader.ReadCell(row: source, key: cell.Key.Value, tick: tick, rawValue: out var raw, text: out _);
+                word[length++] = raw ?? 0L;
             }
         }
 

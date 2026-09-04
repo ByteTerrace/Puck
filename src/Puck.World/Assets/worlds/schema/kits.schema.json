@@ -128,7 +128,7 @@
                   ],
                   "properties": {
                     "when": {
-                      "$ref": "./common.schema.json#/$defs/ActionPredicateNullable",
+                      "$ref": "./common.schema.json#/$defs/ActionPredicateNullable2",
                       "description": "The gate that must hold for this row to win, or null for the unconditional row (permitted only as the final row). The gate reuses the action-lane predicate vocabulary, admitting body-fact kinds (now/recently/all/any/not) and held (a composition channel\u0027s own live read) \u2014 never a per-body action-state predicate.",
                       "default": null
                     },
@@ -618,7 +618,7 @@
                         }
                       },
                       "gate": {
-                        "$ref": "./common.schema.json#/$defs/ActionPredicateNullable",
+                        "$ref": "./common.schema.json#/$defs/ActionPredicateNullable2",
                         "description": "An additional predicate that must hold beside Fact, or null for none.",
                         "default": null
                       },

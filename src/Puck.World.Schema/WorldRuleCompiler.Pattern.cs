@@ -56,6 +56,8 @@ public static partial class WorldRuleCompiler {
         if (kind != pattern.Kind) {
             throw Invalid($"pattern '{pattern.Name}' reads kind={pattern.Kind} but the source word is kind={kind}");
         }
-        return new(new CompiledWorldOperand(WorldRuleFactKind.Pattern, tokens[2], key, KeyFrom: keyFrom, Board: board, FilterRow: attribute, Pattern: tokens[1], ValueKind: CellKind.Int), CellKind.Int, name);
+        return new(new CompiledWorldOperand(WorldRuleFactKind.Pattern, tokens[2], key, KeyFrom: keyFrom, Board: board, FilterRow: attribute, Pattern: tokens[1], ValueKind: CellKind.Int,
+            StateHandle: ResolveWorldStateHandle(definition: definition, name: tokens[2]),
+            FilterHandle: (attribute is null) ? default : ResolveWorldStateHandle(definition: definition, name: attribute)), CellKind.Int, name);
     }
 }

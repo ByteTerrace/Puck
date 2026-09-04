@@ -3412,6 +3412,21 @@
       ],
       "additionalProperties": false
     },
+    "ActionPredicateAnyNonNullable": {
+      "description": "At least one inner predicate holds (disjunction). The list must be non-empty.",
+      "properties": {
+        "$type": {
+          "const": "any"
+        },
+        "predicates": {
+          "$ref": "#/$defs/ActionPredicateList"
+        }
+      },
+      "required": [
+        "predicates"
+      ],
+      "additionalProperties": false
+    },
     "ActionPredicateNot": {
       "description": "Inverts one predicate.",
       "properties": {
@@ -3469,7 +3484,7 @@
           "$ref": "#/$defs/ActionPredicateAll"
         },
         {
-          "$ref": "#/$defs/ActionPredicateAny"
+          "$ref": "#/$defs/ActionPredicateAnyNonNullable"
         },
         {
           "$ref": "#/$defs/ActionPredicateNot"
@@ -3540,24 +3555,12 @@
         "$ref": "#/$defs/ActionPredicateNullable"
       }
     },
-    "ActionPredicateAnyNonNullable": {
-      "description": "At least one inner predicate holds (disjunction). The list must be non-empty.",
-      "properties": {
-        "$type": {
-          "const": "any"
-        },
-        "predicates": {
-          "$ref": "#/$defs/ActionPredicateListNonNullable"
-        }
-      },
-      "required": [
-        "predicates"
-      ],
-      "additionalProperties": false
-    },
-    "ActionPredicateNonNullable": {
+    "ActionPredicateNullable2": {
       "description": "A data-composable gate over body facts and named action state. A trigger fires only while its gate holds. The $type string is the JSON discriminator, the same convention every polymorphic row family uses; a new predicate kind is a new derived record plus its JsonDerivedTypeAttribute line.",
-      "type": "object",
+      "type": [
+        "object",
+        "null"
+      ],
       "required": [
         "$type"
       ],
@@ -3581,7 +3584,7 @@
           "$ref": "#/$defs/ActionPredicateAll"
         },
         {
-          "$ref": "#/$defs/ActionPredicateAnyNonNullable"
+          "$ref": "#/$defs/ActionPredicateAny"
         },
         {
           "$ref": "#/$defs/ActionPredicateNot"
@@ -6152,7 +6155,7 @@
           "description": "The effects applied on fire, in order."
         },
         "gate": {
-          "$ref": "#/$defs/ActionPredicateNullable",
+          "$ref": "#/$defs/ActionPredicateNullable2",
           "description": "The predicate that must hold to fire, or null for always.",
           "default": null
         },

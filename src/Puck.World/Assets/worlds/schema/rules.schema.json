@@ -22,7 +22,7 @@
         }
       },
       "gate": {
-        "$ref": "./common.schema.json#/$defs/ActionPredicateNullable",
+        "$ref": "./common.schema.json#/$defs/ActionPredicateNullable2",
         "description": "The predicate that must hold, or null for always.",
         "default": null
       },
@@ -75,7 +75,7 @@
                   }
                 },
                 "gate": {
-                  "$ref": "./common.schema.json#/$defs/ActionPredicateNullable",
+                  "$ref": "./common.schema.json#/$defs/ActionPredicateNullable2",
                   "description": "Eligibility predicate, or null for always eligible.",
                   "default": null
                 },
@@ -169,7 +169,7 @@
             "default": 0
           },
           "interrupt": {
-            "$ref": "./common.schema.json#/$defs/ActionPredicateNullable",
+            "$ref": "./common.schema.json#/$defs/ActionPredicateNullable2",
             "description": "An optional rising-edge predicate that bypasses period and commitment. Losing eligibility also bypasses both.",
             "default": null
           },
