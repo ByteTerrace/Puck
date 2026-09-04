@@ -403,6 +403,12 @@ public sealed partial class WorldPopulation {
                  observed.Generation > checkpoint.Generations[observed.Index])) {
                 throw new InvalidOperationException("population checkpoint carries an invalid flock target observation.");
             }
+            if (captured.Residue.Carrying < -1 || captured.Residue.Carrying >= Capacity || captured.Residue.Carrying == captured.Index) {
+                throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} carries an invalid carry index {captured.Residue.Carrying}.");
+            }
+            if (captured.Residue.CarriedBy < -1 || captured.Residue.CarriedBy >= Capacity || captured.Residue.CarriedBy == captured.Index) {
+                throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} names an invalid carrier index {captured.Residue.CarriedBy}.");
+            }
             ValidateAutonomyCheckpoint(captured.Autonomy, m_kits[captured.KitIndex]);
             ValidateNavigationCheckpoint(navigation: captured.Navigation);
         }

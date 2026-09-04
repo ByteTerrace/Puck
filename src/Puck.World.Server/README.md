@@ -578,11 +578,16 @@ live-scaled `RigidMass` exceeds the carrier's live-scaled ceiling
 `ScaleRigid` derives against). A carried body's own `Advance` is a no-op —
 its rigid integration is suspended, never solved — and
 `WorldPopulation.UpdateCarriedBodies` (run once per tick, after both advance
-passes, so it reads the carrier's FRESH pose) derives its position and
-orientation from `carrier.root + carrier.orientation·Offset` and its rigid
-velocity from the carrier's own `ApproximateWorldVelocity`; a carried body
-is excluded from `ResolveDynamicContacts`' broadphase and from
-`$physics:quiescent`'s census (`CarriedBy: null` on both). `body.release`
+passes, so it reads the carrier's pose from after this tick's movement) derives
+its position and orientation from `carrier.root + carrier.orientation·Offset`
+and its rigid velocity from the carrier's own `ApproximateWorldVelocity`; the
+sweep runs before `ResolveDynamicContacts`, so when the carrier itself is
+depenetrated from another dynamic body this same tick, the passenger's pose
+was derived from the carrier's pre-depenetration position — a one-tick lag
+bounded and deterministic like every other derived-state ordering, corrected
+the following tick. A carried body is excluded from `ResolveDynamicContacts`'
+broadphase and from `$physics:quiescent`'s census (`CarriedBy: null` on both).
+`body.release`
 hands the target back to the solver with the carrier's own current
 velocity rather than snapping it to rest. `Carrying`/`CarriedBy` are `int?`
 population indices (`-1` raw, on the same "never a boolean fact" terms

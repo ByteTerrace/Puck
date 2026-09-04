@@ -547,7 +547,8 @@ rendering: an ordinary board-typed row nothing in the engine writes, proved
 from the console (`world.state.cell.set plan <cell> 1`) rather than built.
 Boards are a primitive the catalog reuses (checkers, go, cards on a table),
 never a chess-specific engine feature, and a topology is carried by at most
-one placement — the future carry primitive's "one placement/body" shape. See
+one placement. The shipped `body.carry` facet is a separate primitive: it
+picks up a rigid body, never a placement or board. See
 the [schema reference](../src/Puck.World.Schema/README.md#discrete-boards-cards-and-turns)
 and `world.tabletop`'s console read-back.
 

@@ -420,10 +420,13 @@ reads every piece's `$board:cellOf` unconditionally, then one PER-PIECE
 piece's own cell — a piece whose body has left the frame (captured, knocked
 clear) refuses only its own write; it never costs its neighbours theirs, since
 a rule's own contiguous run of state effects preflights and applies as one
-atomic candidate. A `body.pose`-driven proof must pair the pose with a
-negligible `body.impulse` wake — a bare pose is a kinematic write and never
-itself crosses `$physics:quiescent`'s Edge, so nothing re-derives from it
-alone. Wake a piece along Y: the `piece` kit's own high rolling/Coulomb
+atomic candidate. A `body.pose`-driven proof at the piece's resting height must
+pair the pose with a negligible `body.impulse` wake — a bare pose that leaves
+the piece on its support is a kinematic write that does not disturb the rigid
+census, so nothing re-derives from it alone; a pose that drops the piece onto
+or above its support un-rests it and crosses `$physics:quiescent`'s Edge on
+settle with no impulse at all. Wake a piece along Y: the `piece` kit's own high
+rolling/Coulomb
 friction couples a horizontal wake into spin (the ball's known
 rolling-friction overshoot, here on a lighter body), so the unsettled window
 can run long enough to drift the piece across a cell boundary before it

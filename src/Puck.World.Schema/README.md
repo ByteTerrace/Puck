@@ -180,8 +180,9 @@ path. `topology` names the anchored Grid; `occupancy` names the board row the
 engine reads back; `turn`/`verdict`/`move`/`plan` are author-named convenience
 rows a `world.tabletop` read-back echoes together, never engine-interpreted —
 any tabletop game names whichever it needs. A topology is carried by at most
-one placement (validated), the future carry primitive's "one placement/body"
-requirement. The bridge from RIGID BODIES to this row is authored, not built
+one placement (validated). The shipped `body.carry` facet (`WorldCarry`) is a
+separate primitive: it picks up a rigid body, never a placement or board. The
+bridge from rigid bodies to this row is authored, not built
 in: a world rule reads each piece's `$board:cellOf:<occupancy row>:body:<n>`
 on `$physics:quiescent`'s rising edge (a settle, never every tick) and writes
 its code into the occupancy row at that resolved cell — see the garden's own
@@ -201,10 +202,13 @@ needs N separately-authored derive rules, one per piece, never a single rule
 spanning every piece: one piece's body leaving the frame (captured, knocked
 clear) refuses only its own write when it owns its own rule, but rejects
 every sibling piece's write too when they share one. A `body.pose` reposition
-is a kinematic write and never itself crosses `$physics:quiescent`'s Edge —
-pair it with a negligible `body.impulse` (or drive the whole move by impulse)
-to trigger a derive; a bare pose with nothing else disturbing the rigid
-census leaves the board unrevised. Wake a piece along its own up axis where
+is a kinematic write: one that leaves the piece resting on its support (its
+authored resting height) does not itself disturb the rigid census and leaves
+the board unrevised, while one that drops the piece onto or above its
+support un-rests it and crosses `$physics:quiescent`'s Edge on settle with no
+impulse needed at all — pair a resting-height pose with a negligible
+`body.impulse` (or drive the whole move by impulse) to trigger a derive
+without relying on drop height. Wake a piece along its own up axis where
 the kit's rigid friction is high — a horizontal wake couples into spin under
 Coulomb/rolling friction and can drift the piece across a cell boundary
 before the census re-quiesces. The quiescent census is population-wide: an

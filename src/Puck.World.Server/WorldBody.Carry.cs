@@ -35,7 +35,7 @@ public sealed partial class WorldBody {
             return false;
         }
         if (!target.IsRigid) {
-            reason = "carries no rigid kit facet";
+            reason = $"body:{targetIndex} carries no rigid kit facet";
             return false;
         }
         if (targetIndex == selfIndex) {
@@ -46,8 +46,16 @@ public sealed partial class WorldBody {
             reason = $"already carrying body:{m_carryingIndex}";
             return false;
         }
+        if (m_carriedByIndex >= 0) {
+            reason = $"body:{selfIndex} is already carried by body:{m_carriedByIndex}";
+            return false;
+        }
         if (target.m_carriedByIndex >= 0) {
             reason = $"already carried by body:{target.m_carriedByIndex}";
+            return false;
+        }
+        if (target.m_carryingIndex >= 0) {
+            reason = $"body:{targetIndex} is already carrying body:{target.m_carryingIndex}";
             return false;
         }
 

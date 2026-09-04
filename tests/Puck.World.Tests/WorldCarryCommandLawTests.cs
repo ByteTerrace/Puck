@@ -82,6 +82,95 @@ public sealed class WorldCarryCommandLawTests {
             ],
         };
     }
+    // Inhabitants claim the highest free body slot downward in placement order, so with two extra placements the
+    // first-authored placement (dual) lands at the top of the range and the second (ball) one slot below it.
+    private const int DualIndex = (WorldBodiesLimits.LocalSeatCount + 1);
+    private const int DualBallIndex = WorldBodiesLimits.LocalSeatCount;
+
+    // A kit that authors both facets — a body that can itself carry another body while also being a valid carry
+    // target, the shape a mutual or chained carry relies on. Seat 0 still wears the carry-only carrier kit above.
+    private static WorldDefinition MutualCarryTestDocument() {
+        var source = Fixtures.BuildDocument();
+        // Also carries a Rigid facet — the mutual-carry test below needs seat 0 itself to be a valid carry target,
+        // matching the shape a mutual carry relies on: both parties carry Rigid and Carry.
+        var carrierKit = source.Kits[0] with {
+            Collider = new WorldCollider.Sphere(Radius: 0.3f),
+            BodyContact = WorldBodyContactMode.Solid,
+            Rigid = new WorldRigid(Mass: 60f, Restitution: 0.2f, Friction: 0.4f, RollingFriction: 0.1f, LinearDamping: 0f, AngularDamping: 0f),
+            Carry = new WorldCarry(
+                Offset: new Vector3(x: 0f, y: 1f, z: -0.6f),
+                MassEquivalent: 60f,
+                MaxCarryFraction: 1f,
+                MaxReach: 1.5f
+            ),
+        };
+        var dualKit = source.Kits[0] with {
+            Name = "dual",
+            Collider = new WorldCollider.Sphere(Radius: 0.15f),
+            BodyContact = WorldBodyContactMode.Solid,
+            Rigid = new WorldRigid(Mass: 0.3f, Restitution: 0.2f, Friction: 0.4f, RollingFriction: 0.1f, LinearDamping: 0f, AngularDamping: 0f),
+            Carry = new WorldCarry(
+                Offset: new Vector3(x: 0f, y: 1f, z: -0.6f),
+                MassEquivalent: 60f,
+                MaxCarryFraction: 1f,
+                MaxReach: 1.5f
+            ),
+        };
+        var ballKit = source.Kits[0] with {
+            Name = "ball",
+            Collider = new WorldCollider.Sphere(Radius: 0.15f),
+            BodyContact = WorldBodyContactMode.Solid,
+            Rigid = new WorldRigid(Mass: 0.3f, Restitution: 0.2f, Friction: 0.4f, RollingFriction: 0.1f, LinearDamping: 0f, AngularDamping: 0f),
+            Carry = null,
+        };
+        var shape = new ShapeDocument(
+            Id: 0,
+            Name: null,
+            Type: SdfSolidPrimitive.Sphere,
+            Position: Vector3.Zero,
+            Rotation: Quaternion.Identity,
+            Scale: new Vector3(value: 0.15f),
+            Material: 0,
+            Blend: SdfBlendOp.Union,
+            Smooth: 0f,
+            Group: 0);
+        var ballDocument = new CreationDocument(
+            Schema: CreationDocument.CurrentSchema,
+            Name: "carry-ball",
+            Palette: null,
+            Shapes: [shape],
+            Frames: null);
+        var canonical = CreationCanonicalizer.Canonicalize(document: ballDocument, source: "carry-ball");
+        var creation = new WorldPrototype(Id: "carry-ball", Document: canonical.Document, HashRaw: canonical.Hash);
+
+        return source with {
+            KitRowsRaw = [carrierKit, dualKit, ballKit],
+            DefaultSeatKitRaw = carrierKit.Name,
+            PopulationRaw = source.Population with { CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 2) },
+            CreationsRaw = [creation],
+            PlacementRowsRaw = [
+                // Within the carrier's (seat 0, at the origin) reach.
+                new WorldPlacement(
+                    Id: "dual-placement",
+                    PrototypeId: creation.Id,
+                    Position: new DocumentVector3(value: new Vector3(x: 1f, y: 0f, z: 0f)),
+                    YawDegrees: 0f,
+                    Scale: 1f,
+                    Inhabit: new WorldPlacementInhabit(Kit: "dual", Look: null, Source: IntentSource.Idle, Distribution: WorldDistribution.Default)
+                ),
+                // Within the dual body's own reach, never the carrier's.
+                new WorldPlacement(
+                    Id: "dual-ball-placement",
+                    PrototypeId: creation.Id,
+                    Position: new DocumentVector3(value: new Vector3(x: 1f, y: 0f, z: -1f)),
+                    YawDegrees: 0f,
+                    Scale: 1f,
+                    Inhabit: new WorldPlacementInhabit(Kit: "ball", Look: null, Source: IntentSource.Idle, Distribution: WorldDistribution.Default)
+                ),
+            ],
+        };
+    }
+
     private static WorldFixture JoinedCarrier(WorldDefinition definition) {
         var fixture = Fixtures.FreshServer(definition: definition);
         var seat = WorldPrincipal.Seat(slot: 0);
@@ -202,6 +291,78 @@ public sealed class WorldCarryCommandLawTests {
             reason: out var reason
         ));
         Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "out of reach");
+    }
+
+    [Fact]
+    public void CarrierAlreadyCarriedByAnotherBodyCannotItselfBeginACarryAndControlUncarriedSucceeds() {
+        using var fixture = JoinedCarrier(definition: MutualCarryTestDocument());
+        var carrier = fixture.Server.Body(index: CarrierIndex)!;
+        var dual = fixture.Server.Body(index: DualIndex)!;
+        var ball = fixture.Server.Body(index: DualBallIndex)!;
+
+        // Control: proves the "dual" kit's own carry facet works before the relationship exists.
+        Assert.True(condition: fixture.Server.Population.TryBeginCarry(
+            carrierIndex: CarrierIndex,
+            targetIndex: DualIndex,
+            reason: out var controlReason
+        ), userMessage: controlReason);
+        Assert.Equal(expected: DualIndex, actual: carrier.Carrying);
+        Assert.Equal(expected: CarrierIndex, actual: dual.CarriedBy);
+
+        // A body already carried by another may not itself begin carrying — including carrying its own carrier
+        // back, which would otherwise leave both bodies' Advance a no-op while FollowCarrier derives each pose from
+        // the other, running positions apart without bound.
+        Assert.False(condition: fixture.Server.Population.TryBeginCarry(
+            carrierIndex: DualIndex,
+            targetIndex: CarrierIndex,
+            reason: out var mutualReason
+        ));
+        Assert.Contains(actualString: mutualReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "already carried by");
+        Assert.Null(@object: dual.Carrying);
+        Assert.Equal(expected: CarrierIndex, actual: dual.CarriedBy);
+
+        // Being carried excludes a body from carrying anything else too, not just its own carrier — the dual body
+        // cannot pick up the unrelated ball while itself carried.
+        Assert.False(condition: fixture.Server.Population.TryBeginCarry(
+            carrierIndex: DualIndex,
+            targetIndex: DualBallIndex,
+            reason: out var carriedCannotCarryReason
+        ));
+        Assert.Contains(actualString: carriedCannotCarryReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "already carried by");
+        Assert.Null(@object: ball.CarriedBy);
+    }
+
+    [Fact]
+    public void TargetAlreadyCarryingSomethingRefusesBeingPickedUpAndControlIdleTargetSucceeds() {
+        using var fixture = JoinedCarrier(definition: MutualCarryTestDocument());
+        var dual = fixture.Server.Body(index: DualIndex)!;
+        var ball = fixture.Server.Body(index: DualBallIndex)!;
+
+        Assert.True(condition: fixture.Server.Population.TryBeginCarry(
+            carrierIndex: DualIndex,
+            targetIndex: DualBallIndex,
+            reason: out var beginReason
+        ), userMessage: beginReason);
+        Assert.Equal(expected: DualBallIndex, actual: dual.Carrying);
+
+        // A body already carrying something may not itself be picked up — refuses the chain A carries B, C picks
+        // up B, each link deriving its pose from the last.
+        Assert.False(condition: fixture.Server.Population.TryBeginCarry(
+            carrierIndex: CarrierIndex,
+            targetIndex: DualIndex,
+            reason: out var chainReason
+        ));
+        Assert.Contains(actualString: chainReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "already carrying");
+        Assert.Null(@object: fixture.Server.Body(index: CarrierIndex)!.Carrying);
+
+        // Control: releasing the dual body's own carry re-opens it as a valid pickup target.
+        Assert.True(condition: fixture.Server.Population.TryEndCarry(carrierIndex: DualIndex, reason: out var endReason), userMessage: endReason);
+        Assert.True(condition: fixture.Server.Population.TryBeginCarry(
+            carrierIndex: CarrierIndex,
+            targetIndex: DualIndex,
+            reason: out var controlReason
+        ), userMessage: controlReason);
+        _ = ball;
     }
 
     [Fact]
