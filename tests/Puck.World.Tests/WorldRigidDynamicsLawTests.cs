@@ -279,5 +279,10 @@ public sealed class WorldRigidDynamicsLawTests {
             userMessage: $"the control box, posed flat, tipped over on its own (upAlignment={controlUpAlignment:0.###})");
         Assert.True(condition: (control.RigidVelocity.LengthSquared < FixedQ4816.FromDouble(value: 0.01d)),
             userMessage: $"the control box never settled (v={control.RigidVelocity})");
+        // The rest LATCH, not just a loose speed bound: a manifold that leaves a persistent phantom velocity below
+        // this threshold (a fraction of one substep's own gravity increment) would pass the bound above forever
+        // without ever closing the hold window — see Resting's own remarks.
+        Assert.True(condition: control.Resting,
+            userMessage: $"the control box's speed read low but never actually latched to rest (v={control.RigidVelocity}, holdTicks={control.RigidRestingHoldTicks})");
     }
 }

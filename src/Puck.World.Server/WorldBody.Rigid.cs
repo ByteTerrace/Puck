@@ -638,6 +638,13 @@ public sealed partial class WorldBody {
 
             m_position = bodyOrigin;
             m_rigidVelocity = velocity;
+            // The sweep above is a SINGLE-POINT CCD pass (no lever): for a box or capsule it already consumes this
+            // substep's own gravity-driven closing velocity at the body's centre, before the manifold below ever
+            // sees it. Captured here, BEFORE any obstruction-contact impulse runs, so ResolveRigidGroundManifold can
+            // reconstruct what the corner manifold needs — the RAW pre-sweep velocity (gravity's contribution intact,
+            // for the torque only an off-centre corner impulse can supply) PLUS whatever an obstruction contact this
+            // same substep goes on to add — without also re-consuming what the sweep already resolved.
+            var postSweepVelocity = velocity;
 
             // Ground and obstruction are independent contacts that may both hold in the same substep (a ball
             // resting on the floor that also clips a wall) — each carries its own rising-edge restitution latch and
@@ -684,6 +691,7 @@ public sealed partial class WorldBody {
                         contacting: ref m_rigidGroundContacting,
                         iterations: policy.ManifoldIterations,
                         normal: groundNormal,
+                        postSweepVelocity: postSweepVelocity,
                         preVelocity: preVelocity,
                         rigid: in rigid,
                         volume: groundVolume
@@ -871,7 +879,7 @@ public sealed partial class WorldBody {
     /// what produces real torque: an upright body's weight, reacting only against the corner(s) still under it, is
     /// what keeps its centre of mass over its support polygon (or topples it once that polygon no longer reaches
     /// under the centre) without an artificial extra damping term.</summary>
-    private void ResolveRigidGroundManifold(FixedVector3 normal, FixedVector3 preVelocity, ref bool contacting, in FixedWorldRigid rigid, FixedBodyColliderVolume volume, int iterations) {
+    private void ResolveRigidGroundManifold(FixedVector3 normal, FixedVector3 preVelocity, FixedVector3 postSweepVelocity, ref bool contacting, in FixedWorldRigid rigid, FixedBodyColliderVolume volume, int iterations) {
         var incoming = FixedVector3.Dot(
             left: preVelocity,
             right: normal
@@ -893,25 +901,43 @@ public sealed partial class WorldBody {
             volume: volume
         );
 
-        // AdvanceRigid's earlier field.ResolveSweep call already zeroed this substep's centre-of-mass velocity along
-        // `normal` (translational CCD, no lever arm). Reading m_rigidVelocity here would hand every manifold point
-        // that already-zeroed value and this loop would apply no impulse at all, so the target normal speed is
-        // derived from the substep's own pre-sweep velocity instead: reflected by restitution on a rising edge, the
-        // raw pre-sweep value otherwise (so gravity's next per-substep increment is what this loop cancels, not a
-        // value the sweep already discarded).
-        var targetNormalSpeed = (((!wasContacting) && (incoming < FixedQ4816.Zero))
-            ? (rigid.Restitution * -incoming)
-            : incoming
-        );
+        // AdvanceRigid's earlier field.ResolveSweep call is a SINGLE-POINT CCD pass (no lever): for a box or capsule
+        // it already consumes this substep's own gravity-driven closing velocity at the body's CENTRE, before this
+        // manifold ever runs — reading the post-sweep m_rigidVelocity here would hand every corner an already-zeroed
+        // deficit and this loop would apply no impulse at all, freezing a tilted body exactly where it was posed
+        // rather than letting gravity's torque about the still-loaded corner(s) carry it the rest of the way over.
+        // The manifold instead reconstructs what SHOULD reach it: the RAW pre-sweep velocity (gravity intact, for the
+        // corner impulses to redistribute with real lever arms) plus whatever an obstruction contact THIS SAME
+        // substep already added on top of the sweep's own result (`m_rigidVelocity - postSweepVelocity`) — so that
+        // contact's effect is preserved rather than discarded. A genuine first impact (the rising edge) still
+        // reflects by restitution, exactly like ResolveRigidContact's own single-point path. Angular velocity is
+        // untouched by the sweep, so it carries over as-is (any obstruction impulse's spin included).
+        var obstructionDelta = (m_rigidVelocity - postSweepVelocity);
+        var manifoldBaseline = (preVelocity + obstructionDelta);
+
+        if (
+            (!wasContacting) &&
+            (incoming < FixedQ4816.Zero)
+        ) {
+            manifoldBaseline += (normal * (rigid.Restitution * -incoming));
+        }
+
         var ballHandle = TwoBodyHandle();
 
-        ballHandle.LinearVelocity = (preVelocity + (normal * (targetNormalSpeed - incoming)));
+        ballHandle.LinearVelocity = manifoldBaseline;
 
         var groundHandle = GroundPhantomHandle();
         var refusals = 0;
         Span<long> accumulatedNormalImpulseRaw = stackalloc long[4];
         var passes = Math.Max(val1: 1, val2: iterations);
 
+        // Sequential impulse with a per-point ACCUMULATED normal impulse, clamped to non-negative and applied by
+        // DELTA (never a bare positive-only add): every corner shares the same body's mass/inertia, so one corner's
+        // correction shifts the closing speed every other corner reads. Clamping the running total — rather than
+        // only ever adding more whenever a point still reads closing<0 — lets a later pass back a point OFF an
+        // earlier pass's over-application when the coupling has since satisfied it, so passes converge toward the
+        // manifold's true equilibrium (zero net closing at every point still under load) instead of only ever
+        // injecting energy. A body already resting under gravity converges to zero delta, not a residual climb.
         for (var pass = 0; (pass < passes); pass++) {
             for (var point = 0; (point < pointCount); point++) {
                 var anchor = anchors[point];
@@ -923,10 +949,6 @@ public sealed partial class WorldBody {
                     left: contactVelocity,
                     right: normal
                 );
-
-                if (closing >= FixedQ4816.Zero) {
-                    continue;
-                }
 
                 if (!FixedTwoBodyKernel.TryEffectiveMass(
                     bodyA: groundHandle,
@@ -941,19 +963,26 @@ public sealed partial class WorldBody {
                     continue;
                 }
 
-                if (
-                    !FusedArithmetic.TryMixedScaleProduct(
+                if (!FusedArithmetic.TryMixedScaleProduct(
                     a: (-closing).Value,
                     fractionBitsA: FixedQ4816.FractionBitCount,
                     b: normalMassRaw,
                     fractionBitsB: FixedWorldRigid.Scales.EffectiveMass,
                     fractionBitsOut: FixedQ4816.FractionBitCount,
-                    result: out var impulseRaw
-                ) ||
-                    (impulseRaw <= 0L)
-                ) {
+                    result: out var lambdaRaw
+                )) {
                     continue;
                 }
+
+                var previousAccumulated = accumulatedNormalImpulseRaw[point];
+                var newAccumulated = Math.Max(val1: 0L, val2: unchecked((previousAccumulated + lambdaRaw)));
+                var deltaRaw = unchecked((newAccumulated - previousAccumulated));
+
+                if (deltaRaw == 0L) {
+                    continue;
+                }
+
+                accumulatedNormalImpulseRaw[point] = newAccumulated;
 
                 FixedTwoBodyKernel.ApplyImpulse(
                     bodyA: groundHandle,
@@ -961,11 +990,10 @@ public sealed partial class WorldBody {
                     bodyB: ballHandle,
                     anchorB: anchor,
                     normal: normal,
-                    impulseRaw: impulseRaw,
+                    impulseRaw: deltaRaw,
                     scales: FixedWorldRigid.Scales,
                     refusals: ref refusals
                 );
-                accumulatedNormalImpulseRaw[point] += impulseRaw;
             }
         }
 

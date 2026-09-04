@@ -343,9 +343,10 @@ choosing fixed-point primitives on sim value paths.
   impulse passes (`collision.bodyContacts.rigidManifoldIterations`), which is
   what keeps an upright body's centre of mass over its support polygon without
   artificial damping. Dynamic-vs-dynamic contact rides the existing
-  `ResolveDynamicContacts` broadphase (`WorldPopulation.Rigid.cs`); the rigid
-  pairs its first pass resolves are replayed for a derived-down count of extra
-  passes over the SAME tick (`collision.bodyContacts.rigidPairIterationCeiling`/
+  `ResolveDynamicContacts` broadphase (`WorldPopulation.Rigid.cs`); the first
+  pass's own resolved rigid-pair count derives a count of extra FULL sweeps —
+  fresh broadphase and narrowphase, over the same bodies' now-current
+  positions — over the SAME tick (`collision.bodyContacts.rigidPairIterationCeiling`/
   `rigidPairIterationBudget`), so an impulse chain (a rack break, a falling
   domino line) crosses more than one pair-hop within one tick instead of one
   body per tick. `body.impulse`, `world.rigid`, `world.budget`, and the

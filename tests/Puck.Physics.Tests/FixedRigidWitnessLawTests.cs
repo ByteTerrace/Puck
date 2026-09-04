@@ -91,8 +91,12 @@ public sealed class FixedRigidWitnessLawTests {
         Assert.Equal(expected: FixedVector3.Zero, actual: boxControl.AngularVelocity);
     }
 
-    [Fact]
-    public void SupportManifoldSpansTheBoxsCentreOfMassAndControlSphereIsOnePoint() {
+    // The manifold's own anchor span decides whether the box's centre of mass sits over its support: computes the
+    // bottom-face manifold for a unit box centred at (0, half, 0) against a live, off-Center centreOffset and returns
+    // whether the (minX, maxX) x (minZ, maxZ) span the four anchors trace brackets the origin — the local frame every
+    // anchor is expressed in (see FixedRigidWitness.Anchor). Shared by the in-footprint case (must bracket) and its
+    // negative control (a centreOffset outside the footprint — must NOT).
+    private static bool BottomManifoldBracketsOrigin(FixedVector3 centerOffset) {
         var half = FixedQ4816.FromDouble(value: 0.5d);
         var boxVolume = new FixedBodyColliderVolume(
             Kind: FixedBodyColliderKind.Box,
@@ -106,7 +110,7 @@ public sealed class FixedRigidWitnessLawTests {
         Span<FixedVector3> anchors = stackalloc FixedVector3[4];
         var count = FixedRigidWitness.SupportManifold(
             anchors: anchors,
-            centerOffset: boxVolume.Center,
+            centerOffset: centerOffset,
             normal: normal,
             orientation: FixedQuaternion.Identity,
             volume: boxVolume
@@ -126,15 +130,49 @@ public sealed class FixedRigidWitnessLawTests {
             maxZ = FixedQ4816.Max(x: maxZ, y: anchors[index].Z);
         }
 
-        // Every anchor is relative to the body's own centre of mass, so the centre sitting inside the polygon the
-        // four corners span is exactly (minX <= 0 <= maxX) and (minZ <= 0 <= maxZ) — a body merely touching (never
-        // overlapping) its support has no manifold point left to close against once it tips past this, which is what
-        // keeps it upright without an artificial damping term.
-        Assert.True(condition: ((minX <= FixedQ4816.Zero) && (FixedQ4816.Zero <= maxX)), userMessage: $"X span [{(double)minX:0.###}, {(double)maxX:0.###}] does not bracket the centre of mass");
-        Assert.True(condition: ((minZ <= FixedQ4816.Zero) && (FixedQ4816.Zero <= maxZ)), userMessage: $"Z span [{(double)minZ:0.###}, {(double)maxZ:0.###}] does not bracket the centre of mass");
+        return (
+            (minX <= FixedQ4816.Zero) &&
+            (FixedQ4816.Zero <= maxX) &&
+            (minZ <= FixedQ4816.Zero) &&
+            (FixedQ4816.Zero <= maxZ)
+        );
+    }
 
+    [Fact]
+    public void SupportManifoldSpansAnOffCentreMassAndControlPastTheEdgeDoesNot() {
+        // The centre of mass is offset from the box's own geometric centre (a hollowed or asymmetrically loaded
+        // body) but still over its footprint (|0.2| < half.X, |0.1| < half.Z) — every anchor is relative to THIS
+        // offset, not the collider's Center, so a build that read the wrong reference point would shift the whole
+        // span off zero rather than merely re-centring it symmetrically (a centred CoM brackets the origin whether
+        // or not the offset is actually applied, so it alone cannot catch that class of bug).
+        Assert.True(
+            condition: BottomManifoldBracketsOrigin(centerOffset: new FixedVector3(
+                X: FixedQ4816.FromDouble(value: 0.2d),
+                Y: FixedQ4816.FromDouble(value: 0.5d),
+                Z: FixedQ4816.FromDouble(value: -0.1d)
+            )),
+            userMessage: "an in-footprint centre of mass must sit inside its own support manifold"
+        );
+
+        // Control: the centre of mass moved PAST the box's own half-extent (0.8 > half.X 0.5) — physically, the body
+        // has already tipped past its support and there is no manifold point left on the near side to close against.
+        // The span must NOT bracket the origin here; a manifold build that always brackets (the historical bug this
+        // law now catches: a centred CoM control brackets trivially, in-footprint or not) would fail this assertion.
+        Assert.False(
+            condition: BottomManifoldBracketsOrigin(centerOffset: new FixedVector3(
+                X: FixedQ4816.FromDouble(value: 0.8d),
+                Y: FixedQ4816.FromDouble(value: 0.5d),
+                Z: FixedQ4816.Zero
+            )),
+            userMessage: "a centre of mass past the box's own half-extent must NOT read as supported"
+        );
+    }
+
+    [Fact]
+    public void SupportManifoldControlSphereIsAlwaysOnePoint() {
         // Control: a sphere has no support polygon — the identical call degenerates to the single witness point
         // Anchor() itself computes, never a four-point manifold.
+        var half = FixedQ4816.FromDouble(value: 0.5d);
         var sphereVolume = new FixedBodyColliderVolume(
             Kind: FixedBodyColliderKind.Sphere,
             Center: new FixedVector3(X: FixedQ4816.Zero, Y: half, Z: FixedQ4816.Zero),
@@ -143,6 +181,7 @@ public sealed class FixedRigidWitnessLawTests {
             Rotation: FixedQuaternion.Identity,
             Radius: half
         );
+        var normal = new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero);
         Span<FixedVector3> sphereAnchors = stackalloc FixedVector3[4];
         var sphereCount = FixedRigidWitness.SupportManifold(
             anchors: sphereAnchors,

@@ -128,8 +128,12 @@ public sealed partial class WorldPopulation {
     public void PrepareCarriedBodies() => ReconcileCarriedBodies(follow: false);
     /// <summary>Updates valid attachments from their carriers' final pose after movement, dynamic contact, and tether
     /// correction, then performs the same bounded consistency check. Both carry passes walk the sorted,
-    /// preallocated active-relationship table, so a no-carry tick is O(1) and allocation-free rather than scanning
-    /// population capacity.</summary>
+    /// preallocated active-relationship table, so a NO-CARRY tick is O(1) and allocation-free rather than scanning
+    /// population capacity; a tick with an active carry still pays one O(Capacity) scan per carried body inside
+    /// <see cref="ResolveCarriedBodyPush"/> (and, on release, <see cref="IsCarriedTargetPenetrating"/>) — a carried
+    /// target can be pushed by or block against ANY other active solid body, not only carriers, so that scan is the
+    /// same broadphase cost <see cref="ResolveDynamicContacts"/> pays, bounded by how many carries are active rather
+    /// than by the tick itself.</summary>
     public void UpdateCarriedBodies() => ReconcileCarriedBodies(follow: true);
     private void ReconcileCarriedBodies(bool follow) {
         var relationshipIndex = 0;

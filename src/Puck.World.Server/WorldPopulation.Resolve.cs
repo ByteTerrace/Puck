@@ -659,9 +659,22 @@ public sealed partial class WorldPopulation {
         int RunSweep(Span<FixedBodyColliderVolume> leftScratch, Span<FixedBodyColliderVolume> rightScratch) {
             var rigidResolvedThisPass = 0;
 
+            // Refreshed from each body's CURRENT FixedPosition every pass (radius is collider-derived and does not
+            // change mid-tick): an earlier pass's own positional correction can move a body's X interval enough that
+            // the stale one either misses a pair it should now prune in, or keeps pruning in a pair that has since
+            // moved apart, before the Y/Z prune and narrowphase below (which already read live positions) ever see it.
+            for (var refreshOrdinal = 0; (refreshOrdinal < count); refreshOrdinal++) {
+                var refreshedRadius = contacts[refreshOrdinal].Radius;
+                var refreshedX = m_entries[contacts[refreshOrdinal].Index].Body!.FixedPosition.X;
+
+                contacts[refreshOrdinal] = (contacts[refreshOrdinal] with {
+                    MinimumX = (refreshedX - refreshedRadius),
+                    MaximumX = (refreshedX + refreshedRadius),
+                });
+            }
+
             // Introspective sort keeps a badly reshuffled few-thousand-body frame O(n log n), while the body index
-            // is a complete tie-breaker that makes its result deterministic. Re-sorting every pass keeps the sweep
-            // valid after a previous pass's own positional corrections moved bodies along X.
+            // is a complete tie-breaker that makes its result deterministic.
             Array.Sort(array: contacts, index: 0, length: count);
             Array.Clear(array: m_dynamicContactDegrees);
 

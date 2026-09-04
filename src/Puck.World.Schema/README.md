@@ -1789,9 +1789,11 @@ points lying on a side) resolves over each substep, distributing the normal
 impulse across every manifold point rather than one — what keeps an upright
 body's centre of mass over its support polygon without artificial damping.
 `rigidPairIterationCeiling` (default 4, maximum 16, strictly positive) bounds
-the EXTRA solver passes `WorldPopulation.ResolveDynamicContacts` replays over
-the rigid pairs its first pass actually resolved, so an impulse crosses more
-than one pair-hop within the same tick (a rack break, a falling domino line);
+the EXTRA full sweeps (fresh broadphase and narrowphase, over the same
+bodies' now-current positions) `WorldPopulation.ResolveDynamicContacts` runs
+past the first, derived down from the first pass's own resolved-pair count,
+so an impulse crosses more than one pair-hop within the same tick (a rack
+break, a falling domino line);
 the count actually run is derived DOWN from this ceiling by
 `rigidPairIterationBudget` (default 64, maximum 4096, strictly positive)
 divided by the first pass's own resolved-pair count, so a lightly loaded tick

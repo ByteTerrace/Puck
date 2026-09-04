@@ -143,13 +143,14 @@ public sealed record WorldCollisionEvents(int CandidateBudget = 32, int MaxPairs
 /// support manifold (<see cref="Puck.Physics.FixedRigidWitness.SupportManifold"/> — up to four box corners or two
 /// capsule cap points) resolves over each substep, distributing the normal impulse across every manifold point
 /// rather than one. Strictly positive.</param>
-/// <param name="RigidPairIterationCeiling">The most EXTRA solver passes <c>WorldPopulation.ResolveDynamicContacts</c>
-/// replays over the rigid pairs its first pass actually resolved, so an impulse crosses more than one pair-hop
-/// within the same tick (a rack break, a falling domino line). The count actually run is derived DOWN from this
-/// ceiling by <see cref="RigidPairIterationBudget"/> divided by the first pass's own resolved-pair count, so a
-/// lightly loaded tick gets every authored pass and a crowded one stays bounded. Strictly positive.</param>
-/// <param name="RigidPairIterationBudget">The total pair-pass work one tick's extra rigid-pair replay passes may
-/// spend, before <see cref="RigidPairIterationCeiling"/> caps it — see that field. Strictly positive.</param>
+/// <param name="RigidPairIterationCeiling">The most EXTRA full sweeps <c>WorldPopulation.ResolveDynamicContacts</c>
+/// runs past the first — fresh broadphase and narrowphase, over the same bodies' now-current positions — so an
+/// impulse crosses more than one pair-hop within the same tick (a rack break, a falling domino line). The count
+/// actually run is derived DOWN from this ceiling by <see cref="RigidPairIterationBudget"/> divided by the first
+/// pass's own resolved-pair count, so a lightly loaded tick gets every authored pass and a crowded one stays
+/// bounded. Strictly positive.</param>
+/// <param name="RigidPairIterationBudget">The total pair-pass work one tick's extra rigid-pair sweeps may spend,
+/// before <see cref="RigidPairIterationCeiling"/> caps it — see that field. Strictly positive.</param>
 public sealed record WorldBodyContactPolicy(int CandidateBudget = 16, int MaxPairsPerBody = 8, int RigidSubstepCeiling = 8,
     float RigidRestLinearSpeed = 0.05f, float RigidRestAngularSpeed = 0.1f, float RigidRestHoldSeconds = 0.25f,
     float RigidSubstepTravelFraction = 0.5f, float RigidSubstepMinimumTravel = 0.001f, float RigidPairRestitutionSpeed = 0.05f,

@@ -206,6 +206,22 @@ public sealed partial class WorldBody {
             desiredPosition = sweptPosition;
 
             if (blockCorrection != FixedVector3.Zero) {
+                // The carried body's OWN position already took the full sweep correction above — it is never left
+                // penetrating. What reaches the CARRIER is bounded to this body's own bounding radius: a legitimate
+                // touch-and-block push is well under an object's own size, while a correction larger than the
+                // object itself (a carried body posed — or otherwise placed — already embedded in geometry, so the
+                // very first sweep reports a one-shot depenetration spanning most of the gap) would otherwise hand
+                // the carrier a shove sized by that embedding depth rather than by contact, launching it.
+                var correctionLength = blockCorrection.Length;
+                var correctionCeiling = RigidBoundingRadius;
+
+                if (
+                    (correctionCeiling > FixedQ4816.Zero) &&
+                    (correctionLength > correctionCeiling)
+                ) {
+                    blockCorrection = ((blockCorrection / correctionLength) * correctionCeiling);
+                }
+
                 carrier.ApplyDynamicContact(correction: blockCorrection);
             }
         }
