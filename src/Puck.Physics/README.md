@@ -39,7 +39,7 @@ identically whichever yaw-writing frame operation (`ResolveDriveFrame`,
 `ResolveYawAttitudeAndPlanarFrame`, `IntegrateLocalAttitude`) is selected. A
 held low-traction row (a kart's drift) is an ordinary row gated on a `Held`
 predicate (`CompiledPredicateKind.Held`, a live channel-threshold read),
-authored ahead of the row it overrides. An absent engage/release/brake/grip
+authored ahead of the row it overrides. An absent engage/release/reversalRate/lateral
 rate compiles to an explicit instant-convergence flag; zero is not overloaded
 as either instant or disabled. The vertical channel is a hold row's
 own concern (`FixedBodyHold.Gravity`/`.Thrust`, `ResolveHold`/`ApplyHold` in

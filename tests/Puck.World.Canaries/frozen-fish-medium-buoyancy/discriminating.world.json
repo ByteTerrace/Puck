@@ -8,7 +8,7 @@
         "name": "fishKit",
         "motion": {
           "holds": [
-            { "name": "water", "medium": { "buoyancy": -0.6 } }
+            { "name": "water", "medium": { "idleDrift": -0.6 } }
           ]
         }
       }

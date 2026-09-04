@@ -1,7 +1,7 @@
 {
   "id": "frozen-fish-medium-buoyancy",
   "title": "The frozen world's fish settles under its water row's own medium law, and a state hash pins the settled state",
-  "binding": "The positive leg boots puck.world.frozen.json headless, waits 720 ticks (well past the fish's own medium convergence), and reads world.state.hash — pinning the settled state. The discriminating leg boots the SAME world with fishKit's water row buoyancy negated instead (a basis delta over the shipped file), reads the hash at the SAME tick 720, and asserts a different value. Buoyancy, not thrust, is the perturbed facet: fishMotion runs ComputePlanarTargetVelocity, and ProduceWanderIntent writes the MoveUp role only under IntegrateLocalAttitude, so the water row's own thrust (folded through MediumThrust) never reads a nonzero MoveUp for this kit — the medium's own buoyancy/settle law is what actually drives the fish, and is what this canary discriminates.",
+  "binding": "The positive leg boots puck.world.frozen.json headless, waits 720 ticks (well past the fish's own medium convergence), and reads world.state.hash — pinning the settled state. The discriminating leg boots the SAME world with fishKit's water row idleDrift negated instead (a basis delta over the shipped file), reads the hash at the SAME tick 720, and asserts a different value. idleDrift, not thrust, is the perturbed facet: fishMotion runs ComputePlanarTargetVelocity, and ProduceWanderIntent writes the MoveUp role only under IntegrateLocalAttitude, so the water row's own thrust (folded through MediumThrust) never reads a nonzero MoveUp for this kit — the medium's own idleDrift, converged by the governing shaping row, is what actually drives the fish, and is what this canary discriminates.",
   "bootShape": "headless",
   "requirements": [],
   "seconds": 6,
@@ -15,7 +15,7 @@
       { "verb": "world.state.hash", "occurrence": 1, "outcome": "accepted" }
     ],
     "expect": [
-      { "type": "line", "name": "tick-720-hash-pinned", "stream": "stdout", "match": "contains", "text": "[world.state.hash: tick=720 hash=f6d42cfafb037238]", "present": true },
+      { "type": "line", "name": "tick-720-hash-pinned", "stream": "stdout", "match": "contains", "text": "[world.state.hash: tick=720 hash=6a04e708456678a0]", "present": true },
       { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
     ]
   },
@@ -27,8 +27,8 @@
       { "verb": "world.state.hash", "occurrence": 1, "outcome": "accepted" }
     ],
     "expect": [
-      { "type": "line", "name": "tick-720-hash-diverges-on-buoyancy", "stream": "stdout", "match": "contains", "text": "[world.state.hash: tick=720 hash=", "present": true },
-      { "type": "line", "name": "not-the-positive-legs-hash", "stream": "stdout", "match": "contains", "text": "hash=f6d42cfafb037238", "present": false },
+      { "type": "line", "name": "tick-720-hash-diverges-on-idledrift", "stream": "stdout", "match": "contains", "text": "[world.state.hash: tick=720 hash=", "present": true },
+      { "type": "line", "name": "not-the-positive-legs-hash", "stream": "stdout", "match": "contains", "text": "hash=6a04e708456678a0", "present": false },
       { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
     ]
   }

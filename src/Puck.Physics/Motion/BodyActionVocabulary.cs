@@ -25,14 +25,15 @@ public enum ActionFact : byte {
     /// <summary>A targeted effect was applied by another body on the preceding completed tick.</summary>
     AffectedBy,
 
-    /// <summary>The body's origin is below the medium surface. Written by the medium hold's law
-    /// (<see cref="BodyMotionOp.ApplyHold"/>); holds one tick behind that stage's evaluation, the same
-    /// one-tick-behind discipline <see cref="Grounded"/> reads under.</summary>
-    Submerged,
+    /// <summary>The body's origin sits below the medium's free surface along its own resolved gravity-up. Written
+    /// by the medium hold's law (<see cref="BodyMotionOp.ApplyHold"/>); holds one tick behind that stage's
+    /// evaluation, the same one-tick-behind discipline <see cref="Grounded"/> reads under.</summary>
+    InMedium,
 
-    /// <summary>The body's origin is inside the medium's surface bob band (within its float depth of the float
-    /// line). Written by the same medium law as <see cref="Submerged"/>, on the same one-tick-behind terms.</summary>
-    AtSurface,
+    /// <summary>The body's origin is inside the medium's equilibrium band (within its equilibrium offset of the
+    /// equilibrium line). Written by the same medium law as <see cref="InMedium"/>, on the same one-tick-behind
+    /// terms.</summary>
+    AtMediumBand,
 
     /// <summary>The body holds a surface the contact resolve would refuse to stand it on — a face outside the
     /// world's own walkable cone. Not mutually exclusive with <see cref="Grounded"/>/<see cref="Airborne"/>: a gate
@@ -69,11 +70,11 @@ public enum BodyFacts : ushort {
     /// <inheritdoc cref="ActionFact.Falling"/>
     Falling = (1 << 3),
 
-    /// <inheritdoc cref="ActionFact.Submerged"/>
-    Submerged = (1 << 4),
+    /// <inheritdoc cref="ActionFact.InMedium"/>
+    InMedium = (1 << 4),
 
-    /// <inheritdoc cref="ActionFact.AtSurface"/>
-    AtSurface = (1 << 5),
+    /// <inheritdoc cref="ActionFact.AtMediumBand"/>
+    AtMediumBand = (1 << 5),
 
     /// <inheritdoc cref="ActionFact.Climbing"/>
     Climbing = (1 << 6),
@@ -85,7 +86,7 @@ public enum BodyFacts : ushort {
     Resting = (1 << 8),
 
     /// <summary>Every declared bit — the decoder's admission mask.</summary>
-    All = (Grounded | Airborne | Rising | Falling | Submerged | AtSurface | Climbing | Flying | Resting),
+    All = (Grounded | Airborne | Rising | Falling | InMedium | AtMediumBand | Climbing | Flying | Resting),
 }
 /// <summary>The one mapping between the predicate vocabulary and its publishable bit, plus the wire spelling every
 /// read-back echoes.</summary>
@@ -97,8 +98,8 @@ public static class BodyFactVocabulary {
         ActionFact.Airborne,
         ActionFact.Rising,
         ActionFact.Falling,
-        ActionFact.Submerged,
-        ActionFact.AtSurface,
+        ActionFact.InMedium,
+        ActionFact.AtMediumBand,
         ActionFact.Climbing,
         ActionFact.Flying,
         ActionFact.Resting,
@@ -113,8 +114,8 @@ public static class BodyFactVocabulary {
         ActionFact.Airborne => BodyFacts.Airborne,
         ActionFact.Rising => BodyFacts.Rising,
         ActionFact.Falling => BodyFacts.Falling,
-        ActionFact.Submerged => BodyFacts.Submerged,
-        ActionFact.AtSurface => BodyFacts.AtSurface,
+        ActionFact.InMedium => BodyFacts.InMedium,
+        ActionFact.AtMediumBand => BodyFacts.AtMediumBand,
         ActionFact.Climbing => BodyFacts.Climbing,
         ActionFact.Flying => BodyFacts.Flying,
         ActionFact.Resting => BodyFacts.Resting,
@@ -192,8 +193,8 @@ public static class BodyFactVocabulary {
         ActionFact.Airborne => "airborne",
         ActionFact.Rising => "rising",
         ActionFact.Falling => "falling",
-        ActionFact.Submerged => "submerged",
-        ActionFact.AtSurface => "atsurface",
+        ActionFact.InMedium => "inmedium",
+        ActionFact.AtMediumBand => "atmediumband",
         ActionFact.Climbing => "climbing",
         ActionFact.Flying => "flying",
         ActionFact.Resting => "resting",

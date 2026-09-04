@@ -263,7 +263,7 @@ public sealed class BodyScaleLawTests {
                 Motion = kit.Motion with {
                     Speed = kit.Motion.Speed with { Value = 4f },
                     Holds = [
-                        kit.Motion.Holds![0] with { Gravity = new WorldHoldGravity(Fall: 46f, Rise: 28f, Terminal: 40f) },
+                        kit.Motion.Holds![0] with { Envelope = new WorldHoldEnvelope(SinkSpeed: 40f), Gravity = new WorldHoldGravity(Fall: 46f, Rise: 28f) },
                     ],
                 },
             }).ToArray(),

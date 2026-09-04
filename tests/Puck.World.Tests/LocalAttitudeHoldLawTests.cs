@@ -78,7 +78,7 @@ public sealed class LocalAttitudeHoldLawTests {
                 Holds: [
                     new WorldHold(
                         Bond: BodyHoldBond.Free,
-                        Gravity: new WorldHoldGravity(Fall: 23f, Rise: rise, Terminal: 20f),
+                        Gravity: new WorldHoldGravity(Fall: 23f, Rise: rise),
                         Hold: BodyHoldKind.Lift,
                         Lift: 1f,
                         Name: "air"

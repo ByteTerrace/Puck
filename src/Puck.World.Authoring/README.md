@@ -71,7 +71,7 @@ tokens). A token is:
 
 | Token | Holds while |
 |---|---|
-| a `Puck.Physics.Motion.BodyFacts` name — `Grounded`, `Airborne`, `Rising`, `Falling`, `Submerged`, `AtSurface`, `Climbing`, `Flying`, `AffectedBy` | the simulation publishes that fact |
+| a `Puck.Physics.Motion.BodyFacts` name — `Grounded`, `Airborne`, `Rising`, `Falling`, `InMedium`, `AtMediumBand`, `Climbing`, `Flying`, `AffectedBy` | the simulation publishes that fact |
 | `moving` | the body's eased rendered speed is above `WorldGaitDrivers.MovingSpeed` (0.05 m/s) |
 | `still` | the negation of `moving` |
 | `always` | unconditionally — refused alongside any other token |
@@ -125,8 +125,8 @@ Worked rigs, all built from the same three parts:
 | Climber limbs | `travel`, cadence 8, `when: ["Climbing", "moving"]` | the same joints, axis Z, amplitude 0.5, diagonal pairs (left arm φ, right arm φ+π, left leg φ+π, right leg φ) |
 | Wheel | `planarTravel`, cadence = 1 / wheel radius, `when: ["moving"]` | swing, axis X at the hub, amplitude 1, `wave: linear` |
 | Rotor | `time`, cadence = radians per second, `when: always` | swing, axis Y at the mast, amplitude 1, `wave: linear` |
-| Fish tail | `time`, `when: ["Submerged"]` | swing, axis Y at the tail root |
-| Bobbing hull | `time`, `when: ["AtSurface"]` | slide, axis Y |
+| Fish tail | `time`, `when: ["InMedium"]` | swing, axis Y at the tail root |
+| Bobbing hull | `time`, `when: ["AtMediumBand"]` | slide, axis Y |
 | Breathing chest | `time`, `when: ["still"]` (an idle breath) | slide, axis Z, small amplitude |
 
 Every one of these is presentation-only: the facets are read where a body-rooted

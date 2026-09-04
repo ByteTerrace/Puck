@@ -112,8 +112,8 @@ public sealed partial class WorldBody {
         );
         // A program that lacks the medium law must not leave stale medium facts behind — a switch away from one
         // clears them here; a switch back rewrites them next tick.
-        m_submerged = false;
-        m_atSurface = false;
+        m_inMedium = false;
+        m_atMediumBand = false;
         CommitTeleport(resetVertical: program.OwnsVerticalContactState);
         m_continuity = EntityContinuity.Teleport;
     }
@@ -670,9 +670,9 @@ public sealed partial class WorldBody {
     /// <summary>Sets (or clears) the medium free surface this body's medium hold integrates against — sampled fresh
     /// every tick from the population's field lattice at this body's coupled cell, before this body's own Advance
     /// runs. Meaningful only to a kit authoring a medium hold; every other body carries it inertly.</summary>
-    /// <param name="surface">The medium surface's world-space Y, or <see langword="null"/> for no medium at this
-    /// body's position.</param>
-    public void SetMediumSurface(FixedQ4816? surface) {
+    /// <param name="surface">The medium surface, or <see langword="null"/> for no medium at this body's
+    /// position.</param>
+    public void SetMediumSurface(FixedFieldSurface? surface) {
         m_mediumSurface = surface;
     }
     /// <summary>Stages one deterministic producer intent for the next <see cref="Advance"/> — the producer tier below
@@ -796,10 +796,10 @@ public sealed partial class WorldBody {
     /// <summary>Gets the body that applied the latest targeted effect, held for one recipient advance.</summary>
     internal int AffectingSubject => m_affectingSubject;
 
-    /// <summary>Gets a value indicating whether the body's origin is inside the medium's surface bob band as of the
-    /// medium hold's last evaluation — the <c>world.contacts</c> read-back's medium witness. Always
+    /// <summary>Gets a value indicating whether the body's origin is inside the medium's equilibrium band as of
+    /// the medium hold's last evaluation — the <c>world.contacts</c> read-back's medium witness. Always
     /// <see langword="false"/> for a kit authoring no medium hold.</summary>
-    public bool AtSurface => m_atSurface;
+    public bool AtMediumBand => m_atMediumBand;
     /// <summary>Gets the body motion program this player currently executes.</summary>
     public string BodyMotionProgram => m_bodyMotionProgram.Name;
     /// <summary>Gets the last intent after the admitted held overlay composed with the movement tier, retained only for
@@ -915,10 +915,10 @@ public sealed partial class WorldBody {
     internal bool HasMotionTape => (m_tapeCount > 0);
     /// <summary>Gets the most recently staged producer image for population-owned cadence reuse.</summary>
     internal PlayerIntent StagedProducerIntent => m_producerIntent;
-    /// <summary>Gets a value indicating whether the body's origin is below the medium surface as of the medium
-    /// hold's last evaluation — the <c>world.contacts</c> read-back's medium witness. Always
-    /// <see langword="false"/> for a kit authoring no medium hold.</summary>
-    public bool Submerged => m_submerged;
+    /// <summary>Gets a value indicating whether the body's origin sits below the medium's free surface, along
+    /// its own resolved gravity-up, as of the medium hold's last evaluation — the <c>world.contacts</c> read-back's
+    /// medium witness. Always <see langword="false"/> for a kit authoring no medium hold.</summary>
+    public bool InMedium => m_inMedium;
     /// <summary>Gets the avatar's current heading in radians (0 = facing -Z; increases turning left / counter-clockwise).
     /// Under the grounded program this returns the authoritative heading scalar <c>m_yaw</c> directly (the orientation is a
     /// pure yaw rotation built from it, so decomposing it back out would be a redundant round-trip on the hot wander

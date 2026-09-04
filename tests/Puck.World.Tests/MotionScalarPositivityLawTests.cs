@@ -4,7 +4,7 @@ namespace Puck.World.Tests;
 
 /// <summary>
 /// Pins the positivity wall on locomotion-rate authoring, both doors. A <see cref="MotionScalarEnvelope"/> bounds a
-/// speed MAGNITUDE (reverse travel is its own non-negative scalar, an anisotropic row's <c>along.reverse</c>), so a negative endpoint
+/// speed MAGNITUDE (backward travel is its own non-negative scalar, an anisotropic row's <c>along.backwardSpeed</c>), so a negative endpoint
 /// only ever widens the clamp past the bound's apparent intent — an authored <c>[-100, 10]</c> admits a 100 u/s
 /// magnitude under a bound that reads as 10. <see cref="WorldDefinitionValidator"/> refuses that BY NAME at load.
 /// The identity-side door is the same invariant one document over: an owned world's named speed-state rows feed

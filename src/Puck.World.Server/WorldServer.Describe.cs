@@ -344,9 +344,9 @@ public sealed partial class WorldServer {
             provider: CultureInfo.InvariantCulture,
             handler: $"[world.contacts: p{index} grounded={(body.Grounded
             ? "true"
-            : "false")} planarSpeed={body.PlanarSpeed:0.00} resolved={body.ContactCount} submerged={(body.Submerged
+            : "false")} planarSpeed={body.PlanarSpeed:0.00} resolved={body.ContactCount} inMedium={(body.InMedium
             ? "true"
-            : "false")} atSurface={(body.AtSurface
+            : "false")} atMediumBand={(body.AtMediumBand
             ? "true"
             : "false")} obstruction={obstruction}]"
         );

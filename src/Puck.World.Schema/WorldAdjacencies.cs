@@ -782,7 +782,7 @@ public static class WorldAdjacencyPolicy {
     /// contact envelope <see cref="TryReciprocalHysteresis"/> derives for a wall breaks the second half.</para>
     /// <para>Per kit: the steepest fall acceleration any of its holds author, over one step, capped by their fastest
     /// terminal speed, carried over one more step to a distance. Every quotient rounds outward and one raw unit is
-    /// added last, so the result strictly exceeds the sag. A kit whose holds are all Grip or None authors neither, so
+    /// added last, so the result strictly exceeds the sag. A kit whose holds are all Pull or None authors neither, so
     /// its sag is zero and its deadband is the contact skin alone plus that one raw unit.</para>
     /// </remarks>
     /// <param name="definition">The document whose kits, contact skin, and authority rate bound the sag.</param>
@@ -806,7 +806,7 @@ public static class WorldAdjacencyPolicy {
             }
 
             var acceleration = CeilingFixed(value: MathF.Abs(x: WorldHoldFactory.MaxFallAcceleration(holds: motion.Holds)));
-            var terminalSpeed = CeilingFixed(value: MathF.Abs(x: WorldHoldFactory.MaxTerminalFallSpeed(holds: motion.Holds)));
+            var terminalSpeed = CeilingFixed(value: MathF.Abs(x: WorldHoldFactory.MaxEnvelopeSpeed(holds: motion.Holds)));
 
             // A motion row declaring no acceleration has its terminal speed as the one-step speed directly.
             var stepSpeed = terminalSpeed;

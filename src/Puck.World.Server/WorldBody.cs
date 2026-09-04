@@ -41,7 +41,7 @@ public sealed partial class WorldBody {
     /// key/button has no timer.</summary>
     public const float MaxActionHoldSeconds = 60f;
 
-    private bool m_atSurface;
+    private bool m_atMediumBand;
     private CompiledBodyMotionProgram m_bodyMotionProgram;
     // The construction-validated program table and the program this body executes.
     private IReadOnlyDictionary<string, CompiledBodyMotionProgram> m_bodyMotionPrograms;
@@ -182,7 +182,7 @@ public sealed partial class WorldBody {
     private FixedVector3 m_previousPosition;
     private PlayerIntent m_producerIntent;
     private RoleChannelOrdinals m_roleOrdinals;
-    private bool m_submerged;
+    private bool m_inMedium;
     // The two one-tick intent images below the tape, both no-allocation and consumed by the next Advance so a missed
     // producer tick can never leave a stale entity moving forever. The submitted image is the live stream (a seat's
     // device image or a remote client's submission), admitted unless the source is Idle; the producer image is the
@@ -212,7 +212,10 @@ public sealed partial class WorldBody {
     // Sampled fresh every tick, before this body's own Advance, from the population's field lattice at this body's
     // coupled cell — never captured/restored (see WorldBody.Transfer.cs's own remarks): a pure function of this
     // body's position and the live lattice, re-derived identically the very next tick regardless of any teleport.
-    private FixedQ4816? m_mediumSurface;
+    // A point and the lattice's own frame normal (world +Y — the lattice carries no rotation of its own); the medium
+    // hold's law projects displacement along the BODY's own resolved gravity-up, not this normal, so a tilted gravity
+    // area's medium still measures depth correctly.
+    private FixedFieldSurface? m_mediumSurface;
     // The grounded program's authoritative heading scalar (radians): integrated from the Turn rate, with m_orientation
     // derived from it each step (a pure yaw rotation). Under free it is inert (orientation is authoritative and Yaw is
     // read back out of it).

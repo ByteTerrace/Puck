@@ -30,11 +30,15 @@ public sealed class HoldLawTests {
     // under it and out of reach of the floor.
     private const float CeilingY = 6f;
 
-    // The fixture's shared vertical arc: every Gravity/Lift row's own field.
-    private static readonly WorldHoldGravity DefaultGravity = new(Fall: 23f, Rise: 14f, Terminal: 20f);
+    // The fixture's shared vertical arc and envelope: every Gravity/Lift row's own fields.
+    private static readonly WorldHoldGravity DefaultGravity = new(Fall: 23f, Rise: 14f);
+    private static readonly WorldHoldEnvelope DefaultEnvelope = new(SinkSpeed: 20f);
 
     private static WorldHold Air(BodyHoldKind kind = BodyHoldKind.Gravity, float lift = 0f, float thrust = 0f, WorldHoldGravity? gravity = null) => new(
         Bond: BodyHoldBond.Free,
+        Envelope: ((kind is BodyHoldKind.Gravity || ((kind == BodyHoldKind.Lift) && (lift < 1f)))
+        ? DefaultEnvelope
+        : null),
         Gravity: ((kind is BodyHoldKind.Gravity or BodyHoldKind.Lift)
         ? (gravity ?? DefaultGravity)
         : null),
@@ -46,6 +50,7 @@ public sealed class HoldLawTests {
     private static WorldHold Ground(float coneMax = 60f, WorldHoldGravity? gravity = null) => new(
         Bond: BodyHoldBond.Surface,
         Cone: new Vector2(x: 0f, y: coneMax),
+        Envelope: DefaultEnvelope,
         Gravity: (gravity ?? DefaultGravity),
         Hold: BodyHoldKind.Gravity,
         Name: "ground",
@@ -55,8 +60,8 @@ public sealed class HoldLawTests {
         Bond: BodyHoldBond.Surface,
         Cone: new Vector2(x: coneMin, y: coneMax),
         DriveAlignment: 0.5f,
-        Grip: 1f,
-        Hold: BodyHoldKind.Grip,
+        Pull: 1f,
+        Hold: BodyHoldKind.Pull,
         Name: "wall",
         OnDrive: onDrive,
         Reach: reach,
@@ -676,7 +681,7 @@ public sealed class HoldLawTests {
         Assert.True(condition: (hovering.Climb > 0.5), userMessage: $"MoveUp must climb a hovering body; it moved {hovering.Climb}");
     }
     [Fact]
-    public void UpLeanLeansAGrippingBodysATTITUDE_WhileItsContactAxisStaysWithGravity() {
+    public void UpLeanLeansAPullingBodysATTITUDE_WhileItsContactAxisStaysWithGravity() {
         static (FixedVector3 Attitude, FixedVector3 Contact) OnWall(float upLean) {
             using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Wall(upLean: upLean), Ground(), Air()]));
             var body = JoinBody(fixture: fixture);
@@ -721,13 +726,13 @@ public sealed class HoldLawTests {
             condition: (((double)leaned.Attitude.Z) > 0.9),
             userMessage: $"a fully leaned body's attitude up is the face normal; it read {leaned.Attitude}"
         );
-        // And its CONTACT axis is not: a grip holds the body, gravity does not, so the axis the solver grounds and
+        // And its CONTACT axis is not: a pull holds the body, gravity does not, so the axis the solver grounds and
         // depenetrates against stays where the ambient resolve put it under both arms.
         Assert.Equal(expected: FixedQ4816.One, actual: upright.Contact.Y);
         Assert.Equal(expected: FixedQ4816.One, actual: leaned.Contact.Y);
     }
     [Fact]
-    public void AGrippingBodyLeanedOntoACeiling_KeepsTheFloorSolidBeneathIt_AndReturnsToItOnRelease() {
+    public void APullingBodyLeanedOntoACeiling_KeepsTheFloorSolidBeneathIt_AndReturnsToItOnRelease() {
         // The defect this law pins: leaning the CONTACT axis onto a ceiling tells the solver the floor is a ceiling
         // and that falling is upward, so the body sinks through the floor it is standing over. The control is the
         // same world at upLean 0, which never had an inverted axis to begin with — both must keep the floor.
@@ -778,8 +783,8 @@ public sealed class HoldLawTests {
         var leaned = UnderCeiling(upLean: 1f);
         var upright = UnderCeiling(upLean: 0f);
 
-        // Hanging, not fallen: the floor is at y 0 and the grip is the only thing between the body and it.
-        Assert.True(condition: (leaned.Held > 3.5), userMessage: $"a ceiling grip holds the body up; it hung at {leaned.Held}");
+        // Hanging, not fallen: the floor is at y 0 and the pull is the only thing between the body and it.
+        Assert.True(condition: (leaned.Held > 3.5), userMessage: $"a ceiling pull holds the body up; it hung at {leaned.Held}");
         Assert.True(condition: (upright.Held > 3.5), userMessage: $"the control must hang too; it hung at {upright.Held}");
         Assert.True(
             condition: (((double)leaned.Attitude.Y) < -0.9),
@@ -1145,7 +1150,7 @@ public sealed class HoldLawTests {
         ), userMessage: admittedReason);
     }
     [Fact]
-    public void AGripsLeanIsTurnedIntoOverTheBodySpan_NotSnappedTo_WhereAnUnleanedGripNeverLeavesGravityUp() {
+    public void APullsLeanIsTurnedIntoOverTheBodySpan_NotSnappedTo_WhereAnUnleanedPullNeverLeavesGravityUp() {
         // The drawn axis turns at speed over span (rad/s), so with the fixture's capsule and the wall row's 2 m/s a
         // quarter turn takes most of a second: after sixty climbing ticks the axis is visibly short of the face, the
         // trace never turns back, and it finishes inside 300 rested ticks (1.25 s at the engine's 240 Hz; resting
@@ -1198,11 +1203,11 @@ public sealed class HoldLawTests {
             Assert.True(condition: (leaned[tick] >= (leaned[tick - 1] - 1e-4)), userMessage: $"the turn never reverses; tick {tick} read {leaned[tick]} after {leaned[tick - 1]}");
         }
 
-        Assert.All(collection: upright, action: z => Assert.True(condition: (Math.Abs(value: z) < 1e-3), userMessage: $"an unleaned grip's drawn axis stays gravity-up; it read {z}"));
+        Assert.All(collection: upright, action: z => Assert.True(condition: (Math.Abs(value: z) < 1e-3), userMessage: $"an unleaned pull's drawn axis stays gravity-up; it read {z}"));
     }
     [Fact]
     public void LettingGoMidClimb_CarriesTheClimbsRiseIntoTheFall_WhereLettingGoAtRestFallsFromRest() {
-        // A grip owns the whole tangent-plane velocity, rise included; the tick it ends that rise is split into the
+        // A pull owns the whole tangent-plane velocity, rise included; the tick it ends that rise is split into the
         // ballistic channel rather than replaced by the next planar shape. The control is the same release from
         // the same row at rest, which has no rise to carry and falls at once.
         static double RiseAfterRelease(bool climbing) {
@@ -1282,7 +1287,7 @@ public sealed class HoldLawTests {
         return moved;
     }
 
-    // The walker's own rise/fall/terminal, pinned from the wall-grip-release-carries-momentum arc: climb, let go,
+    // The walker's own rise/fall/terminal, pinned from the wall-pull-release-carries-momentum arc: climb, let go,
     // rise on the carried momentum, fall, and land — the rise phase this trace exists to pin.
     private static readonly string[] WalkerJumpTrace240 = [
         "0000000000000000 0000000000000963 fffffffffffe0aab 0000000000000000 0000000000020000 0000000000000000 0000000000000000 0000000000000000",
@@ -1531,7 +1536,7 @@ public sealed class HoldLawTests {
     public void WalkerJumpAndLand_ReproducesTheRecordedTrace_WhereRiseChangedDiverges() {
         static string[] Trace(float rise) {
             var lines = new string[240];
-            var gravity = new WorldHoldGravity(Fall: 23f, Rise: rise, Terminal: 20f);
+            var gravity = new WorldHoldGravity(Fall: 23f, Rise: rise);
             using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Wall(), Ground(gravity: gravity), Air(gravity: gravity)]));
             var body = JoinBody(fixture: fixture);
             var tick = 0;
@@ -1858,12 +1863,12 @@ public sealed class HoldLawTests {
         Assert.True(condition: (Climb(thrust: 1f) > 0.5), userMessage: "the same row with full thrust must climb on MoveUp");
     }
     [Fact]
-    public void AGripRowAuthoringGravity_RefusesValidation_WhereTheSameRowWithoutOneIsAdmitted() {
+    public void APullRowAuthoringGravity_RefusesValidation_WhereTheSameRowWithoutOneIsAdmitted() {
         var admitted = BuildHoldDocument(holds: [Ground(), Wall(), Air()]);
 
         Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: admitted, reason: out var admittedReason), userMessage: admittedReason);
 
-        var denied = BuildHoldDocument(holds: [(Wall() with { Gravity = new WorldHoldGravity(Fall: 1f, Rise: 1f, Terminal: 1f) }), Ground(), Air()]);
+        var denied = BuildHoldDocument(holds: [(Wall() with { Gravity = new WorldHoldGravity(Fall: 1f, Rise: 1f) }), Ground(), Air()]);
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: denied, reason: out var deniedReason));
         Assert.Contains(actualString: deniedReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "gravity is refused");

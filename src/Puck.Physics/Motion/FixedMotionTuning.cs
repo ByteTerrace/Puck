@@ -62,29 +62,31 @@ public enum ShapingInstant : byte {
     /// <summary>The engage lane converges immediately.</summary>
     Engage = 1 << 0,
 
-    /// <summary>The brake lane converges immediately.</summary>
-    Brake = 1 << 1,
+    /// <summary>The reversal lane converges immediately.</summary>
+    Reversal = 1 << 1,
 
     /// <summary>The release lane converges immediately.</summary>
     Release = 1 << 2,
 }
 /// <summary>The compiled form of a <c>shaping</c> row's <c>along</c> facet: the whole-vector response law's
 /// engage/release rates (read when the row carries no <see cref="FixedShapingAcross"/>), and the drive
-/// decomposition's longitudinal accel/brake/coast/reverse rates (read when it does).</summary>
-/// <param name="Engage">The whole-vector engage rate (u/s²), or the drive's longitudinal accel rate.</param>
-/// <param name="Brake">Unread without a paired <see cref="FixedShapingAcross"/>: the drive's sign-reversal
-/// (brake) rate (u/s²).</param>
-/// <param name="Release">The whole-vector release rate (u/s²), or the drive's coast rate.</param>
-/// <param name="Reverse">Unread without a paired <see cref="FixedShapingAcross"/>: the reverse target speed
+/// decomposition's longitudinal engage/reversal/release rates and backward target speed (read when it
+/// does).</summary>
+/// <param name="Engage">The whole-vector engage rate (u/s²), or the drive's longitudinal forward-accelerate
+/// rate.</param>
+/// <param name="ReversalRate">Unread without a paired <see cref="FixedShapingAcross"/>: the drive's sign-reversal
+/// rate (u/s²) while back-throttle opposes forward travel.</param>
+/// <param name="Release">The whole-vector release rate (u/s²), or the drive's coast-down rate.</param>
+/// <param name="BackwardSpeed">Unread without a paired <see cref="FixedShapingAcross"/>: the backward target speed
 /// (u/s) full back-throttle converges on from rest.</param>
 /// <param name="Instant">The explicit absence-derived immediate-convergence lanes. Rate fields are zero where
 /// their corresponding flag is set and are never interpreted without that flag.</param>
-public readonly record struct FixedShapingAlong(FixedQ4816 Engage, FixedQ4816 Brake, FixedQ4816 Release, FixedQ4816 Reverse, ShapingInstant Instant);
+public readonly record struct FixedShapingAlong(FixedQ4816 Engage, FixedQ4816 ReversalRate, FixedQ4816 Release, FixedQ4816 BackwardSpeed, ShapingInstant Instant);
 /// <summary>The compiled form of a <c>shaping</c> row's <c>across</c> facet — present only on a row that runs the
 /// drive decomposition.</summary>
-/// <param name="Grip">The lateral convergence rate (u/s²) toward zero slip while this row governs.</param>
+/// <param name="Lateral">The lateral convergence rate (u/s²) toward zero slip while this row governs.</param>
 /// <param name="Instant">Whether lateral and residual slip are removed immediately.</param>
-public readonly record struct FixedShapingAcross(FixedQ4816 Grip, bool Instant);
+public readonly record struct FixedShapingAcross(FixedQ4816 Lateral, bool Instant);
 /// <summary>One compiled row of a kit's <c>shaping</c> table — the unified velocity-shaping law
 /// <see cref="BodyMotionOp.ShapeVelocity"/> reads. The first row whose <see cref="When"/> gate opens governs the
 /// whole tick; a row carries exactly one of <see cref="Along"/> (used alone for the whole-vector response law, or

@@ -332,8 +332,8 @@ disagrees with. `Scale` multiplies the kit's
 shared collider volumes about the body's own root (never mutated in place —
 a per-call scratch span, scaled only when `Scale != 1`), the resolved move
 speed and turn rate, hold probe height/standoff/reach, a hold's own gravity
-fall/rise/terminal, a wall hold's travel speed, and a grip's pull rate
-(`WorldBody.Hold.cs`) — a shrunk body's fall and depenetration stay
+fall/rise and its vertical-channel envelope, a wall hold's travel speed, and a
+pull's own rate (`WorldBody.Hold.cs`) — a shrunk body's fall and depenetration stay
 proportionally gentle rather than free-falling one tick of full-scale gravity
 into a collider whose own contact skin margin it can no longer absorb; the
 client reads the same row live and folds it into the rendered rig. Only the

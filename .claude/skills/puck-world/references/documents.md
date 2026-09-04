@@ -1073,7 +1073,7 @@ layout, +Z ahead of the origin spawn and +X the player's LEFT (the half-turn fli
 ladder (0.5/1/2 m cubes) ahead-left, the slope fan (30/45/55/65/75°, bracketing
 `collision.maxSlopeDegrees` 60) ahead-right, the step stairs (rises 0.1/0.25/0.5/1 m) to the left,
 the wall with a 1.5 m-clearance and a 0.5 m-clearance overhang at the right edge (a 1 m column,
-`pillarUnderhang`, joins the floor to the low overhang's underside so a whole-sphere grip can crawl
+`pillarUnderhang`, joins the floor to the low overhang's underside so a whole-sphere pull can crawl
 floor → column → ceiling without leaving contact), the pit (a `Subtraction` carve) behind, and 1 m compass posts on the platform's axis midpoints — `axisX` red,
 `axisZ` blue, a post at the ENGINE-positive end and a flat disc at the negative — with `farPillar`
 120 m ahead on the net as the fog/far-distance landmark. What it measures (`body.fly` from each
@@ -1091,11 +1091,11 @@ net to above head height for exactly that reason, and a void that must be exact 
 geometry instead. The chase rig's orbit yaw is `state.look.behind`, world-referenced, so a spawn's
 `yawDegrees` turns the body, never the camera. Three population creatures live on the platform as
 `inhabit` rows with `wander` producers (`spiderDen`, `dragonflyPerch`, `houndRun`), each a different
-hold list over the same primitives: the spider (`spiderKit`) grips any face in a `[0, 180]` cone,
+hold list over the same primitives: the spider (`spiderKit`) pulls any face in a `[0, 180]` cone,
 the dragonfly (`dragonflyKit`, the same `walk` program every kit here shares) holds the air on full
 lift with its own row's `thrust` climbing, and keeps its altitude
 through the producer's `altitudeGain`, the hound (`houndKit`) walks the ground hold with a four-beat
-gait and planted paws; Wren's own hold list is `wall` (grip, `spend` against the `stamina` body slot,
+gait and planted paws; Wren's own hold list is `wall` (pull, `spend` against the `stamina` body slot,
 `jump` releases), `ground`, `air`, and her hands and feet are `effectors` on surface targets. Their
 homes sit away from the pit and the platform edge — a wander radius that reaches either walks the
 creature onto the safety net, which it then paces beneath the platform.
@@ -1114,8 +1114,8 @@ remarks warn a Level-triggered write against. The two regions are never nested o
 one inside the other — the shrink region has no reach into where the restore region would fire, and the
 restore region has no reach back into the shrink region's own interior — so leaving one always reaches
 the other's edge before either could re-trigger itself. `Server.WorldBody.Scale` scales collider
-volumes, move speed/turn rate, hold probes/standoff/reach, a hold's own gravity fall/rise/terminal, a
-wall hold's travel speed, and a grip's pull rate; the client multiplies the same live cell into the
+volumes, move speed/turn rate, hold probes/standoff/reach, a hold's own gravity fall/rise and its
+vertical-channel envelope, a wall hold's travel speed, and a pull's own rate; the client multiplies the same live cell into the
 rendered rig AND the seat chase camera's orbit distance and look-at height
 (`Client.WorldFramePresenter.ResolveCamera`), so a shrunk body stays framed instead of shrinking to a
 speck on screen. A `tabletop` placement (a solid pedestal table, 1.2 m clearance under its top) carries
@@ -1235,8 +1235,8 @@ is a kit whose shaping table carries an `across` row.
 **`shaping` (`WorldShaping[]`) — the unified velocity-shaping table.** One
 row shape serves the whole-vector response law, the anisotropic drive
 decomposition, and a named second-order follower: `{ "when": <predicate,
-optional>, "along": { "engage"?, "brake"?, "release"?, "reverse"? }, "across":
-{ "grip"? }, "dynamics": "<row>", "turnScale": 1 }`. Rows evaluate in order,
+optional>, "along": { "engage"?, "reversalRate"?, "release"?, "backwardSpeed"? }, "across":
+{ "lateral"? }, "dynamics": "<row>", "turnScale": 1 }`. Rows evaluate in order,
 first open gate wins; `when` admits the shaping-gate predicate vocabulary —
 body-fact kinds (`now`/`recently`/`all`/`any`/`not`) plus `held` (`{ "held":
 "<channel>" }` — the named composition channel's own live read at or above
@@ -1244,8 +1244,8 @@ its declared threshold, resolved against the world's channel table at
 kit-compile time; legitimate only here). Exactly one of `along` or `dynamics`
 is authored per row; `across` is legitimate only beside `along`. An omitted
 convergence rate means exact, immediate convergence. An explicit rate must be
-positive; zero is never a hidden spelling of "instant" or "disabled". `brake`
-and any authored `reverse` are refused on a whole-vector row because that law
+positive; zero is never a hidden spelling of "instant" or "disabled". `reversalRate`
+and any authored `backwardSpeed` are refused on a whole-vector row because that law
 does not read drive-only facets.
 
 A row without `across` shapes the whole vector through the engage/release
@@ -1254,10 +1254,10 @@ centered, with the shared recency clocks its `when` gate's `recently`
 predicates read. A row with `across` runs the anisotropic drive
 decomposition instead, the same body-frame longitudinal/lateral/residual
 lanes converging each at its own authored rate: `along.engage` while throttle commands
-more speed, `along.brake` while back-throttle opposes forward travel,
+more speed, `along.reversalRate` while back-throttle opposes forward travel,
 `along.release` toward rest with throttle centered (and the over-speed
-bleed), `along.reverse` the reverse target speed full back-throttle
-converges on from rest, and `across.grip` the lateral convergence rate
+bleed), `along.backwardSpeed` the backward target speed full back-throttle
+converges on from rest, and `across.lateral` the lateral convergence rate
 toward zero slip. `turnScale` multiplies the turn tuning's own authority
 curve while this row governs — `1` (the default) for an ordinary row, and a
 held drift row's own tightened arc. A `dynamics` row names a `dynamics`-
@@ -1282,7 +1282,7 @@ a Surface `Gravity` hold row, a flying variant a Free `Lift` row (`lift: 1`)
 and a positive `turn.pitchRate`, which is what decides vertical contact
 ownership per the seam's rule. Validation
 (`WorldDefinitionValidator.ValidateShaping`): every authored convergence rate
-positive; `along.reverse`, when present, non-negative; `across` refused without `along`,
+positive; `along.backwardSpeed`, when present, non-negative; `across` refused without `along`,
 `turn.falloff` in `[0, 1]`, `turn.pitchRate` non-negative, and a `held` gate
 naming a resolvable channel. `DriveLawTests` pins the drive family, and
 `ShapingRowLawTests` the whole-vector and dynamics-row families, to
@@ -1299,12 +1299,12 @@ A worked kart:
     "speed": { "value": 16.0, "envelope": { "min": 16.0, "max": 16.0 }, "held": { "channel": "boost", "multiplier": 1.5 } },
     "turn": { "rate": 2.4, "referenceSpeed": 4.0, "falloff": 0.55 },
     "holds": [
-      { "name": "ground", "bond": "Surface", "cone": [0, 60], "hold": "Gravity", "reach": 1.2, "gravity": { "rise": 14.0, "fall": 26.0, "terminal": 30.0 } },
-      { "name": "air", "bond": "Free", "hold": "Gravity", "gravity": { "rise": 14.0, "fall": 26.0, "terminal": 30.0 } }
+      { "name": "ground", "bond": "Surface", "cone": [0, 60], "hold": "Gravity", "reach": 1.2, "gravity": { "rise": 14.0, "fall": 26.0 }, "envelope": { "sinkSpeed": 30.0 } },
+      { "name": "air", "bond": "Free", "hold": "Gravity", "gravity": { "rise": 14.0, "fall": 26.0 }, "envelope": { "sinkSpeed": 30.0 } }
     ],
     "shaping": [
-      { "when": { "$type": "held", "channel": "drift" }, "along": { "engage": 7.0, "brake": 18.0, "release": 4.0, "reverse": 5.0 }, "across": { "grip": 6.0 }, "turnScale": 1.4 },
-      { "along": { "engage": 7.0, "brake": 18.0, "release": 4.0, "reverse": 5.0 }, "across": { "grip": 22.0 } }
+      { "when": { "$type": "held", "channel": "drift" }, "along": { "engage": 7.0, "reversalRate": 18.0, "release": 4.0, "backwardSpeed": 5.0 }, "across": { "lateral": 6.0 }, "turnScale": 1.4 },
+      { "along": { "engage": 7.0, "reversalRate": 18.0, "release": 4.0, "backwardSpeed": 5.0 }, "across": { "lateral": 22.0 } }
     ]
   }
 }
@@ -1409,14 +1409,14 @@ program selects.
 
 ```json
 "holds": [
-  { "name": "wall", "bond": "Surface", "cone": [60, 120], "hold": "Grip", "grip": 1.0,
+  { "name": "wall", "bond": "Surface", "cone": [60, 120], "hold": "Pull", "pull": 1.0,
     "reach": 0.8, "speed": 2.0, "upLean": 0.0, "forward": "Heading",
     "onDrive": true, "driveAlignment": 0.5, "release": "jump",
     "spend": { "state": "stamina", "ratePerSecond": 1.0 } },
   { "name": "ground", "bond": "Surface", "cone": [0, 60], "hold": "Gravity", "reach": 1.2,
-    "gravity": { "rise": 28.0, "fall": 46.0, "terminal": 40.0 } },
+    "gravity": { "rise": 28.0, "fall": 46.0 }, "envelope": { "sinkSpeed": 40.0 } },
   { "name": "air", "bond": "Free", "hold": "Gravity",
-    "gravity": { "rise": 28.0, "fall": 46.0, "terminal": 40.0 } }
+    "gravity": { "rise": 28.0, "fall": 46.0 }, "envelope": { "sinkSpeed": 40.0 } }
 ]
 ```
 
@@ -1426,41 +1426,53 @@ is measured against gravity-up, never the body's own leaned up), `Free` (no
 surface at all), or `Medium` (the world's own field-lattice column — the world
 either offers a medium where the body is or it does not, so the bond carries no
 cone and no reach, and takes a `medium` law instead:
-`{ buoyancy, maxRiseSpeed, maxSinkSpeed, surfaceSettleRate, floatDepth }`).
-`hold` is `Gravity` (gravity holds the body against the face — the walkable
-case, integrating the row's own `gravity` arc), `Grip` (a pull of `grip` u/s
-toward the face applied as a POSITIONAL standoff, gravity suspended while it
-holds), `Lift` (a fraction `lift` of gravity cancelled — 1 hovers, bleeding
-whatever the vertical channel carries back to rest at the row's own `gravity.rise`
-rate rather than integrating the arc), or `None`. `gravity` (`{ rise, fall,
-terminal }`, u/s², u/s², u/s) is the row's own vertical arc — required on a
-`Gravity` or `Lift` row, refused on a `Grip` row and on a `Medium` bond (a
-medium displaces by its own law); the world's own solved gravity field, where
-one is authored, overrides the MAGNITUDE but keeps the row's `rise:fall` ratio
-as the arc's asymmetry. `thrust` (a fraction of the kit's resolved move speed
-the `MoveUp` role commands vertically, `[0, 1]`, default `0`) applies in EVERY
-bond: a non-`Medium` row commanding thrust takes the vertical channel outright
-for the tick, clearing the ballistic carry, while a `Medium` row's own thrust
-folds into its displacement law's convergence instead — the medium's drift and
-the body's own MoveUp thrust are summed BEFORE that convergence runs, so
-nothing writes the vertical channel twice, and it publishes
-`Submerged`/`AtSurface`. `speed` (u/s along the row's tangent plane, absent
-rides the kit's own resolved move speed), `reach` (how far a surface row's
-probes search; required positive), `onDrive` + `driveAlignment` (take the row
-by driving into a face in its cone), `release` (a declared channel whose HELD
-read drops the row — no latch, so holding it down keeps the body off the
-face), and `spend` (drain a body-lane Counter slot at a rate; the row becomes
-ineligible the tick the slot cannot pay, and a world's own rules refill it or
-trade for it — the engine has no stamina concept of its own).
+`{ idleDrift, equilibriumOffset, settleRate }` — `settleRate` is the one gain
+that turns the equilibrium error into a target velocity; the governing shaping
+row's own `along`/`dynamics` facet then rate-limits the body's actual velocity
+toward that target the same way it rate-limits every other channel). `hold` is
+`Gravity` (gravity holds the body
+against the face — the walkable case, integrating the row's own `gravity`
+arc), `Pull` (a pull of `pull` u/s toward the face applied as a POSITIONAL
+standoff, gravity suspended while it holds), `Lift` (a fraction `lift` of
+gravity cancelled — 1 hovers, bleeding whatever the vertical channel carries
+back to rest at the row's own `gravity.rise` rate rather than integrating the
+arc), or `None`. `gravity` (`{ rise, fall }`, u/s², u/s²) is the row's own
+vertical arc — required on a `Gravity` or `Lift` row, refused on a `Pull` row
+and on a `Medium` bond (a medium displaces by its own law); the world's own
+solved gravity field, where one is authored, overrides the MAGNITUDE but
+keeps the row's `rise:fall` ratio as the arc's asymmetry. `envelope`
+(`{ riseSpeed?, sinkSpeed }`, u/s each) is the vertical-channel bound a
+`Gravity`/`Lift` row's own terminal fall speed and a `Medium` row's terminal
+rise/sink speeds share — the SAME field family a document-wide speed ceiling
+walks, rather than three separately-authored numbers a caller has to
+`Math.Max` across. Required for a `Medium` bond (both directions) and for a
+`Gravity`/`Lift` row short of full lift (sink only — that arc never clamps a
+rise); refused otherwise, including on a full-lift row (`lift: 1`), whose
+channel decays rather than clamps. `thrust` (a fraction of the kit's resolved
+move speed the `MoveUp` role commands vertically, `[0, 1]`, default `0`)
+applies in EVERY bond: a non-`Medium` row commanding thrust takes the
+vertical channel outright for the tick, clearing the ballistic carry, while a
+`Medium` row's own thrust folds into its displacement law's convergence
+instead — the medium's drift and the body's own MoveUp thrust are summed
+BEFORE that convergence runs, so nothing writes the vertical channel twice,
+and it publishes `InMedium`/`AtMediumBand`. `speed` (u/s along the row's
+tangent plane, absent rides the kit's own resolved move speed), `reach` (how
+far a surface row's probes search; required positive), `onDrive` +
+`driveAlignment` (take the row by driving into a face in its cone), `release`
+(a declared channel whose HELD read drops the row — no latch, so holding it
+down keeps the body off the face), and `spend` (drain a body-lane Counter
+slot at a rate; the row becomes ineligible the tick the slot cannot pay, and
+a world's own rules refill it or trade for it — the engine has no stamina
+concept of its own).
 
-A grip owns the whole tangent-plane velocity, rise included; the tick it ends
+A pull owns the whole tangent-plane velocity, rise included; the tick it ends
 (released, spent out, or its face lost) that rise is split against gravity-up
 and carried into the ballistic channel, so a body letting go mid-climb keeps
 the climb's momentum instead of dropping from rest.
 
 Frame rules per row: `upLean` in `[0, 1]` blends the body's up axis from
 gravity-up toward the face normal (0 keeps a body upright on a wall, 1 lays it
-on the face). A grip's drawn axis is TURNED into its lean, never snapped, at the
+on the face). A pull's drawn axis is TURNED into its lean, never snapped, at the
 rate a body turns over its own span — the row's `speed` over the collider's
 probe height plus standoff, rad/s, derived and not authored — so a face change
 (floor to wall to ceiling) is a turn, and the axis returns to the contact axis
@@ -1469,11 +1481,11 @@ lean, whose contact axis is bounded already. **Whether that lean also carries th
 decided by the hold's KIND, never by the lean.** A `gravity` hold is one the
 world's own gravity presses onto its face, so the face IS the ground the solver
 should stand the body on and the axis leans with it, bounded through the same
-accumulator a measured contact normal is adopted by — a kart on a loop. A `grip`
+accumulator a measured contact normal is adopted by — a kart on a loop. A `pull`
 hold holds the body instead, gravity is suspended, and leaning the contact axis
 there would tell the solver that the floor under the body is a ceiling and that
 falling is upward: the floor stops depenetrating and a released body flies off.
-So a grip's lean is the body's FRAME — the plane it travels in and the attitude
+So a pull's lean is the body's FRAME — the plane it travels in and the attitude
 it is drawn at (`scratch.AttitudeUp`, which every attitude writer including the
 facing snap composes about) — while the contact axis stays with the ambient
 resolve. `forward` (`Heading`/`Intent`/`Velocity`) chooses what that drawn
@@ -1497,7 +1509,7 @@ tangent by a body span and in past the face by a body width — and the body
 arrives one body span off whatever it finds there; that is the whole of the
 ledge transition, with no mantle phase.
 
-Every probe is DIRECTED, for the same reason a grip's always was: an undirected
+Every probe is DIRECTED, for the same reason a pull's always was: an undirected
 nearest-surface query on a world whose floor, walls, ramps and overhangs are one
 holdable placement answers with the floor a body is standing on.
 `IContactField.TryHoldableSurfaceAlongDirection` is that query; both providers
@@ -1505,17 +1517,21 @@ answer it, the field by ray march (`RayHit.Normal` is documented ZERO — the
 surface orientation is a separate `TryFieldGradient` read one step back along
 the ray). Which surfaces admit a hold at all is the collision row's
 `defaultHold` (world-level) composed with a placement's own
-`grip: { holdable: … }` override.
+`grip: { holdable: … }` override — the placement's own surface-holdability
+facet, a distinct concept from a hold row's `Pull` kind despite the shared
+word: `WorldPlacementGrip` says whether a face can be held AT ALL, never how.
 
 Validation (`WorldDefinitionValidator.ValidateHolds`): unique row names; a cone
 required for a `Surface` row and refused for a `Free` one, finite, inside
 `[0, 180]`, increasing; a positive `reach` on a `Surface` row; `upLean` and
-`driveAlignment` in `[0, 1]`; a positive `grip` on a `Grip` row and `Grip`/
+`driveAlignment` in `[0, 1]`; a positive `pull` on a `Pull` row and `Pull`/
 `onDrive` requiring `Surface`; `lift` in `[0, 1]`; `gravity` required with a
-positive `rise`/`fall`/`terminal` on a `Gravity` or `Lift` row and refused
-elsewhere; `thrust` in `[0, 1]`; `release` naming a declared
-composition channel; `spend.state` naming a declared body/identity Counter slot
-and a positive `spend.ratePerSecond`. Both `Holds` and `Drive` are
+positive `rise`/`fall` on a `Gravity` or `Lift` row and refused elsewhere;
+`envelope` required (sink speed positive; a `Medium` bond also requires a
+positive rise speed) on a `Medium` bond or a `Gravity`/`Lift` row short of
+full lift, and refused otherwise; `thrust` in `[0, 1]`; `release` naming a
+declared composition channel; `spend.state` naming a declared body/identity
+Counter slot and a positive `spend.ratePerSecond`. Both `Holds` and `Drive` are
 CONDITIONALLY-supplied facets — a kit authoring an empty or absent `holds` list
 refuses a Motion-kind program outright (a fact checked ahead of the facet
 mechanism, since it holds whatever operations the program selects), and a
@@ -1565,7 +1581,7 @@ value. Surface holds are not authored here.
 **Body facts on the wire (`BodyFacts`, `Puck.Physics.Motion`).** The engine
 publishes each body's per-tick fact set on `EntitySnapshot.Facts` — one bit
 per body-state `ActionFact` (`grounded`, `airborne`, `rising`, `falling`,
-`submerged`, `atsurface`, `climbing` — holding a surface row whose face is
+`inmedium`, `atmediumband`, `climbing` — holding a surface row whose face is
 outside the world's own walkable cone — `flying` — holding a free row with
 lift — and `resting`, written only by the rigid solver once a rigid body's
 linear and angular velocity latch to zero; `AffectedBy` has no bit, being a relationship rather than a state). The mask is derived through the SAME

@@ -722,7 +722,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             } else if ((row?.Across is { } across) && (row.Along is { } along)) {
                 _ = builder.Append(
                     provider: CultureInfo.InvariantCulture,
-                    handler: $"drive(engage={DescribeConvergence(value: along.Engage)} brake={DescribeConvergence(value: along.Brake)} release={DescribeConvergence(value: along.Release)} reverse={DescribeReverse(value: along.Reverse)} grip={DescribeConvergence(value: across.Grip)})"
+                    handler: $"drive(engage={DescribeConvergence(value: along.Engage)} reversalRate={DescribeConvergence(value: along.ReversalRate)} release={DescribeConvergence(value: along.Release)} backwardSpeed={DescribeOptional(value: along.BackwardSpeed)} lateral={DescribeConvergence(value: across.Lateral)})"
                 );
             } else if (row?.Along is { } responseAlong) {
                 _ = builder.Append(
@@ -740,7 +740,9 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         ? finite.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)
         : "instant"
     );
-    private static string DescribeReverse(float? value) => (value is { } finite
+    // The generic "omitted" read-back for an optional authored scalar — none is a document fact worth showing
+    // plainly, distinct from DescribeConvergence's own "instant" (an absent RATE, never an absent scalar).
+    private static string DescribeOptional(float? value) => (value is { } finite
         ? finite.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)
         : "none"
     );
@@ -758,7 +760,13 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"{((index == 0) ? "" : ",")}{hold.Name}:{hold.Hold}");
 
             if (hold.Gravity is { } gravity) {
-                _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"(rise={gravity.Rise:0.###} fall={gravity.Fall:0.###} terminal={gravity.Terminal:0.###})");
+                _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"(rise={gravity.Rise:0.###} fall={gravity.Fall:0.###})");
+            }
+            if (hold.Envelope is { } envelope) {
+                _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"[envelope rise={DescribeOptional(value: envelope.RiseSpeed)} sink={envelope.SinkSpeed:0.###}]");
+            }
+            if (hold.Medium is { } medium) {
+                _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"[medium idleDrift={medium.IdleDrift:0.###} equilibriumOffset={medium.EquilibriumOffset:0.###} settleRate={medium.SettleRate:0.###}]");
             }
             if (hold.Thrust > 0f) {
                 _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"[thrust={hold.Thrust:0.###}]");

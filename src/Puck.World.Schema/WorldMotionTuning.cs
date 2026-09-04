@@ -186,32 +186,32 @@ public sealed record WorldTurn(
 );
 /// <summary>The along-the-target (whole vector) or along-the-heading (drive longitudinal) facet of one
 /// <see cref="WorldShaping"/> row. An absent convergence rate means exact, immediate convergence; zero is never a
-/// hidden spelling of either "instant" or "disabled". <see cref="Brake"/> and <see cref="Reverse"/> are admitted
-/// only when the row also carries <see cref="WorldShaping.Across"/>.</summary>
+/// hidden spelling of either "instant" or "disabled". <see cref="ReversalRate"/> and <see cref="BackwardSpeed"/> are
+/// admitted only when the row also carries <see cref="WorldShaping.Across"/>.</summary>
 /// <param name="Engage">The whole-vector engage rate (u/s²) while the commanded target exceeds the body's current
 /// magnitude, or — paired with <see cref="WorldShaping.Across"/> — the drive's longitudinal accel rate while
 /// throttle commands more speed. <see langword="null"/> means converge immediately.</param>
-/// <param name="Brake">The drive's sign-reversal (brake) rate (u/s²) while back-throttle opposes forward travel.
-/// <see langword="null"/> means brake immediately. Refused without a paired
+/// <param name="ReversalRate">The drive's sign-reversal rate (u/s²) while back-throttle opposes forward travel.
+/// <see langword="null"/> means reverse sign immediately. Refused without a paired
 /// <see cref="WorldShaping.Across"/>.</param>
 /// <param name="Release">The whole-vector release rate (u/s²) while the target does not exceed the current
 /// magnitude, or — paired with <see cref="WorldShaping.Across"/> — the drive's coast rate toward rest with
 /// throttle centered, and the decay rate while over the commanded speed. <see langword="null"/> means converge
 /// immediately.</param>
-/// <param name="Reverse">The reverse speed (u/s) full back-throttle converges on from rest; absence forbids
-/// reversing. Refused whenever authored without a paired <see cref="WorldShaping.Across"/>.</param>
+/// <param name="BackwardSpeed">The backward speed (u/s) full back-throttle converges on from rest; absence forbids
+/// travelling backward. Refused whenever authored without a paired <see cref="WorldShaping.Across"/>.</param>
 public sealed record WorldShapingAlong(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Engage = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Brake = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? ReversalRate = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Release = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Reverse = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? BackwardSpeed = null
 );
 /// <summary>The across-the-heading (lateral) facet of one <see cref="WorldShaping"/> row — its presence is what
 /// selects the anisotropic drive decomposition over the whole-vector response law.</summary>
-/// <param name="Grip">The lateral convergence rate (u/s²) toward zero slip while this row governs, or
+/// <param name="Lateral">The lateral convergence rate (u/s²) toward zero slip while this row governs, or
 /// <see langword="null"/> to remove slip immediately.</param>
 public sealed record WorldShapingAcross(
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Grip = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Lateral = null
 );
 /// <summary>One row of a kit's ordered <c>shaping</c> table: how velocity converges on the commanded intent while
 /// <see cref="When"/> holds. Rows evaluate in order, first match wins; the table may carry one unconditional
@@ -309,18 +309,18 @@ public static class WorldMotionTuningFactory {
                 Along: ((row.Along is { } along)
                 ? new FixedShapingAlong(
                     Engage: FixedQ4816.FromDouble(value: (along.Engage ?? 0f)),
-                    Brake: FixedQ4816.FromDouble(value: (along.Brake ?? 0f)),
+                    ReversalRate: FixedQ4816.FromDouble(value: (along.ReversalRate ?? 0f)),
                     Release: FixedQ4816.FromDouble(value: (along.Release ?? 0f)),
-                    Reverse: FixedQ4816.FromDouble(value: (along.Reverse ?? 0f)),
+                    BackwardSpeed: FixedQ4816.FromDouble(value: (along.BackwardSpeed ?? 0f)),
                     Instant: ((along.Engage is null ? ShapingInstant.Engage : ShapingInstant.None)
-                        | (along.Brake is null ? ShapingInstant.Brake : ShapingInstant.None)
+                        | (along.ReversalRate is null ? ShapingInstant.Reversal : ShapingInstant.None)
                         | (along.Release is null ? ShapingInstant.Release : ShapingInstant.None))
                 )
                 : null),
                 Across: ((row.Across is { } across)
                 ? new FixedShapingAcross(
-                    Grip: FixedQ4816.FromDouble(value: (across.Grip ?? 0f)),
-                    Instant: (across.Grip is null)
+                    Lateral: FixedQ4816.FromDouble(value: (across.Lateral ?? 0f)),
+                    Instant: (across.Lateral is null)
                 )
                 : null),
                 Dynamics: CompileDynamics(

@@ -181,7 +181,7 @@ public sealed partial class NavigationLawTests {
                 // This navigation program carries no gravity law, so its hold row holds nothing and only consumes
                 // MoveUp: a Gravity row here would sink a navigator
                 // out of its own volume domain between goals.
-                Motion = kit.Motion with { Holds = [kit.Motion.Holds![0] with { Gravity = null, Hold = BodyHoldKind.None, Thrust = 1f }] },
+                Motion = kit.Motion with { Holds = [kit.Motion.Holds![0] with { Envelope = null, Gravity = null, Hold = BodyHoldKind.None, Thrust = 1f }] },
                 ProducersRaw = new Dictionary<string, BodyProgramParameters>(collection: kit.Producers) {
                     [ProducerName] = NavigationParameters(),
                 },

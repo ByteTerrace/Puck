@@ -154,7 +154,7 @@ fold — git history only — and rows citing `puck.world.json` describe what is
 `water` field marked `medium` (a 5-unit pool) beside the existing fire/char chemistry, transported by a
 `flow` reaction that spills its edge share into `falls-flux`, which gates a `falls-mist` rule — plus
 `fish`/`critter` placements and `pond-cam`/`south-fall-cam` view layouts. `puck canary medium-submersion`
-proves a medium hold's `Submerged` fact flips both ways off `WorldPopulation.SampleMediumSurfaces`; `puck
+proves a medium hold's `InMedium` fact flips both ways off `WorldPopulation.SampleMediumSurfaces`; `puck
 canary flow-conservation-live` proves a spill row climbs strictly, live, only while a reaction keeps
 feeding its source. `puck parity` (both backends) holds unchanged — the parity world authors neither
 facet.
@@ -204,7 +204,7 @@ leaves `body.where` at the ramp foot (y = −0.48), from x = 1.5/3.5/5.5 it cres
 `body.pose 0 0 3 0 0 0` + `body.fly -1 0 0 0 0 0 1` ends on the net at y = −15.98 inside the pit. The second
 (2026-09-02): climbing and a limbed avatar, built on two primitives that name no game at all. The
 sim publishes a per-body FACT MASK (`BodyFacts`, one bit per `ActionFact` — grounded, airborne,
-rising, falling, submerged, at surface, climbing, flying — derived from the same predicates the action
+rising, falling, inMedium, atMediumBand, climbing, flying — derived from the same predicates the action
 gates read; `EntitySnapshot.Facts`, echoed by `body.where`'s `facts=`), never a regime enum, so a
 submarine is a vehicle body that is submerged and a plane one that is airborne. A creation look
 binds DRIVERS to signals (`drivers[]`: planar travel, travel, time, speed, vertical speed, turn rate;
@@ -213,21 +213,28 @@ compose JOINTS from them (`swings[]` about a pivot and axis, `slides[]` along an
 waveforms) — the same parts make a walker's stride, a climber's reach, a wheel, a rotor, or gills.
 Climbing is no longer a mode of its own: a grounded kit authors an ORDERED HOLD LIST
 (`motion.holds`) of what may hold it — a `bond` (a field face inside a `cone` of degrees from
-gravity-up, or nothing at all), a `hold` law (gravity, a positional grip, a fraction of gravity
+gravity-up, or nothing at all), a `hold` law (gravity, a positional pull, a fraction of gravity
 lifted), a tangent `speed`, an `upLean`, an `onDrive` grab, a `release` channel, and a `spend`
 against a body-lane slot — and the `ResolveHold`/`ApplyHold` operations read it. A wall, a ledge, a
 ceiling and a hover are the same primitive under different cones, so a spider and a dragonfly are
-data rather than code. Every surface probe is directed and the grip is a positional constraint, so
-tunnelling through a wall is impossible by construction; `grip: {holdable: true}` on the debug room
+data rather than code. Every surface probe is directed and the pull is a positional constraint, so
+tunnelling through a wall is impossible by construction; `grip: {holdable: true}` (a placement's own
+surface-holdability facet, unrelated to the hold's own `pull` kind) on the debug room
 (and `collision.defaultHold`) decides which surfaces admit a hold at all, and `body.hold` echoes
 which row holds a body. Three follow-ups settled the primitive: `upLean` moves the body's CONTACT
-axis only for a hold gravity keeps (a kart on a loop) — a grip's lean is the frame it travels in and
+axis only for a hold gravity keeps (a kart on a loop) — a pull's lean is the frame it travels in and
 the attitude it is drawn at, because leaning the contact axis onto a ceiling tells the solver the
 floor is a ceiling and a released body falls through it; a producer's inward pull steers against the
 body's own HOME (its activation position, echoed by `body.where`'s `home=`) rather than the world
 origin, so a population spread over placements keeps to its own ground instead of congregating; and
-`bond: "medium"` carries buoyancy and the surface band in the hold vocabulary — the one spelling of that
-law, pinned by `WorldMediumLawTests` to a recorded fixed-point trace. The anisotropic shaping facets fold the other way:
+`bond: "medium"` carries an idle drift, an equilibrium offset and a settle rate in the hold
+vocabulary — the one spelling of that law (the settle rate is the one gain that turns the
+equilibrium error into a target velocity; the governing shaping row's own convergence then
+rate-limits the body's actual velocity toward that target the same way it rate-limits every other
+channel), pinned by `WorldMediumLawTests` to a recorded fixed-point trace, generalized to measure
+displacement along the body's own resolved gravity-up rather than a raw world-Y difference, so a
+medium inside a tilted gravity area settles at the right height. The anisotropic shaping facets fold
+the other way:
 they shape velocity rather than hold a body, so they are an `along` + `across` row in the same motion row, not a hold —
 `DriveLawTests` pins that fold to the row's recorded 240-tick trace. The pip carries two arms and
 two legs on `stride` (contralateral, about X) and `reach` (diagonal pairs, in the wall plane). The
@@ -254,7 +261,7 @@ mid-walk shows knees and elbows bent through the chain; on the wall (`body.pose 
 in, forward) `world.screenshot` shows the overhead reach, and on the ledge the posture eases out.
 **The kinematics rework, squash 1**: climbing stopped being a concept. A grounded kit authors an
 ordered `holds` list (`bond` surface/free, a `cone` of surface normals against gravity-up, `hold`
-gravity/grip/lift, reach, speed, `upLean`, `forward`, `onDrive`, `release`, `spend` against a body
+gravity/pull/lift, reach, speed, `upLean`, `forward`, `onDrive`, `release`, `spend` against a body
 state slot), and two program ops — `ResolveHold` picks the hold the world offers each tick and sets
 the frame, `ApplyHold` is its vertical law; the attachment section's climb members are gone
 (grapple stays a tether), `BodyFacts.Flying` joins the mask, and `body.hold` reads the hold back. A
@@ -263,7 +270,7 @@ ledge is the next hold, not a mantle state; stamina is the world's own body slot
 from a surface probe, a body, or a state cell, gated on facts, with `plant` windows that latch a foot
 through stance — hands on the wall, feet on the step, from the same primitive that plants a spider's
 eight legs. Three creatures now wander the debug area over those primitives: a spider (whole-sphere
-grip), a dragonfly (full lift, altitude held by its producer), a hound (four-beat trot, planted paws).
+pull), a dragonfly (full lift, altitude held by its producer), a hound (four-beat trot, planted paws).
 Found in passing: the client's query field refused the wallpaper-folded ground texture, so limb
 probes and the chase camera's clearance sweep were inert (it now builds from solid placements only);
 a flat ellipsoid's eccentricity taxes every march in the frame (the dragonfly's first wings made the
@@ -330,7 +337,7 @@ remain possible. Social membership, chosen activity, local steering, shared
 navigation, and physical contact answer different questions. Sharing a compatible
 route is an optimization of chosen behavior, never a reason to force membership;
 followers retain independent progress and may detach without losing their bonds.
-Ground travel uses the body's tangent plane; airborne and submerged travel use
+Ground travel uses the body's tangent plane; airborne and in-medium travel use
 three dimensions, with medium membership remaining an actual traversal constraint.
 
 Relationships are directed, contextual, and author-named numeric dimensions.
@@ -372,8 +379,8 @@ ghost records**.
 geometric scale is a document-declared multiplier (`bodies.scaleRow`, a keyed `state.world` row whose
 own `min`/`max` is the world's declared scale envelope), read and written like any other state cell —
 never a bespoke "shrink" mechanic. Collider volumes, resolved move speed and turn rate, hold
-probe/standoff/reach, a hold's own gravity fall/rise/terminal, a wall hold's travel speed, and a grip's
-pull rate all scale with it on the server — a shrunk body's fall and depenetration stay proportionally
+probe/standoff/reach, a hold's own gravity fall/rise and its vertical-channel envelope, a wall hold's travel speed, and a pull's own
+rate all scale with it on the server — a shrunk body's fall and depenetration stay proportionally
 gentle rather than free-falling one tick of full-scale gravity into a collider whose own contact skin
 margin it can no longer absorb; the client reads the same live cell into the rendered rig and the seat
 chase camera's orbit distance and look-at height, so a shrunk body stays framed rather than shrinking to

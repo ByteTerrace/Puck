@@ -16,7 +16,7 @@ public sealed partial class WorldBody {
     private FixedVector3 m_holdAnchor;
     private FixedVector3 m_holdNormal;
     private FixedRateAccumulator m_holdSpendAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
-    // The axis the body is DRAWN standing on, carried across ticks so a grip's lean is reached by turning over the
+    // The axis the body is DRAWN standing on, carried across ticks so a pull's lean is reached by turning over the
     // body's own span rather than by snapping — see SteerAttitudeToward. Zero until the first resolve seats it.
     private FixedVector3 m_attitudeUp;
     private FixedRateAccumulator m_attitudeTurnAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
@@ -538,7 +538,7 @@ public sealed partial class WorldBody {
 
         if (chosen != m_holdIndex) {
             m_holdSpendAccumulator.Reset();
-            CarryGripMomentum(
+            CarryPullMomentum(
                 next: chosen,
                 up: in up
             );
@@ -623,10 +623,10 @@ public sealed partial class WorldBody {
 
         // Whether the lean also carries the body's CONTACT axis is decided by what is holding the body, never by the
         // lean itself. A hold gravity keeps presses the body onto its face, so that face is the ground the solver
-        // should stand it on and the axis leans with it — a kart on a loop. A grip holds the body instead, gravity is
+        // should stand it on and the axis leans with it — a kart on a loop. A pull holds the body instead, gravity is
         // suspended, and leaning the contact axis onto the face would tell the solver that the floor under the body
         // is a ceiling and that falling is upward: the floor stops depenetrating and a released body flies off. So a
-        // grip's lean is the body's FRAME — the plane it travels in and the attitude it is drawn at — and the contact
+        // pull's lean is the body's FRAME — the plane it travels in and the attitude it is drawn at — and the contact
         // axis stays with the ambient resolve.
         //
         // The adoption is BOUNDED, through the same accumulator a measured contact normal is adopted by and for the
@@ -646,12 +646,12 @@ public sealed partial class WorldBody {
         scratch.Up = m_up;
 
         // The drawn body stands on the leaned axis whether or not the solver does, and every later attitude writer
-        // (the facing snap) composes about this rather than flattening it back onto the contact axis. A grip reaches
+        // (the facing snap) composes about this rather than flattening it back onto the contact axis. A pull reaches
         // its lean by turning over the body's own span, so a face change is a turn and never a pop; a gravity hold's
         // drawn axis stays with its lean, whose contact axis is already bounded above.
         FixedVector3 attitude;
 
-        if (hold.Kind == BodyHoldKind.Grip) {
+        if (hold.Kind == BodyHoldKind.Pull) {
             attitude = SteerAttitudeToward(
                 speed: scratch.MoveSpeed,
                 stepTicks: scratch.StepTicks,
@@ -792,22 +792,22 @@ public sealed partial class WorldBody {
         );
     }
     // The counterpart to SteerAttitudeToward's bounded turn, for a target an ordinary frame operation already
-    // computed correctly: seats the drawn axis to it outright, so the next real lean (a Grip's own steer, or a
+    // computed correctly: seats the drawn axis to it outright, so the next real lean (a Pull's own steer, or a
     // return through the un-gated path above) turns from the true ambient rather than a stale one.
     private FixedVector3 SeatFreeAttitude(in FixedVector3 target) {
         m_attitudeUp = target;
 
         return target;
     }
-    // A grip owns the whole tangent-plane velocity, its rise included, so the tick it ends that rise would be
+    // A pull owns the whole tangent-plane velocity, its rise included, so the tick it ends that rise would be
     // replaced by the next planar shape and lost. It is momentum the body earned: split it against gravity-up, the
     // planar part for the shaper and the rest for the ballistic channel gravity now acts on, so a body letting go
     // mid-climb keeps climbing for the moment its momentum buys rather than dropping from rest.
-    private void CarryGripMomentum(int next, in FixedVector3 up) {
+    private void CarryPullMomentum(int next, in FixedVector3 up) {
         if (
             !TryCurrentHold(hold: out var previous) ||
-            (previous.Kind != BodyHoldKind.Grip) ||
-            ((next >= 0) && (m_holds[next].Kind == BodyHoldKind.Grip))
+            (previous.Kind != BodyHoldKind.Pull) ||
+            ((next >= 0) && (m_holds[next].Kind == BodyHoldKind.Pull))
         ) {
             return;
         }
@@ -827,8 +827,8 @@ public sealed partial class WorldBody {
     }
     // The body's drawn attitude under a hold. While the lean and the contact axis agree — every unleaned hold, and
     // every hold gravity keeps — this is the heading carried into the body's own up frame, exactly as the ordinary
-    // frame operation builds it, so an unleaned world is unchanged. Where they disagree (a grip's lean) the attitude
-    // is built from the leaned axis directly, which is what puts a gripping body's up on the face it holds while the
+    // frame operation builds it, so an unleaned world is unchanged. Where they disagree (a pull's lean) the attitude
+    // is built from the leaned axis directly, which is what puts a pulling body's up on the face it holds while the
     // solver keeps measuring against gravity.
     private void SetHoldAttitude(in FixedBodyHold hold, in FixedVector3 leaned, ref BodyMotionScratch scratch) {
         var source = (hold.Forward switch {
@@ -980,8 +980,8 @@ public sealed partial class WorldBody {
                 }
 
                 break;
-            case BodyHoldKind.Grip:
-                // Gravity is not applied while a grip holds, and the ballistic channel it would have filled is held
+            case BodyHoldKind.Pull:
+                // Gravity is not applied while a pull holds, and the ballistic channel it would have filled is held
                 // clear so nothing accumulates across the hold. The pull itself is positional — see SeatToHold.
                 if (m_verticalVelocity != FixedQ4816.Zero) {
                     m_verticalVelocity = FixedQ4816.Zero;
@@ -1036,7 +1036,7 @@ public sealed partial class WorldBody {
             elapsedTicks: stepTicks,
             ratePerSecond: -((gravity * scale) * m_scale)
         );
-        var terminalVelocity = -(hold.Gravity.Terminal * m_scale);
+        var terminalVelocity = -(hold.Envelope.SinkSpeed * m_scale);
         var acceleratedVelocity = (m_verticalVelocity + gravityStep);
 
         if (acceleratedVelocity < terminalVelocity) {
@@ -1105,36 +1105,65 @@ public sealed partial class WorldBody {
         m_verticalVelocityAccumulator.Reset();
         scratch.DirectVerticalVelocity = ((drive * scratch.MoveSpeed) * hold.Thrust);
     }
-    // The one medium law. The body's own commanded thrust is folded into the medium's drift BEFORE the convergence
-    // runs, so nothing writes the vertical channel twice: below the bob band the medium drifts the body at its
-    // buoyancy, inside the band (and above it, recovering a breach) it settles proportionally toward the float line,
-    // and the sum is clamped to the medium's own terminal speeds.
+    // The world's own gravity-up projected against the field's own plane never resolves below this alignment: past
+    // roughly an 87-degree tilt between the two, the ray a body would have to travel along its own up to reach the
+    // field's horizontal plane blows up (division by a near-zero denominator), so the medium law treats that tick as
+    // no medium at all rather than wrap a division into a nonsense displacement.
+    private static readonly FixedQ4816 MinMediumUpAlignment = FixedQ4816.FromDouble(value: 0.05);
+
+    // The one medium law. The body's own commanded thrust is folded into the medium's drift before the convergence
+    // runs, so nothing writes the vertical channel twice: below the equilibrium band the medium drifts the body at
+    // its idle drift; inside the band (and above it, recovering a breach) the equilibrium error scaled by the
+    // medium's own settle rate is the target. The governing shaping row's own along/dynamics facet below then
+    // rate-limits the body's actual velocity toward that target the same way it rate-limits every other channel —
+    // one gain turns position error into a target velocity, one rate turns that target into an actual one — and the
+    // sum is clamped to the hold's own vertical envelope, scaled by the body's own geometric scale like every other
+    // vertical-channel bound. Displacement is the distance a body would travel along its own resolved gravity-up to
+    // reach the field's plane (Point/Normal) — a ray/plane intersection, not a raw Y difference — so a medium inside
+    // a tilted gravity area still settles at the right height along the axis that actually governs it.
     private void ApplyMedium(in FixedBodyHold hold, ref BodyMotionScratch scratch) {
         var medium = hold.Medium;
 
-        if (m_mediumSurface is not { } mediumSurface) {
+        if (m_mediumSurface is not { } surface) {
             return;
         }
 
-        var surfaceRest = (mediumSurface - medium.FloatDepth);
-        var error = (surfaceRest - m_position.Y);
+        var up = HoldGravityUp;
+        var alignment = FixedVector3.Dot(
+            left: up,
+            right: surface.Normal
+        );
+
+        if (FixedQ4816.Abs(value: alignment) < MinMediumUpAlignment) {
+            return;
+        }
+
+        var riseSpeed = (hold.Envelope.RiseSpeed * m_scale);
+        var sinkSpeed = (hold.Envelope.SinkSpeed * m_scale);
+
+        // Positive when the field's plane sits ahead of the body along up — the body is below the free surface.
+        var displacement = (FixedVector3.Dot(
+            left: (surface.Point - m_position),
+            right: surface.Normal
+        ) / alignment);
+        var error = (displacement - medium.EquilibriumOffset);
         FixedQ4816 drift;
 
-        if (m_position.Y < (surfaceRest - medium.FloatDepth)) {
+        if (error > medium.EquilibriumOffset) {
             drift = FixedQ4816.Clamp(
-                value: medium.Buoyancy,
-                minimum: -medium.MaxSinkSpeed,
-                maximum: medium.MaxRiseSpeed
+                value: medium.IdleDrift,
+                minimum: -sinkSpeed,
+                maximum: riseSpeed
             );
         } else {
-            var upwardCap = ((medium.Buoyancy > FixedQ4816.Zero)
-                ? medium.Buoyancy
+            var upwardCap = ((medium.IdleDrift > FixedQ4816.Zero)
+                ? medium.IdleDrift
                 : FixedQ4816.Zero
             );
 
             drift = FixedQ4816.Clamp(
-                value: (error * medium.SurfaceSettleRate),
-                minimum: -medium.MaxSinkSpeed,
+                value: (error * medium.SettleRate),
+                minimum: -sinkSpeed,
                 maximum: upwardCap
             );
         }
@@ -1144,8 +1173,8 @@ public sealed partial class WorldBody {
                 hold: in hold,
                 scratch: ref scratch
             ) + drift),
-            minimum: -medium.MaxSinkSpeed,
-            maximum: medium.MaxRiseSpeed
+            minimum: -sinkSpeed,
+            maximum: riseSpeed
         );
 
         // ExecuteProgram already refreshed the recency clocks and selected the row once before phase 0, so this
@@ -1163,13 +1192,13 @@ public sealed partial class WorldBody {
             StepVerticalFollower(
                 step: in planar,
                 target: target,
-                minimum: -medium.MaxSinkSpeed,
-                maximum: medium.MaxRiseSpeed
+                minimum: -sinkSpeed,
+                maximum: riseSpeed
             );
             WriteMediumFacts(
+                displacement: displacement,
                 error: error,
-                medium: in medium,
-                surface: mediumSurface
+                medium: in medium
             );
 
             return;
@@ -1209,9 +1238,9 @@ public sealed partial class WorldBody {
         }
 
         WriteMediumFacts(
+            displacement: displacement,
             error: error,
-            medium: in medium,
-            surface: mediumSurface
+            medium: in medium
         );
     }
     // The vertical half of the commanded thrust: the MoveUp role scaled by the hold's travel speed and the row's own
@@ -1228,17 +1257,15 @@ public sealed partial class WorldBody {
         ) * speed) * hold.Thrust);
     }
     // The two medium facts, on the same one-tick-behind terms every other body fact is published under.
-    private void WriteMediumFacts(FixedQ4816 surface, FixedQ4816 error, in FixedBodyMedium medium) {
-        m_submerged = (m_position.Y < surface);
-        m_atSurface = (m_submerged && (((error < FixedQ4816.Zero)
-            ? -error
-            : error) <= medium.FloatDepth));
+    private void WriteMediumFacts(FixedQ4816 displacement, FixedQ4816 error, in FixedBodyMedium medium) {
+        m_inMedium = (displacement > FixedQ4816.Zero);
+        m_atMediumBand = (m_inMedium && (FixedQ4816.Abs(value: error) <= medium.EquilibriumOffset));
     }
     /// <summary>Gets a value indicating whether the current hold owns the body's vertical channel outright, so
     /// contact resolution must not fold its resolved velocity back into it.</summary>
-    private bool HoldOwnsVerticalChannel => (TryCurrentHold(hold: out var hold) && (hold.Kind == BodyHoldKind.Grip));
+    private bool HoldOwnsVerticalChannel => (TryCurrentHold(hold: out var hold) && (hold.Kind == BodyHoldKind.Pull));
 
-    // The grip's pull along the face normal, as a positional constraint rather than a force. A force cannot be
+    // The pull along the face normal, as a positional constraint rather than a force. A force cannot be
     // trusted here: the field depenetrates along its own nearest gradient, which for a body at a wall's foot is the
     // floor, so an inward force meets no resistance from the wall and walks the body through it.
     //
@@ -1248,7 +1275,7 @@ public sealed partial class WorldBody {
     private void SeatToHold(ulong stepTicks) {
         if (
             !TryCurrentHold(hold: out var hold) ||
-            (hold.Kind != BodyHoldKind.Grip) ||
+            (hold.Kind != BodyHoldKind.Pull) ||
             (m_holdNormal == FixedVector3.Zero)
         ) {
             return;
@@ -1268,7 +1295,7 @@ public sealed partial class WorldBody {
 
         var reach = PerStep(
             stepTicks: stepTicks,
-            value: (hold.Grip * m_scale)
+            value: (hold.Pull * m_scale)
         );
 
         m_position -= (m_holdNormal * ((error < reach)

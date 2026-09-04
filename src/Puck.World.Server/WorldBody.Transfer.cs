@@ -541,7 +541,7 @@ public sealed partial class WorldBody {
     /// query corrects it.) <c>m_obstructionWitness</c>/<c>m_obstructionWitnessPosition</c>/
     /// <c>m_obstructionWitnessGraceTicks</c> — explicitly documented at their own declaration as "Read-back only" for
     /// <c>world.contacts</c>; losing the latch only ever produces a missing witness until the next real push or grace
-    /// timeout, never a wrong positive one. <c>m_submerged</c>/<c>m_atSurface</c> — the medium hold's law
+    /// timeout, never a wrong positive one. <c>m_inMedium</c>/<c>m_atMediumBand</c> — the medium hold's law
     /// re-derives both, purely as a function of the restored position and the freshly resampled medium surface, on
     /// the very next Advance.
     /// <c>m_heldChannels</c>/<c>m_channelReadHeld</c>/<c>m_channelReadComposed</c> — ordinary one-tick images; the
