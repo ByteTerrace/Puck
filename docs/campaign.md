@@ -358,18 +358,25 @@ ghost records**.
 **A per-body scale primitive, not a debuff gimmick (owner decision, 2026-09-03).** A body's live
 geometric scale is a document-declared multiplier (`bodies.scaleRow`, a keyed `state.world` row whose
 own `min`/`max` is the world's declared scale envelope), read and written like any other state cell —
-never a bespoke "shrink" mechanic. Collider volumes, resolved move speed and turn rate, and hold
-probe/standoff/reach all scale with it on the server; the client reads the same live cell into the
-rendered rig and the seat chase camera's orbit distance and look-at height, so a shrunk body stays
-framed rather than shrinking to a speck on screen. `WorldServer.RestoreCheckpoint` and every other door
-that mints a `WorldBody` (a detached-seat/peer restore, a silo's checkpoint boot) resync the live value
-from the row, the same catch-up every other admission door already gives a freshly minted body — a
-restored session's bodies never disagree with their own `scale` row cells. A `Region` INTERACTION bound
-to a per-body carrier property is what turns a specific spot into a trigger, scoped to the one body it
-affects — never the aggregate `$region:<placement>` occupant count, which fires for any body standing in
-the region regardless of who and cannot express "this body left while another still stands there"; the
-garden's `drinkMe` bottle and `tabletop` table are one authored instance of that primitive, not new
-engine surface of their own.
+never a bespoke "shrink" mechanic. Collider volumes, resolved move speed and turn rate, hold
+probe/standoff/reach, a hold's own gravity fall/rise/terminal, a wall hold's travel speed, and a grip's
+pull rate all scale with it on the server — a shrunk body's fall and depenetration stay proportionally
+gentle rather than free-falling one tick of full-scale gravity into a collider whose own contact skin
+margin it can no longer absorb; the client reads the same live cell into the rendered rig and the seat
+chase camera's orbit distance and look-at height, so a shrunk body stays framed rather than shrinking to
+a speck on screen. Body-vs-body contact, overlap events, and adjacency transfer still read a kit's
+shared UNSCALED collider volumes — a shrunk body's contact with the world is correct, its contact with
+other bodies is not yet, a known gap rather than a silent claim. `WorldServer.RestoreCheckpoint` and
+every other door that mints a `WorldBody` (a detached-seat/peer restore, a silo's checkpoint boot)
+resync the live value from the row, the same catch-up every other admission door already gives a
+freshly minted body — a restored session's bodies never disagree with their own `scale` row cells. A
+`Region` INTERACTION bound to a per-body carrier property is what turns a specific spot into a trigger,
+scoped to the one body it affects — never the aggregate `$region:<placement>` occupant count, which
+fires for any body standing in the region regardless of who. Two such interactions, each `Edge` mode
+over its own physically separate region, is the trigger/restore shape — never one region's `Level` write
+paired with a self-resetting flag cell, which turns every tick a body simply stands in the region into a
+document mutation; the garden's `drinkMe` bottle (shrinks on entry) and `eatMe` cake (restores on entry)
+are one authored instance of that primitive, not new engine surface of their own.
 
 1. **Frames, as the envelope ratification** — one document shape, not two landings. Order: root/single
    frame, sibling frames, body-parented frames only on demand. **The envelope needs two inputs beyond

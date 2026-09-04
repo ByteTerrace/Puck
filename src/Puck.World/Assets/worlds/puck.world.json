@@ -557,19 +557,29 @@
             "key": "$left",
             "state": "scale",
             "value": 0.15
-          },
+          }
+        ],
+        "left": "wren",
+        "mode": "Edge",
+        "name": "drink-me-shrink",
+        "range": 0,
+        "right": "drinkMe"
+      },
+      {
+        "coOccurrence": "Region",
+        "effects": [
           {
             "$type": "setState",
             "key": "$left",
-            "state": "drinkMeInside",
+            "state": "scale",
             "value": 1
           }
         ],
         "left": "wren",
-        "mode": "Level",
-        "name": "drink-me-inside",
+        "mode": "Edge",
+        "name": "eat-me-restore",
         "range": 0,
-        "right": "drinkMe"
+        "right": "eatMe"
       }
     ]
   },
@@ -1508,6 +1518,20 @@
         "solid": {
           "margin": 0
         },
+        "yawDegrees": 0
+      },
+      {
+        "id": "eatMe",
+        "position": [
+          -8,
+          -0.5,
+          20
+        ],
+        "prototypeId": "eatMe",
+        "region": {
+          "radius": 2.0
+        },
+        "scale": 1,
         "yawDegrees": 0
       }
     ]
@@ -6657,6 +6681,39 @@
         ]
       },
       "id": "tabletop"
+    },
+    {
+      "document": {
+        "name": "eatMe",
+        "palette": [
+          {
+            "color": "#D9A5C0"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "cake",
+            "position": [
+              0,
+              0.06,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.18,
+              0.06,
+              0.18
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          }
+        ]
+      },
+      "id": "eatMe"
     }
   ],
   "render": {
@@ -7144,44 +7201,6 @@
       "forEach": "spider",
       "mode": "Level",
       "name": "stalk-visitor"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "key": "0",
-          "state": "scale",
-          "value": 1
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "key": "0",
-        "state": "drinkMeInside",
-        "value": 0
-      },
-      "mode": "Edge",
-      "name": "drink-me-restore"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "key": "0",
-          "state": "drinkMeInside",
-          "value": 0
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "key": "0",
-        "state": "drinkMeInside",
-        "value": 1
-      },
-      "mode": "Level",
-      "name": "drink-me-inside-reset"
     }
   ],
   "schema": "puck.world.def.v1",
@@ -7998,19 +8017,6 @@
         ],
         "kind": "int",
         "name": "wren"
-      },
-      {
-        "capacity": 1,
-        "cells": [
-          {
-            "key": "0",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "drinkMeInside"
       }
     ]
   },
