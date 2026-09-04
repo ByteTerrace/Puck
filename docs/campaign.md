@@ -438,9 +438,14 @@ NOT create a sixth.** Its reasoning: world rules, interactions, the property voc
 combat caller ALREADY EXIST; what is missing is charter-world EXERCISE, so a sixth horizontal
 "content later" track would add a lane without adding a capability. It also verified that the Phase A
 nouns survive on the rebased tree (`WorldStateAdvance`, `WorldOwnership`, properties, rules,
-interactions) and that `combat.world.json` and `reconnect.world.json` boot headlessly — which
-supports opening track 5 with verification rather than reconstruction, but does NOT by itself prove
-behavioural survival. **If track 5 is aimed at the charter, its completion criterion becomes charter
+interactions) and that `combat.world.json` and `reconnect.world.json` booted headlessly at the time —
+track 5 must re-verify this before relying on it: both scenario docs have since drifted behind several
+schema generations (stale basis reference, placement-policy fields, motion shape, kit vocabulary, host
+fields — partially repaired in the garden/w1 integration) and, as things stand, refuse validation
+outright (a kit claims a channel role and a held/action channel that `channels[]` never declares, and
+the document is missing required `collision` and `views` sections entirely). Opening track 5 with
+verification rather than reconstruction still holds ONLY once that drift is repaired; it does NOT by
+itself prove behavioural survival. **If track 5 is aimed at the charter, its completion criterion becomes charter
 EVIDENCE, not landed primitives**, and track 4 owns the feel gate.
 
 The obsolete portal-border canary was deleted with that model. Its replacement,
