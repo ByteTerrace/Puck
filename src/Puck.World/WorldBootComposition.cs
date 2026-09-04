@@ -363,6 +363,7 @@ internal static class WorldBootComposition {
         // The contribution-slot read-back verb — world.contributions. Slots themselves are authored and filled
         // through world.row.set placements.
         services.AddSingleton<ICommandModule, WorldContributionCommandModule>();
+        services.AddSingleton<ICommandModule, WorldTabletopCommandModule>();
         // The refusal-catalog read-back verb — world.refusals. No constructor dependency: compiled-in data.
         services.AddSingleton<ICommandModule, WorldRefusalsCommandModule>();
         // The storage verb surface — storage.status/push/pull/credential over the owned-world catalog.

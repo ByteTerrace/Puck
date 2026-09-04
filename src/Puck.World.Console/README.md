@@ -17,7 +17,12 @@ reference count), `world.group.*`/`world.ownership.*`/
 (`WorldMarketCommandModule`), `world.peers`/`world.projection`
 (`WorldNetworkCommandModule`), `world.row.*`/`world.kits`/`world.assign`
 (`WorldRowCommandModule`), `world.state.*`/`world.generate`/`world.state`
-(`WorldStateCommandModule`), `world.update` (`WorldUpdateCommandModule`), and
+(`WorldStateCommandModule`), `world.tabletop` (`WorldTabletopCommandModule` —
+the tabletop primitive's read-back: every placement carrying a `board` facet,
+its anchored frame, its occupancy row's live cells, and any bound
+`turn`/`verdict`/`move`/`plan` rows; read-only, since a board's rows are
+authored/mutated through the same ordinary state doors any other row uses),
+`world.update` (`WorldUpdateCommandModule`), and
 `world.wait` (`WorldWaitCommandModule`, alongside the tick-barrier gate it
 arms, `WorldConsoleWaitGate`, and `IWorldWaitGateResolver` — the row's own
 gate, since a host running several rows has one gate per row and a singleton

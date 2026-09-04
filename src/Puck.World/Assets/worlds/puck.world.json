@@ -97,7 +97,7 @@
     }
   ],
   "bodies": {
-    "capacity": 64,
+    "capacity": 96,
     "localSeats": 2,
     "scaleRow": "scale"
   },
@@ -1292,6 +1292,54 @@
           "restitution": 0.1,
           "rollingFriction": 1.2
         }
+      },
+      {
+        "bodyContact": "Solid",
+        "bodyMotionProgram": "walk",
+        "collider": {
+          "$type": "capsule",
+          "endpoint": [
+            0,
+            0.15,
+            0
+          ],
+          "radius": 0.045
+        },
+        "motion": {
+          "facingSnap": true,
+          "holds": [
+            {
+              "bond": "Free",
+              "gravity": {
+                "fall": 46,
+                "rise": 28,
+                "terminal": 40
+              },
+              "hold": "Gravity",
+              "name": "air"
+            }
+          ],
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "speed": {
+            "value": 0.001
+          },
+          "turn": {
+            "rate": 0.001
+          }
+        },
+        "name": "piece",
+        "rigid": {
+          "angularDamping": 1.6,
+          "friction": 1.4,
+          "linearDamping": 1.2,
+          "mass": 0.12,
+          "restitution": 0.05,
+          "rollingFriction": 4.0
+        }
       }
     ]
   },
@@ -1424,6 +1472,174 @@
         "source": {
           "$type": "creation",
           "prototypeId": "billiardBall"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "piece_white_pawn",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "piece_white_pawn"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "piece_white_knight",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "piece_white_knight"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "piece_white_bishop",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "piece_white_bishop"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "piece_white_rook",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "piece_white_rook"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "piece_white_queen",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "piece_white_queen"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "piece_white_king",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "piece_white_king"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "piece_black_pawn",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "piece_black_pawn"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "piece_black_knight",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "piece_black_knight"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "piece_black_bishop",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "piece_black_bishop"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "piece_black_rook",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "piece_black_rook"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "piece_black_queen",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "piece_black_queen"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "piece_black_king",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "piece_black_king"
         }
       }
     ]
@@ -2327,16 +2543,24 @@
         "position": [
           -8,
           -0.5,
-          15
+          9.3
         ],
         "prototypeId": "drinkMe",
         "region": {
-          "radius": 4.0
+          "radius": 1.2
         },
         "scale": 1,
         "yawDegrees": 0
       },
       {
+        "board": {
+          "move": "move",
+          "occupancy": "board",
+          "plan": "plan",
+          "topology": "chessBoard",
+          "turn": "turn",
+          "verdict": "verdict"
+        },
         "id": "tabletop",
         "position": [
           -8,
@@ -2355,12 +2579,1612 @@
         "position": [
           -8,
           -0.5,
-          20
+          18
         ],
         "prototypeId": "eatMe",
         "region": {
           "radius": 2.0
         },
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece0",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_rook",
+          "source": "Idle"
+        },
+        "position": [
+          -8.7,
+          1.3,
+          11.3
+        ],
+        "prototypeId": "piece_white_rook",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece1",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_knight",
+          "source": "Idle"
+        },
+        "position": [
+          -8.5,
+          1.3,
+          11.3
+        ],
+        "prototypeId": "piece_white_knight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece2",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_bishop",
+          "source": "Idle"
+        },
+        "position": [
+          -8.3,
+          1.3,
+          11.3
+        ],
+        "prototypeId": "piece_white_bishop",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece3",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_queen",
+          "source": "Idle"
+        },
+        "position": [
+          -8.1,
+          1.3,
+          11.3
+        ],
+        "prototypeId": "piece_white_queen",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece4",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_king",
+          "source": "Idle"
+        },
+        "position": [
+          -7.9,
+          1.3,
+          11.3
+        ],
+        "prototypeId": "piece_white_king",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece5",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_bishop",
+          "source": "Idle"
+        },
+        "position": [
+          -7.7,
+          1.3,
+          11.3
+        ],
+        "prototypeId": "piece_white_bishop",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece6",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_knight",
+          "source": "Idle"
+        },
+        "position": [
+          -7.5,
+          1.3,
+          11.3
+        ],
+        "prototypeId": "piece_white_knight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece7",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_rook",
+          "source": "Idle"
+        },
+        "position": [
+          -7.3,
+          1.3,
+          11.3
+        ],
+        "prototypeId": "piece_white_rook",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece8",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_pawn",
+          "source": "Idle"
+        },
+        "position": [
+          -8.7,
+          1.3,
+          11.5
+        ],
+        "prototypeId": "piece_white_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece9",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_pawn",
+          "source": "Idle"
+        },
+        "position": [
+          -8.5,
+          1.3,
+          11.5
+        ],
+        "prototypeId": "piece_white_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece10",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_pawn",
+          "source": "Idle"
+        },
+        "position": [
+          -8.3,
+          1.3,
+          11.5
+        ],
+        "prototypeId": "piece_white_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece11",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_pawn",
+          "source": "Idle"
+        },
+        "position": [
+          -8.1,
+          1.3,
+          11.5
+        ],
+        "prototypeId": "piece_white_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece12",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_pawn",
+          "source": "Idle"
+        },
+        "position": [
+          -7.9,
+          1.3,
+          11.5
+        ],
+        "prototypeId": "piece_white_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece13",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_pawn",
+          "source": "Idle"
+        },
+        "position": [
+          -7.7,
+          1.3,
+          11.5
+        ],
+        "prototypeId": "piece_white_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece14",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_pawn",
+          "source": "Idle"
+        },
+        "position": [
+          -7.5,
+          1.3,
+          11.5
+        ],
+        "prototypeId": "piece_white_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece15",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_pawn",
+          "source": "Idle"
+        },
+        "position": [
+          -7.3,
+          1.3,
+          11.5
+        ],
+        "prototypeId": "piece_white_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece16",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_pawn",
+          "source": "Idle"
+        },
+        "position": [
+          -8.7,
+          1.3,
+          12.5
+        ],
+        "prototypeId": "piece_black_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece17",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_pawn",
+          "source": "Idle"
+        },
+        "position": [
+          -8.5,
+          1.3,
+          12.5
+        ],
+        "prototypeId": "piece_black_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece18",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_pawn",
+          "source": "Idle"
+        },
+        "position": [
+          -8.3,
+          1.3,
+          12.5
+        ],
+        "prototypeId": "piece_black_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece19",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_pawn",
+          "source": "Idle"
+        },
+        "position": [
+          -8.1,
+          1.3,
+          12.5
+        ],
+        "prototypeId": "piece_black_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece20",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_pawn",
+          "source": "Idle"
+        },
+        "position": [
+          -7.9,
+          1.3,
+          12.5
+        ],
+        "prototypeId": "piece_black_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece21",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_pawn",
+          "source": "Idle"
+        },
+        "position": [
+          -7.7,
+          1.3,
+          12.5
+        ],
+        "prototypeId": "piece_black_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece22",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_pawn",
+          "source": "Idle"
+        },
+        "position": [
+          -7.5,
+          1.3,
+          12.5
+        ],
+        "prototypeId": "piece_black_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece23",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_pawn",
+          "source": "Idle"
+        },
+        "position": [
+          -7.3,
+          1.3,
+          12.5
+        ],
+        "prototypeId": "piece_black_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece24",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_rook",
+          "source": "Idle"
+        },
+        "position": [
+          -8.7,
+          1.3,
+          12.7
+        ],
+        "prototypeId": "piece_black_rook",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece25",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_knight",
+          "source": "Idle"
+        },
+        "position": [
+          -8.5,
+          1.3,
+          12.7
+        ],
+        "prototypeId": "piece_black_knight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece26",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_bishop",
+          "source": "Idle"
+        },
+        "position": [
+          -8.3,
+          1.3,
+          12.7
+        ],
+        "prototypeId": "piece_black_bishop",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece27",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_queen",
+          "source": "Idle"
+        },
+        "position": [
+          -8.1,
+          1.3,
+          12.7
+        ],
+        "prototypeId": "piece_black_queen",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece28",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_king",
+          "source": "Idle"
+        },
+        "position": [
+          -7.9,
+          1.3,
+          12.7
+        ],
+        "prototypeId": "piece_black_king",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece29",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_bishop",
+          "source": "Idle"
+        },
+        "position": [
+          -7.7,
+          1.3,
+          12.7
+        ],
+        "prototypeId": "piece_black_bishop",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece30",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_knight",
+          "source": "Idle"
+        },
+        "position": [
+          -7.5,
+          1.3,
+          12.7
+        ],
+        "prototypeId": "piece_black_knight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece31",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_rook",
+          "source": "Idle"
+        },
+        "position": [
+          -7.3,
+          1.3,
+          12.7
+        ],
+        "prototypeId": "piece_black_rook",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-0",
+        "position": [
+          -8.7,
+          0.805,
+          11.3
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-1",
+        "position": [
+          -8.5,
+          0.805,
+          11.3
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-2",
+        "position": [
+          -8.3,
+          0.805,
+          11.3
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-3",
+        "position": [
+          -8.1,
+          0.805,
+          11.3
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-4",
+        "position": [
+          -7.9,
+          0.805,
+          11.3
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-5",
+        "position": [
+          -7.7,
+          0.805,
+          11.3
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-6",
+        "position": [
+          -7.5,
+          0.805,
+          11.3
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-7",
+        "position": [
+          -7.3,
+          0.805,
+          11.3
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-8",
+        "position": [
+          -8.7,
+          0.805,
+          11.5
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-9",
+        "position": [
+          -8.5,
+          0.805,
+          11.5
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-10",
+        "position": [
+          -8.3,
+          0.805,
+          11.5
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-11",
+        "position": [
+          -8.1,
+          0.805,
+          11.5
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-12",
+        "position": [
+          -7.9,
+          0.805,
+          11.5
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-13",
+        "position": [
+          -7.7,
+          0.805,
+          11.5
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-14",
+        "position": [
+          -7.5,
+          0.805,
+          11.5
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-15",
+        "position": [
+          -7.3,
+          0.805,
+          11.5
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-16",
+        "position": [
+          -8.7,
+          0.805,
+          11.7
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-17",
+        "position": [
+          -8.5,
+          0.805,
+          11.7
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-18",
+        "position": [
+          -8.3,
+          0.805,
+          11.7
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-19",
+        "position": [
+          -8.1,
+          0.805,
+          11.7
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-20",
+        "position": [
+          -7.9,
+          0.805,
+          11.7
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-21",
+        "position": [
+          -7.7,
+          0.805,
+          11.7
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-22",
+        "position": [
+          -7.5,
+          0.805,
+          11.7
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-23",
+        "position": [
+          -7.3,
+          0.805,
+          11.7
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-24",
+        "position": [
+          -8.7,
+          0.805,
+          11.9
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-25",
+        "position": [
+          -8.5,
+          0.805,
+          11.9
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-26",
+        "position": [
+          -8.3,
+          0.805,
+          11.9
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-27",
+        "position": [
+          -8.1,
+          0.805,
+          11.9
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-28",
+        "position": [
+          -7.9,
+          0.805,
+          11.9
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-29",
+        "position": [
+          -7.7,
+          0.805,
+          11.9
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-30",
+        "position": [
+          -7.5,
+          0.805,
+          11.9
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-31",
+        "position": [
+          -7.3,
+          0.805,
+          11.9
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-32",
+        "position": [
+          -8.7,
+          0.805,
+          12.1
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-33",
+        "position": [
+          -8.5,
+          0.805,
+          12.1
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-34",
+        "position": [
+          -8.3,
+          0.805,
+          12.1
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-35",
+        "position": [
+          -8.1,
+          0.805,
+          12.1
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-36",
+        "position": [
+          -7.9,
+          0.805,
+          12.1
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-37",
+        "position": [
+          -7.7,
+          0.805,
+          12.1
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-38",
+        "position": [
+          -7.5,
+          0.805,
+          12.1
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-39",
+        "position": [
+          -7.3,
+          0.805,
+          12.1
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-40",
+        "position": [
+          -8.7,
+          0.805,
+          12.3
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-41",
+        "position": [
+          -8.5,
+          0.805,
+          12.3
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-42",
+        "position": [
+          -8.3,
+          0.805,
+          12.3
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-43",
+        "position": [
+          -8.1,
+          0.805,
+          12.3
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-44",
+        "position": [
+          -7.9,
+          0.805,
+          12.3
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-45",
+        "position": [
+          -7.7,
+          0.805,
+          12.3
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-46",
+        "position": [
+          -7.5,
+          0.805,
+          12.3
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-47",
+        "position": [
+          -7.3,
+          0.805,
+          12.3
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-48",
+        "position": [
+          -8.7,
+          0.805,
+          12.5
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-49",
+        "position": [
+          -8.5,
+          0.805,
+          12.5
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-50",
+        "position": [
+          -8.3,
+          0.805,
+          12.5
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-51",
+        "position": [
+          -8.1,
+          0.805,
+          12.5
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-52",
+        "position": [
+          -7.9,
+          0.805,
+          12.5
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-53",
+        "position": [
+          -7.7,
+          0.805,
+          12.5
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-54",
+        "position": [
+          -7.5,
+          0.805,
+          12.5
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-55",
+        "position": [
+          -7.3,
+          0.805,
+          12.5
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-56",
+        "position": [
+          -8.7,
+          0.805,
+          12.7
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-57",
+        "position": [
+          -8.5,
+          0.805,
+          12.7
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-58",
+        "position": [
+          -8.3,
+          0.805,
+          12.7
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-59",
+        "position": [
+          -8.1,
+          0.805,
+          12.7
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-60",
+        "position": [
+          -7.9,
+          0.805,
+          12.7
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-61",
+        "position": [
+          -7.7,
+          0.805,
+          12.7
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-62",
+        "position": [
+          -7.5,
+          0.805,
+          12.7
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-63",
+        "position": [
+          -7.3,
+          0.805,
+          12.7
+        ],
+        "prototypeId": "boardSquareLight",
         "scale": 1,
         "yawDegrees": 0
       }
@@ -7846,6 +9670,572 @@
         ]
       },
       "id": "eatMe"
+    },
+    {
+      "document": {
+        "name": "piece_white_pawn",
+        "palette": [
+          {
+            "color": "state.pieceSetColors.white",
+            "shininess": 35,
+            "specular": 0.25
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.035,
+              0.09,
+              0.035
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          }
+        ]
+      },
+      "id": "piece_white_pawn"
+    },
+    {
+      "document": {
+        "name": "piece_white_knight",
+        "palette": [
+          {
+            "color": "state.pieceSetColors.white",
+            "shininess": 35,
+            "specular": 0.25
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.04,
+              0.12,
+              0.04
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          }
+        ]
+      },
+      "id": "piece_white_knight"
+    },
+    {
+      "document": {
+        "name": "piece_white_bishop",
+        "palette": [
+          {
+            "color": "state.pieceSetColors.white",
+            "shininess": 35,
+            "specular": 0.25
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.04,
+              0.15,
+              0.04
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          }
+        ]
+      },
+      "id": "piece_white_bishop"
+    },
+    {
+      "document": {
+        "name": "piece_white_rook",
+        "palette": [
+          {
+            "color": "state.pieceSetColors.white",
+            "shininess": 35,
+            "specular": 0.25
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.05,
+              0.11,
+              0.05
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          }
+        ]
+      },
+      "id": "piece_white_rook"
+    },
+    {
+      "document": {
+        "name": "piece_white_queen",
+        "palette": [
+          {
+            "color": "state.pieceSetColors.white",
+            "shininess": 35,
+            "specular": 0.25
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.045,
+              0.17,
+              0.045
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 1,
+            "material": 0,
+            "name": "crown",
+            "position": [
+              0,
+              0.203,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.055,
+              0.055,
+              0.055
+            ],
+            "smooth": 0.01,
+            "type": "Sphere"
+          }
+        ]
+      },
+      "id": "piece_white_queen"
+    },
+    {
+      "document": {
+        "name": "piece_white_king",
+        "palette": [
+          {
+            "color": "state.pieceSetColors.white",
+            "shininess": 35,
+            "specular": 0.25
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.045,
+              0.19,
+              0.045
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 1,
+            "material": 0,
+            "name": "crown",
+            "position": [
+              0,
+              0.226,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.06,
+              0.06,
+              0.06
+            ],
+            "smooth": 0.01,
+            "type": "Sphere"
+          }
+        ]
+      },
+      "id": "piece_white_king"
+    },
+    {
+      "document": {
+        "name": "piece_black_pawn",
+        "palette": [
+          {
+            "color": "state.pieceSetColors.black",
+            "shininess": 35,
+            "specular": 0.25
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.035,
+              0.09,
+              0.035
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          }
+        ]
+      },
+      "id": "piece_black_pawn"
+    },
+    {
+      "document": {
+        "name": "piece_black_knight",
+        "palette": [
+          {
+            "color": "state.pieceSetColors.black",
+            "shininess": 35,
+            "specular": 0.25
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.04,
+              0.12,
+              0.04
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          }
+        ]
+      },
+      "id": "piece_black_knight"
+    },
+    {
+      "document": {
+        "name": "piece_black_bishop",
+        "palette": [
+          {
+            "color": "state.pieceSetColors.black",
+            "shininess": 35,
+            "specular": 0.25
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.04,
+              0.15,
+              0.04
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          }
+        ]
+      },
+      "id": "piece_black_bishop"
+    },
+    {
+      "document": {
+        "name": "piece_black_rook",
+        "palette": [
+          {
+            "color": "state.pieceSetColors.black",
+            "shininess": 35,
+            "specular": 0.25
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.05,
+              0.11,
+              0.05
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          }
+        ]
+      },
+      "id": "piece_black_rook"
+    },
+    {
+      "document": {
+        "name": "piece_black_queen",
+        "palette": [
+          {
+            "color": "state.pieceSetColors.black",
+            "shininess": 35,
+            "specular": 0.25
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.045,
+              0.17,
+              0.045
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 1,
+            "material": 0,
+            "name": "crown",
+            "position": [
+              0,
+              0.203,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.055,
+              0.055,
+              0.055
+            ],
+            "smooth": 0.01,
+            "type": "Sphere"
+          }
+        ]
+      },
+      "id": "piece_black_queen"
+    },
+    {
+      "document": {
+        "name": "piece_black_king",
+        "palette": [
+          {
+            "color": "state.pieceSetColors.black",
+            "shininess": 35,
+            "specular": 0.25
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.045,
+              0.19,
+              0.045
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 1,
+            "material": 0,
+            "name": "crown",
+            "position": [
+              0,
+              0.226,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.06,
+              0.06,
+              0.06
+            ],
+            "smooth": 0.01,
+            "type": "Sphere"
+          }
+        ]
+      },
+      "id": "piece_black_king"
+    },
+    {
+      "document": {
+        "name": "boardSquareLight",
+        "palette": [
+          {
+            "color": "state.boardColors.light",
+            "shininess": 8,
+            "specular": 0.05
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "square",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.095,
+              0.004,
+              0.095
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "boardSquareLight"
+    },
+    {
+      "document": {
+        "name": "boardSquareDark",
+        "palette": [
+          {
+            "color": "state.boardColors.dark",
+            "shininess": 8,
+            "specular": 0.05
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "square",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.095,
+              0.004,
+              0.095
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "boardSquareDark"
     }
   ],
   "render": {
@@ -8344,6 +10734,4825 @@
       ],
       "mode": "Level",
       "name": "physics-settled"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "0",
+          "fromState": "board",
+          "key": "0",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "1",
+          "fromState": "board",
+          "key": "1",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "2",
+          "fromState": "board",
+          "key": "2",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "3",
+          "fromState": "board",
+          "key": "3",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "4",
+          "fromState": "board",
+          "key": "4",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "5",
+          "fromState": "board",
+          "key": "5",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "6",
+          "fromState": "board",
+          "key": "6",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "7",
+          "fromState": "board",
+          "key": "7",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "8",
+          "fromState": "board",
+          "key": "8",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "9",
+          "fromState": "board",
+          "key": "9",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "10",
+          "fromState": "board",
+          "key": "10",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "11",
+          "fromState": "board",
+          "key": "11",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "12",
+          "fromState": "board",
+          "key": "12",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "13",
+          "fromState": "board",
+          "key": "13",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "14",
+          "fromState": "board",
+          "key": "14",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "15",
+          "fromState": "board",
+          "key": "15",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "16",
+          "fromState": "board",
+          "key": "16",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "17",
+          "fromState": "board",
+          "key": "17",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "18",
+          "fromState": "board",
+          "key": "18",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "19",
+          "fromState": "board",
+          "key": "19",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "20",
+          "fromState": "board",
+          "key": "20",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "21",
+          "fromState": "board",
+          "key": "21",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "22",
+          "fromState": "board",
+          "key": "22",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "23",
+          "fromState": "board",
+          "key": "23",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "24",
+          "fromState": "board",
+          "key": "24",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "25",
+          "fromState": "board",
+          "key": "25",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "26",
+          "fromState": "board",
+          "key": "26",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "27",
+          "fromState": "board",
+          "key": "27",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "28",
+          "fromState": "board",
+          "key": "28",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "29",
+          "fromState": "board",
+          "key": "29",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "30",
+          "fromState": "board",
+          "key": "30",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "31",
+          "fromState": "board",
+          "key": "31",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "32",
+          "fromState": "board",
+          "key": "32",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "33",
+          "fromState": "board",
+          "key": "33",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "34",
+          "fromState": "board",
+          "key": "34",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "35",
+          "fromState": "board",
+          "key": "35",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "36",
+          "fromState": "board",
+          "key": "36",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "37",
+          "fromState": "board",
+          "key": "37",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "38",
+          "fromState": "board",
+          "key": "38",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "39",
+          "fromState": "board",
+          "key": "39",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "40",
+          "fromState": "board",
+          "key": "40",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "41",
+          "fromState": "board",
+          "key": "41",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "42",
+          "fromState": "board",
+          "key": "42",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "43",
+          "fromState": "board",
+          "key": "43",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "44",
+          "fromState": "board",
+          "key": "44",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "45",
+          "fromState": "board",
+          "key": "45",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "46",
+          "fromState": "board",
+          "key": "46",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "47",
+          "fromState": "board",
+          "key": "47",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "48",
+          "fromState": "board",
+          "key": "48",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "49",
+          "fromState": "board",
+          "key": "49",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "50",
+          "fromState": "board",
+          "key": "50",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "51",
+          "fromState": "board",
+          "key": "51",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "52",
+          "fromState": "board",
+          "key": "52",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "53",
+          "fromState": "board",
+          "key": "53",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "54",
+          "fromState": "board",
+          "key": "54",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "55",
+          "fromState": "board",
+          "key": "55",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "56",
+          "fromState": "board",
+          "key": "56",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "57",
+          "fromState": "board",
+          "key": "57",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "58",
+          "fromState": "board",
+          "key": "58",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "59",
+          "fromState": "board",
+          "key": "59",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "60",
+          "fromState": "board",
+          "key": "60",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "61",
+          "fromState": "board",
+          "key": "61",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "62",
+          "fromState": "board",
+          "key": "62",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "63",
+          "fromState": "board",
+          "key": "63",
+          "state": "previousBoard"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-snapshot"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "1",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "2",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "3",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "4",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "5",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "6",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "7",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "8",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "9",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "10",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "11",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "12",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "13",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "14",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "15",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "16",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "17",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "18",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "19",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "20",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "21",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "22",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "23",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "24",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "25",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "26",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "27",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "28",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "29",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "30",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "31",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "32",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "33",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "34",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "35",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "36",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "37",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "38",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "39",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "40",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "41",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "42",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "43",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "44",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "45",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "46",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "47",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "48",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "49",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "50",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "51",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "52",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "53",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "54",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "55",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "56",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "57",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "58",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "59",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "60",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "61",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "62",
+          "state": "board",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "63",
+          "state": "board",
+          "value": 0
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-clear"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "0",
+          "fromState": "pieceCell",
+          "key": "0",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "1",
+          "fromState": "pieceCell",
+          "key": "1",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "2",
+          "fromState": "pieceCell",
+          "key": "2",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "3",
+          "fromState": "pieceCell",
+          "key": "3",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "4",
+          "fromState": "pieceCell",
+          "key": "4",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "5",
+          "fromState": "pieceCell",
+          "key": "5",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "6",
+          "fromState": "pieceCell",
+          "key": "6",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "7",
+          "fromState": "pieceCell",
+          "key": "7",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "8",
+          "fromState": "pieceCell",
+          "key": "8",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "9",
+          "fromState": "pieceCell",
+          "key": "9",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "10",
+          "fromState": "pieceCell",
+          "key": "10",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "11",
+          "fromState": "pieceCell",
+          "key": "11",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "12",
+          "fromState": "pieceCell",
+          "key": "12",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "13",
+          "fromState": "pieceCell",
+          "key": "13",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "14",
+          "fromState": "pieceCell",
+          "key": "14",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "15",
+          "fromState": "pieceCell",
+          "key": "15",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "16",
+          "fromState": "pieceCell",
+          "key": "16",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "17",
+          "fromState": "pieceCell",
+          "key": "17",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "18",
+          "fromState": "pieceCell",
+          "key": "18",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "19",
+          "fromState": "pieceCell",
+          "key": "19",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "20",
+          "fromState": "pieceCell",
+          "key": "20",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "21",
+          "fromState": "pieceCell",
+          "key": "21",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "22",
+          "fromState": "pieceCell",
+          "key": "22",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "23",
+          "fromState": "pieceCell",
+          "key": "23",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "24",
+          "fromState": "pieceCell",
+          "key": "24",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "25",
+          "fromState": "pieceCell",
+          "key": "25",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "26",
+          "fromState": "pieceCell",
+          "key": "26",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "27",
+          "fromState": "pieceCell",
+          "key": "27",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "28",
+          "fromState": "pieceCell",
+          "key": "28",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "29",
+          "fromState": "pieceCell",
+          "key": "29",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "30",
+          "fromState": "pieceCell",
+          "key": "30",
+          "state": "piecePrevCell"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "31",
+          "fromState": "pieceCell",
+          "key": "31",
+          "state": "piecePrevCell"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-piece-snapshot"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:43",
+          "key": "0",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:42",
+          "key": "1",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:41",
+          "key": "2",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:40",
+          "key": "3",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:39",
+          "key": "4",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:38",
+          "key": "5",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:37",
+          "key": "6",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:36",
+          "key": "7",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:35",
+          "key": "8",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:34",
+          "key": "9",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:33",
+          "key": "10",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:32",
+          "key": "11",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:31",
+          "key": "12",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:30",
+          "key": "13",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:29",
+          "key": "14",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:28",
+          "key": "15",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:27",
+          "key": "16",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:26",
+          "key": "17",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:25",
+          "key": "18",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:24",
+          "key": "19",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:23",
+          "key": "20",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:22",
+          "key": "21",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:21",
+          "key": "22",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:20",
+          "key": "23",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:19",
+          "key": "24",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:18",
+          "key": "25",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:17",
+          "key": "26",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:16",
+          "key": "27",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:15",
+          "key": "28",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:14",
+          "key": "29",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:13",
+          "key": "30",
+          "state": "pieceCell"
+        },
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:body:12",
+          "key": "31",
+          "state": "pieceCell"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-piece-cell-derive"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:0",
+          "state": "board",
+          "value": 4
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece0"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:1",
+          "state": "board",
+          "value": 2
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece1"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:2",
+          "state": "board",
+          "value": 3
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece2"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:3",
+          "state": "board",
+          "value": 5
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece3"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:4",
+          "state": "board",
+          "value": 6
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece4"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:5",
+          "state": "board",
+          "value": 3
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece5"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:6",
+          "state": "board",
+          "value": 2
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece6"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:7",
+          "state": "board",
+          "value": 4
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece7"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:8",
+          "state": "board",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece8"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:9",
+          "state": "board",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece9"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:10",
+          "state": "board",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece10"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:11",
+          "state": "board",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece11"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:12",
+          "state": "board",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece12"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:13",
+          "state": "board",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece13"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:14",
+          "state": "board",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece14"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:15",
+          "state": "board",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece15"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:16",
+          "state": "board",
+          "value": -1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece16"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:17",
+          "state": "board",
+          "value": -1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece17"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:18",
+          "state": "board",
+          "value": -1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece18"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:19",
+          "state": "board",
+          "value": -1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece19"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:20",
+          "state": "board",
+          "value": -1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece20"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:21",
+          "state": "board",
+          "value": -1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece21"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:22",
+          "state": "board",
+          "value": -1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece22"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:23",
+          "state": "board",
+          "value": -1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece23"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:24",
+          "state": "board",
+          "value": -4
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece24"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:25",
+          "state": "board",
+          "value": -2
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece25"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:26",
+          "state": "board",
+          "value": -3
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece26"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:27",
+          "state": "board",
+          "value": -5
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece27"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:28",
+          "state": "board",
+          "value": -6
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece28"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:29",
+          "state": "board",
+          "value": -3
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece29"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:30",
+          "state": "board",
+          "value": -2
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece30"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:pieceCell:31",
+          "state": "board",
+          "value": -4
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-write-piece31"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "0",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "0",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "0",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "0",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "0",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "0",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece0"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "1",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "1",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "1",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "1",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "1",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "1",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece1"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "2",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "2",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "2",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "2",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "2",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "2",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece2"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "3",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "3",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "3",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "3",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "3",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "3",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece3"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "4",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "4",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "4",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "4",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "4",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "4",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece4"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "5",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "5",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "5",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "5",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "5",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "5",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece5"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "6",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "6",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "6",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "6",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "6",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "6",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece6"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "7",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "7",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "7",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "7",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "7",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "7",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece7"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "8",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "8",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "8",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "8",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "8",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "8",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece8"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "9",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "9",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "9",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "9",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "9",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "9",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece9"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "10",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "10",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "10",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "10",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "10",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "10",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece10"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "11",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "11",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "11",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "11",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "11",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "11",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece11"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "12",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "12",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "12",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "12",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "12",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "12",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece12"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "13",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "13",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "13",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "13",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "13",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "13",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece13"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "14",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "14",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "14",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "14",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "14",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "14",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece14"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "15",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "15",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "15",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "15",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "15",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "15",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece15"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "16",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "16",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "16",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "16",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "16",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "16",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece16"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "17",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "17",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "17",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "17",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "17",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "17",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece17"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "18",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "18",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "18",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "18",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "18",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "18",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece18"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "19",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "19",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "19",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "19",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "19",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "19",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece19"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "20",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "20",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "20",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "20",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "20",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "20",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece20"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "21",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "21",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "21",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "21",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "21",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "21",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece21"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "22",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "22",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "22",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "22",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "22",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "22",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece22"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "23",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "23",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "23",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "23",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "23",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "23",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece23"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "24",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "24",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "24",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "24",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "24",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "24",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece24"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "25",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "25",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "25",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "25",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "25",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "25",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece25"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "26",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "26",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "26",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "26",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "26",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "26",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece26"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "27",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "27",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "27",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "27",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "27",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "27",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece27"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "28",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "28",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "28",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "28",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "28",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "28",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece28"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "29",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "29",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "29",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "29",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "29",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "29",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece29"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "30",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "30",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "30",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "30",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "30",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "30",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece30"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "31",
+          "fromState": "piecePrevCell",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "31",
+          "fromState": "pieceCell",
+          "key": "to",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "state": "moverColor",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "31",
+            "state": "piecePrevCell",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "31",
+            "comparandState": "piecePrevCell",
+            "comparison": "NotEqual",
+            "key": "31",
+            "state": "pieceCell"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "31",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-mover-piece31"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "verdict",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "justMoved",
+        "value": 1
+      },
+      "mode": "Level",
+      "name": "tabletop-verdict-optimistic"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "verdict",
+          "value": 0
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "moverColor",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Greater",
+            "key": "$cell:move:to",
+            "state": "previousBoard",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "tabletop-illegal-own-white"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "verdict",
+          "value": 0
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "moverColor",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Less",
+            "key": "$cell:move:to",
+            "state": "previousBoard",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "tabletop-illegal-own-black"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "verdict",
+          "value": 0
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "moverColor",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "state": "turn",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "tabletop-turn-check-white"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "verdict",
+          "value": 0
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "moverColor",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "state": "turn",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "tabletop-turn-check-black"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "turn",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "verdict",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "moverColor",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "tabletop-advance-turn-white"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "turn",
+          "value": 0
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "verdict",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "moverColor",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "tabletop-advance-turn-black"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "0",
+          "fromState": "board",
+          "key": "0",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "1",
+          "fromState": "board",
+          "key": "1",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "2",
+          "fromState": "board",
+          "key": "2",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "3",
+          "fromState": "board",
+          "key": "3",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "4",
+          "fromState": "board",
+          "key": "4",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "5",
+          "fromState": "board",
+          "key": "5",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "6",
+          "fromState": "board",
+          "key": "6",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "7",
+          "fromState": "board",
+          "key": "7",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "8",
+          "fromState": "board",
+          "key": "8",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "9",
+          "fromState": "board",
+          "key": "9",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "10",
+          "fromState": "board",
+          "key": "10",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "11",
+          "fromState": "board",
+          "key": "11",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "12",
+          "fromState": "board",
+          "key": "12",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "13",
+          "fromState": "board",
+          "key": "13",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "14",
+          "fromState": "board",
+          "key": "14",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "15",
+          "fromState": "board",
+          "key": "15",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "16",
+          "fromState": "board",
+          "key": "16",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "17",
+          "fromState": "board",
+          "key": "17",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "18",
+          "fromState": "board",
+          "key": "18",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "19",
+          "fromState": "board",
+          "key": "19",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "20",
+          "fromState": "board",
+          "key": "20",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "21",
+          "fromState": "board",
+          "key": "21",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "22",
+          "fromState": "board",
+          "key": "22",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "23",
+          "fromState": "board",
+          "key": "23",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "24",
+          "fromState": "board",
+          "key": "24",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "25",
+          "fromState": "board",
+          "key": "25",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "26",
+          "fromState": "board",
+          "key": "26",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "27",
+          "fromState": "board",
+          "key": "27",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "28",
+          "fromState": "board",
+          "key": "28",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "29",
+          "fromState": "board",
+          "key": "29",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "30",
+          "fromState": "board",
+          "key": "30",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "31",
+          "fromState": "board",
+          "key": "31",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "32",
+          "fromState": "board",
+          "key": "32",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "33",
+          "fromState": "board",
+          "key": "33",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "34",
+          "fromState": "board",
+          "key": "34",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "35",
+          "fromState": "board",
+          "key": "35",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "36",
+          "fromState": "board",
+          "key": "36",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "37",
+          "fromState": "board",
+          "key": "37",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "38",
+          "fromState": "board",
+          "key": "38",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "39",
+          "fromState": "board",
+          "key": "39",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "40",
+          "fromState": "board",
+          "key": "40",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "41",
+          "fromState": "board",
+          "key": "41",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "42",
+          "fromState": "board",
+          "key": "42",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "43",
+          "fromState": "board",
+          "key": "43",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "44",
+          "fromState": "board",
+          "key": "44",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "45",
+          "fromState": "board",
+          "key": "45",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "46",
+          "fromState": "board",
+          "key": "46",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "47",
+          "fromState": "board",
+          "key": "47",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "48",
+          "fromState": "board",
+          "key": "48",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "49",
+          "fromState": "board",
+          "key": "49",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "50",
+          "fromState": "board",
+          "key": "50",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "51",
+          "fromState": "board",
+          "key": "51",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "52",
+          "fromState": "board",
+          "key": "52",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "53",
+          "fromState": "board",
+          "key": "53",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "54",
+          "fromState": "board",
+          "key": "54",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "55",
+          "fromState": "board",
+          "key": "55",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "56",
+          "fromState": "board",
+          "key": "56",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "57",
+          "fromState": "board",
+          "key": "57",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "58",
+          "fromState": "board",
+          "key": "58",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "59",
+          "fromState": "board",
+          "key": "59",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "60",
+          "fromState": "board",
+          "key": "60",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "61",
+          "fromState": "board",
+          "key": "61",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "62",
+          "fromState": "board",
+          "key": "62",
+          "state": "lastLegal"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "63",
+          "fromState": "board",
+          "key": "63",
+          "state": "lastLegal"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "verdict",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "tabletop-sync-last-legal"
+    },
+    {
+      "effects": [
+        {
+          "$type": "addState",
+          "state": "illegalCount",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "justMoved",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "verdict",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "tabletop-apply-illegal"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "justMoved",
+          "value": 0
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "justMoved",
+        "value": 1
+      },
+      "mode": "Level",
+      "name": "tabletop-reset-just-moved"
     }
   ],
   "schema": "puck.world.def.v1",
@@ -8485,7 +15694,7 @@
       "position": [
         -8,
         0,
-        20
+        19
       ],
       "yawDegrees": 0
     }
@@ -8512,6 +15721,21 @@
         ],
         "stepEveryTicks": 8,
         "width": 16
+      },
+      {
+        "cellSize": 0.2,
+        "depth": 8,
+        "kind": "Grid",
+        "layers": 1,
+        "name": "chessBoard",
+        "origin": [
+          -8.8,
+          0.75,
+          11.2
+        ],
+        "stepEveryTicks": 8,
+        "width": 8,
+        "wrap": "None"
       }
     ],
     "social": {
@@ -8754,7 +15978,7 @@
         "name": "spider"
       },
       {
-        "capacity": 64,
+        "capacity": 96,
         "cells": [
           {
             "key": "0",
@@ -9011,6 +16235,134 @@
           {
             "key": "63",
             "value": 63
+          },
+          {
+            "key": "64",
+            "value": 64
+          },
+          {
+            "key": "65",
+            "value": 65
+          },
+          {
+            "key": "66",
+            "value": 66
+          },
+          {
+            "key": "67",
+            "value": 67
+          },
+          {
+            "key": "68",
+            "value": 68
+          },
+          {
+            "key": "69",
+            "value": 69
+          },
+          {
+            "key": "70",
+            "value": 70
+          },
+          {
+            "key": "71",
+            "value": 71
+          },
+          {
+            "key": "72",
+            "value": 72
+          },
+          {
+            "key": "73",
+            "value": 73
+          },
+          {
+            "key": "74",
+            "value": 74
+          },
+          {
+            "key": "75",
+            "value": 75
+          },
+          {
+            "key": "76",
+            "value": 76
+          },
+          {
+            "key": "77",
+            "value": 77
+          },
+          {
+            "key": "78",
+            "value": 78
+          },
+          {
+            "key": "79",
+            "value": 79
+          },
+          {
+            "key": "80",
+            "value": 80
+          },
+          {
+            "key": "81",
+            "value": 81
+          },
+          {
+            "key": "82",
+            "value": 82
+          },
+          {
+            "key": "83",
+            "value": 83
+          },
+          {
+            "key": "84",
+            "value": 84
+          },
+          {
+            "key": "85",
+            "value": 85
+          },
+          {
+            "key": "86",
+            "value": 86
+          },
+          {
+            "key": "87",
+            "value": 87
+          },
+          {
+            "key": "88",
+            "value": 88
+          },
+          {
+            "key": "89",
+            "value": 89
+          },
+          {
+            "key": "90",
+            "value": 90
+          },
+          {
+            "key": "91",
+            "value": 91
+          },
+          {
+            "key": "92",
+            "value": 92
+          },
+          {
+            "key": "93",
+            "value": 93
+          },
+          {
+            "key": "94",
+            "value": 94
+          },
+          {
+            "key": "95",
+            "value": 95
           }
         ],
         "kind": "int",
@@ -9187,6 +16539,1167 @@
         ],
         "kind": "int",
         "name": "wren"
+      },
+      {
+        "board": {
+          "empty": 0,
+          "topology": "chessBoard"
+        },
+        "cells": [
+          {
+            "key": "0",
+            "value": 4
+          },
+          {
+            "key": "1",
+            "value": 2
+          },
+          {
+            "key": "2",
+            "value": 3
+          },
+          {
+            "key": "3",
+            "value": 5
+          },
+          {
+            "key": "4",
+            "value": 6
+          },
+          {
+            "key": "5",
+            "value": 3
+          },
+          {
+            "key": "6",
+            "value": 2
+          },
+          {
+            "key": "7",
+            "value": 4
+          },
+          {
+            "key": "8",
+            "value": 1
+          },
+          {
+            "key": "9",
+            "value": 1
+          },
+          {
+            "key": "10",
+            "value": 1
+          },
+          {
+            "key": "11",
+            "value": 1
+          },
+          {
+            "key": "12",
+            "value": 1
+          },
+          {
+            "key": "13",
+            "value": 1
+          },
+          {
+            "key": "14",
+            "value": 1
+          },
+          {
+            "key": "15",
+            "value": 1
+          },
+          {
+            "key": "16",
+            "value": 0
+          },
+          {
+            "key": "17",
+            "value": 0
+          },
+          {
+            "key": "18",
+            "value": 0
+          },
+          {
+            "key": "19",
+            "value": 0
+          },
+          {
+            "key": "20",
+            "value": 0
+          },
+          {
+            "key": "21",
+            "value": 0
+          },
+          {
+            "key": "22",
+            "value": 0
+          },
+          {
+            "key": "23",
+            "value": 0
+          },
+          {
+            "key": "24",
+            "value": 0
+          },
+          {
+            "key": "25",
+            "value": 0
+          },
+          {
+            "key": "26",
+            "value": 0
+          },
+          {
+            "key": "27",
+            "value": 0
+          },
+          {
+            "key": "28",
+            "value": 0
+          },
+          {
+            "key": "29",
+            "value": 0
+          },
+          {
+            "key": "30",
+            "value": 0
+          },
+          {
+            "key": "31",
+            "value": 0
+          },
+          {
+            "key": "32",
+            "value": 0
+          },
+          {
+            "key": "33",
+            "value": 0
+          },
+          {
+            "key": "34",
+            "value": 0
+          },
+          {
+            "key": "35",
+            "value": 0
+          },
+          {
+            "key": "36",
+            "value": 0
+          },
+          {
+            "key": "37",
+            "value": 0
+          },
+          {
+            "key": "38",
+            "value": 0
+          },
+          {
+            "key": "39",
+            "value": 0
+          },
+          {
+            "key": "40",
+            "value": 0
+          },
+          {
+            "key": "41",
+            "value": 0
+          },
+          {
+            "key": "42",
+            "value": 0
+          },
+          {
+            "key": "43",
+            "value": 0
+          },
+          {
+            "key": "44",
+            "value": 0
+          },
+          {
+            "key": "45",
+            "value": 0
+          },
+          {
+            "key": "46",
+            "value": 0
+          },
+          {
+            "key": "47",
+            "value": 0
+          },
+          {
+            "key": "48",
+            "value": -1
+          },
+          {
+            "key": "49",
+            "value": -1
+          },
+          {
+            "key": "50",
+            "value": -1
+          },
+          {
+            "key": "51",
+            "value": -1
+          },
+          {
+            "key": "52",
+            "value": -1
+          },
+          {
+            "key": "53",
+            "value": -1
+          },
+          {
+            "key": "54",
+            "value": -1
+          },
+          {
+            "key": "55",
+            "value": -1
+          },
+          {
+            "key": "56",
+            "value": -4
+          },
+          {
+            "key": "57",
+            "value": -2
+          },
+          {
+            "key": "58",
+            "value": -3
+          },
+          {
+            "key": "59",
+            "value": -5
+          },
+          {
+            "key": "60",
+            "value": -6
+          },
+          {
+            "key": "61",
+            "value": -3
+          },
+          {
+            "key": "62",
+            "value": -2
+          },
+          {
+            "key": "63",
+            "value": -4
+          }
+        ],
+        "kind": "int",
+        "name": "board"
+      },
+      {
+        "board": {
+          "empty": 0,
+          "topology": "chessBoard"
+        },
+        "cells": [
+          {
+            "key": "0",
+            "value": 4
+          },
+          {
+            "key": "1",
+            "value": 2
+          },
+          {
+            "key": "2",
+            "value": 3
+          },
+          {
+            "key": "3",
+            "value": 5
+          },
+          {
+            "key": "4",
+            "value": 6
+          },
+          {
+            "key": "5",
+            "value": 3
+          },
+          {
+            "key": "6",
+            "value": 2
+          },
+          {
+            "key": "7",
+            "value": 4
+          },
+          {
+            "key": "8",
+            "value": 1
+          },
+          {
+            "key": "9",
+            "value": 1
+          },
+          {
+            "key": "10",
+            "value": 1
+          },
+          {
+            "key": "11",
+            "value": 1
+          },
+          {
+            "key": "12",
+            "value": 1
+          },
+          {
+            "key": "13",
+            "value": 1
+          },
+          {
+            "key": "14",
+            "value": 1
+          },
+          {
+            "key": "15",
+            "value": 1
+          },
+          {
+            "key": "16",
+            "value": 0
+          },
+          {
+            "key": "17",
+            "value": 0
+          },
+          {
+            "key": "18",
+            "value": 0
+          },
+          {
+            "key": "19",
+            "value": 0
+          },
+          {
+            "key": "20",
+            "value": 0
+          },
+          {
+            "key": "21",
+            "value": 0
+          },
+          {
+            "key": "22",
+            "value": 0
+          },
+          {
+            "key": "23",
+            "value": 0
+          },
+          {
+            "key": "24",
+            "value": 0
+          },
+          {
+            "key": "25",
+            "value": 0
+          },
+          {
+            "key": "26",
+            "value": 0
+          },
+          {
+            "key": "27",
+            "value": 0
+          },
+          {
+            "key": "28",
+            "value": 0
+          },
+          {
+            "key": "29",
+            "value": 0
+          },
+          {
+            "key": "30",
+            "value": 0
+          },
+          {
+            "key": "31",
+            "value": 0
+          },
+          {
+            "key": "32",
+            "value": 0
+          },
+          {
+            "key": "33",
+            "value": 0
+          },
+          {
+            "key": "34",
+            "value": 0
+          },
+          {
+            "key": "35",
+            "value": 0
+          },
+          {
+            "key": "36",
+            "value": 0
+          },
+          {
+            "key": "37",
+            "value": 0
+          },
+          {
+            "key": "38",
+            "value": 0
+          },
+          {
+            "key": "39",
+            "value": 0
+          },
+          {
+            "key": "40",
+            "value": 0
+          },
+          {
+            "key": "41",
+            "value": 0
+          },
+          {
+            "key": "42",
+            "value": 0
+          },
+          {
+            "key": "43",
+            "value": 0
+          },
+          {
+            "key": "44",
+            "value": 0
+          },
+          {
+            "key": "45",
+            "value": 0
+          },
+          {
+            "key": "46",
+            "value": 0
+          },
+          {
+            "key": "47",
+            "value": 0
+          },
+          {
+            "key": "48",
+            "value": -1
+          },
+          {
+            "key": "49",
+            "value": -1
+          },
+          {
+            "key": "50",
+            "value": -1
+          },
+          {
+            "key": "51",
+            "value": -1
+          },
+          {
+            "key": "52",
+            "value": -1
+          },
+          {
+            "key": "53",
+            "value": -1
+          },
+          {
+            "key": "54",
+            "value": -1
+          },
+          {
+            "key": "55",
+            "value": -1
+          },
+          {
+            "key": "56",
+            "value": -4
+          },
+          {
+            "key": "57",
+            "value": -2
+          },
+          {
+            "key": "58",
+            "value": -3
+          },
+          {
+            "key": "59",
+            "value": -5
+          },
+          {
+            "key": "60",
+            "value": -6
+          },
+          {
+            "key": "61",
+            "value": -3
+          },
+          {
+            "key": "62",
+            "value": -2
+          },
+          {
+            "key": "63",
+            "value": -4
+          }
+        ],
+        "kind": "int",
+        "name": "previousBoard"
+      },
+      {
+        "board": {
+          "empty": 0,
+          "topology": "chessBoard"
+        },
+        "cells": [
+          {
+            "key": "0",
+            "value": 4
+          },
+          {
+            "key": "1",
+            "value": 2
+          },
+          {
+            "key": "2",
+            "value": 3
+          },
+          {
+            "key": "3",
+            "value": 5
+          },
+          {
+            "key": "4",
+            "value": 6
+          },
+          {
+            "key": "5",
+            "value": 3
+          },
+          {
+            "key": "6",
+            "value": 2
+          },
+          {
+            "key": "7",
+            "value": 4
+          },
+          {
+            "key": "8",
+            "value": 1
+          },
+          {
+            "key": "9",
+            "value": 1
+          },
+          {
+            "key": "10",
+            "value": 1
+          },
+          {
+            "key": "11",
+            "value": 1
+          },
+          {
+            "key": "12",
+            "value": 1
+          },
+          {
+            "key": "13",
+            "value": 1
+          },
+          {
+            "key": "14",
+            "value": 1
+          },
+          {
+            "key": "15",
+            "value": 1
+          },
+          {
+            "key": "16",
+            "value": 0
+          },
+          {
+            "key": "17",
+            "value": 0
+          },
+          {
+            "key": "18",
+            "value": 0
+          },
+          {
+            "key": "19",
+            "value": 0
+          },
+          {
+            "key": "20",
+            "value": 0
+          },
+          {
+            "key": "21",
+            "value": 0
+          },
+          {
+            "key": "22",
+            "value": 0
+          },
+          {
+            "key": "23",
+            "value": 0
+          },
+          {
+            "key": "24",
+            "value": 0
+          },
+          {
+            "key": "25",
+            "value": 0
+          },
+          {
+            "key": "26",
+            "value": 0
+          },
+          {
+            "key": "27",
+            "value": 0
+          },
+          {
+            "key": "28",
+            "value": 0
+          },
+          {
+            "key": "29",
+            "value": 0
+          },
+          {
+            "key": "30",
+            "value": 0
+          },
+          {
+            "key": "31",
+            "value": 0
+          },
+          {
+            "key": "32",
+            "value": 0
+          },
+          {
+            "key": "33",
+            "value": 0
+          },
+          {
+            "key": "34",
+            "value": 0
+          },
+          {
+            "key": "35",
+            "value": 0
+          },
+          {
+            "key": "36",
+            "value": 0
+          },
+          {
+            "key": "37",
+            "value": 0
+          },
+          {
+            "key": "38",
+            "value": 0
+          },
+          {
+            "key": "39",
+            "value": 0
+          },
+          {
+            "key": "40",
+            "value": 0
+          },
+          {
+            "key": "41",
+            "value": 0
+          },
+          {
+            "key": "42",
+            "value": 0
+          },
+          {
+            "key": "43",
+            "value": 0
+          },
+          {
+            "key": "44",
+            "value": 0
+          },
+          {
+            "key": "45",
+            "value": 0
+          },
+          {
+            "key": "46",
+            "value": 0
+          },
+          {
+            "key": "47",
+            "value": 0
+          },
+          {
+            "key": "48",
+            "value": -1
+          },
+          {
+            "key": "49",
+            "value": -1
+          },
+          {
+            "key": "50",
+            "value": -1
+          },
+          {
+            "key": "51",
+            "value": -1
+          },
+          {
+            "key": "52",
+            "value": -1
+          },
+          {
+            "key": "53",
+            "value": -1
+          },
+          {
+            "key": "54",
+            "value": -1
+          },
+          {
+            "key": "55",
+            "value": -1
+          },
+          {
+            "key": "56",
+            "value": -4
+          },
+          {
+            "key": "57",
+            "value": -2
+          },
+          {
+            "key": "58",
+            "value": -3
+          },
+          {
+            "key": "59",
+            "value": -5
+          },
+          {
+            "key": "60",
+            "value": -6
+          },
+          {
+            "key": "61",
+            "value": -3
+          },
+          {
+            "key": "62",
+            "value": -2
+          },
+          {
+            "key": "63",
+            "value": -4
+          }
+        ],
+        "kind": "int",
+        "name": "lastLegal"
+      },
+      {
+        "board": {
+          "empty": 0,
+          "topology": "chessBoard"
+        },
+        "kind": "int",
+        "name": "plan"
+      },
+      {
+        "capacity": 32,
+        "cells": [
+          {
+            "key": "0",
+            "value": -1
+          },
+          {
+            "key": "1",
+            "value": -1
+          },
+          {
+            "key": "2",
+            "value": -1
+          },
+          {
+            "key": "3",
+            "value": -1
+          },
+          {
+            "key": "4",
+            "value": -1
+          },
+          {
+            "key": "5",
+            "value": -1
+          },
+          {
+            "key": "6",
+            "value": -1
+          },
+          {
+            "key": "7",
+            "value": -1
+          },
+          {
+            "key": "8",
+            "value": -1
+          },
+          {
+            "key": "9",
+            "value": -1
+          },
+          {
+            "key": "10",
+            "value": -1
+          },
+          {
+            "key": "11",
+            "value": -1
+          },
+          {
+            "key": "12",
+            "value": -1
+          },
+          {
+            "key": "13",
+            "value": -1
+          },
+          {
+            "key": "14",
+            "value": -1
+          },
+          {
+            "key": "15",
+            "value": -1
+          },
+          {
+            "key": "16",
+            "value": -1
+          },
+          {
+            "key": "17",
+            "value": -1
+          },
+          {
+            "key": "18",
+            "value": -1
+          },
+          {
+            "key": "19",
+            "value": -1
+          },
+          {
+            "key": "20",
+            "value": -1
+          },
+          {
+            "key": "21",
+            "value": -1
+          },
+          {
+            "key": "22",
+            "value": -1
+          },
+          {
+            "key": "23",
+            "value": -1
+          },
+          {
+            "key": "24",
+            "value": -1
+          },
+          {
+            "key": "25",
+            "value": -1
+          },
+          {
+            "key": "26",
+            "value": -1
+          },
+          {
+            "key": "27",
+            "value": -1
+          },
+          {
+            "key": "28",
+            "value": -1
+          },
+          {
+            "key": "29",
+            "value": -1
+          },
+          {
+            "key": "30",
+            "value": -1
+          },
+          {
+            "key": "31",
+            "value": -1
+          }
+        ],
+        "kind": "int",
+        "max": 63,
+        "min": -1,
+        "name": "pieceCell"
+      },
+      {
+        "capacity": 32,
+        "cells": [
+          {
+            "key": "0",
+            "value": -1
+          },
+          {
+            "key": "1",
+            "value": -1
+          },
+          {
+            "key": "2",
+            "value": -1
+          },
+          {
+            "key": "3",
+            "value": -1
+          },
+          {
+            "key": "4",
+            "value": -1
+          },
+          {
+            "key": "5",
+            "value": -1
+          },
+          {
+            "key": "6",
+            "value": -1
+          },
+          {
+            "key": "7",
+            "value": -1
+          },
+          {
+            "key": "8",
+            "value": -1
+          },
+          {
+            "key": "9",
+            "value": -1
+          },
+          {
+            "key": "10",
+            "value": -1
+          },
+          {
+            "key": "11",
+            "value": -1
+          },
+          {
+            "key": "12",
+            "value": -1
+          },
+          {
+            "key": "13",
+            "value": -1
+          },
+          {
+            "key": "14",
+            "value": -1
+          },
+          {
+            "key": "15",
+            "value": -1
+          },
+          {
+            "key": "16",
+            "value": -1
+          },
+          {
+            "key": "17",
+            "value": -1
+          },
+          {
+            "key": "18",
+            "value": -1
+          },
+          {
+            "key": "19",
+            "value": -1
+          },
+          {
+            "key": "20",
+            "value": -1
+          },
+          {
+            "key": "21",
+            "value": -1
+          },
+          {
+            "key": "22",
+            "value": -1
+          },
+          {
+            "key": "23",
+            "value": -1
+          },
+          {
+            "key": "24",
+            "value": -1
+          },
+          {
+            "key": "25",
+            "value": -1
+          },
+          {
+            "key": "26",
+            "value": -1
+          },
+          {
+            "key": "27",
+            "value": -1
+          },
+          {
+            "key": "28",
+            "value": -1
+          },
+          {
+            "key": "29",
+            "value": -1
+          },
+          {
+            "key": "30",
+            "value": -1
+          },
+          {
+            "key": "31",
+            "value": -1
+          }
+        ],
+        "kind": "int",
+        "max": 63,
+        "min": -1,
+        "name": "piecePrevCell"
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "turn",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "verdict",
+        "value": 1
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "moverColor",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "justMoved",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 50400,
+        "min": 0,
+        "name": "illegalCount",
+        "nonNegative": true,
+        "value": 0
+      },
+      {
+        "cells": [
+          {
+            "key": "white",
+            "value": "#F2E9D8"
+          },
+          {
+            "key": "black",
+            "value": "#2B2420"
+          }
+        ],
+        "kind": "text",
+        "name": "pieceSetColors"
+      },
+      {
+        "capacity": 2,
+        "cells": [
+          {
+            "key": "from",
+            "value": -1
+          },
+          {
+            "key": "to",
+            "value": -1
+          }
+        ],
+        "kind": "int",
+        "max": 63,
+        "min": -1,
+        "name": "move"
+      },
+      {
+        "cells": [
+          {
+            "key": "light",
+            "value": "#F0D9B5"
+          },
+          {
+            "key": "dark",
+            "value": "#8B5A2B"
+          }
+        ],
+        "kind": "text",
+        "name": "boardColors"
       }
     ]
   },

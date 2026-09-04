@@ -1288,6 +1288,9 @@ public static partial class WorldDefinitionValidator {
         var dynamicInstanceCount = 0;
         var staticPlacementInstanceCount = 0L;
         var solidPlacementColliderCount = 0L;
+        // The BOARD facet carries a tabletop's frame; a topology admits at most one carrying placement (see
+        // WorldPlacementBoard's own doc) — tracked across the whole loop, never re-scanned per row.
+        var boardTopologies = new HashSet<string>(comparer: StringComparer.Ordinal);
         // The one face derivation, read for both the per-face portal refusals below and the screen budget after the
         // loop — never a second walk of (placements x declared faces) to answer the same questions.
         var faces = WorldFaceCatalog.For(definition: definition);
@@ -1605,6 +1608,15 @@ public static partial class WorldDefinitionValidator {
             ) {
                 errors.Add(item: $"{path}.grip requires .solid — a placement with no solidity facet compiles no collider for a grip override to apply to.");
             }
+
+            // The BOARD facet anchors a discrete Grid topology's frame to this placement — the tabletop primitive.
+            ValidateBoardFacet(
+                board: placement.Board,
+                definition: definition,
+                path: path,
+                boardTopologies: boardTopologies,
+                errors: errors
+            );
 
             // The ATTACH facet binds the row's resolved pose to a live population body (see WorldPlacementAttach).
             // BodyIndex uses the same 0-based entity indexing as WorldAnchor.Entity and the body:<n> grant subject —

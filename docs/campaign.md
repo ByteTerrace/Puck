@@ -522,6 +522,50 @@ free constant. `body.carry`/`body.release` are the console/wire surface (the
 same shape `body.impulse` already established for a rigid-solver-facing
 verb); a rule effect and an authored chord are follow-on work, not yet built.
 
+**The tabletop primitive (owner decisions, Lane D).** Physics-first extends to
+board games: a chess set is 32 ordinary rigid bodies on a shared `piece` kit —
+no second entity kind, no engine-level "piece" concept. A placement's `board`
+facet (`WorldPlacementBoard`) anchors a discrete Grid topology (already
+carrying its own world-space origin/cellSize — no second frame member) to the
+placement, and a world rule derives an occupancy row from each piece's
+resting cell (`$board:cellOf:<row>:body:<n>`, a new reserved channel, Grid-
+only) on `$physics:quiescent`'s rising edge — never every tick. Legality is
+authorable, not engine-adjudicated: the shipped garden default checks
+occupancy and turn order only, over the piece whose own resting cell changed
+between two occupied board cells — a piece that leaves the board entirely
+(captured, knocked clear) never itself registers as a mover, since it has no
+destination cell to rule on; the capturing piece's own move records the
+whole event, and lifting a piece off the board without a compensating move
+records nothing, leaving `turn`/`lastLegal` untouched. A full piece-
+movement-geometry vocabulary (sliding pieces via `$board:rayCell`, leapers
+via the new `$board:offset` channel, check/castling/en passant/promotion) is
+the reserved authorable extension, not built. Illegal moves are recorded — `illegalCount` counts them,
+`verdict` names the last ruling — and never rejected, undone, or repositioned;
+the table remembers the last legal position (`lastLegal`) for a human or a
+future AI body to act on. `plan` is the addon seam for candidate-highlight
+rendering: an ordinary board-typed row nothing in the engine writes, proved
+from the console (`world.state.cell.set plan <cell> 1`) rather than built.
+Boards are a primitive the catalog reuses (checkers, go, cards on a table),
+never a chess-specific engine feature, and a topology is carried by at most
+one placement — the future carry primitive's "one placement/body" shape. See
+the [schema reference](../src/Puck.World.Schema/README.md#discrete-boards-cards-and-turns)
+and `world.tabletop`'s console read-back.
+
+The board itself renders as 64 ordinary placements (`boardSquareLight`/
+`boardSquareDark`, one per cell, colors from a `boardColors` text row) rather
+than a bespoke board-rendering feature — the same placement/prototype and
+`state.<row>.<key>` palette-binding vocabulary the pieces already use, so a
+future board (checkers, go) needs no new client code either. Deriving N
+independent pieces' occupancy needs N separately-authored rules, one write
+per piece: a rule's own contiguous run of effects preflights and applies as
+one atomic candidate, so bundling every piece's write into one rule means a
+single piece leaving the frame (a capture, a knock clear off the table)
+rejects every other piece's write in the same settle. A walker's own capsule
+reach already exceeds a 0.2 m cell, so no body can stand on the 1.6 m board
+itself without risking contact; the garden's proof keeps Wren at a safe
+standoff beside the table and moves pieces by console verb, never by having
+her body touch one.
+
 ## After this arc
 
 Owner review of this branch gates the next wave. Recorded as decisions, not status — none of this has

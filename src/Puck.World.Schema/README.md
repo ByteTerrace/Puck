@@ -45,10 +45,21 @@ Rule operands accept these bounded channels:
 | `$board:rayDistance:<row>:<direction>` | Distance to that cell, or -1 |
 | `$board:line:<row>:<length>:<value>:<exact\|atLeast>` | 1 when a matching line exists, otherwise 0 |
 | `$board:pathCost:<row>:<target>:<maxCost>:<maxVisits>` | Minimum terrain entry cost, -1 when unreachable/unaffordable, -2 when the visit budget is exhausted |
+| `$board:cellOf:<row>:<bodyRef>` | The Grid cell a body's resolved world position falls in, or -1 |
+| `$board:offset:<row>:<dx>:<dz>` | The cell reached by an arbitrary (dx, dz) grid step from the key cell, or -1 |
 | `$phase:<row>:<current\|active\|ready\|sequence\|round\|deadline\|direction\|skipped>` | Persisted phase fact; active is -1 outside sequential phases |
 
 Board operands use the ordinary predicate/source `key` for their origin,
-including the existing `$cell:` dynamic-key form; `line` accepts no key.
+including the existing `$cell:` dynamic-key form; `line`, `cellOf` accept no
+key — `cellOf` takes a `bodyRef` in its place, the same `body:<n>`/
+`argmax:<row>`/`argmin:<row>`/`cell:<row>:<key>` vocabulary `$distance:`/
+`$los:`/`$nearest:` read. Both `cellOf` and `offset` require a `Grid`
+topology — the only kind carrying a rectangular world-space frame
+(`CompiledWorldTopology.Origin`/`CellSize`, the same origin/cellSize every
+topology declares); a `Hex`/`Ring` row refuses them by name at compile.
+`offset` is the arbitrary-`(dx, dz)` sibling of `neighbour`'s fixed eight
+directions — what a leaper (a knight, or any piece whose reach is not a ray)
+authors its geometry against.
 Path search uses all topology neighbours, including grid diagonals, at the
 destination cell's entry cost. Negative terrain is impassable. Equal-cost
 nodes settle by ordinal; the visit bound counts settled nodes. A path budget
@@ -157,6 +168,48 @@ contract. Use a fresh unpredictable secret per game and keep authority saves,
 replays, and replica access private. The simulation draws no system entropy.
 No hidden keys, generator definitions, cursors, or dealt masks enter observation
 payloads. Publicly authored seeds alone are unsuitable for hidden deals.
+
+**The tabletop primitive.** A placement's `board` facet (`WorldPlacementBoard`)
+anchors a discrete `Grid` topology's own world-space frame (its declared
+`origin`/`cellSize` — no separate frame member) to a physical row/body-based
+game. `cellSize` is the divisor `$board:cellOf` resolves world positions
+against, so `WorldTopologyCompilation.TryValidate` refuses a `Grid` whose
+`cellSize` does not quantize to a positive Q48.16 value, or whose `origin`
+does not fit one, at document validation rather than at the per-tick rule
+path. `topology` names the anchored Grid; `occupancy` names the board row the
+engine reads back; `turn`/`verdict`/`move`/`plan` are author-named convenience
+rows a `world.tabletop` read-back echoes together, never engine-interpreted —
+any tabletop game names whichever it needs. A topology is carried by at most
+one placement (validated), the future carry primitive's "one placement/body"
+requirement. The bridge from RIGID BODIES to this row is authored, not built
+in: a world rule reads each piece's `$board:cellOf:<occupancy row>:body:<n>`
+on `$physics:quiescent`'s rising edge (a settle, never every tick) and writes
+its code into the occupancy row at that resolved cell — see the garden's own
+`puck.world.json` tabletop rules for the worked pattern (snapshot the prior
+board before clearing, derive fresh occupancy, detect which single piece
+moved between two occupied board cells — a piece whose cell resolves to no
+cell, before or after (captured, lifted off, knocked clear), never itself
+qualifies as the mover, so its own disappearance is never ruled legal or
+illegal by its own color — then a verdict any authored predicate — occupancy, turn order,
+a `$board:rayCell`/`$board:offset` movement-geometry check — may set to 0
+without touching the mover; a legal verdict alone advances turn and adopts the
+new position into `lastLegal`). Illegal moves are recorded, never undone —
+the world never rejects or repositions a physical piece. A rule's own
+contiguous run of `setState`/`addState`/etc. effects preflights and applies
+as ONE atomic candidate — deriving N independent pieces' occupancy therefore
+needs N separately-authored derive rules, one per piece, never a single rule
+spanning every piece: one piece's body leaving the frame (captured, knocked
+clear) refuses only its own write when it owns its own rule, but rejects
+every sibling piece's write too when they share one. A `body.pose` reposition
+is a kinematic write and never itself crosses `$physics:quiescent`'s Edge —
+pair it with a negligible `body.impulse` (or drive the whole move by impulse)
+to trigger a derive; a bare pose with nothing else disturbing the rigid
+census leaves the board unrevised. Wake a piece along its own up axis where
+the kit's rigid friction is high — a horizontal wake couples into spin under
+Coulomb/rolling friction and can drift the piece across a cell boundary
+before the census re-quiesces. The quiescent census is population-wide: an
+unrelated rigid body still settling elsewhere holds every board's derive at
+bay too.
 
 The [tabletop state fixture](../../tests/Puck.World.Canaries/tabletop-state/fixture.world.json)
 and its [positive script](../../tests/Puck.World.Canaries/tabletop-state/positive.script.txt)

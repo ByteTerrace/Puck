@@ -4954,6 +4954,60 @@
       ],
       "additionalProperties": false
     },
+    "WorldPlacementBoard": {
+      "description": "A placement\u0027s board facet \u2014 the tabletop primitive. Anchors a state.lattices Grid topology (which already carries its own world-space origin/cellSize frame) to this placement, so a chess set, a checkers board, or a card table is one placement/body carrying one topology \u2014 carriable as a unit once an attachment primitive picks it up. A topology is carried by at most one placement (validated). Occupancy is the only row the engine reads; Turn/Verdict/ Move/Plan are author-named convenience bindings world.tabletop echoes together \u2014 ordinary declared rows, never engine-interpreted, so this facet stays a reusable primitive rather than a chess-specific feature.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "topology": {
+          "description": "The state.lattices Grid topology this placement anchors.",
+          "type": "string"
+        },
+        "occupancy": {
+          "description": "The board-typed row over Topology holding current occupant codes.",
+          "type": "string"
+        },
+        "turn": {
+          "description": "An optional phase row read back beside the frame.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "verdict": {
+          "description": "An optional row read back beside the frame (a ruling on the last recorded change).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "move": {
+          "description": "An optional keyed row (conventionally cells \u0022from\u0022/\u0022to\u0022) read back beside the frame.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "plan": {
+          "description": "An optional board-typed row over Topology a future addon paints candidate cells into for highlight rendering \u2014 the seam, not the addon.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "topology",
+        "occupancy"
+      ],
+      "additionalProperties": false
+    },
     "WorldPlacement": {
       "description": "One placement instance row \u2014 a creation asset stamped into the world by reference: transform \u002B facets as data, addressed by its stable Id. A placement whose creation carries timeline frames is animated: it replays client-side on the render clock through the reserved dynamic-transform pool (distribution/mirror facets are static-stamp-only and reject on an animated row). A placement carrying an Inhabit facet is a live population body rather than furniture (see WorldPlacementInhabit); its declared creation eyes derive WorldCamera feeds and its declared faces derive screens (both at the delivery boundary, never written to the document).",
       "type": "object",
@@ -5030,6 +5084,11 @@
         "grip": {
           "$ref": "#/$defs/WorldPlacementGrip",
           "description": "The placement\u0027s grip facet (see WorldPlacementGrip) \u2014 overrides the world\u0027s default hold policy for this row\u0027s compiled surface(s), or null to inherit the world default. Omitted from the wire when null. Requires Solid (validated).",
+          "default": null
+        },
+        "board": {
+          "$ref": "#/$defs/WorldPlacementBoard",
+          "description": "The placement\u0027s board facet (see WorldPlacementBoard) \u2014 the tabletop primitive, or null for no anchored topology. Omitted from the wire when null.",
           "default": null
         }
       },
