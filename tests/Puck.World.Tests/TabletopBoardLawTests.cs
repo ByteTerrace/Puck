@@ -62,6 +62,31 @@ public sealed class TabletopBoardLawTests {
         Assert.False(hexTopology.TryOffset(cell: 0, dx: 1, dz: 0, result: out _));
     }
 
+    // cellSize is the divisor TryCellOf resolves world positions against (localX / cellSize): zero divides by zero,
+    // and a negative or non-finite edge resolves cells with the wrong sign or NaN silently, so a Grid must refuse a
+    // cellSize that does not quantize to a positive Q48.16 value at validation, before any body ever settles.
+    [Theory]
+    [InlineData(0f, true)]
+    [InlineData(-0.2f, true)]
+    [InlineData(float.NaN, true)]
+    [InlineData(float.PositiveInfinity, true)]
+    [InlineData(1e30f, true)]  // does not quantize to Q48.16 — the same overflow guard fields.lattice.cellSize uses.
+    [InlineData(0.2f, false)]  // the DISCRIMINATING control: an ordinary positive edge validates.
+    public void GridTopologyRefusesNonPositiveOrUnrepresentableCellSize(float cellSize, bool refused) {
+        var grid = new WorldStateLatticeTopology("board", new DocumentVector3(0f, 0f, 0f), cellSize, 8, 8, Kind: WorldTopologyKind.Grid);
+        Assert.Equal(!refused, WorldTopologyCompilation.TryValidate(topology: grid, reason: out var reason));
+        if (refused) {
+            Assert.Contains("cellSize", reason, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void GridTopologyRefusesAnOriginThatDoesNotFitQ4816() {
+        var grid = new WorldStateLatticeTopology("board", new DocumentVector3(1e30f, 0f, 0f), 0.2f, 8, 8, Kind: WorldTopologyKind.Grid);
+        Assert.False(WorldTopologyCompilation.TryValidate(topology: grid, reason: out var reason));
+        Assert.Contains("origin", reason, StringComparison.Ordinal);
+    }
+
     // A 2x2 board (cell pitch 1, origin at the world origin) anchored beside a flat floor: one rigid body settling
     // over a cell derives that board's occupancy, and a second settle onto an already-occupied cell is recorded as
     // illegal without moving lastLegal — the exact "record only, never rejects" contract the garden's chess table
@@ -75,7 +100,17 @@ public sealed class TabletopBoardLawTests {
         new(state, value, ActionTarget.Self, key, fromState, fromKey);
     private static WorldRule Rule(string name, ActionPredicate gate, ActionTriggerMode mode, params ActionEffect[] effects) =>
         new(WorldCellName.Parse(name), effects, gate, mode);
-    private static WorldDefinition TabletopBridgeDocument() {
+    private static ActionPredicate[] MoverDetectPredicates(ActionPredicate quiescentEqualsOne, bool excludeOffFrameMover) {
+        ActionPredicate[] baseline = [
+            quiescentEqualsOne, Cs("justMoved", ActionStateComparison.Equal, 0m),
+            Cs("piecePrevCell", ActionStateComparison.NotEqual, -1m, key: "0"),
+            Cs("pieceCell", ActionStateComparison.NotEqual, key: "0", comparandState: "piecePrevCell", comparandKey: "0"),
+        ];
+        return excludeOffFrameMover
+            ? [.. baseline, Cs("pieceCell", ActionStateComparison.NotEqual, -1m, key: "0")]
+            : baseline;
+    }
+    private static WorldDefinition TabletopBridgeDocument(bool excludeOffFrameMover = true) {
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
         var shape = new ShapeDocument(Id: 0, Name: "floor", Type: SdfSolidPrimitive.Box, Position: Vector3.Zero,
             Rotation: Quaternion.Identity, Scale: new Vector3(x: 24f, y: 0.1f, z: 24f), Material: 0, Blend: SdfBlendOp.Union, Smooth: 0f, Group: 0);
@@ -110,9 +145,7 @@ public sealed class TabletopBoardLawTests {
             Rule("derive-piece", quiescentEqualsOne, ActionTriggerMode.Edge,
                 Set("pieceCell", key: "0", fromState: "$board:cellOf:board:body:0"),
                 Set("board", key: "$cell:pieceCell:0", value: 9m)),
-            Rule("mover-detect", All(quiescentEqualsOne, Cs("justMoved", ActionStateComparison.Equal, 0m),
-                    Cs("piecePrevCell", ActionStateComparison.NotEqual, -1m, key: "0"),
-                    Cs("pieceCell", ActionStateComparison.NotEqual, key: "0", comparandState: "piecePrevCell", comparandKey: "0")),
+            Rule("mover-detect", All(MoverDetectPredicates(quiescentEqualsOne, excludeOffFrameMover)),
                 ActionTriggerMode.Edge, Set("justMoved", value: 1m)),
             Rule("verdict-optimistic", Cs("justMoved", ActionStateComparison.Equal, 1m), ActionTriggerMode.Level, Set("verdict", value: 1m)),
             Rule("illegal-check", All(Cs("justMoved", ActionStateComparison.Equal, 1m),
@@ -293,5 +326,51 @@ public sealed class TabletopBoardLawTests {
         Assert.Equal(1, Cell(Row("verdict"), WorldStateRow.SlotKey));
         Assert.Equal(1, Cell(Row("illegalCount"), WorldStateRow.SlotKey)); // unchanged — this move was legal.
         Assert.Equal(9, Cell(Row("lastLegal"), "1")); // NOW lastLegal adopts the board this legal move left behind.
+    }
+
+    // A piece resting on cell 0, then physically lifted clear of the topology's own cell frame entirely (cellOf
+    // answers -1, not merely a different cell), settles a second time off-board. The exclusion — pieceCell != -1
+    // joining mover-detect's gate — never lets a piece whose own destination resolves to no cell register as its own
+    // mover: nothing about verdict/illegalCount/lastLegal moves. The control (excludeOffFrameMover: false) reproduces
+    // what the exclusion prevents: the disappearance registers as a move to key "-1", illegal-check's predicate reads
+    // a cell previousBoard never declares (defaulting to 0, "not occupied"), verdict stays optimistically legal, and
+    // apply-legal copies the now piece-less board into lastLegal — a piece vanishing off the table, ruled a legal
+    // move of its own, silently erasing it from the remembered legal position.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void PieceLeavingTheTopologyEntirelyNeverRegistersAsItsOwnMover(bool excludeOffFrameMover) {
+        using var fixture = Fixtures.FreshServer(definition: TabletopBridgeDocument(excludeOffFrameMover: excludeOffFrameMover));
+        var left = WorldPrincipal.Seat(slot: 0);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(left, left.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+
+        var body = fixture.Server.Body(index: 0)!;
+        body.Pose(x: 0.5f, y: 1f, z: 0.5f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f); // over cell 0, on the topology
+        for (var tick = 0; tick < 400; tick++) {
+            fixture.Step();
+        }
+
+        WorldStateRow Row(string name) => WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, name)!;
+        long Cell(WorldStateRow row, string key) => row.Cells!.Single(c => c.Key.Value == key).Value;
+        Assert.Equal(9, Cell(Row("board"), "0")); // settled, on the topology — the baseline both variants share.
+        var verdictBefore = Cell(Row("verdict"), WorldStateRow.SlotKey);
+        var illegalCountBefore = Cell(Row("illegalCount"), WorldStateRow.SlotKey);
+        var lastLegalCell0Before = Cell(Row("lastLegal"), "0");
+
+        body.Pose(x: 10f, y: 1f, z: 10f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f); // still on the floor, off the 2x2 topology
+        for (var tick = 0; tick < 400; tick++) {
+            fixture.Step();
+        }
+
+        if (excludeOffFrameMover) {
+            Assert.Equal(0, Cell(Row("justMoved"), WorldStateRow.SlotKey));
+            Assert.Equal(verdictBefore, Cell(Row("verdict"), WorldStateRow.SlotKey));
+            Assert.Equal(illegalCountBefore, Cell(Row("illegalCount"), WorldStateRow.SlotKey));
+            Assert.Equal(lastLegalCell0Before, Cell(Row("lastLegal"), "0"));
+        } else {
+            Assert.Equal(1, Cell(Row("verdict"), WorldStateRow.SlotKey)); // ruled legal — nothing checks a destination of "no cell".
+            Assert.Equal(illegalCountBefore, Cell(Row("illegalCount"), WorldStateRow.SlotKey)); // never even counted illegal.
+            Assert.Equal(0, Cell(Row("lastLegal"), "0")); // the piece is erased from the remembered legal position.
+        }
     }
 }

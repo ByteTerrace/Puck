@@ -416,7 +416,12 @@ must pair the pose with a negligible `body.impulse` wake — a bare pose is a
 kinematic write and never itself crosses `$physics:quiescent`'s Edge, so
 nothing re-derives from it alone. A `verdict` records occupancy and turn order
 — the shipped default; per-kind movement geometry is the reserved authorable
-extension — and `lastLegal`/`turn` update only on a legal move.
+extension — and `lastLegal`/`turn` update only on a legal move, over the
+piece whose own cellOf changed between two occupied board cells: a piece that
+resolves to no cell, before or after (captured, lifted off, knocked clear),
+never itself qualifies as the mover, so its disappearance never registers a
+verdict, a turn change, or a `lastLegal` write under its own color — a
+capture is carried entirely by the capturing piece's own move.
 `world.tabletop` reads the frame, live occupancy, and the bound convenience
 rows back. `boardSquareLight`/`boardSquareDark` placements (paired one to a
 cell, colors from the `boardColors` text row) render the board itself; the
@@ -425,7 +430,7 @@ addon to paint move highlights, per the lane's own scope. Two known limits
 carry from the per-body scale primitive's own contract: body-vs-body contact
 still reads a kit's unscaled collider (a body standing where a small piece
 also stands can still displace it), and two pieces landing on one cell in the
-same settle leave only the LAST-written piece's code in the `board` row (the
+same settle leave only the last-written piece's code in the `board` row (the
 other's cell reads empty even though its body is still physically there).
 
 World-space creation text uses the document's optional `text` catalog. Every

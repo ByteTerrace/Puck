@@ -228,6 +228,31 @@ public static class WorldTopologyCompilation {
         if (count > MaxCells) {
             return false;
         }
+        if (topology.Kind == WorldTopologyKind.Grid && !TryValidateFrame(topology, out reason)) {
+            return false;
+        }
+        reason = string.Empty;
+        return true;
+    }
+
+    /// <summary>Checks the spatial frame a <see cref="WorldTopologyKind.Grid"/> resolves <see cref="CompiledWorldTopology.TryCellOf"/>
+    /// against — <see cref="CompiledWorldTopology.TryCellOf"/> divides world-local coordinates by <c>cellSize</c>, so a
+    /// non-positive or unrepresentable edge is load-bearing, not cosmetic, and must be refused here rather than crashing or
+    /// resolving garbage cells on the per-tick rule path.</summary>
+    private static bool TryValidateFrame(WorldStateLatticeTopology topology, out string reason) {
+        static bool FitsFixed(float value) => (
+            float.IsFinite(f: value) &&
+            (value >= (((double)long.MinValue) / 65536.0)) &&
+            (value <= (((double)long.MaxValue) / 65536.0))
+        );
+        if (!FitsFixed(topology.CellSize) || FixedQ4816.FromDouble(topology.CellSize) <= FixedQ4816.Zero) {
+            reason = $"grid.cellSize must quantize to a positive Q48.16 value (was {topology.CellSize})";
+            return false;
+        }
+        if (!FitsFixed(topology.Origin.X) || !FitsFixed(topology.Origin.Y) || !FitsFixed(topology.Origin.Z)) {
+            reason = "grid.origin must fit Q48.16";
+            return false;
+        }
         reason = string.Empty;
         return true;
     }

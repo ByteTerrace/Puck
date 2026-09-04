@@ -669,10 +669,14 @@ spelling). `state.lattices` declares one or more topologies (name, origin,
 `cellSize`, `width` × `depth` × `layers`, `stepEveryTicks`, `reactions`); at
 most one is `Field`-kind and drives THIS trait (`WorldTopologyCompilation.
 FindPhysical` — reactions, lattice-derived geometry) — the rest are discrete
-`Grid`/`Ring`/`Hex` topologies a placement's `board` facet anchors to a
-physical row/body game (`$board:cellOf`/`offset`, `world.tabletop`; the
-garden's `chessBoard` alongside its own `pondBasin` water field — see
-`Puck.World.Schema/README.md`'s tabletop-primitive section). Lattice-shaped
+`Grid`/`Ring`/`Hex` topologies, though only `Grid` carries the rectangular X/Z
+frame the `board` facet resolves against: a placement's `board` facet
+(`$board:cellOf`/`offset`, `world.tabletop`) anchors to a `Grid` topology
+alone (`Ring`/`Hex` refuse it), and a `Grid`'s `cellSize` must quantize to a
+positive Q48.16 value — it is the divisor `$board:cellOf` resolves world
+positions against (the garden's `chessBoard` alongside its own `pondBasin`
+water field — see `Puck.World.Schema/README.md`'s tabletop-primitive
+section). Lattice-shaped
 state rows: `{"name": …, "kind": "fixed", "lattice":
 {"topology": …, "initial"/"min"/"max", optional "heightScale"/"color",
 "paint": […]}}`. `WorldFieldsSection.Compile` assembles the runtime composite

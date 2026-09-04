@@ -172,7 +172,11 @@ payloads. Publicly authored seeds alone are unsuitable for hidden deals.
 **The tabletop primitive.** A placement's `board` facet (`WorldPlacementBoard`)
 anchors a discrete `Grid` topology's own world-space frame (its declared
 `origin`/`cellSize` — no separate frame member) to a physical row/body-based
-game: `topology` names the anchored Grid; `occupancy` names the board row the
+game. `cellSize` is the divisor `$board:cellOf` resolves world positions
+against, so `WorldTopologyCompilation.TryValidate` refuses a `Grid` whose
+`cellSize` does not quantize to a positive Q48.16 value, or whose `origin`
+does not fit one, at document validation rather than at the per-tick rule
+path. `topology` names the anchored Grid; `occupancy` names the board row the
 engine reads back; `turn`/`verdict`/`move`/`plan` are author-named convenience
 rows a `world.tabletop` read-back echoes together, never engine-interpreted —
 any tabletop game names whichever it needs. A topology is carried by at most
@@ -182,8 +186,11 @@ in: a world rule reads each piece's `$board:cellOf:<occupancy row>:body:<n>`
 on `$physics:quiescent`'s rising edge (a settle, never every tick) and writes
 its code into the occupancy row at that resolved cell — see the garden's own
 `puck.world.json` tabletop rules for the worked pattern (snapshot the prior
-board before clearing, derive fresh occupancy, detect which single piece's
-cell changed, then a verdict any authored predicate — occupancy, turn order,
+board before clearing, derive fresh occupancy, detect which single piece
+moved between two occupied board cells — a piece whose cell resolves to no
+cell, before or after (captured, lifted off, knocked clear), never itself
+qualifies as the mover, so its own disappearance is never ruled legal or
+illegal by its own color — then a verdict any authored predicate — occupancy, turn order,
 a `$board:rayCell`/`$board:offset` movement-geometry check — may set to 0
 without touching the mover; a legal verdict alone advances turn and adopts the
 new position into `lastLegal`). Illegal moves are recorded, never undone —

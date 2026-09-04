@@ -504,10 +504,15 @@ placement, and a world rule derives an occupancy row from each piece's
 resting cell (`$board:cellOf:<row>:body:<n>`, a new reserved channel, Grid-
 only) on `$physics:quiescent`'s rising edge — never every tick. Legality is
 authorable, not engine-adjudicated: the shipped garden default checks
-occupancy and turn order only: a full piece-movement-geometry vocabulary
-(sliding pieces via `$board:rayCell`, leapers via the new `$board:offset`
-channel, check/castling/en passant/promotion) is the reserved authorable
-extension, not built. Illegal moves are recorded — `illegalCount` counts them,
+occupancy and turn order only, over the piece whose own resting cell changed
+between two occupied board cells — a piece that leaves the board entirely
+(captured, knocked clear) never itself registers as a mover, since it has no
+destination cell to rule on; the capturing piece's own move records the
+whole event, and lifting a piece off the board without a compensating move
+records nothing, leaving `turn`/`lastLegal` untouched. A full piece-
+movement-geometry vocabulary (sliding pieces via `$board:rayCell`, leapers
+via the new `$board:offset` channel, check/castling/en passant/promotion) is
+the reserved authorable extension, not built. Illegal moves are recorded — `illegalCount` counts them,
 `verdict` names the last ruling — and never rejected, undone, or repositioned;
 the table remembers the last legal position (`lastLegal`) for a human or a
 future AI body to act on. `plan` is the addon seam for candidate-highlight

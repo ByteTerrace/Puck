@@ -343,8 +343,13 @@ choosing fixed-point primitives on sim value paths.
   references for the mechanics. The shipped garden's `billiardsTray`/
   `bowlingLane` placements are the worked example.
 - The tabletop primitive: a placement's `board` facet (`WorldPlacementBoard`)
-  anchors a discrete `Grid`/`Ring`/`Hex` `state.lattices` topology to a
-  physical row/body game (`$board:cellOf`/`offset`, `world.tabletop`). A
+  anchors a discrete `Grid` `state.lattices` topology (only `Grid` carries the
+  rectangular X/Z frame `$board:cellOf`/`offset` resolve against; `Ring`/`Hex`
+  refuse the facet) to a physical row/body game (`$board:cellOf`/`offset`,
+  `world.tabletop`). A `Grid` topology's `cellSize` must quantize to a
+  positive Q48.16 value — it is the divisor `$board:cellOf` resolves world
+  positions against, so a zero or negative edge is refused at validation, not
+  left to crash the per-tick rule path. A
   contiguous run of a rule's own `setState`/`addState`/etc. effects
   preflights and applies as ONE atomic candidate (`WorldServer.Step`'s
   `PreflightWorldRuleStateEffects`) — deriving N independent pieces' cells
