@@ -553,16 +553,17 @@ wrong off an unsorted deal), and `poker-strength1`/`poker-strength2` — declare
 not a console fixture. `pairAtRank2..14`, `hasTripAny`, `hasQuadAny`,
 `straightAny`, and `suitAtLeast5_0..3` all remain shipped, compiled, and
 correct against a sorted or order-independent word respectively, reachable via
-`world.match`, but only `pairAny` feeds `strength1`/`strength2` live: chess's
-own rules already spend most of `world.budget`'s 1,000,000-unit per-tick
-ceiling, and `WorldRuleWorkBudget.TransformCost` prices every `transformState`
+`world.match`, but only `pairAny` feeds `strength1`/`strength2` live:
+`WorldRuleWorkBudget.TransformCost` prices every `transformState`
 effect — a `sort`, a `transfer`, a `completePhase` alike — against the WHOLE
 document's declared cell storage (`suit` and `rank`'s privacy-required
 `keysFrom` each add a full topology-sized share to that storage on their own),
-so the deal's three transfers plus the two sorts already spend nearly the
-whole ceiling; trip/quad/straight/flush reads, a second per-seat suit union,
-and a full house/two-pair tally are each individually affordable but not
-together. `poker-bet-action-seat1`/`-seat2` fold a console-set `betAction1`/
+so the deal's three transfers plus the two sorts, alongside chess's and the
+rigid facets' own rules, together spend most of `world.budget`'s 2,000,000-unit
+per-tick ceiling; trip/quad/straight/flush reads, a second
+per-seat suit union, and a full house/two-pair tally are each individually
+affordable but not together. `poker-bet-action-seat1`/`-seat2` fold a
+console-set `betAction1`/
 `betAction2` (0 = check, 1 = raise) into `bets`/`pot`, each gated on
 `pokerTurn == 1` and on `bettor` naming its own seat, flipping `bettor` to the
 other seat on success — a real turn order, not a free-for-all. Hidden cards

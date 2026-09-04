@@ -1020,8 +1020,9 @@ public static class WorldStateCapacity {
     /// <see cref="MaxTextValueLength"/> since it is likewise a free-form issuer label, never a validated-identifier
     /// type.</summary>
     public const int MaxProvenanceLength = 256;
-    /// <summary>The section's row-count ceiling.</summary>
-    public const int MaxRows = 128;
+    /// <summary>The section's row-count ceiling — a pure capacity bound on document size and per-tick iteration
+    /// cost, never a fixed-size stack buffer or a per-world tunable.</summary>
+    public const int MaxRows = 256;
     /// <summary>A <see cref="CellKind.Text"/> cell's value-length ceiling, in UTF-16 code units.</summary>
     public const int MaxTextValueLength = 256;
 }

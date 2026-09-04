@@ -895,7 +895,7 @@ public static class WorldRuleCapacity {
     /// <summary>The most top-level effects one rule or interaction may carry.</summary>
     public const int MaxEffectsPerRule = 64;
     /// <summary>The maximum statically derived rule, interaction, and flock-affinity work admitted for one simulation tick.</summary>
-    public const long MaxWorkUnitsPerTick = 1_000_000L;
+    public const long MaxWorkUnitsPerTick = 2_000_000L;
     /// <summary>The most postfix tokens in one Boolean gate.</summary>
     public const int MaxPredicateTokens = 256;
     /// <summary>The most postfix tokens in one numeric expression.</summary>

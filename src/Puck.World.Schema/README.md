@@ -1632,7 +1632,7 @@ sphere to the lattice, clamps every result to the field envelope, and caps its
 radius at eight cells, bounding one firing to at most 4,913 candidate visits.
 
 Rule execution has three independent ceilings: 128 ordinary rules, 64 top-level
-effects per rule/interaction, and 1,000,000 statically derived work units per
+effects per rule/interaction, and 2,000,000 statically derived work units per
 tick. The cost includes gate/expression operands, keyed scans, `forEach`, the
 quadratic worst case of distance interactions, mutation rebuild weights, nested
 transaction preflight, field-paint candidate visits, and flock-affinity expressions
@@ -1707,7 +1707,7 @@ limits: they neither grant omniscient sensing nor enlarge the inspected sample.
 Zero affinity does not disable separation. These are relative mean weights;
 the profile's outer `cohesion` and `alignment` still set each term's strength.
 `world.flock` echoes the expressions and counters, and `world.budget` includes
-their conservative cost in the shared 1,000,000-unit admission ceiling.
+their conservative cost in the shared 2,000,000-unit admission ceiling.
 Runtime sampling and checkpoint semantics live in the
 [server reference](../Puck.World.Server/README.md#local-flock-steering).
 

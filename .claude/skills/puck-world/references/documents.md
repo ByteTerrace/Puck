@@ -880,7 +880,7 @@ key is the one reserved exception). `nonNegative` is a per-row floor ANY numeric
 declare, enforced regardless of `min`; `int` + `nonNegative` IS a timer, never
 a fifth kind, and the cross-document write-back channel
 (`Server.WorldOwnedWorlds.Decide`) reads that same row trait rather than
-assuming a floor of its own. Capped at `WorldStateCapacity.MaxRows` (128)
+assuming a floor of its own. Capped at `WorldStateCapacity.MaxRows` (256)
 rows, `MaxCellsPerRow` (128) cells per row (which an authored `capacity` may
 only NARROW, never widen), and
 `MaxTextValueLength` (256) text UTF-16 code units, refused by name past any.
@@ -2160,7 +2160,7 @@ zone, and neutral-grace duration.
   from population capacity. Do not use live instance count to size reserved
   bone storage.
 - `WorldHudCapacity` (`WorldHud.cs`): see [hud.md](hud.md).
-- `WorldStateCapacity` (`WorldState.cs`): `MaxRows = 128`,
+- `WorldStateCapacity` (`WorldState.cs`): `MaxRows = 256`,
   `MaxCellsPerRow = 128` (an authored `capacity` may only narrow it),
   `MaxTextValueLength = 256` (UTF-16 units, a text cell's value), and
   `MaxBodySlots = 128` across the `body` and `identity` lanes (the fixed

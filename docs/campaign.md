@@ -686,15 +686,16 @@ second one. `poker-bet-action-seat1`/`-seat2` gate on `bettor` naming their
 own seat and flip it to the other seat on success, a real turn order over the
 two seats.
 
-Live hand-strength is bounded by what the chess table beside it leaves in
-`world.budget`'s 1,000,000-unit per-tick ceiling: every `transformState`
-effect (dealing's `transfer`, a `sort`) is priced against the WHOLE
-document's declared cell storage (`WorldRuleWorkBudget.TransformCost`), and
-`rank`/`suit`'s privacy-required `keysFrom` each add a full topology-sized
+Live hand-strength is bounded by what the chess table and the rigid facets
+beside it leave in `world.budget`'s 2,000,000-unit per-tick ceiling: every
+`transformState` effect (dealing's `transfer`, a `sort`) is priced against the
+WHOLE document's declared cell storage (`WorldRuleWorkBudget.TransformCost`),
+and `rank`/`suit`'s privacy-required `keysFrom` each add a full topology-sized
 share to that storage on their own — so the deal's three transfers plus one
 sort PER SEAT (needed because the shipped `hasTripAny`/`hasQuadAny`/
 `straightAny` patterns are adjacency-based and read wrong off an unsorted
-deal) already spend nearly the whole ceiling. `poker-strength1`/
+deal), combined with chess's and the rigid facets' own rules, already spend
+most of the ceiling. `poker-strength1`/
 `poker-strength2` ARE rule-derived — a genuine landed fix, not a console
 fixture — but fold only the shipped `pairAny` pattern; trip/quad/straight/
 flush reads, a second per-seat suit union, and a full house/two-pair tally
@@ -711,6 +712,17 @@ exactly one hand per boot: returning a finished hand's cards to the deck for
 a second one costs three more `transfer`s the budget does not have, so
 `poker-deal`'s gate (`pokerTurn == 0`) never reopens once a hand is dealt —
 a second `dealRequest` refuses cleanly rather than partially applying.
+
+**Garden W3 integration (owner decision).** The tabletop-rules, rigid-fidelity,
+and cards lanes were each authored and budget-checked in isolation, every one
+landing comfortably under `WorldStateCapacity.MaxRows` and
+`WorldRuleCapacity.MaxWorkUnitsPerTick` alone. Merged into one document the
+three lanes' `state.world` rows and rule/transform costs sum past both
+ceilings — a document-capacity collision the per-lane work could not see, not
+a defect in any one lane's design. Both ceilings are structural (document size
+and static per-tick work, never a fixed-size buffer or a per-world tunable),
+so the fix is to widen them rather than cut a lane: `MaxRows` 128 → 256,
+`MaxWorkUnitsPerTick` 1,000,000 → 2,000,000.
 
 ## After this arc
 
