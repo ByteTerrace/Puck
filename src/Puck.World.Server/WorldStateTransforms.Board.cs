@@ -1,3 +1,5 @@
+using System.Buffers;
+
 namespace Puck.World.Server;
 
 public static partial class WorldStateTransforms {
@@ -17,6 +19,10 @@ public static partial class WorldStateTransforms {
             return Refuse("setMask writes a value the board row does not admit", out reason);
         }
         var cells = (row.Cells ?? []).ToList();
+        var position = new Dictionary<WorldCellName, int>(cells.Count);
+        for (var cellIndex = 0; cellIndex < cells.Count; cellIndex++) {
+            position[cells[cellIndex].Key] = cellIndex;
+        }
         var bits = (ulong)maskCell.Value;
         while (bits != 0UL) {
             var cell = System.Numerics.BitOperations.TrailingZeroCount(bits);
@@ -24,11 +30,11 @@ public static partial class WorldStateTransforms {
             if (cell >= topology.CellCount) {
                 continue;
             }
-            var key = WorldCellName.Parse(topology.Key(cell));
-            var existing = cells.FindIndex(c => c.Key == key);
-            if (existing >= 0) {
+            var key = topology.CellName(cell);
+            if (position.TryGetValue(key, out var existing)) {
                 cells[existing] = cells[existing] with { Value = setMask.Value };
             } else {
+                position[key] = cells.Count;
                 cells.Add(new(key, setMask.Value));
             }
         }
@@ -36,8 +42,8 @@ public static partial class WorldStateTransforms {
         return true;
     }
 
-    // The ring slot written is cursor mod capacity, so the cursor alone says which slot is oldest and how many are
-    // filled; a checked cursor overflow refuses rather than wrapping the ring's order.
+    // A ring's cells are its slots 0..n-1 in slot order (the validator's invariant), so the slot at the cursor is
+    // cells[slot] when it exists and the next append otherwise; nothing is parsed or searched.
     private static bool TryPush(WorldStateRow[] rows, WorldStateTransform.Push push, out string reason) {
         if (!TryFind(rows, push.Row, out var index, out reason)) {
             return false;
@@ -49,20 +55,26 @@ public static partial class WorldStateTransforms {
         if (row.ClampToEnvelope(push.Value) != push.Value) {
             return Refuse("push writes a value the history row does not admit", out reason);
         }
-        var slot = WorldCellName.Parse((row.HistoryCursor % history.Capacity).ToString(System.Globalization.CultureInfo.InvariantCulture));
-        var cells = (row.Cells ?? []).ToList();
-        var existing = cells.FindIndex(c => c.Key == slot);
-        if (existing >= 0) {
-            cells[existing] = cells[existing] with { Value = push.Value };
+        var slot = (int)(row.HistoryCursor % history.Capacity);
+        var cells = (row.Cells ?? []).ToArray();
+        WorldStateCell[] written;
+        if (slot < cells.Length) {
+            written = cells;
+            written[slot] = written[slot] with { Value = push.Value };
+        } else if (slot == cells.Length) {
+            written = new WorldStateCell[cells.Length + 1];
+            cells.CopyTo(written, 0);
+            written[slot] = new(WorldCellName.Parse(slot.ToString(System.Globalization.CultureInfo.InvariantCulture)), push.Value);
         } else {
-            cells.Add(new(slot, push.Value));
+            return Refuse("push found a ring whose slots are not the dense prefix 0..n-1", out reason);
         }
-        rows[index] = row with { Cells = cells, HistoryCursor = checked(row.HistoryCursor + 1L) };
+        rows[index] = row with { Cells = written, HistoryCursor = checked(row.HistoryCursor + 1L) };
         return true;
     }
 
-    // Every cell of the topology is written, so the target's occupancy is exactly the operation's result and no
-    // stale membership survives from before the write.
+    // Membership is decided cell by cell over pooled scratch; the target is written SPARSELY when its empty value is
+    // zero (only members, as 1), and densely as 1/0 only when a nonzero empty value would otherwise read absent
+    // cells as members.
     private static bool TryCombine(WorldDefinition definition, WorldStateRow[] rows, WorldStateTransform.Combine combine, out string reason) {
         if (!TryFind(rows, combine.Target, out var targetIndex, out reason) || !TryFind(rows, combine.Left, out var leftIndex, out reason)) {
             return false;
@@ -87,26 +99,46 @@ public static partial class WorldStateTransforms {
                 return Refuse("combine requires the right board to share the target's topology", out reason);
             }
         }
-        var leftValues = new long[topology.CellCount];
-        var rightValues = new long[topology.CellCount];
-        WorldBoardQueries.Read(left, topology, leftValues);
-        if (right is not null) {
-            WorldBoardQueries.Read(right, topology, rightValues);
+        var count = topology.CellCount;
+        var scratch = ArrayPool<long>.Shared.Rent(2 * count);
+        try {
+            var leftValues = scratch.AsSpan(0, count);
+            var rightValues = scratch.AsSpan(count, count);
+            WorldBoardQueries.Read(left, topology, leftValues);
+            if (right is not null) {
+                WorldBoardQueries.Read(right, topology, rightValues);
+            } else {
+                rightValues.Clear();
+            }
+            var dense = board.Empty != 0L;
+            var members = 0;
+            for (var cell = 0; cell < count; cell++) {
+                if (Member(combine.Operation, leftValues[cell] != 0L, rightValues[cell] != 0L)) {
+                    members++;
+                }
+            }
+            var cells = new WorldStateCell[dense ? count : members];
+            var next = 0;
+            for (var cell = 0; cell < count; cell++) {
+                var member = Member(combine.Operation, leftValues[cell] != 0L, rightValues[cell] != 0L);
+                if (dense) {
+                    cells[next++] = new(topology.CellName(cell), member ? 1L : 0L);
+                } else if (member) {
+                    cells[next++] = new(topology.CellName(cell), 1L);
+                }
+            }
+            rows[targetIndex] = target with { Cells = cells };
+            return true;
+        } finally {
+            ArrayPool<long>.Shared.Return(scratch);
         }
-        var cells = new WorldStateCell[topology.CellCount];
-        for (var cell = 0; cell < topology.CellCount; cell++) {
-            var a = leftValues[cell] != 0L;
-            var b = rightValues[cell] != 0L;
-            var member = combine.Operation switch {
-                WorldBoardCombine.And => a && b,
-                WorldBoardCombine.Or => a || b,
-                WorldBoardCombine.Xor => a != b,
-                WorldBoardCombine.AndNot => a && !b,
-                _ => !a,
-            };
-            cells[cell] = new(WorldCellName.Parse(topology.Key(cell)), member ? 1L : 0L);
-        }
-        rows[targetIndex] = target with { Cells = cells };
-        return true;
     }
+
+    private static bool Member(WorldBoardCombine operation, bool a, bool b) => operation switch {
+        WorldBoardCombine.And => a && b,
+        WorldBoardCombine.Or => a || b,
+        WorldBoardCombine.Xor => a != b,
+        WorldBoardCombine.AndNot => a && !b,
+        _ => !a,
+    };
 }

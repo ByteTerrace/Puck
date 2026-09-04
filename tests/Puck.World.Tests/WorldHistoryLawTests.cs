@@ -95,8 +95,12 @@ public sealed class WorldHistoryLawTests {
 
         Assert.False(WorldDefinitionValidator.TryValidateLocally(Document([new WorldStateRow(Name("t"), CellKind.Int, HistoryCursor: 1)], []), out var cursorReason));
         Assert.Contains("historyCursor without history", cursorReason);
-        Assert.False(WorldDefinitionValidator.TryValidateLocally(Document([new WorldStateRow(Name("t"), CellKind.Int, History: new(2), Cells: [Cell("5", 1)])], []), out var slotReason));
-        Assert.Contains("not a ring slot", slotReason);
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(Document([new WorldStateRow(Name("t"), CellKind.Int, History: new(2), HistoryCursor: 1, Cells: [Cell("5", 1)])], []), out var slotReason));
+        Assert.Contains("slots 0..n-1 in order", slotReason);
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(Document([new WorldStateRow(Name("t"), CellKind.Int, History: new(3), HistoryCursor: 2, Cells: [Cell("1", 1), Cell("0", 1)])], []), out var orderReason));
+        Assert.Contains("in order", orderReason);
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(Document([new WorldStateRow(Name("t"), CellKind.Int, History: new(3), HistoryCursor: 1, Cells: [Cell("0", 1), Cell("1", 1)])], []), out var cursorCountReason));
+        Assert.Contains("says fewer", cursorCountReason);
         Assert.False(WorldDefinitionValidator.TryValidateLocally(Document([new WorldStateRow(Name("t"), CellKind.Text, History: new(2))], []), out var kindReason));
         Assert.Contains("integer or fixed", kindReason);
         Assert.False(WorldDefinitionValidator.TryValidateLocally(Document([new WorldStateRow(Name("t"), CellKind.Int, History: new(2), Board: new("map"))], []), out var traitReason));

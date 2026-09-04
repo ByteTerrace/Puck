@@ -36,6 +36,18 @@ public sealed partial class WorldServer {
     private long[] m_patternWord = [];
     // The token a pattern value expression is evaluating for; set only for the duration of one word read.
     private string? m_patternTokenKey;
+    // Scratch for one board's cell values on the fact path, grown to the widest topology read and never on the
+    // stack: a 4096-cell board is 32 KiB. A board read never nests another (an expression inside a tuple word runs
+    // only on zone sources), so one buffer serves every reader.
+    private long[] m_boardScratch = [];
+
+    private Span<long> BoardScratch(int count) {
+        if (m_boardScratch.Length < count) {
+            m_boardScratch = new long[Math.Max(count, WorldBoardMask.MaxCells)];
+        }
+
+        return m_boardScratch.AsSpan(0, count);
+    }
 
     private long ReadPatternFact(CompiledWorldOperand operand, ulong tick) {
         if (!m_patterns.TryGet(name: operand.Pattern!, pattern: out var pattern)) {
@@ -52,7 +64,7 @@ public sealed partial class WorldServer {
                 return 0L;
             }
 
-            Span<long> values = stackalloc long[query.Topology.CellCount];
+            var values = BoardScratch(query.Topology.CellCount);
             WorldBoardQueries.Read(row, query.Topology, values);
             var key = ResolveOperandKey(key: operand.Key, keyFrom: operand.KeyFrom, tick: tick);
             var origin = ((key is not null && query.Topology.TryCell(key, out var cell)) ? cell : -1);
@@ -129,10 +141,9 @@ public sealed partial class WorldServer {
 
         if (row.History is { } history) {
             var count = (int)Math.Min(row.HistoryCursor, history.Capacity);
-            Span<char> key = stackalloc char[12];
 
             for (var age = count - 1; age >= 0; age--) {
-                word[length++] = ReadHistorySlot(row, history, age, tick, key);
+                word[length++] = ReadHistorySlot(row, history, age, tick);
             }
 
             return length;
@@ -163,25 +174,22 @@ public sealed partial class WorldServer {
         return length;
     }
 
-    // The slot pushed `age` pushes ago is (cursor - 1 - age) mod capacity; a slot never written reads the empty value.
-    private static long ReadHistorySlot(WorldStateRow row, WorldStateHistory history, long age, ulong tick, Span<char> key) {
+    // The slot pushed `age` pushes ago is (cursor - 1 - age) mod capacity, and the ring's cells ARE its slots in
+    // order (the validator's invariant), so the value is one index away; a slot never written reads the empty value.
+    private static long ReadHistorySlot(WorldStateRow row, WorldStateHistory history, long age, ulong tick) {
         if (age >= Math.Min(row.HistoryCursor, history.Capacity)) {
             return history.Empty;
         }
 
-        var slot = (row.HistoryCursor - 1L - age) % history.Capacity;
+        var slot = (int)((row.HistoryCursor - 1L - age) % history.Capacity);
         var cells = row.Cells;
 
-        for (var index = 0; index < (cells?.Count ?? 0); index++) {
-            var cell = cells![index];
-
-            if (long.TryParse(cell.Key.Value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var parsed) && parsed == slot) {
-                WorldStateReader.ReadCell(row: row, key: cell.Key.Value, tick: tick, rawValue: out var raw, text: out _);
-                return raw ?? history.Empty;
-            }
+        if (cells is null || slot >= cells.Count) {
+            return history.Empty;
         }
 
-        return history.Empty;
+        WorldStateReader.ReadCell(row: row, key: cells[slot].Key.Value, tick: tick, rawValue: out var raw, text: out _);
+        return raw ?? history.Empty;
     }
 
     // $history:<row>:<age> through the compiled row handle.
@@ -191,9 +199,7 @@ public sealed partial class WorldServer {
             throw new InvalidOperationException($"history operand over '{operand.Row}' outlived its compiled row handle");
         }
 
-        Span<char> key = stackalloc char[12];
-
-        return ReadHistorySlot(row, history, operand.SymmetryArgument, tick, key);
+        return ReadHistorySlot(row, history, operand.SymmetryArgument, tick);
     }
 
     // pushState: the value is resolved the way a write's is, then lands as a Push transform so the ring's cursor and

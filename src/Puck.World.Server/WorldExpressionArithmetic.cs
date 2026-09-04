@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Buffers.Binary;
+using System.Runtime.Intrinsics.X86;
 using Puck.Maths;
 
 namespace Puck.World.Server;
@@ -153,9 +154,12 @@ public static class WorldExpressionArithmetic {
 
     private static ulong FieldMask(int width) => (width == 64) ? ulong.MaxValue : ((1UL << width) - 1UL);
 
-    // The software forms of pext/pdep walk the mask's set bits from the bottom, so they are bit-exact with the
-    // hardware instructions on every machine and need no intrinsic check.
+    // BMI2 when the machine has it; the software forms walk the mask's set bits from the bottom and are bit-exact
+    // with the instructions, so a replay agrees across machines either way.
     private static ulong ParallelExtract(ulong value, ulong mask) {
+        if (Bmi2.X64.IsSupported) {
+            return Bmi2.X64.ParallelBitExtract(value, mask);
+        }
         var result = 0UL;
         var bit = 0;
         while (mask != 0UL) {
@@ -167,6 +171,9 @@ public static class WorldExpressionArithmetic {
         return result;
     }
     private static ulong ParallelDeposit(ulong value, ulong mask) {
+        if (Bmi2.X64.IsSupported) {
+            return Bmi2.X64.ParallelBitDeposit(value, mask);
+        }
         var result = 0UL;
         var bit = 0;
         while (mask != 0UL) {

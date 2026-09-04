@@ -57,6 +57,12 @@ public sealed class WorldBoardMaskLawTests {
         Assert.Equal(new[] { "1", "3" }, Members(onlyLeft, "target"));
         var complement = Apply(painted, new WorldStateTransform.Combine("target", "other", WorldBoardCombine.Not));
         Assert.Equal(14, Members(complement, "target").Length);
+        // A zero-empty target stays sparse: only members are written; a nonzero empty forces every cell explicit.
+        Assert.Single(Find(both, "target").Cells!);
+        var loud = painted with { StateRaw = painted.StateRaw! with { World = [.. painted.State.Select(r => r.Name.Value == "target" ? r with { Board = new("map", Empty: 1) } : r)] } };
+        var dense = Apply(loud, new WorldStateTransform.Combine("target", "board", WorldBoardCombine.And, "other"));
+        Assert.Equal(16, Find(dense, "target").Cells!.Count);
+        Assert.Equal(new[] { "0" }, Members(dense, "target"));
 
         Assert.False(WorldStateTransforms.TryApply(painted, new WorldStateTransform.Combine("target", "board", WorldBoardCombine.Not, "other"), WorldPrincipal.World, 0, "test", out _, out var notReason));
         Assert.Contains("takes no right", notReason);

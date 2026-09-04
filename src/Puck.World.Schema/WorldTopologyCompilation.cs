@@ -43,6 +43,7 @@ public sealed record WorldStateBoard(string Topology, long Empty = 0);
 public sealed class CompiledWorldTopology {
     private readonly int[] m_neighbours;
     private readonly string[] m_keys;
+    private readonly WorldCellName[] m_names;
     private readonly int m_width;
     private readonly int m_depth;
     private readonly WorldTopologyWrap m_wrap;
@@ -61,10 +62,16 @@ public sealed class CompiledWorldTopology {
         m_origin = origin;
         m_cellSize = cellSize;
         m_keys = new string[count];
+        m_names = new WorldCellName[count];
         for (var cell = 0; cell < count; cell++) {
             m_keys[cell] = cell.ToString(CultureInfo.InvariantCulture);
+            m_names[cell] = WorldCellName.Parse(m_keys[cell]);
         }
     }
+
+    /// <summary>Gets a cell's key as a parsed cell name, without re-parsing.</summary>
+    /// <param name="cell">The cell ordinal.</param>
+    public WorldCellName CellName(int cell) => m_names[cell];
 
     /// <summary>Gets the shape.</summary>
     public WorldTopologyKind Kind { get; }

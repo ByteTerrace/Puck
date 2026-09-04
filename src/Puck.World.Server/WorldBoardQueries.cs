@@ -119,7 +119,9 @@ public static class WorldBoardQueries {
 
     private static long PathCost(CompiledWorldBoardQuery query, ReadOnlySpan<long> costs, int source) {
         var topology = query.Topology;
-        Span<long> distances = stackalloc long[topology.CellCount];
+        var rented = System.Buffers.ArrayPool<long>.Shared.Rent(topology.CellCount);
+        var distances = rented.AsSpan(0, topology.CellCount);
+        try {
         Span<byte> settled = stackalloc byte[topology.CellCount];
         distances.Fill(long.MaxValue);
         settled.Clear();
@@ -153,6 +155,9 @@ public static class WorldBoardQueries {
             }
         }
         return -2;
+        } finally {
+            System.Buffers.ArrayPool<long>.Shared.Return(rented);
+        }
     }
 }
 
@@ -172,7 +177,7 @@ public sealed partial class WorldServer {
             var origin = originKey is not null && query.Topology.TryCell(originKey, out var originCell) ? originCell : -1;
             return origin >= 0 && query.Topology.TryOffset(origin, query.Dx, query.Dz, out var offset) ? offset : -1;
         }
-        Span<long> values = stackalloc long[query.Topology.CellCount];
+        var values = BoardScratch(query.Topology.CellCount);
         WorldBoardQueries.Read(row, query.Topology, values);
         var key = ResolveOperandKey(operand.Key, operand.KeyFrom, tick);
         var source = key is not null && query.Topology.TryCell(key, out var sourceCell) ? sourceCell : -1;

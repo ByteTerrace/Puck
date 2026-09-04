@@ -34,12 +34,21 @@ public static partial class WorldDefinitionValidator {
         if (row.HistoryCursor < 0L) {
             errors.Add(item: $"{path} ('{row.Name}') historyCursor {row.HistoryCursor} is negative.");
         }
-        foreach (var cell in row.Cells ?? []) {
+        // The cells are the slots 0..n-1 in slot order, so a push and an age read index the list directly.
+        var cells = row.Cells ?? [];
+        if (cells.Count > history.Capacity) {
+            errors.Add(item: $"{path} ('{row.Name}') history holds {cells.Count} cells past its capacity {history.Capacity}.");
+        }
+        if (row.HistoryCursor < history.Capacity && cells.Count > row.HistoryCursor) {
+            errors.Add(item: $"{path} ('{row.Name}') history holds {cells.Count} cells but its cursor {row.HistoryCursor} says fewer were ever pushed.");
+        }
+        for (var slot = 0; slot < cells.Count; slot++) {
+            var cell = cells[slot];
             if (cell is null) {
                 continue;
             }
-            if (!int.TryParse(cell.Key.Value, NumberStyles.None, CultureInfo.InvariantCulture, out var slot) || slot >= history.Capacity) {
-                errors.Add(item: $"{path} ('{row.Name}') history cell '{cell.Key}' is not a ring slot 0..{history.Capacity - 1}.");
+            if (!int.TryParse(cell.Key.Value, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed) || parsed != slot) {
+                errors.Add(item: $"{path} ('{row.Name}') history cell {slot} is keyed '{cell.Key}'; ring cells are the slots 0..n-1 in order.");
             }
             if (cell.Advance is not null || cell.Cycle is not null || cell.Dynamics is not null) {
                 errors.Add(item: $"{path} ('{row.Name}') history cell '{cell.Key}' carries a time trait; a ring slot is a plain value.");
