@@ -64,7 +64,8 @@ are separate from these piles: each `drawDecks` mask is four 64-bit words,
 serialized as exactly 64 hexadecimal digits, and supports 256 dealt entries.
 
 The closed `transformState` effect and transaction step carry one of `transfer`,
-`setRay`, `moveToken`, `completePhase`, `turnOrder`, or `observe`. The same operation travels
+`setRay`, `moveToken`, `completePhase`, `turnOrder`, `shuffle`, or `observe`. The
+same operation travels
 as the `TransformState` document mutation. Transfers preserve keys and accept
 `Key`, `First`, `Last`, or `Random` selectors; random selection names a
 redrawable integer `streamDraw` site. A cursor advances only with the committed
@@ -72,6 +73,10 @@ transfer. `setRay` changes a nonempty run of `through` cells closed by `until`;
 it excludes the origin and terminator and refuses a broken bracket.
 `moveToken` checks all position rows over the topology for occupancy, searches
 within `maxVisits`, and debits the token's allowance atomically with its move.
+`shuffle` reorders an ordered zone in place by one Fisher-Yates pass over a
+redrawable integer `streamDraw` site, consuming one sample per position after
+the first (a 52-card deck advances the cursor by 51), so one transaction
+shuffles a whole deck and a replay deals the same order.
 Every written row requires edit authority. Transaction preflight leaves no
 partial transfer, ray, cursor, allowance, or phase change after refusal.
 
@@ -100,9 +105,13 @@ authority. Phase eligibility does not grant access to another player's units.
 
 `visibility: {}` opts a row into public literal observations. `readers` limits
 that audience to canonical authenticated principals; `readers: []` retains it
-at the authority. Row and cell restrictions intersect. Hidden entries are
-omitted, including their keys and pile positions, and token attributes inherit
-their containing zone's restrictions. An absent policy preserves the existing
+at the authority. Row and cell restrictions intersect. What a hidden entry
+leaves behind is the row's `visibility.hidden` policy: `Omit` (the default)
+drops it with its key and pile position; `Count` reports only `hiddenCount`
+on the observed row; `Placeholder` keeps each hidden entry in pile order as an
+anonymous `hidden: true` cell with no key, value, text, or stamp, the card
+back an opponent's hand shows. Token attributes inherit their containing
+zone's restrictions. An absent policy preserves the existing
 absence of raw state from presentation documents. This is an observation
 payload, not a partial executable authority document. `StateObservations(row)`
 queries require `observe state:<row>` and apply the submission's stamped
@@ -802,11 +811,16 @@ honest and stated: the uniform map is uniform to within `n/2^32`, exactly zero
 when `n` divides `2^32`, rather than exactly uniform.
 
 **One site type, never cleared.** Every draw site is a `WorldStateRow.Draw`
-facet — the draw facet's single home. `WorldDrawBootResolver` (in `Puck.World`)
-fills a row's slot only while it carries no cell yet (first fill: process boot,
-or a fresh `world.instance.start`), keeps the facet and cursor, and resumes on
-reload rather than re-rolling a value the player already saw; nothing settles
-into a bare literal and nothing is cleared. `bodies.capacityRow`/
+facet — the draw facet's single home. `WorldDrawBootResolver` fills a slot
+row only while it carries no cell yet (first fill: process boot, or a fresh
+`world.instance.start`), keeps the facet and cursor, and resumes on reload
+rather than re-rolling a value the player already saw; nothing settles into a
+bare literal and nothing is cleared. A KEYED row may be a site too — a dice
+tray: its numeric source fills one sample per authored cell in cell order at
+its first fill (cursor zero), and `world.generate <row> [key ...]` /
+`WorldMutation.Generate(row, keys)` redraws every cell or only the named ones
+with the rest held, advancing the cursor by the cells drawn. A text source
+refuses a keyed site. `bodies.capacityRow`/
 `host.backendRow` are boot-time READS layered over this, resolved AFTER every
 row's first fill so a boot-drawn row is readable the same boot it draws:
 `capacityRow` names a scalar `int` row, `backendRow` a scalar `text` row

@@ -205,6 +205,10 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 var count = WorldTopologyCompilation.Find(definition.StateRaw, board.Board!.Topology)!.CellCount;
                 cost += (long)count * (count + 2);
                 break;
+            case WorldStateTransform.Shuffle shuffle:
+                var pile = WorldDefinitionRows.FindStateRow(definition.State, shuffle.Row)!;
+                cost += 2L * (pile.Capacity ?? pile.CellCeiling);
+                break;
             case WorldStateTransform.Observe observe:
                 var row = WorldDefinitionRows.FindStateRow(definition.State, observe.Row)!;
                 var cells = WorldTopologyCompilation.Find(definition.StateRaw, row.Board!.Topology)!.CellCount;

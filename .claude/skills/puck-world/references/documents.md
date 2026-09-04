@@ -773,8 +773,9 @@ INDEPENDENT sequences**. That is what makes a reference safe.
 
 **Moment** (`timing`): `boot` (drawn once at first fill; a later `generate`
 refuses by name), `tickPeriod`, `event`. The latter two redraw through the SAME
-`WorldMutation.Generate` (ordinal 51) / `world.generate <row>` — ONE argument,
-because a site owns its whole draw. Cadence is an ordinary `$tick`-scheduled or
+`WorldMutation.Generate` (ordinal 51) / `world.generate <row> [key ...]` — the
+site owns its whole draw; a keyed site (a dice tray) redraws every cell, or the
+named cells alone with the rest held. Cadence is an ordinary `$tick`-scheduled or
 event-gated rule, so timing costs no mutation ordinal.
 
 **The seed ladder is four rungs**, each LENGTH-DELIMITED before its bytes:

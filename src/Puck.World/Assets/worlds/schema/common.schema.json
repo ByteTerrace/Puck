@@ -4022,6 +4022,27 @@
       ],
       "additionalProperties": false
     },
+    "WorldStateTransformShuffle": {
+      "description": "Reorders an ordered zone in place by one Fisher-Yates pass over the named redrawable integer streamDraw site: a pile of n tokens consumes n - 1 samples, so the site\u0027s cursor advances by exactly that and a replay reproduces the permutation.",
+      "properties": {
+        "$type": {
+          "const": "shuffle"
+        },
+        "row": {
+          "description": "The ordered zone.",
+          "type": "string"
+        },
+        "draw": {
+          "description": "The integer streamDraw site supplying the samples.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "row",
+        "draw"
+      ],
+      "additionalProperties": false
+    },
     "WorldStateTransformMoveToken": {
       "description": "Moves a token along an affordable route, debiting movement points in the same candidate.",
       "properties": {
@@ -4096,6 +4117,9 @@
         },
         {
           "$ref": "#/$defs/WorldStateTransformTurnOrder"
+        },
+        {
+          "$ref": "#/$defs/WorldStateTransformShuffle"
         },
         {
           "$ref": "#/$defs/WorldStateTransformMoveToken"

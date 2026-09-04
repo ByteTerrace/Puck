@@ -78,6 +78,7 @@ public enum WorldZoneSelector : byte {
 [JsonDerivedType(typeof(WorldStateTransform.SetRay), "setRay")]
 [JsonDerivedType(typeof(WorldStateTransform.CompletePhase), "completePhase")]
 [JsonDerivedType(typeof(WorldStateTransform.TurnOrder), "turnOrder")]
+[JsonDerivedType(typeof(WorldStateTransform.Shuffle), "shuffle")]
 [JsonDerivedType(typeof(WorldStateTransform.MoveToken), "moveToken")]
 [JsonDerivedType(typeof(WorldStateTransform.Observe), "observe")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -129,4 +130,10 @@ public abstract record WorldStateTransform {
     /// activation (moved past a newly skipped participant when it was the one active).</param>
     public sealed record TurnOrder(string Row, int? Direction = null, IReadOnlyList<string>? Skip = null, IReadOnlyList<string>? Unskip = null,
         string? Active = null) : WorldStateTransform;
+    /// <summary>Reorders an ordered zone in place by one Fisher-Yates pass over the named redrawable integer
+    /// <c>streamDraw</c> site: a pile of n tokens consumes n - 1 samples, so the site's cursor advances by exactly
+    /// that and a replay reproduces the permutation.</summary>
+    /// <param name="Row">The ordered zone.</param>
+    /// <param name="Draw">The integer streamDraw site supplying the samples.</param>
+    public sealed record Shuffle(string Row, string Draw) : WorldStateTransform;
 }

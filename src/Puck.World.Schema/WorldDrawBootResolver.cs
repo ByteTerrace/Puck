@@ -24,9 +24,93 @@ namespace Puck.World;
 /// a member is inserted. Validation already refuses a token naming no backend, so the refusal below is a loud guard
 /// against that check ever going soft, not the primary door.</para>
 /// </remarks>
-internal static class WorldDrawBootResolver {
+public static class WorldDrawBootResolver {
     private static void Narrate(string site, string instanceIdentity, string settled) =>
         Console.Error.WriteLine(value: $"[world.draw: settled {site} instance={instanceIdentity} -> {settled}]");
+    /// <summary>Draws one numeric sample per selected cell of a keyed draw site, in cell order, advancing the site's
+    /// cursor by the cell count — the whole-row roll of a dice tray, or a re-roll of the named <paramref name="keys"/>
+    /// alone with every other cell held.</summary>
+    /// <param name="definition">The document the site's source resolves against.</param>
+    /// <param name="worldSeed">The document's world seed.</param>
+    /// <param name="instanceIdentity">The running instance identity.</param>
+    /// <param name="row">The keyed draw site.</param>
+    /// <param name="keys">The cells to redraw, or <see langword="null"/> for every cell.</param>
+    /// <param name="filled">The row with its drawn values, cursor, and decks.</param>
+    /// <param name="reason">Why the fill refused, on failure.</param>
+    /// <returns><see langword="true"/> when every selected cell drew.</returns>
+    public static bool TryFillKeyedSite(WorldDefinition definition, ulong worldSeed, string instanceIdentity, WorldStateRow row, IReadOnlyList<string>? keys, out WorldStateRow filled, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentNullException.ThrowIfNull(argument: row);
+
+        filled = row;
+        var site = WorldDrawSites.StateRow(rowName: row.Name);
+
+        if (row.Draw is not { } draw || !row.IsKeyed) {
+            reason = $"{site} is not a keyed draw site";
+
+            return false;
+        }
+
+        if (!WorldGeneratorEngine.TryResolveSource(generators: definition.Generators, draw: draw, generator: out var generator, reason: out var resolveReason)) {
+            reason = $"{site} {resolveReason}";
+
+            return false;
+        }
+
+        var cells = (row.Cells ?? []).ToArray();
+        var selected = new List<int>(capacity: cells.Length);
+
+        if (keys is null) {
+            for (var index = 0; index < cells.Length; index++) { selected.Add(item: index); }
+        } else {
+            foreach (var key in keys) {
+                var index = Array.FindIndex(array: cells, match: cell => cell.Key.Value == key);
+
+                if (index < 0 || selected.Contains(item: index)) {
+                    reason = $"{site} names no distinct cell '{key}' to redraw";
+
+                    return false;
+                }
+
+                selected.Add(item: index);
+            }
+
+            selected.Sort();
+        }
+
+        if (selected.Count == 0) {
+            reason = string.Empty;
+
+            return true;
+        }
+
+        var values = new long[selected.Count];
+
+        if (!WorldGeneratorEngine.TryFireBatch(
+            generator: generator,
+            targetKind: row.Kind,
+            seedState: WorldGeneratorEngine.ComputeSeedState(instanceIdentity: instanceIdentity, site: site, worldSeed: worldSeed),
+            stream: WorldGeneratorEngine.ComputeStreamId(site: site),
+            cursor: row.DrawCursor,
+            decks: row.DrawDecks,
+            values: values,
+            decksAfter: out var decksAfter,
+            reason: out var fireReason
+        )) {
+            reason = $"{site} {fireReason}";
+
+            return false;
+        }
+
+        for (var slot = 0; slot < selected.Count; slot++) {
+            cells[selected[slot]] = cells[selected[slot]] with { Value = values[slot] };
+        }
+
+        filled = row with { Cells = cells, DrawCursor = checked(row.DrawCursor + selected.Count), DrawDecks = WorldGeneratorEngine.DecksAfter(generator: generator, fired: decksAfter, previous: row.DrawDecks) };
+        reason = string.Empty;
+
+        return true;
+    }
     private static bool TryDrawSite(WorldDefinition definition, ulong worldSeed, string instanceIdentity, string site, WorldDraw draw, CellKind targetKind, out WorldGeneratorEngine.FireResult fired, out string reason, long cursor = 0L, IReadOnlyList<ClosedBitset256>? decks = null) {
         fired = default;
 
@@ -93,9 +177,20 @@ internal static class WorldDrawBootResolver {
             // already drew — is left exactly as it is, cursor included.
             if (
                 (row.Draw is not { } draw) ||
-                (row.Cells is { Count: > 0 })
+                (row.IsKeyed ? ((row.DrawCursor != 0L) || (row.Cells is not { Count: > 0 })) : (row.Cells is { Count: > 0 }))
             ) {
                 state.Add(item: row);
+
+                continue;
+            }
+
+            if (row.IsKeyed) {
+                if (!TryFillKeyedSite(definition: definition, worldSeed: worldSeed, instanceIdentity: instanceIdentity, row: row, keys: null, filled: out var filledRow, reason: out reason)) {
+                    return false;
+                }
+
+                state.Add(item: filledRow);
+                changed = true;
 
                 continue;
             }

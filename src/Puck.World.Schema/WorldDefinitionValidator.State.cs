@@ -363,8 +363,12 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        if (row.Capacity is not null) {
-            errors.Add(item: $"{path} ('{row.Name}') declares a draw beside capacity — a draw site is a scalar (slot) row; a keyed row has no ONE cell for a draw to fill.");
+        if (
+            row.IsKeyed &&
+            WorldGeneratorEngine.TryResolveSource(generators: generators, draw: draw, generator: out var keyedSource, reason: out _) &&
+            WorldGeneratorEngine.WritesText(source: keyedSource.Source)
+        ) {
+            errors.Add(item: $"{path} ('{row.Name}') is a keyed draw site over a text source — a keyed site fills one numeric sample per cell; a text emission has no per-cell shape.");
         }
 
         if (row.DrawCursor < 0L) {

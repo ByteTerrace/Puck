@@ -11827,6 +11827,27 @@
                               "additionalProperties": false
                             },
                             {
+                              "description": "Reorders an ordered zone in place by one Fisher-Yates pass over the named redrawable integer streamDraw site: a pile of n tokens consumes n - 1 samples, so the site\u0027s cursor advances by exactly that and a replay reproduces the permutation.",
+                              "properties": {
+                                "$type": {
+                                  "const": "shuffle"
+                                },
+                                "row": {
+                                  "description": "The ordered zone.",
+                                  "type": "string"
+                                },
+                                "draw": {
+                                  "description": "The integer streamDraw site supplying the samples.",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "row",
+                                "draw"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
                               "description": "Moves a token along an affordable route, debiting movement points in the same candidate.",
                               "properties": {
                                 "$type": {
@@ -12487,6 +12508,27 @@
                                         },
                                         "required": [
                                           "row"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Reorders an ordered zone in place by one Fisher-Yates pass over the named redrawable integer streamDraw site: a pile of n tokens consumes n - 1 samples, so the site\u0027s cursor advances by exactly that and a replay reproduces the permutation.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "shuffle"
+                                          },
+                                          "row": {
+                                            "description": "The ordered zone.",
+                                            "type": "string"
+                                          },
+                                          "draw": {
+                                            "description": "The integer streamDraw site supplying the samples.",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "row",
+                                          "draw"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -13867,7 +13909,7 @@
         "null"
       ],
       "items": {
-        "description": "A presentation observation, without draw seeds, cursors, masks, grants, or executable traits.",
+        "description": "A presentation observation, without draw seeds, cursors, masks, grants, or executable traits. HiddenCount counts the cells the row\u0027s Hidden policy withheld from this observer (placeholders included), zero under Omit.",
         "type": [
           "object",
           "null"
@@ -13887,7 +13929,7 @@
           "cells": {
             "type": "array",
             "items": {
-              "description": "A disclosed literal cell. Hidden cells have no entry; no identity or placeholder is sent.",
+              "description": "A disclosed literal cell, or, under Placeholder, an anonymous card back (Hidden true, empty key, zero value, no text, no observation).",
               "type": [
                 "object",
                 "null"
@@ -13927,6 +13969,10 @@
                   ],
                   "additionalProperties": false,
                   "default": null
+                },
+                "hidden": {
+                  "type": "boolean",
+                  "default": false
                 }
               },
               "required": [
@@ -13935,6 +13981,10 @@
               ],
               "additionalProperties": false
             }
+          },
+          "hiddenCount": {
+            "type": "integer",
+            "default": 0
           }
         },
         "required": [

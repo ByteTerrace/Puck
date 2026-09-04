@@ -433,8 +433,10 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// </remarks>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Row">The draw site's row name.</param>
+    /// <param name="Keys">On a keyed site, the cells to redraw with every other cell held (a dice hold); null redraws
+    /// every cell. Refused on a slot site.</param>
     [MutationKind(ordinal: 51, section: WorldSection.State)]
-    public sealed record Generate(WorldPrincipal Principal, string Row) : WorldMutation(Principal);
+    public sealed record Generate(WorldPrincipal Principal, string Row, IReadOnlyList<string>? Keys = null) : WorldMutation(Principal);
     /// <summary>Upserts a world rule addressed by <see cref="WorldRule.Name"/> — the authoring door for the
     /// <c>rules</c> section, never the firing one: a rule evaluating and its effects applying both ride
     /// <see cref="WorldPrincipal.World"/> and never submit this kind. Rejected loudly if the rule fails to compile

@@ -52,6 +52,14 @@ public static partial class WorldRuleCompiler {
                     throw Invalid("completePhase requires a phase row, valid sequence, declared participant, and a declared next phase");
                 }
                 break;
+            case WorldStateTransform.Shuffle shuffle:
+                if (Row(shuffle.Row).Zone is not { Ordered: true } || Row(shuffle.Draw).Draw is not { Timing: not WorldDrawTiming.Boot } shuffleDraw ||
+                    Row(shuffle.Draw).Kind != CellKind.Int ||
+                    !WorldGeneratorEngine.TryResolveSource(generators: definition.Generators, draw: shuffleDraw, generator: out var shuffleSource, reason: out _) ||
+                    shuffleSource.Source != WorldGeneratorSource.StreamDraw) {
+                    throw Invalid("shuffle requires an ordered zone and a redrawable integer streamDraw site");
+                }
+                break;
             case WorldStateTransform.TurnOrder order:
                 if (Row(order.Row).Phase is not { } ordered || order.Direction is not (null or 1 or -1) ||
                     (order.Skip ?? []).Concat(order.Unskip ?? []).Concat(order.Active is null ? [] : [order.Active])

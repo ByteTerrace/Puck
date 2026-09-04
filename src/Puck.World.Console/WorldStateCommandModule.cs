@@ -593,18 +593,29 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.generate",
-            description: "Redraws a DRAW SITE — a state row declaring a \"draw\" facet: world.generate <row>. One argument, because a site owns its whole draw: the facet either names a declared source from the document's \"generators\" section (\"source\": <name>) or inlines one (\"generator\": {...}), and the drawn value lands in the site's own slot cell. A markov source walks weighted transitions and writes TEXT — ending at a TERMINAL context (one declaring no alternatives) and REFUSING BY NAME rather than truncating if it reaches the source's declared bound first; under a deck mode (withoutReplacement / reshuffleOnExhaustion) each alternative is dealt at most once per context, and the deck persists across draws in THIS SITE's own bookkeeping (two sites sharing one source deal independently). The uniformRange, weightedNumeric, and streamDraw sources each write ONE numeric value. Refused by name if the site declares timing=boot (drawn once at first fill, never again). The drawn value and the site's advanced cursor land in the SAME candidate, so world.undo rewinds a draw exactly. Buffers and applies at the tick boundary; rejected loudly if <row> names no state row, names one declaring no draw, the site's source resolves to nothing or writes a kind the site cannot hold, the emission exceeds the text bound, or the acting principal lacks a Mutate/section:state or Edit/state:<row> hold admitting Generate.",
+            description: "Redraws a DRAW SITE — a state row declaring a \"draw\" facet: world.generate <row> [key ...]. The site owns its whole draw: the facet either names a declared source from the document's \"generators\" section (\"source\": <name>) or inlines one (\"generator\": {...}), and the drawn value lands in the site's own slot cell — or, on a KEYED site (a dice tray), one numeric sample per cell in cell order; naming keys redraws those cells alone and holds the rest. A markov source walks weighted transitions and writes TEXT — ending at a TERMINAL context (one declaring no alternatives) and REFUSING BY NAME rather than truncating if it reaches the source's declared bound first; under a deck mode (withoutReplacement / reshuffleOnExhaustion) each alternative is dealt at most once per context, and the deck persists across draws in THIS SITE's own bookkeeping (two sites sharing one source deal independently). The uniformRange, weightedNumeric, and streamDraw sources each write ONE numeric value. Refused by name if the site declares timing=boot (drawn once at first fill, never again). The drawn value and the site's advanced cursor land in the SAME candidate, so world.undo rewinds a draw exactly. Buffers and applies at the tick boundary; rejected loudly if <row> names no state row, names one declaring no draw, the site's source resolves to nothing or writes a kind the site cannot hold, the emission exceeds the text bound, or the acting principal lacks a Mutate/section:state or Edit/state:<row> hold admitting Generate.",
             handler: (context, args) => {
-                if (args.Count != 1) {
+                if (args.Count < 1) {
                     return CommandResult.Usage(
-                        form: "<row>",
+                        form: "<row> [key ...]",
                         verb: "world.generate"
                     );
                 }
 
+                string[]? keys = null;
+
+                if (args.Count > 1) {
+                    keys = new string[args.Count - 1];
+
+                    for (var index = 1; index < args.Count; index++) {
+                        keys[index - 1] = args[index].ToString();
+                    }
+                }
+
                 return link.Submit(mutation: new WorldMutation.Generate(
                     Principal: context.ActingPrincipal(),
-                    Row: args[0].ToString()
+                    Row: args[0].ToString(),
+                    Keys: keys
                 ));
             },
             routing: CommandRouting.Simulation

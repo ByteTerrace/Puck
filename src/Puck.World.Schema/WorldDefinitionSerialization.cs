@@ -931,12 +931,6 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
             throw new JsonException(message: $"state row '{name}' declares both 'advance' and 'draw' — a row is a continuous accumulator or an authored-randomness draw site, never both.");
         }
         if (
-            (draw is not null) &&
-            (capacity is not null)
-        ) {
-            throw new JsonException(message: $"state row '{name}' declares 'draw' beside 'capacity' — a draw site is a scalar (slot) row; a keyed row has no ONE cell for a draw to fill.");
-        }
-        if (
             (drawCursor is not null) &&
             (draw is null) &&
             (lattice is null)

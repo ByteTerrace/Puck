@@ -89,6 +89,33 @@ public sealed partial class WorldServer {
             return false;
         }
 
+        if (siteRow.IsKeyed) {
+            if (!WorldDrawBootResolver.TryFillKeyedSite(
+                definition: current,
+                worldSeed: (current.Generation?.WorldSeed ?? 0UL),
+                instanceIdentity: instanceIdentity,
+                row: siteRow,
+                keys: mutation.Keys,
+                filled: out var filled,
+                reason: out var keyedReason
+            )) {
+                reason = $"state row '{mutation.Row}' {keyedReason}";
+
+                return false;
+            }
+
+            candidate = current.WithWorldState(rows: Upsert(list: current.State, item: filled, keyOf: static (WorldStateRow row) => row.Name));
+            reason = string.Empty;
+
+            return true;
+        }
+
+        if (mutation.Keys is not null) {
+            reason = $"state row '{mutation.Row}' is a slot site — keys select cells of a keyed site alone";
+
+            return false;
+        }
+
         if (!WorldGeneratorEngine.TryResolveSource(
             generators: current.Generators,
             draw: draw,

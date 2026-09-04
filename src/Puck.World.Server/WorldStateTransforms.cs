@@ -15,6 +15,7 @@ public static partial class WorldStateTransforms {
         WorldStateTransform.MoveToken move => [move.Positions, move.Allowance],
         WorldStateTransform.CompletePhase phase => [phase.Row],
         WorldStateTransform.TurnOrder order => [order.Row],
+        WorldStateTransform.Shuffle shuffle => [shuffle.Row, shuffle.Draw],
         _ => [],
     };
 
@@ -49,6 +50,9 @@ public static partial class WorldStateTransforms {
                     break;
                 case WorldStateTransform.TurnOrder order:
                     Order(rows, order, actor);
+                    break;
+                case WorldStateTransform.Shuffle shuffle:
+                    ShuffleZone(definition, rows, shuffle, instance);
                     break;
                 default:
                     throw new InvalidOperationException("unknown state transform");
@@ -262,6 +266,41 @@ public static partial class WorldStateTransforms {
             next = next with { DeadlineTick = deadline };
         }
         rows[index] = row with { Phase = next };
+    }
+
+    private static void ShuffleZone(WorldDefinition definition, WorldStateRow[] rows, WorldStateTransform.Shuffle shuffle, string instance) {
+        var index = Find(rows, shuffle.Row);
+        var row = rows[index];
+        if (row.Zone is not { Ordered: true }) {
+            throw new InvalidOperationException("shuffle requires an ordered zone");
+        }
+        var cells = (row.Cells ?? []).ToArray();
+        if (cells.Length < 2) {
+            return;
+        }
+        var drawIndex = Find(rows, shuffle.Draw);
+        var site = rows[drawIndex];
+        if (site.Draw is not { Timing: not WorldDrawTiming.Boot } draw || site.Kind != CellKind.Int ||
+            !WorldGeneratorEngine.TryResolveSource(generators: definition.Generators, draw: draw, generator: out var generator, reason: out _) || generator.Source != WorldGeneratorSource.StreamDraw) {
+            throw new InvalidOperationException("shuffle requires a redrawable integer streamDraw site");
+        }
+        var descriptor = WorldDrawSites.StateRow(site.Name);
+        var seed = WorldGeneratorEngine.ComputeSeedState(worldSeed: definition.Generation?.WorldSeed ?? 0, instanceIdentity: instance, site: descriptor);
+        var stream = WorldGeneratorEngine.ComputeStreamId(descriptor);
+        var cursor = site.DrawCursor;
+        // Fisher-Yates from the top: position i takes a uniform pick from [0, i], the same multiply-high map a random
+        // transfer selects with, one sample per position.
+        for (var position = cells.Length - 1; position > 0; position--) {
+            if (!WorldGeneratorEngine.TryFire(generator, site.Kind, seed, stream, cursor, site.DrawDecks, out var fired, out var reason, draw.Secret)) {
+                throw new InvalidOperationException(reason);
+            }
+            cursor = checked(cursor + fired.Samples);
+            var pick = (int)(((ulong)fired.Numeric!.Value * (ulong)(position + 1)) >> 32);
+            (cells[position], cells[pick]) = (cells[pick], cells[position]);
+            rows[drawIndex] = site with { DrawCursor = cursor, Cells = [new(WorldStateRow.SlotKey, fired.Numeric.Value)] };
+            site = rows[drawIndex];
+        }
+        rows[index] = row with { Cells = cells };
     }
 
     private static uint AllParticipants(WorldStatePhase phase) => phase.Participants.Count == 32 ? uint.MaxValue : (1u << phase.Participants.Count) - 1;

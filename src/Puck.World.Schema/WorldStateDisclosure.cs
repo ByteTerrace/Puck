@@ -3,11 +3,24 @@ using Puck.World.Protocol;
 
 namespace Puck.World;
 
+/// <summary>What an observer learns about a row's cells it may not read.</summary>
+[JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<WorldHiddenCells>))]
+public enum WorldHiddenCells : byte {
+    /// <summary>Hidden cells leave no trace: neither their count nor their positions.</summary>
+    Omit,
+    /// <summary>The observed row reports how many cells were hidden and nothing else about them.</summary>
+    Count,
+    /// <summary>Every hidden cell appears in pile order as an anonymous placeholder (a card back): no key, no
+    /// value, no text, no observation stamp.</summary>
+    Placeholder,
+}
+
 /// <summary>Opt-in observation policy. Null readers means public; an empty list means authority only.
 /// Row and cell policies intersect. Replica-tier authorities remain fully trusted.</summary>
 /// <param name="Readers">Canonical authenticated principal tokens; no seat or peer identity comes from the request payload.</param>
+/// <param name="Hidden">What an observer who may read the row learns about the cells it may not.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldStateVisibility(IReadOnlyList<string>? Readers = null) {
+public sealed record WorldStateVisibility(IReadOnlyList<string>? Readers = null, WorldHiddenCells Hidden = WorldHiddenCells.Omit) {
     /// <summary>Whether this observation policy admits the authenticated recipient, or the public observer when absent.</summary>
     public bool Allows(WorldPrincipal? recipient) => Readers is null || (recipient is { } actor && Readers.Contains(actor.Describe(), StringComparer.Ordinal));
 }
@@ -24,11 +37,16 @@ public sealed record WorldStateKnowledge(string Source, string Mask);
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldStateObservation(long Tick, bool Visible);
 
-/// <summary>A disclosed literal cell. Hidden cells have no entry; no identity or placeholder is sent.</summary>
-public sealed record WorldObservedCell(string Key, long Value, string? Text = null, WorldStateObservation? Observation = null);
+/// <summary>A disclosed literal cell, or, under <see cref="WorldHiddenCells.Placeholder"/>, an anonymous card back
+/// (<see cref="Hidden"/> true, empty key, zero value, no text, no observation).</summary>
+public sealed record WorldObservedCell(string Key, long Value, string? Text = null, WorldStateObservation? Observation = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Hidden = false);
 
-/// <summary>A presentation observation, without draw seeds, cursors, masks, grants, or executable traits.</summary>
-public sealed record WorldObservedRow(string Name, CellKind Kind, IReadOnlyList<WorldObservedCell> Cells);
+/// <summary>A presentation observation, without draw seeds, cursors, masks, grants, or executable traits.
+/// <see cref="HiddenCount"/> counts the cells the row's <see cref="WorldStateVisibility.Hidden"/> policy withheld
+/// from this observer (placeholders included), zero under <see cref="WorldHiddenCells.Omit"/>.</summary>
+public sealed record WorldObservedRow(string Name, CellKind Kind, IReadOnlyList<WorldObservedCell> Cells,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int HiddenCount = 0);
 
 /// <summary>Composes state observations for one authenticated recipient.</summary>
 public static class WorldStateDisclosure {
@@ -45,12 +63,22 @@ public static class WorldStateDisclosure {
             }
 
             var cells = new List<WorldObservedCell>();
+            var hidden = 0;
+            var hiddenPolicy = row.Visibility?.Hidden ?? WorldHiddenCells.Omit;
             foreach (var cell in row.Cells ?? []) {
                 if (CanRead(definition, row, cell, recipient)) {
                     cells.Add(new(cell.Key.Value, cell.Value, cell.Text, cell.Observation));
+                    continue;
+                }
+                if (hiddenPolicy == WorldHiddenCells.Omit) {
+                    continue;
+                }
+                hidden++;
+                if (hiddenPolicy == WorldHiddenCells.Placeholder) {
+                    cells.Add(new(string.Empty, 0L, Hidden: true));
                 }
             }
-            result.Add(new(row.Name.Value, row.Kind, cells));
+            result.Add(new(row.Name.Value, row.Kind, cells, hidden));
         }
         return result.Count == 0 ? null : result;
     }
