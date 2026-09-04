@@ -188,6 +188,20 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
+            name: "body.carry",
+            description: "Begins one body carrying another: body.carry <carrier> <target> (both body indices REQUIRED and explicit — no optional-trailing default). The carrier's kit must author a carry facet and the target a rigid one; refused by name when either body is already a party to another carry relationship, the target sits outside the carrier's own live-scaled reach, or the target's own live-scaled mass exceeds the carrier's live-scaled carry ceiling. On success the target's pose and rigid velocity are derived from the carrier's frame every tick — see body.where's carrying=/carriedBy= read-back — and its own rigid integration is suspended until body.release.",
+            handler: CarryHandler,
+            ackOnly: true
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
+            name: "body.release",
+            description: "Ends a body's active carry, if any: body.release [body] (optional trailing body index, default 0). The released body re-enters the rigid solver carrying the carrier's own current velocity. A friendly no-op refusal when the body is not carrying anything.",
+            handler: ReleaseHandler,
+            ackOnly: true
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
             name: "body.press",
             description: "Presses ANY declared channel — movement roles included — for a timed auto-release: body.press <channel> [value] [holdSeconds] [body]. <channel> is a name from world.affordances' channels section; [value] defaults to the shape's max (1) and is validated against the channel's shape (binary: 0 or 1; unipolar: [0,1]; bipolar: [-1,1]); [holdSeconds] how long it reads held (default a short host-step-derived tap, bounded authoritatively by the deciding Drive grant's hold:<seconds> policy — WorldGrant.DefaultHoldSeconds=2 absent an explicit row — and the 60-second engine backstop). The echo names the TRUE outcome, never an assumed one: a non-positive [holdSeconds] is ignored outright (echoed plainly, no cap blamed); a request either cap truncates echoes the EFFECTIVE hold and names whichever cap structurally bound it (the grant's hold budget, or the engine's hold ceiling when the grant permits the full backstop and the request still exceeds it); a refused command (e.g. a CC/death Drive gate) echoes the refusal, never an affirmative; under no cap and no refusal the echo is unchanged. A press carrying a DIFFERENT value than an ordinal's in-flight hold (materialized or still pending) replaces it outright (its own duration), so an opposing press is never silently swallowed by a longer hold's remaining ticks; a re-press carrying the SAME value only ever extends. [body] the trailing index 0..4095 (default 0 — 0..3 seats, 4..4095 population). The press is INDEPENDENT of the movement tape, so body.fly … then body.press jump fires a runner mid-segment. On a composition channel, what the press DOES is the target's kit binding (the default world's grounded kits bind the vertical impulse via \"jump\" — a short hold = short hop, a long hold = full arc via variable height; an unbound channel leaves it inert). There is no sugar verb for a bound button — the bound control rides its own channel-generic command (see world.affordances); this is the scripted/wire twin reaching every channel.",
             handler: PressHandler,

@@ -11,6 +11,13 @@ public sealed partial class WorldPopulation {
     /// depenetration.</summary>
     public int RigidPairResolvedCount { get; private set; }
 
+    /// <summary>Gets the document-derived speed a <c>body.impulse</c> command's resulting velocity may not exceed —
+    /// <see cref="WorldFacePortalPolicy.SpeedCeiling"/>, the same fastest travel the document already declares for
+    /// crossing a face. <see cref="WorldBody.TryApplyRigidImpulse"/> refuses by name rather than applying a delta
+    /// that would carry a rigid body past it, so a degenerate impulse magnitude never reaches the solver as an
+    /// unrepresentable velocity.</summary>
+    public FixedQ4816 RigidVelocityCeiling => m_rigidVelocityCeiling;
+
     /// <summary>Describes the rigid solver's current census and last-tick work — the <c>world.budget</c> cost-sheet
     /// segment: active rigid body count, resting count, dynamic-pair resolutions, the highest per-body substep count
     /// any active rigid body took its most recent step (the derived cost <see cref="WorldBodyContactPolicy.RigidSubstepCeiling"/>
@@ -35,7 +42,7 @@ public sealed partial class WorldPopulation {
             worstSubsteps = Math.Max(val1: worstSubsteps, val2: body.RigidStaticSubstepsThisTick);
         }
 
-        return $"rigid {rigidCount} body/bodies ({restingCount} resting), pairsResolved={RigidPairResolvedCount}, worstSubsteps={worstSubsteps}/{m_bodyContactPolicy.RigidSubstepCeiling}, restLinear<={m_bodyContactPolicy.RigidRestLinearSpeed:0.###} restAngular<={m_bodyContactPolicy.RigidRestAngularSpeed:0.###} restHold={m_bodyContactPolicy.RigidRestHoldSeconds:0.###}s substepFraction={m_bodyContactPolicy.RigidSubstepTravelFraction:0.###} substepMinTravel={m_bodyContactPolicy.RigidSubstepMinimumTravel:0.####} pairRestitutionSpeed={m_bodyContactPolicy.RigidPairRestitutionSpeed:0.###}";
+        return $"rigid {rigidCount} body/bodies ({restingCount} resting), pairsResolved={RigidPairResolvedCount}, worstSubsteps={worstSubsteps}/{m_bodyContactPolicy.RigidSubstepCeiling}, restLinear<={m_bodyContactPolicy.RigidRestLinearSpeed:0.###} restAngular<={m_bodyContactPolicy.RigidRestAngularSpeed:0.###} restHold={m_bodyContactPolicy.RigidRestHoldSeconds:0.###}s substepFraction={m_bodyContactPolicy.RigidSubstepTravelFraction:0.###} substepMinTravel={m_bodyContactPolicy.RigidSubstepMinimumTravel:0.####} pairRestitutionSpeed={m_bodyContactPolicy.RigidPairRestitutionSpeed:0.###} impulseVelocityCeiling={(double)m_rigidVelocityCeiling:0.###}";
     }
 
     /// <summary>Resolves one already-detected overlapping pair where at least one side is a rigid kit: an

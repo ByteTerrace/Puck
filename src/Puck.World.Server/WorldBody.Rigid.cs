@@ -74,6 +74,12 @@ public sealed partial class WorldBody {
     public int RigidStaticSubstepsThisTick { get; private set; }
 
     private static readonly FixedQ4816 RigidHalf = FixedQ4816.FromDouble(value: 0.5d);
+    // The saturation ceiling ScaleRigid's InverseMass/InverseInertia scaling falls back to when the correctly
+    // rounded Scale⁻³/Scale⁻⁵ product overflows the signed 64-bit raw — long.MaxValue right-shifted 8 leaves two
+    // such raws (the largest sum any solver path adds, InverseMassRaw plus one angular term) eight bits of headroom
+    // under the 64-bit ceiling, so a saturated pair contact still resolves through FixedTwoBodyKernel's own
+    // overflow-checked sum rather than wrapping past it.
+    private const long RepresentableInverseCeiling = (long.MaxValue >> 8);
 
     /// <summary>Gets whether this body's kit carries a <c>rigid</c> facet — a passive rigid entity advanced by
     /// <see cref="AdvanceRigid"/> instead of a locomotion motion program.</summary>
@@ -116,14 +122,22 @@ public sealed partial class WorldBody {
     public FixedQ4816 RigidBoundingRadius => (m_rigid is { } rigid ? ScaleRigid(rigid: rigid).BoundingRadius : FixedQ4816.Zero);
     // Derives a scale-consistent copy of a compiled rigid facet for this body's live Scale: mass ∝ Scale³ against the
     // authored mass at scale 1 (a uniformly bigger body of the same material is heavier by its volume ratio), inertia
-    // (mass·length²) ∝ Scale⁵ so inverse inertia ∝ Scale⁻⁵, and CenterOffset/BoundingRadius ∝ Scale — the SAME linear
+    // (mass·length²) ∝ Scale⁵ so inverse inertia ∝ Scale⁻⁵, and CenterOffset/BoundingRadius ∝ Scale — the same linear
     // rule ScaledColliderVolumes applies to the collider itself, so a rigid body's mass distribution and its collider
     // stay geometrically consistent. Restitution, friction, rolling friction, and both damping rates are dimensionless
     // per-second/coefficient quantities — unaffected by Scale. Scale == One (the overwhelming common case) returns
-    // rigid unchanged, touching no arithmetic. A ratio that overflows the signed 64-bit raw at REPRESENTABLE
-    // scale/mass/inertia combinations falls back to the unscaled component rather than crashing a live body — the
-    // validated scale envelope (bodies.scaleRow's own min/max, refused past authoring.maxPlacementScale) keeps this
-    // path cold in practice.
+    // rigid unchanged, touching no arithmetic.
+    //
+    // InverseInertia's Scale⁻⁵ law reaches FixedRigidScales.RoomScale's 40-fraction-bit placement (23 integer bits,
+    // magnitude ceiling ≈ 8.39e6) well before InverseMass's Scale⁻³ does; a garden billiard ball's unscaled 1/I ≈ 370
+    // already exceeds it below Scale ≈ 0.135, inside the garden's own authored floor of 0.05. ScaleRaw below
+    // saturates to RepresentableInverseCeiling on that overflow instead of reverting to the unscaled raw: reverting
+    // would leave InverseInertia at the full-size body's magnitude while InverseMass (whose overflow threshold sits
+    // far lower and is not reached in the validated envelope) already reflects the shrunk body, so friction couples
+    // a light mass to a spin resistance the solver still reads as heavy and can drive the linear velocity through
+    // zero. Both fields saturate the same way past their own overflow point, so every scaled component stays
+    // consistent in direction (lighter, easier to spin) even once the exact Scale⁻³/Scale⁻⁵ magnitude no longer
+    // fits.
     private FixedWorldRigid ScaleRigid(FixedWorldRigid rigid) {
         if (m_scale == FixedQ4816.One) {
             return rigid;
@@ -157,7 +171,7 @@ public sealed partial class WorldBody {
             fractionBitsB: FixedQ4816.FractionBitCount,
             fractionBitsOut: fractionBits,
             result: out var scaled
-        ) ? scaled : raw);
+        ) ? scaled : RepresentableInverseCeiling);
 
         return rigid with {
             Mass = (rigid.Mass * scaleCubed),
@@ -220,10 +234,16 @@ public sealed partial class WorldBody {
     /// <summary>Applies an instantaneous world-space impulse to this rigid body's linear velocity
     /// (<c>Δv = impulse / mass</c>) and wakes it from rest. A no-op for a locomotion kit.</summary>
     /// <param name="impulse">The impulse, in mass·length/time units.</param>
+    /// <param name="velocityCeiling">The speed the resulting velocity may not exceed — typically
+    /// <see cref="WorldPopulation.RigidVelocityCeiling"/>. Bounds every solver step downstream of this call (the
+    /// static-contact sweep's own substep travel, in particular) to a magnitude the fixed-point representation
+    /// already carries elsewhere in the document, so an oversized authored or client-submitted impulse is refused
+    /// here rather than reaching the solver as an unrepresentable velocity.</param>
     /// <returns><see langword="true"/> when every axis's scaled velocity delta fit the fixed-point representation
-    /// and was applied; <see langword="false"/> when any axis overflowed, leaving velocity entirely unchanged (no
-    /// partial application) — the caller refuses the command by name in that case.</returns>
-    public bool TryApplyRigidImpulse(FixedVector3 impulse) {
+    /// AND the resulting velocity stayed at or under <paramref name="velocityCeiling"/>, and was applied;
+    /// <see langword="false"/> otherwise, leaving velocity entirely unchanged (no partial application) — the caller
+    /// refuses the command by name in that case.</returns>
+    public bool TryApplyRigidImpulse(FixedVector3 impulse, FixedQ4816 velocityCeiling) {
         if (m_rigid is not { } rigid) {
             return true;
         }
@@ -236,7 +256,13 @@ public sealed partial class WorldBody {
             return false;
         }
 
-        m_rigidVelocity += delta;
+        var candidate = (m_rigidVelocity + delta);
+
+        if (candidate.Length > velocityCeiling) {
+            return false;
+        }
+
+        m_rigidVelocity = candidate;
         m_resting = false;
         m_restingHoldTicks = 0UL;
         return true;

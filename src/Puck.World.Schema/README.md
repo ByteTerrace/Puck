@@ -1693,6 +1693,20 @@ authored directly, matching the engine's derived-limits convention. See the
 [server reference](../Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)
 for integration, contact, and checkpoint/hash coverage.
 
+A kit's optional `carry` facet (`WorldCarry.cs`: `offset`, `massEquivalent`,
+`maxCarryFraction` default 1, `maxReach` default 1.5) is a distinct facet
+from `rigid` — presence lets a body pick up another one via
+`body.carry`/`body.release`. `offset` is the carry point in the carrier's own
+body-local axes; `massEquivalent` stands in for a locomotion kit's own
+inertial mass, which `WorldKit.Mass` (gravitational) does not carry;
+`maxCarryFraction` scales `massEquivalent` into the carry-mass ceiling
+`WorldBody.TryBeginCarry` compares a candidate's own live-scaled `RigidMass`
+against; `maxReach` bounds the carrier-to-target distance the same call
+admits. All four must be finite; `massEquivalent`/`maxReach` strictly
+positive, `maxCarryFraction` non-negative. See the
+[server reference](../Puck.World.Server/README.md#carry-as-attachment-worldbodycarrycs-worldpopulationcarrycs)
+for the attachment mechanics.
+
 ## The `probes` section — probe and binding rows
 
 `WorldProbesSection` (`WorldProbes.cs`) declares two lists: `probes`

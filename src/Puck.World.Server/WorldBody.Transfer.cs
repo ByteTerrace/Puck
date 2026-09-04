@@ -758,6 +758,8 @@ public sealed partial class WorldBody {
     /// checkpoint interrupted mid-run.</param>
     /// <param name="RigidObstructionMissStreak">The obstruction-channel contact's consecutive-miss run, on the same
     /// terms as <paramref name="RigidGroundMissStreak"/>.</param>
+    /// <param name="Carrying">The population index of the body this one is carrying, or <c>-1</c>.</param>
+    /// <param name="CarriedBy">The population index of the body carrying this one, or <c>-1</c>.</param>
     public readonly record struct IntegrationResidue(
         FixedVector3 PreviousPosition,
         long PositionRemainderX,
@@ -796,7 +798,9 @@ public sealed partial class WorldBody {
         bool RigidGroundContacting,
         bool RigidObstructionContacting,
         int RigidGroundMissStreak,
-        int RigidObstructionMissStreak
+        int RigidObstructionMissStreak,
+        int Carrying,
+        int CarriedBy
     );
     /// <summary>The checkpoint-only attachment state that remains meaningful only inside the same authoritative
     /// world's coordinate frame. It is intentionally not part of <see cref="TransferState"/>: a cross-world transfer
@@ -863,7 +867,9 @@ public sealed partial class WorldBody {
         RigidGroundContacting: m_rigidGroundContacting,
         RigidObstructionContacting: m_rigidObstructionContacting,
         RigidGroundMissStreak: m_rigidGroundMissStreak,
-        RigidObstructionMissStreak: m_rigidObstructionMissStreak
+        RigidObstructionMissStreak: m_rigidObstructionMissStreak,
+        Carrying: m_carryingIndex,
+        CarriedBy: m_carriedByIndex
     );
     /// <summary>Restores a previously captured integration residue onto this body — called after
     /// <see cref="Pose(FixedVector3, FixedQ4816, FixedQ4816, FixedQ4816)"/> has already set position/orientation and
@@ -940,5 +946,7 @@ public sealed partial class WorldBody {
         m_rigidObstructionContacting = residue.RigidObstructionContacting;
         m_rigidGroundMissStreak = residue.RigidGroundMissStreak;
         m_rigidObstructionMissStreak = residue.RigidObstructionMissStreak;
+        m_carryingIndex = residue.Carrying;
+        m_carriedByIndex = residue.CarriedBy;
     }
 }

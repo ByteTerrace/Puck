@@ -341,7 +341,12 @@ choosing fixed-point primitives on sim value paths.
   for the authored `collision.bodyContacts` rigid fields, and the
   [server](../../../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)/[schema](../../../src/Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs)
   references for the mechanics. The shipped garden's `billiardsTray`/
-  `bowlingLane` placements are the worked example.
+  `bowlingLane` placements are the worked example. A DISTINCT kit facet,
+  `carry` (`Puck.World.Schema.WorldCarry`), lets a body pick up another
+  rigid one — `body.carry <carrier> <target>`/`body.release [carrier]`,
+  `WorldBody.Carry.cs`/`WorldPopulation.Carry.cs`; a carried body's own
+  integration is suspended and its pose is derived from the carrier's frame
+  every tick. The garden's `walker` kit (Wren) carries this facet.
 - `WorldBodiesLimits.CapacityCeiling` is 4096 (the largest authored
   `population.capacity` the validator admits), and `WorldClient.EntityCapacity`
   is SINGLE-SOURCED from it (`= WorldBodiesLimits.CapacityCeiling`, the F3

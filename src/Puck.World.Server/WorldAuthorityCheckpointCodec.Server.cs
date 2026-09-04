@@ -976,6 +976,8 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteBoolean(value: residue.RigidObstructionContacting);
         writer.WriteInt32(value: residue.RigidGroundMissStreak);
         writer.WriteInt32(value: residue.RigidObstructionMissStreak);
+        writer.WriteInt32(value: residue.Carrying);
+        writer.WriteInt32(value: residue.CarriedBy);
     }
     private static WorldBody.IntegrationResidue ReadResidue(ref WireReader reader) {
         var previousPosition = reader.ReadFixedVector();
@@ -1019,6 +1021,8 @@ public static partial class WorldAuthorityCheckpointCodec {
         var rigidObstructionContacting = reader.ReadBoolean();
         var rigidGroundMissStreak = reader.ReadInt32();
         var rigidObstructionMissStreak = reader.ReadInt32();
+        var carrying = reader.ReadInt32();
+        var carriedBy = reader.ReadInt32();
 
         return new WorldBody.IntegrationResidue(
             AffectingSubject: affectingSubject,
@@ -1058,7 +1062,9 @@ public static partial class WorldAuthorityCheckpointCodec {
             RigidGroundContacting: rigidGroundContacting,
             RigidObstructionContacting: rigidObstructionContacting,
             RigidGroundMissStreak: rigidGroundMissStreak,
-            RigidObstructionMissStreak: rigidObstructionMissStreak
+            RigidObstructionMissStreak: rigidObstructionMissStreak,
+            Carrying: carrying,
+            CarriedBy: carriedBy
         );
     }
     private static void WriteAttachmentResidue(WireWriter writer, WorldBody.AttachmentResidue residue) {

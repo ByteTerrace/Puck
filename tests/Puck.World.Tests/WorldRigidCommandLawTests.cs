@@ -190,6 +190,111 @@ public sealed class WorldRigidCommandLawTests {
         Assert.True(condition: ball.Resting, userMessage: $"the scale-0.05 ball never settled — resting={ball.Resting} v={ball.RigidVelocity} pos={ball.FixedPosition}");
     }
 
+    // A settled ball struck horizontally must never have its linear velocity cross back through zero into the
+    // opposite sign — the artifact a starved InverseInertia (kept at the FULL-SIZE body's magnitude while
+    // InverseMass already reflects the shrunk one) produces when friction keeps subtracting linear momentum with
+    // nowhere for it to go. Scale 1 is the control (ScaleRigid's own identity fast path — this law's fixture never
+    // reaches the overflow branch there, unlike the garden's own rollingFriction=1.2 configuration, which reverses
+    // at EVERY scale including 1 for a strong enough strike — a separate, scale-independent friction/rolling
+    // overshoot this law does not exercise); scale 0.2 sits past this fixture's own overflow threshold (~0.07,
+    // below the garden billiard ball's ~0.135 — a smaller unscaled 1/I here) and additionally proves spin develops
+    // post-fix; scale 0.05 (the garden's own authored floor) is deep enough past it that this fixture's mass —
+    // cubed down to ~1e-4 at that scale — starves the friction impulse below FixedQ4816's representable floor
+    // before InverseInertia ever multiplies it, so spin-generation is not asserted there; the reversal check is
+    // what this law actually proves at that scale.
+    [Theory]
+    [InlineData(1d, true)]
+    [InlineData(0.2d, true)]
+    [InlineData(0.05d, false)]
+    public void ScaledRigidBallInverseInertiaStaysConsistentWithScaledMassAcrossAStrike(double scale, bool expectSpin) {
+        var scaleValue = FixedQ4816.FromDouble(value: scale);
+        var definition = ((scaleValue == FixedQ4816.One)
+            ? FallingRigidBallDocument()
+            : ScaledFallingRigidBallDocument(cellValue: scaleValue)
+        );
+
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        var seat = WorldPrincipal.Seat(slot: 0);
+
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(seat, seat.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+
+        var ball = fixture.Server.Body(index: 0)!;
+
+        ball.Pose(x: 0f, y: 3f, z: 0f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+
+        for (var tick = 0; (tick < 4000); tick++) {
+            fixture.Step();
+        }
+
+        Assert.True(condition: ball.Resting, userMessage: $"scale={scale}: ball never settled before the strike — resting={ball.Resting}");
+
+        // Scaled by scale³ — mass ∝ Scale³, so an impulse scaled the SAME way keeps the resulting velocity
+        // (impulse/mass) roughly comparable across scales, matching a cue strike rather than a body-length-per-tick
+        // teleport that flies the ball off the ground before friction ever touches it.
+        Assert.True(condition: ball.TryApplyRigidImpulse(
+            impulse: new FixedVector3(
+                X: (FixedQ4816.FromDouble(value: -0.85d) * scaleValue * scaleValue * scaleValue),
+                Y: FixedQ4816.Zero,
+                Z: FixedQ4816.Zero
+            ),
+            velocityCeiling: FixedQ4816.FromDouble(value: 1_000d)
+        ), userMessage: $"scale={scale}: the strike impulse was refused");
+
+        var sawSpin = false;
+
+        for (var tick = 0; (tick < 30); tick++) {
+            fixture.Step();
+
+            Assert.True(
+                condition: (ball.RigidVelocity.X <= FixedQ4816.Zero),
+                userMessage: $"scale={scale} tick={tick}: velocity reversed sign — v={ball.RigidVelocity}"
+            );
+
+            if (ball.RigidAngularVelocity.LengthSquared > FixedQ4816.Zero) {
+                sawSpin = true;
+            }
+        }
+
+        if (expectSpin) {
+            Assert.True(condition: sawSpin, userMessage: $"scale={scale}: ball never developed angular velocity from a horizontal strike while grounded");
+        }
+    }
+
+    [Fact]
+    public void TryApplyRigidImpulseRefusesAResultingVelocityOverTheCeilingWithoutThrowingAndControlStillApplies() {
+        using var fixture = Fixtures.FreshServer(definition: FallingRigidBallDocument());
+        var seat = WorldPrincipal.Seat(slot: 0);
+
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(seat, seat.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+
+        var ball = fixture.Server.Body(index: 0)!;
+        var ceiling = FixedQ4816.FromDouble(value: 20d);
+
+        Assert.False(condition: ball.TryApplyRigidImpulse(
+            impulse: new FixedVector3(
+                X: FixedQ4816.FromDouble(value: 1_000_000_000_000d),
+                Y: FixedQ4816.Zero,
+                Z: FixedQ4816.Zero
+            ),
+            velocityCeiling: ceiling
+        ), userMessage: "a degenerate impulse magnitude must be refused rather than applied");
+        Assert.Equal(expected: FixedVector3.Zero, actual: ball.RigidVelocity);
+
+        Assert.True(condition: ball.TryApplyRigidImpulse(
+            impulse: new FixedVector3(
+                X: FixedQ4816.FromDouble(value: 2d),
+                Y: FixedQ4816.Zero,
+                Z: FixedQ4816.Zero
+            ),
+            velocityCeiling: ceiling
+        ), userMessage: "an ordinary impulse well under the ceiling must still apply");
+        Assert.NotEqual(expected: FixedVector3.Zero, actual: ball.RigidVelocity);
+
+        for (var tick = 0; (tick < 60); tick++) {
+            fixture.Step();
+        }
+    }
+
     [Fact]
     public void PhysicsQuiescentReadsFalseWhileFallingAndTrueOnceEveryRigidBodyRests() {
         using var fixture = Fixtures.FreshServer(definition: FallingRigidBallDocument());

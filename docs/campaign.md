@@ -499,10 +499,28 @@ value decays identically at any simulation rate. Each substep rotates and
 translates the body about its own centre of mass, never its root, so a
 rolling collider's rendered position does not orbit the root as it spins.
 Cross-world transfer of a rigid body is
-out of scope and refused by name. The garden's `billiardsTray`/`bowlingLane`
+out of scope and refused by name — a carrier holding one refuses its OWN
+transfer for the same reason, rather than dropping or orphaning what it
+holds. The garden's `billiardsTray`/`bowlingLane`
 placements are the proof fixture; see the
 [server](../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)
 and [schema](../src/Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs) references.
+
+**Carry, as attachment (owner decision).** Picking up a rigid body is not a
+second attachment primitive beside the surface-hold system — it is a
+carrier-declared kit facet (`carry`: a body-local frame offset, a
+mass-equivalent, and a reach) authored the same "presence is the whole
+switch" way `rigid` is. While carried, the target's own rigid integration is
+suspended entirely — its pose is derived from the carrier's frame every tick,
+never solved — and it re-enters the solver with the carrier's own velocity on
+release, never snapped to rest. A body may carry at most one other body at a
+time; a candidate must sit within the carrier's own live-scaled reach and its
+own live-scaled mass must not exceed the carrier's mass-equivalent times an
+authored fraction — the same mass ∝ Scale³ law a rigid body's own mass scales
+under, so a shrunk carrier's ceiling shrinks with it rather than staying a
+free constant. `body.carry`/`body.release` are the console/wire surface (the
+same shape `body.impulse` already established for a rigid-solver-facing
+verb); a rule effect and an authored chord are follow-on work, not yet built.
 
 ## After this arc
 

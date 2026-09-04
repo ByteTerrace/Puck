@@ -588,6 +588,16 @@
       {
         "bodyContact": "Solid",
         "bodyMotionProgram": "walk",
+        "carry": {
+          "massEquivalent": 60.0,
+          "maxCarryFraction": 1.0,
+          "maxReach": 1.5,
+          "offset": [
+            0.0,
+            0.9,
+            -0.5
+          ]
+        },
         "collider": {
           "$type": "capsule",
           "endpoint": [

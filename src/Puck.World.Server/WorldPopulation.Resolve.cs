@@ -45,6 +45,7 @@ public sealed partial class WorldPopulation {
         m_walkableThreshold = FixedWorldCollision.Compile(collision: definition.Collision).GroundedThreshold;
         m_bodyContactPolicy = definition.Collision.BodyContacts;
         m_rigidContactPolicy = RigidContactPolicy.FromAuthored(policy: m_bodyContactPolicy);
+        m_rigidVelocityCeiling = WorldFacePortalPolicy.SpeedCeiling(definition: definition);
         m_targetRows = definition.TargetRegisters;
         m_targets = WorldTargetRegisterTable.Compile(
             registers: definition.TargetRegisters,
@@ -74,6 +75,11 @@ public sealed partial class WorldPopulation {
                 simulationRateHz: definition.SimulationRateHz
             );
         }
+
+        m_anyCarryCapableKit = Array.Exists(
+            array: m_kits,
+            match: static kit => (kit.Carry is not null)
+        );
 
         CompileFlocks();
 
@@ -569,6 +575,7 @@ public sealed partial class WorldPopulation {
                 programs: m_bodyMotionPrograms,
                 collider: kit.Collider,
                 rigid: kit.Rigid,
+                carry: kit.Carry,
                 maxSmoothError: m_fixedMotion.MaxSmoothError,
                 holds: kit.Holds
             );
@@ -613,7 +620,7 @@ public sealed partial class WorldPopulation {
             if (
                 !m_entries[index].Active ||
                 (BodyContact(index: index) != WorldBodyContactMode.Solid) ||
-                (m_entries[index].Body is not { Collider: { } collider, OrdinaryAdvanceAdmitted: true } body)
+                (m_entries[index].Body is not { Collider: { } collider, OrdinaryAdvanceAdmitted: true, CarriedBy: null } body)
             ) {
                 continue;
             }

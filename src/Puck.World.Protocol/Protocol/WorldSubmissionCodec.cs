@@ -284,6 +284,15 @@ public static class WorldSubmissionCodec {
                 z: reader.ReadSingle()
             )
         ),
+            11 => new WorldCommand.CarryBody(
+            Principal: principal,
+            EntityIndex: entity,
+            TargetIndex: reader.ReadInt32()
+        ),
+            12 => new WorldCommand.ReleaseCarry(
+            Principal: principal,
+            EntityIndex: entity
+        ),
             var wire => throw new LeafCodecException(failure: Fail(
             detail: $"command discriminant {wire} is not declared",
             refusal: WorldCodecRefusal.LeafKindUnknown
@@ -998,6 +1007,10 @@ public static class WorldSubmissionCodec {
                 break;
             case WorldCommand.RigidImpulse value:
                 writer.Write(value: ((byte)10)); writer.Write(value: value.Impulse.X); writer.Write(value: value.Impulse.Y); writer.Write(value: value.Impulse.Z); break;
+            case WorldCommand.CarryBody value:
+                writer.Write(value: ((byte)11)); writer.Write(value: value.TargetIndex); break;
+            case WorldCommand.ReleaseCarry:
+                writer.Write(value: ((byte)12)); break;
             default:
                 throw UnknownLeaf(value: command);
         }

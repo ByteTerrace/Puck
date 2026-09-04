@@ -538,7 +538,60 @@ adds or drops the `rigid` facet resets every rigid-solver field
 (`WorldBody.RecompileKit`) rather than leaking the other kind of body's stale
 state forward; a live retune that keeps the facet carries its velocity
 through unchanged. Cross-world transfer of a rigid body is refused by name
-(`WorldInstanceHost.Transfers.cs`).
+(`WorldInstanceHost.Transfers.cs`); a carrier holding one refuses its OWN
+transfer for the same reason (see Carry below).
+
+`TryApplyRigidImpulse` refuses by name a second way beyond a raw fixed-point
+overflow: the resulting velocity's magnitude may not exceed
+`WorldPopulation.RigidVelocityCeiling` — the document's own declared speed
+ceiling (`WorldFacePortalPolicy.SpeedCeiling`, the same fastest travel a
+crossing face already reads), so a degenerate `body.impulse` magnitude is
+refused before it can reach the solver as an unrepresentable per-tick
+position delta rather than accepted and left to overflow deeper in the
+sweep. `world.budget`'s `rigid` segment echoes the compiled ceiling as
+`impulseVelocityCeiling=`.
+
+`WorldBody.ScaleRigid`'s inverse-mass/inverse-inertia scaling saturates to a
+representable ceiling rather than reverting to the unscaled component when
+the correctly rounded `Scale⁻³`/`Scale⁻⁵` product overflows the signed
+64-bit raw — inverse inertia's fifth-power law reaches
+`FixedRigidScales.RoomScale`'s placement well before inverse mass's
+third-power one does, and reverting only the overflowing component would
+leave it at the FULL-SIZE body's magnitude while every sibling component
+already reflects the shrunk one, an inconsistency severe enough to read as
+a light body friction can decelerate but that resists spinning as if it
+were still heavy. Saturating both components the same way keeps every
+scaled quantity moving in the SAME direction (lighter, easier to spin) past
+the point the exact magnitude stops fitting.
+
+### Carry, as attachment (`WorldBody.Carry.cs`, `WorldPopulation.Carry.cs`)
+
+A kit's `carry` facet (`FixedWorldCarry`: a body-local frame offset, a
+carrier mass-equivalent, an authored carry-mass fraction, and a reach) is a
+distinct facet from `rigid` — the seam `body.carry <carrier> <target>` and
+`body.release [carrier]` use. `WorldBody.TryBeginCarry` refuses by name: a
+carrier kit with no `carry` facet, a target with no `rigid` facet, either
+body already a party to another carry relationship, a target outside the
+carrier's own live-scaled reach (`MaxReach × Scale`), or a target whose own
+live-scaled `RigidMass` exceeds the carrier's live-scaled ceiling
+(`MassEquivalent × MaxCarryFraction × Scale³` — the same mass ∝ `Scale`³ law
+`ScaleRigid` derives against). A carried body's own `Advance` is a no-op —
+its rigid integration is suspended, never solved — and
+`WorldPopulation.UpdateCarriedBodies` (run once per tick, after both advance
+passes, so it reads the carrier's FRESH pose) derives its position and
+orientation from `carrier.root + carrier.orientation·Offset` and its rigid
+velocity from the carrier's own `ApproximateWorldVelocity`; a carried body
+is excluded from `ResolveDynamicContacts`' broadphase and from
+`$physics:quiescent`'s census (`CarriedBy: null` on both). `body.release`
+hands the target back to the solver with the carrier's own current
+velocity rather than snapping it to rest. `Carrying`/`CarriedBy` are `int?`
+population indices (`-1` raw, on the same "never a boolean fact" terms
+`AffectingSubject` already carries) folded into checkpoint
+(`IntegrationResidue`) and the authoritative hash; a relationship whose
+mirror breaks (a body going inactive, or a live kit retune away from the
+facet either side depends on) self-heals in the same per-tick sweep rather
+than leaking a dangling reference forward. `body.where` echoes
+`carrying=<index>`/`carriedBy=<index>` only while set.
 
 World rules can carry [decision policies](../Puck.World.Schema/README.md#decision-policies).
 `WorldServer.Decisions.cs` owns each binding's selected option, local PCG state,

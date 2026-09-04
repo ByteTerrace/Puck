@@ -1731,6 +1731,11 @@ public sealed class WorldReplaySnapshot {
             hash.Add(value: (body.RigidObstructionContacting ? 1UL : 0UL));
             hash.Add(value: unchecked((uint)body.RigidGroundMissStreak));
             hash.Add(value: unchecked((uint)body.RigidObstructionMissStreak));
+            // Two identical poses/velocities that differ only in WHO carries WHOM diverge the instant either side's
+            // next tick reads it — a carried body's own advance is a no-op FollowCarrier is about to overwrite, so
+            // the relationship itself is state a hashed pose does not otherwise cover. -1 means no relationship.
+            hash.Add(value: unchecked((uint)(body.Carrying ?? -1)));
+            hash.Add(value: unchecked((uint)(body.CarriedBy ?? -1)));
         }
 
         return hash.Value;
