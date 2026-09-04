@@ -16,14 +16,20 @@ namespace Puck.World.Server;
 /// while grounded before the resting latch actually closes.</param>
 /// <param name="SubstepTravelFraction">The fraction of a rigid body's own bounding radius one continuous-collision
 /// substep may travel.</param>
+/// <param name="SubstepMinimumTravel">The floor under one substep's travel bound, independent of
+/// <see cref="SubstepTravelFraction"/> — see <see cref="WorldBodyContactPolicy.RigidSubstepMinimumTravel"/>.</param>
 /// <param name="SubstepCeiling">The most substeps one rigid body's static-contact integration may take in a tick —
 /// see <see cref="WorldBodyContactPolicy.RigidSubstepCeiling"/>.</param>
+/// <param name="PairRestitutionThreshold">Below this closing speed, a rigid-vs-rigid pair contact restitutes at
+/// zero rather than the authored coefficient — see <see cref="WorldBodyContactPolicy.RigidPairRestitutionSpeed"/>.</param>
 public readonly record struct RigidContactPolicy(
     FixedQ4816 RestLinearThreshold,
     FixedQ4816 RestAngularThreshold,
     ulong RestHoldTicks,
     FixedQ4816 SubstepTravelFraction,
-    int SubstepCeiling
+    FixedQ4816 SubstepMinimumTravel,
+    int SubstepCeiling,
+    FixedQ4816 PairRestitutionThreshold
 ) {
     /// <summary>Compiles an authored <see cref="WorldBodyContactPolicy"/>'s rigid fields to this fixed-point form.</summary>
     public static RigidContactPolicy FromAuthored(WorldBodyContactPolicy policy) => new(
@@ -31,7 +37,9 @@ public readonly record struct RigidContactPolicy(
         RestAngularThreshold: FixedQ4816.FromDouble(value: policy.RigidRestAngularSpeed),
         RestHoldTicks: FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: policy.RigidRestHoldSeconds)),
         SubstepTravelFraction: FixedQ4816.FromDouble(value: policy.RigidSubstepTravelFraction),
-        SubstepCeiling: policy.RigidSubstepCeiling
+        SubstepMinimumTravel: FixedQ4816.FromDouble(value: policy.RigidSubstepMinimumTravel),
+        SubstepCeiling: policy.RigidSubstepCeiling,
+        PairRestitutionThreshold: FixedQ4816.FromDouble(value: policy.RigidPairRestitutionSpeed)
     );
 }
 
@@ -262,7 +270,7 @@ public sealed partial class WorldBody {
         var travel = (m_rigidVelocity.Length * tickSeconds);
         var perSubstepBound = FixedQ4816.Max(
             x: (rigid.BoundingRadius * policy.SubstepTravelFraction),
-            y: FixedQ4816.FromDouble(value: 0.001d)
+            y: policy.SubstepMinimumTravel
         );
         var derivedSubsteps = 1;
 
@@ -290,13 +298,17 @@ public sealed partial class WorldBody {
             var subSeconds = (FixedQ4816.FromInteger(value: unchecked((long)thisSubTicks)) / FixedQ4816.FromInteger(value: EngineTicksPerSecond));
             var preVelocity = m_rigidVelocity;
 
+            // Rotate and translate about the body's own centre of mass, never its root: capture the CoM under the
+            // OLD orientation first, displace THAT by the substep's linear motion, then re-derive the root from the
+            // NEW orientation's own offset. Updating the orientation first and re-deriving the root from it (root =
+            // CoM_old + v·dt - R_new·offset) would translate the root at v while the true CoM — root + R·offset —
+            // additionally jumps by (R_new - R_old)·offset every substep from the rotation alone.
+            var previousCenter = (m_position + m_orientation.Rotate(vector: rigid.CenterOffset));
             var deltaRotation = FixedQuaternion.Exp(bivector: (m_angularVelocity * (subSeconds * RigidHalf)));
 
             m_orientation = (deltaRotation * m_orientation).Normalize();
 
-            var center = (m_position + m_orientation.Rotate(vector: rigid.CenterOffset));
-
-            center += (m_rigidVelocity * subSeconds);
+            var center = (previousCenter + (m_rigidVelocity * subSeconds));
 
             var previousBodyOrigin = m_position;
             var bodyOrigin = (center - m_orientation.Rotate(vector: rigid.CenterOffset));
@@ -326,8 +338,7 @@ public sealed partial class WorldBody {
                     normal: resolution.ObstructionNormal,
                     preVelocity: preVelocity,
                     contacting: ref m_rigidObstructionContacting,
-                    rigid: in rigid,
-                    subSeconds: subSeconds
+                    rigid: in rigid
                 );
             } else {
                 m_rigidObstructionContacting = false;
@@ -338,8 +349,7 @@ public sealed partial class WorldBody {
                     normal: resolution.GroundNormal,
                     preVelocity: preVelocity,
                     contacting: ref m_rigidGroundContacting,
-                    rigid: in rigid,
-                    subSeconds: subSeconds
+                    rigid: in rigid
                 );
                 // Rolling resistance: a pure angular-velocity decay while actually grounded, distinct from — and
                 // applied after — the coupled slip-friction solve above (which already moved translational energy
@@ -382,7 +392,8 @@ public sealed partial class WorldBody {
     /// translational and rotational velocity together through the body's own inertia (the two-body kernel, with the
     /// world modeled as an infinite-mass static phantom — see <see cref="GroundPhantomHandle"/>) rather than an
     /// ad-hoc lever with no way back into linear motion.</summary>
-    private void ResolveRigidContact(FixedVector3 normal, FixedVector3 preVelocity, ref bool contacting, in FixedWorldRigid rigid, FixedQ4816 subSeconds) {
+    private void ResolveRigidContact(FixedVector3 normal, FixedVector3 preVelocity, ref bool contacting, in FixedWorldRigid rigid) {
+        var postSweepVelocity = m_rigidVelocity;
         var incoming = FixedVector3.Dot(
             left: preVelocity,
             right: normal
@@ -398,6 +409,21 @@ public sealed partial class WorldBody {
         contacting = true;
 
         if (rigid.BoundingRadius <= FixedQ4816.Zero) {
+            return;
+        }
+
+        // Coulomb friction, on the SAME terms `rigid.friction` carries against another rigid body
+        // (WorldPopulation.ResolveRigidPairContact): the tangential impulse is clamped to friction times the normal
+        // impulse magnitude, never a bare speed-independent decay rate — one authored coefficient, one meaning. The
+        // sweep above already removed this substep's inward velocity component; the impulse that took
+        // (postSweepVelocity - preVelocity)·normal off the body IS this contact's normal force for the substep, so
+        // it stands in for the explicit normal impulse a two-body pair contact computes directly.
+        var normalSpeedRemoved = FixedQ4816.Max(
+            x: FixedQ4816.Zero,
+            y: (FixedVector3.Dot(left: postSweepVelocity, right: normal) - incoming)
+        );
+
+        if (normalSpeedRemoved <= FixedQ4816.Zero) {
             return;
         }
 
@@ -420,15 +446,6 @@ public sealed partial class WorldBody {
 
         var tangentSpeed = tangential.Length;
         var tangentDirection = (tangential / tangentSpeed);
-        var keptFraction = RateDecay(
-            rate: rigid.Friction,
-            seconds: subSeconds
-        );
-        var removedSpeed = (tangentSpeed * (FixedQ4816.One - keptFraction));
-
-        if (removedSpeed <= FixedQ4816.Zero) {
-            return;
-        }
 
         var ballHandle = TwoBodyHandle();
         var groundHandle = GroundPhantomHandle();
@@ -451,15 +468,25 @@ public sealed partial class WorldBody {
 
         if (
             !FusedArithmetic.TryMixedScaleProduct(
-            a: (-removedSpeed).Value,
+            a: (-tangentSpeed).Value,
             fractionBitsA: FixedQ4816.FractionBitCount,
             b: tangentMassRaw,
             fractionBitsB: FixedWorldRigid.Scales.EffectiveMass,
             fractionBitsOut: FixedQ4816.FractionBitCount,
-            result: out var impulseRaw
-        ) ||
-            (impulseRaw == 0L)
+            result: out var stickImpulseRaw
+        )
         ) {
+            return;
+        }
+
+        var maxTangentImpulseRaw = (rigid.Mass * normalSpeedRemoved * rigid.Friction).Value;
+        var clampedImpulseRaw = Math.Clamp(
+            value: stickImpulseRaw,
+            min: -maxTangentImpulseRaw,
+            max: maxTangentImpulseRaw
+        );
+
+        if (clampedImpulseRaw == 0L) {
             return;
         }
 
@@ -469,7 +496,7 @@ public sealed partial class WorldBody {
             bodyB: ballHandle,
             anchorB: contactAnchor,
             normal: tangentDirection,
-            impulseRaw: impulseRaw,
+            impulseRaw: clampedImpulseRaw,
             scales: FixedWorldRigid.Scales,
             refusals: ref refusals
         );

@@ -754,7 +754,7 @@
                 "default": 0
               },
               "friction": {
-                "description": "The contact-point tangential (slip) velocity decay rate against the static world, per second, on the same (1 - rate\u00B7dt) terms as LinearDamping \u2014 applied only while in contact, so it never slows a free-flying body, and coupled through the body\u0027s own inertia rather than decaying linear and angular velocity independently. Also the pair\u0027s average Coulomb friction coefficient the server clamps a rigid-vs-rigid contact\u0027s tangential impulse to. Non-negative; zero (the default) is frictionless.",
+                "description": "The Coulomb friction coefficient at a contact point, against the static world and \u2014 as the pair\u0027s average \u2014 against another rigid body: the tangential (slip) impulse the contact solver applies is clamped to this times the contact\u0027s own normal impulse magnitude, coupled through the body\u0027s own inertia rather than decaying linear and angular velocity independently. Applied only while in contact, so it never slows a free-flying body. Non-negative (a coefficient over 1 is physically ordinary); zero (the default) is frictionless.",
                 "type": "number",
                 "default": 0
               },

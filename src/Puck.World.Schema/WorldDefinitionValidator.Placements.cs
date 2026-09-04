@@ -268,8 +268,9 @@ public static partial class WorldDefinitionValidator {
             name: $"{path}.restitution",
             errors: errors
         );
-        // Friction, rolling friction, and both damping rates are per-second decay RATES (applied as 1 - rate·dt,
-        // clamped at apply time), not per-tick fractions — so they are bounded below only, never by 1.
+        // Friction is a Coulomb coefficient (unbounded above — over 1 is physically ordinary); rolling friction and
+        // both damping rates are per-second decay RATES (applied as 1 - rate·dt, clamped at apply time). All four
+        // share the same bound here: non-negative, never bounded by 1.
         foreach (var (value, name) in new (float Value, string Name)[] {
             (rigid.Friction, "friction"),
             (rigid.RollingFriction, "rollingFriction"),

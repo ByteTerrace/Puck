@@ -379,11 +379,18 @@ A kit carrying a `rigid` facet (`FixedWorldRigid`, derived from the kit's own
 sphere/capsule/box collider and authored mass via `Puck.Maths.FixedMassProperties`)
 hands its bodies to the rigid solver instead of the grounded/free motion
 program: `WorldBody.Advance` branches to `AdvanceRigid` before any intent,
-action track, or hold runs. Static-world contact is a swept, substepped
-integration against the SAME `IContactField` every locomotion body resolves
-against. Substep count is derived per body per tick from its speed and the
-collider's own bounding radius against an authored travel fraction
-(`collision.bodyContacts.rigidSubstepTravelFraction`), capped by
+action track, or hold runs. Each substep rotates and translates the body
+about its own centre of mass (`root + orientation·CenterOffset`), not its
+root: the CoM under the pre-substep orientation is displaced by the
+substep's linear motion, and the root is re-derived from THAT against the
+new orientation — updating the root directly at the linear velocity and
+re-deriving it from the new orientation's offset would additionally kick
+the true CoM by the rotation alone every substep. Static-world contact is a
+swept, substepped integration against the SAME `IContactField` every
+locomotion body resolves against. Substep count is derived per body per
+tick from its speed and the collider's own bounding radius against an
+authored travel fraction (`collision.bodyContacts.rigidSubstepTravelFraction`,
+floored by `collision.bodyContacts.rigidSubstepMinimumTravel`), capped by
 `collision.bodyContacts.rigidSubstepCeiling`; the derived count is echoed in
 `world.budget`'s `rigid` segment and `RigidStaticSubstepsThisTick`.
 
@@ -394,20 +401,23 @@ time it clips a wall — so each carries its OWN rising-edge restitution latch
 restitution fires only on a genuine impact on THAT channel, never on
 continued contact, which would read gravity's own per-tick pull (or ongoing
 sliding contact) as a fresh hit and never let the body settle. Tangential
-(slip) friction at either contact is a real coupled impulse, not a lever
-formula: the contact-point velocity (linear plus the rotational contribution
-`ω × r`, `r` the collider's bounding radius along the contact normal) decays
-toward the authored per-second `friction` rate through
-`Puck.Physics.FixedTwoBodyKernel`, with the world modeled as an infinite-mass
-static phantom (`WorldBody.GroundPhantomHandle`) — so linear and angular
-motion stay coupled exactly as inertia dictates, and a spinning ball can
-genuinely start rolling (or a rolling one stop spinning) rather than the two
-evolving independently. `rollingFriction` remains a separate pure
-angular-velocity decay while grounded — rolling resistance, not slip
-friction. Friction, rolling friction, and both damping coefficients are
-authored per-second RATES, applied as `(1 - rate·dt)` each tick so the same
-value decays identically at any simulation rate; the rest thresholds and hold
-window (`collision.bodyContacts.rigidRestLinearSpeed`/`rigidRestAngularSpeed`/`rigidRestHoldSeconds`)
+(slip) friction at either contact is a real coupled Coulomb impulse, not a
+decay curve: the contact-point velocity (linear plus the rotational
+contribution `ω × r`, `r` the collider's bounding radius along the contact
+normal) is arrested toward zero through `Puck.Physics.FixedTwoBodyKernel`,
+clamped to the authored `friction` coefficient times the normal impulse the
+sweep just applied to stop the substep's own inward motion — the SAME
+meaning `friction` carries against another rigid body (below), never a
+speed-independent rate. The world is modeled as an infinite-mass static
+phantom (`WorldBody.GroundPhantomHandle`), so linear and angular motion stay
+coupled exactly as inertia dictates and a spinning ball can genuinely start
+rolling (or a rolling one stop spinning) rather than the two evolving
+independently. `rollingFriction` remains a separate pure angular-velocity
+decay while grounded — rolling resistance, not slip friction. Rolling
+friction and both damping coefficients are authored per-second RATES,
+applied as `(1 - rate·dt)` each tick so the same value decays identically at
+any simulation rate; the rest thresholds and hold window
+(`collision.bodyContacts.rigidRestLinearSpeed`/`rigidRestAngularSpeed`/`rigidRestHoldSeconds`)
 are authored the same way, defaulting to the engine's original hard-coded
 values.
 
@@ -428,11 +438,11 @@ through the kernel — the full-stick impulse that would zero the relative
 tangential velocity, clamped to the pair's average friction coefficient
 times the normal impulse just applied — never an independent rescale of
 either body's whole velocity vector, which would burn or invent momentum
-along the normal too. Below a small closing-speed floor
-(`RigidPairRestitutionThreshold`) restitution is treated as zero — a rigid
-pair carries no per-pair rising-edge latch, so without this floor two
-touching bodies would restitute a hair apart every tick they are found
-overlapping and never fully settle. A kinematic (locomotion) side builds a
+along the normal too. Below a small authored closing-speed floor
+(`collision.bodyContacts.rigidPairRestitutionSpeed`) restitution is treated
+as zero — a rigid pair carries no per-pair rising-edge latch, so without
+this floor two touching bodies would restitute a hair apart every tick they
+are found overlapping and never fully settle. A kinematic (locomotion) side builds a
 STATIC phantom handle (`WorldBody.TwoBodyHandle`) carrying its own live
 velocity so it contributes to the closing-speed term without ever receiving
 an impulse back (`FixedRigidBody.IsDynamic` gates every write) — "a
@@ -451,7 +461,10 @@ below threshold for a short hold window while grounded; `body.impulse`
 by name otherwise) wakes it. `$physics:quiescent`
 (`WorldPopulation.RigidBodiesQuiescent`) reads 1 when every active rigid body
 rests, vacuously 1 for a world authoring none. `world.rigid` echoes the live
-census plus the compiled rest/substep policy; checkpoint (`IntegrationResidue`)
+per-body census (mass, velocity, angular velocity, resting) plus the
+quiescent verdict; the compiled rest/substep/pair-restitution policy and the
+last tick's solver work (pair resolutions, worst substep count) are
+`world.budget`'s own `rigid` segment. Checkpoint (`IntegrationResidue`)
 and the authoritative pose hash (`WorldReplaySnapshot.HashState`) both cover
 linear/angular velocity, the resting latch and hold-tick counter, and BOTH
 restitution edge latches. A kit swap that adds or drops the `rigid` facet

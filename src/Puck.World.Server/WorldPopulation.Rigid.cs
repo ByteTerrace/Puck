@@ -5,13 +5,6 @@ namespace Puck.World.Server;
 
 public sealed partial class WorldPopulation {
     private static readonly FixedQ4816 RigidPairFrictionHalf = FixedQ4816.FromDouble(value: 0.5d);
-    // Below this closing speed, a rigid pair's restitution is treated as zero (a pure momentum-conserving, no-
-    // bounce separation) rather than the authored coefficient: a rigid-vs-rigid contact carries no rising-edge
-    // latch (unlike a body-vs-static-world contact — see WorldBody.AdvanceRigid's own ground/obstruction latches),
-    // so without this floor two touching bodies at rest would restitute a hair apart every tick they are found
-    // overlapping, separate, fall back together, and restitute again — a stable micro-bounce that never reaches
-    // either rest threshold. Small enough that a real strike (anything but contact noise) is unaffected.
-    private static readonly FixedQ4816 RigidPairRestitutionThreshold = FixedQ4816.FromDouble(value: 0.05d);
 
     /// <summary>Gets the number of active dynamic-body pairs the most recent <see cref="ResolveDynamicContacts"/>
     /// resolved through the rigid impulse path (at least one side a rigid kit) rather than plain positional
@@ -42,7 +35,7 @@ public sealed partial class WorldPopulation {
             worstSubsteps = Math.Max(val1: worstSubsteps, val2: body.RigidStaticSubstepsThisTick);
         }
 
-        return $"rigid {rigidCount} body/bodies ({restingCount} resting), pairsResolved={RigidPairResolvedCount}, worstSubsteps={worstSubsteps}/{m_bodyContactPolicy.RigidSubstepCeiling}, restLinear<={m_bodyContactPolicy.RigidRestLinearSpeed:0.###} restAngular<={m_bodyContactPolicy.RigidRestAngularSpeed:0.###} restHold={m_bodyContactPolicy.RigidRestHoldSeconds:0.###}s substepFraction={m_bodyContactPolicy.RigidSubstepTravelFraction:0.###}";
+        return $"rigid {rigidCount} body/bodies ({restingCount} resting), pairsResolved={RigidPairResolvedCount}, worstSubsteps={worstSubsteps}/{m_bodyContactPolicy.RigidSubstepCeiling}, restLinear<={m_bodyContactPolicy.RigidRestLinearSpeed:0.###} restAngular<={m_bodyContactPolicy.RigidRestAngularSpeed:0.###} restHold={m_bodyContactPolicy.RigidRestHoldSeconds:0.###}s substepFraction={m_bodyContactPolicy.RigidSubstepTravelFraction:0.###} substepMinTravel={m_bodyContactPolicy.RigidSubstepMinimumTravel:0.####} pairRestitutionSpeed={m_bodyContactPolicy.RigidPairRestitutionSpeed:0.###}";
     }
 
     /// <summary>Resolves one already-detected overlapping pair where at least one side is a rigid kit: an
@@ -100,7 +93,7 @@ public sealed partial class WorldPopulation {
             refusals: ref refusals
         )
         ) {
-            var restitution = ((closingSpeed < -RigidPairRestitutionThreshold)
+            var restitution = ((closingSpeed < -m_rigidContactPolicy.PairRestitutionThreshold)
                 ? ((left.RigidRestitution + right.RigidRestitution) * RigidPairFrictionHalf)
                 : FixedQ4816.Zero
             );

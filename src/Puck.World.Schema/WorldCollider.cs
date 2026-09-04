@@ -130,9 +130,18 @@ public sealed record WorldCollisionEvents(int CandidateBudget = 32, int MaxPairs
 /// conservative that derivation is IS a document field: a smaller fraction takes more, cheaper substeps for the same
 /// speed; a larger one risks a fast body tunneling through a thin wall before <see cref="RigidSubstepCeiling"/> forces
 /// it to stop deriving more. Strictly positive.</param>
+/// <param name="RigidSubstepMinimumTravel">The floor under one continuous-collision substep's travel bound (world
+/// units), independent of <see cref="RigidSubstepTravelFraction"/> — guards a body whose collider is small enough
+/// that the fraction alone would derive a near-zero bound. Strictly positive.</param>
+/// <param name="RigidPairRestitutionSpeed">Below this closing speed (world units/second), a rigid-vs-rigid contact
+/// restitutes at zero rather than the authored coefficient — a pure momentum-conserving separation. A rigid pair
+/// carries no rising-edge latch (unlike a body-vs-static-world contact), so without this floor two touching bodies
+/// at rest would restitute a hair apart every tick they are found overlapping, separating, and falling back
+/// together — a stable micro-bounce that never reaches either rest threshold. Non-negative; small enough that a
+/// real strike is unaffected.</param>
 public sealed record WorldBodyContactPolicy(int CandidateBudget = 16, int MaxPairsPerBody = 8, int RigidSubstepCeiling = 8,
     float RigidRestLinearSpeed = 0.05f, float RigidRestAngularSpeed = 0.1f, float RigidRestHoldSeconds = 0.25f,
-    float RigidSubstepTravelFraction = 0.5f) {
+    float RigidSubstepTravelFraction = 0.5f, float RigidSubstepMinimumTravel = 0.001f, float RigidPairRestitutionSpeed = 0.05f) {
     /// <summary>The largest accepted candidate budget per solid body.</summary>
     public const int MaximumCandidateBudget = 32;
     /// <summary>The largest accepted resolved-contact degree per solid body.</summary>

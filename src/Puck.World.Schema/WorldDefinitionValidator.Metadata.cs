@@ -455,6 +455,16 @@ public static partial class WorldDefinitionValidator {
             name: "collision.bodyContacts.rigidSubstepTravelFraction",
             errors: errors
         );
+        RequirePositive(
+            value: bodyContacts.RigidSubstepMinimumTravel,
+            name: "collision.bodyContacts.rigidSubstepMinimumTravel",
+            errors: errors
+        );
+        RequireNonNegative(
+            value: bodyContacts.RigidPairRestitutionSpeed,
+            name: "collision.bodyContacts.rigidPairRestitutionSpeed",
+            errors: errors
+        );
     }
     private static void ValidateDistribution(WorldDistribution distribution, string path, HashSet<string> spawnPointIds, bool allowDisc, bool allowPoints, bool allowLattice, bool allowZeroDisc, List<string> errors, bool allowNoise = false, bool allowScatter = false) {
         if (

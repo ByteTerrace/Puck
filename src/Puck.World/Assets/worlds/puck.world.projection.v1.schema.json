@@ -8653,6 +8653,16 @@
               "description": "The fraction of a rigid body\u0027s own bounding radius one continuous- collision substep may travel \u2014 the derived substep COUNT stays derived (never authored directly), but how conservative that derivation is IS a document field: a smaller fraction takes more, cheaper substeps for the same speed; a larger one risks a fast body tunneling through a thin wall before RigidSubstepCeiling forces it to stop deriving more. Strictly positive.",
               "type": "number",
               "default": 0.5
+            },
+            "rigidSubstepMinimumTravel": {
+              "description": "The floor under one continuous-collision substep\u0027s travel bound (world units), independent of RigidSubstepTravelFraction \u2014 guards a body whose collider is small enough that the fraction alone would derive a near-zero bound. Strictly positive.",
+              "type": "number",
+              "default": 0.001
+            },
+            "rigidPairRestitutionSpeed": {
+              "description": "Below this closing speed (world units/second), a rigid-vs-rigid contact restitutes at zero rather than the authored coefficient \u2014 a pure momentum-conserving separation. A rigid pair carries no rising-edge latch (unlike a body-vs-static-world contact), so without this floor two touching bodies at rest would restitute a hair apart every tick they are found overlapping, separating, and falling back together \u2014 a stable micro-bounce that never reaches either rest threshold. Non-negative; small enough that a real strike is unaffected.",
+              "type": "number",
+              "default": 0.05
             }
           },
           "additionalProperties": false,

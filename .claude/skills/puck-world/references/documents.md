@@ -1492,8 +1492,9 @@ three channel names. Surface holds are not authored here.
 publishes each body's per-tick fact set on `EntitySnapshot.Facts` — one bit
 per body-state `ActionFact` (`grounded`, `airborne`, `rising`, `falling`,
 `submerged`, `atsurface`, `climbing` — holding a surface row whose face is
-outside the world's own walkable cone — and `flying` — holding a free row with
-lift; `AffectedBy` has no bit, being a relationship rather than a state). The mask is derived through the SAME
+outside the world's own walkable cone — `flying` — holding a free row with
+lift — and `resting`, written only by the rigid solver once a rigid body's
+linear and angular velocity latch to zero; `AffectedBy` has no bit, being a relationship rather than a state). The mask is derived through the SAME
 predicate the kit's action gates read, so the snapshot, the gates, and the
 `body.where` echo cannot disagree; a decoder refuses an undeclared bit by
 name. `WorldSessionMirror.Facts(int)` and `WorldClient.Facts(int)` front it
