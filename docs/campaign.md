@@ -567,6 +567,45 @@ itself without risking contact; the garden's proof keeps Wren at a safe
 standoff beside the table and moves pieces by console verb, never by having
 her body touch one.
 
+**The hidden-hand poker table (owner decisions, Lane C).** State only, no
+card bodies: a `cards` token domain, a `deck`/`hand1`/`hand2`/`community`
+zone family, a two-phase `pokerTurn`, a `bets` history ring. Placeholder card
+backs read through the `rank` attribute row's own public, `Hidden:
+Placeholder` visibility rather than the zone rows themselves: a row's own
+`visibility.readers` is all-or-nothing (`WorldStateDisclosure.Compose` gates
+the WHOLE row once before ever walking cells), so a zone can show every one
+of its member tokens to an admitted reader or none — never a placeholder for
+the rest — while an attribute row keyed over that zone's domain resolves
+each cell through its owning zone's OWN visibility
+(`Observer.CanRead`'s nested zones-by-domain lookup), which is where a
+card still in the deck or an unrevealed hand reads as an anonymous hidden
+entry, count preserved. `hand1`/`hand2` keep their own `readers`/
+`readersFrom` for each seat's direct, full read of its own two cards, and
+`poker-showdown-reveal` widens that same `readersFrom` row at showdown —
+one more use of the tabletop primitive's own reveal seam, not a second one.
+
+Live hand-strength is bounded by what the chess table beside it leaves in
+`world.budget`'s 1,000,000-unit per-tick ceiling: every `transformState`
+effect (dealing's `transfer`/`completePhase`, a `sort`) is priced against the
+WHOLE document's declared cell storage
+(`WorldRuleWorkBudget.TransformCost`), and a rule's `transaction` wrapper
+prices its own wrapped effects TWICE over — preflight and apply, priced
+separately — so the deal is authored as four plain top-level effects, never
+a `transaction`, and reads its cards at random (`Transfer`'s own `Random`
+selector) rather than a separate `shuffle` pass. What that still does not
+leave room for — a sort plus the adjacency-shaped trip/quad/straight/flush
+patterns, or a `bet1` phase's own `completePhase` — is proven correct as
+authored patterns instead: by a law test
+(`tests/Puck.World.Tests/PokerHandStrengthLawTests.cs`) and by
+`world.match`/the new `world.observe <principal>` read-back (composes
+`WorldStateDisclosure` for an explicitly named principal, not the caller's
+own stamped identity — `world.why`/`world.grants`' own authority-side
+pattern) from the console, rather than by a live rule two more `sort`s and a
+fifth `completePhase` this document does not have the budget for. The live
+`strength1`/`strength2` rows are console-written from those same reads
+(`pairCount` — pairAtRankN order-independent, no sort needed — over high
+card/one pair/two pair), not rule-derived.
+
 ## After this arc
 
 Owner review of this branch gates the next wave. Recorded as decisions, not status — none of this has

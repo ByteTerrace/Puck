@@ -321,5 +321,11 @@ Discrete state commands: `world.state.transform <transform-json>` and
 stamp the caller, and register deferred refusal echoes. `world.topologies`
 and `world.state.observe` are Immediate read-backs. The latter uses a stamped
 query and returns observation JSON; `world.state` remains an authority-console
-read-back. Operators and limits live in the Schema README's discrete-state
-section rather than a second command vocabulary here.
+read-back. `world.observe <principal>` is the third: an Immediate,
+authority-side composition of `WorldStateDisclosure.Compose` for an EXPLICITLY
+named principal (`WorldPrincipal.TryParse`'s token grammar, the same
+`world.grant`/`world.why` take), so a single console session can inspect what
+seat1 sees and what seat2 sees without submitting as either — the read-back
+side of a hidden-hand table (see the garden's `puck.world.json` poker table).
+Operators and limits live in the Schema README's discrete-state section rather
+than a second command vocabulary here.

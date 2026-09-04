@@ -77,6 +77,23 @@ public sealed partial class WorldStateCommandModule {
                 return new CommandResult(Output: server.DescribeSymmetry(topologyName: args[0].ToString(), cellKey: (args.Count == 2) ? args[1].ToString() : null));
             });
         yield return CommandDefinition.WithWireArgs(
+            name: "world.observe", bindability: CommandBindability.Unbindable,
+            description: "Composes the literal state observations an EXPLICITLY NAMED principal would see — the read-back side of a hidden-hand table, for inspecting another seat's disclosure without submitting as it: world.observe <principal>. Same token grammar as world.grant (WorldPrincipal.TryParse). Unlike world.state.observe (which reads the CALLER's own stamped identity), this composes for the named principal directly through WorldStateDisclosure.Compose, the same trusted-authority read world.why/world.grants already use — a console/authority tool, not a wire capability check.",
+            routing: CommandRouting.Immediate,
+            handler: (context, args) => {
+                if (args.Count != 1) {
+                    return CommandResult.Usage("world.observe", "<principal>");
+                }
+                if (!authority.TryResolveServer(context, "world.observe", out var server, out var error)) {
+                    return error;
+                }
+                if (!WorldGrantCommandModule.TryParsePrincipal(args[0].ToString(), out var principal)) {
+                    return CommandResult.Error($"[world.observe: unknown principal '{args[0]}' — {WorldPrincipal.TokenGrammar}]");
+                }
+                var rows = (WorldStateDisclosure.Compose(server.Definition, principal) ?? []).ToArray();
+                return new CommandResult(Output: System.Text.Json.JsonSerializer.Serialize(rows, WorldJsonContext.Default.WorldObservedRowArray));
+            });
+        yield return CommandDefinition.WithWireArgs(
             name: "world.match", bindability: CommandBindability.Unbindable,
             description: "Walks one word through a pattern and narrates it: world.match <pattern> <row> [<attribute>] for a keyed row or zone, world.match <pattern> <board-row> <origin-cell> <direction|any> for a board.",
             routing: CommandRouting.Immediate,
