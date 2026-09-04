@@ -89,15 +89,15 @@ public sealed partial class WorldBody {
             // integration, so the snapshot holds it stable). The action track below still advances, so a timed press
             // drains identically whether the intent drives the avatar or the route target.
         } else {
-            // The attachment surface reads its own attach/detach/reel channels directly (never through the kit's
-            // action table — see WorldBody.Attachment.cs), so it runs here, ahead of the program dispatch below, on
-            // the SAME "intent reaches the avatar" gate as everything else in this branch. A detach that fires this
-            // tick falls through to the ordinary ExecuteProgram path below in the SAME tick, already carrying the
-            // momentum Detach wrote into the vertical/planar channels. Gravity stays on while a tether holds and
-            // the kit's own program keeps integrating; WorldPopulation.ResolveTethers clamps the result to the rope
-            // AFTER every body this tick has advanced.
-            ProcessAttachmentIntent(intent: in intent);
-            ProcessReel(
+            // The tether facet reads its own attach/detach/reel channels directly (never through the kit's action
+            // table — see WorldBody.Tether.cs), so it runs here, ahead of the program dispatch below, on the SAME
+            // "intent reaches the avatar" gate as everything else in this branch. A detach that fires this tick
+            // falls through to the ordinary ExecuteProgram path below in the SAME tick, already carrying the
+            // momentum DetachTether wrote into the vertical/planar channels. Gravity stays on while a tether holds
+            // and the kit's own program keeps integrating; WorldPopulation.ResolveTethers clamps the result to the
+            // rope AFTER every body this tick has advanced.
+            ProcessTetherIntent(intent: in intent);
+            ProcessTetherReel(
                 intent: in intent,
                 stepTicks: stepTicks
             );

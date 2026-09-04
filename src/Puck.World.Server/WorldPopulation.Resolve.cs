@@ -37,10 +37,6 @@ public sealed partial class WorldPopulation {
         }
         m_bodyMotionPrograms = programs;
         m_channels = WorldChannelTable.Compile(channels: definition.Channels);
-        m_fixedAttachment = FixedWorldAttachment.Compile(
-            channels: m_channels,
-            section: definition.Attachment
-        );
         m_bodyUpPolicy = WorldBodyUpPolicyCompiler.Compile(collision: definition.Collision);
         m_walkableThreshold = FixedWorldCollision.Compile(collision: definition.Collision).GroundedThreshold;
         m_bodyContactPolicy = definition.Collision.BodyContacts;
@@ -572,6 +568,7 @@ public sealed partial class WorldPopulation {
                 collider: kit.Collider,
                 rigid: kit.Rigid,
                 carry: kit.Carry,
+                tether: kit.Tether,
                 maxSmoothError: m_fixedMotion.MaxSmoothError,
                 holds: kit.Holds
             );
@@ -583,7 +580,6 @@ public sealed partial class WorldPopulation {
                 walkableThreshold: m_walkableThreshold
             );
             body.SetGravityField(field: m_gravityField);
-            body.SetAttachmentPolicy(policy: m_fixedAttachment);
         }
 
         m_revision++;

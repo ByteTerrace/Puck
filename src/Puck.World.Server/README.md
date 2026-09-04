@@ -368,9 +368,10 @@ as ordinary `WorldBody` sim state (`WorldBody.Dynamics.cs`); a medium hold's
 vertical lane carries the scalar counterpart. Cross-world motion continuity
 round-trips their values through `TransferState`. A same-world authority
 checkpoint additionally carries their seeded latches, the arbitrary-up
-frame/reseat/turn fractions, and complete hold/grapple state through
-`IntegrationResidue`/`WorldAuthorityCheckpointCodec` (`SupportedVersion`,
-bumped whenever the fail-closed wire shape changes).
+frame/reseat/turn fractions, and complete hold/tether state through
+`IntegrationResidue`/`WorldAuthorityCheckpointCodec` (still under development —
+`SupportedVersion` stays fixed and the fail-closed wire shape changes directly,
+with no compatibility reader).
 
 `kit.autonomy` independently batches non-human motion and producer steering in
 engine-tick time. Bodies are deterministically phased across each interval;
@@ -597,6 +598,44 @@ than leaking a dangling reference forward. That pass walks a sorted,
 preallocated table of active relationships, not the full population capacity.
 `body.where` echoes
 `carrying=<index>`/`carriedBy=<index>` only while set.
+
+### Tether (`WorldBody.Tether.cs`)
+
+A kit's `tether` facet (`FixedWorldTether?`, constructor/`RecompileKit`
+parameter alongside `rigid`/`carry`) is a further distinct facet — the seam
+`body.attach`/`body.detach`/`body.reel` use. `ProcessTetherIntent` reads the
+facet's `attachChannel`/`detachChannel` ordinals DIRECTLY off the intent every
+tick (never through the kit's action table, since it carries its own
+threshold), firing at most one transition per tick: a detach edge always wins
+over a same-tick attach edge, and a fresh attach only ever starts while
+untethered. `TryAttachTether` throws a directed aim query
+(`FixedSurfaceQuery.TryNearestSurfaceAlongDirection`) along the body's facing
+within `maxAnchorDistance`/`aimHalfAngle`; a candidate anchors a
+`FixedTetherConstraint` at the candidate's own resolved distance (never the
+authored ceiling), with `minLength` clamped down when authored past what the
+attach actually found. `ProcessTetherReel` hands the held reel channel's
+value straight to `ReelTether` at `lengthRate`, scaled by the channel's own
+sign. `DetachTether` clears the tether and scales the body's surviving
+planar/vertical velocity by `releaseVelocityScale`. `m_tether is not null` is
+the single source of truth for "is this body attached" — there is no
+separate mode field. An optional `modeState` counter ordinal, resolved once
+at kit compile time, is written `1`/`0` on every transition
+(`WriteTetherModeState`) so a world's camera program can `select` on it. A
+kit swap that changes the facet's own presence (`RecompileKit`) drops any
+live attach rather than let it dangle against ordinals the new (or absent)
+facet no longer resolves, on the same terms a rigid-facet swap resets
+solver-owned fields. `IntegrationResidue.Tether` (`WorldBody.TetherResidue`)
+carries the attach/detach previous-bits and the complete rope state
+(length, min length, reel remainder, anchor) through
+`WorldAuthorityCheckpointCodec` and the authoritative hash; a cross-world
+transfer deliberately drops it (`TransferState` carries none of it) since a
+tether anchor names the source authority's own coordinate frame.
+`body.tether` echoes `attached=<yes|no> anchor=(x, y, z) rope=<length|n/a>`;
+`body.where` trails `tether=<length> anchor=(x, y, z)` only while attached.
+`WorldPopulation.ResolveTethers` (unchanged by the per-kit fold) solves every
+attached body's rope after every body has integrated and dynamic contacts
+have resolved, reading a body-anchored tether's anchor from the SAME tick's
+just-advanced pose.
 
 World rules can carry [decision policies](../Puck.World.Schema/README.md#decision-policies).
 `WorldServer.Decisions.cs` owns each binding's selected option, local PCG state,

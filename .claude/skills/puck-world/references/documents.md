@@ -1548,16 +1548,19 @@ normal, and the spend accumulator's remainder are simulation state: captured in
 `IntegrationResidue`, carried through `WorldAuthorityCheckpointCodec`, and part
 of the replay hash.
 
-**The `attachment` section (`WorldAttachmentSection` → `FixedWorldAttachment`)
-— the world's grapple surface.** Absent resolves to `Enabled: false`: no
-attach/detach/reel channel reaches any body. A body's attachment state is a
-MODE (`WorldBodyAttachmentMode` — `None`/`Grapple`), read directly off the
-intent by `WorldBody.Attachment.cs`, never through a kit's action table, and
-echoed by `body.attachment`; the section itself is echoed by
-`world.attach-policy`. Its fields are the aim ceiling and cone
-(`grappleMaxDistance`/`grappleAssistHalfAngleDegrees`), the rope
-(`reelRate`/`reelInFloor`), the release scale (`releaseMomentumScale`), and the
-three channel names. Surface holds are not authored here.
+**A kit's `tether` facet (`WorldTether` → `FixedWorldTether`) — an aimed
+distance-cap rope, beside `rigid`/`carry`.** Absent (`null`) refuses
+`body.attach`/`body.detach`/`body.reel` by name for that kit's bodies, the
+same presence-is-the-switch convention `rigid`/`carry` carry. A body's attach
+state is `m_tether is not null` (`WorldBody.Tether.cs`), read directly off the
+intent (never through a kit's action table) and echoed by `body.tether`; the
+facet itself is echoed per kit by `world.kits`. Its fields are the aim ceiling
+and cone (`maxAnchorDistance`/`aimHalfAngleDegrees`), the rope
+(`lengthRate`/`minLength`), the release scale (`releaseVelocityScale`), the
+three channel names, and an optional `modeState` counter-slot name the facet
+writes `1`/`0` to while attached/not — resolved to an ordinal at kit compile
+time, the camera program's `select` op keys off it like any `state.<row>`
+value. Surface holds are not authored here.
 
 **Body facts on the wire (`BodyFacts`, `Puck.Physics.Motion`).** The engine
 publishes each body's per-tick fact set on `EntitySnapshot.Facts` — one bit

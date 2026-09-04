@@ -287,6 +287,19 @@ body reads live, and refuses by name for an identity not owned here). An identit
 before the reshape still carries its seeded 0.01 rows and reads as an explicit 0.01 claim — cure it
 with `identity.motion`, or delete the state dir.
 
+**The attachment section is gone; the tether it carried is a per-kit facet.** It had zero authored
+callers (no shipped world, no canary, authored it) and one use baked into its own field names
+(`grappleMaxDistance`, `grappleAssistHalfAngleDegrees`, `releaseMomentumScale`) — a document section
+named, and shaped, for a single game's grapple. Kart's tow rope and Jump's own grapple want
+independently tuned reach, cone, and release feel, so the world-global `attachment`/
+`WorldAttachmentSection` is deleted outright and folded into `WorldTether`, a kit facet beside
+`rigid`/`carry` (presence is the switch, same as those two). `WorldBodyAttachmentMode` is gone too —
+a body's attach state was always exactly `m_tether is not null` (`WorldBody.Tether.cs` already said
+so); carrying a separate mode enum alongside it was a second spelling of the same fact. The optional
+`modeState` row a camera program selects on is now resolved to an ordinal at kit compile time, not a
+runtime name scan on every transition. Read back per body with `body.tether`, per kit with
+`world.kits`.
+
 **The foundation is complete and overshot.** One flat motion row containing its `holds` and `shaping` rows; the portal
 lane end to end — step into a frame and the whole party transfers, all-or-nothing across capacity
 *and* authorization; input vocabulary with ordered chord activators; the radial wheel; roster sync;

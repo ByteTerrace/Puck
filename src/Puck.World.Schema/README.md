@@ -1845,6 +1845,33 @@ after fixed-point compilation, and `maxCarryFraction` is non-negative. See the
 [server reference](../Puck.World.Server/README.md#carry-as-attachment-worldbodycarrycs-worldpopulationcarrycs)
 for the attachment mechanics.
 
+### Tether (`WorldTether.cs`)
+
+A kit's optional `tether` facet (`WorldTether` → `FixedWorldTether`) is a
+further distinct facet from `rigid`/`carry`, presence-is-the-switch on the
+same terms: it admits the kit's bodies to `body.attach`/`body.detach`/
+`body.reel`, an aimed distance-cap rope a body throws along its own facing
+and reels (`Puck.Physics.FixedSurfaceQuery.TryNearestSurfaceAlongDirection`,
+`Puck.Physics.FixedTetherConstraint`). Absent, those three channels refuse by
+name for every body wearing the kit. `maxAnchorDistance` (non-negative) is
+the aim ceiling — also the tether's rope length at attach, clamped to the
+resolved anchor's actual distance; `aimHalfAngleDegrees` (`[0, 180]`) is the
+aim-assist cone half-angle; `lengthRate` (non-negative) is the held reel
+channel's world-units-per-second rate; `minLength` (non-negative) is the
+reel-in floor; `releaseVelocityScale` (non-negative, default 1) scales the
+body's velocity at the instant of detach. `attachChannel`/`detachChannel`/
+`reelChannel` each name a declared composition channel (validated when
+authored; a null lane is simply unreachable). `modeState` optionally names a
+declared `state.body`/`state.identity` Counter slot the facet writes `1`
+while attached and `0` otherwise — resolved to an ordinal at kit compile
+time (never a runtime name scan), so the camera program's `select` op can key
+off it like any other `state.<row>` value. A body's attach state is
+`m_tether is not null` (`WorldBody.Tether.cs`) — there is no separate mode
+enum. Read back with `body.tether` (per body: `[body.tether: body:<n>
+attached=<yes|no> anchor=(x, y, z) rope=<length|n/a>]`) and per kit with
+`world.kits` (`tether=none` for a kit that carries no rope). Surface holds
+are not authored here — they are a kit's own `motion.holds` list.
+
 ## The `probes` section — probe and binding rows
 
 `WorldProbesSection` (`WorldProbes.cs`) declares two lists: `probes`

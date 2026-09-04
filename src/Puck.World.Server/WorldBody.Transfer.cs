@@ -452,7 +452,7 @@ public sealed partial class WorldBody {
     /// struct entirely.</summary>
     /// <remarks>
     /// <para>Every mutable instance field this class declares is classified between this transfer record and the
-    /// checkpoint-only <see cref="IntegrationResidue"/>/<see cref="AttachmentResidue"/> records below, so a reviewer
+    /// checkpoint-only <see cref="IntegrationResidue"/>/<see cref="TetherResidue"/> records below, so a reviewer
     /// can check a table rather than re-hunt every partial declaration. Two invariants bound the transfer
     /// classification either way: no park state (governed by
     /// <see cref="Puck.World.Server.WorldPopulation.Entry.ParkedUntilTick"/>, never this struct — re-derived on the
@@ -559,11 +559,10 @@ public sealed partial class WorldBody {
     /// <para><b>Checkpoint-only continuation.</b> <see cref="IntegrationResidue"/> carries the same-world integration
     /// state a cross-world transfer deliberately cannot: position/rotation/gravity-axis accumulator remainders,
     /// previous position, grounded/up/frame/reseat state, dynamics-follower seed latches, engagement latches, and the
-    /// complete <see cref="AttachmentResidue"/>. The latter includes every field declared by
-    /// <c>WorldBody.Attachment.cs</c>/<c>WorldBody.Tether.cs</c> except the compiled attachment policy, which the
-    /// checkpoint's own world definition reconstructs before restore. Grip points, tangent bases, tether anchors, and
-    /// rope integration fractions stay out of <see cref="TransferState"/> because they name the source authority's
-    /// coordinate frame and geometry.</para>
+    /// complete <see cref="TetherResidue"/>. The latter includes every field <c>WorldBody.Tether.cs</c> declares
+    /// except the compiled tether facet, which the checkpoint's own world definition (its owning kit row) reconstructs
+    /// before restore. Grip points, tangent bases, tether anchors, and rope integration fractions stay out of
+    /// <see cref="TransferState"/> because they name the source authority's coordinate frame and geometry.</para>
     /// <para><b>Population-owned state.</b>
     /// <see cref="Puck.World.Server.WorldPopulation.Entry.Designations"/> and
     /// <see cref="Puck.World.Server.WorldPopulation.Entry.ProducerState"/> are not <see cref="WorldBody"/> fields at
@@ -729,7 +728,7 @@ public sealed partial class WorldBody {
     /// <param name="ContactUpTurnRemainder">The measured-contact-normal turn accumulator's signed remainder.</param>
     /// <param name="PlanarFollowerSeeded">Whether the planar dynamics follower has consumed its first target.</param>
     /// <param name="VerticalFollowerSeeded">Whether the vertical dynamics follower has consumed its first target.</param>
-    /// <param name="Attachment">The body-local grapple continuation state.</param>
+    /// <param name="Tether">The body-local tether continuation state.</param>
     /// <param name="HoldIndex">The index into the kit's ordered hold list of the hold this body holds, or <c>-1</c>
     /// when nothing holds it.</param>
     /// <param name="HoldAnchor">The held surface point, or <see cref="FixedVector3.Zero"/> for a free (or absent)
@@ -782,7 +781,7 @@ public sealed partial class WorldBody {
         long ContactUpTurnRemainder,
         bool PlanarFollowerSeeded,
         bool VerticalFollowerSeeded,
-        AttachmentResidue Attachment,
+        TetherResidue Tether,
         int HoldIndex,
         FixedVector3 HoldAnchor,
         FixedVector3 HoldNormal,
@@ -802,17 +801,16 @@ public sealed partial class WorldBody {
         int Carrying,
         int CarriedBy
     );
-    /// <summary>The checkpoint-only attachment state that remains meaningful only inside the same authoritative
-    /// world's coordinate frame. It is intentionally not part of <see cref="TransferState"/>: a cross-world transfer
-    /// cannot carry a tether anchor whose geometry belongs to the source authority.</summary>
-    /// <param name="Mode">The active attachment dispatch mode.</param>
+    /// <summary>The checkpoint-only tether state that remains meaningful only inside the same authoritative world's
+    /// coordinate frame. It is intentionally not part of <see cref="TransferState"/>: a cross-world transfer cannot
+    /// carry a tether anchor whose geometry belongs to the source authority.</summary>
     /// <param name="AttachPreviousBit">The attach channel's previous threshold-crossing image.</param>
     /// <param name="DetachPreviousBit">The detach channel's previous threshold-crossing image.</param>
-    /// <param name="Tether">The complete rope constraint state, or <see langword="null"/> when none is attached.</param>
+    /// <param name="Tether">The complete rope constraint state, or <see langword="null"/> when none is attached —
+    /// the single source of truth for whether this body is currently tethered.</param>
     /// <param name="TetherAnchorBodyIndex">The anchor body index, or <c>-1</c> for a world-point tether.</param>
     /// <param name="TetherAnchorPointOrLocalOffset">The world point or body-local anchor offset.</param>
-    public readonly record struct AttachmentResidue(
-        WorldBodyAttachmentMode Mode,
+    public readonly record struct TetherResidue(
         bool AttachPreviousBit,
         bool DetachPreviousBit,
         FixedTetherConstraintState? Tether,
@@ -844,8 +842,7 @@ public sealed partial class WorldBody {
         ContactUpTurnRemainder: m_contactUpTurnAccumulator.Remainder,
         PlanarFollowerSeeded: m_planarFollowerSeeded,
         VerticalFollowerSeeded: m_verticalFollowerSeeded,
-        Attachment: new AttachmentResidue(
-            Mode: m_attachmentMode,
+        Tether: new TetherResidue(
             AttachPreviousBit: m_attachPreviousBit,
             DetachPreviousBit: m_detachPreviousBit,
             Tether: m_tether?.CaptureState(),
@@ -913,11 +910,10 @@ public sealed partial class WorldBody {
         m_planarFollowerSeeded = residue.PlanarFollowerSeeded;
         m_verticalFollowerSeeded = residue.VerticalFollowerSeeded;
 
-        var attachment = residue.Attachment;
+        var tether = residue.Tether;
 
-        m_attachmentMode = attachment.Mode;
-        m_attachPreviousBit = attachment.AttachPreviousBit;
-        m_detachPreviousBit = attachment.DetachPreviousBit;
+        m_attachPreviousBit = tether.AttachPreviousBit;
+        m_detachPreviousBit = tether.DetachPreviousBit;
         m_holdAnchor = residue.HoldAnchor;
         m_holdIndex = residue.HoldIndex;
         m_holdNormal = residue.HoldNormal;
@@ -932,12 +928,12 @@ public sealed partial class WorldBody {
             ticksPerSecond: EngineTicksPerSecond
         );
         m_home = residue.Home;
-        m_tether = ((attachment.Tether is { } tether)
-            ? FixedTetherConstraint.FromState(state: tether)
+        m_tether = ((tether.Tether is { } tetherState)
+            ? FixedTetherConstraint.FromState(state: tetherState)
             : null
         );
-        m_tetherAnchorBodyIndex = attachment.TetherAnchorBodyIndex;
-        m_tetherAnchorPointOrLocalOffset = attachment.TetherAnchorPointOrLocalOffset;
+        m_tetherAnchorBodyIndex = tether.TetherAnchorBodyIndex;
+        m_tetherAnchorPointOrLocalOffset = tether.TetherAnchorPointOrLocalOffset;
         m_rigidVelocity = residue.RigidVelocity;
         m_angularVelocity = residue.RigidAngularVelocity;
         m_resting = residue.RigidResting;

@@ -868,6 +868,75 @@
             "additionalProperties": false,
             "default": null
           },
+          "tether": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "maxAnchorDistance": {
+                "description": "The non-negative world-unit ceiling an attach aim searches along the body\u0027s facing direction \u2014 also the tether\u0027s rope length at attach (the resolved anchor\u0027s actual distance, always within this ceiling).",
+                "type": "number"
+              },
+              "aimHalfAngleDegrees": {
+                "description": "The aim-assist cone half-angle, degrees, within [0, 180], an attach candidate\u0027s bearing must fall within around the body\u0027s facing. Honoured only by a collider-list contact provider; a field provider\u0027s own directed march has no candidate list to score bearings over and ignores it (see WorldSolidField.TryNearestSurfaceAlongDirection\u0027s remarks).",
+                "type": "number"
+              },
+              "lengthRate": {
+                "description": "The non-negative world-units-per-second the held ReelChannel reels the rope at \u2014 positive reels out, negative in (the channel\u0027s own sign selects direction; this is a magnitude).",
+                "type": "number"
+              },
+              "minLength": {
+                "description": "The non-negative rope-length floor a reel-in clamps to.",
+                "type": "number"
+              },
+              "releaseVelocityScale": {
+                "description": "The non-negative multiplier a detach applies to the body\u0027s velocity at the instant of release \u2014 1 (the default) preserves it exactly, below 1 dampens, above 1 boosts.",
+                "type": "number",
+                "default": 1
+              },
+              "attachChannel": {
+                "description": "The declared channel name (validated) whose rising edge attaches the tether. null leaves attach unreachable from any channel.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "detachChannel": {
+                "description": "The declared channel name (validated) whose rising edge clears an active tether. null leaves detach unreachable from any channel.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "reelChannel": {
+                "description": "The declared channel name (validated) whose held bipolar value drives the rope length every tick. null leaves reel inert.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "modeState": {
+                "description": "The declared state.body/state.identity counter slot name this facet writes 1 while attached and 0 otherwise \u2014 the camera program\u0027s select op keys off it exactly as it keys off any other state.\u003Crow\u003E value. null writes nothing.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              }
+            },
+            "required": [
+              "maxAnchorDistance",
+              "aimHalfAngleDegrees",
+              "lengthRate",
+              "minLength"
+            ],
+            "additionalProperties": false,
+            "default": null
+          },
           "pad": {
             "type": [
               "object",

@@ -24,6 +24,7 @@ public sealed partial class WorldPopulation {
             collider: kit.Collider,
             rigid: kit.Rigid,
             carry: kit.Carry,
+            tether: kit.Tether,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             holds: kit.Holds
         );
@@ -34,7 +35,6 @@ public sealed partial class WorldPopulation {
                 walkableThreshold: m_walkableThreshold
         );
         body.SetGravityField(field: m_gravityField);
-        body.SetAttachmentPolicy(policy: m_fixedAttachment);
 
         var spawn = InhabitantSpawn(
             placement: placement,
@@ -93,6 +93,7 @@ public sealed partial class WorldPopulation {
             collider: kit.Collider,
             rigid: kit.Rigid,
             carry: kit.Carry,
+            tether: kit.Tether,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             holds: kit.Holds
         );
@@ -103,7 +104,6 @@ public sealed partial class WorldPopulation {
                 walkableThreshold: m_walkableThreshold
         );
         player.SetGravityField(field: m_gravityField);
-        player.SetAttachmentPolicy(policy: m_fixedAttachment);
 
         player.Pose(
             position: entry.SpawnPosition,
@@ -264,6 +264,7 @@ public sealed partial class WorldPopulation {
             collider: m_kits[m_seatKit].Collider,
             rigid: m_kits[m_seatKit].Rigid,
             carry: m_kits[m_seatKit].Carry,
+            tether: m_kits[m_seatKit].Tether,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             holds: m_kits[m_seatKit].Holds
         ) {
@@ -276,7 +277,6 @@ public sealed partial class WorldPopulation {
                 walkableThreshold: m_walkableThreshold
         );
         body.SetGravityField(field: m_gravityField);
-        body.SetAttachmentPolicy(policy: m_fixedAttachment);
 
         var spawnPoint = m_seatSpawns[slot];
 
@@ -702,7 +702,8 @@ public sealed partial class WorldPopulation {
                 rigid: m_kits[kitIndex].Rigid,
                 carry: m_kits[kitIndex].Carry,
                 maxSmoothError: m_fixedMotion.MaxSmoothError,
-                holds: m_kits[kitIndex].Holds
+                holds: m_kits[kitIndex].Holds,
+                tether: m_kits[kitIndex].Tether
             );
         }
 
@@ -863,6 +864,7 @@ public sealed partial class WorldPopulation {
             collider: m_kits[m_seatKit].Collider,
             rigid: m_kits[m_seatKit].Rigid,
             carry: m_kits[m_seatKit].Carry,
+            tether: m_kits[m_seatKit].Tether,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             holds: m_kits[m_seatKit].Holds
         ) {
@@ -875,7 +877,6 @@ public sealed partial class WorldPopulation {
                 walkableThreshold: m_walkableThreshold
         );
         body.SetGravityField(field: m_gravityField);
-        body.SetAttachmentPolicy(policy: m_fixedAttachment);
         body.Pose(
             position: position,
             yawRadians: yawRadians,

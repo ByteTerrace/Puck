@@ -1458,12 +1458,6 @@ public static partial class WorldDefinitionValidator {
             gravity: definition.Gravity,
             placements: definition.Placements
         );
-        ValidateAttachment(
-            attachment: definition.Attachment,
-            channelNames: allChannelNames,
-            errors: errors
-        );
-
         var fontNames = ValidateTextCatalog(
             text: definition.Text,
             errors: errors

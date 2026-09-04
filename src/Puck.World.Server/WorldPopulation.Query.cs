@@ -680,6 +680,7 @@ public sealed partial class WorldPopulation {
             collider: kit.Collider,
             rigid: kit.Rigid,
             carry: kit.Carry,
+            tether: kit.Tether,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             holds: kit.Holds
         ) {

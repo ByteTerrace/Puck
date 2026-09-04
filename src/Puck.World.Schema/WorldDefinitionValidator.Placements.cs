@@ -344,6 +344,84 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} cannot compile deterministically: {reason}");
         }
     }
+    // A kit's tether facet: the aim/rope tuning, and every named channel/state slot resolvable. Absence refuses
+    // body.attach/body.detach/body.reel by name (see PlayerCommandModule.Tether.cs).
+    private static void ValidateTether(WorldTether? tether, string path, ISet<string> channelNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, List<string> errors) {
+        if (tether is not { } facet) {
+            return;
+        }
+
+        RequireNonNegative(
+            errors: errors,
+            name: $"{path}.maxAnchorDistance",
+            value: facet.MaxAnchorDistance
+        );
+        RequireRange(
+            errors: errors,
+            max: 180f,
+            min: 0f,
+            name: $"{path}.aimHalfAngleDegrees",
+            value: facet.AimHalfAngleDegrees
+        );
+        RequireNonNegative(
+            errors: errors,
+            name: $"{path}.lengthRate",
+            value: facet.LengthRate
+        );
+        RequireNonNegative(
+            errors: errors,
+            name: $"{path}.minLength",
+            value: facet.MinLength
+        );
+        RequireNonNegative(
+            errors: errors,
+            name: $"{path}.releaseVelocityScale",
+            value: facet.ReleaseVelocityScale
+        );
+
+        // Every channel name is OPTIONAL (a null lane is simply unreachable), but an AUTHORED one must resolve —
+        // the same "declared or the field is pointless" door a kit's own speed.held channel already opens.
+        if (facet.AttachChannel is { Length: > 0 } attachChannel) {
+            _ = RequireDeclared(
+                declaredSet: channelNames,
+                errors: errors,
+                field: string.Empty,
+                path: $"{path}.attachChannel",
+                rowNoun: "channel",
+                value: attachChannel
+            );
+        }
+        if (facet.DetachChannel is { Length: > 0 } detachChannel) {
+            _ = RequireDeclared(
+                declaredSet: channelNames,
+                errors: errors,
+                field: string.Empty,
+                path: $"{path}.detachChannel",
+                rowNoun: "channel",
+                value: detachChannel
+            );
+        }
+        if (facet.ReelChannel is { Length: > 0 } reelChannel) {
+            _ = RequireDeclared(
+                declaredSet: channelNames,
+                errors: errors,
+                field: string.Empty,
+                path: $"{path}.reelChannel",
+                rowNoun: "channel",
+                value: reelChannel
+            );
+        }
+        if (facet.ModeState is { Length: > 0 } modeState) {
+            if (!stateSlots.TryGetValue(
+                key: modeState,
+                value: out var slot
+            )) {
+                errors.Add(item: $"{path}.modeState '{modeState}' names no declared body or identity state slot.");
+            } else if (slot.Kind != ActionStateKind.Counter) {
+                errors.Add(item: $"{path}.modeState '{modeState}' is a {slot.Kind} slot — a tether mode flag writes a Counter.");
+            }
+        }
+    }
     private static void ValidateCollider(WorldCollider? collider, IReadOnlyList<WorldPrototype> creations, string path, List<string> errors) {
         if (collider is null) {
             return;
@@ -1044,6 +1122,13 @@ public static partial class WorldDefinitionValidator {
                 carry: kit.Carry,
                 path: $"{path}.carry",
                 errors: errors
+            );
+            ValidateTether(
+                channelNames: compositionChannelNames,
+                errors: errors,
+                path: $"{path}.tether",
+                stateSlots: stateSlots,
+                tether: kit.Tether
             );
         }
 
