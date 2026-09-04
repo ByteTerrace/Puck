@@ -519,6 +519,23 @@ one placement — the future carry primitive's "one placement/body" shape. See
 the [schema reference](../src/Puck.World.Schema/README.md#discrete-boards-cards-and-turns)
 and `world.tabletop`'s console read-back.
 
+The board itself renders as 64 ordinary placements (`boardSquareLight`/
+`boardSquareDark`, one per cell, colors from a `boardColors` text row) rather
+than a bespoke board-rendering feature — the same placement/prototype and
+`state.<row>.<key>` palette-binding vocabulary the pieces already use, so a
+future board (checkers, go) needs no new client code either. Deriving N
+independent pieces' occupancy needs N separately-authored rules, one write
+per piece: a rule's own contiguous run of effects preflights and applies as
+one atomic candidate, so bundling every piece's write into one rule means a
+single piece leaving the frame (a capture, a knock clear off the table)
+rejects every other piece's write in the same settle. The scale primitive's
+own known limit — body-vs-body contact still reads a kit's unscaled collider
+— means no body can stand on the 1.6 m board itself (its own reach already
+exceeds a 0.2 m cell) without risking contact; the garden's proof keeps Wren
+at a safe standoff beside the table and moves pieces by console verb, never
+by having her body touch one — closing that gap is scale-primitive work, not
+this lane's.
+
 ## After this arc
 
 Owner review of this branch gates the next wave. Recorded as decisions, not status — none of this has

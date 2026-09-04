@@ -187,7 +187,17 @@ cell changed, then a verdict any authored predicate — occupancy, turn order,
 a `$board:rayCell`/`$board:offset` movement-geometry check — may set to 0
 without touching the mover; a legal verdict alone advances turn and adopts the
 new position into `lastLegal`). Illegal moves are recorded, never undone —
-the world never rejects or repositions a physical piece.
+the world never rejects or repositions a physical piece. A rule's own
+contiguous run of `setState`/`addState`/etc. effects preflights and applies
+as ONE atomic candidate — deriving N independent pieces' occupancy therefore
+needs N separately-authored derive rules, one per piece, never a single rule
+spanning every piece: one piece's body leaving the frame (captured, knocked
+clear) refuses only its own write when it owns its own rule, but rejects
+every sibling piece's write too when they share one. A `body.pose` reposition
+is a kinematic write and never itself crosses `$physics:quiescent`'s Edge —
+pair it with a negligible `body.impulse` (or drive the whole move by impulse)
+to trigger a derive; a bare pose with nothing else disturbing the rigid
+census leaves the board unrevised.
 
 The [tabletop state fixture](../../tests/Puck.World.Canaries/tabletop-state/fixture.world.json)
 and its [positive script](../../tests/Puck.World.Canaries/tabletop-state/positive.script.txt)

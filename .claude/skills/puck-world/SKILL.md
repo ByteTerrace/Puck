@@ -342,6 +342,18 @@ choosing fixed-point primitives on sim value paths.
   [server](../../../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)/[schema](../../../src/Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs)
   references for the mechanics. The shipped garden's `billiardsTray`/
   `bowlingLane` placements are the worked example.
+- The tabletop primitive: a placement's `board` facet (`WorldPlacementBoard`)
+  anchors a discrete `Grid`/`Ring`/`Hex` `state.lattices` topology to a
+  physical row/body game (`$board:cellOf`/`offset`, `world.tabletop`). A
+  contiguous run of a rule's own `setState`/`addState`/etc. effects
+  preflights and applies as ONE atomic candidate (`WorldServer.Step`'s
+  `PreflightWorldRuleStateEffects`) — deriving N independent pieces' cells
+  needs N separately-authored rules (one write can refuse, alone, only when
+  it owns its own rule), never one rule spanning every piece, or a single
+  piece leaving the frame (captured, knocked clear) rejects every sibling's
+  write in the same settle. See [references/documents.md](references/documents.md)'s
+  `state.lattices` section and `Puck.World.Schema/README.md`'s
+  tabletop-primitive section; the garden's `chessBoard` is the worked example.
 - `WorldBodiesLimits.CapacityCeiling` is 4096 (the largest authored
   `population.capacity` the validator admits), and `WorldClient.EntityCapacity`
   is SINGLE-SOURCED from it (`= WorldBodiesLimits.CapacityCeiling`, the F3

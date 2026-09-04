@@ -35,6 +35,14 @@ public sealed class TabletopBoardLawTests {
             }
         }
 
+        // TryCellOf is X/Z-only BY DESIGN (a board carries one layer): the same cell-0 center, hundreds of units
+        // above or below the declared origin's Y, still resolves to cell 0 — a piece over the wrong table entirely,
+        // or one that has fallen through the floor beneath this one, reads as standing on this board regardless.
+        Assert.True(topology.TryCellOf(position: new FixedVector3(FixedQ4816.FromDouble(10.25d), FixedQ4816.FromDouble(502d), FixedQ4816.FromDouble(-4.75d)), cell: out var highCell));
+        Assert.Equal(0, highCell);
+        Assert.True(topology.TryCellOf(position: new FixedVector3(FixedQ4816.FromDouble(10.25d), FixedQ4816.FromDouble(-498d), FixedQ4816.FromDouble(-4.75d)), cell: out var lowCell));
+        Assert.Equal(0, lowCell);
+
         // Below the origin corner: outside the frame on both axes.
         Assert.False(topology.TryCellOf(position: new FixedVector3(FixedQ4816.FromDouble(9d), FixedQ4816.Zero, FixedQ4816.FromDouble(-6d)), cell: out _));
         // One cell past the far edge: outside on X alone.
@@ -60,6 +68,13 @@ public sealed class TabletopBoardLawTests {
     // rides. Cell 1 is pre-seeded occupied (value 5) with no body ever placed there, so the illegality is a property
     // of the RULE reading previousBoard, not an artifact of two bodies colliding.
     private const string Quiescent = "$physics:quiescent";
+    private static ActionPredicate.CompareState Cs(string state, ActionStateComparison comparison, decimal? value = null, string? key = null,
+        string? comparandState = null, string? comparandKey = null) => new(state, comparison, value, key, comparandState, comparandKey);
+    private static ActionPredicate All(params ActionPredicate[] predicates) => new ActionPredicate.All(predicates);
+    private static ActionEffect.SetState Set(string state, decimal? value = null, string? key = null, string? fromState = null, string? fromKey = null) =>
+        new(state, value, ActionTarget.Self, key, fromState, fromKey);
+    private static WorldRule Rule(string name, ActionPredicate gate, ActionTriggerMode mode, params ActionEffect[] effects) =>
+        new(WorldCellName.Parse(name), effects, gate, mode);
     private static WorldDefinition TabletopBridgeDocument() {
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
         var shape = new ShapeDocument(Id: 0, Name: "floor", Type: SdfSolidPrimitive.Box, Position: Vector3.Zero,
@@ -78,14 +93,6 @@ public sealed class TabletopBoardLawTests {
             Cells: [new WorldStateCell(WorldCellName.Parse("0"), initial)], Capacity: 1);
         WorldStateRow Slot(string name, long initial) => new(WorldCellName.Parse(name), CellKind.Int, Min: -1, Max: 5,
             Cells: [new WorldStateCell(WorldCellName.Parse(WorldStateRow.SlotKey), initial)]);
-
-        ActionPredicate.CompareState Cs(string state, ActionStateComparison comparison, decimal? value = null, string? key = null,
-            string? comparandState = null, string? comparandKey = null) => new(state, comparison, value, key, comparandState, comparandKey);
-        ActionPredicate All(params ActionPredicate[] predicates) => new ActionPredicate.All(predicates);
-        ActionEffect.SetState Set(string state, decimal? value = null, string? key = null, string? fromState = null, string? fromKey = null) =>
-            new(state, value, ActionTarget.Self, key, fromState, fromKey);
-        WorldRule Rule(string name, ActionPredicate gate, ActionTriggerMode mode, params ActionEffect[] effects) =>
-            new(WorldCellName.Parse(name), effects, gate, mode);
 
         var quiescentEqualsOne = Cs(Quiescent, ActionStateComparison.Equal, 1m);
 
@@ -139,6 +146,94 @@ public sealed class TabletopBoardLawTests {
                 ]),
             Rules = rules,
         };
+    }
+
+    // A second 2x2-board fixture, isolating ONE property: whether one piece's derive failing (its body off the
+    // frame entirely) can cost a SIBLING piece its own, otherwise-successful, derive. Piece 0 rides body:0, posed
+    // over cell 0 and left to settle; piece 1 rides body:1, a declared-but-never-joined (inactive) body — $board:
+    // cellOf answers -1 for an inactive body exactly as it does for one that has physically left the frame, so this
+    // stands in for a second piece knocked clean off the table without needing a second physical body. splitRules
+    // toggles between the fix (each piece's pieceCell+board write is its OWN rule, so one failing write is isolated)
+    // and the defect it replaces (all four writes riding one rule, so the whole contiguous run — including piece
+    // 0's otherwise-valid write — is preflighted, and rejected, as one candidate).
+    private static WorldDefinition TwoPieceTabletopDocument(bool splitRules) {
+        var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
+        var shape = new ShapeDocument(Id: 0, Name: "floor", Type: SdfSolidPrimitive.Box, Position: Vector3.Zero,
+            Rotation: Quaternion.Identity, Scale: new Vector3(x: 24f, y: 0.1f, z: 24f), Material: 0, Blend: SdfBlendOp.Union, Smooth: 0f, Group: 0);
+        var document = new CreationDocument(Schema: CreationDocument.CurrentSchema, Name: "rigid-floor", Palette: null, Shapes: [shape], Frames: null);
+        var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "rigid-floor");
+        var creation = new WorldPrototype(Id: "floor", Document: canonical.Document, HashRaw: canonical.Hash);
+        var rigid = new WorldRigid(Mass: 1f, Restitution: 0.05f, Friction: 1f, RollingFriction: 2f, LinearDamping: 1f, AngularDamping: 1f);
+        var topology = new WorldStateLatticeTopology("board", new DocumentVector3(0f, 0f, 0f), 1f, 2, 2, Kind: WorldTopologyKind.Grid);
+
+        WorldStateRow BoardRow(string name) => new(WorldCellName.Parse(name), CellKind.Int,
+            Cells: [.. Enumerable.Range(0, 4).Select(k => new WorldStateCell(WorldCellName.Parse(k.ToString()), 0))],
+            Board: new WorldStateBoard("board"));
+        WorldStateRow Keyed(string name, long initial, int capacity) => new(WorldCellName.Parse(name), CellKind.Int, Min: -1, Max: 3,
+            Cells: [.. Enumerable.Range(0, capacity).Select(k => new WorldStateCell(WorldCellName.Parse(k.ToString()), initial))], Capacity: capacity);
+
+        var quiescentEqualsOne = Cs(Quiescent, ActionStateComparison.Equal, 1m);
+        ActionEffect[] deriveEffects = [
+            Set("pieceCell", key: "0", fromState: "$board:cellOf:board:body:0"),
+            Set("board", key: "$cell:pieceCell:0", value: 9m),
+            Set("pieceCell", key: "1", fromState: "$board:cellOf:board:body:1"),
+            Set("board", key: "$cell:pieceCell:1", value: 7m),
+        ];
+        WorldRule[] deriveRules = splitRules
+            ? [
+                Rule("derive-piece0", quiescentEqualsOne, ActionTriggerMode.Edge, deriveEffects[0], deriveEffects[1]),
+                Rule("derive-piece1", quiescentEqualsOne, ActionTriggerMode.Edge, deriveEffects[2], deriveEffects[3]),
+            ]
+            : [Rule("derive-pieces", quiescentEqualsOne, ActionTriggerMode.Edge, deriveEffects)];
+
+        WorldRule[] rules = [
+            Rule("clear-board", quiescentEqualsOne, ActionTriggerMode.Edge,
+                Set("board", value: 0m, key: "0"), Set("board", value: 0m, key: "1"),
+                Set("board", value: 0m, key: "2"), Set("board", value: 0m, key: "3")),
+            .. deriveRules,
+        ];
+
+        return source with {
+            CollisionRaw = source.Collision with { Requirements = [WorldContactRequirement.SmoothUnionContact] },
+            CreationsRaw = [creation],
+            GravityRaw = source.Gravity with { Uniform = new DocumentVector3(value: new Vector3(x: 0f, y: -9.8f, z: 0f)) },
+            KitRowsRaw = [.. source.Kits.Select(selector: kit => kit with {
+                BodyContact = WorldBodyContactMode.Solid,
+                Collider = new WorldCollider.Sphere(Radius: 0.15f),
+                Rigid = rigid,
+            })],
+            PlacementRowsRaw = [new WorldPlacement(Id: "floor", PrototypeId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
+            StateRaw = new WorldStateSection(
+                Lattices: [topology],
+                World: [BoardRow("board"), Keyed("pieceCell", -1, capacity: 2)]),
+            Rules = rules,
+        };
+    }
+
+    [Theory]
+    [InlineData(true)]  // the fix: isolated per-piece rules — piece 0 derives despite piece 1 being off-frame.
+    [InlineData(false)] // the CONTROL: one combined rule — piece 1's refusal costs piece 0 its own derive too.
+    public void OneOffFrameSiblingIsolatesOrWipesTheOtherPieceByRuleShape(bool splitRules) {
+        using var fixture = Fixtures.FreshServer(definition: TwoPieceTabletopDocument(splitRules: splitRules));
+        var left = WorldPrincipal.Seat(slot: 0);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(left, left.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+
+        var body = fixture.Server.Body(index: 0)!;
+        body.Pose(x: 0.5f, y: 1f, z: 0.5f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f); // over cell 0
+        Assert.Null(fixture.Server.Body(index: 1)); // never joined — body:1 stays inactive, cellOf answers -1.
+
+        for (var tick = 0; tick < 400; tick++) {
+            fixture.Step();
+        }
+
+        var board = WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, "board")!;
+        var cell0 = board.Cells!.Single(c => c.Key.Value == "0").Value;
+
+        if (splitRules) {
+            Assert.Equal(9, cell0); // piece 1's off-frame write is refused alone — piece 0 still derives.
+        } else {
+            Assert.Equal(0, cell0); // the same refusal rejects the whole four-effect run — piece 0's write with it.
+        }
     }
 
     [Fact]

@@ -404,12 +404,29 @@ The `tabletop` placement carries a `board` facet (the tabletop primitive —
 see the [schema reference](../Puck.World.Schema/README.md#discrete-boards-cards-and-turns))
 anchoring an 8x8 `chessBoard` Grid topology, and 32 `piece`-kit rigid bodies
 (the garden's chess set, shrunk-Wren scale beside the `drinkMe`/`eatMe`
-regions) prove it: a world rule derives the `board` row from each piece's
-resting cell every settle, records a `verdict` (occupancy and turn order —
-the shipped default; per-kind movement geometry is the reserved authorable
-extension), and updates `lastLegal`/`turn` only on a legal move.
+regions, now sited clear of the table's own footprint so the shrink and the
+approach never jostle a resting piece) prove it: one `pieceCell`-derive rule
+reads every piece's `$board:cellOf` unconditionally, then one PER-PIECE
+`board`-write rule (never a single rule spanning every piece) commits that
+piece's own cell — a piece whose body has left the frame (captured, knocked
+clear) refuses only its own write; it never costs its neighbours theirs, since
+a rule's own contiguous run of state effects preflights and applies as one
+atomic candidate. `body.pose`-driven proofs (carry, lane C, is not yet merged)
+must pair the pose with a negligible `body.impulse` wake — a bare pose is a
+kinematic write and never itself crosses `$physics:quiescent`'s Edge, so
+nothing re-derives from it alone. A `verdict` records occupancy and turn order
+— the shipped default; per-kind movement geometry is the reserved authorable
+extension — and `lastLegal`/`turn` update only on a legal move.
 `world.tabletop` reads the frame, live occupancy, and the bound convenience
-rows back.
+rows back. `boardSquareLight`/`boardSquareDark` placements (paired one to a
+cell, colors from the `boardColors` text row) render the board itself; the
+`plan` row is echoed and console-writable but unrendered — reserved for an
+addon to paint move highlights, per the lane's own scope. Two known limits
+carry from the per-body scale primitive's own contract: body-vs-body contact
+still reads a kit's unscaled collider (a body standing where a small piece
+also stands can still displace it), and two pieces landing on one cell in the
+same settle leave only the LAST-written piece's code in the `board` row (the
+other's cell reads empty even though its body is still physically there).
 
 World-space creation text uses the document's optional `text` catalog. Every
 font row has a stable name, a path relative to the world document, a

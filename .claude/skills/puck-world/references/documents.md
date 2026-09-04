@@ -665,9 +665,15 @@ see the server README's Navigation section for the current limits.
 ### `state.lattices` + the `lattice` row trait — the lattice (scalar rows, reactions, lattice-derived geometry)
 
 `WorldFields.cs` (the compiled composite) + `WorldState.cs` (the document
-spelling). The document declares ONE `state.lattices` topology (name, origin,
-`cellSize`, `width` × `depth` × `layers`, `stepEveryTicks`, `reactions`) and
-lattice-shaped state rows: `{"name": …, "kind": "fixed", "lattice":
+spelling). `state.lattices` declares one or more topologies (name, origin,
+`cellSize`, `width` × `depth` × `layers`, `stepEveryTicks`, `reactions`); at
+most one is `Field`-kind and drives THIS trait (`WorldTopologyCompilation.
+FindPhysical` — reactions, lattice-derived geometry) — the rest are discrete
+`Grid`/`Ring`/`Hex` topologies a placement's `board` facet anchors to a
+physical row/body game (`$board:cellOf`/`offset`, `world.tabletop`; the
+garden's `chessBoard` alongside its own `pondBasin` water field — see
+`Puck.World.Schema/README.md`'s tabletop-primitive section). Lattice-shaped
+state rows: `{"name": …, "kind": "fixed", "lattice":
 {"topology": …, "initial"/"min"/"max", optional "heightScale"/"color",
 "paint": […]}}`. `WorldFieldsSection.Compile` assembles the runtime composite
 the engine consumes (`WorldDefinition.Fields` is that compiled view — never
@@ -1108,13 +1114,28 @@ volumes, move speed/turn rate, hold probes/standoff/reach, a hold's own gravity 
 wall hold's travel speed, and a grip's pull rate; the client multiplies the same live cell into the
 rendered rig AND the seat chase camera's orbit distance and look-at height
 (`Client.WorldFramePresenter.ResolveCamera`), so a shrunk body stays framed instead of shrinking to a
-speck on screen. A `tabletop` placement (a solid pedestal table, 1.2 m clearance under its top) sits
-beyond the bottle, and the `table` spawn point stands a body north of both, facing south — inside the
-`eatMe` region already, so an unshrunk arrival reads `scale=1` from the first tick. `body.where`'s
-`scale=` echo is the read-back. Body-vs-body contact, overlap events, adjacency transfer sweeps, and the
-cross-boundary continuum trajectory still read a kit's shared UNSCALED collider volumes — only the
-self-collision sweep does not; a shrunk body's contact with the world is correct, its contact with
-other bodies is not yet.
+speck on screen. A `tabletop` placement (a solid pedestal table, 1.2 m clearance under its top) carries
+the chess board (below); `drinkMe` sits north of it, its region kept clear of the tabletop's own
+footprint and of every resting piece's contact radius, so shrinking never jostles the board. `eatMe`
+and the `table` spawn point sit south of the tabletop, inside the `eatMe` region already, so an
+unshrunk arrival reads `scale=1` from the first tick. `body.where`'s `scale=` echo is the read-back.
+Body-vs-body contact, overlap events, adjacency transfer sweeps, and the cross-boundary continuum
+trajectory still read a kit's shared UNSCALED collider volumes — only the self-collision sweep does
+not; a shrunk body's contact with the world is correct, its contact with other bodies is not yet. This
+is why the chess board's own safe-approach distance is measured in the WALKER kit's own (unscaled)
+capsule radius, never the shrunk body's visual size — see below.
+
+The tabletop's `chessBoard` Grid topology (8x8, 0.2 m cells) carries 32 `piece`-kit rigid bodies and is
+rendered as 64 `boardSquareLight`/`boardSquareDark` placements, one per cell, colors from the
+`boardColors` text row (the SAME `state.<row>.<key>` palette binding the piece prototypes use for
+`pieceSetColors`) — the tabletop otherwise renders as a bare top with no board pattern. A body's
+UNSCALED walker capsule (radius 0.35) still reaches roughly 0.4 m from its own center, well past a
+single 0.2 m cell — so a body cannot stand ANYWHERE on the board's own 1.6 m footprint (let alone tread
+among the pieces) without risking contact; the garden's own proof keeps Wren at a safe standoff beside
+the table and moves pieces by console verb (`body.impulse`/`body.pose`), never by having her body touch
+one. The `plan` row is a rendered-nothing seam: an addon may write candidate cell keys into it and
+`world.tabletop` echoes them back, but no client code paints a highlight from it — chess set style and
+board rendering are this lane's; painting `plan` is deliberately left to a future addon.
 An explicit path or the shipped default that cannot be loaded refuses the boot by name.
 `puck.world.frozen.json` ships beside them: the frozen floating-island diorama, reference-only,
 reachable via `--world`, never extended, deleted on owner order — the worked examples this file cites
