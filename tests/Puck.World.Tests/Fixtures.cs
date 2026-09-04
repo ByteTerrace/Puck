@@ -69,7 +69,7 @@ internal static class Fixtures {
     /// ("traveler", a bare-bones grounded program with one exact instant-convergence shaping row), the three
     /// channels its body motion program's selected operations require
     /// (<c>MoveAdvance</c>/<c>MoveStrafe</c>/<c>Turn</c>), and <see cref="IntentSource.Idle"/> as the population's
-    /// default peer source so no producer program (wander/attend/designated) is needed at all. This kit carries NO
+    /// default peer source so no producer program (roam/approach/designated) is needed at all. This kit carries NO
     /// collider — no law here needs one — so <see cref="BuildDocumentCore"/> is the shared shape
     /// <see cref="BuildGradientUpDocument"/> extends with the ONE collider-bearing arm
     /// <see cref="GradientUpContactLawTests"/> needs, without duplicating this whole literal.
@@ -92,13 +92,13 @@ internal static class Fixtures {
         new(Id: "seat-4", Position: new Vector3(x: 2f, y: 0f, z: 2f)),
     ];
 
-    /// <summary>The full parameter set <c>ValidateProducerParameters</c> requires for a kit naming the "wander"
+    /// <summary>The full parameter set <c>ValidateProducerParameters</c> requires for a kit naming the "roam"
     /// producer — shared by every fixture kit that declares one (<see cref="BuildKits"/>'s own "traveler" row, and
     /// any other suite file's own custom kit — see <see cref="TransferAbortKitWideningLawTests"/>'s drive/medium
     /// kits). Values mirror the shipped worlds' own "traveler"-style kit; none of them is exercised by any of these
-    /// suites' laws. Kits that declare wander seed its variation whether or not it is selected; kits without
-    /// wander still receive ordinary spawn/color initialization.</summary>
-    public static BodyProgramParameters TravelerWanderParameters { get; } = new(
+    /// suites' laws. Kits that declare roam seed its variation whether or not it is selected; kits without
+    /// roam still receive ordinary spawn/color initialization.</summary>
+    public static BodyProgramParameters TravelerRoamParameters { get; } = new(
         Scalars: new Dictionary<string, float> {
             ["forward"] = 0.375f,
             ["softRadius"] = 45f,
@@ -155,11 +155,11 @@ internal static class Fixtures {
                     new WorldShaping(Along: new WorldShapingAlong()),
                 ]
             ),
-            // The full parameter set ValidateProducerParameters requires for a kit naming the "wander"
+            // The full parameter set ValidateProducerParameters requires for a kit naming the "roam"
             // producer — see the bodyMotionPrograms remark above for why this exists at all. Values mirror the
             // shipped worlds' own "traveler"-style kit; none of them is exercised by this suite's laws.
             ProducersRaw: new Dictionary<string, BodyProgramParameters> {
-                ["wander"] = TravelerWanderParameters,
+                ["roam"] = TravelerRoamParameters,
             },
             ActionsRaw: new Dictionary<string, ActionSpec>(),
             Collider: seatCollider
@@ -197,10 +197,10 @@ internal static class Fixtures {
                     BodyMotionOp.CommitPose,
                 ]
             ),
-            // Keep an authored wander program available for laws that explicitly select it. Spawn and color
+            // Keep an authored roam program available for laws that explicitly select it. Spawn and color
             // initialization are independent of whether the assigned kit declares this optional behavior.
             new(
-                Name: "wander",
+                Name: "roam",
                 Version: "puck.body-motion.v1",
                 Kind: BodyProgramKind.Producer,
                 Operations: [BodyMotionOp.ProduceSteeringIntent]

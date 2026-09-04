@@ -452,9 +452,9 @@ public sealed partial class WorldPopulation {
         }
     }
     /// <summary>Recompiles the population's derived state after a sim-affecting section mutation (a live kit tune, a
-    /// motion/wander retune, a seat-kit or assignment change, or a whole-document swap): re-quantizes the fixed tables,
-    /// re-resolves every entry's kit index, re-derives the kit/wander-dependent per-entry statics without resetting the
-    /// running wander phase, and swaps every live body's compiled tuning/actions/program in place — bodies keep their
+    /// motion/producer retune, a seat-kit or assignment change, or a whole-document swap): re-quantizes the fixed tables,
+    /// re-resolves every entry's kit index, re-derives the kit/producer-dependent per-entry statics without resetting the
+    /// running producer phase, and swaps every live body's compiled tuning/actions/program in place — bodies keep their
     /// pose/velocity/tape, only the compiled feel swaps. Bumps <see cref="Revision"/> so the client rebuilds the avatar
     /// program. New activations re-seed fully from these fresh tables.</summary>
     /// <param name="definition">The new live definition.</param>
@@ -527,7 +527,7 @@ public sealed partial class WorldPopulation {
         // + the client program rebuild the bumped revision triggers). PRESENTATION-ONLY, so it touches no body state.
         ResolveLookIndices(definition: definition);
 
-        // Re-derive the kit/wander-dependent per-entry statics from the fresh tables, but keep the running wander phase
+        // Re-derive the kit/producer-dependent per-entry statics from the fresh tables, but keep the running producer phase
         // (resetPhase: false) so the live crowd's producer stays continuous — no phase jerk on a retune.
         for (var index = LocalSeatCount; (index < Capacity); index++) {
             SeedSimulated(
@@ -538,7 +538,7 @@ public sealed partial class WorldPopulation {
 
         for (var slot = 0; (slot < LocalSeatCount); slot++) {
             if (m_entries[slot].Active) {
-                SeedSeatWander(
+                SeedSeatSteeringProducer(
                     resetPhase: false,
                     slot: slot
                 );
