@@ -1200,6 +1200,29 @@ public static partial class WorldRuleCompiler {
             );
         }
 
+        if (string.Equals(
+            a: name,
+            b: WorldRuleFacts.PhysicsQuiescent,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            RefuseKeyOnReservedChannel(
+                key: key,
+                keyFieldLabel: keyFieldLabel,
+                name: name,
+                ruleName: ruleName
+            );
+
+            return new ResolvedOperand(
+                Operand: new CompiledWorldOperand(
+                    Kind: WorldRuleFactKind.PhysicsQuiescent,
+                    Row: null,
+                    Key: null
+                ),
+                ValueKind: CellKind.Bool,
+                Describe: describe
+            );
+        }
+
         if (name.StartsWith(
             comparisonType: StringComparison.Ordinal,
             value: WorldRuleFacts.RegionPrefix

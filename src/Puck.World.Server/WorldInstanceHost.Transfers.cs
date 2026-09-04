@@ -1705,6 +1705,15 @@ public sealed partial class WorldInstanceHost {
             return false;
         }
 
+        // A rigid kit's mass/inertia and momentum are meaningless without the source authority's own contact field
+        // and manifold state; carrying one across is out of scope, refused by name here rather than transferred
+        // silently as an inert avatar.
+        if (body.IsRigid) {
+            Console.Error.WriteLine(value: $"[world.transfer: refused (seat {(sourceSlot + 1)} in '{sourceName}' wears a rigid kit — cross-world transfer of a rigid body is not supported)]");
+
+            return false;
+        }
+
         if (!AllowsLeave(
             server: source.Server,
             principal: actingPrincipal,

@@ -1506,7 +1506,44 @@ two `solid` kits. Its `candidateBudget` caps inspected x-overlapping sweep
 pairs per body (default 16, maximum 32); `maxPairsPerBody` caps corrections
 incident to one body per tick (default 8, maximum 16). Saturation omits later
 stable-index pairs, so even a fully coincident 4096-body stadium has linear,
-authored work rather than an accidental all-pairs frame.
+authored work rather than an accidental all-pairs frame. Its
+`rigidSubstepCeiling` (default 8, maximum 32) bounds a rigid body's own
+per-tick continuous-collision substep count — the actual count is DERIVED
+per body per tick from speed and collider size against `rigidSubstepTravelFraction`
+(default 0.5, strictly positive — the fraction of the collider's own
+bounding radius one substep may travel) floored by `rigidSubstepMinimumTravel`
+(default 0.001 world units, strictly positive), never authored directly; the
+ceiling only bounds worst-case cost. `rigidRestLinearSpeed`/`rigidRestAngularSpeed`
+(default 0.05/0.1, non-negative) and `rigidRestHoldSeconds` (default 0.25,
+non-negative) are the thresholds and hold window that decide when a grounded
+rigid body's `Resting` fact latches. `rigidPairRestitutionSpeed` (default
+0.05, non-negative) is the closing-speed floor below which a rigid-vs-rigid
+contact restitutes at zero rather than the authored coefficient — a rigid
+pair carries no rising-edge latch, so without this floor two touching bodies
+would restitute a hair apart every tick they are found overlapping and never
+fully settle. See the
+[server reference](../Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs).
+
+### Rigid dynamics (`WorldRigid.cs`)
+
+A kit's optional `rigid` facet (`WorldRigid`: `mass`, `restitution`,
+`friction`, `rollingFriction`, `linearDamping`, `angularDamping`) hands its
+bodies to the rigid solver instead of a locomotion motion program — a passive
+physical entity such as a billiard ball, a bowling pin, or a chess piece.
+`mass` is required and strictly positive; `restitution` lies in `[0, 1]`;
+`friction` is a Coulomb coefficient at a contact point (non-negative, not
+bounded by 1) — the SAME meaning against the static world and, as the pair's
+average, against another rigid body; `rollingFriction`/`linearDamping`/`angularDamping`
+are non-negative per-second decay RATES (applied as `1 - rate·dt`, never a
+flat per-tick fraction, so the same authored value decays identically at any
+simulation rate). A rigid kit REQUIRES `collider` (sphere, capsule, or box — never
+`fromCreation`, whose compound shape has no single closed-form inertia) and
+`bodyContact: solid` (a rigid body that never depenetrates is inert). Mass and
+inertia derive from the collider's own shape and the authored mass through
+`Puck.Maths.FixedMassProperties` — density and the inertia tensor are never
+authored directly, matching the engine's derived-limits convention. See the
+[server reference](../Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)
+for integration, contact, and checkpoint/hash coverage.
 
 ## The `probes` section — probe and binding rows
 

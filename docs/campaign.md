@@ -432,6 +432,41 @@ diagonal peers are not yet exercised by it — widening its scripts is future wo
 **Owner decision:** no sixth track. Track 5 is aimed at the charter from the start, so its rule
 primitives land with the content that proves them.
 
+**Authorable rigid dynamics (owner decisions).** A rigid body is a kit facet
+(`rigid`), never a second body kind: physics-first authoring derives mass and
+inertia from the kit's own collider and an authored mass, never a free density
+or tensor. A kinematic character contributes its velocity to a rigid contact
+but is never itself pushed unless its own kit says so. Substep count for
+continuous collision is derived per body per tick from speed and collider
+size against an authored ceiling and an authored per-substep travel
+fraction, never a free per-tick knob. Restitution against the static world
+fires only on a genuine impact (the rising edge of contact) on EACH of the
+ground and obstruction contact channels independently, never every tick of
+continued rest — the naive per-tick reapplication is a stable non-decaying
+bounce, not a settling body, and conflating the two channels is what let a
+grounded ball's continuous floor contact mask a fresh wall impact. A
+rigid-vs-rigid pair carries no such latch, so its restitution is instead
+floored to zero below a small closing-speed threshold — the same "settle,
+don't chatter" intent applied to a contact with no rising-edge state of its
+own — the threshold is an authored field, not a C# constant. A pair's contact
+anchor is a real off-center surface point, never the body center, so a strike
+carries real torque; its tangential response is a real Coulomb impulse
+through the two-body kernel, clamped to the friction coefficient against the
+normal impulse just applied, never an independent rescale of either body's
+whole velocity (which would burn or invent momentum along the normal).
+Friction carries the SAME Coulomb meaning against the static world and
+against another rigid body — one authored coefficient, one physical model,
+never a decay rate; rolling friction and both damping channels remain
+authored per-second decay rates, not per-tick fractions, so one authored
+value decays identically at any simulation rate. Each substep rotates and
+translates the body about its own centre of mass, never its root, so a
+rolling collider's rendered position does not orbit the root as it spins.
+Cross-world transfer of a rigid body is
+out of scope and refused by name. The garden's `billiardsTray`/`bowlingLane`
+placements are the proof fixture; see the
+[server](../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)
+and [schema](../src/Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs) references.
+
 ## After this arc
 
 Owner review of this branch gates the next wave. Recorded as decisions, not status — none of this has

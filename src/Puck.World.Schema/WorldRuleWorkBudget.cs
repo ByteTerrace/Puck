@@ -235,7 +235,10 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
             return (RowCapacity(definition, operand.Row ?? string.Empty)
             );
         }
-        if (operand.Kind is WorldRuleFactKind.Nearest or WorldRuleFactKind.RegionOccupancy) {
+        // PhysicsQuiescent scans every population slot for an active rigid body not yet at rest
+        // (WorldPopulation.RigidBodiesQuiescent) — the same per-tick cost as Nearest/RegionOccupancy's own
+        // capacity-wide scan, so it is priced on the same terms rather than read as a free operand.
+        if (operand.Kind is WorldRuleFactKind.Nearest or WorldRuleFactKind.RegionOccupancy or WorldRuleFactKind.PhysicsQuiescent) {
             return definition.Population.Capacity;
         }
 

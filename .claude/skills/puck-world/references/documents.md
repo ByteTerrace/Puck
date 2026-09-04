@@ -600,7 +600,21 @@ cadence phase, cached steering, and overlap latches through checkpoint/hash.
 `solid` kits: at most 32 inspected candidates and 16 resolved pairs per body
 (defaults 16/8). Dense saturation omits later stable-index pairs. Do not couple
 these budgets to `collision.events`; sensing and physical correction are
-independent authored costs.
+independent authored costs. `rigidSubstepCeiling` (default 8, maximum 32)
+bounds a rigid body's own per-tick continuous-collision substep count against
+an authored `rigidSubstepTravelFraction` (default 0.5) — the count itself is
+derived per body per tick from speed and collider size, never authored
+directly. `rigidRestLinearSpeed`/`rigidRestAngularSpeed`/`rigidRestHoldSeconds`
+(defaults 0.05/0.1/0.25) are the thresholds and hold window a grounded rigid
+body's `Resting` fact latches against.
+
+A kit's `rigid` facet (`mass`, `restitution`, `friction`, `rollingFriction`,
+`linearDamping`, `angularDamping`) hands its bodies to the rigid solver
+instead of a locomotion program — see
+[the server reference](../../../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs).
+`mass` is required and positive; the other four are non-negative per-second
+decay rates, never per-tick fractions. Requires `collider` (sphere, capsule,
+or box — never `fromCreation`) and `bodyContact: solid`.
 
 ### `navigation` — bounded surface, flight, and medium routes
 
@@ -1478,8 +1492,9 @@ three channel names. Surface holds are not authored here.
 publishes each body's per-tick fact set on `EntitySnapshot.Facts` — one bit
 per body-state `ActionFact` (`grounded`, `airborne`, `rising`, `falling`,
 `submerged`, `atsurface`, `climbing` — holding a surface row whose face is
-outside the world's own walkable cone — and `flying` — holding a free row with
-lift; `AffectedBy` has no bit, being a relationship rather than a state). The mask is derived through the SAME
+outside the world's own walkable cone — `flying` — holding a free row with
+lift — and `resting`, written only by the rigid solver once a rigid body's
+linear and angular velocity latch to zero; `AffectedBy` has no bit, being a relationship rather than a state). The mask is derived through the SAME
 predicate the kit's action gates read, so the snapshot, the gates, and the
 `body.where` echo cannot disagree; a decoder refuses an undeclared bit by
 name. `WorldSessionMirror.Facts(int)` and `WorldClient.Facts(int)` front it

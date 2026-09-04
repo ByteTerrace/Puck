@@ -31,13 +31,27 @@ public sealed partial class WorldBody {
     /// <c>ElapsedTicks</c> rather than any tick this method captures.</param>
     /// <returns><see langword="true"/> when <paramref name="engageProbeOrdinal"/>'s rising edge fired this tick
     /// (the caller should engage); otherwise <see langword="false"/>.</returns>
+    /// <param name="rigidPolicy">The authored, once-compiled rigid-contact tunables <see cref="AdvanceRigid"/> reads;
+    /// ignored for a locomotion kit.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> is zero.</exception>
-    internal bool Advance(ulong tick, ulong stepTicks, int? engageProbeOrdinal = null, int entityIndex = -1, BodyEffectTargets effectTargets = default, List<BodyEffectOutput>? effectOutputs = null, List<WorldDesignation>? designationOutputs = null, List<WorldGeneratorInvocation>? generatorInvocations = null, List<WorldJudgeInvocation>? judgeInvocations = null) {
+    internal bool Advance(ulong tick, ulong stepTicks, RigidContactPolicy rigidPolicy, int? engageProbeOrdinal = null, int entityIndex = -1, BodyEffectTargets effectTargets = default, List<BodyEffectOutput>? effectOutputs = null, List<WorldDesignation>? designationOutputs = null, List<WorldGeneratorInvocation>? generatorInvocations = null, List<WorldJudgeInvocation>? judgeInvocations = null) {
         ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
 
         // Captured before ExecuteProgram (or the overlay add below) can move m_position — the swept portal-crossing
         // scan's segment start for this step. A hard teleport between scans overwrites this separately (CommitTeleport).
         m_previousPosition = m_position;
+
+        // A rigid kit hands the whole step to the rigid solver instead of the grounded/free motion program: no
+        // intent, action track, or hold list applies to a passive rigid entity.
+        if (m_rigid is not null) {
+            AdvanceRigid(
+                entityIndex: entityIndex,
+                stepTicks: stepTicks,
+                policy: rigidPolicy
+            );
+
+            return false;
+        }
 
         ApplyDurableInput(tick: tick);
         MaterializeDefaultLanePresses(stepTicks: stepTicks);

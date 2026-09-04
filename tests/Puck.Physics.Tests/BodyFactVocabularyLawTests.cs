@@ -44,7 +44,7 @@ public sealed class BodyFactVocabularyLawTests {
         );
         Assert.Equal(
             actual: BodyFactVocabulary.Describe(facts: BodyFacts.All),
-            expected: "grounded|airborne|rising|falling|submerged|atsurface|climbing|flying"
+            expected: "grounded|airborne|rising|falling|submerged|atsurface|climbing|flying|resting"
         );
     }
     [Fact]

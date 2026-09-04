@@ -392,6 +392,7 @@ public sealed partial class WorldServer {
         WorldRuleFactKind.Board => Finite(ReadBoardFact(operand, tick), CellKind.Int),
         WorldRuleFactKind.Tick => Finite(value: unchecked((long)tick), kind: CellKind.Int),
         WorldRuleFactKind.Population => Finite(value: m_population.ActiveCount(), kind: CellKind.Int),
+        WorldRuleFactKind.PhysicsQuiescent => Finite(value: (m_population.RigidBodiesQuiescent() ? 1 : 0), kind: CellKind.Bool),
         WorldRuleFactKind.RegionOccupancy => Finite(value: m_events.OccupantCount(placementId: operand.Row!), kind: CellKind.Int),
         // $link: — the same per-tick staleness the link event family's own threshold comparison reads, in SIMULATION
         // ticks. An edge whose livenessGraceSeconds is unauthored is held at 0 by the feed itself, so a staleness

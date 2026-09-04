@@ -737,6 +737,16 @@ public sealed partial class WorldBody {
     /// a hold turns the axis back or seats it outright.</param>
     /// <param name="Home">The position this body was activated at — the anchor its producer steers against. Not
     /// re-derivable after the fact (a teleport never moves it), so a checkpoint carries it.</param>
+    /// <param name="RigidVelocity">A rigid kit's linear velocity; zero for a locomotion kit.</param>
+    /// <param name="RigidAngularVelocity">A rigid kit's angular velocity; zero for a locomotion kit.</param>
+    /// <param name="RigidResting">A rigid kit's resting latch; always <see langword="false"/> for a locomotion kit.</param>
+    /// <param name="RigidRestingHoldTicks">A rigid kit's elapsed engine ticks under the resting thresholds so far,
+    /// carried across a checkpoint so a restore does not re-arm the hold window from zero mid-settle.</param>
+    /// <param name="RigidGroundContacting">A rigid kit's ground-channel restitution edge latch — whether the
+    /// previous substep already had a walkable contact, so a restore does not read a genuine mid-rest tick as a
+    /// fresh impact.</param>
+    /// <param name="RigidObstructionContacting">A rigid kit's obstruction-channel restitution edge latch, on the
+    /// same terms as <paramref name="RigidGroundContacting"/> but for the last non-walkable (wall) contact.</param>
     public readonly record struct IntegrationResidue(
         FixedVector3 PreviousPosition,
         long PositionRemainderX,
@@ -767,7 +777,13 @@ public sealed partial class WorldBody {
         FixedVector3 AttitudeUp,
         long AttitudeTurnRemainder,
         bool AttitudeLeaned,
-        FixedVector3 Home
+        FixedVector3 Home,
+        FixedVector3 RigidVelocity,
+        FixedVector3 RigidAngularVelocity,
+        bool RigidResting,
+        ulong RigidRestingHoldTicks,
+        bool RigidGroundContacting,
+        bool RigidObstructionContacting
     );
     /// <summary>The checkpoint-only attachment state that remains meaningful only inside the same authoritative
     /// world's coordinate frame. It is intentionally not part of <see cref="TransferState"/>: a cross-world transfer
@@ -826,7 +842,13 @@ public sealed partial class WorldBody {
         AttitudeUp: m_attitudeUp,
         AttitudeTurnRemainder: m_attitudeTurnAccumulator.Remainder,
         AttitudeLeaned: m_attitudeLeaned,
-        Home: m_home
+        Home: m_home,
+        RigidVelocity: m_rigidVelocity,
+        RigidAngularVelocity: m_angularVelocity,
+        RigidResting: m_resting,
+        RigidRestingHoldTicks: m_restingHoldTicks,
+        RigidGroundContacting: m_rigidGroundContacting,
+        RigidObstructionContacting: m_rigidObstructionContacting
     );
     /// <summary>Restores a previously captured integration residue onto this body — called after
     /// <see cref="Pose(FixedVector3, FixedQ4816, FixedQ4816, FixedQ4816)"/> has already set position/orientation and
@@ -895,5 +917,11 @@ public sealed partial class WorldBody {
         );
         m_tetherAnchorBodyIndex = attachment.TetherAnchorBodyIndex;
         m_tetherAnchorPointOrLocalOffset = attachment.TetherAnchorPointOrLocalOffset;
+        m_rigidVelocity = residue.RigidVelocity;
+        m_angularVelocity = residue.RigidAngularVelocity;
+        m_resting = residue.RigidResting;
+        m_restingHoldTicks = residue.RigidRestingHoldTicks;
+        m_rigidGroundContacting = residue.RigidGroundContacting;
+        m_rigidObstructionContacting = residue.RigidObstructionContacting;
     }
 }

@@ -44,6 +44,7 @@ public sealed partial class WorldPopulation {
         m_bodyUpPolicy = WorldBodyUpPolicyCompiler.Compile(collision: definition.Collision);
         m_walkableThreshold = FixedWorldCollision.Compile(collision: definition.Collision).GroundedThreshold;
         m_bodyContactPolicy = definition.Collision.BodyContacts;
+        m_rigidContactPolicy = RigidContactPolicy.FromAuthored(policy: m_bodyContactPolicy);
         m_targetRows = definition.TargetRegisters;
         m_targets = WorldTargetRegisterTable.Compile(
             registers: definition.TargetRegisters,
@@ -567,6 +568,7 @@ public sealed partial class WorldPopulation {
                 program: kit.BodyMotionProgram,
                 programs: m_bodyMotionPrograms,
                 collider: kit.Collider,
+                rigid: kit.Rigid,
                 maxSmoothError: m_fixedMotion.MaxSmoothError,
                 holds: kit.Holds
             );
@@ -630,6 +632,7 @@ public sealed partial class WorldPopulation {
         DynamicContactLimitedBodies = 0;
         DynamicContactNarrowPairs = 0;
         DynamicContactResolvedPairs = 0;
+        RigidPairResolvedCount = 0;
         Array.Clear(array: m_dynamicContactDegrees);
 
         for (var leftOrdinal = 0; (leftOrdinal < count); leftOrdinal++) {
@@ -678,10 +681,18 @@ public sealed partial class WorldPopulation {
                     tieBreaker: leftIndex ^ rightIndex,
                     correction: out var correction
                 )) {
-                    var shared = (correction / two);
+                    if (left.IsRigid || right.IsRigid) {
+                        ResolveRigidPairContact(
+                            left: left,
+                            right: right,
+                            correction: correction
+                        );
+                    } else {
+                        var shared = (correction / two);
 
-                    left.ApplyDynamicContact(correction: shared);
-                    right.ApplyDynamicContact(correction: -shared);
+                        left.ApplyDynamicContact(correction: shared);
+                        right.ApplyDynamicContact(correction: -shared);
+                    }
                     m_dynamicContactDegrees[leftIndex]++;
                     m_dynamicContactDegrees[rightIndex]++;
                     DynamicContactResolvedPairs++;

@@ -391,7 +391,9 @@ public sealed partial class WorldBody {
     /// <param name="maxSmoothError">The compiled world-distance correction smoothing threshold.</param>
     /// <param name="holds">The kit's compiled ordered hold list (<see cref="FixedWorldKit.Holds"/>), or
     /// <see langword="null"/> for a kit authoring none.</param>
-    public void RecompileKit(FixedMotionTuning tuning, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, FixedBodyHold[]? holds = null) {
+    /// <param name="rigid">The kit's compiled rigid-dynamics facet (<see cref="FixedWorldKit.Rigid"/>), or
+    /// <see langword="null"/> for a locomotion kit.</param>
+    public void RecompileKit(FixedMotionTuning tuning, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, FixedBodyHold[]? holds = null, FixedWorldRigid? rigid = null) {
         SetTuning(
             holds: holds,
             tuning: tuning
@@ -405,7 +407,25 @@ public sealed partial class WorldBody {
         m_roleOrdinals = roleOrdinals;
         CompileActionState(state: actionState);
         m_collider = collider;
+
+        var hadRigidFacet = (m_rigid is not null);
+
+        m_rigid = rigid;
         m_maxSmoothError = maxSmoothError;
+
+        if (hadRigidFacet != (rigid is not null)) {
+            // The rigid facet's own presence just changed (a document mutation swapped this slot between a rigid
+            // kit and a locomotion one) — reset every rigid-solver-owned field rather than let the OTHER kind of
+            // body's stale state leak forward: slot reuse must never inherit a previous occupant's simulation state.
+            // A live retune that keeps the facet (mass/friction/etc change while staying rigid) does NOT hit this —
+            // its velocity survives, on the same terms m_planarVelocity survives a locomotion retune.
+            m_rigidVelocity = FixedVector3.Zero;
+            m_angularVelocity = FixedVector3.Zero;
+            m_resting = false;
+            m_restingHoldTicks = 0UL;
+            m_rigidGroundContacting = false;
+            m_rigidObstructionContacting = false;
+        }
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
             m_laneActions[lane] = default;
