@@ -9,7 +9,8 @@ namespace Puck.World.Schema.Tests;
 /// Laws pinning the review corrections around the state traits and draw sites: the runtime cell validator refuses
 /// every shape the boot walk refuses, a drive-gate row never carries a cycling cell, persisted dealt masks must fit
 /// their source, a fractional comparand lowers to the exact integer gate, a rule's generate reaches a lattice draw
-/// fill, and dynamics state rides the fixed spelling on every row kind.
+/// fill, dynamics state rides the fixed spelling on every row kind, and a motion row's ground-stick bias compiles
+/// independently of the kit's own speed.
 /// </summary>
 public sealed class ReviewFixLawTests {
     private static WorldDefinition Definition(IReadOnlyList<WorldStateRow> rows, IReadOnlyList<WorldRule>? rules = null, IReadOnlyList<WorldGeneratorRow>? generators = null) => new(
@@ -172,5 +173,30 @@ public sealed class ReviewFixLawTests {
         var restored = WorldDefinitionSerialization.Deserialize(bytes);
 
         Assert.Equal(expected: row.Dynamics, actual: WorldDefinitionRows.FindStateRow(rows: restored.State, name: "gauge")!.Dynamics);
+    }
+    [Fact]
+    public void GroundStick_CompilesIndependentlyOfSpeed_AndDefaultsToTheEngineConstant() {
+        static FixedMotionTuning Compile(float speed, float? groundStick = null) => WorldMotionTuningFactory.Compile(
+            tuning: new WorldMotion(
+                Speed: new WorldSpeed(Value: speed),
+                Turn: new WorldTurn(Rate: 1f),
+                GroundStick: (groundStick ?? 2f)
+            ),
+            channels: WorldChannelTable.Empty,
+            dynamics: [],
+            simulationRateHz: 240
+        );
+        var slow = Compile(speed: 1f);
+        var fast = Compile(speed: 50f);
+
+        // A faster kit's own resolved move speed must never widen the surface catch-up bias: scaling it by speed
+        // over-corrects a shallow slope climb (the bias converts to downhill drift under depenetration faster than
+        // it converts to held contact).
+        Assert.Equal(expected: slow.GroundStick, actual: fast.GroundStick);
+        Assert.Equal(expected: FixedQ4816.FromDouble(value: 2d), actual: slow.GroundStick);
+
+        var authored = Compile(speed: 1f, groundStick: 5f);
+
+        Assert.Equal(expected: FixedQ4816.FromDouble(value: 5d), actual: authored.GroundStick);
     }
 }

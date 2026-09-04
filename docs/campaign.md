@@ -507,18 +507,22 @@ placements are the proof fixture; see the
 and [schema](../src/Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs) references.
 
 **Locomotion feel is a kit field, not a baked constant (owner decision).**
-`WorldBody`'s per-tick catch-up bias against a curving surface (the old flat
-`StickSpeed`) now equals the kit's own resolved move speed — a slower kit was
-already under-covered by a single global value tuned for one speed, and a
-faster one over-corrected; both now catch up at exactly their own pace, with
-no separate authoring surface (it rides the existing `motion.speed`). The
-up-axis steering ceilings (how fast a solved gravity field, and separately a
-measured ground-contact normal, may turn a body's up axis), the drive frame's
-pitch clamp, and the non-walkable-contact witness's latch (displacement,
-idle threshold, grace) are genuine feel, not derivable from anything else a
-document declares — each is now a `motion` row field (`upTurn`, `turn.maxPitch`,
-`obstruction`) whose default reproduces the engine's old hardcoded value bit
-for bit, so no shipped world's behavior moved. `world.kits` echoes all four.
+`WorldBody`'s per-tick catch-up bias against a curving surface (`StickSpeed`,
+the old flat `2.0`) is genuine feel, not a value derivable from the kit's own
+resolved move speed: a first pass tried deriving it from speed and measurably
+regressed slope climbing on any `GradientDerivedUp` world (a faster kit's
+larger inward bias converts into downhill drift under depenetration faster
+than it converts into held contact) — no shipped world caught it because none
+authors `GradientDerivedUp`. It is now its own `motion` row field
+(`groundStick`), independent of `motion.speed`, defaulting to the engine's old
+`2.0` bit for bit. The up-axis steering ceilings (how fast a solved gravity
+field, and separately a measured ground-contact normal, may turn a body's up
+axis), the drive frame's pitch clamp, and the non-walkable-contact witness's
+latch (displacement, idle threshold, grace) are likewise genuine feel, not
+derivable from anything else a document declares — each is a `motion` row
+field (`upTurn`, `turn.maxPitch`, `obstruction`) whose default reproduces the
+engine's old hardcoded value bit for bit, so no shipped world's behavior
+moved. `world.kits` echoes all five.
 
 **Discrete-topology capacity constants are derived, not restated (owner
 decision).** The hex radius ceiling, the document-wide board-storage budget,

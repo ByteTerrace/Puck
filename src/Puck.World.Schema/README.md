@@ -363,7 +363,11 @@ every kit rides is documented on its kit's `WorldMotion`
 row (`Speed`/`Turn`, `MoveFrame`/`FacingSnap`, the up-axis steering ceilings
 `upTurn` (field/contact) and the obstruction-witness latch `obstruction`
 (displacement/idleThreshold/graceSeconds) — both default to the engine's own
-rates; `Turn.MaxPitch` is the drive frame's own pitch clamp), the
+rates; `Turn.MaxPitch` is the drive frame's own pitch clamp; `groundStick` is
+the inward speed a grounded body on a curving surface is held against,
+independent of `Speed` — a kit's own resolved move speed measurably
+over-corrects a shallow slope climb, so it is its own field, defaulting to the
+engine's old constant), the
 frame its MoveAdvance/MoveStrafe channel rows are authored in
 (`channels[].frame`, `ChannelFrame`: `World` raw, `Camera` camera-relative and
 facing its travel, `Heading` body-relative with `Turn` steering — the stick's

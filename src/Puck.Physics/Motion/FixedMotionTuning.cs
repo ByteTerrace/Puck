@@ -143,7 +143,8 @@ public readonly record struct FixedMotionTuning(
     MotionMoveFrame MoveFrame,
     bool FacingSnap,
     FixedUpTurnRates UpTurn,
-    FixedObstructionLatch Obstruction
+    FixedObstructionLatch Obstruction,
+    FixedQ4816 GroundStick
 ) {
     /// <summary>Gets the number of recency clocks the shaping table's recency gates share.</summary>
     public int RecencySlots => ShapingRecencyFacts.Length;

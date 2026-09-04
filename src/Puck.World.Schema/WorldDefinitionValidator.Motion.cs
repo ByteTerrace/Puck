@@ -285,6 +285,12 @@ public static partial class WorldDefinitionValidator {
             obstruction: tuning.Obstruction,
             path: $"{path}.obstruction"
         );
+
+        RequirePositive(
+            value: tuning.GroundStick,
+            name: $"{path}.groundStick",
+            errors: errors
+        );
     }
     // A kit's movement rate: a positive fallback speed, its optional seat-time envelope (absent is wide-open), and
     // its optional held multiplier (a misspelled channel name is otherwise a silent, permanent no-op).

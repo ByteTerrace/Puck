@@ -42,6 +42,13 @@ namespace Puck.World;
 /// <param name="ObstructionRaw">The non-walkable contact witness's latch tuning — see
 /// <see cref="WorldObstructionLatch"/>. Omitted (<see langword="null"/>) reproduces the engine's own latch exactly;
 /// read the effective latch from <see cref="Obstruction"/>.</param>
+/// <param name="GroundStick">The inward speed (world units/second) a grounded body on a curving surface (the
+/// up policy is not world-up) is held against while it is not already moving into it at least that fast —
+/// depenetration removes whatever the surface curves away, so a walker's own speed cannot carry it clean off a
+/// convex surface between ticks. Independent of <see cref="Speed"/>: scaling this bias with a kit's own resolved
+/// move speed over-corrects a shallow slope, where a larger inward bias converts into downhill drift under
+/// depenetration faster than it converts into held contact. The default reproduces the engine's old hardcoded
+/// constant.</param>
 public sealed record WorldMotion(
     WorldSpeed Speed,
     WorldTurn Turn,
@@ -50,7 +57,8 @@ public sealed record WorldMotion(
     bool FacingSnap = true,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldHold>? Holds = null,
     [property: JsonPropertyName("upTurn"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldUpTurnRates? UpTurnRaw = null,
-    [property: JsonPropertyName("obstruction"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldObstructionLatch? ObstructionRaw = null
+    [property: JsonPropertyName("obstruction"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldObstructionLatch? ObstructionRaw = null,
+    float GroundStick = 2f
 ) {
     /// <summary>Gets the up-axis steering rates, defaulted when the kit authors none.</summary>
     [JsonIgnore]
@@ -382,7 +390,8 @@ public static class WorldMotionTuningFactory {
                 DisplacementSquared: FixedQ4816.FromDouble(value: ((double)tuning.Obstruction.Displacement * tuning.Obstruction.Displacement)),
                 IdleThreshold: FixedQ4816.FromDouble(value: tuning.Obstruction.IdleThreshold),
                 GraceTicks: FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: tuning.Obstruction.GraceSeconds))
-            )
+            ),
+            GroundStick: FixedQ4816.FromDouble(value: tuning.GroundStick)
         );
     }
 }

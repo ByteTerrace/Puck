@@ -476,6 +476,7 @@ public sealed class DriveLawTests {
             (motion => motion with { ObstructionRaw = (motion.Obstruction with { Displacement = 0f }) }, "obstruction.displacement"),
             (motion => motion with { ObstructionRaw = (motion.Obstruction with { IdleThreshold = -1f }) }, "obstruction.idleThreshold"),
             (motion => motion with { ObstructionRaw = (motion.Obstruction with { GraceSeconds = 0f }) }, "obstruction.graceSeconds"),
+            (motion => motion with { GroundStick = 0f }, "groundStick"),
             (motion => motion with { Shaping = [motion.Shaping![0] with { When = new ActionPredicate.Held(Channel: "nope") }, motion.Shaping[1]] }, "shaping[0].when.channel"),
             (motion => motion with { Shaping = [motion.Shaping![0] with { Across = motion.Shaping[0].Across! with { Grip = 0f } }, motion.Shaping[1]] }, "shaping[0].across.grip"),
             (motion => motion with { Shaping = [motion.Shaping![0] with { TurnScale = 0f }, motion.Shaping[1]] }, "shaping[0].turnScale"),

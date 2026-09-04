@@ -473,6 +473,11 @@
                 },
                 "additionalProperties": false,
                 "default": null
+              },
+              "groundStick": {
+                "description": "The inward speed (world units/second) a grounded body on a curving surface (the up policy is not world-up) is held against while it is not already moving into it at least that fast \u2014 depenetration removes whatever the surface curves away, so a walker\u0027s own speed cannot carry it clean off a convex surface between ticks. Independent of Speed: scaling this bias with a kit\u0027s own resolved move speed over-corrects a shallow slope, where a larger inward bias converts into downhill drift under depenetration faster than it converts into held contact. The default reproduces the engine\u0027s old hardcoded constant.",
+                "type": "number",
+                "default": 2
               }
             },
             "required": [
