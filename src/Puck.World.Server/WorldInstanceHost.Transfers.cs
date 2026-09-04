@@ -1719,6 +1719,16 @@ public sealed partial class WorldInstanceHost {
             return false;
         }
 
+        // A carried rigid body's pose is derived from the carrier's own frame every tick (WorldBody.Carry.cs) —
+        // there is no destination authority for it to keep deriving from once the carrier lands elsewhere, and the
+        // rigid-kit refusal above already blocks transferring the passenger directly. Refuse the carrier's own
+        // transfer instead of silently dropping or orphaning what it holds.
+        if (body.Carrying is not null) {
+            Console.Error.WriteLine(value: $"[world.transfer: refused (seat {(sourceSlot + 1)} in '{sourceName}' is carrying body:{body.Carrying} — cross-world transfer while carrying is not supported)]");
+
+            return false;
+        }
+
         if (!AllowsLeave(
             server: source.Server,
             principal: actingPrincipal,

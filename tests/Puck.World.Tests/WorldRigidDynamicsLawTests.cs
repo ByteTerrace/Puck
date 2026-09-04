@@ -50,11 +50,14 @@ public sealed class WorldRigidDynamicsLawTests {
 
         var approachVelocity = FixedQ4816.FromDouble(value: 4d);
 
-        mover.ApplyRigidImpulse(impulse: new FixedVector3(
-            X: (approachVelocity * mover.RigidMass),
-            Y: FixedQ4816.Zero,
-            Z: FixedQ4816.Zero
-        ));
+        mover.TryApplyRigidImpulse(
+            impulse: new FixedVector3(
+                X: (approachVelocity * mover.RigidMass),
+                Y: FixedQ4816.Zero,
+                Z: FixedQ4816.Zero
+            ),
+            velocityCeiling: FixedQ4816.FromDouble(value: 1_000d)
+        );
 
         var momentumBefore = ((mover.RigidMass * mover.RigidVelocity.X) + (target.RigidMass * target.RigidVelocity.X));
 
@@ -134,11 +137,14 @@ public sealed class WorldRigidDynamicsLawTests {
         var ball = fixture.Server.Body(index: 0)!;
 
         ball.Pose(x: 0f, y: 3f, z: 0f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
-        ball.ApplyRigidImpulse(impulse: new FixedVector3(
-            X: FixedQ4816.FromDouble(value: 2d),
-            Y: FixedQ4816.Zero,
-            Z: FixedQ4816.FromDouble(value: 0.7d)
-        ));
+        ball.TryApplyRigidImpulse(
+            impulse: new FixedVector3(
+                X: FixedQ4816.FromDouble(value: 2d),
+                Y: FixedQ4816.Zero,
+                Z: FixedQ4816.FromDouble(value: 0.7d)
+            ),
+            velocityCeiling: FixedQ4816.FromDouble(value: 1_000d)
+        );
 
         for (var tick = 0; (tick < 100); tick++) {
             fixture.Step();

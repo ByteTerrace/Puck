@@ -285,6 +285,34 @@ public static partial class WorldDefinitionValidator {
             }
         }
     }
+    private static void ValidateCarry(WorldCarry? carry, string path, List<string> errors) {
+        if (carry is null) {
+            return;
+        }
+
+        if (!IsFinite(value: carry.Offset)) {
+            errors.Add(item: $"{path}.offset must be finite.");
+        }
+
+        RequirePositive(
+            value: carry.MassEquivalent,
+            name: $"{path}.massEquivalent",
+            errors: errors
+        );
+
+        if (
+            !float.IsFinite(f: carry.MaxCarryFraction) ||
+            (carry.MaxCarryFraction < 0f)
+        ) {
+            errors.Add(item: $"{path}.maxCarryFraction must be finite and non-negative.");
+        }
+
+        RequirePositive(
+            value: carry.MaxReach,
+            name: $"{path}.maxReach",
+            errors: errors
+        );
+    }
     private static void ValidateCollider(WorldCollider? collider, IReadOnlyList<WorldPrototype> creations, string path, List<string> errors) {
         if (collider is null) {
             return;
@@ -979,6 +1007,11 @@ public static partial class WorldDefinitionValidator {
                 collider: kit.Collider,
                 bodyContact: kit.BodyContact,
                 path: $"{path}.rigid",
+                errors: errors
+            );
+            ValidateCarry(
+                carry: kit.Carry,
+                path: $"{path}.carry",
                 errors: errors
             );
         }

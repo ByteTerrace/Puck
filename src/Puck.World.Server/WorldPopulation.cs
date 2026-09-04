@@ -172,6 +172,12 @@ public sealed partial class WorldPopulation {
     // recompile) rather than every AdvanceRigid call — the same "authored float, compiled once" split every other
     // per-document tunable in this file already keeps.
     private RigidContactPolicy m_rigidContactPolicy = RigidContactPolicy.FromAuthored(policy: WorldBodyContactPolicy.Default);
+    // The document-derived speed ceiling (WorldFacePortalPolicy.SpeedCeiling) a rigid impulse's resulting velocity
+    // is refused past — see RigidVelocityCeiling.
+    private FixedQ4816 m_rigidVelocityCeiling;
+    // Whether ANY compiled kit authors a carry facet — UpdateCarriedBodies' whole-population sweep is a no-op
+    // (never even enters its loop) for a world where this is false, the overwhelming common case.
+    private bool m_anyCarryCapableKit;
     // The fixed-point derived tables — recompiled in place by Rebuild when a sim-affecting section mutates (a live kit
     // tune, motion/wander retune, seat-kit or assignment change), so they are no longer readonly.
     private FixedMotionDefaults m_fixedMotion;

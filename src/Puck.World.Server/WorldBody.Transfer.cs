@@ -99,6 +99,12 @@ public sealed partial class WorldBody {
             (m_contactField is { } field) &&
             (m_collider is { } collider)
         ) {
+            Span<FixedBodyColliderVolume> continuumScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
+            var volumes = ScaledColliderVolumes(
+                volumes: collider.Volumes,
+                scratch: continuumScratch
+            );
+
             resolution = ((field is IEntityContactField entityField)
                 ? entityField.ResolveEntitySweep(
                     entityIndex: entityIndex,
@@ -107,7 +113,7 @@ public sealed partial class WorldBody {
                     up: in m_up,
                     velocity: ref velocity,
                     orientation: in m_orientation,
-                    volumes: collider.Volumes
+                    volumes: volumes
                 )
                 : field.ResolveSweep(
                     previousPosition: trajectory.PreviousPosition,
@@ -115,7 +121,7 @@ public sealed partial class WorldBody {
                     up: in m_up,
                     velocity: ref velocity,
                     orientation: in m_orientation,
-                    volumes: collider.Volumes
+                    volumes: volumes
                 )
             );
         }
@@ -747,6 +753,13 @@ public sealed partial class WorldBody {
     /// fresh impact.</param>
     /// <param name="RigidObstructionContacting">A rigid kit's obstruction-channel restitution edge latch, on the
     /// same terms as <paramref name="RigidGroundContacting"/> but for the last non-walkable (wall) contact.</param>
+    /// <param name="RigidGroundMissStreak">The ground-channel contact's consecutive-miss run —
+    /// <see cref="WorldBody.RigidGroundMissStreak"/> — carried so a restore does not grant a fresh grace window a
+    /// checkpoint interrupted mid-run.</param>
+    /// <param name="RigidObstructionMissStreak">The obstruction-channel contact's consecutive-miss run, on the same
+    /// terms as <paramref name="RigidGroundMissStreak"/>.</param>
+    /// <param name="Carrying">The population index of the body this one is carrying, or <c>-1</c>.</param>
+    /// <param name="CarriedBy">The population index of the body carrying this one, or <c>-1</c>.</param>
     public readonly record struct IntegrationResidue(
         FixedVector3 PreviousPosition,
         long PositionRemainderX,
@@ -783,7 +796,11 @@ public sealed partial class WorldBody {
         bool RigidResting,
         ulong RigidRestingHoldTicks,
         bool RigidGroundContacting,
-        bool RigidObstructionContacting
+        bool RigidObstructionContacting,
+        int RigidGroundMissStreak,
+        int RigidObstructionMissStreak,
+        int Carrying,
+        int CarriedBy
     );
     /// <summary>The checkpoint-only attachment state that remains meaningful only inside the same authoritative
     /// world's coordinate frame. It is intentionally not part of <see cref="TransferState"/>: a cross-world transfer
@@ -848,7 +865,11 @@ public sealed partial class WorldBody {
         RigidResting: m_resting,
         RigidRestingHoldTicks: m_restingHoldTicks,
         RigidGroundContacting: m_rigidGroundContacting,
-        RigidObstructionContacting: m_rigidObstructionContacting
+        RigidObstructionContacting: m_rigidObstructionContacting,
+        RigidGroundMissStreak: m_rigidGroundMissStreak,
+        RigidObstructionMissStreak: m_rigidObstructionMissStreak,
+        Carrying: m_carryingIndex,
+        CarriedBy: m_carriedByIndex
     );
     /// <summary>Restores a previously captured integration residue onto this body — called after
     /// <see cref="Pose(FixedVector3, FixedQ4816, FixedQ4816, FixedQ4816)"/> has already set position/orientation and
@@ -923,5 +944,9 @@ public sealed partial class WorldBody {
         m_restingHoldTicks = residue.RigidRestingHoldTicks;
         m_rigidGroundContacting = residue.RigidGroundContacting;
         m_rigidObstructionContacting = residue.RigidObstructionContacting;
+        m_rigidGroundMissStreak = residue.RigidGroundMissStreak;
+        m_rigidObstructionMissStreak = residue.RigidObstructionMissStreak;
+        m_carryingIndex = residue.Carrying;
+        m_carriedByIndex = residue.CarriedBy;
     }
 }

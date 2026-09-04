@@ -42,6 +42,14 @@ public sealed partial class WorldBody {
         // scan's segment start for this step. A hard teleport between scans overwrites this separately (CommitTeleport).
         m_previousPosition = m_position;
 
+        // A carried body's pose and rigid velocity are DERIVED from its carrier every tick (WorldBody.FollowCarrier,
+        // called from WorldPopulation.UpdateCarriedBodies after both advance passes complete) — its own integration
+        // is suspended for as long as CarriedBy stays set, so this tick's Advance is a pure no-op rather than
+        // running gravity/contact against a pose FollowCarrier is about to overwrite anyway.
+        if (m_carriedByIndex >= 0) {
+            return false;
+        }
+
         // A rigid kit hands the whole step to the rigid solver instead of the grounded/free motion program: no
         // intent, action track, or hold list applies to a passive rigid entity.
         if (m_rigid is not null) {

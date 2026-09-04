@@ -400,6 +400,15 @@ are the garden's proof fixture — see the
 for the mechanics and the [schema reference](../Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs)
 for the authored facet.
 
+A kit carrying a `carry` facet may pick up another kit's rigid body:
+`body.carry <carrier> <target>` begins it (within an authored reach and mass
+ceiling, both scaling with the carrier's own live `Scale`), `body.release
+[carrier]` ends it; a carried body's own rigid integration is suspended and
+its pose is derived from the carrier's frame every tick, re-entering the
+solver with the carrier's own velocity on release. `body.where` echoes
+`carrying=`/`carriedBy=` while the relationship holds. The garden's `walker`
+kit (Wren) is the worked example — see the [server reference](../Puck.World.Server/README.md#carry-as-attachment-worldbodycarrycs-worldpopulationcarrycs).
+
 World-space creation text uses the document's optional `text` catalog. Every
 font row has a stable name, a path relative to the world document, a
 `sha256-64/...` content pin, explicit Unicode scalar ranges, and an optional

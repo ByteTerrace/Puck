@@ -1453,6 +1453,7 @@ public sealed partial class WorldServer {
             engageProbeOrdinals: engageProbeOrdinals,
             engageEdges: engageEdges
         );
+        m_population.UpdateCarriedBodies();
         m_population.ResolveDynamicContacts();
         m_population.ResolveTethers();
         m_population.CompleteStep(tick: tick);

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
 using Puck.Abstractions.Presentation;
@@ -1044,6 +1045,21 @@ public static partial class WorldDefinitionValidator {
                         (cell.Dynamics is not null)
                     ) {
                         errors.Add(item: $"bodies.scaleRow names state row '{scaleRow}', whose cell '{cell.Key}' declares an advance/cycle/dynamics trait — WorldPopulation.SyncBodyScale resyncs it at tick 0 only, so a value-over-time cell would read its base value forever instead of progressing.");
+                    }
+                    // The SAME parse WorldPopulation.SyncBodyScale runs at every resync: a key that fails it is
+                    // silently skipped there rather than read, so an author typo (a non-integer key, or an index
+                    // outside the authored population) would otherwise author a cell nothing ever reads.
+                    if (
+                        !int.TryParse(
+                        s: cell.Key,
+                        style: NumberStyles.Integer,
+                        provider: CultureInfo.InvariantCulture,
+                        result: out var scaleBodyIndex
+                    ) ||
+                        (scaleBodyIndex < 0) ||
+                        (scaleBodyIndex >= definition.Population.Capacity)
+                    ) {
+                        errors.Add(item: $"bodies.scaleRow names state row '{scaleRow}', whose cell key '{cell.Key}' is not a 0-based body index inside 0..{(definition.Population.Capacity - 1)}.");
                     }
                 }
             }

@@ -1111,10 +1111,12 @@ rendered rig AND the seat chase camera's orbit distance and look-at height
 speck on screen. A `tabletop` placement (a solid pedestal table, 1.2 m clearance under its top) sits
 beyond the bottle, and the `table` spawn point stands a body north of both, facing south — inside the
 `eatMe` region already, so an unshrunk arrival reads `scale=1` from the first tick. `body.where`'s
-`scale=` echo is the read-back. Body-vs-body contact, overlap events, adjacency transfer sweeps, and the
-cross-boundary continuum trajectory still read a kit's shared UNSCALED collider volumes — only the
-self-collision sweep does not; a shrunk body's contact with the world is correct, its contact with
-other bodies is not yet.
+`scale=` echo is the read-back. Body-vs-body contact, overlap events, the cross-boundary continuum
+trajectory, the adjacency sweep's LOCAL side, and the self-collision sweep all read each body's
+live-scaled collider volumes; a rigid body's mass, inertia, bounding radius, centre of mass (`com=` on
+`body.where`), and linear rest threshold scale with it too (`WorldBody.ScaleRigid`). Only the adjacency
+sweep's REMOTE side (a neighbour authority's own entities) still reads an unscaled collider, since no
+delivered snapshot yet carries a remote entity's live Scale.
 An explicit path or the shipped default that cannot be loaded refuses the boot by name.
 `puck.world.frozen.json` ships beside them: the frozen floating-island diorama, reference-only,
 reachable via `--world`, never extended, deleted on owner order — the worked examples this file cites

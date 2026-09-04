@@ -1617,18 +1617,56 @@ public sealed partial class WorldServer {
                 break;
             case WorldCommand.RigidImpulse impulse:
                 if (!body.IsRigid) {
-                    var denial = $"body:{command.EntityIndex} carries no rigid kit facet";
+                    var notRigidDenial = $"body:{command.EntityIndex} carries no rigid kit facet";
 
-                    Console.Error.WriteLine(value: $"[body.impulse denied: {denial}]");
+                    Console.Error.WriteLine(value: $"[body.impulse denied: {notRigidDenial}]");
                     NoteDriveRefusalIfTracked(
                         command: command,
-                        reason: denial
+                        reason: notRigidDenial
                     );
 
                     break;
                 }
 
-                body.ApplyRigidImpulse(impulse: FixedVector3.FromVector3(value: impulse.Impulse));
+                if (!body.TryApplyRigidImpulse(
+                    impulse: FixedVector3.FromVector3(value: impulse.Impulse),
+                    velocityCeiling: m_population.RigidVelocityCeiling
+                )) {
+                    var overflowDenial = $"body:{command.EntityIndex} impulse is not representable or would exceed the world's declared speed ceiling ({(double)m_population.RigidVelocityCeiling:0.###})";
+
+                    Console.Error.WriteLine(value: $"[body.impulse denied: {overflowDenial}]");
+                    NoteDriveRefusalIfTracked(
+                        command: command,
+                        reason: overflowDenial
+                    );
+                }
+
+                break;
+            case WorldCommand.CarryBody carry:
+                if (!m_population.TryBeginCarry(
+                    carrierIndex: command.EntityIndex,
+                    targetIndex: carry.TargetIndex,
+                    reason: out var carryDenial
+                )) {
+                    Console.Error.WriteLine(value: $"[body.carry denied: body:{command.EntityIndex} {carryDenial}]");
+                    NoteDriveRefusalIfTracked(
+                        command: command,
+                        reason: carryDenial
+                    );
+                }
+
+                break;
+            case WorldCommand.ReleaseCarry:
+                if (!m_population.TryEndCarry(
+                    carrierIndex: command.EntityIndex,
+                    reason: out var releaseDenial
+                )) {
+                    Console.Error.WriteLine(value: $"[body.release denied: body:{command.EntityIndex} {releaseDenial}]");
+                    NoteDriveRefusalIfTracked(
+                        command: command,
+                        reason: releaseDenial
+                    );
+                }
 
                 break;
             case WorldCommand.EnqueueSegment segment:

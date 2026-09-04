@@ -157,12 +157,16 @@ public sealed partial class WorldBody {
     /// <summary>Formats the standalone <c>body.where</c> echo — the bracket-tagged, index-prefixed line a piped run
     /// asserts against — as the full 6DOF pose plus the fact mask:
     /// <c>[body.where: body:{N} pos=(x.xx, y.yy, z.zz) yaw=ddd° pitch=ddd° roll=ddd° facts=grounded|climbing
-    /// home=(x.xx, y.yy, z.zz) scale=s.ss]</c>. One format always. A grounded entity keeps a canonical level
-    /// orientation — <c>pitch=0 roll=0</c> — while <c>y</c> is its resolved ground foot point (<c>0.00</c> on the
-    /// flat plane, following the contact field where solids lift it). <c>facts=</c> is <see cref="Facts"/> spelled
-    /// lower-case and <c>|</c>-joined in bit order (<c>none</c> when empty), the same mask the snapshot publishes.
-    /// <c>scale=</c> is <see cref="Scale"/> — 1.00 for every body under a world authoring no <c>bodies.scaleRow</c>.
-    /// The bare planar fragment is <see cref="DescribePose"/>.</summary>
+    /// home=(x.xx, y.yy, z.zz) scale=s.ss com=(x.xx, y.yy, z.zz)]</c>. One format always. A grounded entity keeps a
+    /// canonical level orientation — <c>pitch=0 roll=0</c> — while <c>y</c> is its resolved ground foot point
+    /// (<c>0.00</c> on the flat plane, following the contact field where solids lift it). <c>facts=</c> is
+    /// <see cref="Facts"/> spelled lower-case and <c>|</c>-joined in bit order (<c>none</c> when empty), the same
+    /// mask the snapshot publishes. <c>scale=</c> is <see cref="Scale"/> — 1.00 for every body under a world
+    /// authoring no <c>bodies.scaleRow</c>. <c>com=</c> trails only for a rigid-kit body — <see cref="RigidCenterOfMass"/>,
+    /// which orbits away from <c>pos=</c> (the root) for a rolling or tumbling rigid body while <c>pos=</c> itself
+    /// stays the root every kit shares. <c>carrying=</c> trails only while <see cref="Carrying"/> is set, and
+    /// <c>carriedBy=</c> only while <see cref="CarriedBy"/> is — both absent for every body outside a carry
+    /// relationship. The bare planar fragment is <see cref="DescribePose"/>.</summary>
     /// <param name="index">The 0-based body index to tag the line with.</param>
     /// <returns>The full bracketed <c>body.where</c> echo line.</returns>
     public string DescribeWhere(int index) {
@@ -170,10 +174,22 @@ public sealed partial class WorldBody {
         var home = m_home.ToVector3();
         var position = m_position.ToVector3();
         var scale = ((double)m_scale);
+        var com = (IsRigid ? RigidCenterOfMass.ToVector3() : default);
+        var comSuffix = (IsRigid
+            ? string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $" com=({com.X:0.00}, {com.Y:0.00}, {com.Z:0.00})"
+            )
+            : string.Empty
+        );
+        var carrySuffix = string.Concat(
+            (Carrying is { } carrying ? $" carrying={carrying}" : string.Empty),
+            (CarriedBy is { } carriedBy ? $" carriedBy={carriedBy}" : string.Empty)
+        );
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[body.where: body:{index} pos=({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: yaw):0}° pitch={CompassDegrees(radians: pitch):0}° roll={CompassDegrees(radians: roll):0}° facts={BodyFactVocabulary.Describe(facts: Facts)} home=({home.X:0.00}, {home.Y:0.00}, {home.Z:0.00}) scale={scale:0.00}]"
+            handler: $"[body.where: body:{index} pos=({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: yaw):0}° pitch={CompassDegrees(radians: pitch):0}° roll={CompassDegrees(radians: roll):0}° facts={BodyFactVocabulary.Describe(facts: Facts)} home=({home.X:0.00}, {home.Y:0.00}, {home.Z:0.00}) scale={scale:0.00}{comSuffix}{carrySuffix}]"
         );
     }
     /// <summary>Enqueues a timed scripted segment onto the tape: while it is live it drives the avatar with
@@ -396,7 +412,9 @@ public sealed partial class WorldBody {
     /// <see langword="null"/> for a kit authoring none.</param>
     /// <param name="rigid">The kit's compiled rigid-dynamics facet (<see cref="FixedWorldKit.Rigid"/>), or
     /// <see langword="null"/> for a locomotion kit.</param>
-    public void RecompileKit(FixedMotionTuning tuning, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, FixedBodyHold[]? holds = null, FixedWorldRigid? rigid = null) {
+    /// <param name="carry">The kit's compiled carry facet (<see cref="FixedWorldKit.Carry"/>), or
+    /// <see langword="null"/> for a kit that can never pick up a rigid body.</param>
+    public void RecompileKit(FixedMotionTuning tuning, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, FixedBodyHold[]? holds = null, FixedWorldRigid? rigid = null, FixedWorldCarry? carry = null) {
         SetTuning(
             holds: holds,
             tuning: tuning
@@ -428,7 +446,24 @@ public sealed partial class WorldBody {
             m_restingHoldTicks = 0UL;
             m_rigidGroundContacting = false;
             m_rigidObstructionContacting = false;
+            m_rigidGroundMissStreak = 0;
+            m_rigidObstructionMissStreak = 0;
+            // Losing the rigid facet mid-carry drops this body's OWN half of the relationship on the same terms as
+            // the carry-facet branch above; the carrier's mirrored Carrying is left for a population-level sweep.
+            m_carriedByIndex = -1;
         }
+
+        // A live kit retune away from carry-capable while this body is mid-carry drops its OWN half of the
+        // relationship (Carrying reads null, the census stops counting it); the target's mirrored CarriedBy is left
+        // for a population-level sweep to notice and release, since only WorldPopulation holds both sides.
+        if (
+            (m_carry is not null) &&
+            (carry is null)
+        ) {
+            m_carryingIndex = -1;
+        }
+
+        m_carry = carry;
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
             m_laneActions[lane] = default;

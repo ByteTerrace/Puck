@@ -45,6 +45,7 @@ public sealed partial class WorldPopulation {
         m_walkableThreshold = FixedWorldCollision.Compile(collision: definition.Collision).GroundedThreshold;
         m_bodyContactPolicy = definition.Collision.BodyContacts;
         m_rigidContactPolicy = RigidContactPolicy.FromAuthored(policy: m_bodyContactPolicy);
+        m_rigidVelocityCeiling = WorldFacePortalPolicy.SpeedCeiling(definition: definition);
         m_targetRows = definition.TargetRegisters;
         m_targets = WorldTargetRegisterTable.Compile(
             registers: definition.TargetRegisters,
@@ -74,6 +75,11 @@ public sealed partial class WorldPopulation {
                 simulationRateHz: definition.SimulationRateHz
             );
         }
+
+        m_anyCarryCapableKit = Array.Exists(
+            array: m_kits,
+            match: static kit => (kit.Carry is not null)
+        );
 
         CompileFlocks();
 
@@ -569,6 +575,7 @@ public sealed partial class WorldPopulation {
                 programs: m_bodyMotionPrograms,
                 collider: kit.Collider,
                 rigid: kit.Rigid,
+                carry: kit.Carry,
                 maxSmoothError: m_fixedMotion.MaxSmoothError,
                 holds: kit.Holds
             );
@@ -603,17 +610,25 @@ public sealed partial class WorldPopulation {
         var two = FixedQ4816.FromInteger(value: 2L);
         var contacts = m_dynamicContactBodies;
         var count = 0;
+        // Hoisted out of every loop below (CA2014): one reused stack buffer per role, its contents fully overwritten
+        // by ScaledColliderVolumes on every call, never read across bodies.
+        Span<FixedBodyColliderVolume> broadphaseScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
+        Span<FixedBodyColliderVolume> leftScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
+        Span<FixedBodyColliderVolume> rightScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
 
         for (var index = 0; (index < Capacity); index++) {
             if (
                 !m_entries[index].Active ||
                 (BodyContact(index: index) != WorldBodyContactMode.Solid) ||
-                (m_entries[index].Body is not { Collider: { } collider, OrdinaryAdvanceAdmitted: true } body)
+                (m_entries[index].Body is not { Collider: { } collider, OrdinaryAdvanceAdmitted: true, CarriedBy: null } body)
             ) {
                 continue;
             }
 
-            var radius = FixedDynamicBodyContacts.BroadphaseRadius(volumes: collider.Volumes);
+            var radius = FixedDynamicBodyContacts.BroadphaseRadius(volumes: body.ScaledColliderVolumes(
+                volumes: collider.Volumes,
+                scratch: broadphaseScratch
+            ));
 
             contacts[count++] = new DynamicContactBody(
                 Index: index,
@@ -674,10 +689,16 @@ public sealed partial class WorldPopulation {
                 if (FixedDynamicBodyContacts.TryCorrection(
                     leftPosition: left.FixedPosition,
                     leftOrientation: left.FixedOrientation,
-                    leftVolumes: leftCollider.Volumes,
+                    leftVolumes: left.ScaledColliderVolumes(
+                        volumes: leftCollider.Volumes,
+                        scratch: leftScratch
+                    ),
                     rightPosition: right.FixedPosition,
                     rightOrientation: right.FixedOrientation,
-                    rightVolumes: rightCollider.Volumes,
+                    rightVolumes: right.ScaledColliderVolumes(
+                        volumes: rightCollider.Volumes,
+                        scratch: rightScratch
+                    ),
                     tieBreaker: leftIndex ^ rightIndex,
                     correction: out var correction
                 )) {

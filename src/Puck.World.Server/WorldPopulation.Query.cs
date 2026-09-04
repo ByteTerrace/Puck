@@ -135,13 +135,16 @@ public sealed partial class WorldPopulation {
 
         return count;
     }
-    /// <summary>Returns whether every active rigid body currently latches
-    /// <see cref="Puck.Physics.Motion.ActionFact.Resting"/> — the <c>$physics:quiescent</c> rule fact. Vacuously
-    /// <see langword="true"/> when the world activates no rigid body.</summary>
+    /// <summary>Returns whether every active, UNCARRIED rigid body currently latches
+    /// <see cref="Puck.Physics.Motion.ActionFact.Resting"/> — the <c>$physics:quiescent</c> rule fact. A carried
+    /// body's own integration is suspended (its pose is derived from its carrier, never solved), so it contributes
+    /// neither a settle nor a bounce here — carrying the world's one rigid body off a resting surface must not read
+    /// as newly quiescent, and neither must it read as newly unsettled. Vacuously <see langword="true"/> when the
+    /// world activates no rigid body.</summary>
     public bool RigidBodiesQuiescent() {
         for (var index = 0; (index < m_entries.Length); index++) {
             if (
-                (m_entries[index] is { Active: true, Body: { IsRigid: true, Resting: false } })
+                (m_entries[index] is { Active: true, Body: { IsRigid: true, Resting: false, CarriedBy: null } })
             ) {
                 return false;
             }
@@ -676,6 +679,7 @@ public sealed partial class WorldPopulation {
             actionState: kit.ActionState,
             collider: kit.Collider,
             rigid: kit.Rigid,
+            carry: kit.Carry,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             holds: kit.Holds
         ) {
