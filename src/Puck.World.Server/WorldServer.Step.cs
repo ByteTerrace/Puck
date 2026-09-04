@@ -208,18 +208,21 @@ public sealed partial class WorldServer {
             if (rule.ForEach is { } forEach) {
                 // The keys are snapshotted before the first evaluation, so an effect minting a cell (a status
                 // applied to a new carrier) starts ticking next tick, never mid-iteration.
-                CarrierKeys(
-                    into: m_carrierScratchLeft,
+                EachKeys(
+                    into: m_eachKeyScratch,
                     row: forEach
                 );
                 latch.BeginSweep();
 
-                foreach (var key in m_carrierScratchLeft) {
-                    m_boundEach = key;
+                for (var position = 0; position < m_eachKeyScratch.Count; position++) {
+                    var key = m_eachKeyScratch[position];
+                    var numeric = WorldStateReader.TryParseCandidateIndex(index: out var index, key: key);
+                    m_boundEach = numeric ? index : -1;
+                    m_boundEachKey = key.Value;
                     applied |= EvaluateOnce(
                         latch: latch,
                         binding: new LatchKey(
-                            Left: key,
+                            Left: numeric ? index : (PositionalLatchBase | position),
                             Right: -1
                         ),
                         bindings: bindings,
@@ -230,6 +233,7 @@ public sealed partial class WorldServer {
                 }
 
                 m_boundEach = -1;
+                m_boundEachKey = null;
                 latch.EndSweep(bindings: bindings);
 
                 continue;
@@ -401,6 +405,25 @@ public sealed partial class WorldServer {
     }
     // The integer keys a keyed row holds at this moment, ascending — the iteration set of a forEach rule. Fills the
     // caller's scratch list; the cells themselves are not retained.
+    // A latch key for a non-integer forEach cell: its position in the row, flagged above any body index.
+    private const int PositionalLatchBase = 0x4000_0000;
+    private readonly List<WorldCellName> m_eachKeyScratch = [];
+    private string? m_boundEachKey;
+
+    // Every cell key of the iterated row in cell order; an integer key also binds the body of that index.
+    private void EachKeys(string row, List<WorldCellName> into) {
+        into.Clear();
+
+        if (WorldDefinitionRows.FindStateRow(
+            rows: m_definition.State,
+            name: row
+        ) is { Cells: { } cells }) {
+            for (var index = 0; index < cells.Count; index++) {
+                into.Add(item: cells[index].Key);
+            }
+        }
+    }
+
     private void CarrierKeys(string row, List<int> into) {
         into.Clear();
 

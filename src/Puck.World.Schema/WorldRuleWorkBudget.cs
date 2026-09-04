@@ -206,6 +206,10 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 var count = WorldTopologyCompilation.Find(definition.StateRaw, board.Board!.Topology)!.CellCount;
                 cost += (long)count * (count + 2);
                 break;
+            case WorldStateTransform.Transfer transfer:
+                var dealt = WorldDefinitionRows.FindStateRow(definition.State, transfer.From)!;
+                cost += (long)transfer.Count * (dealt.Capacity ?? dealt.CellCeiling);
+                break;
             case WorldStateTransform.Sort sort:
                 var sorted = WorldDefinitionRows.FindStateRow(definition.State, sort.Row)!;
                 cost += 2L * (sorted.Capacity ?? sorted.CellCeiling) * Math.Max(1, sort.By?.Count ?? 1);

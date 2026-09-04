@@ -6,7 +6,10 @@ namespace Puck.World;
 /// <summary>Declares the stable token identities shared by attribute and zone rows.</summary>
 /// <param name="Capacity">The greatest token count, 1 through 4096.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldStateTokens(int Capacity = 256);
+public sealed record WorldStateTokens(int Capacity = 256) {
+    /// <summary>The most tokens one domain declares, and the most one transfer moves.</summary>
+    public const int MaxCapacity = 256;
+}
 
 /// <summary>A ring of the last <paramref name="Capacity"/> values pushed into the row, oldest overwritten first:
 /// the temporal twin of a board ray, read by <c>$history:</c> facts and matched by <c>$match:</c> in push order.
@@ -112,8 +115,10 @@ public abstract record WorldStateTransform {
     /// <param name="Key">The token key for key selection.</param>
     /// <param name="InsertFirst">Insert at the first position rather than the last.</param>
     /// <param name="Draw">A streamDraw site for random selection; absent for other selectors.</param>
+    /// <param name="Count">How many tokens move in this one transfer, 1..256, each selected afresh from what remains
+    /// (a five-card deal is one mutation); a key selection moves exactly one.</param>
     public sealed record Transfer(string From, string To, WorldZoneSelector Selector = WorldZoneSelector.Key,
-        string? Key = null, bool InsertFirst = false, string? Draw = null) : WorldStateTransform;
+        string? Key = null, bool InsertFirst = false, string? Draw = null, int Count = 1) : WorldStateTransform;
 
     /// <summary>Writes only a nonempty run of matching cells closed by a required terminator; otherwise refuses.</summary>
     /// <param name="Row">The board row.</param>

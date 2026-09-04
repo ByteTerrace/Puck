@@ -90,8 +90,9 @@ writes the cell-wise set operation of two boards over one topology into a
 third as 1/0, the board algebra for topologies too large for one mask. The same operation travels
 as the `TransformState` document mutation. Transfers preserve keys and accept
 `Key`, `First`, `Last`, or `Random` selectors; random selection names a
-redrawable integer `streamDraw` site. A cursor advances only with the committed
-transfer. `setRay` changes a nonempty run of `through` cells closed by `until`;
+redrawable integer `streamDraw` site, and `count` (1..256) moves that many
+tokens in one mutation, each selected afresh from what remains, so a deal is
+one journal entry. A cursor advances only with the committed transfer. `setRay` changes a nonempty run of `through` cells closed by `until`;
 it excludes the origin and terminator and refuses a broken bracket.
 `moveToken` checks all position rows over the topology for occupancy, searches
 within `maxVisits`, and debits the token's allowance atomically with its move.
@@ -127,7 +128,9 @@ authority. Phase eligibility does not grant access to another player's units.
 
 `visibility: {}` opts a row into public literal observations. `readers` limits
 that audience to canonical authenticated principals; `readers: []` retains it
-at the authority. Row and cell restrictions intersect. What a hidden entry
+at the authority; `readersFrom` names a keyed text row whose cell texts are
+tokens admitted beside `readers`, so a rule widens the audience by writing a
+token (a showdown reveals a hand) and narrows it by clearing one. Row and cell restrictions intersect. What a hidden entry
 leaves behind is the row's `visibility.hidden` policy: `Omit` (the default)
 drops it with its key and pile position; `Count` reports only `hiddenCount`
 on the observed row; `Placeholder` keeps each hidden entry in pile order as an
@@ -1245,7 +1248,9 @@ their evaluation order do not consume its draws. A weighted choice with
 multiple positive options uses one 64-bit ticket (two PCG32 draws); this bounds
 work without a rejection loop, with probability quantization below 2^-64 per
 option. A deterministic choice, no choice, or one positive option consumes no
-draws. Numeric aliases of the same `forEach` key evaluate once. Removing a
+draws. Numeric aliases of the same `forEach` key evaluate once. A rule's
+`forEach` iterates any keyed row: an integer key also binds the `each` body,
+a non-integer key (a card or piece token) binds `$each` alone. Removing a
 binding, replacing a body generation, or changing the source policy starts a
 new decision episode; unrelated recompilation retains the episode and refreshes
 its compiled state handles.

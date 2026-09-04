@@ -121,43 +121,65 @@ public static partial class WorldStateTransforms {
         if ((transfer.Selector == WorldZoneSelector.Key) != (transfer.Key is not null) || (transfer.Selector == WorldZoneSelector.Random) != (transfer.Draw is not null)) {
             return Refuse("key selection requires only key; random selection requires only draw", out reason);
         }
-        var cells = (source.Cells ?? []).ToList();
-        if (cells.Count == 0) {
-            return Refuse("source zone is empty", out reason);
+        if (transfer.Count < 1 || transfer.Count > WorldStateTokens.MaxCapacity || (transfer.Selector == WorldZoneSelector.Key && transfer.Count != 1)) {
+            return Refuse($"transfer count must be 1..{WorldStateTokens.MaxCapacity}, and exactly 1 for a key selection", out reason);
         }
-        if (from != to && (destination.Cells?.Count ?? 0) >= (destination.Capacity ?? destination.CellCeiling)) {
+        var cells = (source.Cells ?? []).ToList();
+        if (cells.Count < transfer.Count) {
+            return Refuse((cells.Count == 0) ? "source zone is empty" : $"source zone holds {cells.Count} tokens, fewer than the {transfer.Count} to transfer", out reason);
+        }
+        var target = from == to ? cells : (destination.Cells ?? []).ToList();
+        if (from != to && (target.Count + transfer.Count) > (destination.Capacity ?? destination.CellCeiling)) {
             return Refuse("destination zone is full", out reason);
         }
-        var selected = transfer.Selector switch {
-            WorldZoneSelector.First => 0,
-            WorldZoneSelector.Last => cells.Count - 1,
-            WorldZoneSelector.Key => cells.FindIndex(c => c.Key.Value == transfer.Key),
-            _ => 0,
-        };
+        var drawIndex = -1;
+        WorldStateRow? site = null;
+        WorldGenerator generator = default!;
+        WorldDraw draw = default!;
+        ulong seed = 0;
+        ulong stream = 0;
+        var cursor = 0L;
+        var lastSample = 0L;
         if (transfer.Selector == WorldZoneSelector.Random) {
-            if (!TryFind(rows, transfer.Draw!, out var drawIndex, out reason)) {
+            if (!TryFind(rows, transfer.Draw!, out drawIndex, out reason)) {
                 return false;
             }
-            var site = rows[drawIndex];
-            if (!TryResolveDrawSite(definition, site, instance, "random transfer", out var generator, out var draw, out var seed, out var stream, out reason)) {
+            site = rows[drawIndex];
+            if (!TryResolveDrawSite(definition, site, instance, "random transfer", out generator, out draw, out seed, out stream, out reason)) {
                 return false;
             }
-            if (!WorldGeneratorEngine.TryFire(generator, site.Kind, seed, stream, site.DrawCursor, site.DrawDecks, out var fired, out reason, draw.Secret)) {
-                return false;
+            cursor = site.DrawCursor;
+        }
+        // Each token is selected afresh from what remains, so a random deal samples once per card and a
+        // positional deal walks the pile from its chosen end.
+        for (var moved = 0; moved < transfer.Count; moved++) {
+            var selected = transfer.Selector switch {
+                WorldZoneSelector.First => 0,
+                WorldZoneSelector.Last => cells.Count - 1,
+                WorldZoneSelector.Key => cells.FindIndex(c => c.Key.Value == transfer.Key),
+                _ => 0,
+            };
+            if (transfer.Selector == WorldZoneSelector.Random) {
+                if (!WorldGeneratorEngine.TryFire(generator, site!.Kind, seed, stream, cursor, site.DrawDecks, out var fired, out reason, draw.Secret)) {
+                    return false;
+                }
+                cursor = checked(cursor + fired.Samples);
+                lastSample = fired.Numeric!.Value;
+                selected = (int)(((ulong)lastSample * (ulong)cells.Count) >> 32);
             }
-            selected = (int)(((ulong)fired.Numeric!.Value * (ulong)cells.Count) >> 32);
-            rows[drawIndex] = site with { DrawCursor = checked(site.DrawCursor + fired.Samples), Cells = [new(WorldStateRow.SlotKey, fired.Numeric.Value)] };
+            if (selected < 0) {
+                return Refuse("source zone does not contain the selected token", out reason);
+            }
+            var token = cells[selected];
+            cells.RemoveAt(selected);
+            if (target.Any(c => c.Key == token.Key)) {
+                return Refuse("destination already contains the token", out reason);
+            }
+            target.Insert(transfer.InsertFirst ? 0 : target.Count, token);
         }
-        if (selected < 0) {
-            return Refuse("source zone does not contain the selected token", out reason);
+        if (site is not null) {
+            rows[drawIndex] = site with { DrawCursor = cursor, Cells = [new(WorldStateRow.SlotKey, lastSample)] };
         }
-        var token = cells[selected];
-        cells.RemoveAt(selected);
-        var target = from == to ? cells : (destination.Cells ?? []).ToList();
-        if (target.Any(c => c.Key == token.Key)) {
-            return Refuse("destination already contains the token", out reason);
-        }
-        target.Insert(transfer.InsertFirst ? 0 : target.Count, token);
         rows[from] = source with { Cells = cells };
         rows[to] = destination with { Cells = target };
         return true;

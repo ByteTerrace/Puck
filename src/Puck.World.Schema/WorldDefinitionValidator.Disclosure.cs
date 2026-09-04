@@ -15,6 +15,7 @@ public static partial class WorldDefinitionValidator {
 
             storage += row.Capacity ?? (row.Board is { } board ? WorldTopologyCompilation.Find(definition.StateRaw, board.Topology)?.CellCount ?? row.CellCeiling : row.CellCeiling);
             ValidateVisibility(row.Visibility, row.Name.Value, errors);
+            ValidateReadersFrom(definition, row.Visibility, row.Name.Value, errors);
             if (row.Draw is { Secret: { } secret } draw && (secret.IsEmpty || row.Kind != CellKind.Int || !WorldGeneratorEngine.TryResolveSource(definition.Generators, draw, out var generator, out _) || generator.Source != WorldGeneratorSource.StreamDraw || generator.Mode != WorldGeneratorMode.WithReplacement)) {
                 errors.Add($"state row {row.Name}: secret requires a nonzero key and an integer streamDraw source with replacement.");
             }
@@ -24,6 +25,7 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 ValidateVisibility(cell.Visibility, row.Name.Value, errors);
+                ValidateReadersFrom(definition, cell.Visibility, row.Name.Value, errors);
                 if (row.IsSlot && cell.Visibility is not null) {
                     errors.Add($"state row '{row.Name}': slot visibility belongs on the row.");
                 }
@@ -50,6 +52,17 @@ public static partial class WorldDefinitionValidator {
         }
         if (storage > 262_144) {
             errors.Add("state declared cell storage exceeds the 262144-cell world budget.");
+        }
+    }
+
+    // The live audience row is keyed text: each cell's text is one canonical token, and a rule rewrites it.
+    private static void ValidateReadersFrom(WorldDefinition definition, WorldStateVisibility? visibility, string name, List<string> errors) {
+        if (visibility?.ReadersFrom is not { } source) {
+            return;
+        }
+        var row = WorldDefinitionRows.FindStateRow(definition.State, source);
+        if (row is null || row.Kind != CellKind.Text || !row.IsKeyed || row.Visibility is not null || row.Name.Value == name) {
+            errors.Add($"state row '{name}': visibility.readersFrom must name a distinct public keyed text row.");
         }
     }
 

@@ -3995,6 +3995,11 @@
             "null"
           ],
           "default": null
+        },
+        "count": {
+          "description": "How many tokens move in this one transfer, 1..256, each selected afresh from what remains (a five-card deal is one mutation); a key selection moves exactly one.",
+          "type": "integer",
+          "default": 1
         }
       },
       "required": [

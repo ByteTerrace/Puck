@@ -103,8 +103,10 @@ namespace Puck.World;
 /// <param name="Gate">The predicate that must hold, or <see langword="null"/> for always.</param>
 /// <param name="ForEach">A keyed state row to iterate, or <see langword="null"/> for one evaluation per tick. With
 /// a row named, the gate and effects evaluate once per cell the row holds at the top of the tick, with
-/// <c>$each</c> bound to that cell's key (a body index by convention) — the quantifier that lets one rule tick a
-/// status for every body carrying it. The latch is kept per key.</param>
+/// <c>$each</c> bound to that cell's key — the quantifier that lets one rule tick a status for every body carrying
+/// it, or one rule judge every piece or card of a keyed row. An integer key also binds the <c>each</c> body
+/// reference; a non-integer key binds <c>$each</c> alone. The latch is kept per key, by the key's value when it
+/// is an integer and by its position in the row otherwise.</param>
 /// <param name="Mode">Without a Decision, whether the rule fires every tick the gate holds (<see cref="ActionTriggerMode.Level"/>, the
 /// default) or once per crossing (<see cref="ActionTriggerMode.Edge"/>). A rule that writes a row almost always wants
 /// <see cref="ActionTriggerMode.Edge"/>: level-firing an <c>addState</c> is what wrote 503 journal entries in 500

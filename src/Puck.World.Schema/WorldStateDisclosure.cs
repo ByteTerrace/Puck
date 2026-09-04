@@ -19,19 +19,44 @@ public enum WorldHiddenCells : byte {
 /// Row and cell policies intersect. Replica-tier authorities remain fully trusted.</summary>
 /// <param name="Readers">Canonical authenticated principal tokens; no seat or peer identity comes from the request payload.</param>
 /// <param name="Hidden">What an observer who may read the row learns about the cells it may not.</param>
+/// <param name="ReadersFrom">A keyed text row whose cell texts are principal tokens admitted beside
+/// <paramref name="Readers"/>: the live audience a rule widens by writing a token (a showdown reveals a hand) or
+/// narrows by clearing one. Either list alone, or both, keeps the row private; neither makes it public.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldStateVisibility(IReadOnlyList<string>? Readers = null, WorldHiddenCells Hidden = WorldHiddenCells.Omit) {
+public sealed record WorldStateVisibility(IReadOnlyList<string>? Readers = null, WorldHiddenCells Hidden = WorldHiddenCells.Omit,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ReadersFrom = null) {
+    /// <summary>Gets a value indicating whether the policy admits the public observer: no reader list of either kind.</summary>
+    public bool IsPublic => Readers is null && ReadersFrom is null;
+
     /// <summary>Whether this observation policy admits the recipient named by its canonical token, or the public
     /// observer when the token is null.</summary>
     public bool Allows(string? recipient) {
-        if (Readers is null) {
+        if (IsPublic) {
             return true;
         }
-        if (recipient is null) {
+        if (recipient is null || Readers is null) {
             return false;
         }
         for (var index = 0; index < Readers.Count; index++) {
             if (string.Equals(Readers[index], recipient, StringComparison.Ordinal)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>Whether the policy admits the recipient through its static list or the live text row.</summary>
+    /// <param name="recipient">The canonical token, or null for the public observer.</param>
+    /// <param name="definition">The document the live row is read from.</param>
+    public bool Allows(string? recipient, WorldDefinition definition) {
+        if (Allows(recipient)) {
+            return true;
+        }
+        if (recipient is null || ReadersFrom is null || WorldDefinitionRows.FindStateRow(definition.State, ReadersFrom) is not { Cells: { } cells }) {
+            return false;
+        }
+        for (var index = 0; index < cells.Count; index++) {
+            if (string.Equals(cells[index].Text, recipient, StringComparison.Ordinal)) {
                 return true;
             }
         }
@@ -73,7 +98,7 @@ public static class WorldStateDisclosure {
                 continue;
             }
 
-            if (row.Visibility is { } policy && !policy.Allows(observer.Name)) {
+            if (row.Visibility is { } policy && !policy.Allows(observer.Name, definition)) {
                 continue;
             }
 
@@ -106,7 +131,7 @@ public static class WorldStateDisclosure {
     public static void ValidateBindings(WorldDefinition definition, object graph, WorldPrincipal? recipient) {
         var observer = new Observer(definition, recipient);
         foreach (var row in definition.State) {
-            if (!(row.Cells ?? []).Any(c => !observer.CanRead(row, c)) && (row.Visibility is null || row.Visibility.Allows(observer.Name))) {
+            if (!(row.Cells ?? []).Any(c => !observer.CanRead(row, c)) && (row.Visibility is null || row.Visibility.Allows(observer.Name, definition))) {
                 continue;
             }
 
@@ -120,8 +145,10 @@ public static class WorldStateDisclosure {
     // token domain once, so a cell's read check costs the members of its own domain's zones and nothing else.
     private readonly struct Observer {
         private readonly Dictionary<string, List<WorldStateRow>> m_zonesByDomain;
+        private readonly WorldDefinition m_definition;
 
         public Observer(WorldDefinition definition, WorldPrincipal? recipient) {
+            m_definition = definition;
             Name = recipient?.Describe();
             m_zonesByDomain = new(StringComparer.Ordinal);
             foreach (var row in definition.State) {
@@ -139,7 +166,7 @@ public static class WorldStateDisclosure {
         public string? Name { get; }
 
         public bool CanRead(WorldStateRow row, WorldStateCell cell) {
-            if ((row.Visibility is { } policy && !policy.Allows(Name)) || (cell.Visibility is { } cellPolicy && !cellPolicy.Allows(Name))) {
+            if ((row.Visibility is { } policy && !policy.Allows(Name, m_definition)) || (cell.Visibility is { } cellPolicy && !cellPolicy.Allows(Name, m_definition))) {
                 return false;
             }
 
@@ -154,7 +181,7 @@ public static class WorldStateDisclosure {
                         continue;
                     }
 
-                    if ((zone.Visibility is { } zonePolicy && !zonePolicy.Allows(Name)) || (member.Visibility is { } memberPolicy && !memberPolicy.Allows(Name))) {
+                    if ((zone.Visibility is { } zonePolicy && !zonePolicy.Allows(Name, m_definition)) || (member.Visibility is { } memberPolicy && !memberPolicy.Allows(Name, m_definition))) {
                         return false;
                     }
                 }

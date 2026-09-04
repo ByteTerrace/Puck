@@ -559,6 +559,9 @@ public sealed partial class WorldServer {
         if (indirection.Binding == RuleBinding.Token) {
             return m_patternTokenKey ?? throw new InvalidOperationException("a $token key was read outside a pattern value expression");
         }
+        if (indirection.Binding == RuleBinding.Each && m_boundEachKey is { } eachKey) {
+            return eachKey;
+        }
 
         var index = ((indirection.Binding != RuleBinding.None)
             ? BoundBody(binding: indirection.Binding)
