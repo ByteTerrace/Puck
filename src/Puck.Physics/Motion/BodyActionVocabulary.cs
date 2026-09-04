@@ -41,6 +41,10 @@ public enum ActionFact : byte {
 
     /// <summary>The body holds itself up with no surface at all — a free hold with lift.</summary>
     Flying,
+
+    /// <summary>A rigid body's linear and angular velocity have latched to zero after settling — written by the
+    /// rigid solver, never by a locomotion program.</summary>
+    Resting,
 }
 /// <summary>The publishable per-body fact set — one bit per body-state <see cref="ActionFact"/>, so the simulation's
 /// predicates and the wire share one vocabulary rather than a parallel enum. <see cref="ActionFact.AffectedBy"/> has
@@ -77,8 +81,11 @@ public enum BodyFacts : ushort {
     /// <inheritdoc cref="ActionFact.Flying"/>
     Flying = (1 << 7),
 
+    /// <inheritdoc cref="ActionFact.Resting"/>
+    Resting = (1 << 8),
+
     /// <summary>Every declared bit — the decoder's admission mask.</summary>
-    All = (Grounded | Airborne | Rising | Falling | Submerged | AtSurface | Climbing | Flying),
+    All = (Grounded | Airborne | Rising | Falling | Submerged | AtSurface | Climbing | Flying | Resting),
 }
 /// <summary>The one mapping between the predicate vocabulary and its publishable bit, plus the wire spelling every
 /// read-back echoes.</summary>
@@ -94,6 +101,7 @@ public static class BodyFactVocabulary {
         ActionFact.AtSurface,
         ActionFact.Climbing,
         ActionFact.Flying,
+        ActionFact.Resting,
     ];
 
     /// <summary>Returns the mask bit a publishable fact carries, or <see cref="BodyFacts.None"/> for a fact with no
@@ -109,6 +117,7 @@ public static class BodyFactVocabulary {
         ActionFact.AtSurface => BodyFacts.AtSurface,
         ActionFact.Climbing => BodyFacts.Climbing,
         ActionFact.Flying => BodyFacts.Flying,
+        ActionFact.Resting => BodyFacts.Resting,
         _ => BodyFacts.None,
     };
     /// <summary>Formats a mask as lower-case, <c>|</c>-joined tokens in bit order, or <c>none</c> when empty — the
@@ -187,6 +196,7 @@ public static class BodyFactVocabulary {
         ActionFact.AtSurface => "atsurface",
         ActionFact.Climbing => "climbing",
         ActionFact.Flying => "flying",
+        ActionFact.Resting => "resting",
         _ => "affectedby",
     };
 }

@@ -582,6 +582,11 @@ public sealed partial class WorldServer {
             defaults: m_definition.PlayerDefaults,
             tick: m_lastCompletedTick
         );
+        // Restore rebuilds every WorldBody at the constructed default (Scale == One) — bodies.scaleRow is document
+        // state, not part of WorldPopulationCheckpoint, so it needs the same catch-up every other admission door
+        // gives a freshly minted body. m_definition is already the checkpoint's own restored document (set above),
+        // so this reads the SAME cells the live server had when it captured.
+        m_population.SyncBodyScale(definition: m_definition);
         m_grants.Restore(checkpoint: checkpoint.Grants);
 
         // A restored parked PEER generation is released right here, not at its grace deadline: the connection that

@@ -288,6 +288,11 @@ public sealed partial class WorldServer {
         }
 
         if (admitted.Count > 0) {
+            // Every admitted body's own WorldBody instance postdates the last Install/construction-time resync
+            // (the same reasoning the Join case in ApplySession carries) — catch it up from bodies.scaleRow here,
+            // the one choke point every admission path in this file funnels an admitted list through.
+            m_population.SyncBodyScale(definition: m_definition);
+
             // mintedGrants is supplied only by TryAdmitVerifiedParticipant, built from the door's verdict. Every
             // other admitted-list caller (boot inhabitant reconciliation, world.population's SetSimulatedCount, a
             // definition swap's post-Rebuild reconciliation) activates a locally-simulated body with no connecting
@@ -573,6 +578,12 @@ public sealed partial class WorldServer {
                             profile: profile
                         );
                     }
+
+                    // The freshly admitted (or resumed) body's own WorldBody instance postdates the last
+                    // Install/construction-time resync, so it starts at the constructed default (Scale == One)
+                    // until this catches it up from bodies.scaleRow — the same reason a reused slot never inherits
+                    // a previous occupant's scale.
+                    m_population.SyncBodyScale(definition: m_definition);
 
                     StageOwnedState(
                         slot: join.Slot,

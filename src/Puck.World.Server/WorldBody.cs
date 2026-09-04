@@ -51,6 +51,15 @@ public sealed partial class WorldBody {
     // clear, and never read by simulation — diagnostic only, with no allocation and no feedback into either fold.
     private PlayerIntent m_channelReadHeld;
     private FixedWorldCollider? m_collider;
+    // The kit's rigid-dynamics facet, or null for a locomotion kit — see WorldBody.Rigid.cs. Non-null routes Advance
+    // through AdvanceRigid instead of the grounded/free motion program entirely.
+    private FixedWorldRigid? m_rigid;
+    // Rigid-only state: a locomotion body's velocity lives in m_planarVelocity/m_verticalVelocity instead, and never
+    // both at once for the same body.
+    private FixedVector3 m_rigidVelocity;
+    private FixedVector3 m_angularVelocity;
+    private bool m_resting;
+    private ulong m_restingHoldTicks;
 
     // The world contact field this body solves its swept grounded position against (null before a population assigns
     // the document-derived field) and the body's own capsule volume (null = a volumeless kit, never solved).
@@ -344,8 +353,10 @@ public sealed partial class WorldBody {
     /// <param name="maxSmoothError">The compiled world-distance correction smoothing threshold.</param>
     /// <param name="holds">The kit's compiled ordered hold list (<see cref="FixedWorldKit.Holds"/>), or
     /// <see langword="null"/> for a kit authoring none.</param>
+    /// <param name="rigid">The kit's compiled rigid-dynamics facet (<see cref="FixedWorldKit.Rigid"/>), or
+    /// <see langword="null"/> for a locomotion kit.</param>
     /// <exception cref="ArgumentNullException"><paramref name="program"/> or <paramref name="programs"/> is <see langword="null"/>.</exception>
-    public WorldBody(FixedMotionTuning tuning, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedQ4816 maxSmoothError, CompiledActionSpec?[]? actions = null, FixedQ4816[]? actionThresholds = null, ChannelShape[]? actionShapes = null, bool[]? roleMask = null, RoleChannelOrdinals roleOrdinals = default, CompiledActionStateSlot[]? actionState = null, FixedWorldCollider? collider = null, FixedBodyHold[]? holds = null) {
+    public WorldBody(FixedMotionTuning tuning, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedQ4816 maxSmoothError, CompiledActionSpec?[]? actions = null, FixedQ4816[]? actionThresholds = null, ChannelShape[]? actionShapes = null, bool[]? roleMask = null, RoleChannelOrdinals roleOrdinals = default, CompiledActionStateSlot[]? actionState = null, FixedWorldCollider? collider = null, FixedBodyHold[]? holds = null, FixedWorldRigid? rigid = null) {
         SetTuning(holds: holds, tuning: tuning);
         m_bodyMotionProgram = (program ?? throw new ArgumentNullException(paramName: nameof(program)));
         m_bodyMotionPrograms = (programs ?? throw new ArgumentNullException(paramName: nameof(programs)));
@@ -358,6 +369,7 @@ public sealed partial class WorldBody {
         m_roleOrdinals = roleOrdinals;
         CompileActionState(state: actionState);
         m_collider = collider;
+        m_rigid = rigid;
         m_maxSmoothError = maxSmoothError;
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
