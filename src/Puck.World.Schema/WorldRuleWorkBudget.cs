@@ -205,6 +205,10 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 var count = WorldTopologyCompilation.Find(definition.StateRaw, board.Board!.Topology)!.CellCount;
                 cost += (long)count * (count + 2);
                 break;
+            case WorldStateTransform.Sort sort:
+                var sorted = WorldDefinitionRows.FindStateRow(definition.State, sort.Row)!;
+                cost += 2L * (sorted.Capacity ?? sorted.CellCeiling);
+                break;
             case WorldStateTransform.Shuffle shuffle:
                 var pile = WorldDefinitionRows.FindStateRow(definition.State, shuffle.Row)!;
                 cost += 2L * (pile.Capacity ?? pile.CellCeiling);
@@ -241,6 +245,10 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         }
         if (operand.Kind is WorldRuleFactKind.Nearest or WorldRuleFactKind.RegionOccupancy) {
             return definition.Population.Capacity;
+        }
+        if (operand.Kind == WorldRuleFactKind.Pattern) {
+            var pattern = definition.Patterns.FirstOrDefault(candidate => candidate.Name.Value == operand.Pattern);
+            return WorldPatternCapacity.MaxWord + (operand.Board?.Topology.CellCount ?? 0);
         }
 
         return 1L;

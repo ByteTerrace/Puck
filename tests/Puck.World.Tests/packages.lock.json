@@ -2,6 +2,12 @@
   "version": 1,
   "dependencies": {
     "net10.0": {
+      "FSharp.Core": {
+        "type": "Direct",
+        "requested": "[10.*, )",
+        "resolved": "10.1.400",
+        "contentHash": "H9wlZ/tWgNp+Q4WQ5aUSi3XOBXrL6z+UkR0PNeyDFyoZR3c3PbtA21B9FqlthrhEwQ6f5AtQV0JLhBBDqjjscw=="
+      },
       "Microsoft.Extensions.DependencyInjection": {
         "type": "Direct",
         "requested": "[10.*, )",
@@ -20,6 +26,12 @@
           "Microsoft.CodeCoverage": "18.9.0",
           "Microsoft.TestPlatform.TestHost": "18.9.0"
         }
+      },
+      "Resharp": {
+        "type": "Direct",
+        "requested": "[1.*, )",
+        "resolved": "1.0.5",
+        "contentHash": "2gnMKbuDxRxlnkMkl8w7aC+Nzkc2qxAOZd5FUKjgpgT2S7nOrf2ooYjp0zL7yRk2DUYLDpj+ewH/awxsGlXKsA=="
       },
       "xunit.runner.visualstudio": {
         "type": "Direct",

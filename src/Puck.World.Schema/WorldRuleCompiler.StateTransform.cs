@@ -52,6 +52,14 @@ public static partial class WorldRuleCompiler {
                     throw Invalid("completePhase requires a phase row, valid sequence, declared participant, and a declared next phase");
                 }
                 break;
+            case WorldStateTransform.Sort sort:
+                if (Row(sort.Row) is not { } sortedRow ||
+                    (sortedRow.Zone is not null
+                        ? (!sortedRow.Zone.Ordered || sort.By is null || Row(sort.By) is not { IsKeyed: true, Kind: CellKind.Int or CellKind.Fixed })
+                        : (!sortedRow.IsKeyed || sort.By is not null || sortedRow.Kind is not (CellKind.Int or CellKind.Fixed)))) {
+                    throw Invalid("sort requires an ordered zone with a keyed numeric attribute row, or a keyed numeric row alone");
+                }
+                break;
             case WorldStateTransform.Shuffle shuffle:
                 if (Row(shuffle.Row).Zone is not { Ordered: true } || Row(shuffle.Draw).Draw is not { Timing: not WorldDrawTiming.Boot } shuffleDraw ||
                     Row(shuffle.Draw).Kind != CellKind.Int ||

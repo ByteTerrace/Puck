@@ -31,24 +31,27 @@ public static partial class WorldStateTransforms {
         return false;
     }
 
-    private static void Move(WorldDefinition definition, WorldStateRow[] rows, WorldStateTransform.MoveToken move) {
-        var positionIndex = Find(rows, move.Positions);
-        var allowanceIndex = Find(rows, move.Allowance);
+    private static bool TryMove(WorldDefinition definition, WorldStateRow[] rows, WorldStateTransform.MoveToken move, out string reason) {
+        if (!TryFind(rows, move.Positions, out var positionIndex, out reason) ||
+            !TryFind(rows, move.Allowance, out var allowanceIndex, out reason) ||
+            !TryFind(rows, move.Terrain, out var terrainIndex, out reason)) {
+            return false;
+        }
         var positions = rows[positionIndex];
         var allowance = rows[allowanceIndex];
-        var terrain = rows[Find(rows, move.Terrain)];
+        var terrain = rows[terrainIndex];
         if (positions.Kind != CellKind.Int || allowance.Kind != CellKind.Int || terrain.Kind != CellKind.Int ||
             positions.KeysFrom is null || allowance.KeysFrom != positions.KeysFrom ||
             terrain.Board is not { } board || positions.ValuesFrom != board.Topology || allowance.ValuesFrom is not null ||
             WorldTopologyCompilation.Find(definition.StateRaw, board.Topology) is not { } topology ||
             (uint)move.Destination >= topology.CellCount || move.MaxVisits < 1 || move.MaxVisits > topology.CellCount ||
             !WorldCellName.TryParse(move.Token, out var token, out _)) {
-            throw new InvalidOperationException("moveToken requires compatible position, allowance, and terrain rows and bounded addressing");
+            return Refuse("moveToken requires compatible position, allowance, and terrain rows and bounded addressing", out reason);
         }
         var positionCell = WorldDefinitionRows.FindCell(positions.Cells, token);
         var allowanceCell = WorldDefinitionRows.FindCell(allowance.Cells, token);
         if (positionCell is null || allowanceCell is null || (ulong)positionCell.Value >= (ulong)topology.CellCount || allowanceCell.Value < 0) {
-            throw new InvalidOperationException("token has no valid position or movement allowance");
+            return Refuse("token has no valid position or movement allowance", out reason);
         }
         Span<long> costs = stackalloc long[topology.CellCount];
         WorldBoardQueries.Read(terrain, topology, costs);
@@ -67,9 +70,21 @@ public static partial class WorldStateTransforms {
             Target: move.Destination, MaxCost: allowanceCell.Value, MaxVisits: move.MaxVisits);
         var cost = WorldBoardQueries.Evaluate(query, costs, board.Empty, (int)positionCell.Value);
         if (cost < 0) {
-            throw new InvalidOperationException(cost == -2 ? "moveToken search budget exhausted" : "moveToken destination is blocked, unreachable, or unaffordable");
+            return Refuse(cost == -2 ? "moveToken search budget exhausted" : "moveToken destination is blocked, unreachable, or unaffordable", out reason);
         }
-        rows[positionIndex] = positions with { Cells = (positions.Cells ?? []).Select(c => c.Key == token ? c with { Value = move.Destination } : c).ToArray() };
-        rows[allowanceIndex] = allowance with { Cells = (allowance.Cells ?? []).Select(c => c.Key == token ? c with { Value = c.Value - cost } : c).ToArray() };
+        rows[positionIndex] = positions with { Cells = WithCell(positions.Cells, token, move.Destination) };
+        rows[allowanceIndex] = allowance with { Cells = WithCell(allowance.Cells, token, allowanceCell.Value - cost) };
+        return true;
+    }
+
+    // One copy of the cell list with the keyed cell's value replaced in place.
+    private static WorldStateCell[] WithCell(IReadOnlyList<WorldStateCell>? cells, WorldCellName key, long value) {
+        var copy = (cells ?? []).ToArray();
+        for (var index = 0; index < copy.Length; index++) {
+            if (copy[index].Key == key) {
+                copy[index] = copy[index] with { Value = value };
+            }
+        }
+        return copy;
     }
 }

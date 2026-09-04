@@ -4043,6 +4043,35 @@
       ],
       "additionalProperties": false
     },
+    "WorldStateTransformSort": {
+      "description": "Reorders a row\u0027s cells by value, stably: an ordered zone by the named keyed attribute row over its token domain, a keyed numeric row by its own cell values. The canonical order a pattern reads a hand in.",
+      "properties": {
+        "$type": {
+          "const": "sort"
+        },
+        "row": {
+          "description": "The ordered zone or keyed numeric row.",
+          "type": "string"
+        },
+        "by": {
+          "description": "The attribute row for a zone; null (required) for a keyed row.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "descending": {
+          "description": "Whether the greatest value comes first.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "row"
+      ],
+      "additionalProperties": false
+    },
     "WorldStateTransformMoveToken": {
       "description": "Moves a token along an affordable route, debiting movement points in the same candidate.",
       "properties": {
@@ -4120,6 +4149,9 @@
         },
         {
           "$ref": "#/$defs/WorldStateTransformShuffle"
+        },
+        {
+          "$ref": "#/$defs/WorldStateTransformSort"
         },
         {
           "$ref": "#/$defs/WorldStateTransformMoveToken"
@@ -6646,6 +6678,287 @@
         "hash"
       ],
       "additionalProperties": false
+    },
+    "WorldPatternNodeSymbol": {
+      "description": "One token whose value falls in the named symbol.",
+      "properties": {
+        "$type": {
+          "const": "symbol"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "WorldPatternNodeAnySymbol": {
+      "description": "One token of any value, named symbols and the unnamed remainder alike.",
+      "properties": {
+        "$type": {
+          "const": "any"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldPatternNodeExcept": {
+      "description": "One token whose value falls outside the named symbol.",
+      "properties": {
+        "$type": {
+          "const": "except"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "WorldPatternNodeNothing": {
+      "description": "The empty word.",
+      "properties": {
+        "$type": {
+          "const": "empty"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldPatternNodeSequence": {
+      "description": "The items matched one after another.",
+      "properties": {
+        "$type": {
+          "const": "sequence"
+        },
+        "items": {
+          "$ref": "#/$defs/WorldPatternNodeListNonNullable"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "additionalProperties": false
+    },
+    "WorldPatternNodeList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/WorldPatternNodeNullable"
+      }
+    },
+    "WorldPatternNodeChoice": {
+      "description": "Any one of the items.",
+      "properties": {
+        "$type": {
+          "const": "choice"
+        },
+        "items": {
+          "$ref": "#/$defs/WorldPatternNodeList"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "additionalProperties": false
+    },
+    "WorldPatternNodeBoth": {
+      "description": "Every item at once: the word is in each item\u0027s language.",
+      "properties": {
+        "$type": {
+          "const": "all"
+        },
+        "items": {
+          "$ref": "#/$defs/WorldPatternNodeList"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "additionalProperties": false
+    },
+    "WorldPatternNodeComplement": {
+      "description": "Every word the item does not match.",
+      "properties": {
+        "$type": {
+          "const": "not"
+        },
+        "item": {
+          "$ref": "#/$defs/WorldPatternNode"
+        }
+      },
+      "required": [
+        "item"
+      ],
+      "additionalProperties": false
+    },
+    "WorldPatternNodeOptional": {
+      "description": "The item or nothing.",
+      "properties": {
+        "$type": {
+          "const": "optional"
+        },
+        "item": {
+          "$ref": "#/$defs/WorldPatternNode"
+        }
+      },
+      "required": [
+        "item"
+      ],
+      "additionalProperties": false
+    },
+    "WorldPatternNodeStar": {
+      "description": "The item zero or more times.",
+      "properties": {
+        "$type": {
+          "const": "star"
+        },
+        "item": {
+          "$ref": "#/$defs/WorldPatternNode"
+        }
+      },
+      "required": [
+        "item"
+      ],
+      "additionalProperties": false
+    },
+    "WorldPatternNodePlus": {
+      "description": "The item one or more times.",
+      "properties": {
+        "$type": {
+          "const": "plus"
+        },
+        "item": {
+          "$ref": "#/$defs/WorldPatternNode"
+        }
+      },
+      "required": [
+        "item"
+      ],
+      "additionalProperties": false
+    },
+    "WorldPatternNodeRepeat": {
+      "description": "The item between Min and Max times.",
+      "properties": {
+        "$type": {
+          "const": "repeat"
+        },
+        "item": {
+          "$ref": "#/$defs/WorldPatternNode"
+        },
+        "min": {
+          "type": "integer"
+        },
+        "max": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "item",
+        "min",
+        "max"
+      ],
+      "additionalProperties": false
+    },
+    "WorldPatternNode": {
+      "description": "The closed pattern vocabulary over a row\u0027s cell values, matched against the whole word. Complement and intersection are first-class, so \u0022no two adjacent kings\u0022 and \u0022holds a 2 and a 5\u0022 are single patterns rather than rule arithmetic.",
+      "type": "object",
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WorldPatternNodeSymbol"
+        },
+        {
+          "$ref": "#/$defs/WorldPatternNodeAnySymbol"
+        },
+        {
+          "$ref": "#/$defs/WorldPatternNodeExcept"
+        },
+        {
+          "$ref": "#/$defs/WorldPatternNodeNothing"
+        },
+        {
+          "$ref": "#/$defs/WorldPatternNodeSequence"
+        },
+        {
+          "$ref": "#/$defs/WorldPatternNodeChoice"
+        },
+        {
+          "$ref": "#/$defs/WorldPatternNodeBoth"
+        },
+        {
+          "$ref": "#/$defs/WorldPatternNodeComplement"
+        },
+        {
+          "$ref": "#/$defs/WorldPatternNodeOptional"
+        },
+        {
+          "$ref": "#/$defs/WorldPatternNodeStar"
+        },
+        {
+          "$ref": "#/$defs/WorldPatternNodePlus"
+        },
+        {
+          "$ref": "#/$defs/WorldPatternNodeRepeat"
+        }
+      ]
+    },
+    "WorldPatternNodeNullable": {
+      "description": "The closed pattern vocabulary over a row\u0027s cell values, matched against the whole word. Complement and intersection are first-class, so \u0022no two adjacent kings\u0022 and \u0022holds a 2 and a 5\u0022 are single patterns rather than rule arithmetic.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WorldPatternNodeSymbol"
+        },
+        {
+          "$ref": "#/$defs/WorldPatternNodeAnySymbol"
+        },
+        {
+          "$ref": "#/$defs/WorldPatternNodeExcept"
+        },
+        {
+          "$ref": "#/$defs/WorldPatternNodeNothing"
+        },
+        {
+          "$ref": "#/$defs/WorldPatternNodeSequence"
+        },
+        {
+          "$ref": "#/$defs/WorldPatternNodeChoice"
+        },
+        {
+          "$ref": "#/$defs/WorldPatternNodeBoth"
+        },
+        {
+          "$ref": "#/$defs/WorldPatternNodeComplement"
+        },
+        {
+          "$ref": "#/$defs/WorldPatternNodeOptional"
+        },
+        {
+          "$ref": "#/$defs/WorldPatternNodeStar"
+        },
+        {
+          "$ref": "#/$defs/WorldPatternNodePlus"
+        },
+        {
+          "$ref": "#/$defs/WorldPatternNodeRepeat"
+        }
+      ]
+    },
+    "WorldPatternNodeListNonNullable": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/WorldPatternNodeNullable"
+      }
     }
   }
 }

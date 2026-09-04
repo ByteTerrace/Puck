@@ -1150,6 +1150,9 @@ public static partial class WorldRuleCompiler {
         if (name.StartsWith("$board:", StringComparison.Ordinal)) {
             return ResolveBoardOperand(name, key, ruleName, definition);
         }
+        if (name.StartsWith(WorldRuleFacts.MatchPrefix, StringComparison.Ordinal)) {
+            return ResolvePatternOperand(name, key, ruleName, definition);
+        }
         var describe = $"{name}{((key is { } spelledKey)
             ? $".{spelledKey}"
             : string.Empty)}";

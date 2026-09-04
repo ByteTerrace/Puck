@@ -2165,6 +2165,14 @@ Do not flatten restricted state into a public document value. Replica access
 remains full authority trust. Test socket observations using authenticated
 submission stamps, and check exact topology and query work bounds at preflight.
 
+A `patterns` section row is a regular language over cell values
+(`WorldPatterns.cs`: symbols as value ranges, a closed node vocabulary with
+complement and intersection, a derivative machine inside a state budget of at
+most 256) compiled at validation;
+rules read it through `$match:<pattern>:<row>[:<direction>]` over a board
+ray, an ordered zone's attribute word, or a keyed row, and the `sort`
+transform supplies the canonical order. Read back with `world.patterns`.
+
 `state.social` installs a `WorldSocialPolicy`/`CompiledWorldSocialPolicy` bank;
 `WorldSocialMemory` owns directed impressions and exact evidence receipts.
 World-only `observeSocial`/`forgetSocial` effects and numeric `social` queries

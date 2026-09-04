@@ -3,19 +3,23 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public static partial class WorldStateTransforms {
-    private static void Observe(WorldDefinition definition, WorldStateRow[] rows, WorldStateTransform.Observe operation, WorldPrincipal actor, ulong tick) {
+    private static bool TryObserve(WorldDefinition definition, WorldStateRow[] rows, WorldStateTransform.Observe operation, WorldPrincipal actor, ulong tick, out string reason) {
         if (actor != WorldPrincipal.World) {
-            throw new InvalidOperationException("only the authority may refresh knowledge");
+            return Refuse("only the authority may refresh knowledge", out reason);
         }
-
-        var index = Find(rows, operation.Row);
+        if (!TryFind(rows, operation.Row, out var index, out reason)) {
+            return false;
+        }
         var row = rows[index];
         if (row.Knowledge is not { } knowledge || row.Board is not { } board || WorldTopologyCompilation.Find(definition.StateRaw, board.Topology) is not { } topology) {
-            throw new InvalidOperationException("observe requires a knowledge board");
+            return Refuse("observe requires a knowledge board", out reason);
+        }
+        if (!TryFind(rows, knowledge.Source, out var sourceIndex, out reason) || !TryFind(rows, knowledge.Mask, out var maskIndex, out reason)) {
+            return false;
         }
 
-        var source = rows[Find(rows, knowledge.Source)];
-        var mask = rows[Find(rows, knowledge.Mask)];
+        var source = rows[sourceIndex];
+        var mask = rows[maskIndex];
         Span<long> values = stackalloc long[topology.CellCount];
         Span<long> visible = stackalloc long[topology.CellCount];
         WorldBoardQueries.Read(source, topology, values);
@@ -36,5 +40,6 @@ public static partial class WorldStateTransforms {
             }
         }
         rows[index] = row with { Cells = cells };
+        return true;
     }
 }

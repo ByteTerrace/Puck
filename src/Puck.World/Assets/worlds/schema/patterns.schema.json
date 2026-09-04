@@ -1,0 +1,84 @@
+{
+  "type": [
+    "array",
+    "null"
+  ],
+  "items": {
+    "description": "One row of the patterns section: a regular language over cell values, compiled once to a deterministic table the $match: operand runs allocation-free, one indexed step per token.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "name": {
+        "description": "The pattern name a rule references.",
+        "type": "string"
+      },
+      "kind": {
+        "description": "The numeric kind of the values the word is read from: Int or Fixed.",
+        "enum": [
+          "Int",
+          "Fixed",
+          "Bool",
+          "Text"
+        ]
+      },
+      "symbols": {
+        "description": "The alphabet, 1..32 named value ranges.",
+        "type": "array",
+        "items": {
+          "description": "One symbol of a pattern\u0027s alphabet: the cell values in Min..Max (inclusive, in the pattern\u0027s kind) read as this letter. Symbols may overlap; the refined alphabet splits them.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "name": {
+              "description": "The symbol name a pattern node references.",
+              "type": "string"
+            },
+            "min": {
+              "description": "The least value the symbol accepts.",
+              "type": "number"
+            },
+            "max": {
+              "description": "The greatest value the symbol accepts.",
+              "type": "number"
+            }
+          },
+          "required": [
+            "name",
+            "min",
+            "max"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "pattern": {
+        "$ref": "./common.schema.json#/$defs/WorldPatternNode",
+        "description": "The language."
+      },
+      "attribute": {
+        "description": "For a zone source, the keyed row (over the zone\u0027s token domain) whose cell values form the word, in pile order; null reads the source row\u0027s own cell values.",
+        "type": [
+          "string",
+          "null"
+        ],
+        "default": null
+      },
+      "maxStates": {
+        "description": "The machine-state budget the compile refuses past, 1..256.",
+        "type": "integer",
+        "default": 64
+      }
+    },
+    "required": [
+      "name",
+      "kind",
+      "symbols",
+      "pattern"
+    ],
+    "additionalProperties": false
+  },
+  "default": null
+}

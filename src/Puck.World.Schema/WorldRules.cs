@@ -155,6 +155,11 @@ public static class WorldRuleFacts {
     /// <c>row</c> tags enemies — or <c>-1</c> when no such body exists. Ties resolve to the lowest index. The body
     /// reference takes the same tokens <see cref="DistancePrefix"/> takes.</summary>
     public const string NearestPrefix = "$nearest:";
+    /// <summary>The prefix; <c>$match:&lt;pattern&gt;:&lt;row&gt;[:&lt;direction&gt;]</c> runs a <c>patterns</c> row
+    /// over a word: a board ray from the operand key's origin (exclusive) in the direction, an ordered zone's
+    /// attribute values in pile order, or a keyed row's own cells. Reads 1 for a match, 0 for none, -1 when the word
+    /// exceeds the pattern's window.</summary>
+    public const string MatchPrefix = "$match:";
     /// <summary>The prefix a cell KEY may carry in place of a literal: <c>$cell:&lt;row&gt;:&lt;key&gt;</c> resolves, at
     /// every read and every firing, to the integer value of that cell spelled as a key — so an effect or operand
     /// addresses "the cell named by another cell" (the target a body's <c>target</c> cell currently names). Admitted
@@ -458,6 +463,9 @@ public enum WorldRuleFactKind : byte {
     SocialClock,
     /// <summary>The last social evidence outcome ordinal.</summary>
     SocialResult,
+    /// <summary>A pattern-language match over a row's word (<see cref="WorldRuleFacts.MatchPrefix"/>): 1, 0, or -1
+    /// when undecided.</summary>
+    Pattern,
 }
 /// <summary>One resolved operand of a world-rule comparison — the (<see cref="Kind"/>, <see cref="Row"/>,
 /// <see cref="Key"/>) address plus the <see cref="Screen"/>/<see cref="Address"/> machine coordinates, the live
@@ -504,6 +512,7 @@ public enum WorldRuleFactKind : byte {
 /// <param name="FilterHandle">The compiled handle for <paramref name="FilterRow"/>.</param>
 /// <param name="Board">The compiled discrete query, when present.</param>
 /// <param name="Social">The compiled directed social query, when present.</param>
+/// <param name="Pattern">The pattern a <see cref="WorldRuleFactKind.Pattern"/> operand runs; the word source is <paramref name="Row"/> and, for a zone, <paramref name="FilterRow"/> is its attribute row.</param>
 public readonly record struct CompiledWorldOperand(
     WorldRuleFactKind Kind,
     string? Row,
@@ -524,7 +533,8 @@ public readonly record struct CompiledWorldOperand(
     string? FilterRow = null,
     WorldStateHandle FilterHandle = default,
     CompiledWorldBoardQuery? Board = null,
-    CompiledWorldSocialQuery? Social = null
+    CompiledWorldSocialQuery? Social = null,
+    string? Pattern = null
 );
 /// <summary>One operation in a compiled postfix Boolean gate.</summary>
 public enum CompiledWorldPredicateKind : byte {

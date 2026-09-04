@@ -50,6 +50,19 @@ public sealed partial class WorldStateCommandModule {
                 }
                 return new CommandResult(Output: string.Join(Environment.NewLine, lines));
             });
+        yield return CommandDefinition.WithWireArgs(
+            name: "world.patterns", bindability: CommandBindability.Unbindable,
+            description: "Echoes every compiled pattern language: kind, refined letters, machine states against the row's budget, and the attribute row a zone source reads.",
+            routing: CommandRouting.Immediate,
+            handler: (context, args) => {
+                if (CommandResult.RequireNoArguments(args, "world.patterns") is { } refusal) {
+                    return refusal;
+                }
+                if (!authority.TryResolveServer(context, "world.patterns", out var server, out var error)) {
+                    return error;
+                }
+                return new CommandResult(Output: server.DescribePatterns());
+            });
     }
 
     private CommandResult SubmitTransform(CommandContext context, WireArgs args, bool guarded) {

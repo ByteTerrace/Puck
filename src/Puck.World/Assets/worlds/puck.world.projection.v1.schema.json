@@ -11848,6 +11848,35 @@
                               "additionalProperties": false
                             },
                             {
+                              "description": "Reorders a row\u0027s cells by value, stably: an ordered zone by the named keyed attribute row over its token domain, a keyed numeric row by its own cell values. The canonical order a pattern reads a hand in.",
+                              "properties": {
+                                "$type": {
+                                  "const": "sort"
+                                },
+                                "row": {
+                                  "description": "The ordered zone or keyed numeric row.",
+                                  "type": "string"
+                                },
+                                "by": {
+                                  "description": "The attribute row for a zone; null (required) for a keyed row.",
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "default": null
+                                },
+                                "descending": {
+                                  "description": "Whether the greatest value comes first.",
+                                  "type": "boolean",
+                                  "default": false
+                                }
+                              },
+                              "required": [
+                                "row"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
                               "description": "Moves a token along an affordable route, debiting movement points in the same candidate.",
                               "properties": {
                                 "$type": {
@@ -12529,6 +12558,35 @@
                                         "required": [
                                           "row",
                                           "draw"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Reorders a row\u0027s cells by value, stably: an ordered zone by the named keyed attribute row over its token domain, a keyed numeric row by its own cell values. The canonical order a pattern reads a hand in.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "sort"
+                                          },
+                                          "row": {
+                                            "description": "The ordered zone or keyed numeric row.",
+                                            "type": "string"
+                                          },
+                                          "by": {
+                                            "description": "The attribute row for a zone; null (required) for a keyed row.",
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ],
+                                            "default": null
+                                          },
+                                          "descending": {
+                                            "description": "Whether the greatest value comes first.",
+                                            "type": "boolean",
+                                            "default": false
+                                          }
+                                        },
+                                        "required": [
+                                          "row"
                                         ],
                                         "additionalProperties": false
                                       },

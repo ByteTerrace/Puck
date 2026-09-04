@@ -185,6 +185,9 @@
     "navigation": {
       "$ref": "./schema/navigation.schema.json"
     },
+    "patterns": {
+      "$ref": "./schema/patterns.schema.json"
+    },
     "basis": {
       "$ref": "./schema/basis.schema.json"
     },

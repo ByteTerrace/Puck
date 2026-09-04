@@ -83,7 +83,8 @@ public sealed record WorldDefinition(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCapturesSection? Captures = null,
     [property: JsonPropertyName("attachment"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldAttachmentSection? AttachmentRaw = null,
     [property: JsonPropertyName("curves"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCurveRow>? CurvesRaw = null,
-    [property: JsonPropertyName("navigation"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldNavigationSection? NavigationRaw = null
+    [property: JsonPropertyName("navigation"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldNavigationSection? NavigationRaw = null,
+    [property: JsonPropertyName("patterns"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPatternRow>? PatternsRaw = null
 ) {
     /// <summary>The document schema version. A loader rejects any other value; the canonical writer always emits it.</summary>
     public const string SchemaVersion = "puck.world.def.v1";
@@ -203,6 +204,9 @@ public sealed record WorldDefinition(
     /// <see cref="WorldCurveRow.Name"/> — ABSENT resolves to none, so an unauthored world is unchanged.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldCurveRow> Curves => (CurvesRaw ?? []);
+    /// <summary>The pattern-language table, or empty when the document declares none.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldPatternRow> Patterns => (PatternsRaw ?? []);
     /// <summary>Gets the unknown top-level members captured during deserialization, declared identically on every versioned
     /// document root here and validated
     /// through the shared <see cref="DocumentExtensionsPolicy"/> regime (see <see cref="WorldDefinitionValidator"/>): a

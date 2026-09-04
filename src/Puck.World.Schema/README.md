@@ -64,8 +64,8 @@ are separate from these piles: each `drawDecks` mask is four 64-bit words,
 serialized as exactly 64 hexadecimal digits, and supports 256 dealt entries.
 
 The closed `transformState` effect and transaction step carry one of `transfer`,
-`setRay`, `moveToken`, `completePhase`, `turnOrder`, `shuffle`, or `observe`. The
-same operation travels
+`setRay`, `moveToken`, `completePhase`, `turnOrder`, `shuffle`, `sort`, or
+`observe`. The same operation travels
 as the `TransformState` document mutation. Transfers preserve keys and accept
 `Key`, `First`, `Last`, or `Random` selectors; random selection names a
 redrawable integer `streamDraw` site. A cursor advances only with the committed
@@ -126,6 +126,28 @@ tick, and marks previously known cells outside sight as no longer visible.
 Unseen cells remain absent; remembered values never refresh from hidden truth.
 Rules author the visibility mask and refresh cadence. This does not generate
 line of sight or render a tactical UI automatically.
+
+A `patterns` row is a regular language over cell values, compiled once at
+validation into a deterministic table the `$match:<pattern>:<row>[:<direction>]`
+operand runs allocation-free, one indexed step per token: `symbols` name value
+ranges in the pattern's `kind` (overlaps refine into letters; at most 32
+symbols, 64 letters) and `pattern` is the closed node vocabulary `symbol`,
+`any`, `except`, `empty`, `sequence`, `choice`, `all` (intersection), `not`
+(complement), `optional`, `star`, `plus`, `repeat` (`min`..`max`, at most
+64), matched against the whole word. The machine's states are the pattern's
+Brzozowski derivatives, kept canonical by similarity, so stars, complements,
+and intersections are exact at any word length; `maxStates` (1..256, default
+64) is the state budget the compile refuses past, by name, at validation. The
+word is a board ray from the operand key's origin (exclusive) in the named
+direction, an ordered zone's cells read through the pattern's `attribute` row
+in pile order, or a keyed numeric row's own cells; a word longer than 256
+tokens reads -1 (undecided), never a false no. `sort` (`row`, `by`, `descending`) puts a
+zone in canonical order by an attribute row, or a keyed row by its values,
+stably, which is what turns a multiset question into a regular one: Reversi's
+flank is `them+ me` on a ray, a straight is five consecutive rank symbols over
+a sorted hand, Yahtzee's large straight is a `choice` of two sequences over a
+sorted tray. `world.patterns` echoes each compiled table; `world.budget`
+carries the states and the word cap.
 
 Private random transfers can use `draw.secret`, a nonzero 256-bit key provisioned
 by the authority before simulation. This selects cursor-addressed HMAC-SHA256

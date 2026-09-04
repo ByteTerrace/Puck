@@ -390,6 +390,7 @@ public sealed partial class WorldServer {
         WorldRuleFactKind.SocialResult => Finite(m_lastSocialResult, CellKind.Int),
         WorldRuleFactKind.Phase => Finite(ReadPhaseFact(operand), CellKind.Int),
         WorldRuleFactKind.Board => Finite(ReadBoardFact(operand, tick), CellKind.Int),
+        WorldRuleFactKind.Pattern => Finite(ReadPatternFact(operand, tick), CellKind.Int),
         WorldRuleFactKind.Tick => Finite(value: unchecked((long)tick), kind: CellKind.Int),
         WorldRuleFactKind.Population => Finite(value: m_population.ActiveCount(), kind: CellKind.Int),
         WorldRuleFactKind.RegionOccupancy => Finite(value: m_events.OccupantCount(placementId: operand.Row!), kind: CellKind.Int),

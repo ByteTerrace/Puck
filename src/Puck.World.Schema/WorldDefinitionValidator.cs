@@ -1274,6 +1274,10 @@ public static partial class WorldDefinitionValidator {
         // whole candidate (state rows, generator rows, placement regions), so it runs once those are known good. The
         // compiler is the ONE authority on what a rule may say — this pass calls it rather than restating its rules,
         // and turns its by-name refusal into an aggregated error line.
+        ValidatePatterns(
+            definition: definition,
+            errors: errors
+        );
         ValidateRules(
             rules: definition.Rules,
             definition: definition,

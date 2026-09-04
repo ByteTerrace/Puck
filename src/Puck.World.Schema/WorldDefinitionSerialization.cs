@@ -61,6 +61,18 @@ namespace Puck.World;
 // otherwise resolve to one generated accessor for both (SYSLIB1031). Naming this arm explicitly keeps both.
 [JsonSerializable(typeof(WorldCameraSubject.Placement), TypeInfoPropertyName = "WorldCameraSubjectPlacement")]
 [JsonSerializable(typeof(WorldValueToken.Select), TypeInfoPropertyName = "WorldValueTokenSelect")]
+[JsonSerializable(typeof(WorldPatternNode.Symbol), TypeInfoPropertyName = "WorldPatternNodeSymbol")]
+[JsonSerializable(typeof(WorldPatternNode.AnySymbol), TypeInfoPropertyName = "WorldPatternNodeAnySymbol")]
+[JsonSerializable(typeof(WorldPatternNode.Except), TypeInfoPropertyName = "WorldPatternNodeExcept")]
+[JsonSerializable(typeof(WorldPatternNode.Nothing), TypeInfoPropertyName = "WorldPatternNodeNothing")]
+[JsonSerializable(typeof(WorldPatternNode.Sequence), TypeInfoPropertyName = "WorldPatternNodeSequence")]
+[JsonSerializable(typeof(WorldPatternNode.Choice), TypeInfoPropertyName = "WorldPatternNodeChoice")]
+[JsonSerializable(typeof(WorldPatternNode.Optional), TypeInfoPropertyName = "WorldPatternNodeOptional")]
+[JsonSerializable(typeof(WorldPatternNode.Star), TypeInfoPropertyName = "WorldPatternNodeStar")]
+[JsonSerializable(typeof(WorldPatternNode.Plus), TypeInfoPropertyName = "WorldPatternNodePlus")]
+[JsonSerializable(typeof(WorldPatternNode.Repeat), TypeInfoPropertyName = "WorldPatternNodeRepeat")]
+[JsonSerializable(typeof(WorldPatternNode.Both), TypeInfoPropertyName = "WorldPatternNodeBoth")]
+[JsonSerializable(typeof(WorldPatternNode.Complement), TypeInfoPropertyName = "WorldPatternNodeComplement")]
 // The seat rig's input-policy sibling; this entry exposes the typed accessor world.view.look deserializes through.
 [JsonSerializable(typeof(WorldSeatCameraFeel))]
 [JsonSerializable(typeof(WorldSeatViewControl))]

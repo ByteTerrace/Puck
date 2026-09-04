@@ -79,6 +79,7 @@ public enum WorldZoneSelector : byte {
 [JsonDerivedType(typeof(WorldStateTransform.CompletePhase), "completePhase")]
 [JsonDerivedType(typeof(WorldStateTransform.TurnOrder), "turnOrder")]
 [JsonDerivedType(typeof(WorldStateTransform.Shuffle), "shuffle")]
+[JsonDerivedType(typeof(WorldStateTransform.Sort), "sort")]
 [JsonDerivedType(typeof(WorldStateTransform.MoveToken), "moveToken")]
 [JsonDerivedType(typeof(WorldStateTransform.Observe), "observe")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -136,4 +137,10 @@ public abstract record WorldStateTransform {
     /// <param name="Row">The ordered zone.</param>
     /// <param name="Draw">The integer streamDraw site supplying the samples.</param>
     public sealed record Shuffle(string Row, string Draw) : WorldStateTransform;
+    /// <summary>Reorders a row's cells by value, stably: an ordered zone by the named keyed attribute row over its
+    /// token domain, a keyed numeric row by its own cell values. The canonical order a pattern reads a hand in.</summary>
+    /// <param name="Row">The ordered zone or keyed numeric row.</param>
+    /// <param name="By">The attribute row for a zone; null (required) for a keyed row.</param>
+    /// <param name="Descending">Whether the greatest value comes first.</param>
+    public sealed record Sort(string Row, string? By = null, bool Descending = false) : WorldStateTransform;
 }

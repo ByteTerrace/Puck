@@ -1263,6 +1263,7 @@ public sealed partial class WorldServer {
         m_interactionGateHeld.Prune(compiled: m_interactions);
         ReconcileDecisions();
         ReconcileSocial(definition);
+        ReconcilePatterns(definition);
         m_population.BindFlockAffinities(definition, EvaluateFlockAffinity);
     }
     private bool RuleGateOpen(CompiledWorldPredicate[] gate, ulong tick) {

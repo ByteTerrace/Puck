@@ -3,7 +3,8 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 /// <summary>Pure candidate composition for bounded state operations. No effect, random cursor, or phase progression
-/// escapes a refused candidate; the ordinary mutation pipeline validates, installs and journals the result.</summary>
+/// escapes a refused candidate; the ordinary mutation pipeline validates, installs and journals the result. A refusal
+/// is a returned reason, never a thrown one: a rule may retry a refused transform every tick.</summary>
 public static partial class WorldStateTransforms {
     /// <summary>Lists every state row whose edit capability an operation needs.</summary>
     /// <param name="transform">The operation.</param>
@@ -16,6 +17,7 @@ public static partial class WorldStateTransforms {
         WorldStateTransform.CompletePhase phase => [phase.Row],
         WorldStateTransform.TurnOrder order => [order.Row],
         WorldStateTransform.Shuffle shuffle => [shuffle.Row, shuffle.Draw],
+        WorldStateTransform.Sort sort => sort.By is null ? [sort.Row] : [sort.Row, sort.By],
         _ => [],
     };
 
@@ -31,69 +33,94 @@ public static partial class WorldStateTransforms {
     public static bool TryApply(WorldDefinition definition, WorldStateTransform transform, WorldPrincipal actor,
         ulong tick, string instance, out WorldDefinition candidate, out string reason) {
         candidate = definition;
-        reason = string.Empty;
+        var rows = definition.State.ToArray();
+        bool composed;
+
         try {
-            var rows = definition.State.ToArray();
-            switch (transform) {
-                case WorldStateTransform.Observe observe: Observe(definition, rows, observe, actor, tick); break;
-                case WorldStateTransform.Transfer transfer:
-                    Transfer(definition, rows, transfer, instance);
-                    break;
-                case WorldStateTransform.MoveToken move:
-                    Move(definition, rows, move);
-                    break;
-                case WorldStateTransform.SetRay ray:
-                    SetRay(definition, rows, ray);
-                    break;
-                case WorldStateTransform.CompletePhase complete:
-                    Complete(definition, rows, complete, actor, tick);
-                    break;
-                case WorldStateTransform.TurnOrder order:
-                    Order(rows, order, actor);
-                    break;
-                case WorldStateTransform.Shuffle shuffle:
-                    ShuffleZone(definition, rows, shuffle, instance);
-                    break;
-                default:
-                    throw new InvalidOperationException("unknown state transform");
-            }
-            candidate = definition.WithWorldState(rows);
-            return true;
-        } catch (Exception exception) when (exception is InvalidOperationException or OverflowException or ArgumentException) {
+            composed = transform switch {
+                WorldStateTransform.Observe observe => TryObserve(definition, rows, observe, actor, tick, out reason),
+                WorldStateTransform.Transfer transfer => TryTransfer(definition, rows, transfer, instance, out reason),
+                WorldStateTransform.MoveToken move => TryMove(definition, rows, move, out reason),
+                WorldStateTransform.SetRay ray => TrySetRay(definition, rows, ray, out reason),
+                WorldStateTransform.CompletePhase complete => TryComplete(definition, rows, complete, actor, tick, out reason),
+                WorldStateTransform.TurnOrder order => TryOrder(rows, order, actor, out reason),
+                WorldStateTransform.Shuffle shuffle => TryShuffle(definition, rows, shuffle, instance, out reason),
+                WorldStateTransform.Sort sort => TrySort(rows, sort, out reason),
+                _ => Refuse("unknown state transform", out reason),
+            };
+        } catch (OverflowException exception) {
+            // Cursor, sequence, and round counters are checked; wrapping one silently would fork replay.
             reason = exception.Message;
             return false;
         }
+
+        if (composed) {
+            candidate = definition.WithWorldState(rows);
+        }
+
+        return composed;
     }
 
-    private static int Find(WorldStateRow[] rows, string name) {
-        for (var index = 0; index < rows.Length; index++) {
+    private static bool Refuse(string message, out string reason) {
+        reason = message;
+        return false;
+    }
+
+    private static bool TryFind(WorldStateRow[] rows, string name, out int index, out string reason) {
+        for (index = 0; index < rows.Length; index++) {
             if (rows[index].Name.Value == name) {
-                return index;
+                reason = string.Empty;
+                return true;
             }
         }
-        throw new InvalidOperationException($"state row '{name}' does not exist");
+
+        index = -1;
+        reason = $"state row '{name}' does not exist";
+        return false;
     }
 
-    private static void Transfer(WorldDefinition definition, WorldStateRow[] rows, WorldStateTransform.Transfer transfer, string instance) {
-        var from = Find(rows, transfer.From);
-        var to = Find(rows, transfer.To);
+    // The redrawable integer streamDraw site a transfer or shuffle samples from, with its seed and stream resolved.
+    private static bool TryResolveDrawSite(WorldDefinition definition, WorldStateRow site, string instance, string verb,
+        out WorldGenerator generator, out WorldDraw draw, out ulong seed, out ulong stream, out string reason) {
+        generator = default!;
+        seed = default;
+        stream = 0;
+
+        if (site.Draw is not { Timing: not WorldDrawTiming.Boot } declared || site.Kind != CellKind.Int ||
+            !WorldGeneratorEngine.TryResolveSource(generators: definition.Generators, draw: declared, generator: out generator, reason: out _) || generator.Source != WorldGeneratorSource.StreamDraw) {
+            draw = default!;
+            return Refuse($"{verb} requires a redrawable integer streamDraw site", out reason);
+        }
+
+        draw = declared;
+        var descriptor = WorldDrawSites.StateRow(site.Name);
+        seed = WorldGeneratorEngine.ComputeSeedState(worldSeed: definition.Generation?.WorldSeed ?? 0, instanceIdentity: instance, site: descriptor);
+        stream = WorldGeneratorEngine.ComputeStreamId(descriptor);
+        reason = string.Empty;
+        return true;
+    }
+
+    private static bool TryTransfer(WorldDefinition definition, WorldStateRow[] rows, WorldStateTransform.Transfer transfer, string instance, out string reason) {
+        if (!TryFind(rows, transfer.From, out var from, out reason) || !TryFind(rows, transfer.To, out var to, out reason)) {
+            return false;
+        }
         var source = rows[from];
         var destination = rows[to];
         if (source.Zone is not { } sourceZone || destination.Zone is not { } destinationZone || sourceZone.Tokens != destinationZone.Tokens || !Enum.IsDefined(transfer.Selector)) {
-            throw new InvalidOperationException("transfer requires zones in one token domain and a defined selector");
+            return Refuse("transfer requires zones in one token domain and a defined selector", out reason);
         }
         if ((transfer.Selector is WorldZoneSelector.First or WorldZoneSelector.Last) && !sourceZone.Ordered || transfer.InsertFirst && !destinationZone.Ordered) {
-            throw new InvalidOperationException("positional selection and insertion require ordered zones");
+            return Refuse("positional selection and insertion require ordered zones", out reason);
         }
         if ((transfer.Selector == WorldZoneSelector.Key) != (transfer.Key is not null) || (transfer.Selector == WorldZoneSelector.Random) != (transfer.Draw is not null)) {
-            throw new InvalidOperationException("key selection requires only key; random selection requires only draw");
+            return Refuse("key selection requires only key; random selection requires only draw", out reason);
         }
         var cells = (source.Cells ?? []).ToList();
         if (cells.Count == 0) {
-            throw new InvalidOperationException("source zone is empty");
+            return Refuse("source zone is empty", out reason);
         }
         if (from != to && (destination.Cells?.Count ?? 0) >= (destination.Capacity ?? destination.CellCeiling)) {
-            throw new InvalidOperationException("destination zone is full");
+            return Refuse("destination zone is full", out reason);
         }
         var selected = transfer.Selector switch {
             WorldZoneSelector.First => 0,
@@ -102,41 +129,42 @@ public static partial class WorldStateTransforms {
             _ => 0,
         };
         if (transfer.Selector == WorldZoneSelector.Random) {
-            var drawIndex = Find(rows, transfer.Draw!);
-            var site = rows[drawIndex];
-            if (site.Draw is not { Timing: not WorldDrawTiming.Boot } draw || site.Kind != CellKind.Int ||
-                !WorldGeneratorEngine.TryResolveSource(generators: definition.Generators, draw: draw, generator: out var generator, reason: out _) || generator.Source != WorldGeneratorSource.StreamDraw) {
-                throw new InvalidOperationException("random transfer requires a redrawable integer streamDraw site");
+            if (!TryFind(rows, transfer.Draw!, out var drawIndex, out reason)) {
+                return false;
             }
-            var descriptor = WorldDrawSites.StateRow(site.Name);
-            if (!WorldGeneratorEngine.TryFire(generator, site.Kind,
-                WorldGeneratorEngine.ComputeSeedState(worldSeed: definition.Generation?.WorldSeed ?? 0, instanceIdentity: instance, site: descriptor),
-                WorldGeneratorEngine.ComputeStreamId(descriptor), site.DrawCursor, site.DrawDecks, out var fired, out var reason, draw.Secret)) {
-                throw new InvalidOperationException(reason);
+            var site = rows[drawIndex];
+            if (!TryResolveDrawSite(definition, site, instance, "random transfer", out var generator, out var draw, out var seed, out var stream, out reason)) {
+                return false;
+            }
+            if (!WorldGeneratorEngine.TryFire(generator, site.Kind, seed, stream, site.DrawCursor, site.DrawDecks, out var fired, out reason, draw.Secret)) {
+                return false;
             }
             selected = (int)(((ulong)fired.Numeric!.Value * (ulong)cells.Count) >> 32);
             rows[drawIndex] = site with { DrawCursor = checked(site.DrawCursor + fired.Samples), Cells = [new(WorldStateRow.SlotKey, fired.Numeric.Value)] };
         }
         if (selected < 0) {
-            throw new InvalidOperationException("source zone does not contain the selected token");
+            return Refuse("source zone does not contain the selected token", out reason);
         }
         var token = cells[selected];
         cells.RemoveAt(selected);
         var target = from == to ? cells : (destination.Cells ?? []).ToList();
         if (target.Any(c => c.Key == token.Key)) {
-            throw new InvalidOperationException("destination already contains the token");
+            return Refuse("destination already contains the token", out reason);
         }
         target.Insert(transfer.InsertFirst ? 0 : target.Count, token);
         rows[from] = source with { Cells = cells };
         rows[to] = destination with { Cells = target };
+        return true;
     }
 
-    private static void SetRay(WorldDefinition definition, WorldStateRow[] rows, WorldStateTransform.SetRay ray) {
-        var index = Find(rows, ray.Row);
+    private static bool TrySetRay(WorldDefinition definition, WorldStateRow[] rows, WorldStateTransform.SetRay ray, out string reason) {
+        if (!TryFind(rows, ray.Row, out var index, out reason)) {
+            return false;
+        }
         var row = rows[index];
         if (row.Board is not { } board || WorldTopologyCompilation.Find(definition.StateRaw, board.Topology) is not { } topology ||
             !topology.TryCell(ray.From, out var origin) || topology.Direction(ray.Direction) < 0 || ray.Through == ray.Until) {
-            throw new InvalidOperationException("setRay requires a board origin, valid direction and distinct through/until values");
+            return Refuse("setRay requires a board origin, valid direction and distinct through/until values", out reason);
         }
         var direction = topology.Direction(ray.Direction);
         Span<long> values = stackalloc long[topology.CellCount];
@@ -160,7 +188,7 @@ public static partial class WorldStateTransforms {
             affected[count++] = cell;
         }
         if (!closed) {
-            throw new InvalidOperationException("setRay requires a nonempty matching run and a closing endpoint");
+            return Refuse("setRay requires a nonempty matching run and a closing endpoint", out reason);
         }
         var cells = (row.Cells ?? []).ToList();
         for (var affectedIndex = 0; affectedIndex < count; affectedIndex++) {
@@ -173,6 +201,7 @@ public static partial class WorldStateTransforms {
             }
         }
         rows[index] = row with { Cells = cells };
+        return true;
     }
 
     /// <summary>Gets the absolute phase deadline, including a newly authored initial phase.</summary>
@@ -182,12 +211,16 @@ public static partial class WorldStateTransforms {
     public static long Deadline(WorldStatePhase phase, int rate) => phase.Sequence == 0 && phase.DeadlineTick == 0
         ? checked((long)decimal.Ceiling(phase.Phases[phase.Current].TimeoutSeconds * rate)) : phase.DeadlineTick;
 
-    private static void Complete(WorldDefinition definition, WorldStateRow[] rows, WorldStateTransform.CompletePhase complete, WorldPrincipal actor, ulong tick) {
-        var index = Find(rows, complete.Row);
+    private static bool TryComplete(WorldDefinition definition, WorldStateRow[] rows, WorldStateTransform.CompletePhase complete, WorldPrincipal actor, ulong tick, out string reason) {
+        if (!TryFind(rows, complete.Row, out var index, out reason)) {
+            return false;
+        }
         var row = rows[index];
-        var phase = row.Phase ?? throw new InvalidOperationException("completion requires a phase row");
+        if (row.Phase is not { } phase) {
+            return Refuse("completion requires a phase row", out reason);
+        }
         if ((complete.ExpectedSequence is { } expected && expected != phase.Sequence) || (complete.ExpectedSequence is null && actor != WorldPrincipal.World)) {
-            throw new InvalidOperationException("phase completion requires the current sequence");
+            return Refuse("phase completion requires the current sequence", out reason);
         }
         var node = phase.Phases[phase.Current];
         var deadline = Deadline(phase, definition.SimulationRateHz);
@@ -195,7 +228,7 @@ public static partial class WorldStateTransforms {
         var actorName = actor.Describe();
         if (complete.Participant is not null) {
             if (actor != WorldPrincipal.World) {
-                throw new InvalidOperationException("only the world program may name another participant");
+                return Refuse("only the world program may name another participant", out reason);
             }
             actorName = complete.Participant;
         }
@@ -206,20 +239,20 @@ public static partial class WorldStateTransforms {
         }
         if (complete.Timeout) {
             if (actor != WorldPrincipal.World || deadline == 0 || tick < (ulong)deadline) {
-                throw new InvalidOperationException("timeout completion requires the world program and an expired deadline");
+                return Refuse("timeout completion requires the world program and an expired deadline", out reason);
             }
         } else {
             if (deadline > 0 && tick >= (ulong)deadline) {
-                throw new InvalidOperationException("phase deadline has expired");
+                return Refuse("phase deadline has expired", out reason);
             }
             if (node.Mode == WorldPhaseMode.Resolution ? actor != WorldPrincipal.World : participant < 0 ||
                 (node.Mode == WorldPhaseMode.Sequential && participant != phase.Active) ||
                 (node.Mode == WorldPhaseMode.Together && (phase.Ready & (1u << participant)) != 0)) {
-                throw new InvalidOperationException("actor is not eligible to complete this phase");
+                return Refuse("actor is not eligible to complete this phase", out reason);
             }
         }
         if (complete.Next is not null && actor != WorldPrincipal.World) {
-            throw new InvalidOperationException("only the world program may branch a phase transition");
+            return Refuse("only the world program may branch a phase transition", out reason);
         }
         var next = phase;
         var transition = complete.Timeout || node.Mode == WorldPhaseMode.Resolution;
@@ -251,7 +284,7 @@ public static partial class WorldStateTransforms {
                 }
             }
             if (target < 0) {
-                throw new InvalidOperationException("next phase is not declared");
+                return Refuse("next phase is not declared", out reason);
             }
             next = next with { Current = target, Active = FirstActive(phase, phase.Direction), Ready = 0, Round = checked(phase.Round + (target == 0 ? 1 : 0)) };
         }
@@ -266,41 +299,76 @@ public static partial class WorldStateTransforms {
             next = next with { DeadlineTick = deadline };
         }
         rows[index] = row with { Phase = next };
+        return true;
     }
 
-    private static void ShuffleZone(WorldDefinition definition, WorldStateRow[] rows, WorldStateTransform.Shuffle shuffle, string instance) {
-        var index = Find(rows, shuffle.Row);
+    private static bool TrySort(WorldStateRow[] rows, WorldStateTransform.Sort sort, out string reason) {
+        if (!TryFind(rows, sort.Row, out var index, out reason)) {
+            return false;
+        }
+        var row = rows[index];
+        var cells = (row.Cells ?? []).ToArray();
+        Func<WorldStateCell, long> keyOf;
+        if (row.Zone is { } zone) {
+            if (!zone.Ordered || sort.By is null) {
+                return Refuse("sorting a zone requires an ordered zone and an attribute row", out reason);
+            }
+            if (!TryFind(rows, sort.By, out var byIndex, out reason)) {
+                return false;
+            }
+            var by = rows[byIndex];
+            if (!by.IsKeyed || by.Kind is not (CellKind.Int or CellKind.Fixed)) {
+                return Refuse("a sort attribute must be a keyed numeric row", out reason);
+            }
+            keyOf = cell => WorldDefinitionRows.FindCell(cells: by.Cells, key: cell.Key)?.Value ?? 0L;
+        } else {
+            if (!row.IsKeyed || sort.By is not null || row.Kind is not (CellKind.Int or CellKind.Fixed)) {
+                return Refuse("sorting a keyed row orders its own numeric values and takes no attribute", out reason);
+            }
+            keyOf = cell => cell.Value;
+        }
+        var ordered = sort.Descending
+            ? cells.OrderByDescending(keyOf).ToArray()
+            : cells.OrderBy(keyOf).ToArray();
+        rows[index] = row with { Cells = ordered };
+        return true;
+    }
+
+    private static bool TryShuffle(WorldDefinition definition, WorldStateRow[] rows, WorldStateTransform.Shuffle shuffle, string instance, out string reason) {
+        if (!TryFind(rows, shuffle.Row, out var index, out reason)) {
+            return false;
+        }
         var row = rows[index];
         if (row.Zone is not { Ordered: true }) {
-            throw new InvalidOperationException("shuffle requires an ordered zone");
+            return Refuse("shuffle requires an ordered zone", out reason);
         }
         var cells = (row.Cells ?? []).ToArray();
         if (cells.Length < 2) {
-            return;
+            return true;
         }
-        var drawIndex = Find(rows, shuffle.Draw);
+        if (!TryFind(rows, shuffle.Draw, out var drawIndex, out reason)) {
+            return false;
+        }
         var site = rows[drawIndex];
-        if (site.Draw is not { Timing: not WorldDrawTiming.Boot } draw || site.Kind != CellKind.Int ||
-            !WorldGeneratorEngine.TryResolveSource(generators: definition.Generators, draw: draw, generator: out var generator, reason: out _) || generator.Source != WorldGeneratorSource.StreamDraw) {
-            throw new InvalidOperationException("shuffle requires a redrawable integer streamDraw site");
+        if (!TryResolveDrawSite(definition, site, instance, "shuffle", out var generator, out var draw, out var seed, out var stream, out reason)) {
+            return false;
         }
-        var descriptor = WorldDrawSites.StateRow(site.Name);
-        var seed = WorldGeneratorEngine.ComputeSeedState(worldSeed: definition.Generation?.WorldSeed ?? 0, instanceIdentity: instance, site: descriptor);
-        var stream = WorldGeneratorEngine.ComputeStreamId(descriptor);
         var cursor = site.DrawCursor;
+        var last = 0L;
         // Fisher-Yates from the top: position i takes a uniform pick from [0, i], the same multiply-high map a random
-        // transfer selects with, one sample per position.
+        // transfer selects with, one sample per position. The site records the final cursor and the last sample once.
         for (var position = cells.Length - 1; position > 0; position--) {
-            if (!WorldGeneratorEngine.TryFire(generator, site.Kind, seed, stream, cursor, site.DrawDecks, out var fired, out var reason, draw.Secret)) {
-                throw new InvalidOperationException(reason);
+            if (!WorldGeneratorEngine.TryFire(generator, site.Kind, seed, stream, cursor, site.DrawDecks, out var fired, out reason, draw.Secret)) {
+                return false;
             }
             cursor = checked(cursor + fired.Samples);
-            var pick = (int)(((ulong)fired.Numeric!.Value * (ulong)(position + 1)) >> 32);
+            last = fired.Numeric!.Value;
+            var pick = (int)(((ulong)last * (ulong)(position + 1)) >> 32);
             (cells[position], cells[pick]) = (cells[pick], cells[position]);
-            rows[drawIndex] = site with { DrawCursor = cursor, Cells = [new(WorldStateRow.SlotKey, fired.Numeric.Value)] };
-            site = rows[drawIndex];
         }
+        rows[drawIndex] = site with { DrawCursor = cursor, Cells = [new(WorldStateRow.SlotKey, last)] };
         rows[index] = row with { Cells = cells };
+        return true;
     }
 
     private static uint AllParticipants(WorldStatePhase phase) => phase.Participants.Count == 32 ? uint.MaxValue : (1u << phase.Participants.Count) - 1;
@@ -319,26 +387,39 @@ public static partial class WorldStateTransforms {
         for (var i = 0; i < phase.Participants.Count; i++) {
             if (phase.Participants[i] == token) { return i; }
         }
-        throw new InvalidOperationException($"'{token}' is not a declared participant");
+        return -1;
     }
 
-    private static void Order(WorldStateRow[] rows, WorldStateTransform.TurnOrder order, WorldPrincipal actor) {
+    private static bool TryOrder(WorldStateRow[] rows, WorldStateTransform.TurnOrder order, WorldPrincipal actor, out string reason) {
         if (actor != WorldPrincipal.World) {
-            throw new InvalidOperationException("only the world program may reshape turn order");
+            return Refuse("only the world program may reshape turn order", out reason);
         }
-        var index = Find(rows, order.Row);
+        if (!TryFind(rows, order.Row, out var index, out reason)) {
+            return false;
+        }
         var row = rows[index];
-        var phase = row.Phase ?? throw new InvalidOperationException("turn order requires a phase row");
+        if (row.Phase is not { } phase) {
+            return Refuse("turn order requires a phase row", out reason);
+        }
         if (order.Direction is { } direction && direction is not (1 or -1)) {
-            throw new InvalidOperationException("turn order direction must be 1 or -1");
+            return Refuse("turn order direction must be 1 or -1", out reason);
         }
         var next = phase with { Direction = order.Direction ?? phase.Direction };
-        foreach (var token in order.Skip ?? []) { next = next with { Skipped = next.Skipped | (1u << ParticipantOrdinal(phase, token)) }; }
-        foreach (var token in order.Unskip ?? []) { next = next with { Skipped = next.Skipped & ~(1u << ParticipantOrdinal(phase, token)) }; }
+        foreach (var token in order.Skip ?? []) {
+            var ordinal = ParticipantOrdinal(phase, token);
+            if (ordinal < 0) { return Refuse($"'{token}' is not a declared participant", out reason); }
+            next = next with { Skipped = next.Skipped | (1u << ordinal) };
+        }
+        foreach (var token in order.Unskip ?? []) {
+            var ordinal = ParticipantOrdinal(phase, token);
+            if (ordinal < 0) { return Refuse($"'{token}' is not a declared participant", out reason); }
+            next = next with { Skipped = next.Skipped & ~(1u << ordinal) };
+        }
         if (order.Active is { } activeToken) {
             var active = ParticipantOrdinal(phase, activeToken);
+            if (active < 0) { return Refuse($"'{activeToken}' is not a declared participant", out reason); }
             if (IsSkipped(next, active)) {
-                throw new InvalidOperationException("the activated participant is skipped");
+                return Refuse("the activated participant is skipped", out reason);
             }
             next = next with { Active = active };
         } else if (phase.Phases[phase.Current].Mode == WorldPhaseMode.Sequential && IsSkipped(next, next.Active)) {
@@ -353,5 +434,6 @@ public static partial class WorldStateTransforms {
             next = next with { Sequence = checked(phase.Sequence + 1) };
         }
         rows[index] = row with { Phase = next };
+        return true;
     }
 }

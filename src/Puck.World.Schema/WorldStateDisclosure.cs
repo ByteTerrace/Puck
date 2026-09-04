@@ -21,8 +21,22 @@ public enum WorldHiddenCells : byte {
 /// <param name="Hidden">What an observer who may read the row learns about the cells it may not.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldStateVisibility(IReadOnlyList<string>? Readers = null, WorldHiddenCells Hidden = WorldHiddenCells.Omit) {
-    /// <summary>Whether this observation policy admits the authenticated recipient, or the public observer when absent.</summary>
-    public bool Allows(WorldPrincipal? recipient) => Readers is null || (recipient is { } actor && Readers.Contains(actor.Describe(), StringComparer.Ordinal));
+    /// <summary>Whether this observation policy admits the recipient named by its canonical token, or the public
+    /// observer when the token is null.</summary>
+    public bool Allows(string? recipient) {
+        if (Readers is null) {
+            return true;
+        }
+        if (recipient is null) {
+            return false;
+        }
+        for (var index = 0; index < Readers.Count; index++) {
+            if (string.Equals(Readers[index], recipient, StringComparison.Ordinal)) {
+                return true;
+            }
+        }
+        return false;
+    }
 }
 
 /// <summary>A persisted knowledge layer refreshed explicitly by the authority.</summary>
@@ -52,13 +66,14 @@ public sealed record WorldObservedRow(string Name, CellKind Kind, IReadOnlyList<
 public static class WorldStateDisclosure {
     /// <summary>Projects only rows/cells with explicit observation policies; token attributes inherit their zone's restrictions.</summary>
     public static IReadOnlyList<WorldObservedRow>? Compose(WorldDefinition definition, WorldPrincipal? recipient) {
+        var observer = new Observer(definition, recipient);
         var result = new List<WorldObservedRow>();
         foreach (var row in definition.State) {
             if (row.Visibility is null && !(row.Cells ?? []).Any(c => c.Visibility is not null)) {
                 continue;
             }
 
-            if (row.Visibility is { } policy && !policy.Allows(recipient)) {
+            if (row.Visibility is { } policy && !policy.Allows(observer.Name)) {
                 continue;
             }
 
@@ -66,7 +81,7 @@ public static class WorldStateDisclosure {
             var hidden = 0;
             var hiddenPolicy = row.Visibility?.Hidden ?? WorldHiddenCells.Omit;
             foreach (var cell in row.Cells ?? []) {
-                if (CanRead(definition, row, cell, recipient)) {
+                if (observer.CanRead(row, cell)) {
                     cells.Add(new(cell.Key.Value, cell.Value, cell.Text, cell.Observation));
                     continue;
                 }
@@ -84,44 +99,67 @@ public static class WorldStateDisclosure {
     }
 
     /// <summary>Whether the recipient may read a value, including its containing zone's policy.</summary>
-    public static bool CanRead(WorldDefinition definition, WorldStateRow row, WorldStateCell cell, WorldPrincipal? recipient) {
-        if ((row.Visibility is { } policy && !policy.Allows(recipient)) || (cell.Visibility is { } cellPolicy && !cellPolicy.Allows(recipient))) {
-            return false;
-        }
-
-        var domain = row.Tokens is not null ? row.Name.Value : row.KeysFrom;
-        if (domain is null) {
-            return true;
-        }
-
-        foreach (var zone in definition.State) {
-            if (zone.Zone?.Tokens != domain) {
-                continue;
-            }
-
-            foreach (var member in zone.Cells ?? []) {
-                if (member.Key != cell.Key) {
-                    continue;
-                }
-
-                if ((zone.Visibility is { } zonePolicy && !zonePolicy.Allows(recipient)) || (member.Visibility is { } memberPolicy && !memberPolicy.Allows(recipient))) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
+    public static bool CanRead(WorldDefinition definition, WorldStateRow row, WorldStateCell cell, WorldPrincipal? recipient) =>
+        new Observer(definition, recipient).CanRead(row, cell);
 
     /// <summary>Refuses flattening a presentation binding that could disclose a restricted value.</summary>
     public static void ValidateBindings(WorldDefinition definition, object graph, WorldPrincipal? recipient) {
+        var observer = new Observer(definition, recipient);
         foreach (var row in definition.State) {
-            if (!(row.Cells ?? []).Any(c => !CanRead(definition, row, c, recipient)) && (row.Visibility is null || row.Visibility.Allows(recipient))) {
+            if (!(row.Cells ?? []).Any(c => !observer.CanRead(row, c)) && (row.Visibility is null || row.Visibility.Allows(observer.Name))) {
                 continue;
             }
 
             if (WorldStateDocumentValues.ReferencesRow(definition, graph, row.Name.Value)) {
                 throw new InvalidOperationException("a presentation binding references restricted state; bind an explicit observation layer instead");
             }
+        }
+    }
+
+    // One recipient's view of one document: the canonical token is formatted once, and the zones are indexed by
+    // token domain once, so a cell's read check costs the members of its own domain's zones and nothing else.
+    private readonly struct Observer {
+        private readonly Dictionary<string, List<WorldStateRow>> m_zonesByDomain;
+
+        public Observer(WorldDefinition definition, WorldPrincipal? recipient) {
+            Name = recipient?.Describe();
+            m_zonesByDomain = new(StringComparer.Ordinal);
+            foreach (var row in definition.State) {
+                if (row.Zone?.Tokens is not { } domain) {
+                    continue;
+                }
+                if (!m_zonesByDomain.TryGetValue(domain, out var zones)) {
+                    zones = [];
+                    m_zonesByDomain[domain] = zones;
+                }
+                zones.Add(row);
+            }
+        }
+
+        public string? Name { get; }
+
+        public bool CanRead(WorldStateRow row, WorldStateCell cell) {
+            if ((row.Visibility is { } policy && !policy.Allows(Name)) || (cell.Visibility is { } cellPolicy && !cellPolicy.Allows(Name))) {
+                return false;
+            }
+
+            var domain = row.Tokens is not null ? row.Name.Value : row.KeysFrom;
+            if (domain is null || !m_zonesByDomain.TryGetValue(domain, out var zones)) {
+                return true;
+            }
+
+            foreach (var zone in zones) {
+                foreach (var member in zone.Cells ?? []) {
+                    if (member.Key != cell.Key) {
+                        continue;
+                    }
+
+                    if ((zone.Visibility is { } zonePolicy && !zonePolicy.Allows(Name)) || (member.Visibility is { } memberPolicy && !memberPolicy.Allows(Name))) {
+                        return false;
+                    }
+                }
+            }
+            return true;
         }
     }
 }
