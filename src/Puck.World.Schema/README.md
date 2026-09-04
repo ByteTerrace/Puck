@@ -61,11 +61,20 @@ key — `cellOf` takes a `bodyRef` in its place, the same `body:<n>`/
 topology — the only kind carrying a rectangular world-space frame
 (`CompiledWorldTopology.Origin`/`CellSize`, the same origin/cellSize every
 topology declares); a `Hex`/`Ring` row refuses them by name at compile.
+A `Box` topology is `width` by `layers` by `depth` cells with the 26 space
+directions: the grid's eight compass names in the layer, each prefixed `U`
+or `D` for the layer above or below, and `U`/`D` alone; ordinals run
+`(layer * depth + z) * width + x`, and `layerHeight` resolves a body's Y to
+its layer the way `cellSize` resolves X and Z. Rays, lines, masks under 64
+cells, patterns, path search, `combine`, and `mapBoard` apply to it
+unchanged; a 4x4x4 tic-tac-toe is one 64-bit mask and `line:4`.
 Every discrete topology carries its point group, derived from its shape and
 never authored: a square grid the eight elements `identity`, `rot90`,
 `rot180`, `rot270`, `mirrorX`, `mirrorZ`, `mirrorMain`, `mirrorAnti`; a
 rectangle the four without quarter turns; a hex board `rot60`..`rot300` and
-`mirror0`..`mirror5`; a ring the identity alone. `world.topology <topology>
+`mirror0`..`mirror5`; a box the signed axis permutations its equal extents
+admit (48 for a cube, 16 for a square prism, 8 otherwise), named by where
+`+x+y+z` land; a ring the identity alone. `world.topology <topology>
 [<cell>]` lists them and a cell's image under each. `mapBoard` (`target`,
 `source`, `element`) writes a board carried through an element, which is how
 rules authored from one side's view read the other side's position through

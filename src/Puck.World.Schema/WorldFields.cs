@@ -314,6 +314,9 @@ public sealed record WorldFieldsSection(
 /// <param name="Band">For a <see cref="WorldTopologyKind.Grid"/>, the vertical half-extent about the origin's Y a
 /// position must lie within to resolve to a cell (<c>cellOf</c>); 0 resolves any height, so a piece on the floor
 /// beneath a table still reads as on its square.</param>
+/// <param name="LayerHeight">For a <see cref="WorldTopologyKind.Box"/>, the world-space height of one layer, so a
+/// position's Y above the origin resolves to a layer the way X and Z resolve to a column; positive, and only on a
+/// box.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldStateLatticeTopology(
     string Name,
@@ -327,7 +330,8 @@ public sealed record WorldStateLatticeTopology(
     WorldTopologyKind Kind = WorldTopologyKind.Field,
     WorldTopologyWrap Wrap = WorldTopologyWrap.None,
     int Radius = 0,
-    float Band = 0f
+    float Band = 0f,
+    float LayerHeight = 0f
 );
 /// <summary>A state row's <c>lattice</c> trait -- the row holds one <see cref="CellKind.Fixed"/> scalar per cell of
 /// the named topology instead of slot/keyed cells. Values are authored DECIMAL (like every lattice quantity), not

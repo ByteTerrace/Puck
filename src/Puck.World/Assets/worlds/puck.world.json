@@ -15553,6 +15553,40 @@
       },
       "mode": "Level",
       "name": "tabletop-reset-just-moved"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "cubeWinner",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$board:line:cubeBoard:4:1:atLeast",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "cube-win-x"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "cubeWinner",
+          "value": 2
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$board:line:cubeBoard:4:2:atLeast",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "cube-win-o"
     }
   ],
   "schema": "puck.world.def.v1",
@@ -15736,6 +15770,22 @@
         ],
         "stepEveryTicks": 8,
         "width": 8,
+        "wrap": "None"
+      },
+      {
+        "cellSize": 0.25,
+        "depth": 4,
+        "kind": "Box",
+        "layerHeight": 0.25,
+        "layers": 4,
+        "name": "cube",
+        "origin": [
+          -6.0,
+          0.0,
+          14.0
+        ],
+        "stepEveryTicks": 8,
+        "width": 4,
         "wrap": "None"
       }
     ],
@@ -17701,6 +17751,23 @@
         ],
         "kind": "text",
         "name": "boardColors"
+      },
+      {
+        "board": {
+          "empty": 0,
+          "topology": "cube"
+        },
+        "kind": "int",
+        "max": 2,
+        "min": 0,
+        "name": "cubeBoard"
+      },
+      {
+        "kind": "int",
+        "max": 2,
+        "min": 0,
+        "name": "cubeWinner",
+        "value": 0
       }
     ]
   },

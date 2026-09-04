@@ -5229,7 +5229,7 @@
                                             "type": "string"
                                           },
                                           "element": {
-                                            "description": "An element name world.symmetry lists for that topology.",
+                                            "description": "An element name world.topology lists for that topology.",
                                             "type": "string"
                                           }
                                         },
@@ -12250,7 +12250,7 @@
                                   "type": "string"
                                 },
                                 "element": {
-                                  "description": "An element name world.symmetry lists for the topology.",
+                                  "description": "An element name world.topology lists for the topology.",
                                   "type": "string"
                                 }
                               },
@@ -13090,7 +13090,7 @@
                                             "type": "string"
                                           },
                                           "element": {
-                                            "description": "An element name world.symmetry lists for the topology.",
+                                            "description": "An element name world.topology lists for the topology.",
                                             "type": "string"
                                           }
                                         },
