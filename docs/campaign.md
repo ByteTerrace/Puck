@@ -227,12 +227,14 @@ the attitude it is drawn at, because leaning the contact axis onto a ceiling tel
 floor is a ceiling and a released body falls through it; a producer's inward pull steers against the
 body's own HOME (its activation position, echoed by `body.where`'s `home=`) rather than the world
 origin, so a population spread over placements keeps to its own ground instead of congregating; and
-`bond: "medium"` carries an idle drift and an equilibrium offset in the hold vocabulary — the one
-spelling of that law (the raw signal a governing shaping row's own convergence turns into an actual
-velocity, never a rate the medium authors itself), pinned by `WorldMediumLawTests` to a recorded
-fixed-point trace, generalized to measure displacement along the body's own resolved gravity-up
-rather than a raw world-Y difference, so a medium inside a tilted gravity area settles at the right
-height. The anisotropic shaping facets fold the other way:
+`bond: "medium"` carries an idle drift, an equilibrium offset and a settle rate in the hold
+vocabulary — the one spelling of that law (the settle rate is the one gain that turns the
+equilibrium error into a target velocity; the governing shaping row's own convergence then
+rate-limits the body's actual velocity toward that target the same way it rate-limits every other
+channel), pinned by `WorldMediumLawTests` to a recorded fixed-point trace, generalized to measure
+displacement along the body's own resolved gravity-up rather than a raw world-Y difference, so a
+medium inside a tilted gravity area settles at the right height. The anisotropic shaping facets fold
+the other way:
 they shape velocity rather than hold a body, so they are an `along` + `across` row in the same motion row, not a hold —
 `DriveLawTests` pins that fold to the row's recorded 240-tick trace. The pip carries two arms and
 two legs on `stride` (contralateral, about X) and `reach` (diagonal pairs, in the wall plane). The

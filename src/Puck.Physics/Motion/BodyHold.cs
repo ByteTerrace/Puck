@@ -53,16 +53,19 @@ public enum BodyHoldForward : byte {
 }
 /// <summary>The compiled displacement law of a <see cref="BodyHoldBond.Medium"/> hold — what the medium does to a
 /// body that is in it, independent of what the body itself thrusts. Meaningless, and left zeroed, on every other
-/// bond. Convergence toward the equilibrium line is NOT this law's own: the governing shaping row's own along/
-/// dynamics facet is the one convergence source, so this carries only the raw signal that facet converges toward,
-/// bounded by the hold's own <see cref="FixedBodyHold.Envelope"/>.</summary>
+/// bond. <see cref="SettleRate"/> is the one law that turns a position error into a target velocity; the governing
+/// shaping row's own along/dynamics facet then rate-limits the body's actual velocity toward that target the same
+/// way it rate-limits every other channel, bounded by the hold's own <see cref="FixedBodyHold.Envelope"/>.</summary>
 /// <param name="IdleDrift">The medium's idle vertical drift velocity below the equilibrium band, signed (u/s):
 /// positive drifts the body up toward equilibrium, negative sinks it, zero holds depth.</param>
 /// <param name="EquilibriumOffset">How far below the medium surface the body rests at equilibrium, and the band's
 /// half-width around that line (u).</param>
+/// <param name="SettleRate">The proportional gain (1/s) the equilibrium error is scaled by to reach a target
+/// velocity while inside the band or recovering a breach above the surface.</param>
 public readonly record struct FixedBodyMedium(
     FixedQ4816 IdleDrift,
-    FixedQ4816 EquilibriumOffset
+    FixedQ4816 EquilibriumOffset,
+    FixedQ4816 SettleRate
 );
 /// <summary>The compiled vertical arc a <see cref="BodyHoldKind.Gravity"/> or <see cref="BodyHoldKind.Lift"/> row
 /// falls under — zeroed on every other kind and on a <see cref="BodyHoldBond.Medium"/> row. The terminal fall speed

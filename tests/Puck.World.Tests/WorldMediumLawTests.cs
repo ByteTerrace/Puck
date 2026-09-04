@@ -204,7 +204,7 @@ public sealed class WorldMediumLawTests {
 
     // The medium spelled as a hold row on an ordinary grounded kit — the one authoring spelling of the law, and the
     // document MediumTrace240 was recorded against.
-    private static WorldDefinition BuildMediumHoldDocument(WorldStateLatticeTopology topology, float idleDrift = 0.5f) {
+    private static WorldDefinition BuildMediumHoldDocument(WorldStateLatticeTopology topology, float idleDrift = 0.5f, float settleRate = 6f) {
         var channels = new WorldChannel[] {
             new(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveAdvance),
             new(Name: "strafe", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveStrafe),
@@ -245,7 +245,8 @@ public sealed class WorldMediumLawTests {
                         Hold: BodyHoldKind.None,
                         Medium: new WorldHoldMedium(
                             EquilibriumOffset: 1f,
-                            IdleDrift: idleDrift
+                            IdleDrift: idleDrift,
+                            SettleRate: settleRate
                         ),
                         Name: "water",
                         Thrust: 0.75f
@@ -364,7 +365,8 @@ public sealed class WorldMediumLawTests {
             Hold: BodyHoldKind.Gravity,
             Medium: new WorldHoldMedium(
                 EquilibriumOffset: 1f,
-                IdleDrift: 0.5f
+                IdleDrift: 0.5f,
+                SettleRate: 6f
             ),
             Name: "floor",
             Reach: 1f,
@@ -545,5 +547,105 @@ public sealed class WorldMediumLawTests {
             condition: (Math.Abs(value: (settledY - untiltedLawPrediction)) > 0.1),
             userMessage: $"the settled y={settledY:0.####} must diverge from the untilted Y-scalar law's prediction y={untiltedLawPrediction:0.####}, or the tilt is not actually being read"
         );
+    }
+    // A variant of BuildMediumHoldDocument with seat-1 dropped to an authored spawn Y (the other three seats keep
+    // their own BuildSpawnPoints() corners) and the medium row's own settle rate and envelope overridden, so the
+    // envelope/settle-rate law tests below can place the body on either side of the equilibrium band without
+    // touching BuildMediumHoldDocument's own recorded-trace shape.
+    private static WorldDefinition BuildMediumEnvelopeDocument(WorldStateLatticeTopology topology, float spawnY, float idleDrift, float settleRate, float riseSpeed, float sinkSpeed) {
+        var document = BuildMediumHoldDocument(topology: topology, idleDrift: idleDrift, settleRate: settleRate);
+        var motion = document.Kits[0].Motion!;
+        var water = motion.Holds![0] with {
+            Envelope = new WorldHoldEnvelope(RiseSpeed: riseSpeed, SinkSpeed: sinkSpeed),
+        };
+
+        return document with {
+            KitRowsRaw = [(document.Kits[0] with {
+                Motion = (motion with {
+                    Holds = [water, .. motion.Holds.Skip(count: 1)],
+                }),
+            })],
+            SpawnPointsRaw = [
+                new WorldSpawnPoint(Id: "seat-1", Position: new DocumentVector3(x: 0f, y: spawnY, z: 0f)),
+                new WorldSpawnPoint(Id: "seat-2", Position: new DocumentVector3(x: 2f, y: 0f, z: 0f)),
+                new WorldSpawnPoint(Id: "seat-3", Position: new DocumentVector3(x: 0f, y: 0f, z: 2f)),
+                new WorldSpawnPoint(Id: "seat-4", Position: new DocumentVector3(x: 2f, y: 0f, z: 2f)),
+            ],
+        };
+    }
+    // The vertical speed the FIRST tick's own position delta implies (u/s), for a document whose shaping row is
+    // instant (BuildMediumHoldDocument's), so m_verticalVelocity snaps to ApplyMedium's own target with no ramp and
+    // that tick's position delta is exactly target * (1 / SimulationRateHz).
+    private const double SimulationRateHz = 240.0;
+    private static double FirstTickImpliedVerticalSpeed(WorldDefinition definition) {
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        var actor = WorldPrincipal.Seat(slot: 0);
+
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: actor, Slot: actor.Index, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);
+
+        var body = fixture.Server.Body(index: actor.Index)!;
+        var before = (double)body.FixedPosition.Y;
+
+        body.SubmitIntent(intent: default);
+        fixture.Step();
+
+        var after = (double)body.FixedPosition.Y;
+
+        return ((after - before) * SimulationRateHz);
+    }
+    /// <summary>The medium surface sits at world Y 5 (see BuildMediumHoldDocument); the row's own equilibriumOffset
+    /// is 1, so the free-fall branch (<c>error &gt; equilibriumOffset</c>) governs a body deep enough that its own
+    /// displacement exceeds 2, and clamps its authored idle drift to the hold's own RiseSpeed. The control is a
+    /// document whose RiseSpeed is wide enough that the same idle drift never reaches it — the two must diverge, or
+    /// the narrow envelope is not actually the thing bounding the clamped answer.</summary>
+    [Fact]
+    public void TheFreeFallBranchsIdleDriftIsClampedToTheHoldsRiseSpeed_WhereAWideEnvelopeLetsTheUnclampedDriftThrough() {
+        var topology = Topology();
+        const float IdleDrift = 5f;
+        const float NarrowRiseSpeed = 1f;
+        const float WideRiseSpeed = 100f;
+
+        var clamped = FirstTickImpliedVerticalSpeed(definition: BuildMediumEnvelopeDocument(topology: topology, spawnY: 0f, idleDrift: IdleDrift, settleRate: 6f, riseSpeed: NarrowRiseSpeed, sinkSpeed: 3f));
+        var control = FirstTickImpliedVerticalSpeed(definition: BuildMediumEnvelopeDocument(topology: topology, spawnY: 0f, idleDrift: IdleDrift, settleRate: 6f, riseSpeed: WideRiseSpeed, sinkSpeed: 3f));
+
+        Assert.True(condition: (Math.Abs(value: (clamped - NarrowRiseSpeed)) < 0.05), userMessage: $"expected the narrow envelope to clamp the rise to {NarrowRiseSpeed}, read {clamped:0.####}");
+        Assert.True(condition: (Math.Abs(value: (control - IdleDrift)) < 0.05), userMessage: $"expected the wide envelope to let the authored idle drift {IdleDrift} through unclamped, read {control:0.####}");
+        Assert.True(condition: (control > (clamped + 1f)), userMessage: $"the wide-envelope control {control:0.####} must exceed the narrow-envelope clamp {clamped:0.####}, or the RiseSpeed bound is not actually being read");
+    }
+    /// <summary>The in-band branch (<c>error &lt;= equilibriumOffset</c>) turns the equilibrium error into a target
+    /// through the medium's own SettleRate, clamped to the hold's own SinkSpeed for a body recovering a breach above
+    /// the surface (a large negative error). The control is a document whose SinkSpeed is wide enough that the same
+    /// error*SettleRate answer never reaches it — the two must diverge, or the narrow envelope is not actually the
+    /// thing bounding the clamped answer.</summary>
+    [Fact]
+    public void TheInBandBranchsSettleDriftIsClampedToTheHoldsSinkSpeed_WhereAWideEnvelopeLetsTheUnclampedDriftThrough() {
+        var topology = Topology();
+        const float SpawnY = 4.5f; // displacement 0.5, error = 0.5 - 1 = -0.5.
+        const float SettleRate = 6f; // raw drift = -0.5 * 6 = -3.
+        const float NarrowSinkSpeed = 1f;
+        const float WideSinkSpeed = 100f;
+
+        var clamped = FirstTickImpliedVerticalSpeed(definition: BuildMediumEnvelopeDocument(topology: topology, spawnY: SpawnY, idleDrift: 0.5f, settleRate: SettleRate, riseSpeed: 2.4f, sinkSpeed: NarrowSinkSpeed));
+        var control = FirstTickImpliedVerticalSpeed(definition: BuildMediumEnvelopeDocument(topology: topology, spawnY: SpawnY, idleDrift: 0.5f, settleRate: SettleRate, riseSpeed: 2.4f, sinkSpeed: WideSinkSpeed));
+
+        Assert.True(condition: (Math.Abs(value: (clamped - -NarrowSinkSpeed)) < 0.05), userMessage: $"expected the narrow envelope to clamp the sink to {-NarrowSinkSpeed}, read {clamped:0.####}");
+        Assert.True(condition: (Math.Abs(value: (control - -3.0)) < 0.05), userMessage: $"expected the wide envelope to let the raw error*SettleRate answer -3 through unclamped, read {control:0.####}");
+        Assert.True(condition: (clamped > (control + 1f)), userMessage: $"the narrow-envelope clamp {clamped:0.####} must be less negative than the wide-envelope control {control:0.####}, or the SinkSpeed bound is not actually being read");
+    }
+    /// <summary>The in-band branch's own target is the equilibrium error scaled by the medium's own SettleRate, not
+    /// an implicit unit gain: two documents differing only in SettleRate must answer proportionally different first-
+    /// tick drifts. Both spawns and envelopes are wide enough that neither answer clamps, so the divergence reads the
+    /// SettleRate scaling alone.</summary>
+    [Fact]
+    public void TheInBandBranchsDriftScalesWithTheMediumsOwnSettleRate_WhereADifferentRateAnswersDifferently() {
+        var topology = Topology();
+        const float SpawnY = 4.5f; // displacement 0.5, error = -0.5.
+
+        var fast = FirstTickImpliedVerticalSpeed(definition: BuildMediumEnvelopeDocument(topology: topology, spawnY: SpawnY, idleDrift: 0.5f, settleRate: 6f, riseSpeed: 2.4f, sinkSpeed: 100f));
+        var slow = FirstTickImpliedVerticalSpeed(definition: BuildMediumEnvelopeDocument(topology: topology, spawnY: SpawnY, idleDrift: 0.5f, settleRate: 2f, riseSpeed: 2.4f, sinkSpeed: 100f));
+
+        Assert.True(condition: (Math.Abs(value: (fast - -3.0)) < 0.05), userMessage: $"expected error(-0.5) * SettleRate(6) = -3, read {fast:0.####}");
+        Assert.True(condition: (Math.Abs(value: (slow - -1.0)) < 0.05), userMessage: $"expected error(-0.5) * SettleRate(2) = -1, read {slow:0.####}");
+        Assert.True(condition: (Math.Abs(value: (fast - slow)) > 1f), userMessage: $"a SettleRate of 6 ({fast:0.####}) must answer differently from a SettleRate of 2 ({slow:0.####}), or the in-band branch is not actually reading it");
     }
 }

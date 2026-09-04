@@ -157,7 +157,8 @@ public sealed class TransferAbortKitWideningLawTests {
                         Hold: BodyHoldKind.None,
                         Medium: new WorldHoldMedium(
                             EquilibriumOffset: 1f,
-                            IdleDrift: 0.5f
+                            IdleDrift: 0.5f,
+                            SettleRate: 6f
                         ),
                         Name: "water",
                         Thrust: 0.75f

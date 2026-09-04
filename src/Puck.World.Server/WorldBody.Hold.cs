@@ -1111,14 +1111,16 @@ public sealed partial class WorldBody {
     // no medium at all rather than wrap a division into a nonsense displacement.
     private static readonly FixedQ4816 MinMediumUpAlignment = FixedQ4816.FromDouble(value: 0.05);
 
-    // The one medium law. The body's own commanded thrust is folded into the medium's drift BEFORE the convergence
+    // The one medium law. The body's own commanded thrust is folded into the medium's drift before the convergence
     // runs, so nothing writes the vertical channel twice: below the equilibrium band the medium drifts the body at
-    // its idle drift, inside the band (and above it, recovering a breach) the raw error IS the target — the
-    // governing shaping row's own along/dynamics facet below is the one convergence source that turns it into an
-    // actual velocity, so this law authors no rate of its own — and the sum is clamped to the hold's own vertical
-    // envelope. Displacement is the distance a body would travel along its OWN resolved gravity-up to reach the
-    // field's plane (Point/Normal) — a ray/plane intersection, not a raw Y difference — so a medium inside a tilted
-    // gravity area, or on a planetoid, still settles at the right height along the axis that actually governs it.
+    // its idle drift; inside the band (and above it, recovering a breach) the equilibrium error scaled by the
+    // medium's own settle rate is the target. The governing shaping row's own along/dynamics facet below then
+    // rate-limits the body's actual velocity toward that target the same way it rate-limits every other channel —
+    // one gain turns position error into a target velocity, one rate turns that target into an actual one — and the
+    // sum is clamped to the hold's own vertical envelope, scaled by the body's own geometric scale like every other
+    // vertical-channel bound. Displacement is the distance a body would travel along its own resolved gravity-up to
+    // reach the field's plane (Point/Normal) — a ray/plane intersection, not a raw Y difference — so a medium inside
+    // a tilted gravity area still settles at the right height along the axis that actually governs it.
     private void ApplyMedium(in FixedBodyHold hold, ref BodyMotionScratch scratch) {
         var medium = hold.Medium;
 
@@ -1136,6 +1138,9 @@ public sealed partial class WorldBody {
             return;
         }
 
+        var riseSpeed = (hold.Envelope.RiseSpeed * m_scale);
+        var sinkSpeed = (hold.Envelope.SinkSpeed * m_scale);
+
         // Positive when the field's plane sits ahead of the body along up — the body is below the free surface.
         var displacement = (FixedVector3.Dot(
             left: (surface.Point - m_position),
@@ -1147,8 +1152,8 @@ public sealed partial class WorldBody {
         if (error > medium.EquilibriumOffset) {
             drift = FixedQ4816.Clamp(
                 value: medium.IdleDrift,
-                minimum: -hold.Envelope.SinkSpeed,
-                maximum: hold.Envelope.RiseSpeed
+                minimum: -sinkSpeed,
+                maximum: riseSpeed
             );
         } else {
             var upwardCap = ((medium.IdleDrift > FixedQ4816.Zero)
@@ -1157,8 +1162,8 @@ public sealed partial class WorldBody {
             );
 
             drift = FixedQ4816.Clamp(
-                value: error,
-                minimum: -hold.Envelope.SinkSpeed,
+                value: (error * medium.SettleRate),
+                minimum: -sinkSpeed,
                 maximum: upwardCap
             );
         }
@@ -1168,8 +1173,8 @@ public sealed partial class WorldBody {
                 hold: in hold,
                 scratch: ref scratch
             ) + drift),
-            minimum: -hold.Envelope.SinkSpeed,
-            maximum: hold.Envelope.RiseSpeed
+            minimum: -sinkSpeed,
+            maximum: riseSpeed
         );
 
         // ExecuteProgram already refreshed the recency clocks and selected the row once before phase 0, so this
@@ -1187,8 +1192,8 @@ public sealed partial class WorldBody {
             StepVerticalFollower(
                 step: in planar,
                 target: target,
-                minimum: -hold.Envelope.SinkSpeed,
-                maximum: hold.Envelope.RiseSpeed
+                minimum: -sinkSpeed,
+                maximum: riseSpeed
             );
             WriteMediumFacts(
                 displacement: displacement,

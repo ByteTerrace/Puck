@@ -433,7 +433,7 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{rowPath}.bond 'Medium' requires a medium lattice row (state.world[].lattice.medium) — a medium hold implies a medium to stand in.");
                 }
                 if (hold.Medium is not { } medium) {
-                    errors.Add(item: $"{rowPath}.medium is required for a medium hold — the idle drift and the equilibrium offset are its whole law.");
+                    errors.Add(item: $"{rowPath}.medium is required for a medium hold — the idle drift, the equilibrium offset and the settle rate are its whole law.");
                 } else {
                     RequirePositive(
                         errors: errors,
@@ -444,6 +444,11 @@ public static partial class WorldDefinitionValidator {
                         errors: errors,
                         name: $"{rowPath}.medium.idleDrift",
                         value: medium.IdleDrift
+                    );
+                    RequirePositive(
+                        errors: errors,
+                        name: $"{rowPath}.medium.settleRate",
+                        value: medium.SettleRate
                     );
                 }
             } else if (hold.Medium is not null) {

@@ -37,19 +37,20 @@ public interface IWorldFieldLatticeHost {
     /// <param name="tick">The stepping tick.</param>
     void AddScalar(WorldStateHandle row, FixedQ4816 amount, ulong tick);
 }
+/// <summary>A field lattice's own free surface at one column — a point on it and the lattice's own frame normal
+/// (always world +Y: the lattice carries no rotation of its own). A medium hold's law projects displacement along
+/// the body's own resolved gravity-up rather than this normal, so a medium inside a tilted gravity area still
+/// measures depth along the axis that governs it; the lattice's own normal stays world +Y either way, so a curved
+/// (planetoid) surface is not expressible this way, only a uniform tilted one.</summary>
+/// <param name="Point">A point on the surface, over the sampled position's own column.</param>
+/// <param name="Normal">The lattice's own frame normal.</param>
+public readonly record struct FixedFieldSurface(FixedVector3 Point, FixedVector3 Normal);
 /// <summary>
 /// The live cell values of a world's <c>fields</c> section and the reactions that evolve them — simulation state
 /// beside the population: stepped from <c>WorldServer.Step</c> on the lattice's cadence, checkpointed, and delivered
 /// to clients as cell deltas on the snapshot. Values are <see cref="FixedQ4816"/>; every reaction is integer
 /// arithmetic in a fixed cell order, so the same document and input reproduce the same fields bit for bit.
 /// </summary>
-/// <summary>A field lattice's own free surface at one column — a point on it and the lattice's own frame normal
-/// (always world +Y: the lattice carries no rotation of its own). A medium hold's law projects displacement along
-/// the BODY's own resolved gravity-up rather than this normal, so a medium inside a tilted gravity area, or on a
-/// planetoid, still measures depth correctly.</summary>
-/// <param name="Point">A point on the surface, over the sampled position's own column.</param>
-/// <param name="Normal">The lattice's own frame normal.</param>
-public readonly record struct FixedFieldSurface(FixedVector3 Point, FixedVector3 Normal);
 public sealed class WorldFieldLattice {
     private static readonly FixedVector3 UnitY = new(
         X: FixedQ4816.Zero,

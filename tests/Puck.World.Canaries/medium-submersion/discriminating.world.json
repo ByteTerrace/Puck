@@ -162,7 +162,8 @@
               },
               "medium": {
                 "idleDrift": 0.5,
-                "equilibriumOffset": 1
+                "equilibriumOffset": 1,
+                "settleRate": 6
               },
               "thrust": 0.75
             },

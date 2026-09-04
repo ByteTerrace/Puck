@@ -55,11 +55,13 @@ public enum ShapingInstant : byte {
 }
 /// <summary>The compiled form of a <c>shaping</c> row's <c>along</c> facet: the whole-vector response law's
 /// engage/release rates (read when the row carries no <see cref="FixedShapingAcross"/>), and the drive
-/// decomposition's longitudinal accel/brake/coast/reverse rates (read when it does).</summary>
-/// <param name="Engage">The whole-vector engage rate (u/s²), or the drive's longitudinal accel rate.</param>
+/// decomposition's longitudinal engage/reversal/release rates and backward target speed (read when it
+/// does).</summary>
+/// <param name="Engage">The whole-vector engage rate (u/s²), or the drive's longitudinal forward-accelerate
+/// rate.</param>
 /// <param name="ReversalRate">Unread without a paired <see cref="FixedShapingAcross"/>: the drive's sign-reversal
 /// rate (u/s²) while back-throttle opposes forward travel.</param>
-/// <param name="Release">The whole-vector release rate (u/s²), or the drive's coast rate.</param>
+/// <param name="Release">The whole-vector release rate (u/s²), or the drive's coast-down rate.</param>
 /// <param name="BackwardSpeed">Unread without a paired <see cref="FixedShapingAcross"/>: the backward target speed
 /// (u/s) full back-throttle converges on from rest.</param>
 /// <param name="Instant">The explicit absence-derived immediate-convergence lanes. Rate fields are zero where

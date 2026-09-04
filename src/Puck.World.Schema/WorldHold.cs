@@ -14,15 +14,19 @@ public sealed record WorldHoldSpend(
     float RatePerSecond
 );
 /// <summary>What the medium does to a body standing in it — the authored half of a <see cref="BodyHoldBond.Medium"/>
-/// hold. Required for that bond and refused on every other. Convergence toward equilibrium is NOT authored here: the
-/// governing shaping row's own along/dynamics facet is the one convergence source this law's raw signal — clamped by
-/// <see cref="WorldHold.Envelope"/> — converges through.</summary>
+/// hold. Required for that bond and refused on every other. <see cref="SettleRate"/> is the one law that turns the
+/// equilibrium error into a target velocity; the governing shaping row's own along/dynamics facet then rate-limits
+/// the body's actual velocity toward that target — clamped by <see cref="WorldHold.Envelope"/> — the same way it
+/// rate-limits every other channel.</summary>
 /// <param name="IdleDrift">The idle vertical drift velocity below the equilibrium band, signed (u/s).</param>
 /// <param name="EquilibriumOffset">The equilibrium line's depth below the medium surface, and the band's
 /// half-width (u).</param>
+/// <param name="SettleRate">The proportional gain (1/s) the equilibrium error scales by to reach a target velocity
+/// inside the band or while recovering a breach above the surface.</param>
 public sealed record WorldHoldMedium(
     float IdleDrift,
-    float EquilibriumOffset
+    float EquilibriumOffset,
+    float SettleRate
 );
 /// <summary>The vertical arc a <see cref="BodyHoldKind.Gravity"/> or <see cref="BodyHoldKind.Lift"/> row falls
 /// under, carried per row so a kit's ground, wall, and air rows may each fall differently. Required on those two
@@ -126,7 +130,8 @@ public static class WorldHoldFactory {
     public static FixedBodyMedium CompileMedium(WorldHoldMedium? medium) => ((medium is { } law)
         ? new FixedBodyMedium(
             EquilibriumOffset: FixedQ4816.FromDouble(value: law.EquilibriumOffset),
-            IdleDrift: FixedQ4816.FromDouble(value: law.IdleDrift)
+            IdleDrift: FixedQ4816.FromDouble(value: law.IdleDrift),
+            SettleRate: FixedQ4816.FromDouble(value: law.SettleRate)
         )
         : default
     );

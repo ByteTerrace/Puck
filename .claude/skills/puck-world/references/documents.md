@@ -1409,9 +1409,11 @@ is measured against gravity-up, never the body's own leaned up), `Free` (no
 surface at all), or `Medium` (the world's own field-lattice column — the world
 either offers a medium where the body is or it does not, so the bond carries no
 cone and no reach, and takes a `medium` law instead:
-`{ idleDrift, equilibriumOffset }` — the raw signal a governing shaping row's
-own `along`/`dynamics` facet converges toward; the medium law authors no
-convergence rate of its own). `hold` is `Gravity` (gravity holds the body
+`{ idleDrift, equilibriumOffset, settleRate }` — `settleRate` is the one gain
+that turns the equilibrium error into a target velocity; the governing shaping
+row's own `along`/`dynamics` facet then rate-limits the body's actual velocity
+toward that target the same way it rate-limits every other channel). `hold` is
+`Gravity` (gravity holds the body
 against the face — the walkable case, integrating the row's own `gravity`
 arc), `Pull` (a pull of `pull` u/s toward the face applied as a POSITIONAL
 standoff, gravity suspended while it holds), `Lift` (a fraction `lift` of

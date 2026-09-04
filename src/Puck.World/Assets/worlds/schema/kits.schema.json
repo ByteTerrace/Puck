@@ -355,11 +355,16 @@
                         "equilibriumOffset": {
                           "description": "The equilibrium line\u0027s depth below the medium surface, and the band\u0027s half-width (u).",
                           "type": "number"
+                        },
+                        "settleRate": {
+                          "description": "The proportional gain (1/s) the equilibrium error scales by to reach a target velocity inside the band or while recovering a breach above the surface.",
+                          "type": "number"
                         }
                       },
                       "required": [
                         "idleDrift",
-                        "equilibriumOffset"
+                        "equilibriumOffset",
+                        "settleRate"
                       ],
                       "additionalProperties": false,
                       "default": null
