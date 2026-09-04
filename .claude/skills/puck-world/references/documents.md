@@ -2058,8 +2058,9 @@ zone, and neutral-grace duration.
   `WorldClient.EntityCapacity` (the F3 reconciliation, 2026-08-06; see
   [SKILL.md](../SKILL.md)'s "Boundaries" section). There is no
   `MaxPopulation`/`MaxPopulationSimulated` constant. The client reserves full
-  catalog detail for the first 128 indices and emits later active bodies as
-  one-instance coarse capsules. That hybrid bounds storage and SDF inputs; it
+  catalog detail for the first `DetailedRenderBand` (128) indices and emits
+  later active bodies as one-instance coarse capsules. That hybrid bounds
+  storage and SDF inputs; it
   does not establish dense-crowd frame time. Hard presentation targets require
   a non-per-creature SDF lane (for example raster impostors or an authored
   aggregate). Existing shipped worlds may still author
@@ -2083,8 +2084,9 @@ zone, and neutral-grace duration.
   the document-global CPU/instance-grid admission ceiling. The recorded
   GPU-bound measurement is 0 but does not govern admission.
 - `WorldPlacementPolicy`: `MaxShapesPerStamp = 48`,
-  `MaxStampRegistrations = 8`, `TimelineSecondsPerFrame = 8f/60f`, and the
-  reserved derived-face screen band.
+  `MaxStampRegistrations = WorldBodiesLimits.DetailedRenderBand` (128),
+  `TimelineSecondsPerFrame = 8f/60f`, and the reserved derived-face screen
+  band.
 - `WorldRenderEnvelope.cs` — the render-capacity oracle: `Configure` at boot
   from the probe, `TryFit(candidate)` at every apply; unconfigured reads as
   "fits".

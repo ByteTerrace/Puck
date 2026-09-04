@@ -63,9 +63,10 @@ Catalog appearance and body identity are independent. `WorldRigCatalog` holds
 any of them. A pinned or transferred look therefore keeps every leaf, even when
 its destination slot originally wore a smaller rig. Restyling one body does not
 move another body's transforms or attachment slots. Render-capacity probes
-reserve the largest rig for each of the lowest 128 detailed bodies and one
-coarse capsule for every remaining body; repeated looks do not change that
-hybrid ceiling, and the number of catalog entries is not the population limit.
+reserve the largest rig for each of the lowest `WorldBodiesLimits.DetailedRenderBand`
+(128) detailed bodies and one coarse capsule for every remaining body;
+repeated looks do not change that hybrid ceiling, and the number of catalog
+entries is not the population limit.
 This is a buffer and input-complexity bound, not a frame-rate guarantee. A dense
 crowd with a hard presentation target needs a non-per-creature SDF lane such as
 raster impostors or an authored aggregate representation.

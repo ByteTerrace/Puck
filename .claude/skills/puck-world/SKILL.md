@@ -124,7 +124,12 @@ feeds back into the tick.
 A `BodyTargetSource.Navigated` producer points at one domain and one ordinary
 authority-checked target register. Keep A* fixed-point, budgeted, stable-tied,
 checkpointed, and hashed; bake static solid clearance once, but recheck a
-medium field before traversing its cached edge. Extend this vocabulary for
+medium field before traversing its cached edge — a medium's free surface
+(value × heightScale) is bounded by the shared lattice's body-coupling
+ceiling, not by its topology's own layer count, so a shallow `layers: 1`
+topology under a deep medium still resolves correctly
+(`WorldFieldLattice.IsInsideMedium`/`IsSegmentInsideMedium`). Extend this
+vocabulary for
 engine-integral movement semantics; addons/agent extensions remain the home
 for arbitrary policy and planning, not collision/path correctness.
 
@@ -330,9 +335,10 @@ choosing fixed-point primitives on sim value paths.
   client's fixed per-entity view arrays are the SAME number by construction; the
   old gap where a document could author past the client bound, validate, and boot
   into an out-of-bounds throw is closed. The client reserves detailed rigs for
-  the first 128 indices and emits later active bodies through the coarse crowd
-  representation. Existing shipped worlds may still author 128 with seats 0–3
-  local and 124 simulated.
+  the first `WorldBodiesLimits.DetailedRenderBand` (128, also
+  `WorldPlacementPolicy.MaxStampRegistrations`) indices and emits later active
+  bodies through the coarse crowd representation. Existing shipped worlds may
+  still author 128 with seats 0–3 local and 124 simulated.
 - `SdfProgramBuilder.MaxInstances = 16384` — the per-tile mask width scales
   with DECLARED instances, which is why the frame source emits active
   avatars only and the render envelope is probed at construction
