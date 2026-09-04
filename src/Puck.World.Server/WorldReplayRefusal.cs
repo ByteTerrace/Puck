@@ -48,7 +48,7 @@ internal enum ReplayRefusal {
     RateZeroCarriesTicks,
 
     /// <summary>A recorded same-process transfer's own content signature disagrees with what its decoded fields
-    /// recompute. This entry sits outside the pose hash's coverage, so this check is the only thing on the tape that
+    /// recompute. This entry sits outside the population hash's coverage, so this check is the only thing on the tape that
     /// would ever catch a tampered byte in one — never a plausible-looking ordinary trajectory mismatch.</summary>
     [Refusal(door: "replay.tape", condition: "a recorded transfer's content signature disagrees with what its own decoded fields recompute", kind: RefusalKind.Verdict)]
     TransferEventTampered,

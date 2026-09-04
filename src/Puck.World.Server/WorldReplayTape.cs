@@ -35,7 +35,7 @@ public readonly record struct WorldReplayStopResult(string Path, WorldReplayVerd
 /// the <see cref="LoopbackTransport"/> each tick — plus the record-start world definition, active seats, and mounted
 /// addon receipts, into a self-contained
 /// <see cref="WorldReplaySnapshot"/>. It samples both the live state-system hash used for the verdict and a narrower
-/// population-pose hash retained for trajectory inspection. A saved recording
+/// population hash retained for trajectory inspection. A saved recording
 /// rehydrates a fresh world from its captured starting state and re-drives the captured stream through it
 /// (<see cref="WorldReplaySnapshot.Drive"/>); the replayed state trace is compared against the live reference, so a MATCH is a
 /// genuine live-vs-replay fidelity proof rather than a re-drive compared against another re-drive of the same stream.
@@ -98,7 +98,7 @@ public sealed partial class WorldReplayTape {
     private List<WorldReplaySeat>? m_seats;
     private List<WorldReplayTickInput>? m_ticks;
 
-    // The LIVE session's per-tick pose hash trace — one entry appended each NoteTick (after that tick's server step), so
+    // The LIVE session's per-tick population hash trace — one entry appended each NoteTick (after that tick's server step), so
     // the final entry is the true live tail and the whole array is the trajectory. Persisted as the recording's
     // RecordedHashes, so a replay's fresh re-drive is compared against the ACTUAL live session tick by tick, not against
     // another re-drive of itself and not only at the end.
@@ -386,7 +386,7 @@ public sealed partial class WorldReplayTape {
     /// <c>"aborted:&lt;reason&gt;"</c>) — narration only, never re-interpreted by <see cref="WorldReplaySnapshot.Drive"/>.</param>
     /// <param name="departedBootSlots">The 0-based boot local-seat slots this crossing actually removed from boot's
     /// own population (empty unless this transfer's source is boot and it committed) — re-applied against the
-    /// replay's shadow population at re-drive so a departed body stops contributing to the pose hash there exactly
+    /// replay's shadow population at re-drive so a departed body stops contributing to the population hash there exactly
     /// as it stopped contributing live (see <see cref="WorldReplayEntry.Transfer"/>'s own remarks).</param>
     public void NoteTransfer(ulong transferId, string destinationName, string scopeKey, ulong generationId, string outcome, IReadOnlyList<int> departedBootSlots) {
         if (m_mode != WorldReplayMode.Recording) {
@@ -611,12 +611,12 @@ public sealed partial class WorldReplayTape {
         }
 
         if (m_liveServer.AnyMachineEverPumped) {
-            refusal = "a screen machine has already stepped this session — offline replay reconstructs a FRESH WorldMachineHost from the tape's embedded definition, so a booted cartridge's accumulated core state (WRAM, CPU registers) from before recording began can never be re-established, and the pose hash covers no machine state to catch the divergence; record from a fresh boot, before any machine's first step";
+            refusal = "a screen machine has already stepped this session — offline replay reconstructs a FRESH WorldMachineHost from the tape's embedded definition, so a booted cartridge's accumulated core state (WRAM, CPU registers) from before recording began can never be re-established, and the population hash covers no machine state to catch the divergence; record from a fresh boot, before any machine's first step";
             return false;
         }
 
         if (m_liveServer.AnyScreenOpEverApplied) {
-            refusal = "a screen op (insert/eject/select/options/link/unlink) has already applied this session — screen ops are not document mutations, so the recording's own definition snapshot cannot capture whichever one already landed, and offline replay reconstructs a FRESH WorldMachineHost from that snapshot alone; a pre-record insert/select can leave the live session running a machine replay never even creates, and the pose hash covers no machine state to catch it; record from a fresh boot, before any screen op applies";
+            refusal = "a screen op (insert/eject/select/options/link/unlink) has already applied this session — screen ops are not document mutations, so the recording's own definition snapshot cannot capture whichever one already landed, and offline replay reconstructs a FRESH WorldMachineHost from that snapshot alone; a pre-record insert/select can leave the live session running a machine replay never even creates, and the population hash covers no machine state to catch it; record from a fresh boot, before any screen op applies";
             return false;
         }
 

@@ -1,6 +1,6 @@
 # Deterministic replay — the tape
 
-`replay.record` captures a running session's inputs and per-tick pose hashes;
+`replay.record` captures a running session's inputs and per-tick population hashes;
 `replay.verify` re-drives them offline against a fresh boot-image world and
 reports MATCH or MISMATCH naming the first divergent tick; `replay.drive`
 re-drives a tape into the LIVE session at the recorded rate, and
@@ -18,7 +18,7 @@ from there into a standalone child. Files (all in
 
 - Format and development version
 - What the tape records — and does not
-- The pose hash — what a MATCH proves
+- The population hash — what a MATCH proves
 - Lifecycle
 - Verify semantics
 - Inspect — reading a tape back
@@ -244,7 +244,7 @@ shadow server an explicit narration-only tap instead of the live one: a fired
 save is SUPPRESSED, never reaching disk, and named on stderr
 (`[replay: save effect suppressed …]`, once per fire) rather than left
 indistinguishable from a rule that never fired. Suppressing it cannot move the
-pose hash — the sim state after a tick carrying a fired save is bit-identical
+population hash — the sim state after a tick carrying a fired save is bit-identical
 to a tick without one (`ActionEffect.Save`'s own remarks) — so a
 `replay.verify` MATCH is unaffected either way; proven by a fresh-process
 verify leaving the recorded world file's mtime untouched while the hash still
@@ -269,10 +269,10 @@ armed-recording refusal remains for any of the three verbs.
 ## The hash boundaries — what a MATCH proves
 
 `WorldReplaySnapshot.HashState(population)`: FNV-1a over active bodies in
-index order — per body the index, the raw `FixedPosition.X/Y/Z` lanes, ALL
-FOUR raw `FixedOrientation` quaternion lanes, and the raw `FixedYaw` scalar
-(authoritative under the grounded program; the quaternion is built from it).
-This pose digest is diagnostic; the replay verdict instead compares
+index order — per body the index, fixed position, all four orientation lanes,
+grounded-program yaw, rigid linear/angular velocity, rest hold and contact
+latches/miss streaks, and both carry-partner indices. This population digest is
+diagnostic; the replay verdict instead compares
 `RecordedAuthoritativeHashes` against `WorldRuntimeStateHash.HashAuthoritative`.
 That scope includes poses, stored/resolved world-state rows and traits, live
 field cells, rule/interaction latches, body action state, cached navigation and
@@ -292,10 +292,10 @@ raws themselves are not independently hashed; they cross only through
 [mutations.md](mutations.md)'s body-motion notes), never the replay tape.
 Checkpoint continuation also carries the follower seed latches, arbitrary-up
 frame/reseat/turn fractions, and same-world climb/grapple state through
-`WorldBody.IntegrationResidue`; none is independently covered by this pose
+`WorldBody.IntegrationResidue`; none is independently covered by this population
 hash before it changes a later pose.
 Across a session request, MATCH proves that re-executing the request reproduced
-the same hashed pose trajectory. It does not directly prove the request's reply,
+the same hashed authoritative trajectory. It does not directly prove the request's reply,
 roster echo, profile document, population metadata, or any other unhashed effect.
 Seat occupancy and slot generations also enter the authoritative fold. Say
 which scope was checked when a verification leans on `replay.verify`.

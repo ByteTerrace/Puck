@@ -141,7 +141,7 @@ public abstract record WorldReplayEntry {
     /// through the crossing. <see cref="DestinationName"/>/<see cref="ScopeKey"/>/<see cref="GenerationId"/>/
     /// <see cref="Outcome"/> remain narration only — proving the outcome reproducible by name, never re-deriving the
     /// destination's own simulation. The entry's byte-level integrity (including <see cref="DepartedBootSlots"/>
-    /// itself) is enforced separately: this sits partly outside the pose hash's own coverage (the destination/scope/
+    /// itself) is enforced separately: this sits partly outside the population hash's own coverage (the destination/scope/
     /// generation/outcome text is never simulation state), so <see cref="WorldReplaySnapshot.ReadTransferEntry"/>
     /// recomputes a content signature from every decoded field and refuses by name
     /// (<see cref="ReplayRefusal.TransferEventTampered"/>) on a disagreement, never a plausible-looking ordinary
@@ -283,18 +283,18 @@ public sealed class WorldReplaySnapshot {
     /// content hash, fuel, lane) the re-drive re-establishes before it runs a tick. Empty when the recorded session
     /// mounted nothing, which is itself pinned: a re-drive that mounts a guest against an empty set is refused.</summary>
     public required IReadOnlyList<WorldAddonReceipt> MountedAddons { get; init; }
-    /// <summary>Gets the live session's per-tick pose hash trace — one entry per recorded tick, sampled off the live
+    /// <summary>Gets the live session's per-tick population hash trace — one entry per recorded tick, sampled off the live
     /// population after each tick's server step, so the last entry is the state the running world actually reached. A
     /// replay recomputes this diagnostic trace by re-driving the recording through a fresh world
     /// (<see cref="Drive"/>); <see cref="RecordedAuthoritativeHashes"/> drives the verdict. Its length always equals
-    /// <see cref="TickCount"/>; keeping every entry rather than only the tail lets pose inspection name the tick
-    /// visible motion first diverged.</summary>
+    /// <see cref="TickCount"/>; keeping every entry rather than only the tail lets inspection name the first tick
+    /// body pose, rigid residue, or carry relationships diverged.</summary>
     public required ulong[] RecordedHashes { get; init; }
-    /// <summary>Gets the live session's tail pose-only hash, or <c>0</c> when nothing was recorded.</summary>
+    /// <summary>Gets the live session's tail population-state hash, or <c>0</c> when nothing was recorded.</summary>
     public ulong RecordedPoseTailHash => ((RecordedHashes.Length > 0) ? RecordedHashes[^1] : 0UL);
     /// <summary>Gets the live session's per-tick authoritative state-system hashes: world state, rule and interaction
     /// latches, body action state, live fields, and poses. Replay verdicts compare this trace;
-    /// <see cref="RecordedHashes"/> remains the pose-only diagnostic trace.</summary>
+    /// <see cref="RecordedHashes"/> remains the population-only diagnostic trace.</summary>
     public required ulong[] RecordedAuthoritativeHashes { get; init; }
     /// <summary>Gets the live session's tail authoritative hash, or <c>0</c> when nothing was recorded.</summary>
     public ulong RecordedTailHash => ((RecordedAuthoritativeHashes.Length > 0)
@@ -787,7 +787,7 @@ public sealed class WorldReplaySnapshot {
         var recomputed = ComputeTransferSignature(transfer: entry);
 
         if (recomputed != storedSignature) {
-            throw ReplayRefusal.TransferEventTampered.Raise(message: $"transfer {transferId} -> '{destinationName}' (scope '{scopeKey}', generation {generationId}): stored content signature 0x{storedSignature:x16} disagrees with the recomputed 0x{recomputed:x16} — the tape's transfer event bytes were corrupted or edited after recording (this entry sits outside the pose hash's own coverage, so nothing else on the tape would catch it)");
+            throw ReplayRefusal.TransferEventTampered.Raise(message: $"transfer {transferId} -> '{destinationName}' (scope '{scopeKey}', generation {generationId}): stored content signature 0x{storedSignature:x16} disagrees with the recomputed 0x{recomputed:x16} — the tape's transfer event bytes were corrupted or edited after recording (this entry sits outside the population hash's own coverage, so nothing else on the tape would catch it)");
         }
 
         return entry;
@@ -1270,7 +1270,7 @@ public sealed class WorldReplaySnapshot {
     // FNV-1a content signature folded over those SAME five fields, length-prefixing every string so two distinct
     // field sequences can never fold to the same signature regardless of what any one field contains (the identical
     // netstring argument WorldSessionResolver.ScopedSegment already documents for the same reason). This entry sits
-    // OUTSIDE the pose hash's own coverage — a crossing's destination/scope/generation/outcome text is not
+    // OUTSIDE the population hash's own coverage — a crossing's destination/scope/generation/outcome text is not
     // simulation state — so this signature is the ONLY thing on the tape that would ever catch a tampered byte here;
     // ReadTransferEntry recomputes it from the DECODED fields and refuses BY NAME on a disagreement.
     private static void WriteTransferLeaf(BinaryWriter writer, WorldReplayEntry.Transfer transfer) {
@@ -1323,7 +1323,7 @@ public sealed class WorldReplaySnapshot {
     /// <see cref="WorldServer"/> it is handed (or rely on <see cref="Drive"/> attaching it) — a host that never
     /// reaches <see cref="WorldServer.AttachAddons"/> re-drives with no guests and produces a MATCH that proves
     /// nothing.</param>
-    /// <returns>The per-tick pose-hash trace, one entry per recorded tick. <see cref="DriveTraces"/> exposes both
+    /// <returns>The per-tick population-hash trace, one entry per recorded tick. <see cref="DriveTraces"/> exposes both
     /// traces and is what verdicts use.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="profiles"/>, <paramref name="engines"/>, or
     /// <paramref name="addonHostFactory"/> is <see langword="null"/>.</exception>
@@ -1369,7 +1369,7 @@ public sealed class WorldReplaySnapshot {
 
         // Replay verification is side-effect-free: a rule's 'save' effect re-derives deterministically like any
         // other rule effect, but writing the world's own file is engine I/O. Wire an explicit narration-only tap
-        // (rather than leaving it null implicitly) so a verify run reports why no file write happened; the pose hash
+        // (rather than leaving it null implicitly) so a verify run reports why no file write happened; the population hash
         // this drive compares never depends on whether the write occurred.
         server.SaveEffectTap = tick => Console.Error.WriteLine(value: $"[replay: save effect suppressed (tick {tick}) — replay verification is side-effect-free]");
 
@@ -1673,10 +1673,10 @@ public sealed class WorldReplaySnapshot {
             throw ReplayRefusal.MutationOutcomeMismatch.Raise(message: $"tick {tick}: the replay produced {replayed.Count} more mutation outcome(s) than were recorded — the mutation stream itself diverged, not merely a later tick's pose.");
         }
     }
-    /// <summary>Returns the deterministic per-tick state hash: every active body's fixed-point pose — position and the full 6DOF
-    /// attitude — folded in index order, so two runs with identical input produce identical traces regardless of
-    /// wall-clock or backend. The hashed scope is the authoritative population pose — the honest boundary of what a
-    /// replay reproduces.</summary>
+    /// <summary>Returns the deterministic per-tick population hash: every active body's fixed-point pose, rigid
+    /// velocity/contact/rest residue, and carry relationship folded in index order, so two runs with identical input
+    /// produce identical traces regardless of wall-clock or backend. This remains the diagnostic population trace;
+    /// replay verdicts compare the wider <see cref="WorldRuntimeStateHash.HashAuthoritative"/> scope.</summary>
     /// <param name="population">The entity table to hash.</param>
     /// <returns>The state hash.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="population"/> is <see langword="null"/>.</exception>
