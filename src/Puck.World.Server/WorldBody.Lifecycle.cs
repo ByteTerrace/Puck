@@ -156,21 +156,24 @@ public sealed partial class WorldBody {
     }
     /// <summary>Formats the standalone <c>body.where</c> echo — the bracket-tagged, index-prefixed line a piped run
     /// asserts against — as the full 6DOF pose plus the fact mask:
-    /// <c>[body.where: body:{N} pos=(x.xx, y.yy, z.zz) yaw=ddd° pitch=ddd° roll=ddd° facts=grounded|climbing]</c>. One
-    /// format always. A grounded entity keeps a canonical level orientation — <c>pitch=0 roll=0</c> — while <c>y</c> is
-    /// its resolved ground foot point (<c>0.00</c> on the flat plane, following the contact field where solids lift
-    /// it). <c>facts=</c> is <see cref="Facts"/> spelled lower-case and <c>|</c>-joined in bit order (<c>none</c> when
-    /// empty), the same mask the snapshot publishes. The bare planar fragment is <see cref="DescribePose"/>.</summary>
+    /// <c>[body.where: body:{N} pos=(x.xx, y.yy, z.zz) yaw=ddd° pitch=ddd° roll=ddd° facts=grounded|climbing
+    /// home=(x.xx, y.yy, z.zz) scale=s.ss]</c>. One format always. A grounded entity keeps a canonical level
+    /// orientation — <c>pitch=0 roll=0</c> — while <c>y</c> is its resolved ground foot point (<c>0.00</c> on the
+    /// flat plane, following the contact field where solids lift it). <c>facts=</c> is <see cref="Facts"/> spelled
+    /// lower-case and <c>|</c>-joined in bit order (<c>none</c> when empty), the same mask the snapshot publishes.
+    /// <c>scale=</c> is <see cref="Scale"/> — 1.00 for every body under a world authoring no <c>bodies.scaleRow</c>.
+    /// The bare planar fragment is <see cref="DescribePose"/>.</summary>
     /// <param name="index">The 0-based body index to tag the line with.</param>
     /// <returns>The full bracketed <c>body.where</c> echo line.</returns>
     public string DescribeWhere(int index) {
         var (yaw, pitch, roll) = EulerRadians();
         var home = m_home.ToVector3();
         var position = m_position.ToVector3();
+        var scale = ((double)m_scale);
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[body.where: body:{index} pos=({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: yaw):0}° pitch={CompassDegrees(radians: pitch):0}° roll={CompassDegrees(radians: roll):0}° facts={BodyFactVocabulary.Describe(facts: Facts)} home=({home.X:0.00}, {home.Y:0.00}, {home.Z:0.00})]"
+            handler: $"[body.where: body:{index} pos=({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: yaw):0}° pitch={CompassDegrees(radians: pitch):0}° roll={CompassDegrees(radians: roll):0}° facts={BodyFactVocabulary.Describe(facts: Facts)} home=({home.X:0.00}, {home.Y:0.00}, {home.Z:0.00}) scale={scale:0.00}]"
         );
     }
     /// <summary>Enqueues a timed scripted segment onto the tape: while it is live it drives the avatar with
@@ -391,7 +394,9 @@ public sealed partial class WorldBody {
     /// <param name="maxSmoothError">The compiled world-distance correction smoothing threshold.</param>
     /// <param name="holds">The kit's compiled ordered hold list (<see cref="FixedWorldKit.Holds"/>), or
     /// <see langword="null"/> for a kit authoring none.</param>
-    public void RecompileKit(FixedMotionTuning tuning, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, FixedBodyHold[]? holds = null) {
+    /// <param name="rigid">The kit's compiled rigid-dynamics facet (<see cref="FixedWorldKit.Rigid"/>), or
+    /// <see langword="null"/> for a locomotion kit.</param>
+    public void RecompileKit(FixedMotionTuning tuning, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, FixedBodyHold[]? holds = null, FixedWorldRigid? rigid = null) {
         SetTuning(
             holds: holds,
             tuning: tuning
@@ -405,7 +410,25 @@ public sealed partial class WorldBody {
         m_roleOrdinals = roleOrdinals;
         CompileActionState(state: actionState);
         m_collider = collider;
+
+        var hadRigidFacet = (m_rigid is not null);
+
+        m_rigid = rigid;
         m_maxSmoothError = maxSmoothError;
+
+        if (hadRigidFacet != (rigid is not null)) {
+            // The rigid facet's own presence just changed (a document mutation swapped this slot between a rigid
+            // kit and a locomotion one) — reset every rigid-solver-owned field rather than let the OTHER kind of
+            // body's stale state leak forward: slot reuse must never inherit a previous occupant's simulation state.
+            // A live retune that keeps the facet (mass/friction/etc change while staying rigid) does NOT hit this —
+            // its velocity survives, on the same terms m_planarVelocity survives a locomotion retune.
+            m_rigidVelocity = FixedVector3.Zero;
+            m_angularVelocity = FixedVector3.Zero;
+            m_resting = false;
+            m_restingHoldTicks = 0UL;
+            m_rigidGroundContacting = false;
+            m_rigidObstructionContacting = false;
+        }
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
             m_laneActions[lane] = default;

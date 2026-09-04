@@ -78,6 +78,41 @@
           "description": "The most physical pair corrections incident to one body in a tick.",
           "type": "integer",
           "default": 8
+        },
+        "rigidSubstepCeiling": {
+          "description": "The most substeps one rigid body\u0027s static-contact integration may take in a tick \u2014 the derived-count\u0027s own ceiling: the actual count is derived per body per tick from its speed and collider size (a fast ball takes more, a resting one takes one), never authored directly, but the ceiling bounds the worst-case per-tick cost and is echoed in world.budget.",
+          "type": "integer",
+          "default": 8
+        },
+        "rigidRestLinearSpeed": {
+          "description": "Below this linear speed (world units/second) a grounded rigid body counts toward the resting hold window (RigidRestHoldSeconds). Non-negative; the default reproduces the engine\u0027s original hard-coded threshold.",
+          "type": "number",
+          "default": 0.05
+        },
+        "rigidRestAngularSpeed": {
+          "description": "Below this angular speed (radians/second) a grounded rigid body counts toward the resting hold window, on the same terms as RigidRestLinearSpeed. Non-negative.",
+          "type": "number",
+          "default": 0.1
+        },
+        "rigidRestHoldSeconds": {
+          "description": "How long a rigid body must stay under both rest thresholds while grounded before the resting latch actually closes \u2014 long enough that crossing a contact skin\u0027s noise band for one tick never freezes a body mid-roll. Non-negative.",
+          "type": "number",
+          "default": 0.25
+        },
+        "rigidSubstepTravelFraction": {
+          "description": "The fraction of a rigid body\u0027s own bounding radius one continuous- collision substep may travel \u2014 the derived substep COUNT stays derived (never authored directly), but how conservative that derivation is IS a document field: a smaller fraction takes more, cheaper substeps for the same speed; a larger one risks a fast body tunneling through a thin wall before RigidSubstepCeiling forces it to stop deriving more. Strictly positive.",
+          "type": "number",
+          "default": 0.5
+        },
+        "rigidSubstepMinimumTravel": {
+          "description": "The floor under one continuous-collision substep\u0027s travel bound (world units), independent of RigidSubstepTravelFraction \u2014 guards a body whose collider is small enough that the fraction alone would derive a near-zero bound. Strictly positive.",
+          "type": "number",
+          "default": 0.001
+        },
+        "rigidPairRestitutionSpeed": {
+          "description": "Below this closing speed (world units/second), a rigid-vs-rigid contact restitutes at zero rather than the authored coefficient \u2014 a pure momentum-conserving separation. A rigid pair carries no rising-edge latch (unlike a body-vs-static-world contact), so without this floor two touching bodies at rest would restitute a hair apart every tick they are found overlapping, separating, and falling back together \u2014 a stable micro-bounce that never reaches either rest threshold. Non-negative; small enough that a real strike is unaffected.",
+          "type": "number",
+          "default": 0.05
         }
       },
       "additionalProperties": false,

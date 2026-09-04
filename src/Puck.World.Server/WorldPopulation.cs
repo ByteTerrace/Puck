@@ -168,6 +168,10 @@ public sealed partial class WorldPopulation {
     // Live for FUTURE activations, inert for bodies already standing (resetPhase: false keeps the running crowd put).
     private FixedWorldDistribution m_distribution;
     private WorldBodyContactPolicy m_bodyContactPolicy = WorldBodyContactPolicy.Default;
+    // WorldBodyContactPolicy's rigid-specific fields, converted to fixed point/engine ticks once here (Resolve's own
+    // recompile) rather than every AdvanceRigid call — the same "authored float, compiled once" split every other
+    // per-document tunable in this file already keeps.
+    private RigidContactPolicy m_rigidContactPolicy = RigidContactPolicy.FromAuthored(policy: WorldBodyContactPolicy.Default);
     // The fixed-point derived tables — recompiled in place by Rebuild when a sim-affecting section mutates (a live kit
     // tune, motion/wander retune, seat-kit or assignment change), so they are no longer readonly.
     private FixedMotionDefaults m_fixedMotion;

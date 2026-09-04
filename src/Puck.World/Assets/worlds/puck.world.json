@@ -98,7 +98,8 @@
   ],
   "bodies": {
     "capacity": 64,
-    "localSeats": 2
+    "localSeats": 2,
+    "scaleRow": "scale"
   },
   "bodyMotionPrograms": [
     {
@@ -547,6 +548,38 @@
         "name": "bone-claim",
         "range": 0,
         "right": "bone"
+      },
+      {
+        "coOccurrence": "Region",
+        "effects": [
+          {
+            "$type": "setState",
+            "key": "$left",
+            "state": "scale",
+            "value": 0.15
+          }
+        ],
+        "left": "wren",
+        "mode": "Edge",
+        "name": "drink-me-shrink",
+        "range": 0,
+        "right": "drinkMe"
+      },
+      {
+        "coOccurrence": "Region",
+        "effects": [
+          {
+            "$type": "setState",
+            "key": "$left",
+            "state": "scale",
+            "value": 1
+          }
+        ],
+        "left": "wren",
+        "mode": "Edge",
+        "name": "eat-me-restore",
+        "range": 0,
+        "right": "eatMe"
       }
     ]
   },
@@ -1115,6 +1148,140 @@
             }
           }
         }
+      },
+      {
+        "bodyContact": "Solid",
+        "bodyMotionProgram": "walk",
+        "collider": {
+          "$type": "sphere",
+          "radius": 0.15
+        },
+        "motion": {
+          "facingSnap": true,
+          "holds": [
+            {
+              "bond": "Free",
+              "gravity": {
+                "fall": 46,
+                "rise": 28,
+                "terminal": 40
+              },
+              "hold": "Gravity",
+              "name": "air"
+            }
+          ],
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "speed": {
+            "value": 0.001
+          },
+          "turn": {
+            "rate": 0.001
+          }
+        },
+        "name": "billiardBall",
+        "rigid": {
+          "angularDamping": 0.8,
+          "friction": 0.25,
+          "linearDamping": 0.5,
+          "mass": 0.3,
+          "restitution": 0.55,
+          "rollingFriction": 1.2
+        }
+      },
+      {
+        "bodyContact": "Solid",
+        "bodyMotionProgram": "walk",
+        "collider": {
+          "$type": "sphere",
+          "radius": 0.28
+        },
+        "motion": {
+          "facingSnap": true,
+          "holds": [
+            {
+              "bond": "Free",
+              "gravity": {
+                "fall": 46,
+                "rise": 28,
+                "terminal": 40
+              },
+              "hold": "Gravity",
+              "name": "air"
+            }
+          ],
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "speed": {
+            "value": 0.001
+          },
+          "turn": {
+            "rate": 0.001
+          }
+        },
+        "name": "bowlingBall",
+        "rigid": {
+          "angularDamping": 0.6,
+          "friction": 0.2,
+          "linearDamping": 0.3,
+          "mass": 2.2,
+          "restitution": 0.35,
+          "rollingFriction": 1.0
+        }
+      },
+      {
+        "bodyContact": "Solid",
+        "bodyMotionProgram": "walk",
+        "collider": {
+          "$type": "capsule",
+          "endpoint": [
+            0,
+            0.34,
+            0
+          ],
+          "radius": 0.075
+        },
+        "motion": {
+          "facingSnap": true,
+          "holds": [
+            {
+              "bond": "Free",
+              "gravity": {
+                "fall": 46,
+                "rise": 28,
+                "terminal": 40
+              },
+              "hold": "Gravity",
+              "name": "air"
+            }
+          ],
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "speed": {
+            "value": 0.001
+          },
+          "turn": {
+            "rate": 0.001
+          }
+        },
+        "name": "bowlingPin",
+        "rigid": {
+          "angularDamping": 0.8,
+          "friction": 0.4,
+          "linearDamping": 0.5,
+          "mass": 0.15,
+          "restitution": 0.1,
+          "rollingFriction": 1.2
+        }
       }
     ]
   },
@@ -1206,6 +1373,48 @@
           "$type": "creation",
           "prototypeId": "fish"
         }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "billiardBall",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "billiardBall"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "bowlingPin",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "bowlingPin"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "bowlingBall",
+        "scale": 1.866666666666667,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "billiardBall"
+        }
       }
     ]
   },
@@ -1246,7 +1455,7 @@
         "origin": [
           -12,
           0.75,
-          -12
+          2
         ],
         "width": 24
       },
@@ -1343,7 +1552,7 @@
             "fill": {
               "name": "additive",
               "offset": 0,
-              "step": 0.618034
+              "step": 0.001
             },
             "region": {
               "$type": "disc",
@@ -1374,7 +1583,7 @@
             "fill": {
               "name": "additive",
               "offset": 0,
-              "step": 0.618034
+              "step": 0.001
             },
             "region": {
               "$type": "disc",
@@ -1405,7 +1614,7 @@
             "fill": {
               "name": "additive",
               "offset": 0,
-              "step": 0.618034
+              "step": 0.001
             },
             "region": {
               "$type": "disc",
@@ -1436,7 +1645,7 @@
             "fill": {
               "name": "additive",
               "offset": 0,
-              "step": 0.618034
+              "step": 0.001
             },
             "region": {
               "$type": "disc",
@@ -1458,12 +1667,699 @@
         "prototypeId": "fish",
         "scale": 1,
         "yawDegrees": 0
+      },
+      {
+        "id": "billiardsTray",
+        "position": [
+          10.0,
+          0,
+          -10.0
+        ],
+        "prototypeId": "billiardsTray",
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0
+      },
+      {
+        "id": "cueBall",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          10.0,
+          -0.35000000000000003,
+          -10.9
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "rackBall0",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          10.0,
+          -0.35000000000000003,
+          -10.0
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "rackBall1",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          9.845,
+          -0.35000000000000003,
+          -9.7303
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "rackBall2",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          10.155,
+          -0.35000000000000003,
+          -9.7303
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "rackBall3",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          9.69,
+          -0.35000000000000003,
+          -9.4606
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "rackBall4",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          10.0,
+          -0.35000000000000003,
+          -9.4606
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "rackBall5",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          10.31,
+          -0.35000000000000003,
+          -9.4606
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "rackBall6",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          9.535,
+          -0.35000000000000003,
+          -9.1909
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "rackBall7",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          9.845,
+          -0.35000000000000003,
+          -9.1909
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "rackBall8",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          10.155,
+          -0.35000000000000003,
+          -9.1909
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "rackBall9",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          10.465,
+          -0.35000000000000003,
+          -9.1909
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "bowlingLane",
+        "position": [
+          10.0,
+          0,
+          10.0
+        ],
+        "prototypeId": "bowlingLane",
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0
+      },
+      {
+        "id": "bowlingBall",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "bowlingBall",
+          "look": "bowlingBall",
+          "source": "Idle"
+        },
+        "position": [
+          10.0,
+          -0.35000000000000003,
+          7.9
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "pin0",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "bowlingPin",
+          "look": "bowlingPin",
+          "source": "Idle"
+        },
+        "position": [
+          10.0,
+          -0.35000000000000003,
+          11.6
+        ],
+        "prototypeId": "bowlingPin",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "pin1",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "bowlingPin",
+          "look": "bowlingPin",
+          "source": "Idle"
+        },
+        "position": [
+          9.87,
+          -0.35000000000000003,
+          11.82
+        ],
+        "prototypeId": "bowlingPin",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "pin2",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "bowlingPin",
+          "look": "bowlingPin",
+          "source": "Idle"
+        },
+        "position": [
+          10.13,
+          -0.35000000000000003,
+          11.82
+        ],
+        "prototypeId": "bowlingPin",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "pin3",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "bowlingPin",
+          "look": "bowlingPin",
+          "source": "Idle"
+        },
+        "position": [
+          9.74,
+          -0.35000000000000003,
+          12.04
+        ],
+        "prototypeId": "bowlingPin",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "pin4",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "bowlingPin",
+          "look": "bowlingPin",
+          "source": "Idle"
+        },
+        "position": [
+          10.0,
+          -0.35000000000000003,
+          12.04
+        ],
+        "prototypeId": "bowlingPin",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "pin5",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "bowlingPin",
+          "look": "bowlingPin",
+          "source": "Idle"
+        },
+        "position": [
+          10.26,
+          -0.35000000000000003,
+          12.04
+        ],
+        "prototypeId": "bowlingPin",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "pin6",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "bowlingPin",
+          "look": "bowlingPin",
+          "source": "Idle"
+        },
+        "position": [
+          9.61,
+          -0.35000000000000003,
+          12.26
+        ],
+        "prototypeId": "bowlingPin",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "pin7",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "bowlingPin",
+          "look": "bowlingPin",
+          "source": "Idle"
+        },
+        "position": [
+          9.87,
+          -0.35000000000000003,
+          12.26
+        ],
+        "prototypeId": "bowlingPin",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "pin8",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "bowlingPin",
+          "look": "bowlingPin",
+          "source": "Idle"
+        },
+        "position": [
+          10.13,
+          -0.35000000000000003,
+          12.26
+        ],
+        "prototypeId": "bowlingPin",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "pin9",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "bowlingPin",
+          "look": "bowlingPin",
+          "source": "Idle"
+        },
+        "position": [
+          10.39,
+          -0.35000000000000003,
+          12.26
+        ],
+        "prototypeId": "bowlingPin",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "drinkMe",
+        "position": [
+          -8,
+          -0.5,
+          15
+        ],
+        "prototypeId": "drinkMe",
+        "region": {
+          "radius": 4.0
+        },
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "tabletop",
+        "position": [
+          -8,
+          -0.5,
+          12
+        ],
+        "prototypeId": "tabletop",
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0
+      },
+      {
+        "id": "eatMe",
+        "position": [
+          -8,
+          -0.5,
+          20
+        ],
+        "prototypeId": "eatMe",
+        "region": {
+          "radius": 2.0
+        },
+        "scale": 1,
+        "yawDegrees": 0
       }
     ]
   },
   "properties": {
     "names": [
-      "hound"
+      "hound",
+      "wren"
     ]
   },
   "prototypes": [
@@ -6498,6 +7394,448 @@
         ]
       },
       "id": "pondBasin"
+    },
+    {
+      "document": {
+        "name": "billiardBall",
+        "palette": [
+          {
+            "color": "state.billiardsColors.ball",
+            "shininess": 60,
+            "specular": 0.4
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "sphere",
+            "position": [
+              0,
+              0.15,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          }
+        ]
+      },
+      "id": "billiardBall"
+    },
+    {
+      "document": {
+        "name": "bowlingPin",
+        "palette": [
+          {
+            "color": "state.billiardsColors.pin",
+            "shininess": 20,
+            "specular": 0.1
+          },
+          {
+            "color": "state.billiardsColors.pinBand",
+            "shininess": 20,
+            "specular": 0.1
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0.06,
+              0
+            ],
+            "rotation": [
+              0.7071,
+              0,
+              0,
+              0.7071
+            ],
+            "scale": [
+              0.06,
+              0.06,
+              0.34
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 1,
+            "material": 1,
+            "name": "band",
+            "position": [
+              0,
+              0.28,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.075,
+              0.02,
+              0.075
+            ],
+            "smooth": 0.01,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "bowlingPin"
+    },
+    {
+      "document": {
+        "name": "billiardsTray",
+        "palette": [
+          {
+            "color": "state.billiardsColors.tray",
+            "shininess": 5,
+            "specular": 0.05
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "floor",
+            "position": [
+              0,
+              -0.45,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              1.4,
+              0.05,
+              1.4
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 0,
+            "name": "wallNorth",
+            "position": [
+              0,
+              -0.31,
+              1.35
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              1.4,
+              0.14,
+              0.05
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 2,
+            "material": 0,
+            "name": "wallSouth",
+            "position": [
+              0,
+              -0.31,
+              -1.35
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              1.4,
+              0.14,
+              0.05
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 3,
+            "material": 0,
+            "name": "wallEast",
+            "position": [
+              1.35,
+              -0.31,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.05,
+              0.14,
+              1.4
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 4,
+            "material": 0,
+            "name": "wallWest",
+            "position": [
+              -1.35,
+              -0.31,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.05,
+              0.14,
+              1.4
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "billiardsTray"
+    },
+    {
+      "document": {
+        "name": "bowlingLane",
+        "palette": [
+          {
+            "color": "state.billiardsColors.tray",
+            "shininess": 5,
+            "specular": 0.05
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "floor",
+            "position": [
+              0,
+              -0.45,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.9,
+              0.05,
+              2.6
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 0,
+            "name": "wallEast",
+            "position": [
+              0.85,
+              -0.05,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.05,
+              0.35,
+              2.6
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 2,
+            "material": 0,
+            "name": "wallWest",
+            "position": [
+              -0.85,
+              -0.05,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.05,
+              0.35,
+              2.6
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 3,
+            "material": 0,
+            "name": "wallFar",
+            "position": [
+              0,
+              -0.05,
+              2.55
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.9,
+              0.35,
+              0.05
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "bowlingLane"
+    },
+    {
+      "document": {
+        "name": "drinkMe",
+        "palette": [
+          {
+            "color": "state.drinkMeColors.glass"
+          },
+          {
+            "color": "state.drinkMeColors.cap"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0.12,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.05,
+              0.12,
+              0.05
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 1,
+            "name": "neck",
+            "position": [
+              0,
+              0.28,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.02,
+              0.04,
+              0.02
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          }
+        ]
+      },
+      "id": "drinkMe"
+    },
+    {
+      "document": {
+        "name": "tabletop",
+        "palette": [
+          {
+            "color": "#8A6A45"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "top",
+            "position": [
+              0,
+              1.25,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              1.0,
+              0.05,
+              1.0
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 0,
+            "name": "leg",
+            "position": [
+              0,
+              0.6,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.08,
+              0.6,
+              0.08
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          }
+        ]
+      },
+      "id": "tabletop"
+    },
+    {
+      "document": {
+        "name": "eatMe",
+        "palette": [
+          {
+            "color": "#D9A5C0"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "cake",
+            "position": [
+              0,
+              0.06,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.18,
+              0.06,
+              0.18
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          }
+        ]
+      },
+      "id": "eatMe"
     }
   ],
   "render": {
@@ -6860,7 +8198,7 @@
                 },
                 {
                   "$type": "constant",
-                  "value": 0.5
+                  "value": 2.0
                 },
                 {
                   "$type": "multiply"
@@ -6985,6 +8323,17 @@
       "forEach": "spider",
       "mode": "Level",
       "name": "stalk-visitor"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromState": "$physics:quiescent",
+          "state": "physicsSettled"
+        }
+      ],
+      "mode": "Level",
+      "name": "physics-settled"
     }
   ],
   "schema": "puck.world.def.v1",
@@ -7107,19 +8456,28 @@
       "id": "swarm",
       "position": [
         0,
-        0,
-        9
+        2,
+        24
       ],
-      "yawDegrees": 180
+      "yawDegrees": 0
     },
     {
       "id": "pond",
       "position": [
-        11,
-        0,
-        9
+        16,
+        0.5,
+        22
       ],
-      "yawDegrees": -135
+      "yawDegrees": 0
+    },
+    {
+      "id": "table",
+      "position": [
+        -8,
+        0,
+        20
+      ],
+      "yawDegrees": 0
     }
   ],
   "state": {
@@ -7754,6 +9112,71 @@
           "topology": "pondBasin"
         },
         "name": "water"
+      },
+      {
+        "cells": [
+          {
+            "key": "ball",
+            "value": "#F5F1E6"
+          },
+          {
+            "key": "pin",
+            "value": "#E4E4E4"
+          },
+          {
+            "key": "pinBand",
+            "value": "#D62839"
+          },
+          {
+            "key": "tray",
+            "value": "#2E2A26"
+          }
+        ],
+        "kind": "text",
+        "name": "billiardsColors"
+      },
+      {
+        "kind": "bool",
+        "name": "physicsSettled",
+        "value": false
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": "1"
+          }
+        ],
+        "kind": "fixed",
+        "max": "1",
+        "min": "0.05",
+        "name": "scale"
+      },
+      {
+        "cells": [
+          {
+            "key": "glass",
+            "value": "#8FD6C8"
+          },
+          {
+            "key": "cap",
+            "value": "#C6435B"
+          }
+        ],
+        "kind": "text",
+        "name": "drinkMeColors"
+      },
+      {
+        "capacity": 1,
+        "cells": [
+          {
+            "key": "0",
+            "value": 1
+          }
+        ],
+        "kind": "int",
+        "name": "wren"
       }
     ]
   },

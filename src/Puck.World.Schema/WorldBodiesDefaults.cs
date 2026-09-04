@@ -68,7 +68,16 @@ public readonly record struct WorldBodiesDefaults(
     [property: JsonPropertyName("capacityRow"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CapacityRow = null,
     // OPTIONAL per-observer snapshot disclosure. Null resolves to WorldObserverDisclosure.Default (disclose-all),
     // which is what every world authoring none delivers.
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldObserverDisclosure? Disclosure = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldObserverDisclosure? Disclosure = null,
+    // OPTIONAL — names a scalar kind=fixed, KEYED state.world row (capacity declared, cells keyed by 0-based body
+    // index, Min AND Max both authored — the declared scale envelope) that carries each body's own live scale
+    // multiplier. Absent (the default) is today's behavior: every body's Scale reads FixedQ4816.One forever, at no
+    // per-Install cost. Resynced wholesale at the same choke points state.GatesDrive is (WorldServer.Install's own
+    // Install/InstallRuntimeStateValue), never per-tick — a live world.state.cell.set against this row settles
+    // before the next tick reads it. A body absent from the row's cells reads Scale = 1, exactly like a body a live
+    // RemoveStateCell just cleared, and a reused population slot always resyncs from the row rather than inheriting
+    // a previous occupant's value.
+    [property: JsonPropertyName("scaleRow"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ScaleRow = null
 ) {
     /// <summary>Gets the total authoritative body capacity, including reserved local seats — ABSENT resolves to
     /// <see cref="LocalSeats"/> plus <see cref="NetworkPlayers"/> (no simulated peers beyond the seats the document

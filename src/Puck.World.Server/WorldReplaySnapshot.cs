@@ -1712,6 +1712,22 @@ public sealed class WorldReplaySnapshot {
             // construction would otherwise go unhashed. Under the free program this lane is redundant with the
             // quaternion's own extracted yaw, but deterministically so, and costs only one fold.
             hash.Add(value: body.FixedYaw.Value);
+            // A rigid body's velocity, resting latch/hold-tick counter, and both restitution edge latches are
+            // simulation state a hashed pose alone does not cover: two identical poses with different velocities
+            // diverge on the very next tick, and two identical poses/velocities with different hold-tick counts or
+            // edge latches diverge the first tick either one's own threshold decides differently (the resting latch
+            // closing early or late, or a wall hit reading as a continuation of an earlier contact instead of a
+            // fresh impact). Zero/false for a locomotion body, costing one fold each.
+            hash.Add(value: body.RigidVelocity.X.Value);
+            hash.Add(value: body.RigidVelocity.Y.Value);
+            hash.Add(value: body.RigidVelocity.Z.Value);
+            hash.Add(value: body.RigidAngularVelocity.X.Value);
+            hash.Add(value: body.RigidAngularVelocity.Y.Value);
+            hash.Add(value: body.RigidAngularVelocity.Z.Value);
+            hash.Add(value: (body.Resting ? 1UL : 0UL));
+            hash.Add(value: body.RigidRestingHoldTicks);
+            hash.Add(value: (body.RigidGroundContacting ? 1UL : 0UL));
+            hash.Add(value: (body.RigidObstructionContacting ? 1UL : 0UL));
         }
 
         return hash.Value;

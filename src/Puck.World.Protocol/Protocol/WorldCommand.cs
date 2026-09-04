@@ -126,6 +126,16 @@ public abstract record WorldCommand(WorldPrincipal Principal, int EntityIndex) {
         Principal,
         EntityIndex
     );
+    /// <summary>Applies an instantaneous world-space impulse to a rigid-kit body's linear velocity — the
+    /// <c>body.impulse</c> wire path. Refused (by the server, never here) for a body whose kit carries no
+    /// <c>rigid</c> facet.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="EntityIndex">The 0-based entity index.</param>
+    /// <param name="Impulse">The impulse, in mass·length/time units.</param>
+    public sealed record RigidImpulse(WorldPrincipal Principal, int EntityIndex, Vector3 Impulse) : WorldCommand(
+        Principal,
+        EntityIndex
+    );
 }
 /// <summary>One named value crossing the durable action-state input boundary.</summary>
 /// <param name="Name">The authored slot name.</param>
