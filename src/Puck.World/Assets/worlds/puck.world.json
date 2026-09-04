@@ -800,6 +800,7 @@
               "altitudeGain": 0.5,
               "altitudeRange": 0.0,
               "approach": 1.0,
+              "approachAltitudeGain": 0.5,
               "forward": 1.0,
               "inwardGain": 3.0,
               "orbit": 0.0,

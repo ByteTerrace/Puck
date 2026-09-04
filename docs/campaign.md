@@ -309,15 +309,20 @@ runtime name scan on every transition. Read back per body with `body.tether`, pe
 
 **Wander and attend collapsed into one steering primitive.** They were never two opcodes the world needed —
 `ProduceSteeringIntent` dispatches, every tick, on whether that tick's `SenseNearestInCone` found a target: the
-approach shape (a standoff/approach/orbit steer plus its own altitude term) when it did, the roam shape (an
-oscillator weave plus a radial restoring term toward the body's own home register, yaw-rate clamped) otherwise —
+approach shape (a standoff/approach/orbit steer plus its own `approachAltitudeGain` term) when it did, the roam
+shape (an oscillator weave plus a radial restoring term toward the body's own home register, yaw-rate clamped)
+otherwise, when that producer authors the roam scalar set —
 the garden's own spider `stalk` program already ran both opcodes back to back as this exact fallback chain, which
-was the tell. The roam shape's oscillator runs every tick regardless of which shape is governing that tick's
+was the tell. A sensing, attend-only producer may omit the complete roam set and then holds on an unsensed tick;
+a non-sensing producer has no other reachable shape and still requires the roam set. Shared
+`inwardGain`/`turnScale` fields used by `FaceSensorTarget` do not accidentally opt it into roam. When authored,
+the roam shape's oscillator runs every tick regardless of which shape is governing that tick's
 Intent — the same way the old two-opcode program ran wander every tick and let attend overwrite its output only
 when a target existed — so a body that loses its sensed target resumes roaming from the phase the oscillator would
 already be at, not one frozen for the sensed window's length; `SteeringIntentLawTests` pins this with a synthetic
 hunter/prey pair whose approach-shape Intent is forced to zero, isolating the oscillator's own state from
-everything else the trajectory could reveal. The approach-only scalars (`standoffRadius`/`approach`/`orbit`) are
+everything else the trajectory could reveal. The approach-only scalars
+(`standoffRadius`/`approach`/`orbit`/`approachAltitudeGain`) are
 required exactly when a producer's program also selects `SenseNearestInCone` — never on a bare roam producer,
 which can never reach that shape. The altitude term generalized alongside it, from a literal world-Y read
 to a distance along the body's own resolved up axis (`Dot(position, up)`, which reduces to `.Y` exactly under the

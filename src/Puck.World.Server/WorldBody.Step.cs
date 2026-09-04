@@ -928,14 +928,17 @@ public sealed partial class WorldBody {
         right: m_up
     );
     // One steering intent, dispatched per tick on whether this tick's SenseNearestInCone found a target. The roam
-    // shape runs UNCONDITIONALLY first — its oscillator (state.Phase/ActivityPhase) advances every tick regardless
-    // of which shape ends up steering, so losing a sensed target resumes roam from the phase it would already be at
-    // rather than one frozen at the moment sensing began; the approach shape, when a target exists, then overwrites
-    // its computed intent outright. A program pairing this op with sensing (a stalking predator) takes both shapes
-    // across its lifetime; a program selecting this op alone always keeps the roam shape (SensorTarget never exists
-    // without SenseNearestInCone in the same program).
+    // shape runs first, and only when the producer's own compiled RoamActive says the kit authored it — its
+    // oscillator (state.Phase/ActivityPhase) then advances every tick regardless of which shape ends up steering, so
+    // losing a sensed target resumes roam from the phase it would already be at rather than one frozen at the moment
+    // sensing began; the approach shape, when a target exists, then overwrites its computed intent outright. A
+    // program authoring both shapes (a stalking predator) takes both across its lifetime; a producer authoring no
+    // roam scalars at all (an approach-only follower) leaves this tick's Intent exactly as handed in — a hold — on any
+    // tick sensing finds nothing, rather than resuming a roam it never wanted.
     private void ProduceSteeringIntent(ref BodyMotionScratch scratch) {
-        ProduceRoamIntent(scratch: ref scratch);
+        if (scratch.Producer!.RoamActive) {
+            ProduceRoamIntent(scratch: ref scratch);
+        }
 
         if (scratch.SensorTarget.Exists) {
             ProduceApproachIntent(scratch: ref scratch);
@@ -951,9 +954,11 @@ public sealed partial class WorldBody {
         var strafe = producer.Scalar(BodyProducerParameter.Orbit);
         var followsVolume = producer.Target is { Source: BodyTargetSource.Navigated, NavigationKind: not WorldNavigationKind.Surface };
         var preferredAltitude = (followsVolume ? AlongUp(point: scratch.SensorTarget.Position) : scratch.ProducerState.PreferredAltitude);
+        // Its own gain, distinct from the roam shape's AltitudeGain (ProduceRoamIntent) — the two shapes are
+        // independently authorable, so zeroing one's altitude term never zeroes the other's.
         var up = (followsVolume || m_bodyMotionProgram.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)
             ? FixedQ4816.Clamp(
-                value: ((preferredAltitude - AlongUp(point: m_position)) * producer.Scalar(BodyProducerParameter.AltitudeGain)),
+                value: ((preferredAltitude - AlongUp(point: m_position)) * producer.Scalar(BodyProducerParameter.ApproachAltitudeGain)),
                 minimum: NegativeOne,
                 maximum: FixedQ4816.One
             )
@@ -1002,7 +1007,7 @@ public sealed partial class WorldBody {
         );
 
         // Measured from the body's own HOME, never the world origin: a population spread over several placements
-        // steers back to the ground it was activated on, instead of every wanderer in the world converging on (0, 0).
+        // steers back to the ground it was activated on, instead of every roaming body converging on (0, 0).
         // A body with no home (the zero default) reads exactly as it did when the origin was the only anchor.
         var planarX = (m_position.X - m_home.X);
         var planarZ = (m_position.Z - m_home.Z);
@@ -1732,7 +1737,7 @@ public sealed partial class WorldBody {
         // Release-radius hysteresis exists to damp flicker among a COMPETITIVELY sensed population (Sensed alone);
         // a Designated register and a Curve follow-point are each a single deterministic candidate every tick with
         // nothing to flicker against, so both take the fresh candidate outright. Flocks retain observations on
-        // their own bounded perception cadence and do not consume attend's release-radius scalar.
+        // their own bounded perception cadence and do not consume the approach shape's release-radius scalar.
         if (producer.Flock is not null || producer.Target?.Source is not BodyTargetSource.Sensed) {
             scratch.SensorTarget = candidate;
         } else {

@@ -18,9 +18,9 @@ namespace Puck.World.Tests;
 /// axis rather than baked to world Y.
 /// </summary>
 public sealed class SteeringIntentLawTests {
-    private const string ProducerName = "wander";
+    private const string ProducerName = "roam";
 
-    private static Dictionary<string, float> RoamScalars(float inwardGain) => new(collection: Fixtures.TravelerWanderParameters.Scalars) {
+    private static Dictionary<string, float> RoamScalars(float inwardGain) => new(collection: Fixtures.TravelerRoamParameters.Scalars) {
         ["weaveAmplitude"] = 0f,
         ["strafeWave"] = 0f,
         ["turnWave"] = 0f,
@@ -39,7 +39,7 @@ public sealed class SteeringIntentLawTests {
         return document with {
             KitRowsRaw = [kit with {
                 ProducersRaw = new Dictionary<string, BodyProgramParameters>(collection: kit.Producers) {
-                    [ProducerName] = Fixtures.TravelerWanderParameters with { Scalars = RoamScalars(inwardGain: inwardGain) },
+                    [ProducerName] = Fixtures.TravelerRoamParameters with { Scalars = RoamScalars(inwardGain: inwardGain) },
                 },
             }],
         };
@@ -118,70 +118,91 @@ public sealed class SteeringIntentLawTests {
     private const int MoveUpOrdinal = 5;
     private const float FlyerAltitudeGain = 0.32f;
 
-    private static WorldDefinition FlyerDocument() {
-        var channels = new WorldChannel[] {
-            new(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveAdvance),
-            new(Name: "strafe", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveStrafe),
-            new(Name: "pitch", Shape: ChannelShape.Bipolar, Role: ChannelRole.Pitch),
-            new(Name: "roll", Shape: ChannelShape.Bipolar, Role: ChannelRole.Roll),
-            new(Name: "turn", Shape: ChannelShape.Bipolar, Role: ChannelRole.Turn),
-            new(Name: "up", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveUp),
-        };
-        var free = new BodyMotionProgram(
-            Name: "free",
-            Version: "puck.body-motion.v1",
-            Kind: BodyProgramKind.Motion,
-            Operations: [
-                // ResolveYawAttitudeAndPlanarFrame runs first and is the one op that resolves m_up from ambient
-                // gravity (WorldBody.Step.cs's ResolveUp) — included here only so this fixture's body actually
-                // carries a tilted up to measure against; IntegrateLocalAttitude overwrites its orientation write
-                // immediately after, which is the only reason ProduceSteeringIntent's altitude branch fires at all
-                // (it gates on the KIT'S motion program containing IntegrateLocalAttitude).
-                BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
-                BodyMotionOp.IntegrateLocalAttitude,
-                BodyMotionOp.ResolveHold,
-                BodyMotionOp.ComputeLocalTargetVelocity,
-                BodyMotionOp.RunActionTriggers,
-                BodyMotionOp.ApplyHold,
-                BodyMotionOp.IntegrateScratchVelocity,
-                BodyMotionOp.CommitPose,
+    private static readonly WorldChannel[] FlyerChannels = [
+        new(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveAdvance),
+        new(Name: "strafe", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveStrafe),
+        new(Name: "pitch", Shape: ChannelShape.Bipolar, Role: ChannelRole.Pitch),
+        new(Name: "roll", Shape: ChannelShape.Bipolar, Role: ChannelRole.Roll),
+        new(Name: "turn", Shape: ChannelShape.Bipolar, Role: ChannelRole.Turn),
+        new(Name: "up", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveUp),
+    ];
+    // ResolveYawAttitudeAndPlanarFrame runs first and is the one op that resolves m_up from ambient gravity
+    // (WorldBody.Step.cs's ResolveUp) — included here only so a fixture body actually carries a tilted up to
+    // measure against; IntegrateLocalAttitude overwrites its orientation write immediately after, which is the
+    // only reason ProduceSteeringIntent's altitude branch fires at all (it gates on the KIT'S motion program
+    // containing IntegrateLocalAttitude).
+    private static readonly BodyMotionProgram FlyerFreeProgram = new(
+        Name: "free",
+        Version: "puck.body-motion.v1",
+        Kind: BodyProgramKind.Motion,
+        Operations: [
+            BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
+            BodyMotionOp.IntegrateLocalAttitude,
+            BodyMotionOp.ResolveHold,
+            BodyMotionOp.ComputeLocalTargetVelocity,
+            BodyMotionOp.RunActionTriggers,
+            BodyMotionOp.ApplyHold,
+            BodyMotionOp.IntegrateScratchVelocity,
+            BodyMotionOp.CommitPose,
+        ]
+    );
+    // A free-flight kit naming FlyerFreeProgram — callers differ only in which producer program/scalars they set
+    // through ProducersRaw.
+    private static WorldKit FlyerKit() => new(
+        Name: "flyer-test",
+        BodyMotionProgram: FlyerFreeProgram.Name,
+        Motion: new WorldMotion(
+            Speed: new WorldSpeed(Value: 4f),
+            Turn: new WorldTurn(Rate: 2.5f),
+            Holds: [
+                new WorldHold(
+                    Bond: BodyHoldBond.Free,
+                    Gravity: new WorldHoldGravity(Fall: 23f, Rise: 14f),
+                    Hold: BodyHoldKind.Lift,
+                    Lift: 1f,
+                    Name: "air"
+                ),
             ]
-        );
+        ),
+        ProducersRaw: new Dictionary<string, BodyProgramParameters>(),
+        Collider: new WorldCollider.Capsule(Endpoint: new Vector3(x: 0f, y: 1f, z: 0f), Radius: 0.35f)
+    );
+    private static WorldDefinition FlyerDocument() {
         var roam = new BodyMotionProgram(Name: ProducerName, Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
-        var kit = new WorldKit(
-            Name: "flyer-test",
-            BodyMotionProgram: "free",
-            Motion: new WorldMotion(
-                Speed: new WorldSpeed(Value: 4f),
-                Turn: new WorldTurn(Rate: 2.5f),
-                Holds: [
-                    new WorldHold(
-                        Bond: BodyHoldBond.Free,
-                        Gravity: new WorldHoldGravity(Fall: 23f, Rise: 14f),
-                        Hold: BodyHoldKind.Lift,
-                        Lift: 1f,
-                        Name: "air"
-                    ),
-                ]
-            ),
-            ProducersRaw: new Dictionary<string, BodyProgramParameters> {
-                [ProducerName] = Fixtures.TravelerWanderParameters with {
-                    Scalars = new Dictionary<string, float>(collection: Fixtures.TravelerWanderParameters.Scalars) {
+        var kit = FlyerKit() with {
+            ProducersRaw = new Dictionary<string, BodyProgramParameters> {
+                [ProducerName] = Fixtures.TravelerRoamParameters with {
+                    Scalars = new Dictionary<string, float>(collection: Fixtures.TravelerRoamParameters.Scalars) {
                         ["forward"] = 0f,
                         ["softRadius"] = 1_000_000f,
                         ["altitudeGain"] = FlyerAltitudeGain,
                     },
                 },
             },
-            Collider: new WorldCollider.Capsule(Endpoint: new Vector3(x: 0f, y: 1f, z: 0f), Radius: 0.35f)
-        );
+        };
 
         return Fixtures.BuildDocument() with {
-            BodyMotionProgramsRaw = [free, roam],
-            ChannelsRaw = channels,
-            DefaultSeatKitRaw = "flyer-test",
+            BodyMotionProgramsRaw = [FlyerFreeProgram, roam],
+            ChannelsRaw = FlyerChannels,
+            DefaultSeatKitRaw = kit.Name,
             KitRowsRaw = [kit],
         };
+    }
+    private static WorldBody JoinAndPose(WorldFixture fixture, float x, float y, float z) {
+        var actor = WorldPrincipal.Seat(slot: 0);
+
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
+            Principal: actor,
+            Slot: actor.Index,
+            IdentityName: null,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        )).Accepted);
+
+        var body = fixture.Server.Body(index: actor.Index)!;
+
+        body.Pose(x: x, y: y, z: z, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+
+        return body;
     }
 
     [Fact]
@@ -274,7 +295,7 @@ public sealed class SteeringIntentLawTests {
     // position/yaw; forward/strafeWave/turnWave/upWave/pitchWave/rollTurn/altitudeGain 0 so nothing but the
     // phase-driven Turn write is observable), and a softRadius large enough the restoring branch never opens even
     // if position drifted. The approach shape's own scalars are zeroed too (standoffRadius irrelevant since
-    // approach/orbit/altitudeGain are all 0), so a governed tick writes an all-zero Intent — invisible in the
+    // approach/orbit/approachAltitudeGain are all 0), so a governed tick writes an all-zero Intent — invisible in the
     // trajectory — while the roam shape's phase state keeps advancing underneath it.
     private static Dictionary<string, float> IsolatedPhaseScalars() => new() {
         ["forward"] = 0f,
@@ -300,6 +321,7 @@ public sealed class SteeringIntentLawTests {
         ["standoffRadius"] = 1f,
         ["approach"] = 0f,
         ["orbit"] = 0f,
+        ["approachAltitudeGain"] = 0f,
         // Sensed hysteresis: releaseRadius > the target source's own range >= standoffRadius (WorldDefinitionValidator.Motion.cs).
         ["releaseRadius"] = 2000f,
     };
@@ -312,7 +334,7 @@ public sealed class SteeringIntentLawTests {
         return document with {
             KitRowsRaw = [kit with {
                 ProducersRaw = new Dictionary<string, BodyProgramParameters> {
-                    [ProducerName] = Fixtures.TravelerWanderParameters with { Scalars = IsolatedPhaseScalars() },
+                    [ProducerName] = Fixtures.TravelerRoamParameters with { Scalars = IsolatedPhaseScalars() },
                 },
             }],
         };
@@ -334,11 +356,11 @@ public sealed class SteeringIntentLawTests {
             BodyMotionProgramsRaw = [.. document.BodyMotionPrograms, sensingProgram],
             // The ONLY producer this kit declares: SeedProducer (WorldPopulation.Step.cs) seeds a seat's oscillator
             // from the first producer whose program selects ProduceSteeringIntent, so a second one (the base kit's
-            // own "wander") would seed WeaveFrequency from ITS scalars instead of this one's — a divergent phase
+            // own "roam") would seed WeaveFrequency from ITS scalars instead of this one's — a divergent phase
             // that has nothing to do with the property under test.
             KitRowsRaw = [kit with {
                 ProducersRaw = new Dictionary<string, BodyProgramParameters> {
-                    [SensingProducerName] = Fixtures.TravelerWanderParameters with { Scalars = IsolatedPhaseScalarsWithApproach() },
+                    [SensingProducerName] = Fixtures.TravelerRoamParameters with { Scalars = IsolatedPhaseScalarsWithApproach() },
                 },
             }],
         };
@@ -409,7 +431,7 @@ public sealed class SteeringIntentLawTests {
             stalk.Step();
         }
 
-        // THE CONTROL: the approach shape's own Intent is all-zero (approach/orbit/altitudeGain 0), so the sensed
+        // THE CONTROL: the approach shape's own Intent is all-zero (approach/orbit/approachAltitudeGain 0), so the sensed
         // window leaves the hunter's yaw exactly where it started — proving the sensed window is otherwise inert
         // and any divergence below can only come from the (invisible) oscillator state.
         Assert.Equal(
@@ -453,5 +475,99 @@ public sealed class SteeringIntentLawTests {
             expected: FixedQ4816.Zero,
             actual: pureRoamYawAtHandoff
         );
+    }
+
+    // --- The roam shape runs only when the producer authors its own scalars — never unconditionally on selecting the op. ---
+
+    // Senses nothing, ever (the fixture joins one body alone and the sensed range is far below any distance it
+    // could occupy), and authors only the approach shape's own scalars — no roam scalar at all, so
+    // CompiledBodyProducer.RoamActive is false and ProduceRoamIntent never runs.
+    private static WorldDefinition ApproachOnlyFlyerDocument(float approachAltitudeGain = 0.5f, float sensedRange = 0.01f) {
+        var approach = new BodyMotionProgram(
+            Name: ProducerName,
+            Version: "puck.body-motion.v1",
+            Kind: BodyProgramKind.Producer,
+            Target: new BodyTargetSource.Sensed(Scope: BodyTargetScope.Bodies, Range: sensedRange, HalfAngleDegrees: 180f, RequiresLineOfSight: false),
+            Operations: [BodyMotionOp.SenseNearestInCone, BodyMotionOp.ProduceSteeringIntent, BodyMotionOp.FaceSensorTarget]
+        );
+        var kit = FlyerKit() with {
+            ProducersRaw = new Dictionary<string, BodyProgramParameters> {
+                [ProducerName] = new(
+                    Scalars: new Dictionary<string, float> {
+                        ["standoffRadius"] = 0.005f,
+                        ["approach"] = 0f,
+                        ["orbit"] = 0f,
+                        ["approachAltitudeGain"] = approachAltitudeGain,
+                        ["inwardGain"] = 1.6f,
+                        ["turnScale"] = 2.5f,
+                        ["releaseRadius"] = (sensedRange * 2f),
+                    },
+                    Channels: new Dictionary<string, string>()
+                ),
+            },
+        };
+
+        return FlyerDocument() with {
+            BodyMotionProgramsRaw = [FlyerFreeProgram, approach],
+            KitRowsRaw = [kit],
+        };
+    }
+
+    [Fact]
+    public void ApproachOnlyProducer_HoldsForeverOnAnUnsensedTick_WhereARoamAuthoringProducerHomesToItsSeededAltitude() {
+        using var approachOnly = Fixtures.FreshServer(definition: ApproachOnlyFlyerDocument());
+        var approachOnlyBody = JoinAndPose(fixture: approachOnly, x: 3f, y: 1f, z: 0f);
+
+        approachOnlyBody.SetIntentSource(source: IntentSource.Producer(name: ProducerName));
+
+        for (var tick = 0; (tick < 30); tick++) {
+            approachOnly.Step();
+
+            Assert.Equal(
+                expected: FixedQ4816.Zero,
+                actual: approachOnlyBody.EngagedIntent[MoveUpOrdinal]
+            );
+        }
+
+        // THE CONTROL: the same free-flight kit and off-origin pose, but FlyerDocument's own producer DOES author
+        // the roam scalars (and never senses at all) — an unsensed tick must home toward its seeded altitude
+        // instead of holding, proving the approach-only case above holds BECAUSE it omits the roam scalars, not
+        // because nothing here can ever produce a nonzero MoveUp.
+        using var roaming = Fixtures.FreshServer(definition: FlyerDocument());
+        var roamingBody = JoinAndPose(fixture: roaming, x: 3f, y: 1f, z: 0f);
+
+        roamingBody.SetIntentSource(source: IntentSource.Producer(name: ProducerName));
+        roaming.Step();
+
+        Assert.NotEqual(
+            expected: FixedQ4816.Zero,
+            actual: roamingBody.EngagedIntent[MoveUpOrdinal]
+        );
+    }
+
+    [Fact]
+    public void ApproachAltitudeGain_GovernsTheSensedShapeIndependentlyOfTheOmittedRoamGain() {
+        static FixedQ4816 ProducedMoveUp(float gain) {
+            using var fixture = Fixtures.FreshServer(definition: ApproachOnlyFlyerDocument(approachAltitudeGain: gain, sensedRange: 100f));
+            var follower = JoinSeat(fixture: fixture, slot: 0, x: 0f, z: 0f);
+            var target = JoinSeat(fixture: fixture, slot: 1, x: 0f, z: 1f);
+
+            follower.SetIntentSource(source: IntentSource.Producer(name: ProducerName));
+            fixture.Step();
+
+            // Preserve the producer's seeded preferred altitude, then move only the follower away from it while a
+            // target remains sensed. The approach shape's vertical term is now the only possible MoveUp writer.
+            follower.Pose(x: 0f, y: 10f, z: 0f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+            target.Pose(x: 0f, y: 0f, z: 1f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+            fixture.Step();
+
+            return follower.EngagedIntent[MoveUpOrdinal];
+        }
+
+        var disabled = ProducedMoveUp(gain: 0f);
+        var enabled = ProducedMoveUp(gain: 0.5f);
+
+        Assert.Equal(expected: FixedQ4816.Zero, actual: disabled);
+        Assert.NotEqual(expected: FixedQ4816.Zero, actual: enabled);
     }
 }

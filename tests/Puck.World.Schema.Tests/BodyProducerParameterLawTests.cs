@@ -7,12 +7,12 @@ namespace Puck.World.Schema.Tests;
 /// <summary>Pins the producer-parameter compile boundary: an authored <c>scalars</c> key resolves to a fixed
 /// <see cref="BodyProducerParameter"/> ordinal once, at kit-compile time, and a missing or unknown key refuses by
 /// name rather than reading a runtime dictionary miss. Also pins that the approach-only scalars
-/// (<c>standoffRadius</c>/<c>approach</c>/<c>orbit</c>) are required exactly when the program also senses
+/// (<c>standoffRadius</c>/<c>approach</c>/<c>orbit</c>/<c>approachAltitudeGain</c>) are required exactly when the program also senses
 /// (<see cref="BodyMotionOp.SenseNearestInCone"/>) — a bare roam program can never reach
-/// <c>ProduceSteeringIntent</c>'s approach shape, so authoring them there refuses as unknown.</summary>
+/// <c>ProduceSteeringIntent</c>'s approach shape, so authoring them there refuses as unknown. The roam set is all-or-
+/// nothing but optional for a sensing producer that should hold whenever it sees no target.</summary>
 public sealed class BodyProducerParameterLawTests {
-    // Every ordinal ProduceSteeringIntent's roam shape reads — required of every producer selecting the op,
-    // regardless of sensing (the roam shape runs every tick; see WorldBody.Step.cs).
+    // Every ordinal ProduceSteeringIntent's roam shape reads — required together once any is authored.
     private static Dictionary<string, float> CompleteRoamScalars() => new() {
         ["forward"] = 0.5f,
         ["softRadius"] = 4f,
@@ -41,6 +41,7 @@ public sealed class BodyProducerParameterLawTests {
         scalars["standoffRadius"] = 1f;
         scalars["approach"] = 0f;
         scalars["orbit"] = 0f;
+        scalars["approachAltitudeGain"] = 0.5f;
 
         return scalars;
     }
@@ -111,6 +112,13 @@ public sealed class BodyProducerParameterLawTests {
         );
     }
     [Fact]
+    public void ABareSteeringProgramCannotCompileAsAPermanentlyInertProducer() {
+        var exception = Assert.Throws<BodyMotionProgramException>(testCode: () => CompileRoam(scalars: []));
+
+        Assert.Equal(expected: BodyMotionProgramRefusal.ParameterMissing, actual: exception.Refusal);
+        Assert.Contains(actualString: exception.Message, expectedSubstring: "forward", comparisonType: StringComparison.Ordinal);
+    }
+    [Fact]
     public void AnUnknownParameterRefusesByName() {
         var extra = CompleteRoamScalars();
 
@@ -152,6 +160,24 @@ public sealed class BodyProducerParameterLawTests {
             expected: 1f,
             actual: (double)producer.Scalar(BodyProducerParameter.StandoffRadius)
         );
+    }
+    [Fact]
+    public void ASensingProgramMayOmitTheWholeRoamShape_ButNotOnlyPartOfIt() {
+        var approachOnly = new Dictionary<string, float> {
+            ["standoffRadius"] = 1f,
+            ["approach"] = 0f,
+            ["orbit"] = 0f,
+            ["approachAltitudeGain"] = 0.5f,
+        };
+        var producer = Compile(program: SensingProgram(), scalars: approachOnly);
+
+        Assert.False(condition: producer.RoamActive);
+
+        approachOnly["forward"] = 0.5f;
+        var exception = Assert.Throws<BodyMotionProgramException>(testCode: () => Compile(program: SensingProgram(), scalars: approachOnly));
+
+        Assert.Equal(expected: BodyMotionProgramRefusal.ParameterMissing, actual: exception.Refusal);
+        Assert.Contains(actualString: exception.Message, expectedSubstring: "softRadius", comparisonType: StringComparison.Ordinal);
     }
     [Fact]
     public void ASensingProgramRefusesAMissingApproachOnlyScalarByName() {
