@@ -435,6 +435,26 @@ public static partial class WorldDefinitionValidator {
             name: "collision.bodyContacts.rigidSubstepCeiling",
             errors: errors
         );
+        RequireNonNegative(
+            value: bodyContacts.RigidRestLinearSpeed,
+            name: "collision.bodyContacts.rigidRestLinearSpeed",
+            errors: errors
+        );
+        RequireNonNegative(
+            value: bodyContacts.RigidRestAngularSpeed,
+            name: "collision.bodyContacts.rigidRestAngularSpeed",
+            errors: errors
+        );
+        RequireNonNegative(
+            value: bodyContacts.RigidRestHoldSeconds,
+            name: "collision.bodyContacts.rigidRestHoldSeconds",
+            errors: errors
+        );
+        RequirePositive(
+            value: bodyContacts.RigidSubstepTravelFraction,
+            name: "collision.bodyContacts.rigidSubstepTravelFraction",
+            errors: errors
+        );
     }
     private static void ValidateDistribution(WorldDistribution distribution, string path, HashSet<string> spawnPointIds, bool allowDisc, bool allowPoints, bool allowLattice, bool allowZeroDisc, List<string> errors, bool allowNoise = false, bool allowScatter = false) {
         if (

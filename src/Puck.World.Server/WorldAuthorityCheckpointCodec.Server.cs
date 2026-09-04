@@ -972,7 +972,8 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteFixedVector(value: residue.RigidAngularVelocity);
         writer.WriteBoolean(value: residue.RigidResting);
         writer.WriteUInt64(value: residue.RigidRestingHoldTicks);
-        writer.WriteBoolean(value: residue.RigidContacting);
+        writer.WriteBoolean(value: residue.RigidGroundContacting);
+        writer.WriteBoolean(value: residue.RigidObstructionContacting);
     }
     private static WorldBody.IntegrationResidue ReadResidue(ref WireReader reader) {
         var previousPosition = reader.ReadFixedVector();
@@ -1012,7 +1013,8 @@ public static partial class WorldAuthorityCheckpointCodec {
         var rigidAngularVelocity = reader.ReadFixedVector();
         var rigidResting = reader.ReadBoolean();
         var rigidRestingHoldTicks = reader.ReadUInt64();
-        var rigidContacting = reader.ReadBoolean();
+        var rigidGroundContacting = reader.ReadBoolean();
+        var rigidObstructionContacting = reader.ReadBoolean();
 
         return new WorldBody.IntegrationResidue(
             AffectingSubject: affectingSubject,
@@ -1049,7 +1051,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             RigidAngularVelocity: rigidAngularVelocity,
             RigidResting: rigidResting,
             RigidRestingHoldTicks: rigidRestingHoldTicks,
-            RigidContacting: rigidContacting
+            RigidGroundContacting: rigidGroundContacting,
+            RigidObstructionContacting: rigidObstructionContacting
         );
     }
     private static void WriteAttachmentResidue(WireWriter writer, WorldBody.AttachmentResidue residue) {

@@ -16,10 +16,11 @@ namespace Puck.World;
 /// positive — a rigid body with no mass is not a rigid body, it is a decoration.</param>
 /// <param name="Restitution">The coefficient of restitution against the static world and against another rigid body,
 /// in <c>[0, 1]</c>. Zero (the default) is a dead-stop collision; one is a lossless bounce.</param>
-/// <param name="Friction">The tangential-velocity decay rate against the static world, per second, on the same
-/// <c>(1 - rate·dt)</c> terms as <see cref="LinearDamping"/> — applied only while in contact, so it never slows a
-/// free-flying body. Also the rigid-vs-rigid tangential decay the server applies once per resolved pair contact.
-/// Non-negative; zero (the default) is frictionless.</param>
+/// <param name="Friction">The contact-point tangential (slip) velocity decay rate against the static world, per
+/// second, on the same <c>(1 - rate·dt)</c> terms as <see cref="LinearDamping"/> — applied only while in contact,
+/// so it never slows a free-flying body, and coupled through the body's own inertia rather than decaying linear and
+/// angular velocity independently. Also the pair's average Coulomb friction coefficient the server clamps a
+/// rigid-vs-rigid contact's tangential impulse to. Non-negative; zero (the default) is frictionless.</param>
 /// <param name="RollingFriction">The angular-velocity decay rate, per second, applied while a rigid body is in
 /// contact with a surface — the resistance that lets a rolling ball settle instead of spinning forever. Non-negative;
 /// the applied decay is clamped so a wide step never reverses spin.</param>

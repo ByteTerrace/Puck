@@ -117,7 +117,22 @@ public sealed record WorldCollisionEvents(int CandidateBudget = 32, int MaxPairs
 /// tick — the derived-count's own ceiling: the actual count is derived per body per tick from its speed and collider
 /// size (a fast ball takes more, a resting one takes one), never authored directly, but the ceiling bounds the
 /// worst-case per-tick cost and is echoed in <c>world.budget</c>.</param>
-public sealed record WorldBodyContactPolicy(int CandidateBudget = 16, int MaxPairsPerBody = 8, int RigidSubstepCeiling = 8) {
+/// <param name="RigidRestLinearSpeed">Below this linear speed (world units/second) a grounded rigid body counts
+/// toward the resting hold window (<see cref="RigidRestHoldSeconds"/>). Non-negative; the default reproduces the
+/// engine's original hard-coded threshold.</param>
+/// <param name="RigidRestAngularSpeed">Below this angular speed (radians/second) a grounded rigid body counts toward
+/// the resting hold window, on the same terms as <see cref="RigidRestLinearSpeed"/>. Non-negative.</param>
+/// <param name="RigidRestHoldSeconds">How long a rigid body must stay under both rest thresholds while grounded
+/// before the resting latch actually closes — long enough that crossing a contact skin's noise band for one tick
+/// never freezes a body mid-roll. Non-negative.</param>
+/// <param name="RigidSubstepTravelFraction">The fraction of a rigid body's own bounding radius one continuous-
+/// collision substep may travel — the derived substep COUNT stays derived (never authored directly), but how
+/// conservative that derivation is IS a document field: a smaller fraction takes more, cheaper substeps for the same
+/// speed; a larger one risks a fast body tunneling through a thin wall before <see cref="RigidSubstepCeiling"/> forces
+/// it to stop deriving more. Strictly positive.</param>
+public sealed record WorldBodyContactPolicy(int CandidateBudget = 16, int MaxPairsPerBody = 8, int RigidSubstepCeiling = 8,
+    float RigidRestLinearSpeed = 0.05f, float RigidRestAngularSpeed = 0.1f, float RigidRestHoldSeconds = 0.25f,
+    float RigidSubstepTravelFraction = 0.5f) {
     /// <summary>The largest accepted candidate budget per solid body.</summary>
     public const int MaximumCandidateBudget = 32;
     /// <summary>The largest accepted resolved-contact degree per solid body.</summary>

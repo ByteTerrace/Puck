@@ -332,8 +332,9 @@ choosing fixed-point primitives on sim value paths.
   `ResolveDynamicContacts` broadphase (`WorldPopulation.Rigid.cs`) through
   `Puck.Physics.FixedTwoBodyKernel`. `body.impulse`, `world.rigid`, and the
   `$physics:quiescent` rule operand are the console/rule surface; see
-  [references/documents.md](references/documents.md) if it grows a rigid
-  section, and the [server](../../../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)/[schema](../../../src/Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs)
+  [references/documents.md](references/documents.md#crowd-scale-policies)
+  for the authored `collision.bodyContacts` rigid fields, and the
+  [server](../../../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)/[schema](../../../src/Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs)
   references for the mechanics. The shipped garden's `billiardsTray`/
   `bowlingLane` placements are the worked example.
 - `WorldBodiesLimits.CapacityCeiling` is 4096 (the largest authored

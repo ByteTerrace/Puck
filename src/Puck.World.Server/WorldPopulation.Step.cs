@@ -626,7 +626,7 @@ Replan:
                     entityIndex: slot,
                     generatorInvocations: m_generatorInvocations,
                     judgeInvocations: m_judgeInvocations,
-                    rigidSubstepCeiling: m_bodyContactPolicy.RigidSubstepCeiling,
+                    rigidPolicy: m_rigidContactPolicy,
                     stepTicks: stepTicks,
                     tick: tick
                 );
@@ -819,7 +819,7 @@ Replan:
                 designationOutputs: m_designationOutputs,
                 generatorInvocations: m_generatorInvocations,
                 judgeInvocations: m_judgeInvocations,
-                rigidSubstepCeiling: m_bodyContactPolicy.RigidSubstepCeiling
+                rigidPolicy: m_rigidContactPolicy
             );
             RecordFlockMotion(player);
         }

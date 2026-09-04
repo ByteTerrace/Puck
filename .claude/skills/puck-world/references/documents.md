@@ -601,9 +601,12 @@ cadence phase, cached steering, and overlap latches through checkpoint/hash.
 (defaults 16/8). Dense saturation omits later stable-index pairs. Do not couple
 these budgets to `collision.events`; sensing and physical correction are
 independent authored costs. `rigidSubstepCeiling` (default 8, maximum 32)
-bounds a rigid body's own per-tick continuous-collision substep count — the
-count itself is derived per body per tick from speed and collider size, never
-authored directly.
+bounds a rigid body's own per-tick continuous-collision substep count against
+an authored `rigidSubstepTravelFraction` (default 0.5) — the count itself is
+derived per body per tick from speed and collider size, never authored
+directly. `rigidRestLinearSpeed`/`rigidRestAngularSpeed`/`rigidRestHoldSeconds`
+(defaults 0.05/0.1/0.25) are the thresholds and hold window a grounded rigid
+body's `Resting` fact latches against.
 
 A kit's `rigid` facet (`mass`, `restitution`, `friction`, `rollingFriction`,
 `linearDamping`, `angularDamping`) hands its bodies to the rigid solver

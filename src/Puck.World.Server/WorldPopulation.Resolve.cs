@@ -44,6 +44,7 @@ public sealed partial class WorldPopulation {
         m_bodyUpPolicy = WorldBodyUpPolicyCompiler.Compile(collision: definition.Collision);
         m_walkableThreshold = FixedWorldCollision.Compile(collision: definition.Collision).GroundedThreshold;
         m_bodyContactPolicy = definition.Collision.BodyContacts;
+        m_rigidContactPolicy = RigidContactPolicy.FromAuthored(policy: m_bodyContactPolicy);
         m_targetRows = definition.TargetRegisters;
         m_targets = WorldTargetRegisterTable.Compile(
             registers: definition.TargetRegisters,

@@ -438,10 +438,22 @@ inertia from the kit's own collider and an authored mass, never a free density
 or tensor. A kinematic character contributes its velocity to a rigid contact
 but is never itself pushed unless its own kit says so. Substep count for
 continuous collision is derived per body per tick from speed and collider
-size against an authored ceiling, never a free per-tick knob. Restitution
-fires only on a genuine impact (the rising edge of contact), never every tick
-of continued rest — the naive per-tick reapplication is a stable
-non-decaying bounce, not a settling body. Friction and damping are authored
+size against an authored ceiling and an authored per-substep travel
+fraction, never a free per-tick knob. Restitution against the static world
+fires only on a genuine impact (the rising edge of contact) on EACH of the
+ground and obstruction contact channels independently, never every tick of
+continued rest — the naive per-tick reapplication is a stable non-decaying
+bounce, not a settling body, and conflating the two channels is what let a
+grounded ball's continuous floor contact mask a fresh wall impact. A
+rigid-vs-rigid pair carries no such latch, so its restitution is instead
+floored to zero below a small closing-speed threshold — the same "settle,
+don't chatter" intent applied to a contact with no rising-edge state of its
+own. A pair's contact anchor is a real off-center surface point, never the
+body center, so a strike carries real torque; its tangential response is a
+real Coulomb impulse through the two-body kernel, clamped to the pair's
+friction coefficient against the normal impulse just applied, never an
+independent rescale of either body's whole velocity (which would burn or
+invent momentum along the normal). Friction and damping are authored
 per-second decay rates, not per-tick fractions, so one authored value decays
 identically at any simulation rate. Cross-world transfer of a rigid body is
 out of scope and refused by name. The garden's `billiardsTray`/`bowlingLane`

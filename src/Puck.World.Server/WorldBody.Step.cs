@@ -31,10 +31,10 @@ public sealed partial class WorldBody {
     /// <c>ElapsedTicks</c> rather than any tick this method captures.</param>
     /// <returns><see langword="true"/> when <paramref name="engageProbeOrdinal"/>'s rising edge fired this tick
     /// (the caller should engage); otherwise <see langword="false"/>.</returns>
-    /// <param name="rigidSubstepCeiling">The most substeps a rigid body's static-contact integration may take this
-    /// call (<see cref="WorldBodyContactPolicy.RigidSubstepCeiling"/>); ignored for a locomotion kit.</param>
+    /// <param name="rigidPolicy">The authored, once-compiled rigid-contact tunables <see cref="AdvanceRigid"/> reads;
+    /// ignored for a locomotion kit.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> is zero.</exception>
-    internal bool Advance(ulong tick, ulong stepTicks, int? engageProbeOrdinal = null, int entityIndex = -1, BodyEffectTargets effectTargets = default, List<BodyEffectOutput>? effectOutputs = null, List<WorldDesignation>? designationOutputs = null, List<WorldGeneratorInvocation>? generatorInvocations = null, List<WorldJudgeInvocation>? judgeInvocations = null, int rigidSubstepCeiling = 1) {
+    internal bool Advance(ulong tick, ulong stepTicks, RigidContactPolicy rigidPolicy, int? engageProbeOrdinal = null, int entityIndex = -1, BodyEffectTargets effectTargets = default, List<BodyEffectOutput>? effectOutputs = null, List<WorldDesignation>? designationOutputs = null, List<WorldGeneratorInvocation>? generatorInvocations = null, List<WorldJudgeInvocation>? judgeInvocations = null) {
         ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
 
         // Captured before ExecuteProgram (or the overlay add below) can move m_position — the swept portal-crossing
@@ -47,7 +47,7 @@ public sealed partial class WorldBody {
             AdvanceRigid(
                 entityIndex: entityIndex,
                 stepTicks: stepTicks,
-                maxSubsteps: rigidSubstepCeiling
+                policy: rigidPolicy
             );
 
             return false;

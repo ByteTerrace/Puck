@@ -4,28 +4,58 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
+/// <summary>The authored rigid-contact tunables (<see cref="WorldBodyContactPolicy"/>'s rigid-specific fields),
+/// converted to fixed point/engine ticks once per document (re)compile — see
+/// <see cref="Puck.World.Server.WorldPopulation"/>'s own compiled tables — instead of every
+/// <see cref="WorldBody.AdvanceRigid"/> call.</summary>
+/// <param name="RestLinearThreshold">Below this linear speed a grounded rigid body counts toward the resting hold
+/// window.</param>
+/// <param name="RestAngularThreshold">Below this angular speed a grounded rigid body counts toward the resting hold
+/// window.</param>
+/// <param name="RestHoldTicks">How long, in exact engine ticks, a rigid body must stay under both rest thresholds
+/// while grounded before the resting latch actually closes.</param>
+/// <param name="SubstepTravelFraction">The fraction of a rigid body's own bounding radius one continuous-collision
+/// substep may travel.</param>
+/// <param name="SubstepCeiling">The most substeps one rigid body's static-contact integration may take in a tick —
+/// see <see cref="WorldBodyContactPolicy.RigidSubstepCeiling"/>.</param>
+public readonly record struct RigidContactPolicy(
+    FixedQ4816 RestLinearThreshold,
+    FixedQ4816 RestAngularThreshold,
+    ulong RestHoldTicks,
+    FixedQ4816 SubstepTravelFraction,
+    int SubstepCeiling
+) {
+    /// <summary>Compiles an authored <see cref="WorldBodyContactPolicy"/>'s rigid fields to this fixed-point form.</summary>
+    public static RigidContactPolicy FromAuthored(WorldBodyContactPolicy policy) => new(
+        RestLinearThreshold: FixedQ4816.FromDouble(value: policy.RigidRestLinearSpeed),
+        RestAngularThreshold: FixedQ4816.FromDouble(value: policy.RigidRestAngularSpeed),
+        RestHoldTicks: FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: policy.RigidRestHoldSeconds)),
+        SubstepTravelFraction: FixedQ4816.FromDouble(value: policy.RigidSubstepTravelFraction),
+        SubstepCeiling: policy.RigidSubstepCeiling
+    );
+}
+
 public sealed partial class WorldBody {
     // The persistent FixedTwoBodyKernel vehicle RigidHandle() maintains — allocated once, mutated in place every
     // call, so steady-state dynamic-vs-dynamic contact resolution allocates nothing.
     private FixedRigidBody? m_rigidHandle;
-    // Whether the previous substep was already in static contact — the restitution edge latch (see AdvanceRigid):
-    // a rising edge (false -> true) is a genuine impact, continuous contact is not.
-    private bool m_rigidContacting;
+    // The persistent infinite-mass phantom AdvanceRigid's own static-contact friction solve reads as the "other
+    // body" in a two-body kernel call — the world/ground never moves and never receives an impulse (zero inverse
+    // mass/inertia), so this is allocated once and its velocity fields are never touched after construction.
+    private FixedRigidBody? m_groundPhantomHandle;
+    // Whether the previous substep already had a walkable (ground) / non-walkable (obstruction) contact — two
+    // independent restitution edge latches (see AdvanceRigid): a rising edge (false -> true) on EITHER channel is a
+    // genuine impact on THAT surface, continuous contact on it is not. Separate latches so a ball resting on the
+    // floor (continuous ground contact) still bounces the first time it clips a wall, rather than reading the wall
+    // hit as a continuation of the unrelated floor contact.
+    private bool m_rigidGroundContacting;
+    private bool m_rigidObstructionContacting;
 
     /// <summary>Gets the number of substeps the most recent <see cref="AdvanceRigid"/> call took — the
     /// derived-count read-back <c>world.budget</c> echoes. Zero for a locomotion kit or a body never yet advanced.</summary>
     public int RigidStaticSubstepsThisTick { get; private set; }
 
-    // Below these magnitudes a rigid body counts as "not moving" toward the resting latch — small enough that a
-    // ball settled in a tray floor's own contact skin never reads as still drifting, large enough that ordinary
-    // fixed-point contact noise never re-arms it.
-    private static readonly FixedQ4816 RigidRestLinearThreshold = FixedQ4816.FromDouble(value: 0.05d);
-    private static readonly FixedQ4816 RigidRestAngularThreshold = FixedQ4816.FromDouble(value: 0.1d);
-    // How long a grounded, slow rigid body must stay that way before the resting latch actually closes — long enough
-    // that a ball crossing a contact skin's noise band for one tick never freezes mid-roll.
-    private static readonly ulong RigidRestHoldTicks = FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: 0.25d));
     private static readonly FixedQ4816 RigidHalf = FixedQ4816.FromDouble(value: 0.5d);
-    private static readonly FixedQ4816 RigidTwo = FixedQ4816.FromInteger(value: 2L);
 
     /// <summary>Gets whether this body's kit carries a <c>rigid</c> facet — a passive rigid entity advanced by
     /// <see cref="AdvanceRigid"/> instead of a locomotion motion program.</summary>
@@ -37,17 +67,29 @@ public sealed partial class WorldBody {
     /// <summary>Gets whether the rigid solver has latched this body to rest. Always <see langword="false"/> for a
     /// locomotion kit.</summary>
     public bool Resting => m_resting;
+    /// <summary>Gets the elapsed engine ticks this body has spent under the rest thresholds so far — zero the
+    /// instant it wakes, latched at <see cref="Resting"/>'s own hold window once it closes.</summary>
+    public ulong RigidRestingHoldTicks => m_restingHoldTicks;
+    /// <summary>Gets whether the previous substep already had a walkable (ground) contact — the ground-channel
+    /// restitution edge latch <see cref="AdvanceRigid"/> reads.</summary>
+    public bool RigidGroundContacting => m_rigidGroundContacting;
+    /// <summary>Gets whether the previous substep already had a non-walkable (obstruction) contact — the
+    /// obstruction-channel restitution edge latch <see cref="AdvanceRigid"/> reads.</summary>
+    public bool RigidObstructionContacting => m_rigidObstructionContacting;
     /// <summary>Gets the rigid facet's authored mass, or zero for a locomotion kit.</summary>
     public FixedQ4816 RigidMass => (m_rigid?.Mass ?? FixedQ4816.Zero);
     /// <summary>Gets the rigid facet's authored restitution against another rigid body, or zero for a locomotion kit.</summary>
     public FixedQ4816 RigidRestitution => (m_rigid?.Restitution ?? FixedQ4816.Zero);
     /// <summary>Gets the rigid facet's authored friction against another rigid body, or zero for a locomotion kit.</summary>
     public FixedQ4816 RigidFriction => (m_rigid?.Friction ?? FixedQ4816.Zero);
+    /// <summary>Gets the rigid facet's derived conservative bounding radius — the same radius the pair-contact
+    /// anchor approximation and the static-contact substep bound both read. Zero for a locomotion kit.</summary>
+    public FixedQ4816 RigidBoundingRadius => (m_rigid?.BoundingRadius ?? FixedQ4816.Zero);
 
     /// <summary>Applies an instantaneous world-space impulse to this rigid body's linear velocity
     /// (<c>Δv = impulse / mass</c>) and wakes it from rest. A no-op for a locomotion kit.</summary>
     /// <param name="impulse">The impulse, in mass·length/time units.</param>
-    internal void ApplyRigidImpulse(FixedVector3 impulse) {
+    public void ApplyRigidImpulse(FixedVector3 impulse) {
         if (m_rigid is not { } rigid) {
             return;
         }
@@ -131,6 +173,24 @@ public sealed partial class WorldBody {
 
         return handle;
     }
+    /// <summary>Builds (or refreshes) the persistent static ground phantom <see cref="AdvanceRigid"/>'s static-
+    /// contact friction solve plays as the kernel's "other" body: zero velocity, zero inverse mass/inertia, so it
+    /// never moves and never receives an impulse, whatever anchor or normal a call names.</summary>
+    private FixedRigidBody GroundPhantomHandle() {
+        var handle = (m_groundPhantomHandle ??= new FixedRigidBody());
+
+        handle.LinearVelocity = FixedVector3.Zero;
+        handle.AngularVelocity = FixedVector3.Zero;
+        handle.InverseMassRaw = 0L;
+        handle.InverseInertiaXX = 0L;
+        handle.InverseInertiaYY = 0L;
+        handle.InverseInertiaZZ = 0L;
+        handle.InverseInertiaXY = 0L;
+        handle.InverseInertiaXZ = 0L;
+        handle.InverseInertiaYZ = 0L;
+
+        return handle;
+    }
     /// <summary>Writes a rigid body's own <see cref="TwoBodyHandle"/>, after the kernel has applied an impulse to it,
     /// back onto this body's velocity state and wakes it. A no-op for a locomotion kit (its handle is a static
     /// phantom — see <see cref="TwoBodyHandle"/> — and never receives a written impulse to commit).</summary>
@@ -144,16 +204,31 @@ public sealed partial class WorldBody {
         m_resting = false;
         m_restingHoldTicks = 0UL;
     }
+    /// <summary>Applies a positional-only depenetration correction to a rigid body — no velocity or impulse change,
+    /// that is the separate rigid-pair impulse path's job (<see cref="WorldPopulation.ResolveRigidPairContact"/>) —
+    /// and wakes it: a body another body's overlap has just physically displaced is no longer at rest, whatever its
+    /// latched velocity said a moment ago. A no-op for zero correction, so a body already merely touching (never
+    /// re-entering overlap once actually settled — see <see cref="Puck.Physics.FixedDynamicBodyContacts"/>) is never
+    /// woken by a call that does nothing.</summary>
+    internal void ApplyRigidPositionalCorrection(FixedVector3 correction) {
+        if (correction == FixedVector3.Zero) {
+            return;
+        }
+
+        m_position += correction;
+        m_resting = false;
+        m_restingHoldTicks = 0UL;
+    }
     /// <summary>Advances a rigid-kit body by one exact simulation step: damping, gravity, a swept, substepped
     /// integration against the world's static contact field with restitution/friction/rolling response, and the
     /// resting latch. Dynamic-vs-dynamic contact is a separate pass
     /// (<see cref="WorldPopulation.ResolveDynamicContacts"/>), run after every body has advanced.</summary>
     /// <param name="entityIndex">This body's population index — the same index gravity/checkpoint reads key on.</param>
     /// <param name="stepTicks">The exact engine ticks this call advances.</param>
-    /// <param name="maxSubsteps">The authored ceiling (<see cref="WorldBodyContactPolicy.RigidSubstepCeiling"/>) on
-    /// how many substeps this call may take; the actual count is derived from this tick's speed and the collider's
-    /// bounding radius, never authored directly.</param>
-    private void AdvanceRigid(int entityIndex, ulong stepTicks, int maxSubsteps) {
+    /// <param name="policy">The authored, once-compiled rigid-contact tunables (rest thresholds/hold window, the
+    /// substep travel fraction, and the substep ceiling <see cref="WorldBodyContactPolicy.RigidSubstepCeiling"/>
+    /// bounds) — <see cref="RigidContactPolicy"/>.</param>
+    private void AdvanceRigid(int entityIndex, ulong stepTicks, RigidContactPolicy policy) {
         m_entityIndex = entityIndex;
 
         if (
@@ -182,17 +257,17 @@ public sealed partial class WorldBody {
         }
 
         // Continuous collision, by derived substep count: a fast ball must not tunnel through a thin wall at the
-        // authority rate, so the travel this tick is bounded against a fraction of the collider's own bounding
-        // radius rather than authored as a free knob.
+        // authority rate, so the travel this tick is bounded against an authored fraction of the collider's own
+        // bounding radius rather than a fixed knob.
         var travel = (m_rigidVelocity.Length * tickSeconds);
         var perSubstepBound = FixedQ4816.Max(
-            x: (rigid.BoundingRadius * RigidHalf),
+            x: (rigid.BoundingRadius * policy.SubstepTravelFraction),
             y: FixedQ4816.FromDouble(value: 0.001d)
         );
         var derivedSubsteps = 1;
 
         while (
-            (derivedSubsteps < Math.Max(val1: 1, val2: maxSubsteps)) &&
+            (derivedSubsteps < Math.Max(val1: 1, val2: policy.SubstepCeiling)) &&
             ((perSubstepBound * FixedQ4816.FromInteger(value: derivedSubsteps)) < travel)
         ) {
             derivedSubsteps++;
@@ -240,67 +315,44 @@ public sealed partial class WorldBody {
             }
 
             m_position = bodyOrigin;
+            m_rigidVelocity = velocity;
 
-            var normal = (resolution.Grounded
-                ? resolution.GroundNormal
-                : resolution.ObstructionNormal
-            );
-
-            if (normal != FixedVector3.Zero) {
-                // Restitution fires only on the RISING edge of contact (m_rigidContacting false -> true this
-                // substep) — a genuine impact, never every tick of continuous rest: applying it every contacting
-                // tick would read gravity's own per-tick pull as a fresh impact and bounce the body back up by
-                // restitution·g·dt every tick forever. While resting, ResolveSweep's own inward-component removal is
-                // what holds the body still; nothing here adds velocity back.
-                var incoming = FixedVector3.Dot(
-                    left: preVelocity,
-                    right: normal
+            // Ground and obstruction are independent contacts that may both hold in the same substep (a ball
+            // resting on the floor that also clips a wall) — each carries its own rising-edge restitution latch and
+            // its own coupled slip-friction solve, so a wall hit bounces on its own first contact even while the
+            // floor contact underneath has been continuous for many ticks (see the two latch fields above).
+            if (resolution.ObstructionNormal != FixedVector3.Zero) {
+                ResolveRigidContact(
+                    normal: resolution.ObstructionNormal,
+                    preVelocity: preVelocity,
+                    contacting: ref m_rigidObstructionContacting,
+                    rigid: in rigid,
+                    subSeconds: subSeconds
                 );
+            } else {
+                m_rigidObstructionContacting = false;
+            }
 
-                if (
-                    !m_rigidContacting &&
-                    (incoming < FixedQ4816.Zero)
-                ) {
-                    velocity += (normal * (rigid.Restitution * -incoming));
-                }
-
-                m_rigidContacting = true;
-
-                var normalComponent = (normal * FixedVector3.Dot(
-                    left: velocity,
-                    right: normal
-                ));
-                var tangential = (velocity - normalComponent);
-                var keptTangential = (tangential * RateDecay(
-                    rate: rigid.Friction,
-                    seconds: subSeconds
-                ));
-                var removedTangential = (tangential - keptTangential);
-
-                if (
-                    (rigid.BoundingRadius > FixedQ4816.Zero) &&
-                    (removedTangential != FixedVector3.Zero)
-                ) {
-                    // A removed tangential (slip) velocity becomes rolling spin about the contact-plane axis
-                    // perpendicular to it: ω += (n × v_removed) / r — the same lever a contact-point friction
-                    // impulse would apply, folded to angular velocity directly rather than through a torque impulse.
-                    m_angularVelocity += (FixedVector3.Cross(
-                        left: normal,
-                        right: removedTangential
-                    ) / rigid.BoundingRadius);
-                }
-
+            if (resolution.GroundNormal != FixedVector3.Zero) {
+                ResolveRigidContact(
+                    normal: resolution.GroundNormal,
+                    preVelocity: preVelocity,
+                    contacting: ref m_rigidGroundContacting,
+                    rigid: in rigid,
+                    subSeconds: subSeconds
+                );
+                // Rolling resistance: a pure angular-velocity decay while actually grounded, distinct from — and
+                // applied after — the coupled slip-friction solve above (which already moved translational energy
+                // into rotational and back through the shared inertia, not this decay).
                 m_angularVelocity *= RateDecay(
                     rate: rigid.RollingFriction,
                     seconds: subSeconds
                 );
-                velocity = (normalComponent + keptTangential);
-                grounded = true;
             } else {
-                m_rigidContacting = false;
+                m_rigidGroundContacting = false;
             }
 
-            m_rigidVelocity = velocity;
+            grounded = (grounded || resolution.Grounded);
         }
 
         var linearSpeed = m_rigidVelocity.Length;
@@ -308,12 +360,12 @@ public sealed partial class WorldBody {
 
         if (
             grounded &&
-            (linearSpeed <= RigidRestLinearThreshold) &&
-            (angularSpeed <= RigidRestAngularThreshold)
+            (linearSpeed <= policy.RestLinearThreshold) &&
+            (angularSpeed <= policy.RestAngularThreshold)
         ) {
             m_restingHoldTicks += stepTicks;
 
-            if (m_restingHoldTicks >= RigidRestHoldTicks) {
+            if (m_restingHoldTicks >= policy.RestHoldTicks) {
                 m_resting = true;
                 m_rigidVelocity = FixedVector3.Zero;
                 m_angularVelocity = FixedVector3.Zero;
@@ -324,5 +376,104 @@ public sealed partial class WorldBody {
         }
 
         m_continuity = EntityContinuity.Continuous;
+    }
+    /// <summary>Resolves one contact normal (ground OR obstruction — see <see cref="AdvanceRigid"/>) for the current
+    /// substep: restitution on a rising edge, then a coupled slip-friction impulse at the contact point that moves
+    /// translational and rotational velocity together through the body's own inertia (the two-body kernel, with the
+    /// world modeled as an infinite-mass static phantom — see <see cref="GroundPhantomHandle"/>) rather than an
+    /// ad-hoc lever with no way back into linear motion.</summary>
+    private void ResolveRigidContact(FixedVector3 normal, FixedVector3 preVelocity, ref bool contacting, in FixedWorldRigid rigid, FixedQ4816 subSeconds) {
+        var incoming = FixedVector3.Dot(
+            left: preVelocity,
+            right: normal
+        );
+
+        if (
+            !contacting &&
+            (incoming < FixedQ4816.Zero)
+        ) {
+            m_rigidVelocity += (normal * (rigid.Restitution * -incoming));
+        }
+
+        contacting = true;
+
+        if (rigid.BoundingRadius <= FixedQ4816.Zero) {
+            return;
+        }
+
+        // The contact point, relative to the body's own center: straight out from the center opposite the contact
+        // normal, at the collider's conservative bounding radius — the same single-point approximation the
+        // rigid-vs-rigid pair anchors use.
+        var contactAnchor = (-normal * rigid.BoundingRadius);
+        var contactVelocity = (m_rigidVelocity + FixedVector3.Cross(
+            left: m_angularVelocity,
+            right: contactAnchor
+        ));
+        var tangential = (contactVelocity - (normal * FixedVector3.Dot(
+            left: contactVelocity,
+            right: normal
+        )));
+
+        if (tangential == FixedVector3.Zero) {
+            return;
+        }
+
+        var tangentSpeed = tangential.Length;
+        var tangentDirection = (tangential / tangentSpeed);
+        var keptFraction = RateDecay(
+            rate: rigid.Friction,
+            seconds: subSeconds
+        );
+        var removedSpeed = (tangentSpeed * (FixedQ4816.One - keptFraction));
+
+        if (removedSpeed <= FixedQ4816.Zero) {
+            return;
+        }
+
+        var ballHandle = TwoBodyHandle();
+        var groundHandle = GroundPhantomHandle();
+        var refusals = 0;
+
+        if (
+            !FixedTwoBodyKernel.TryEffectiveMass(
+            bodyA: groundHandle,
+            anchorA: FixedVector3.Zero,
+            bodyB: ballHandle,
+            anchorB: contactAnchor,
+            normal: tangentDirection,
+            scales: FixedWorldRigid.Scales,
+            normalMassRaw: out var tangentMassRaw,
+            refusals: ref refusals
+        )
+        ) {
+            return;
+        }
+
+        if (
+            !FusedArithmetic.TryMixedScaleProduct(
+            a: (-removedSpeed).Value,
+            fractionBitsA: FixedQ4816.FractionBitCount,
+            b: tangentMassRaw,
+            fractionBitsB: FixedWorldRigid.Scales.EffectiveMass,
+            fractionBitsOut: FixedQ4816.FractionBitCount,
+            result: out var impulseRaw
+        ) ||
+            (impulseRaw == 0L)
+        ) {
+            return;
+        }
+
+        FixedTwoBodyKernel.ApplyImpulse(
+            bodyA: groundHandle,
+            anchorA: FixedVector3.Zero,
+            bodyB: ballHandle,
+            anchorB: contactAnchor,
+            normal: tangentDirection,
+            impulseRaw: impulseRaw,
+            scales: FixedWorldRigid.Scales,
+            refusals: ref refusals
+        );
+        m_rigidVelocity = ballHandle.LinearVelocity;
+        m_angularVelocity = ballHandle.AngularVelocity;
     }
 }

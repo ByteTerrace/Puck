@@ -742,8 +742,11 @@ public sealed partial class WorldBody {
     /// <param name="RigidResting">A rigid kit's resting latch; always <see langword="false"/> for a locomotion kit.</param>
     /// <param name="RigidRestingHoldTicks">A rigid kit's elapsed engine ticks under the resting thresholds so far,
     /// carried across a checkpoint so a restore does not re-arm the hold window from zero mid-settle.</param>
-    /// <param name="RigidContacting">A rigid kit's restitution edge latch — whether the previous substep was
-    /// already in static contact, so a restore does not read a genuine mid-rest tick as a fresh impact.</param>
+    /// <param name="RigidGroundContacting">A rigid kit's ground-channel restitution edge latch — whether the
+    /// previous substep already had a walkable contact, so a restore does not read a genuine mid-rest tick as a
+    /// fresh impact.</param>
+    /// <param name="RigidObstructionContacting">A rigid kit's obstruction-channel restitution edge latch, on the
+    /// same terms as <paramref name="RigidGroundContacting"/> but for the last non-walkable (wall) contact.</param>
     public readonly record struct IntegrationResidue(
         FixedVector3 PreviousPosition,
         long PositionRemainderX,
@@ -779,7 +782,8 @@ public sealed partial class WorldBody {
         FixedVector3 RigidAngularVelocity,
         bool RigidResting,
         ulong RigidRestingHoldTicks,
-        bool RigidContacting
+        bool RigidGroundContacting,
+        bool RigidObstructionContacting
     );
     /// <summary>The checkpoint-only attachment state that remains meaningful only inside the same authoritative
     /// world's coordinate frame. It is intentionally not part of <see cref="TransferState"/>: a cross-world transfer
@@ -843,7 +847,8 @@ public sealed partial class WorldBody {
         RigidAngularVelocity: m_angularVelocity,
         RigidResting: m_resting,
         RigidRestingHoldTicks: m_restingHoldTicks,
-        RigidContacting: m_rigidContacting
+        RigidGroundContacting: m_rigidGroundContacting,
+        RigidObstructionContacting: m_rigidObstructionContacting
     );
     /// <summary>Restores a previously captured integration residue onto this body — called after
     /// <see cref="Pose(FixedVector3, FixedQ4816, FixedQ4816, FixedQ4816)"/> has already set position/orientation and
@@ -916,6 +921,7 @@ public sealed partial class WorldBody {
         m_angularVelocity = residue.RigidAngularVelocity;
         m_resting = residue.RigidResting;
         m_restingHoldTicks = residue.RigidRestingHoldTicks;
-        m_rigidContacting = residue.RigidContacting;
+        m_rigidGroundContacting = residue.RigidGroundContacting;
+        m_rigidObstructionContacting = residue.RigidObstructionContacting;
     }
 }

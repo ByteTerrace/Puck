@@ -5,6 +5,13 @@ namespace Puck.World.Server;
 
 public sealed partial class WorldPopulation {
     private static readonly FixedQ4816 RigidPairFrictionHalf = FixedQ4816.FromDouble(value: 0.5d);
+    // Below this closing speed, a rigid pair's restitution is treated as zero (a pure momentum-conserving, no-
+    // bounce separation) rather than the authored coefficient: a rigid-vs-rigid contact carries no rising-edge
+    // latch (unlike a body-vs-static-world contact — see WorldBody.AdvanceRigid's own ground/obstruction latches),
+    // so without this floor two touching bodies at rest would restitute a hair apart every tick they are found
+    // overlapping, separate, fall back together, and restitute again — a stable micro-bounce that never reaches
+    // either rest threshold. Small enough that a real strike (anything but contact noise) is unaffected.
+    private static readonly FixedQ4816 RigidPairRestitutionThreshold = FixedQ4816.FromDouble(value: 0.05d);
 
     /// <summary>Gets the number of active dynamic-body pairs the most recent <see cref="ResolveDynamicContacts"/>
     /// resolved through the rigid impulse path (at least one side a rigid kit) rather than plain positional
@@ -12,9 +19,10 @@ public sealed partial class WorldPopulation {
     public int RigidPairResolvedCount { get; private set; }
 
     /// <summary>Describes the rigid solver's current census and last-tick work — the <c>world.budget</c> cost-sheet
-    /// segment: active rigid body count, resting count, dynamic-pair resolutions, and the highest per-body substep
-    /// count any active rigid body took its most recent step (the derived cost <see cref="WorldBodyContactPolicy.RigidSubstepCeiling"/>
-    /// bounds).</summary>
+    /// segment: active rigid body count, resting count, dynamic-pair resolutions, the highest per-body substep count
+    /// any active rigid body took its most recent step (the derived cost <see cref="WorldBodyContactPolicy.RigidSubstepCeiling"/>
+    /// bounds), and the compiled rest/substep policy every rigid body's <see cref="WorldBody.AdvanceRigid"/> call
+    /// reads this tick.</summary>
     public string DescribeRigidWork() {
         var rigidCount = 0;
         var restingCount = 0;
@@ -34,51 +42,68 @@ public sealed partial class WorldPopulation {
             worstSubsteps = Math.Max(val1: worstSubsteps, val2: body.RigidStaticSubstepsThisTick);
         }
 
-        return $"rigid {rigidCount} body/bodies ({restingCount} resting), pairsResolved={RigidPairResolvedCount}, worstSubsteps={worstSubsteps}/{m_bodyContactPolicy.RigidSubstepCeiling}";
+        return $"rigid {rigidCount} body/bodies ({restingCount} resting), pairsResolved={RigidPairResolvedCount}, worstSubsteps={worstSubsteps}/{m_bodyContactPolicy.RigidSubstepCeiling}, restLinear<={m_bodyContactPolicy.RigidRestLinearSpeed:0.###} restAngular<={m_bodyContactPolicy.RigidRestAngularSpeed:0.###} restHold={m_bodyContactPolicy.RigidRestHoldSeconds:0.###}s substepFraction={m_bodyContactPolicy.RigidSubstepTravelFraction:0.###}";
     }
 
     /// <summary>Resolves one already-detected overlapping pair where at least one side is a rigid kit: an
     /// impulse-based restitution/friction response through <see cref="FixedTwoBodyKernel"/> (real angular coupling
-    /// when both sides are rigid; a kinematic side contributes its own velocity but is never itself pushed — see
+    /// when both sides are rigid — the contact anchor is approximated at each rigid side's own bounding-radius
+    /// surface point facing the other body, never the body-center anchor a torque-free response would imply; a
+    /// kinematic side contributes its own velocity but is never itself pushed — see
     /// <see cref="WorldBody.TwoBodyHandle"/>), plus the SAME positional split <see cref="ResolveDynamicContacts"/>
     /// already applies to a kinematic-vs-kinematic pair, restricted to the rigid side(s) only: a kinematic body is
     /// never repositioned by a rigid body it did not choose to contact physically.</summary>
     /// <param name="left">The first body in the pair.</param>
     /// <param name="right">The second body in the pair.</param>
-    /// <param name="correction">The pair's already-computed overlap correction — its direction is the contact normal
-    /// (pointing from <paramref name="right"/> toward <paramref name="left"/>), its magnitude the penetration depth.</param>
+    /// <param name="correction">The pair's already-computed overlap correction — its direction points from
+    /// <paramref name="right"/> toward <paramref name="left"/> (<see cref="Puck.Physics.FixedDynamicBodyContacts"/>'s
+    /// own convention: added to <paramref name="left"/>'s position, subtracted from <paramref name="right"/>'s), its
+    /// magnitude the penetration depth.</param>
     private void ResolveRigidPairContact(WorldBody left, WorldBody right, FixedVector3 correction) {
         if (correction == FixedVector3.Zero) {
             return;
         }
 
+        // The contact normal points away from `right` toward `left` (the correction's own direction).
+        // FixedTwoBodyKernel's contract names its "A" side the body the normal points AWAY FROM — so `right` plays
+        // A and `left` plays B here. Naming them the other way around (as this pair once did) reads an APPROACHING
+        // pair as a POSITIVE closing speed, so the impulse gate below never opens until the two bodies' centers have
+        // already crossed.
         var normal = correction.Normalize();
-        var leftHandle = left.TwoBodyHandle();
-        var rightHandle = right.TwoBodyHandle();
-        var zero = FixedVector3.Zero;
+        var aHandle = right.TwoBodyHandle();
+        var bHandle = left.TwoBodyHandle();
+        // Each rigid side's own contact-point anchor: straight out from its center, at its bounding radius, facing
+        // the other body — never the body-center (zero) anchor, which would carry no lever and so no torque, no
+        // matter how far off-center a strike actually lands. A kinematic side's anchor is irrelevant (its handle
+        // carries zero inverse inertia, so its own angular term is always zero) and left at zero.
+        var anchorA = (right.IsRigid ? (normal * right.RigidBoundingRadius) : FixedVector3.Zero);
+        var anchorB = (left.IsRigid ? (-normal * left.RigidBoundingRadius) : FixedVector3.Zero);
         var refusals = 0;
         var closingSpeed = FixedTwoBodyKernel.RelativeNormalVelocity(
-            bodyA: leftHandle,
-            anchorA: zero,
-            bodyB: rightHandle,
-            anchorB: zero,
+            bodyA: aHandle,
+            anchorA: anchorA,
+            bodyB: bHandle,
+            anchorB: anchorB,
             normal: normal
         );
 
         if (
             (closingSpeed < FixedQ4816.Zero) &&
             FixedTwoBodyKernel.TryEffectiveMass(
-            bodyA: leftHandle,
-            anchorA: zero,
-            bodyB: rightHandle,
-            anchorB: zero,
+            bodyA: aHandle,
+            anchorA: anchorA,
+            bodyB: bHandle,
+            anchorB: anchorB,
             normal: normal,
             scales: FixedWorldRigid.Scales,
             normalMassRaw: out var normalMassRaw,
             refusals: ref refusals
         )
         ) {
-            var restitution = ((left.RigidRestitution + right.RigidRestitution) * RigidPairFrictionHalf);
+            var restitution = ((closingSpeed < -RigidPairRestitutionThreshold)
+                ? ((left.RigidRestitution + right.RigidRestitution) * RigidPairFrictionHalf)
+                : FixedQ4816.Zero
+            );
             var impulseScalar = ((FixedQ4816.One + restitution) * -closingSpeed);
 
             if (
@@ -93,46 +118,123 @@ public sealed partial class WorldPopulation {
                 (impulseRaw > 0L)
             ) {
                 FixedTwoBodyKernel.ApplyImpulse(
-                    bodyA: leftHandle,
-                    anchorA: zero,
-                    bodyB: rightHandle,
-                    anchorB: zero,
+                    bodyA: aHandle,
+                    anchorA: anchorA,
+                    bodyB: bHandle,
+                    anchorB: anchorB,
                     normal: normal,
                     impulseRaw: impulseRaw,
                     scales: FixedWorldRigid.Scales,
                     refusals: ref refusals
                 );
-
-                // A coarse Coulomb-style tangential damp on the post-impulse relative velocity — a single-tick
-                // approximation (no persistent contact/friction-cone state), disclosed as a simplification of
-                // per-manifold friction: real billiard/pin contacts are dominated by the normal impulse this
-                // reproduces exactly, and this keeps two touching rigid bodies from sliding past each other forever.
-                var friction = FixedQ4816.Max(
-                    x: FixedQ4816.Zero,
-                    y: (FixedQ4816.One - ((left.RigidFriction + right.RigidFriction) * RigidPairFrictionHalf))
+                ApplyRigidPairFriction(
+                    aHandle: aHandle,
+                    anchorA: anchorA,
+                    bHandle: bHandle,
+                    anchorB: anchorB,
+                    normal: normal,
+                    normalImpulseRaw: impulseRaw,
+                    frictionCoefficient: FixedQ4816.Max(
+                        x: FixedQ4816.Zero,
+                        y: ((left.RigidFriction + right.RigidFriction) * RigidPairFrictionHalf)
+                    ),
+                    refusals: ref refusals
                 );
-
-                leftHandle.LinearVelocity *= friction;
-                rightHandle.LinearVelocity *= friction;
-
-                left.CommitRigidHandle(handle: leftHandle);
-                right.CommitRigidHandle(handle: rightHandle);
+                left.CommitRigidHandle(handle: bHandle);
+                right.CommitRigidHandle(handle: aHandle);
                 RigidPairResolvedCount++;
             }
         }
 
         // Positional depenetration: split between two rigid bodies exactly as the kinematic-vs-kinematic path does;
         // restricted to the rigid side alone against a kinematic partner, which never moves for a body it did not
-        // choose to contact.
+        // choose to contact. Routed through the rigid-aware correction (never the locomotion one, whose planar/
+        // vertical-velocity channels a rigid body does not use) so a body this displaces wakes rather than keeping a
+        // stale resting latch while it is visibly being pushed.
         if (left.IsRigid && right.IsRigid) {
             var shared = (correction / FixedQ4816.FromInteger(value: 2L));
 
-            left.ApplyDynamicContact(correction: shared);
-            right.ApplyDynamicContact(correction: -shared);
+            left.ApplyRigidPositionalCorrection(correction: shared);
+            right.ApplyRigidPositionalCorrection(correction: -shared);
         } else if (left.IsRigid) {
-            left.ApplyDynamicContact(correction: correction);
+            left.ApplyRigidPositionalCorrection(correction: correction);
         } else if (right.IsRigid) {
-            right.ApplyDynamicContact(correction: -correction);
+            right.ApplyRigidPositionalCorrection(correction: -correction);
         }
+    }
+    /// <summary>Applies a Coulomb-style tangential impulse at a just-resolved rigid pair's contact point: the
+    /// impulse that would fully cancel the post-normal-impulse relative tangential velocity, clamped to the pair's
+    /// average friction coefficient times the normal impulse just applied, and applied through the SAME two-body
+    /// kernel the normal impulse used — so it moves exactly as much momentum off one body as it moves onto the
+    /// other, rather than independently rescaling either body's whole velocity vector (which would burn or invent
+    /// momentum along the normal too).</summary>
+    private static void ApplyRigidPairFriction(FixedRigidBody aHandle, FixedVector3 anchorA, FixedRigidBody bHandle, FixedVector3 anchorB, FixedVector3 normal, long normalImpulseRaw, FixedQ4816 frictionCoefficient, ref int refusals) {
+        var relativeVelocity = ((bHandle.LinearVelocity + FixedVector3.Cross(
+            left: bHandle.AngularVelocity,
+            right: anchorB
+        )) - (aHandle.LinearVelocity + FixedVector3.Cross(
+            left: aHandle.AngularVelocity,
+            right: anchorA
+        )));
+        var tangential = (relativeVelocity - (normal * FixedVector3.Dot(
+            left: relativeVelocity,
+            right: normal
+        )));
+
+        if (tangential == FixedVector3.Zero) {
+            return;
+        }
+
+        var tangentDirection = tangential.Normalize();
+
+        if (
+            !FixedTwoBodyKernel.TryEffectiveMass(
+            bodyA: aHandle,
+            anchorA: anchorA,
+            bodyB: bHandle,
+            anchorB: anchorB,
+            normal: tangentDirection,
+            scales: FixedWorldRigid.Scales,
+            normalMassRaw: out var tangentMassRaw,
+            refusals: ref refusals
+        )
+        ) {
+            return;
+        }
+
+        if (
+            !FusedArithmetic.TryMixedScaleProduct(
+            a: (-tangential.Length).Value,
+            fractionBitsA: FixedQ4816.FractionBitCount,
+            b: tangentMassRaw,
+            fractionBitsB: FixedWorldRigid.Scales.EffectiveMass,
+            fractionBitsOut: FixedQ4816.FractionBitCount,
+            result: out var stickImpulseRaw
+        )
+        ) {
+            return;
+        }
+
+        var maxTangentImpulseRaw = (FixedQ4816.FromRawBits(value: normalImpulseRaw) * frictionCoefficient).Value;
+        var clampedImpulseRaw = Math.Clamp(
+            value: stickImpulseRaw,
+            min: -maxTangentImpulseRaw,
+            max: maxTangentImpulseRaw
+        );
+
+        if (clampedImpulseRaw == 0L) {
+            return;
+        }
+
+        FixedTwoBodyKernel.ApplyImpulse(
+            bodyA: aHandle,
+            anchorA: anchorA,
+            bodyB: bHandle,
+            anchorB: anchorB,
+            normal: tangentDirection,
+            impulseRaw: clampedImpulseRaw,
+            scales: FixedWorldRigid.Scales,
+            refusals: ref refusals
+        );
     }
 }

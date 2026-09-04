@@ -1508,8 +1508,14 @@ stable-index pairs, so even a fully coincident 4096-body stadium has linear,
 authored work rather than an accidental all-pairs frame. Its
 `rigidSubstepCeiling` (default 8, maximum 32) bounds a rigid body's own
 per-tick continuous-collision substep count — the actual count is DERIVED
-per body per tick from speed and collider size, never authored directly (see
-below); the ceiling only bounds worst-case cost.
+per body per tick from speed and collider size against `rigidSubstepTravelFraction`
+(default 0.5, strictly positive — the fraction of the collider's own
+bounding radius one substep may travel), never authored directly; the
+ceiling only bounds worst-case cost. `rigidRestLinearSpeed`/`rigidRestAngularSpeed`
+(default 0.05/0.1, non-negative) and `rigidRestHoldSeconds` (default 0.25,
+non-negative) are the thresholds and hold window that decide when a grounded
+rigid body's `Resting` fact latches — see the
+[server reference](../Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs).
 
 ### Rigid dynamics (`WorldRigid.cs`)
 

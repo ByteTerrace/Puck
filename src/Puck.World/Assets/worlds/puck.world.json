@@ -1151,12 +1151,12 @@
         },
         "name": "billiardBall",
         "rigid": {
-          "angularDamping": 0.02,
+          "angularDamping": 0.8,
           "friction": 0.25,
-          "linearDamping": 0.01,
+          "linearDamping": 0.5,
           "mass": 0.3,
           "restitution": 0.55,
-          "rollingFriction": 0.03
+          "rollingFriction": 1.2
         }
       },
       {
@@ -1194,12 +1194,12 @@
         },
         "name": "bowlingBall",
         "rigid": {
-          "angularDamping": 0.01,
+          "angularDamping": 0.6,
           "friction": 0.2,
-          "linearDamping": 0.005,
+          "linearDamping": 0.3,
           "mass": 2.2,
           "restitution": 0.35,
-          "rollingFriction": 0.015
+          "rollingFriction": 1.0
         }
       },
       {
@@ -1242,12 +1242,12 @@
         },
         "name": "bowlingPin",
         "rigid": {
-          "angularDamping": 0.03,
+          "angularDamping": 0.8,
           "friction": 0.4,
-          "linearDamping": 0.02,
+          "linearDamping": 0.5,
           "mass": 0.15,
           "restitution": 0.1,
-          "rollingFriction": 0.05
+          "rollingFriction": 1.2
         }
       }
     ]
@@ -1367,6 +1367,20 @@
         "source": {
           "$type": "creation",
           "prototypeId": "bowlingPin"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "bowlingBall",
+        "scale": 1.866666666666667,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "billiardBall"
         }
       }
     ]
@@ -1748,6 +1762,202 @@
         "yawDegrees": 0
       },
       {
+        "id": "rackBall3",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          9.69,
+          -0.35000000000000003,
+          -9.4606
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "rackBall4",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          10.0,
+          -0.35000000000000003,
+          -9.4606
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "rackBall5",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          10.31,
+          -0.35000000000000003,
+          -9.4606
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "rackBall6",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          9.535,
+          -0.35000000000000003,
+          -9.1909
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "rackBall7",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          9.845,
+          -0.35000000000000003,
+          -9.1909
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "rackBall8",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          10.155,
+          -0.35000000000000003,
+          -9.1909
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "rackBall9",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          10.465,
+          -0.35000000000000003,
+          -9.1909
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
         "id": "bowlingLane",
         "position": [
           10.0,
@@ -1777,7 +1987,7 @@
             }
           },
           "kit": "bowlingBall",
-          "look": "billiardBall",
+          "look": "bowlingBall",
           "source": "Idle"
         },
         "position": [
@@ -1811,7 +2021,7 @@
         "position": [
           10.0,
           -0.35000000000000003,
-          12.1
+          11.6
         ],
         "prototypeId": "bowlingPin",
         "scale": 1,
@@ -1839,7 +2049,7 @@
         "position": [
           9.87,
           -0.35000000000000003,
-          12.32
+          11.82
         ],
         "prototypeId": "bowlingPin",
         "scale": 1,
@@ -1867,7 +2077,203 @@
         "position": [
           10.13,
           -0.35000000000000003,
-          12.32
+          11.82
+        ],
+        "prototypeId": "bowlingPin",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "pin3",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "bowlingPin",
+          "look": "bowlingPin",
+          "source": "Idle"
+        },
+        "position": [
+          9.74,
+          -0.35000000000000003,
+          12.04
+        ],
+        "prototypeId": "bowlingPin",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "pin4",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "bowlingPin",
+          "look": "bowlingPin",
+          "source": "Idle"
+        },
+        "position": [
+          10.0,
+          -0.35000000000000003,
+          12.04
+        ],
+        "prototypeId": "bowlingPin",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "pin5",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "bowlingPin",
+          "look": "bowlingPin",
+          "source": "Idle"
+        },
+        "position": [
+          10.26,
+          -0.35000000000000003,
+          12.04
+        ],
+        "prototypeId": "bowlingPin",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "pin6",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "bowlingPin",
+          "look": "bowlingPin",
+          "source": "Idle"
+        },
+        "position": [
+          9.61,
+          -0.35000000000000003,
+          12.26
+        ],
+        "prototypeId": "bowlingPin",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "pin7",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "bowlingPin",
+          "look": "bowlingPin",
+          "source": "Idle"
+        },
+        "position": [
+          9.87,
+          -0.35000000000000003,
+          12.26
+        ],
+        "prototypeId": "bowlingPin",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "pin8",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "bowlingPin",
+          "look": "bowlingPin",
+          "source": "Idle"
+        },
+        "position": [
+          10.13,
+          -0.35000000000000003,
+          12.26
+        ],
+        "prototypeId": "bowlingPin",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "pin9",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "bowlingPin",
+          "look": "bowlingPin",
+          "source": "Idle"
+        },
+        "position": [
+          10.39,
+          -0.35000000000000003,
+          12.26
         ],
         "prototypeId": "bowlingPin",
         "scale": 1,
@@ -7161,13 +7567,13 @@
             "name": "wallEast",
             "position": [
               0.85,
-              -0.33,
+              -0.05,
               0
             ],
             "rotation": "state.transforms.identity",
             "scale": [
               0.05,
-              0.12,
+              0.35,
               2.6
             ],
             "smooth": 0,
@@ -7180,13 +7586,13 @@
             "name": "wallWest",
             "position": [
               -0.85,
-              -0.33,
+              -0.05,
               0
             ],
             "rotation": "state.transforms.identity",
             "scale": [
               0.05,
-              0.12,
+              0.35,
               2.6
             ],
             "smooth": 0,
@@ -7199,13 +7605,13 @@
             "name": "wallFar",
             "position": [
               0,
-              -0.33,
+              -0.05,
               2.55
             ],
             "rotation": "state.transforms.identity",
             "scale": [
               0.9,
-              0.12,
+              0.35,
               0.05
             ],
             "smooth": 0,
@@ -7701,6 +8107,17 @@
       "forEach": "spider",
       "mode": "Level",
       "name": "stalk-visitor"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromState": "$physics:quiescent",
+          "state": "physicsSettled"
+        }
+      ],
+      "mode": "Level",
+      "name": "physics-settled"
     }
   ],
   "schema": "puck.world.def.v1",
@@ -8492,6 +8909,11 @@
         ],
         "kind": "text",
         "name": "billiardsColors"
+      },
+      {
+        "kind": "bool",
+        "name": "physicsSettled",
+        "value": false
       }
     ]
   },
