@@ -316,6 +316,32 @@ public sealed class WorldFieldLatticeLawTests {
         Assert.Null(@object: outside.MediumSurface(position: in outsidePosition));
     }
     [Fact]
+    public void AMediumFieldAdmitsAPointAboveItsSingleVoxelLayer_WhereTheFreeSurfaceReachesThatHigh() {
+        // Layers = 1, cellSize 1: the raw voxel box tops out at Y = 1. The free surface (value 1 * heightScale 5)
+        // reaches Y = 5 — a swimmer well inside that depth (Y = 3) is inside the medium; the topology's own layer
+        // count says nothing about how tall a medium's surface may rise, the same reasoning the derived coupling
+        // ceiling above already applies to reaction coupling.
+        var lattice = Fixtures.BuildLattice(document: MediumFields(initial: 1f, heightScale: 5f));
+        var submerged = new FixedVector3(X: FixedQ4816.FromDouble(value: 1.5), Y: FixedQ4816.FromInteger(value: 3), Z: FixedQ4816.FromDouble(value: 1.5));
+        var aboveSurface = new FixedVector3(X: FixedQ4816.FromDouble(value: 1.5), Y: FixedQ4816.FromInteger(value: 6), Z: FixedQ4816.FromDouble(value: 1.5));
+
+        Assert.True(condition: lattice.IsInsideMedium(field: 0, position: in submerged));
+        Assert.False(condition: lattice.IsInsideMedium(field: 0, position: in aboveSurface));
+    }
+    [Fact]
+    public void ASegmentEntirelyBelowTheFreeSurfaceProvesInsideTheMedium_WhereOneCrossingTheSurfaceRefuses() {
+        // Same lattice as above: surface at Y = 5, raw voxel box only one cellSize (1) tall. A short segment well
+        // beneath the surface but above that one voxel must still prove submerged for navigation's medium-domain
+        // locomotion check (WorldNavigationRuntime.Domain.AdmitsLocomotion) to ever admit a swimmer's move.
+        var lattice = Fixtures.BuildLattice(document: MediumFields(initial: 1f, heightScale: 5f));
+        var from = new FixedVector3(X: FixedQ4816.FromDouble(value: 1.5), Y: FixedQ4816.FromInteger(value: 3), Z: FixedQ4816.FromDouble(value: 1.5));
+        var to = new FixedVector3(X: FixedQ4816.FromDouble(value: 1.6), Y: FixedQ4816.FromInteger(value: 3), Z: FixedQ4816.FromDouble(value: 1.5));
+        var crossing = new FixedVector3(X: FixedQ4816.FromDouble(value: 1.5), Y: FixedQ4816.FromInteger(value: 6), Z: FixedQ4816.FromDouble(value: 1.5));
+
+        Assert.True(condition: lattice.IsSegmentInsideMedium(field: 0, from: in from, to: in to, clearance: FixedQ4816.FromDouble(value: 0.1), maximumSubdivisions: 8));
+        Assert.False(condition: lattice.IsSegmentInsideMedium(field: 0, from: in from, to: in crossing, clearance: FixedQ4816.FromDouble(value: 0.1), maximumSubdivisions: 8));
+    }
+    [Fact]
     public void DiffusionUsesTheCompiledFieldHandleAndSnapshotsBeforeWriting() {
         var lattice = Fixtures.BuildLattice(document: Fields(
             width: 3,

@@ -243,7 +243,8 @@ interpolated body pose, packed every frame by `Client/WorldStampPool.cs`, so
 the row visibly RIDES its body. An attached row therefore draws through the
 reserved stamp pool rather than as a static stamp
 (`Client/WorldPlacementStamper.IsStaticStamp`) and charges
-`WorldPlacementPolicy.MaxStampRegistrations` alongside animated rows; its
+`WorldPlacementPolicy.MaxStampRegistrations` (= `WorldBodiesLimits.DetailedRenderBand`,
+128) alongside animated rows; its
 authored `Position`/`YawDegrees` become inert. `Region`, `Solid` (under the
 analytic contact provider), and `Emission` all read the resolved DYNAMIC pose
 instead of refusing outright (`Server/WorldEventFeed.CollectRegions`,
