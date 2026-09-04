@@ -1504,10 +1504,12 @@ for presentation, which is how animation keys on regime without the client
 deriving one. `body.where` echoes it as `facts=` (lower-case, `|`-joined in
 bit order, `none` when empty), followed by `home=(x, y, z)` — the position the
 body was ACTIVATED at (a seat's spawn point, an inhabitant's placement plus its
-own distribution sample). A producer's inward pull steers against that home
-rather than the world origin, so a population spread over several placements
-keeps to its own ground instead of congregating; a teleport moves the body,
-never its home. Facts are NOT mutually exclusive: a body can be
+own distribution sample) — then `scale=` (`Server.WorldBody.Scale`'s read-back)
+and, for a routed local seat, `anchor=body:<n>` (the seat's currently routed
+entity index). A producer's inward pull steers against that home rather than the world origin,
+so a population spread over several placements keeps to its own ground
+instead of congregating; a teleport moves the body, never its home. Facts are
+NOT mutually exclusive: a body can be
 grounded and rising in one tick, and a body on a wall reads `airborne|climbing`
 because contact resolution keeps running under every hold.
 
