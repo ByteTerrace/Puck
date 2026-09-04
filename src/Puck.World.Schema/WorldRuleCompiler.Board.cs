@@ -14,6 +14,10 @@ public enum WorldBoardQueryKind : byte {
     Line,
     /// <summary>Minimum nonnegative entry cost, -1 if unreachable, -2 if the visit budget was exhausted.</summary>
     PathCost,
+    /// <summary>The grid cell a referenced body's world position falls in, or -1.</summary>
+    CellOf,
+    /// <summary>The cell reached by an arbitrary (dx, dz) grid step from the key cell, or -1.</summary>
+    Offset,
 }
 
 /// <summary>A bounded board query with all structural arguments compiled once.</summary>
@@ -26,8 +30,11 @@ public enum WorldBoardQueryKind : byte {
 /// <param name="Target">The path destination ordinal.</param>
 /// <param name="MaxCost">The greatest admitted path cost.</param>
 /// <param name="MaxVisits">The greatest settled nodes in one search.</param>
+/// <param name="Dx">The signed +X grid step for <see cref="WorldBoardQueryKind.Offset"/>.</param>
+/// <param name="Dz">The signed +Z grid step for <see cref="WorldBoardQueryKind.Offset"/>.</param>
 public sealed record CompiledWorldBoardQuery(CompiledWorldTopology Topology, WorldBoardQueryKind Kind,
-    int Direction = 0, int Length = 0, long Value = 0, bool Exact = false, int Target = 0, long MaxCost = 0, int MaxVisits = 0);
+    int Direction = 0, int Length = 0, long Value = 0, bool Exact = false, int Target = 0, long MaxCost = 0, int MaxVisits = 0,
+    int Dx = 0, int Dz = 0);
 
 public static partial class WorldRuleCompiler {
     private static ResolvedOperand ResolveBoardOperand(string name, string? key, string ruleName, WorldDefinition definition) {
@@ -46,19 +53,25 @@ public static partial class WorldRuleCompiler {
             "rayDistance" => WorldBoardQueryKind.RayDistance,
             "line" => WorldBoardQueryKind.Line,
             "pathCost" => WorldBoardQueryKind.PathCost,
+            "cellOf" => WorldBoardQueryKind.CellOf,
+            "offset" => WorldBoardQueryKind.Offset,
             _ => throw Invalid($"unknown board operation '{tokens[1]}'"),
         };
+        if (kind is WorldBoardQueryKind.CellOf or WorldBoardQueryKind.Offset && topology.Kind != WorldTopologyKind.Grid) {
+            throw Invalid($"'{tokens[1]}' requires a Grid topology, not {topology.Kind}");
+        }
         CompiledCellRef? keyFrom = null;
-        if (kind != WorldBoardQueryKind.Line) {
+        if (kind is not (WorldBoardQueryKind.Line or WorldBoardQueryKind.CellOf)) {
             if (TryResolveDynamicKey(definition: definition, key: key, ruleName: ruleName, verb: "board", keyFieldLabel: "key", cell: out var dynamicKey)) {
                 keyFrom = dynamicKey;
             } else if (key is null || !topology.TryCell(key, out _)) {
                 throw Invalid("board query key must name a source cell or use a validated dynamic key");
             }
         } else if (key is not null) {
-            throw Invalid("line searches the whole board and does not accept key");
+            throw Invalid($"{tokens[1]} does not accept key");
         }
         var query = new CompiledWorldBoardQuery(topology, kind);
+        CompiledBodyRef? bodyRef = null;
         if (kind == WorldBoardQueryKind.Line) {
             if (tokens.Length != 6 || !int.TryParse(tokens[3], NumberStyles.None, CultureInfo.InvariantCulture, out var length) ||
                 length < 1 || length > topology.CellCount || !long.TryParse(tokens[4], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var value) ||
@@ -73,6 +86,19 @@ public static partial class WorldRuleCompiler {
                 throw Invalid("pathCost requires <targetCell>:<maxCost>:<maxVisits> on an integer terrain row");
             }
             query = query with { Target = target, MaxCost = cost, MaxVisits = visits };
+        } else if (kind == WorldBoardQueryKind.Offset) {
+            if (tokens.Length != 5 || !int.TryParse(tokens[3], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var dx) ||
+                !int.TryParse(tokens[4], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var dz)) {
+                throw Invalid("offset requires <dx>:<dz>, both signed integers");
+            }
+            query = query with { Dx = dx, Dz = dz };
+        } else if (kind == WorldBoardQueryKind.CellOf) {
+            var bodyTokens = tokens[3..];
+            var width = BodyRefTokenWidth(start: 0, tokens: bodyTokens);
+            if (bodyTokens.Length != width) {
+                throw Invalid($"'{name}' does not spell '$board:cellOf:<row>:<bodyRef>' ({s_bodyRefVocabulary})");
+            }
+            bodyRef = ResolveBodyRefToken(channel: name, definition: definition, ruleName: ruleName, start: 0, tokens: bodyTokens);
         } else {
             var direction = topology.Direction(tokens[3]);
             if (tokens.Length != 4 || direction < 0) {
@@ -80,6 +106,6 @@ public static partial class WorldRuleCompiler {
             }
             query = query with { Direction = direction };
         }
-        return new(new CompiledWorldOperand(WorldRuleFactKind.Board, row.Name, key, KeyFrom: keyFrom, ValueKind: CellKind.Int, Board: query), CellKind.Int, name);
+        return new(new CompiledWorldOperand(WorldRuleFactKind.Board, row.Name, key, KeyFrom: keyFrom, ValueKind: CellKind.Int, Board: query, BodyA: bodyRef), CellKind.Int, name);
     }
 }

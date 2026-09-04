@@ -406,9 +406,14 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     }
     // The creation a body renders as a stamp, or null (it renders as a catalog avatar): an INHABITANT wears the look's
     // creation (a Creation look) or its placement's own creation; a crowd body wears its look's creation (a Creation
-    // look). The uniform scale folds the placement scale and the look scale.
+    // look). The uniform scale folds the placement scale, the look scale, and the body's own live scale (see
+    // LiveBodyScale) — the same bodies.scaleRow cell WorldPopulation.SyncBodyScale reads server-side.
     private WorldStampPool.BodyStamp? ResolveStampCreation(int index, WorldDefinition definition) {
         var look = m_client.Look(index: index);
+        var liveScale = LiveBodyScale(
+            definition: definition,
+            index: index
+        );
 
         if (m_client.PlacementId(index: index) is { } placementId) {
             if (WorldDefinitionRows.FindPlacement(
@@ -430,7 +435,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 ? new WorldStampPool.BodyStamp(
                     BodyIndex: index,
                     Creation: creation,
-                    Scale: (placement.Scale * look.Scale),
+                    Scale: (placement.Scale * look.Scale * liveScale),
                     Motion: look.Motion
                 )
                 : null
@@ -445,7 +450,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 ? new WorldStampPool.BodyStamp(
                     BodyIndex: index,
                     Creation: creation,
-                    Scale: look.Scale,
+                    Scale: (look.Scale * liveScale),
                     Motion: look.Motion
                 )
                 : null
@@ -454,6 +459,11 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
         return null;
     }
+    private float LiveBodyScale(WorldDefinition definition, int index) => WorldGaitDrivers.LiveBodyScale(
+        definition: definition,
+        index: index,
+        tick: m_client.Tick
+    );
     private bool TryPresentedAppearance(int index, out Vector3 bodyColor, out WorldLook look, out byte catalogRig) {
         if (m_client.IsActive(index: index)) {
             bodyColor = m_client.BodyColor(index: index);
@@ -614,8 +624,8 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         m_slotBase = context.SlotBase;
 
         if (context.Probe) {
-            // The ONE construction-time worst case (never rendered): 128 detailed avatars plus every remaining
-            // coarse crowd body, the reserved placement instances,
+            // The ONE construction-time worst case (never rendered): WorldRigCatalog.DetailedAvatarCapacity
+            // detailed avatars plus every remaining coarse crowd body, the reserved placement instances,
             // the worst-case animated pool, and the authoring headroom (screens and placement stamps) so a
             // live editor can add rows up to the reserved ceilings. Reads the client's definition live because the
             // probe runs exactly once, inside the composition host's constructor, before any delivery can land.

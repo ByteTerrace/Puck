@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
+using Puck.Maths;
 
 namespace Puck.World;
 
@@ -42,12 +43,23 @@ public sealed record WorldStateBoard(string Topology, long Empty = 0);
 public sealed class CompiledWorldTopology {
     private readonly int[] m_neighbours;
     private readonly string[] m_keys;
+    private readonly int m_width;
+    private readonly int m_depth;
+    private readonly WorldTopologyWrap m_wrap;
+    private readonly FixedVector3 m_origin;
+    private readonly FixedQ4816 m_cellSize;
 
-    internal CompiledWorldTopology(WorldTopologyKind kind, int count, int directions, int[] neighbours) {
+    internal CompiledWorldTopology(WorldTopologyKind kind, int count, int directions, int[] neighbours,
+        int width, int depth, WorldTopologyWrap wrap, FixedVector3 origin, FixedQ4816 cellSize) {
         Kind = kind;
         CellCount = count;
         DirectionCount = directions;
         m_neighbours = neighbours;
+        m_width = width;
+        m_depth = depth;
+        m_wrap = wrap;
+        m_origin = origin;
+        m_cellSize = cellSize;
         m_keys = new string[count];
         for (var cell = 0; cell < count; cell++) {
             m_keys[cell] = cell.ToString(CultureInfo.InvariantCulture);
@@ -60,6 +72,70 @@ public sealed class CompiledWorldTopology {
     public int CellCount { get; }
     /// <summary>Gets the number of directions at each cell.</summary>
     public int DirectionCount { get; }
+    /// <summary>Gets the declared minimum corner — the spatial frame a <see cref="Kind"/> of
+    /// <see cref="WorldTopologyKind.Grid"/> resolves <see cref="TryCellOf"/>/<see cref="TryOffset"/> against.</summary>
+    public FixedVector3 Origin => m_origin;
+    /// <summary>Gets the declared cell edge, world units.</summary>
+    public FixedQ4816 CellSize => m_cellSize;
+    /// <summary>Gets the cell count along +X.</summary>
+    public int Width => m_width;
+    /// <summary>Gets the cell count along +Z.</summary>
+    public int Depth => m_depth;
+
+    /// <summary>Resolves the grid cell a world position falls in, X/Z only — a board carries one layer, so no
+    /// height test applies. Only <see cref="WorldTopologyKind.Grid"/> carries a rectangular X/Z frame; every other
+    /// kind answers <see langword="false"/>.</summary>
+    /// <param name="position">The world position (a body's resolved pose).</param>
+    /// <param name="cell">The resolved cell ordinal.</param>
+    /// <returns>Whether the position lies over a declared cell.</returns>
+    public bool TryCellOf(in FixedVector3 position, out int cell) {
+        cell = -1;
+        if (Kind != WorldTopologyKind.Grid) {
+            return false;
+        }
+        var localX = ((Int128)position.X.Value) - m_origin.X.Value;
+        var localZ = ((Int128)position.Z.Value) - m_origin.Z.Value;
+        if (localX < Int128.Zero || localZ < Int128.Zero) {
+            return false;
+        }
+        var x = localX / m_cellSize.Value;
+        var z = localZ / m_cellSize.Value;
+        if (x >= m_width || z >= m_depth) {
+            return false;
+        }
+        cell = ((int)z * m_width) + (int)x;
+        return true;
+    }
+
+    /// <summary>Resolves the cell reached by moving <paramref name="dx"/>/<paramref name="dz"/> grid steps from
+    /// <paramref name="cell"/>, wrapping the axes this topology declares — the arbitrary-offset sibling of
+    /// <see cref="Neighbour"/>'s fixed eight directions, what a leaper (a knight, or a chess-variant piece with no
+    /// ray shape) authors its reach against. Only <see cref="WorldTopologyKind.Grid"/> carries rectangular
+    /// coordinates; every other kind answers <see langword="false"/>.</summary>
+    /// <param name="cell">The source cell ordinal.</param>
+    /// <param name="dx">The signed step along +X.</param>
+    /// <param name="dz">The signed step along +Z.</param>
+    /// <param name="result">The resolved cell ordinal.</param>
+    /// <returns>Whether the offset lands on a declared cell.</returns>
+    public bool TryOffset(int cell, int dx, int dz, out int result) {
+        result = -1;
+        if (Kind != WorldTopologyKind.Grid || (uint)cell >= (uint)CellCount) {
+            return false;
+        }
+        var x = (cell % m_width) + dx;
+        var z = (cell / m_width) + dz;
+        if (m_wrap is WorldTopologyWrap.X or WorldTopologyWrap.Both) {
+            x = ((x % m_width) + m_width) % m_width;
+        }
+        if (m_wrap is WorldTopologyWrap.Y or WorldTopologyWrap.Both) {
+            z = ((z % m_depth) + m_depth) % m_depth;
+        }
+        if ((uint)x >= (uint)m_width || (uint)z >= (uint)m_depth) {
+            return false;
+        }
+        result = (z * m_width) + x;
+        return true;
+    }
     /// <summary>Reads one precomputed neighbour.</summary>
     /// <param name="cell">The source cell ordinal.</param>
     /// <param name="direction">The direction ordinal in this shape's vocabulary.</param>
@@ -195,6 +271,12 @@ public static class WorldTopologyCompilation {
                 neighbours[cell * directions.Length + direction] = indices.TryGetValue((x,y), out var next) ? next : -1;
             }
         }
-        return new(topology.Kind, coordinates.Count, directions.Length, neighbours);
+        return new(topology.Kind, coordinates.Count, directions.Length, neighbours, topology.Width, topology.Depth, topology.Wrap,
+            new FixedVector3(
+                X: FixedQ4816.FromDouble(topology.Origin.X),
+                Y: FixedQ4816.FromDouble(topology.Origin.Y),
+                Z: FixedQ4816.FromDouble(topology.Origin.Z)
+            ),
+            FixedQ4816.FromDouble(topology.CellSize));
     }
 }

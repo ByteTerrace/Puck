@@ -386,6 +386,31 @@ The fixed collider vocabulary and generic contact geometry live in
 `Puck.Physics`; World retains document compilation, authority, pair selection,
 grounding/walkability, obstruction reporting, and body-state writes.
 
+A kit carrying a `rigid` facet is a passive physical entity — a billiard ball,
+a bowling pin — advanced by the rigid solver instead of a locomotion program:
+gravity, restitution/friction/rolling against the world, real angular
+velocity, and momentum transfer against another rigid body or a kinematic
+character (which contributes its own velocity but is never itself pushed).
+`body.impulse <x> <y> <z> [body]` applies an instantaneous world-space impulse
+and wakes a resting body; `world.rigid` reads the live census (mass,
+velocity, resting) and the same `quiescent` flag the `$physics:quiescent` rule
+operand reads. The shipped world's `billiardsTray`/`bowlingLane` placements
+are the garden's proof fixture — see the
+[server reference](../Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)
+for the mechanics and the [schema reference](../Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs)
+for the authored facet.
+
+The `tabletop` placement carries a `board` facet (the tabletop primitive —
+see the [schema reference](../Puck.World.Schema/README.md#discrete-boards-cards-and-turns))
+anchoring an 8x8 `chessBoard` Grid topology, and 32 `piece`-kit rigid bodies
+(the garden's chess set, shrunk-Wren scale beside the `drinkMe`/`eatMe`
+regions) prove it: a world rule derives the `board` row from each piece's
+resting cell every settle, records a `verdict` (occupancy and turn order —
+the shipped default; per-kind movement geometry is the reserved authorable
+extension), and updates `lastLegal`/`turn` only on a legal move.
+`world.tabletop` reads the frame, live occupancy, and the bound convenience
+rows back.
+
 World-space creation text uses the document's optional `text` catalog. Every
 font row has a stable name, a path relative to the world document, a
 `sha256-64/...` content pin, explicit Unicode scalar ranges, and an optional

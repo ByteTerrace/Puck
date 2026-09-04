@@ -77,14 +77,14 @@ public sealed partial class WorldBody {
 
             var volume = collider.Volumes[0];
 
-            return ((volume.Kind == FixedBodyColliderKind.Capsule)
+            return (((volume.Kind == FixedBodyColliderKind.Capsule)
                 ? ((volume.Center.Y + volume.Endpoint.Y) / FixedQ4816.FromInteger(value: 2L))
                 : volume.Center.Y
-            );
+            ) * m_scale);
         }
     }
     private FixedQ4816 HoldStandoff => ((m_collider is { Volumes.Length: > 0 } collider)
-        ? collider.Volumes[0].Radius
+        ? (collider.Volumes[0].Radius * m_scale)
         : FixedQ4816.Zero
     );
     private FixedVector3 HoldProbeOrigin => (m_position + (UnitY * HoldProbeHeight));
@@ -204,7 +204,7 @@ public sealed partial class WorldBody {
         if (!TryCastHold(
             candidate: out var nearest,
             direction: -m_holdNormal,
-            reach: hold.Reach
+            reach: (hold.Reach * m_scale)
         )) {
             return false;
         }
@@ -239,7 +239,7 @@ public sealed partial class WorldBody {
         if (!TryCastHold(
             candidate: out var driven,
             direction: in drive,
-            reach: hold.Reach
+            reach: (hold.Reach * m_scale)
         )) {
             return false;
         }
@@ -296,7 +296,7 @@ public sealed partial class WorldBody {
         if (!TryCastHold(
             candidate: out var hit,
             direction: in direction,
-            reach: hold.Reach
+            reach: (hold.Reach * m_scale)
         )) {
             return false;
         }
@@ -338,7 +338,7 @@ public sealed partial class WorldBody {
         var span = HoldSpan;
         var standoff = HoldStandoff;
         var origin = ((HoldProbeOrigin + (lostTangent * span)) - (lostNormal * (standoff + standoff)));
-        var reach = (hold.Reach + standoff);
+        var reach = ((hold.Reach * m_scale) + standoff);
 
         if (
             (hold.ConeAdmitsBelow && field.TryHoldableSurfaceAlongDirection(
@@ -566,8 +566,9 @@ public sealed partial class WorldBody {
         }
         if (held.Speed > FixedQ4816.Zero) {
             // The row's own travel speed along its tangent plane, replacing the kit's resolved move speed for as
-            // long as it holds; a row authoring none rides the kit's.
-            scratch.MoveSpeed = held.Speed;
+            // long as it holds; a row authoring none rides the kit's. Scaled like every other speed the resolved
+            // kit reads, so a shrunk body climbs proportionally slower rather than at the row's full authored rate.
+            scratch.MoveSpeed = (held.Speed * m_scale);
         }
 
         SpendHold(
@@ -1009,8 +1010,10 @@ public sealed partial class WorldBody {
     // Integrates ONE gravity channel whatever sources it — the world's solved field when it authors one, the row's
     // own arc otherwise. The rise/fall asymmetry is SHAPING, not a source — under a solved field it rides as the
     // row's authored Rise:Fall ratio so a floaty top of the arc survives on a planetoid, and the row's own Terminal
-    // clamps either way. scale is the fraction of the arc still reaching the body — a lift row's own fraction
-    // cancels the rest; one is the unscaled arc.
+    // clamps either way. `scale` is the fraction of the arc still reaching the body — a lift row's own fraction
+    // cancels the rest; one is the unscaled arc. m_scale (the body's own geometric scale, distinct from `scale`)
+    // multiplies both the acceleration and the terminal speed, so a shrunk body falls proportionally slower and
+    // settles under proportionally less overshoot than its own tiny collider skin margin.
     private void ApplyHoldGravity(in FixedBodyHold hold, FixedQ4816 scale, ulong stepTicks) {
         var rising = (m_verticalVelocity > FixedQ4816.Zero);
         var gravity = (rising
@@ -1031,9 +1034,9 @@ public sealed partial class WorldBody {
 
         var gravityStep = m_verticalVelocityAccumulator.Integrate(
             elapsedTicks: stepTicks,
-            ratePerSecond: -(gravity * scale)
+            ratePerSecond: -((gravity * scale) * m_scale)
         );
-        var terminalVelocity = -hold.Gravity.Terminal;
+        var terminalVelocity = -(hold.Gravity.Terminal * m_scale);
         var acceleratedVelocity = (m_verticalVelocity + gravityStep);
 
         if (acceleratedVelocity < terminalVelocity) {
@@ -1054,7 +1057,7 @@ public sealed partial class WorldBody {
 
         if (m_verticalVelocity > FixedQ4816.Zero) {
             var bleed = m_verticalVelocityAccumulator.Integrate(
-                ratePerSecond: -hold.Gravity.Rise,
+                ratePerSecond: -(hold.Gravity.Rise * m_scale),
                 elapsedTicks: scratch.StepTicks
             );
             var next = (m_verticalVelocity + bleed);
@@ -1065,7 +1068,7 @@ public sealed partial class WorldBody {
             );
         } else {
             var bleed = m_verticalVelocityAccumulator.Integrate(
-                ratePerSecond: hold.Gravity.Rise,
+                ratePerSecond: (hold.Gravity.Rise * m_scale),
                 elapsedTicks: scratch.StepTicks
             );
             var next = (m_verticalVelocity + bleed);
@@ -1265,7 +1268,7 @@ public sealed partial class WorldBody {
 
         var reach = PerStep(
             stepTicks: stepTicks,
-            value: hold.Grip
+            value: (hold.Grip * m_scale)
         );
 
         m_position -= (m_holdNormal * ((error < reach)

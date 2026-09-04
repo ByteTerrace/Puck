@@ -255,6 +255,11 @@ public static class WorldRuleFacts {
     public const string ParkedPrefix = "$parked:";
     /// <summary>Compares the world's own live active-population count.</summary>
     public const string Population = "$population";
+    /// <summary>Reads <c>1</c> when every active rigid body (a kit authoring <c>rigid</c>) currently latches
+    /// <see cref="Puck.Physics.Motion.ActionFact.Resting"/>, <c>0</c> otherwise — vacuously <c>1</c> when the world
+    /// authors no rigid body, so a turn-waiting rule composes without a special case for a world that never wired one
+    /// in.</summary>
+    public const string PhysicsQuiescent = "$physics:quiescent";
     /// <summary>The prefix; <c>$reduce:&lt;op&gt;:&lt;row&gt;</c> aggregates every cell a keyed (or slot) row
     /// declares — <c>max</c>/<c>min</c>/<c>sum</c> read the row's own <see cref="CellKind"/>, <c>count</c> is always
     /// integer (the number of cells present, regardless of what they hold). The reserved-channel exemption from
@@ -409,6 +414,9 @@ public enum WorldRuleFactKind : byte {
 
     /// <summary>The live active-population count (<see cref="WorldRuleFacts.Population"/>).</summary>
     Population,
+
+    /// <summary>Whether every active rigid body is at rest (<see cref="WorldRuleFacts.PhysicsQuiescent"/>).</summary>
+    PhysicsQuiescent,
 
     /// <summary>A named placement region's live occupant count (<see cref="WorldRuleFacts.RegionPrefix"/>).</summary>
     RegionOccupancy,

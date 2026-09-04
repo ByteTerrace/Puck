@@ -238,6 +238,53 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
     }
+    // A rigid kit's mass properties derive from its own collider shape (WorldRigid.cs), so the collider it names must
+    // be one FixedMassProperties actually has a closed form for — a compound fromCreation shape is refused rather
+    // than silently approximated by its first primitive.
+    private static void ValidateRigid(WorldRigid? rigid, WorldCollider? collider, WorldBodyContactMode bodyContact, string path, List<string> errors) {
+        if (rigid is null) {
+            return;
+        }
+
+        if (collider is null) {
+            errors.Add(item: $"{path} requires a collider (sphere, capsule, or box) to derive mass properties from.");
+        } else if (collider is WorldCollider.FromCreation) {
+            errors.Add(item: $"{path} requires a sphere, capsule, or box collider; 'fromCreation' has no closed-form mass properties.");
+        }
+
+        if (bodyContact != WorldBodyContactMode.Solid) {
+            errors.Add(item: $"{path} requires bodyContact 'solid' — a rigid body that never depenetrates is inert.");
+        }
+
+        RequirePositive(
+            value: rigid.Mass,
+            name: $"{path}.mass",
+            errors: errors
+        );
+        RequireRange(
+            value: rigid.Restitution,
+            min: 0f,
+            max: 1f,
+            name: $"{path}.restitution",
+            errors: errors
+        );
+        // Friction is a Coulomb coefficient (unbounded above — over 1 is physically ordinary); rolling friction and
+        // both damping rates are per-second decay RATES (applied as 1 - rate·dt, clamped at apply time). All four
+        // share the same bound here: non-negative, never bounded by 1.
+        foreach (var (value, name) in new (float Value, string Name)[] {
+            (rigid.Friction, "friction"),
+            (rigid.RollingFriction, "rollingFriction"),
+            (rigid.LinearDamping, "linearDamping"),
+            (rigid.AngularDamping, "angularDamping"),
+        }) {
+            if (
+                !float.IsFinite(f: value) ||
+                (value < 0f)
+            ) {
+                errors.Add(item: $"{path}.{name} must be finite and non-negative.");
+            }
+        }
+    }
     private static void ValidateCollider(WorldCollider? collider, IReadOnlyList<WorldPrototype> creations, string path, List<string> errors) {
         if (collider is null) {
             return;
@@ -927,6 +974,13 @@ public static partial class WorldDefinitionValidator {
                 path: $"{path}.collider",
                 errors: errors
             );
+            ValidateRigid(
+                rigid: kit.Rigid,
+                collider: kit.Collider,
+                bodyContact: kit.BodyContact,
+                path: $"{path}.rigid",
+                errors: errors
+            );
         }
 
         // ABSENT (kitNames empty) derives DefaultSeatKit to "" (WorldDefinition.DefaultSeatKit), which names no kit
@@ -1201,6 +1255,9 @@ public static partial class WorldDefinitionValidator {
         var dynamicInstanceCount = 0;
         var staticPlacementInstanceCount = 0L;
         var solidPlacementColliderCount = 0L;
+        // The BOARD facet carries a tabletop's frame; a topology admits at most one carrying placement (see
+        // WorldPlacementBoard's own doc) — tracked across the whole loop, never re-scanned per row.
+        var boardTopologies = new HashSet<string>(comparer: StringComparer.Ordinal);
         // The one face derivation, read for both the per-face portal refusals below and the screen budget after the
         // loop — never a second walk of (placements x declared faces) to answer the same questions.
         var faces = WorldFaceCatalog.For(definition: definition);
@@ -1518,6 +1575,15 @@ public static partial class WorldDefinitionValidator {
             ) {
                 errors.Add(item: $"{path}.grip requires .solid — a placement with no solidity facet compiles no collider for a grip override to apply to.");
             }
+
+            // The BOARD facet anchors a discrete Grid topology's frame to this placement — the tabletop primitive.
+            ValidateBoardFacet(
+                board: placement.Board,
+                definition: definition,
+                path: path,
+                boardTopologies: boardTopologies,
+                errors: errors
+            );
 
             // The ATTACH facet binds the row's resolved pose to a live population body (see WorldPlacementAttach).
             // BodyIndex uses the same 0-based entity indexing as WorldAnchor.Entity and the body:<n> grant subject —

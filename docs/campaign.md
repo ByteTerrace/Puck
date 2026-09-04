@@ -355,6 +355,29 @@ are real and an honest account is what keeps the fold from becoming a pile: **tr
 track 1** (track 1's own proof is a canary), and **track 5's entity-address type gates track 3's
 ghost records**.
 
+**A per-body scale primitive, not a debuff gimmick (owner decision, 2026-09-03).** A body's live
+geometric scale is a document-declared multiplier (`bodies.scaleRow`, a keyed `state.world` row whose
+own `min`/`max` is the world's declared scale envelope), read and written like any other state cell —
+never a bespoke "shrink" mechanic. Collider volumes, resolved move speed and turn rate, hold
+probe/standoff/reach, a hold's own gravity fall/rise/terminal, a wall hold's travel speed, and a grip's
+pull rate all scale with it on the server — a shrunk body's fall and depenetration stay proportionally
+gentle rather than free-falling one tick of full-scale gravity into a collider whose own contact skin
+margin it can no longer absorb; the client reads the same live cell into the rendered rig and the seat
+chase camera's orbit distance and look-at height, so a shrunk body stays framed rather than shrinking to
+a speck on screen. Body-vs-body contact, overlap events, and adjacency transfer still read a kit's
+shared UNSCALED collider volumes — a shrunk body's contact with the world is correct, its contact with
+other bodies is not yet, a known gap rather than a silent claim. `WorldServer.RestoreCheckpoint` and
+every other door that mints a `WorldBody` (a detached-seat/peer restore, a silo's checkpoint boot)
+resync the live value from the row, the same catch-up every other admission door already gives a
+freshly minted body — a restored session's bodies never disagree with their own `scale` row cells. A
+`Region` INTERACTION bound to a per-body carrier property is what turns a specific spot into a trigger,
+scoped to the one body it affects — never the aggregate `$region:<placement>` occupant count, which
+fires for any body standing in the region regardless of who. Two such interactions, each `Edge` mode
+over its own physically separate region, is the trigger/restore shape — never one region's `Level` write
+paired with a self-resetting flag cell, which turns every tick a body simply stands in the region into a
+document mutation; the garden's `drinkMe` bottle (shrinks on entry) and `eatMe` cake (restores on entry)
+are one authored instance of that primitive, not new engine surface of their own.
+
 1. **Frames, as the envelope ratification** — one document shape, not two landings. Order: root/single
    frame, sibling frames, body-parented frames only on demand. **The envelope needs two inputs beyond
    a size and speed band**: an ANGULAR-speed bound, because the solver uses `ω × anchor` and linear
@@ -415,9 +438,14 @@ NOT create a sixth.** Its reasoning: world rules, interactions, the property voc
 combat caller ALREADY EXIST; what is missing is charter-world EXERCISE, so a sixth horizontal
 "content later" track would add a lane without adding a capability. It also verified that the Phase A
 nouns survive on the rebased tree (`WorldStateAdvance`, `WorldOwnership`, properties, rules,
-interactions) and that `combat.world.json` and `reconnect.world.json` boot headlessly — which
-supports opening track 5 with verification rather than reconstruction, but does NOT by itself prove
-behavioural survival. **If track 5 is aimed at the charter, its completion criterion becomes charter
+interactions) and that `combat.world.json` and `reconnect.world.json` booted headlessly at the time —
+track 5 must re-verify this before relying on it: both scenario docs have since drifted behind several
+schema generations (stale basis reference, placement-policy fields, motion shape, kit vocabulary, host
+fields — partially repaired in the garden/w1 integration) and, as things stand, refuse validation
+outright (a kit claims a channel role and a held/action channel that `channels[]` never declares, and
+the document is missing required `collision` and `views` sections entirely). Opening track 5 with
+verification rather than reconstruction still holds ONLY once that drift is repaired; it does NOT by
+itself prove behavioural survival. **If track 5 is aimed at the charter, its completion criterion becomes charter
 EVIDENCE, not landed primitives**, and track 4 owns the feel gate.
 
 The obsolete portal-border canary was deleted with that model. Its replacement,
@@ -431,6 +459,65 @@ diagonal peers are not yet exercised by it — widening its scripts is future wo
 
 **Owner decision:** no sixth track. Track 5 is aimed at the charter from the start, so its rule
 primitives land with the content that proves them.
+
+**Authorable rigid dynamics (owner decisions).** A rigid body is a kit facet
+(`rigid`), never a second body kind: physics-first authoring derives mass and
+inertia from the kit's own collider and an authored mass, never a free density
+or tensor. A kinematic character contributes its velocity to a rigid contact
+but is never itself pushed unless its own kit says so. Substep count for
+continuous collision is derived per body per tick from speed and collider
+size against an authored ceiling and an authored per-substep travel
+fraction, never a free per-tick knob. Restitution against the static world
+fires only on a genuine impact (the rising edge of contact) on EACH of the
+ground and obstruction contact channels independently, never every tick of
+continued rest — the naive per-tick reapplication is a stable non-decaying
+bounce, not a settling body, and conflating the two channels is what let a
+grounded ball's continuous floor contact mask a fresh wall impact. A
+rigid-vs-rigid pair carries no such latch, so its restitution is instead
+floored to zero below a small closing-speed threshold — the same "settle,
+don't chatter" intent applied to a contact with no rising-edge state of its
+own — the threshold is an authored field, not a C# constant. A pair's contact
+anchor is a real off-center surface point, never the body center, so a strike
+carries real torque; its tangential response is a real Coulomb impulse
+through the two-body kernel, clamped to the friction coefficient against the
+normal impulse just applied, never an independent rescale of either body's
+whole velocity (which would burn or invent momentum along the normal).
+Friction carries the SAME Coulomb meaning against the static world and
+against another rigid body — one authored coefficient, one physical model,
+never a decay rate; rolling friction and both damping channels remain
+authored per-second decay rates, not per-tick fractions, so one authored
+value decays identically at any simulation rate. Each substep rotates and
+translates the body about its own centre of mass, never its root, so a
+rolling collider's rendered position does not orbit the root as it spins.
+Cross-world transfer of a rigid body is
+out of scope and refused by name. The garden's `billiardsTray`/`bowlingLane`
+placements are the proof fixture; see the
+[server](../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)
+and [schema](../src/Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs) references.
+
+**The tabletop primitive (owner decisions, Lane D).** Physics-first extends to
+board games: a chess set is 32 ordinary rigid bodies on a shared `piece` kit —
+no second entity kind, no engine-level "piece" concept. A placement's `board`
+facet (`WorldPlacementBoard`) anchors a discrete Grid topology (already
+carrying its own world-space origin/cellSize — no second frame member) to the
+placement, and a world rule derives an occupancy row from each piece's
+resting cell (`$board:cellOf:<row>:body:<n>`, a new reserved channel, Grid-
+only) on `$physics:quiescent`'s rising edge — never every tick. Legality is
+authorable, not engine-adjudicated: the shipped garden default checks
+occupancy and turn order only: a full piece-movement-geometry vocabulary
+(sliding pieces via `$board:rayCell`, leapers via the new `$board:offset`
+channel, check/castling/en passant/promotion) is the reserved authorable
+extension, not built. Illegal moves are recorded — `illegalCount` counts them,
+`verdict` names the last ruling — and never rejected, undone, or repositioned;
+the table remembers the last legal position (`lastLegal`) for a human or a
+future AI body to act on. `plan` is the addon seam for candidate-highlight
+rendering: an ordinary board-typed row nothing in the engine writes, proved
+from the console (`world.state.cell.set plan <cell> 1`) rather than built.
+Boards are a primitive the catalog reuses (checkers, go, cards on a table),
+never a chess-specific engine feature, and a topology is carried by at most
+one placement — the future carry primitive's "one placement/body" shape. See
+the [schema reference](../src/Puck.World.Schema/README.md#discrete-boards-cards-and-turns)
+and `world.tabletop`'s console read-back.
 
 ## After this arc
 

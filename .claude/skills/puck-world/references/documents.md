@@ -600,7 +600,21 @@ cadence phase, cached steering, and overlap latches through checkpoint/hash.
 `solid` kits: at most 32 inspected candidates and 16 resolved pairs per body
 (defaults 16/8). Dense saturation omits later stable-index pairs. Do not couple
 these budgets to `collision.events`; sensing and physical correction are
-independent authored costs.
+independent authored costs. `rigidSubstepCeiling` (default 8, maximum 32)
+bounds a rigid body's own per-tick continuous-collision substep count against
+an authored `rigidSubstepTravelFraction` (default 0.5) — the count itself is
+derived per body per tick from speed and collider size, never authored
+directly. `rigidRestLinearSpeed`/`rigidRestAngularSpeed`/`rigidRestHoldSeconds`
+(defaults 0.05/0.1/0.25) are the thresholds and hold window a grounded rigid
+body's `Resting` fact latches against.
+
+A kit's `rigid` facet (`mass`, `restitution`, `friction`, `rollingFriction`,
+`linearDamping`, `angularDamping`) hands its bodies to the rigid solver
+instead of a locomotion program — see
+[the server reference](../../../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs).
+`mass` is required and positive; the other four are non-negative per-second
+decay rates, never per-tick fractions. Requires `collider` (sphere, capsule,
+or box — never `fromCreation`) and `bodyContact: solid`.
 
 ### `navigation` — bounded surface, flight, and medium routes
 
@@ -1075,6 +1089,32 @@ gait and planted paws; Wren's own hold list is `wall` (grip, `spend` against the
 `jump` releases), `ground`, `air`, and her hands and feet are `effectors` on surface targets. Their
 homes sit away from the pit and the platform edge — a wander radius that reaches either walks the
 creature onto the safety net, which it then paces beneath the platform.
+Away from the debugRoom cluster, near the pond, a `drinkMe` bottle placement (colors from the
+`drinkMeColors` text row) carries a `region`, and a second, physically separate `eatMe` cake placement
+carries its own region straddling the approach back toward the `table` spawn point. Two `Region`
+INTERACTIONS — `left: "wren"` (a one-cell carrier row naming body 0, never the aggregate
+`$region:<placementId>` occupant count, which fires for ANY body standing in the region regardless of
+who), both Edge mode — write body 0's cell of the keyed `scale` state row (`bodies.scaleRow`, envelope
+`[0.05, 1]`): `drink-me-shrink` (`right: "drinkMe"`) sets it to 0.15 once on entering the bottle's
+region, and `eat-me-restore` (`right: "eatMe"`) sets it back to 1 once on entering the cake's. Edge is
+load-bearing, not a style choice: a `Level` trigger re-fires its `setState` every tick the co-occurrence
+holds, which for a body simply standing in the region is a document mutation, a stderr journal line, and
+a client definition delivery EVERY tick — the same per-tick-write anti-pattern `ActionTriggerMode`'s own
+remarks warn a Level-triggered write against. The two regions are never nested or otherwise contained
+one inside the other — the shrink region has no reach into where the restore region would fire, and the
+restore region has no reach back into the shrink region's own interior — so leaving one always reaches
+the other's edge before either could re-trigger itself. `Server.WorldBody.Scale` scales collider
+volumes, move speed/turn rate, hold probes/standoff/reach, a hold's own gravity fall/rise/terminal, a
+wall hold's travel speed, and a grip's pull rate; the client multiplies the same live cell into the
+rendered rig AND the seat chase camera's orbit distance and look-at height
+(`Client.WorldFramePresenter.ResolveCamera`), so a shrunk body stays framed instead of shrinking to a
+speck on screen. A `tabletop` placement (a solid pedestal table, 1.2 m clearance under its top) sits
+beyond the bottle, and the `table` spawn point stands a body north of both, facing south — inside the
+`eatMe` region already, so an unshrunk arrival reads `scale=1` from the first tick. `body.where`'s
+`scale=` echo is the read-back. Body-vs-body contact, overlap events, adjacency transfer sweeps, and the
+cross-boundary continuum trajectory still read a kit's shared UNSCALED collider volumes — only the
+self-collision sweep does not; a shrunk body's contact with the world is correct, its contact with
+other bodies is not yet.
 An explicit path or the shipped default that cannot be loaded refuses the boot by name.
 `puck.world.frozen.json` ships beside them: the frozen floating-island diorama, reference-only,
 reachable via `--world`, never extended, deleted on owner order — the worked examples this file cites
@@ -1479,8 +1519,9 @@ three channel names. Surface holds are not authored here.
 publishes each body's per-tick fact set on `EntitySnapshot.Facts` — one bit
 per body-state `ActionFact` (`grounded`, `airborne`, `rising`, `falling`,
 `submerged`, `atsurface`, `climbing` — holding a surface row whose face is
-outside the world's own walkable cone — and `flying` — holding a free row with
-lift; `AffectedBy` has no bit, being a relationship rather than a state). The mask is derived through the SAME
+outside the world's own walkable cone — `flying` — holding a free row with
+lift — and `resting`, written only by the rigid solver once a rigid body's
+linear and angular velocity latch to zero; `AffectedBy` has no bit, being a relationship rather than a state). The mask is derived through the SAME
 predicate the kit's action gates read, so the snapshot, the gates, and the
 `body.where` echo cannot disagree; a decoder refuses an undeclared bit by
 name. `WorldSessionMirror.Facts(int)` and `WorldClient.Facts(int)` front it
@@ -1488,10 +1529,12 @@ for presentation, which is how animation keys on regime without the client
 deriving one. `body.where` echoes it as `facts=` (lower-case, `|`-joined in
 bit order, `none` when empty), followed by `home=(x, y, z)` — the position the
 body was ACTIVATED at (a seat's spawn point, an inhabitant's placement plus its
-own distribution sample). A producer's inward pull steers against that home
-rather than the world origin, so a population spread over several placements
-keeps to its own ground instead of congregating; a teleport moves the body,
-never its home. Facts are NOT mutually exclusive: a body can be
+own distribution sample) — then `scale=` (`Server.WorldBody.Scale`'s read-back)
+and, for a routed local seat, `anchor=body:<n>` (the seat's currently routed
+entity index). A producer's inward pull steers against that home rather than the world origin,
+so a population spread over several placements keeps to its own ground
+instead of congregating; a teleport moves the body, never its home. Facts are
+NOT mutually exclusive: a body can be
 grounded and rising in one tick, and a body on a wall reads `airborne|climbing`
 because contact resolution keeps running under every hold.
 
@@ -2059,8 +2102,9 @@ zone, and neutral-grace duration.
   `WorldClient.EntityCapacity` (the F3 reconciliation, 2026-08-06; see
   [SKILL.md](../SKILL.md)'s "Boundaries" section). There is no
   `MaxPopulation`/`MaxPopulationSimulated` constant. The client reserves full
-  catalog detail for the first 128 indices and emits later active bodies as
-  one-instance coarse capsules. That hybrid bounds storage and SDF inputs; it
+  catalog detail for the first `DetailedRenderBand` (128) indices and emits
+  later active bodies as one-instance coarse capsules. That hybrid bounds
+  storage and SDF inputs; it
   does not establish dense-crowd frame time. Hard presentation targets require
   a non-per-creature SDF lane (for example raster impostors or an authored
   aggregate). Existing shipped worlds may still author
@@ -2084,8 +2128,9 @@ zone, and neutral-grace duration.
   the document-global CPU/instance-grid admission ceiling. The recorded
   GPU-bound measurement is 0 but does not govern admission.
 - `WorldPlacementPolicy`: `MaxShapesPerStamp = 48`,
-  `MaxStampRegistrations = 8`, `TimelineSecondsPerFrame = 8f/60f`, and the
-  reserved derived-face screen band.
+  `MaxStampRegistrations = WorldBodiesLimits.DetailedRenderBand` (128),
+  `TimelineSecondsPerFrame = 8f/60f`, and the reserved derived-face screen
+  band.
 - `WorldRenderEnvelope.cs` — the render-capacity oracle: `Configure` at boot
   from the probe, `TryFit(candidate)` at every apply; unconfigured reads as
   "fits".

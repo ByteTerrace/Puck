@@ -2,6 +2,7 @@ using System.Numerics;
 using Puck.Hosting;
 using Puck.Maths;
 using Puck.World.Protocol;
+using Puck.Physics;
 using Puck.Physics.Motion;
 
 namespace Puck.World.Server;
@@ -31,13 +32,27 @@ public sealed partial class WorldBody {
     /// <c>ElapsedTicks</c> rather than any tick this method captures.</param>
     /// <returns><see langword="true"/> when <paramref name="engageProbeOrdinal"/>'s rising edge fired this tick
     /// (the caller should engage); otherwise <see langword="false"/>.</returns>
+    /// <param name="rigidPolicy">The authored, once-compiled rigid-contact tunables <see cref="AdvanceRigid"/> reads;
+    /// ignored for a locomotion kit.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> is zero.</exception>
-    internal bool Advance(ulong tick, ulong stepTicks, int? engageProbeOrdinal = null, int entityIndex = -1, BodyEffectTargets effectTargets = default, List<BodyEffectOutput>? effectOutputs = null, List<WorldDesignation>? designationOutputs = null, List<WorldGeneratorInvocation>? generatorInvocations = null, List<WorldJudgeInvocation>? judgeInvocations = null) {
+    internal bool Advance(ulong tick, ulong stepTicks, RigidContactPolicy rigidPolicy, int? engageProbeOrdinal = null, int entityIndex = -1, BodyEffectTargets effectTargets = default, List<BodyEffectOutput>? effectOutputs = null, List<WorldDesignation>? designationOutputs = null, List<WorldGeneratorInvocation>? generatorInvocations = null, List<WorldJudgeInvocation>? judgeInvocations = null) {
         ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
 
         // Captured before ExecuteProgram (or the overlay add below) can move m_position — the swept portal-crossing
         // scan's segment start for this step. A hard teleport between scans overwrites this separately (CommitTeleport).
         m_previousPosition = m_position;
+
+        // A rigid kit hands the whole step to the rigid solver instead of the grounded/free motion program: no
+        // intent, action track, or hold list applies to a passive rigid entity.
+        if (m_rigid is not null) {
+            AdvanceRigid(
+                entityIndex: entityIndex,
+                stepTicks: stepTicks,
+                policy: rigidPolicy
+            );
+
+            return false;
+        }
 
         ApplyDurableInput(tick: tick);
         MaterializeDefaultLanePresses(stepTicks: stepTicks);
@@ -87,7 +102,7 @@ public sealed partial class WorldBody {
                 // EffectiveMoveSpeed's read-back echo performs the same resolve. No envelope (the default) is a
                 // no-op clamp elided entirely; a kit pinning its speed outright authors min == max.
                 var moveSpeed = ResolveMoveSpeed();
-                var turnSpeed = (Profile?.FixedTurnSpeed ?? m_tuning.Turn.Rate);
+                var turnSpeed = ResolveTurnRate();
 
                 ExecuteProgram(
                     designationOutputs: designationOutputs,
@@ -239,7 +254,7 @@ public sealed partial class WorldBody {
             ProducerState = state,
             SensorTarget = BodySensorTarget.None,
             StepTicks = stepTicks,
-            TurnSpeed = (Profile?.FixedTurnSpeed ?? m_tuning.Turn.Rate),
+            TurnSpeed = ResolveTurnRate(),
         };
 
         for (var phase = 0; (phase < producer.Program.Phases.Length); phase++) {
@@ -1096,8 +1111,9 @@ public sealed partial class WorldBody {
     // speed multiplier (a drive's boost) multiplies AFTER this clamp, never inside it (see ApplySpeedHeld).
     private FixedQ4816 ResolveMoveSpeed() {
         var resolved = (Profile?.FixedMoveSpeed ?? m_tuning.Speed.Value);
+        var clamped = (m_tuning.Speed.Envelope?.Clamp(value: resolved) ?? resolved);
 
-        return (m_tuning.Speed.Envelope?.Clamp(value: resolved) ?? resolved);
+        return (clamped * m_scale);
     }
     // Position/planar contact response applies to ANY collider-bearing body regardless of body motion program — a flying
     // body still shouldn't clip through a wall. The vertical WRITE-BACK (m_verticalVelocity, m_planarVelocity, the
@@ -1111,6 +1127,8 @@ public sealed partial class WorldBody {
             (m_collider is { } collider)
         ) {
             var resolvedVelocity = scratch.Velocity;
+            Span<FixedBodyColliderVolume> volumeScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
+            var volumes = ScaledColliderVolumes(volumes: collider.Volumes, scratch: volumeScratch);
             var contactResolution = ((field is IEntityContactField entityField)
                 ? entityField.ResolveEntitySweep(
                     entityIndex: scratch.EntityIndex,
@@ -1119,7 +1137,7 @@ public sealed partial class WorldBody {
                     up: in scratch.Up,
                     velocity: ref resolvedVelocity,
                     orientation: in scratch.Orientation,
-                    volumes: collider.Volumes
+                    volumes: volumes
                 )
                 : field.ResolveSweep(
                     previousPosition: m_position,
@@ -1127,7 +1145,7 @@ public sealed partial class WorldBody {
                     up: in scratch.Up,
                     velocity: ref resolvedVelocity,
                     orientation: in scratch.Orientation,
-                    volumes: collider.Volumes
+                    volumes: volumes
                 )
             );
 

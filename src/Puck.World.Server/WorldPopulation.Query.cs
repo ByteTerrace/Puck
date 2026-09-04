@@ -135,6 +135,20 @@ public sealed partial class WorldPopulation {
 
         return count;
     }
+    /// <summary>Returns whether every active rigid body currently latches
+    /// <see cref="Puck.Physics.Motion.ActionFact.Resting"/> — the <c>$physics:quiescent</c> rule fact. Vacuously
+    /// <see langword="true"/> when the world activates no rigid body.</summary>
+    public bool RigidBodiesQuiescent() {
+        for (var index = 0; (index < m_entries.Length); index++) {
+            if (
+                (m_entries[index] is { Active: true, Body: { IsRigid: true, Resting: false } })
+            ) {
+                return false;
+            }
+        }
+
+        return true;
+    }
     /// <summary>Counts the active entities per kit row for console diagnostics (one slot per definition row).</summary>
     public int[] ActiveKitCounts() {
         var counts = new int[m_kits.Length];
@@ -661,6 +675,7 @@ public sealed partial class WorldPopulation {
             roleOrdinals: kit.RoleOrdinals,
             actionState: kit.ActionState,
             collider: kit.Collider,
+            rigid: kit.Rigid,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             holds: kit.Holds
         ) {

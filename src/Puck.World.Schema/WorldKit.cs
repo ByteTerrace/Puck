@@ -18,7 +18,10 @@ namespace Puck.World;
 /// null. <see cref="BodyContact"/> is whether bodies wearing this kit overlap one another or participate in
 /// physical depenetration — world geometry still uses <see cref="Collider"/> in either mode. <see cref="Mass"/> is the
 /// body's gravitational mass in the same units a <c>gravity.attractors</c> row uses; zero (the default) makes a body a
-/// target that is pulled but pulls nothing.</remarks>
+/// target that is pulled but pulls nothing. <see cref="Rigid"/> is a distinct facet: presence hands the kit's bodies
+/// to the rigid solver instead of a locomotion motion program, requires <see cref="Collider"/> (sphere/capsule/box)
+/// and <see cref="BodyContact"/> <see cref="WorldBodyContactMode.Solid"/>, and derives its own inertial mass from that
+/// collider's shape — it never reads <see cref="Mass"/>.</remarks>
 public sealed record WorldKit(
     string Name,
     string BodyMotionProgram,
@@ -28,6 +31,7 @@ public sealed record WorldKit(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCollider? Collider = null,
     WorldBodyContactMode BodyContact = WorldBodyContactMode.Overlap,
     float Mass = 0f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRigid? Rigid = null,
     [property: JsonPropertyName("pad"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, WorldPadElement>? PadRaw = null,
     [property: JsonPropertyName("autonomy"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldAutonomyCadence? AutonomyRaw = null
 ) {
@@ -105,6 +109,7 @@ public enum WorldBodyContactMode : byte {
 /// against the world's channel table and <c>dynamics</c> rows here, once, rather than per body.</param>
 /// <param name="AutonomousMotionTicks">The non-human motion cadence in engine ticks; zero means every authority tick.</param>
 /// <param name="AutonomousSteeringTicks">The non-human producer cadence in engine ticks; zero means every authority tick.</param>
+/// <param name="Rigid">The kit's compiled rigid-dynamics facet, or <see langword="null"/> for a locomotion kit.</param>
 public readonly record struct FixedWorldKit(
     CompiledBodyMotionProgram BodyMotionProgram,
     IReadOnlyDictionary<string, CompiledBodyProducer> Producers,
@@ -120,7 +125,8 @@ public readonly record struct FixedWorldKit(
     FixedBodyHold[] Holds,
     FixedMotionTuning Tuning,
     ulong AutonomousMotionTicks,
-    ulong AutonomousSteeringTicks
+    ulong AutonomousSteeringTicks,
+    FixedWorldRigid? Rigid = null
 ) {
     private static (CompiledActionStateSlot[] Slots, Dictionary<string, int> ByName) CompileActionState(IReadOnlyList<ActionStateSlot> bodyState, IReadOnlyList<ActionStateSlot> identityState) {
         var slots = new List<CompiledActionStateSlot>();
@@ -278,6 +284,18 @@ public readonly record struct FixedWorldKit(
             ordinals: roleOrdinals
         );
 
+        var collider = FixedWorldCollider.Compile(
+            collider: kit.Collider,
+            creations: creations
+        );
+        var rigid = ((kit.Rigid is { } rigidRow)
+            ? FixedWorldRigid.Compile(
+                rigid: rigidRow,
+                collider: collider!.Value
+            )
+            : (FixedWorldRigid?)null
+        );
+
         var tuning = WorldMotionTuningFactory.Compile(
             channels: channels,
             dynamics: dynamics,
@@ -314,10 +332,7 @@ public readonly record struct FixedWorldKit(
             Actions: actions,
             ActionThresholds: thresholds,
             ActionShapes: shapes,
-            Collider: FixedWorldCollider.Compile(
-                collider: kit.Collider,
-                creations: creations
-            ),
+            Collider: collider,
             BodyContact: kit.BodyContact,
             Mass: FixedQ4816.FromDouble(value: kit.Mass),
             RoleOrdinals: roleOrdinals,
@@ -333,7 +348,8 @@ public readonly record struct FixedWorldKit(
                 : 0UL),
             AutonomousSteeringTicks: ((kit.Autonomy.SteeringSeconds > 0f)
                 ? FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: kit.Autonomy.SteeringSeconds))
-                : 0UL)
+                : 0UL),
+            Rigid: rigid
         );
     }
 }

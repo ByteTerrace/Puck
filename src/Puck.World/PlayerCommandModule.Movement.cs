@@ -636,6 +636,56 @@ internal sealed partial class PlayerCommandModule {
             handler: $"[body.reconcile: body:{index} → ({x:0.00}, {z:0.00}) yaw={degrees:0}° over {seconds:0.##}s]"
         );
     }
+    // body.impulse <x> <y> <z> [body] — applies an instantaneous world-space impulse to a rigid-kit body's linear
+    // velocity. Local population only (no instance:<name> routing): a rigid body is never a joined remote seat.
+    private CommandResult ImpulseHandler(CommandContext context, WireArgs args) {
+        if (
+            (args.Count is not (3 or 4)) ||
+            !args.TryFloats(
+            count: 3,
+            start: 0,
+            values: out var impulse
+        )
+        ) {
+            return CommandResult.Usage(
+                form: "<x> <y> <z> [body]",
+                verb: "body.impulse"
+            );
+        }
+
+        var (player, index, error) = ResolveTarget(
+            args: in args,
+            requiredCount: 3,
+            verb: "body.impulse"
+        );
+
+        if (player is null) {
+            return CommandResult.Error(output: error!);
+        }
+
+        if (!player.IsRigid) {
+            return CommandResult.Error(output: $"[body.impulse: body:{index} carries no rigid kit facet — see world.rigid]");
+        }
+
+        if (ReplayDriveError(verb: "body.impulse") is { } driveError) {
+            return driveError;
+        }
+
+        m_link.SubmitCommand(command: new WorldCommand.RigidImpulse(
+            Principal: context.ActingPrincipal(),
+            EntityIndex: index,
+            Impulse: new Vector3(
+                x: impulse[0],
+                y: impulse[1],
+                z: impulse[2]
+            )
+        ));
+
+        return Echoed(
+            args: in args,
+            handler: $"[body.impulse: body:{index} <- ({impulse[0]:0.###}, {impulse[1]:0.###}, {impulse[2]:0.###})]"
+        );
+    }
     private CommandResult StopHandler(CommandContext context, WireArgs args) {
         if (!TryStripInstanceToken(
             args: in args,
