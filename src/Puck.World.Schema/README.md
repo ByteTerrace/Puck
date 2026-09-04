@@ -1494,6 +1494,29 @@ engine-tick duration when due. Human bodies, live sources, tapes, and pending
 external input remain full-rate. `bodyContact: solid` requires full-rate motion;
 large crowds that batch motion use the default `overlap` contact mode.
 
+### Body scale
+
+`bodies.scaleRow` names a keyed `state.world` row (`kind: fixed`, a declared
+`capacity`, and both `min`/`max` authored — the row's own envelope is the
+world's own declared scale envelope) whose cells, keyed by 0-based body index,
+carry each body's live scale multiplier: absent (the default) leaves every
+body's `Server.WorldBody.Scale` at `1` forever, at no per-tick cost. An
+ordinary world rule (`setState`/`addState` against the row, gated however the
+world likes — a placement's `region` facet and the `$region:<placementId>`
+reserved channel are the natural fit for a spatial trigger) writes a body's
+cell; `WorldPopulation.SyncBodyScale` resyncs every active body's `Scale`
+wholesale from it at the same `Install`/admission choke points
+`WorldGrants.SyncState` resyncs its own drive gates at, so a live write settles
+before the next tick and a reused population slot never inherits a previous
+occupant's value. `Scale` multiplies the body's collider volumes (about its own
+root — contact resolution and hold probes/standoff/reach alike), its resolved
+move speed and turn rate, and — client-side, reading the same row live — its
+composed render scale (`Client.WorldSceneEmitter.ResolveStampCreation`).
+`body.where`'s `scale=` echo is the read-back. `WorldLook.Scale` is a
+different, presentation-only per-look constant layered on top (appearance
+only; it never touches collision or motion tuning) — the two multiply
+together, never one standing in for the other.
+
 `collision.events` bounds overlap-event sensing without changing physical world
 contact. `candidateBudget` limits inspected broadphase candidates per body,
 `maxPairsPerBody` limits retained degree, and `beginBudget` limits new pairs per

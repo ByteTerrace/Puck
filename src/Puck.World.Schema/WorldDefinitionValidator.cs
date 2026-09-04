@@ -1013,6 +1013,23 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
+        if (definition.Population.ScaleRow is { } scaleRow) {
+            if (WorldDefinitionRows.FindStateRow(
+                rows: definition.State,
+                name: scaleRow
+            ) is not { } scaleStateRow) {
+                errors.Add(item: $"bodies.scaleRow names state row '{scaleRow}', which the document does not declare.");
+            } else if (
+                (scaleStateRow.Kind != CellKind.Fixed) ||
+                !scaleStateRow.IsKeyed ||
+                (scaleStateRow.Lattice is not null) ||
+                (scaleStateRow.Min is null) ||
+                (scaleStateRow.Max is null)
+            ) {
+                errors.Add(item: $"bodies.scaleRow names state row '{scaleRow}', which must be a keyed kind=fixed row declaring both min and max — the world's own body-scale envelope.");
+            }
+        }
+
         var peerCapacity = Math.Max(
             val1: 0,
             val2: (definition.Population.Capacity - localSeats)

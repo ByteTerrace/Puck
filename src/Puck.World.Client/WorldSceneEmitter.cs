@@ -406,9 +406,14 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     }
     // The creation a body renders as a stamp, or null (it renders as a catalog avatar): an INHABITANT wears the look's
     // creation (a Creation look) or its placement's own creation; a crowd body wears its look's creation (a Creation
-    // look). The uniform scale folds the placement scale and the look scale.
+    // look). The uniform scale folds the placement scale, the look scale, and the body's own live scale (see
+    // LiveBodyScale) — the same bodies.scaleRow cell WorldPopulation.SyncBodyScale reads server-side.
     private WorldStampPool.BodyStamp? ResolveStampCreation(int index, WorldDefinition definition) {
         var look = m_client.Look(index: index);
+        var liveScale = LiveBodyScale(
+            definition: definition,
+            index: index
+        );
 
         if (m_client.PlacementId(index: index) is { } placementId) {
             if (WorldDefinitionRows.FindPlacement(
@@ -430,7 +435,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 ? new WorldStampPool.BodyStamp(
                     BodyIndex: index,
                     Creation: creation,
-                    Scale: (placement.Scale * look.Scale),
+                    Scale: (placement.Scale * look.Scale * liveScale),
                     Motion: look.Motion
                 )
                 : null
@@ -445,7 +450,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 ? new WorldStampPool.BodyStamp(
                     BodyIndex: index,
                     Creation: creation,
-                    Scale: look.Scale,
+                    Scale: (look.Scale * liveScale),
                     Motion: look.Motion
                 )
                 : null
@@ -453,6 +458,21 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         }
 
         return null;
+    }
+    // A world authoring no bodies.scaleRow (the common case) reads 1 without ever parsing a state binding. Reads
+    // through the same state.<row>[.<key>] resolve a creation driver's own signal uses (WorldGaitDrivers), so this
+    // needs no wire of its own: the value is whatever the live definition's own scale row cell holds.
+    private float LiveBodyScale(WorldDefinition definition, int index) {
+        if (definition.Population.ScaleRow is not { } scaleRow) {
+            return 1f;
+        }
+
+        return (WorldGaitDrivers.TryReadStateNumber(
+            definition: definition,
+            reference: $"state.{scaleRow}.{index}",
+            tick: m_client.Tick,
+            value: out var value
+        ) ? value : 1f);
     }
     private bool TryPresentedAppearance(int index, out Vector3 bodyColor, out WorldLook look, out byte catalogRig) {
         if (m_client.IsActive(index: index)) {

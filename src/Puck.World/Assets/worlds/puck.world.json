@@ -98,7 +98,8 @@
   ],
   "bodies": {
     "capacity": 64,
-    "localSeats": 2
+    "localSeats": 2,
+    "scaleRow": "scale"
   },
   "bodyMotionPrograms": [
     {
@@ -1457,6 +1458,34 @@
         ],
         "prototypeId": "fish",
         "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "drinkMe",
+        "position": [
+          -8,
+          -0.5,
+          15
+        ],
+        "prototypeId": "drinkMe",
+        "region": {
+          "radius": 4.0
+        },
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "tabletop",
+        "position": [
+          -8,
+          -0.5,
+          12
+        ],
+        "prototypeId": "tabletop",
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        },
         "yawDegrees": 0
       }
     ]
@@ -6498,6 +6527,113 @@
         ]
       },
       "id": "pondBasin"
+    },
+    {
+      "document": {
+        "name": "drinkMe",
+        "palette": [
+          {
+            "color": "state.drinkMeColors.glass"
+          },
+          {
+            "color": "state.drinkMeColors.cap"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0.12,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.05,
+              0.12,
+              0.05
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 1,
+            "name": "neck",
+            "position": [
+              0,
+              0.28,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.02,
+              0.04,
+              0.02
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          }
+        ]
+      },
+      "id": "drinkMe"
+    },
+    {
+      "document": {
+        "name": "tabletop",
+        "palette": [
+          {
+            "color": "#8A6A45"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "top",
+            "position": [
+              0,
+              1.25,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              1.0,
+              0.05,
+              1.0
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 0,
+            "name": "leg",
+            "position": [
+              0,
+              0.6,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.08,
+              0.6,
+              0.08
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          }
+        ]
+      },
+      "id": "tabletop"
     }
   ],
   "render": {
@@ -6985,6 +7121,42 @@
       "forEach": "spider",
       "mode": "Level",
       "name": "stalk-visitor"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "scale",
+          "value": 0.15
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "state": "$region:drinkMe",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "drink-me-shrink"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "scale",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$region:drinkMe",
+        "value": 0
+      },
+      "mode": "Edge",
+      "name": "drink-me-restore"
     }
   ],
   "schema": "puck.world.def.v1",
@@ -7120,6 +7292,15 @@
         9
       ],
       "yawDegrees": -135
+    },
+    {
+      "id": "table",
+      "position": [
+        -8,
+        0,
+        20
+      ],
+      "yawDegrees": 0
     }
   ],
   "state": {
@@ -7754,6 +7935,33 @@
           "topology": "pondBasin"
         },
         "name": "water"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": "1"
+          }
+        ],
+        "kind": "fixed",
+        "max": "1",
+        "min": "0.05",
+        "name": "scale"
+      },
+      {
+        "cells": [
+          {
+            "key": "glass",
+            "value": "#8FD6C8"
+          },
+          {
+            "key": "cap",
+            "value": "#C6435B"
+          }
+        ],
+        "kind": "text",
+        "name": "drinkMeColors"
       }
     ]
   },

@@ -318,7 +318,17 @@ the reserved local seats and the rest host simulated stand-ins and network
 peers. The client reserves 128 full-detail catalog rigs and represents later
 active indices with one-instance coarse capsules, keeping the worst-case SDF
 program under its fixed instruction/transform ceilings. `WorldBody` owns one entry's integration, pose, tape, motion row, and
-action state. Bodies advance against the one contact-resolution seam
+action state — including its live `Scale` multiplier (`WorldBody.Scale.cs`),
+1 unless `bodies.scaleRow` names a keyed `state.world` row carrying this
+body's cell; `WorldPopulation.SyncBodyScale` resyncs every active body's
+`Scale` wholesale from that row at the same `Install`/admission choke points
+`WorldGrants.SyncState` resyncs its own drive-gate index at (construction,
+every `Install`, every seat join/peer admission), so a reused population slot
+never inherits a previous occupant's value. `Scale` multiplies the kit's
+shared collider volumes about the body's own root (never mutated in place —
+a per-call scratch span, scaled only when `Scale != 1`), the resolved move
+speed and turn rate, and hold probe height/standoff/reach; the client reads
+the same row live and folds it into the rendered rig. Bodies advance against the one contact-resolution seam
 `IContactField.cs`, which has two providers: the analytic `WorldColliderSet`
 (document-derived convex colliders) and the SDF-backed `WorldSolidField.cs`.
 Both include solid scene rows, screen frames, and the shapes emitted by solid

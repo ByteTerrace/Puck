@@ -355,6 +355,15 @@ are real and an honest account is what keeps the fold from becoming a pile: **tr
 track 1** (track 1's own proof is a canary), and **track 5's entity-address type gates track 3's
 ghost records**.
 
+**A per-body scale primitive, not a debuff gimmick (owner decision, 2026-09-03).** A body's live
+geometric scale is a document-declared multiplier (`bodies.scaleRow`, a keyed `state.world` row whose
+own `min`/`max` is the world's declared scale envelope), read and written like any other state cell —
+never a bespoke "shrink" mechanic. Collider volumes, resolved move speed and turn rate, and hold
+probe/standoff/reach all scale with it on the server; the client reads the same live cell into the
+rendered rig. An ordinary world rule gated on a placement's `region` facet is what turns a specific
+spot into a trigger — the garden's `drinkMe` bottle and `tabletop` table are one authored instance of
+that primitive, not new engine surface of their own.
+
 1. **Frames, as the envelope ratification** — one document shape, not two landings. Order: root/single
    frame, sibling frames, body-parented frames only on demand. **The envelope needs two inputs beyond
    a size and speed band**: an ANGULAR-speed bound, because the solver uses `ω × anchor` and linear

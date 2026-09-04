@@ -77,14 +77,14 @@ public sealed partial class WorldBody {
 
             var volume = collider.Volumes[0];
 
-            return ((volume.Kind == FixedBodyColliderKind.Capsule)
+            return (((volume.Kind == FixedBodyColliderKind.Capsule)
                 ? ((volume.Center.Y + volume.Endpoint.Y) / FixedQ4816.FromInteger(value: 2L))
                 : volume.Center.Y
-            );
+            ) * m_scale);
         }
     }
     private FixedQ4816 HoldStandoff => ((m_collider is { Volumes.Length: > 0 } collider)
-        ? collider.Volumes[0].Radius
+        ? (collider.Volumes[0].Radius * m_scale)
         : FixedQ4816.Zero
     );
     private FixedVector3 HoldProbeOrigin => (m_position + (UnitY * HoldProbeHeight));
@@ -204,7 +204,7 @@ public sealed partial class WorldBody {
         if (!TryCastHold(
             candidate: out var nearest,
             direction: -m_holdNormal,
-            reach: hold.Reach
+            reach: (hold.Reach * m_scale)
         )) {
             return false;
         }
@@ -239,7 +239,7 @@ public sealed partial class WorldBody {
         if (!TryCastHold(
             candidate: out var driven,
             direction: in drive,
-            reach: hold.Reach
+            reach: (hold.Reach * m_scale)
         )) {
             return false;
         }
@@ -296,7 +296,7 @@ public sealed partial class WorldBody {
         if (!TryCastHold(
             candidate: out var hit,
             direction: in direction,
-            reach: hold.Reach
+            reach: (hold.Reach * m_scale)
         )) {
             return false;
         }
@@ -338,7 +338,7 @@ public sealed partial class WorldBody {
         var span = HoldSpan;
         var standoff = HoldStandoff;
         var origin = ((HoldProbeOrigin + (lostTangent * span)) - (lostNormal * (standoff + standoff)));
-        var reach = (hold.Reach + standoff);
+        var reach = ((hold.Reach * m_scale) + standoff);
 
         if (
             (hold.ConeAdmitsBelow && field.TryHoldableSurfaceAlongDirection(
