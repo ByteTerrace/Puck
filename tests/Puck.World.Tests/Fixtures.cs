@@ -118,11 +118,8 @@ internal static class Fixtures {
             ["pressThreshold"] = 0f,
             ["altitudeBase"] = 0f,
             ["altitudeRange"] = 0f,
-            // ProduceSteeringIntent's approach shape never governs this producer (no SenseNearestInCone in its
-            // program), but the op reads the full parameter set regardless of which shape a given tick takes.
-            ["standoffRadius"] = 1f,
-            ["approach"] = 0f,
-            ["orbit"] = 0f,
+            // standoffRadius/approach/orbit are omitted: this producer's program has no SenseNearestInCone, so
+            // ProduceSteeringIntent's approach shape can never govern it and the compiler does not require them.
         },
         Channels: new Dictionary<string, string>()
     );

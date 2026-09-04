@@ -71,7 +71,7 @@ tokens). A token is:
 
 | Token | Holds while |
 |---|---|
-| a `Puck.Physics.Motion.BodyFacts` name — `Grounded`, `Airborne`, `Rising`, `Falling`, `Submerged`, `AtSurface`, `Climbing`, `Flying`, `AffectedBy` | the simulation publishes that fact |
+| a `Puck.Physics.Motion.BodyFacts` name — `Grounded`, `Airborne`, `Rising`, `Falling`, `Submerged`, `AtSurface`, `HoldingUnwalkable`, `Unsupported`, `AffectedBy` | the simulation publishes that fact |
 | `moving` | the body's eased rendered speed is above `WorldGaitDrivers.MovingSpeed` (0.05 m/s) |
 | `still` | the negation of `moving` |
 | `always` | unconditionally — refused alongside any other token |
@@ -122,7 +122,7 @@ Worked rigs, all built from the same three parts:
 | Rig | Driver | Facet |
 |---|---|---|
 | Walker limbs | `planarTravel`, cadence 8, `when: ["Grounded", "moving"]` | swings, axis X at the shoulder (y ≈ 1.25, x ±0.5) and the hip (y ≈ 0.45, x ±0.3), amplitude 0.6, contralateral (left arm φ+π, right arm φ, left leg φ, right leg φ+π) |
-| Climber limbs | `travel`, cadence 8, `when: ["Climbing", "moving"]` | the same joints, axis Z, amplitude 0.5, diagonal pairs (left arm φ, right arm φ+π, left leg φ+π, right leg φ) |
+| Climber limbs | `travel`, cadence 8, `when: ["HoldingUnwalkable", "moving"]` | the same joints, axis Z, amplitude 0.5, diagonal pairs (left arm φ, right arm φ+π, left leg φ+π, right leg φ) |
 | Wheel | `planarTravel`, cadence = 1 / wheel radius, `when: ["moving"]` | swing, axis X at the hub, amplitude 1, `wave: linear` |
 | Rotor | `time`, cadence = radians per second, `when: always` | swing, axis Y at the mast, amplitude 1, `wave: linear` |
 | Fish tail | `time`, `when: ["Submerged"]` | swing, axis Y at the tail root |
@@ -150,7 +150,7 @@ pose; the solve bends it.
 "effectors": [
   { "name": "handLeft", "chain": ["upperArmLeft", "forearmLeft"], "tip": "handLeft",
     "target": { "kind": "surface", "direction": [0, 0, 1], "reach": 0.6, "standoff": 0.03 },
-    "when": ["Climbing"], "weight": 1.0 },
+    "when": ["HoldingUnwalkable"], "weight": 1.0 },
   { "name": "footLeft", "chain": ["thighLeft", "shinLeft"], "tip": "bootLeft",
     "target": { "kind": "surface", "direction": [0, -1, 0], "reach": 0.5, "standoff": 0.05 },
     "when": ["Grounded"], "plant": { "driver": "stride", "window": [0.0, 3.14159] } }

@@ -927,15 +927,18 @@ public sealed partial class WorldBody {
         left: point,
         right: m_up
     );
-    // One steering intent, dispatched per tick on whether this tick's SenseNearestInCone found a target: approach it
-    // when it did, otherwise roam the body's own home register. A program pairing this op with sensing (a stalking
-    // predator) takes both shapes across its lifetime; a program selecting this op alone always roams (SensorTarget
-    // never exists without SenseNearestInCone in the same program).
+    // One steering intent, dispatched per tick on whether this tick's SenseNearestInCone found a target. The roam
+    // shape runs UNCONDITIONALLY first — its oscillator (state.Phase/ActivityPhase) advances every tick regardless
+    // of which shape ends up steering, so losing a sensed target resumes roam from the phase it would already be at
+    // rather than one frozen at the moment sensing began; the approach shape, when a target exists, then overwrites
+    // its computed intent outright. A program pairing this op with sensing (a stalking predator) takes both shapes
+    // across its lifetime; a program selecting this op alone always keeps the roam shape (SensorTarget never exists
+    // without SenseNearestInCone in the same program).
     private void ProduceSteeringIntent(ref BodyMotionScratch scratch) {
+        ProduceRoamIntent(scratch: ref scratch);
+
         if (scratch.SensorTarget.Exists) {
             ProduceApproachIntent(scratch: ref scratch);
-        } else {
-            ProduceRoamIntent(scratch: ref scratch);
         }
     }
     private void ProduceApproachIntent(ref BodyMotionScratch scratch) {

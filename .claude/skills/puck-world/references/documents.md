@@ -1306,10 +1306,10 @@ free-flight kit that owns its whole velocity channel directly) may author
 none. `Speed.Held` is a HELD (not edge-triggered) channel that scales the
 resolved planar speed while it reads held, default `null` (no held
 multiplier) — a shaping row's boost is this seam under that name, never a
-second channel; resolved to `FixedSpeed.HeldOrdinal` the same way
-`WanderFlavor.PressChannel` resolves its own ordinal, since a channel name
-needs the world's compiled channel table and a body's own compile step has
-none. `MoveFrame` (`MotionMoveFrame.Heading` / `.World` default) and
+second channel; resolved to `FixedSpeed.HeldOrdinal` the same way a producer's
+`BodyProducerParameter.Press` channel argument resolves its own ordinal
+(`CompiledBodyProducer.Channel`), since a channel name needs the world's
+compiled channel table and a body's own compile step has none. `MoveFrame` (`MotionMoveFrame.Heading` / `.World` default) and
 `FacingSnap` — `Heading` is tank controls; `World` (every kit that never
 sets this field) treats `MoveAdvance`/`MoveStrafe`
 as ALREADY-WORLD-FRAME axes (the seat's client resolves its camera yaw into
@@ -1545,8 +1545,8 @@ three channel names. Surface holds are not authored here.
 **Body facts on the wire (`BodyFacts`, `Puck.Physics.Motion`).** The engine
 publishes each body's per-tick fact set on `EntitySnapshot.Facts` — one bit
 per body-state `ActionFact` (`grounded`, `airborne`, `rising`, `falling`,
-`submerged`, `atsurface`, `climbing` — holding a surface row whose face is
-outside the world's own walkable cone — `flying` — holding a free row with
+`submerged`, `atsurface`, `holdingunwalkable` — holding a surface row whose face is
+outside the world's own walkable cone — `unsupported` — holding a free row with
 lift — and `resting`, written only by the rigid solver once a rigid body's
 linear and angular velocity latch to zero; `AffectedBy` has no bit, being a relationship rather than a state). The mask is derived through the SAME
 predicate the kit's action gates read, so the snapshot, the gates, and the
@@ -1562,7 +1562,7 @@ entity index). A producer's inward pull steers against that home rather than the
 so a population spread over several placements keeps to its own ground
 instead of congregating; a teleport moves the body, never its home. Facts are
 NOT mutually exclusive: a body can be
-grounded and rising in one tick, and a body on a wall reads `airborne|climbing`
+grounded and rising in one tick, and a body on a wall reads `airborne|holdingunwalkable`
 because contact resolution keeps running under every hold.
 
 `views.seatRig` is a `WorldCameraProgram` — an ordered op list, not a kind

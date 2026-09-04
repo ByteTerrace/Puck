@@ -15,7 +15,7 @@
       { "verb": "world.state.hash", "occurrence": 1, "outcome": "accepted" }
     ],
     "expect": [
-      { "type": "line", "name": "tick-720-hash-pinned", "stream": "stdout", "match": "contains", "text": "[world.state.hash: tick=720 hash=f6d42cfafb037238]", "present": true },
+      { "type": "line", "name": "tick-720-hash-pinned", "stream": "stdout", "match": "contains", "text": "[world.state.hash: tick=720 hash=6a04e708456678a0]", "present": true },
       { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
     ]
   },
@@ -28,7 +28,7 @@
     ],
     "expect": [
       { "type": "line", "name": "tick-720-hash-diverges-on-buoyancy", "stream": "stdout", "match": "contains", "text": "[world.state.hash: tick=720 hash=", "present": true },
-      { "type": "line", "name": "not-the-positive-legs-hash", "stream": "stdout", "match": "contains", "text": "hash=f6d42cfafb037238", "present": false },
+      { "type": "line", "name": "not-the-positive-legs-hash", "stream": "stdout", "match": "contains", "text": "hash=6a04e708456678a0", "present": false },
       { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
     ]
   }

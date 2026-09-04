@@ -642,11 +642,18 @@ public sealed class CompiledBodyProducer {
                 requiredScalars.UnionWith(other: BodyProducerParameterVocabulary.RequiredScalars(op: op));
             }
         }
+        var senses = program.Contains(operation: BodyMotionOp.SenseNearestInCone);
+
+        // The approach shape ProduceSteeringIntent runs is reachable only on a tick this program's own sensing
+        // found a target — never on a bare roam producer, which can only ever run the roam shape.
+        if (senses && program.Contains(operation: BodyMotionOp.ProduceSteeringIntent)) {
+            requiredScalars.UnionWith(other: BodyProducerParameterVocabulary.SteeringApproachScalars);
+        }
         // SenseTarget's own release-radius hysteresis (WorldBody.Step.cs) reads this scalar only for a NON-flock
         // producer sensing a Sensed source — a flock's own bounded-perception cadence retains observations by a
         // different mechanism and never reads it.
         if (
-            program.Contains(operation: BodyMotionOp.SenseNearestInCone) &&
+            senses &&
             (source is BodyTargetSource.Sensed) &&
             (parameters.Flock is null)
         ) {

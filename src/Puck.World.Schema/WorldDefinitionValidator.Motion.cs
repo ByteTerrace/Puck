@@ -684,9 +684,9 @@ public static partial class WorldDefinitionValidator {
             var senses = program.Contains(operation: BodyMotionOp.SenseNearestInCone);
 
             // Each selected op's own declared read set, unioned — the single table BodyProducerParameterVocabulary
-            // owns (never a per-caller literal list). ProduceSteeringIntent runs its roam shape whenever this tick
-            // senses no target, so a program pairing it with senses (a stalking predator) still requires the full
-            // set: both shapes must have sane arguments ready.
+            // owns (never a per-caller literal list). ProduceSteeringIntent's roam shape runs every tick regardless
+            // of sensing, so its scalars are always required; its approach shape is reachable only when the program
+            // also senses, so that scalar set is required exactly then — never on a bare roam producer.
             var required = new HashSet<string>(comparer: StringComparer.Ordinal);
 
             foreach (var op in Enum.GetValues<BodyMotionOp>()) {
@@ -697,11 +697,16 @@ public static partial class WorldDefinitionValidator {
                     required.Add(item: BodyProducerParameterVocabulary.Name(parameter: parameter));
                 }
             }
+            if (senses && program.Contains(operation: BodyMotionOp.ProduceSteeringIntent)) {
+                foreach (var parameter in BodyProducerParameterVocabulary.SteeringApproachScalars) {
+                    required.Add(item: BodyProducerParameterVocabulary.Name(parameter: parameter));
+                }
+            }
             // SenseTarget's own release-radius hysteresis (WorldBody.Step.cs) reads this scalar only for a
             // NON-flock producer sensing a Sensed source — a flock's own bounded-perception cadence retains
             // observations by a different mechanism and never reads it.
             if (senses && (target is BodyTargetSource.Sensed) && (parameters.Flock is null)) {
-                required.Add(item: "releaseRadius");
+                required.Add(item: BodyProducerParameterVocabulary.Name(parameter: BodyProducerParameter.ReleaseRadius));
             }
 
             foreach (var scalar in required) {
@@ -724,7 +729,7 @@ public static partial class WorldDefinitionValidator {
                 if (
                     !string.Equals(
                     a: argument,
-                    b: "press",
+                    b: BodyProducerParameterVocabulary.Name(parameter: BodyProducerParameter.Press),
                     comparisonType: StringComparison.Ordinal
                 ) ||
                     !program.Contains(operation: BodyMotionOp.ProduceSteeringIntent)
@@ -815,8 +820,9 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{itemPath} radii must satisfy releaseRadius > the target source range >= standoffRadius.");
                 }
             }
-            // The approach shape is reachable only once a target can be sensed — a bare roam producer still
-            // declares standoffRadius/approach/orbit (the schema cost of the shared op) but never evaluates them.
+            // The approach shape is reachable only once a target can be sensed — the presence check above already
+            // requires standoffRadius/approach/orbit exactly when senses holds, so a bare roam producer authors
+            // none of them; these value checks run under the same condition.
             if (senses && program.Contains(operation: BodyMotionOp.ProduceSteeringIntent)) {
                 RequirePositiveScalar(
                     errors: errors,

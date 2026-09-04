@@ -287,23 +287,39 @@ body reads live, and refuses by name for an identity not owned here). An identit
 before the reshape still carries its seeded 0.01 rows and reads as an explicit 0.01 claim — cure it
 with `identity.motion`, or delete the state dir.
 
-**Wander and attend collapsed into one steering primitive.** They were never two behaviours: both were
-an oscillator weave plus a radial restoring term toward a reference, yaw-clamped, differing only in
-whether the reference was the body's own home register or a sensed target — the garden's own spider
-`stalk` program already ran both opcodes back to back as a fallback chain (approach when a target is
-sensed, roam home otherwise), which was the tell. `ProduceSteeringIntent` is that one op now: with no
-sensed target this tick it roams against home, with one it approaches — a single mechanism two
-authored parameterisations share, at the cost every producer selecting it now declares the full
-scalar set regardless of which shape a given tick takes. The altitude term generalized alongside it,
-from a literal world-Y read to a distance along the body's own resolved up axis (`Dot(position, up)`,
-which reduces to `.Y` exactly under the ordinary `UnitY` up every world still runs under — the garden's
-600-tick population state hash is unchanged by either fold). Producer scalars/channels compile to
+**Wander and attend collapsed into one steering primitive.** They were never two opcodes the world needed —
+`ProduceSteeringIntent` dispatches, every tick, on whether that tick's `SenseNearestInCone` found a target: the
+approach shape (a standoff/approach/orbit steer plus its own altitude term) when it did, the roam shape (an
+oscillator weave plus a radial restoring term toward the body's own home register, yaw-rate clamped) otherwise —
+the garden's own spider `stalk` program already ran both opcodes back to back as this exact fallback chain, which
+was the tell. The roam shape's oscillator runs every tick regardless of which shape is governing that tick's
+Intent — the same way the old two-opcode program ran wander every tick and let attend overwrite its output only
+when a target existed — so a body that loses its sensed target resumes roaming from the phase the oscillator would
+already be at, not one frozen for the sensed window's length; `SteeringIntentLawTests` pins this with a synthetic
+hunter/prey pair whose approach-shape Intent is forced to zero, isolating the oscillator's own state from
+everything else the trajectory could reveal. The approach-only scalars (`standoffRadius`/`approach`/`orbit`) are
+required exactly when a producer's program also selects `SenseNearestInCone` — never on a bare roam producer,
+which can never reach that shape. The altitude term generalized alongside it, from a literal world-Y read
+to a distance along the body's own resolved up axis (`Dot(position, up)`, which reduces to `.Y` exactly under the
+ordinary `UnitY` up every world still runs under). Producer scalars/channels compile to
 `Puck.Physics.Motion.BodyProducerParameter` ordinals at kit-compile time now, the same resolved-
 outside/consumed-as-ordinal seam `FixedSpeed.HeldOrdinal` uses for a channel name — a missing or
 unknown authored key refuses by name at boot rather than reading a runtime dictionary miss on first
 tick. The published facts `Climbing`/`Flying` are `HoldingUnwalkable`/`Unsupported` — mechanism names
 for what they already measure (a held face outside the walkable cone; a free hold with lift), not the
 creature-AI nouns that named them originally.
+
+**The garden's own `spider`/`hound` state rows named the wrong bodies.** Both keyed the population
+indices of an earlier layout (spiders 54-57, hounds 58-63) — rigid billiard balls under today's
+layout — so the `stalk-visitor` rule's designation and every `hound`-scoped social rule
+(`witness-claim`/`rumor`/`first-witness`/`choose-companion`) silently governed inert bodies instead of
+the real creatures (spiders 86-89, hounds 90-95); no spider ever sensed a quarry in a default boot, and
+the social rules never observed a live hound. Corrected to the real indices in the same change: the
+`stalk-visitor` gate still never opens for the default seat (it spawns outside the pond's proximity
+range), so the garden's population state hash is unchanged by that half of the fix alone, but the hound
+rules now run against live bodies every tick, which moves the 300/600-tick hash
+(`e04606d46ac2631e`/`2fc248117e349d2a` before, `e07cc3b82127cdf1`/`26a3266ce57c98d8` after) — the
+corrected mapping, not a regression.
 
 **The foundation is complete and overshot.** One flat motion row containing its `holds` and `shaping` rows; the portal
 lane end to end — step into a frame and the whole party transfers, all-or-nothing across capacity

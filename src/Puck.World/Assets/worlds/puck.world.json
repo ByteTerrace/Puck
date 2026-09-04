@@ -791,15 +791,12 @@
               "altitudeBase": 0.0,
               "altitudeGain": 0.5,
               "altitudeRange": 0.0,
-              "approach": 0.0,
               "forward": 1.0,
               "inwardGain": 3.0,
-              "orbit": 0.0,
               "pitchWave": 0.0,
               "pressThreshold": 0.0,
               "rollTurn": 0.0,
               "softRadius": 2.5,
-              "standoffRadius": 1.0,
               "strafeWave": 0.0,
               "turnScale": 3.0,
               "turnWave": 0.0,
@@ -905,15 +902,12 @@
               "altitudeBase": 0.0,
               "altitudeGain": 0.6,
               "altitudeRange": 0.0,
-              "approach": 0.0,
               "forward": 1.0,
               "inwardGain": 3.0,
-              "orbit": 0.0,
               "pitchWave": 0.0,
               "pressThreshold": 0.0,
               "rollTurn": 0.0,
               "softRadius": 2.5,
-              "standoffRadius": 1.0,
               "strafeWave": 0.0,
               "turnScale": 3.0,
               "turnWave": 0.0,
@@ -1050,15 +1044,12 @@
               "altitudeBase": 0.0,
               "altitudeGain": 0.5,
               "altitudeRange": 0.0,
-              "approach": 0.0,
               "forward": 1.0,
               "inwardGain": 3.0,
-              "orbit": 0.0,
               "pitchWave": 0.0,
               "pressThreshold": 0.0,
               "rollTurn": 0.0,
               "softRadius": 2.5,
-              "standoffRadius": 1.0,
               "strafeWave": 0.0,
               "turnScale": 3.0,
               "turnWave": 0.0,
@@ -1150,15 +1141,12 @@
               "altitudeBase": 0.0,
               "altitudeGain": 0.5,
               "altitudeRange": 0.0,
-              "approach": 0.0,
               "forward": 0.6,
               "inwardGain": 0.8,
-              "orbit": 0.0,
               "pitchWave": 0.0,
               "pressThreshold": 0.0,
               "rollTurn": 0.0,
               "softRadius": 5.0,
-              "standoffRadius": 1.0,
               "strafeWave": 0.0,
               "turnScale": 3.0,
               "turnWave": 0.0,
@@ -15989,27 +15977,27 @@
         "capacity": 64,
         "cells": [
           {
-            "key": "58",
+            "key": "90",
             "value": 1
           },
           {
-            "key": "59",
+            "key": "91",
             "value": 1
           },
           {
-            "key": "60",
+            "key": "92",
             "value": 1
           },
           {
-            "key": "61",
+            "key": "93",
             "value": 1
           },
           {
-            "key": "62",
+            "key": "94",
             "value": 1
           },
           {
-            "key": "63",
+            "key": "95",
             "value": 1
           }
         ],
@@ -16020,19 +16008,19 @@
         "capacity": 64,
         "cells": [
           {
-            "key": "54",
+            "key": "86",
             "value": 1
           },
           {
-            "key": "55",
+            "key": "87",
             "value": 1
           },
           {
-            "key": "56",
+            "key": "88",
             "value": 1
           },
           {
-            "key": "57",
+            "key": "89",
             "value": 1
           }
         ],

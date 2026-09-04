@@ -624,10 +624,7 @@
               "rollTurn": 0.32,
               "pressThreshold": 0,
               "altitudeBase": 4.5,
-              "altitudeRange": 3,
-              "standoffRadius": 1,
-              "approach": 0,
-              "orbit": 0
+              "altitudeRange": 3
             },
             "channels": {}
           }
@@ -709,10 +706,7 @@
               "rollTurn": 0.18,
               "pressThreshold": 0,
               "altitudeBase": 0.8,
-              "altitudeRange": 1.2,
-              "standoffRadius": 1,
-              "approach": 0,
-              "orbit": 0
+              "altitudeRange": 1.2
             },
             "channels": {}
           }
@@ -831,10 +825,7 @@
               "rollTurn": 0,
               "pressThreshold": 0.45,
               "altitudeBase": 0,
-              "altitudeRange": 0,
-              "standoffRadius": 1,
-              "approach": 0,
-              "orbit": 0
+              "altitudeRange": 0
             },
             "channels": {
               "press": "jump"
@@ -1024,10 +1015,7 @@
               "rollTurn": 0,
               "pressThreshold": 0,
               "altitudeBase": 0,
-              "altitudeRange": 0,
-              "standoffRadius": 1,
-              "approach": 0,
-              "orbit": 0
+              "altitudeRange": 0
             },
             "channels": {}
           },
@@ -1246,10 +1234,7 @@
               "rollTurn": 0,
               "pressThreshold": 0,
               "altitudeBase": 0,
-              "altitudeRange": 0,
-              "standoffRadius": 1,
-              "approach": 0,
-              "orbit": 0
+              "altitudeRange": 0
             },
             "channels": {}
           }

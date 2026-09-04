@@ -265,4 +265,193 @@ public sealed class SteeringIntentLawTests {
             actual: producedMoveUp
         );
     }
+
+    // --- The roam shape's oscillator runs every tick, including while the approach shape governs. ---
+
+    private const string SensingProducerName = "stalk";
+
+    // Every roam contribution but the oscillator weave zeroed (inwardGain 0 so the restoring term never reads
+    // position/yaw; forward/strafeWave/turnWave/upWave/pitchWave/rollTurn/altitudeGain 0 so nothing but the
+    // phase-driven Turn write is observable), and a softRadius large enough the restoring branch never opens even
+    // if position drifted. The approach shape's own scalars are zeroed too (standoffRadius irrelevant since
+    // approach/orbit/altitudeGain are all 0), so a governed tick writes an all-zero Intent — invisible in the
+    // trajectory — while the roam shape's phase state keeps advancing underneath it.
+    private static Dictionary<string, float> IsolatedPhaseScalars() => new() {
+        ["forward"] = 0f,
+        ["softRadius"] = 1_000_000f,
+        ["weaveAmplitude"] = 0.7f,
+        ["inwardGain"] = 0f,
+        ["turnScale"] = 2f,
+        ["weaveFrequencyBase"] = 0.35f,
+        ["weaveFrequencyRange"] = 0f,
+        ["altitudeGain"] = 0f,
+        ["activityRateBase"] = 0f,
+        ["activityRateRange"] = 0f,
+        ["strafeWave"] = 0f,
+        ["turnWave"] = 0f,
+        ["upWave"] = 0f,
+        ["pitchWave"] = 0f,
+        ["rollTurn"] = 0f,
+        ["pressThreshold"] = 0f,
+        ["altitudeBase"] = 0f,
+        ["altitudeRange"] = 0f,
+    };
+    private static Dictionary<string, float> IsolatedPhaseScalarsWithApproach() => new(collection: IsolatedPhaseScalars()) {
+        ["standoffRadius"] = 1f,
+        ["approach"] = 0f,
+        ["orbit"] = 0f,
+        // Sensed hysteresis: releaseRadius > the target source's own range >= standoffRadius (WorldDefinitionValidator.Motion.cs).
+        ["releaseRadius"] = 2000f,
+    };
+    // A bare roam producer — no sensing, so ProduceSteeringIntent's roam shape governs every tick and its Turn
+    // write is directly observable throughout.
+    private static WorldDefinition RoamOnlyIsolatedPhaseDocument() {
+        var document = Fixtures.BuildDocument();
+        var kit = document.Kits[0];
+
+        return document with {
+            KitRowsRaw = [kit with {
+                ProducersRaw = new Dictionary<string, BodyProgramParameters> {
+                    [ProducerName] = Fixtures.TravelerWanderParameters with { Scalars = IsolatedPhaseScalars() },
+                },
+            }],
+        };
+    }
+    // Senses any other active body within a generous cone/range, so a second body placed nearby governs the
+    // approach shape until it is moved out of range.
+    private static WorldDefinition SensingIsolatedPhaseDocument() {
+        var document = Fixtures.BuildDocument();
+        var kit = document.Kits[0];
+        var sensingProgram = new BodyMotionProgram(
+            Name: SensingProducerName,
+            Version: "puck.body-motion.v1",
+            Kind: BodyProgramKind.Producer,
+            Operations: [BodyMotionOp.SenseNearestInCone, BodyMotionOp.ProduceSteeringIntent],
+            Target: new BodyTargetSource.Sensed(Scope: BodyTargetScope.Bodies, Range: 1000f, HalfAngleDegrees: 180f, RequiresLineOfSight: false)
+        );
+
+        return document with {
+            BodyMotionProgramsRaw = [.. document.BodyMotionPrograms, sensingProgram],
+            // The ONLY producer this kit declares: SeedProducer (WorldPopulation.Step.cs) seeds a seat's oscillator
+            // from the first producer whose program selects ProduceSteeringIntent, so a second one (the base kit's
+            // own "wander") would seed WeaveFrequency from ITS scalars instead of this one's — a divergent phase
+            // that has nothing to do with the property under test.
+            KitRowsRaw = [kit with {
+                ProducersRaw = new Dictionary<string, BodyProgramParameters> {
+                    [SensingProducerName] = Fixtures.TravelerWanderParameters with { Scalars = IsolatedPhaseScalarsWithApproach() },
+                },
+            }],
+        };
+    }
+    private static WorldBody JoinSeat(WorldFixture fixture, int slot, float x, float z) {
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
+            Principal: WorldPrincipal.Seat(slot: slot),
+            Slot: slot,
+            IdentityName: null,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        )).Accepted);
+
+        var body = fixture.Server.Body(index: slot)!;
+
+        body.Pose(x: x, y: (float)(double)body.FixedPosition.Y, z: z, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+
+        return body;
+    }
+
+    [Fact]
+    public void TheRoamOscillatorAdvancesEveryTickRegardlessOfWhichShapeGoverns() {
+        const int sensedTicks = 37;
+        const int postLossTicks = 53;
+
+        // T2 — a pure roam producer never governs anything but the roam shape; its Turn write is a direct,
+        // continuous readout of sin(Phase) for the whole run. It shares slot 0's deterministic phase/weave seed
+        // with T3 and T4 below (WorldSequenceSampling.FixedAngle keyed only by slot index).
+        using var pureRoam = Fixtures.FreshServer(definition: RoamOnlyIsolatedPhaseDocument());
+        var pureRoamBody = JoinSeat(fixture: pureRoam, slot: 0, x: 0f, z: 0f);
+
+        pureRoamBody.SetIntentSource(source: IntentSource.Producer(name: ProducerName));
+
+        for (var tick = 0; (tick < sensedTicks); tick++) {
+            pureRoam.Step();
+        }
+
+        var pureRoamYawAtHandoff = pureRoamBody.FixedYaw;
+
+        for (var tick = 0; (tick < postLossTicks); tick++) {
+            pureRoam.Step();
+        }
+
+        var pureRoamYawAtEnd = pureRoamBody.FixedYaw;
+
+        // T4 — the alternative a phase FROZEN during sensing would predict: a fresh body roaming for exactly the
+        // post-loss tick count, starting from the SAME seeded phase T3 starts from (never having run through a
+        // sensed window at all).
+        using var freshRoam = Fixtures.FreshServer(definition: RoamOnlyIsolatedPhaseDocument());
+        var freshRoamBody = JoinSeat(fixture: freshRoam, slot: 0, x: 0f, z: 0f);
+
+        freshRoamBody.SetIntentSource(source: IntentSource.Producer(name: ProducerName));
+
+        for (var tick = 0; (tick < postLossTicks); tick++) {
+            freshRoam.Step();
+        }
+
+        var freshRoamYawAfterPostLossTicks = freshRoamBody.FixedYaw;
+
+        // T3 — the case under test: a sensed target governs the approach shape (a zeroed Intent — invisible in the
+        // trajectory) for sensedTicks, then is moved out of range so the roam shape resumes for postLossTicks.
+        using var stalk = Fixtures.FreshServer(definition: SensingIsolatedPhaseDocument());
+        var hunter = JoinSeat(fixture: stalk, slot: 0, x: 0f, z: 0f);
+        var prey = JoinSeat(fixture: stalk, slot: 1, x: 1f, z: 0f);
+
+        hunter.SetIntentSource(source: IntentSource.Producer(name: SensingProducerName));
+
+        for (var tick = 0; (tick < sensedTicks); tick++) {
+            stalk.Step();
+        }
+
+        // THE CONTROL: the approach shape's own Intent is all-zero (approach/orbit/altitudeGain 0), so the sensed
+        // window leaves the hunter's yaw exactly where it started — proving the sensed window is otherwise inert
+        // and any divergence below can only come from the (invisible) oscillator state.
+        Assert.Equal(
+            expected: FixedQ4816.Zero,
+            actual: hunter.FixedYaw
+        );
+
+        prey.Pose(x: 5000f, y: (float)(double)prey.FixedPosition.Y, z: 5000f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+
+        for (var tick = 0; (tick < postLossTicks); tick++) {
+            stalk.Step();
+        }
+
+        var stalkYawAtEnd = hunter.FixedYaw;
+        // The hunter's yaw is 0 at the handoff tick (the sensed-window control above), so its own post-loss delta
+        // is stalkYawAtEnd unmodified; the pure-roam control's Turn writes accumulate from tick 1, so its matching
+        // delta is measured from its own handoff reading.
+        var pureRoamPostLossDelta = (pureRoamYawAtEnd - pureRoamYawAtHandoff);
+
+        // THE FIX: with the oscillator advancing every tick regardless of dispatch, the hunter's post-loss roam
+        // resumes from the SAME phase the pure-roam control reached at the handoff tick, so the yaw ACCUMULATED
+        // over the identical postLossTicks window matches (the two bodies' absolute yaw differs, since the
+        // pure-roam control's Turn writes were live — and observable — during the sensed window too, while the
+        // hunter's were held at the approach shape's all-zero Intent; only the Turn accumulated AFTER the handoff
+        // isolates the oscillator's own state). A few ULP of Q16.16 tolerance: subtracting two independently
+        // rounded 90-tick and 37-tick accumulations is not bit-identical to a 53-tick accumulation from zero.
+        const double phaseContinuityToleranceRadians = 0.001;
+
+        Assert.True(
+            condition: (Math.Abs(value: ((double)pureRoamPostLossDelta - (double)stalkYawAtEnd)) < phaseContinuityToleranceRadians),
+            userMessage: $"the hunter's post-loss yaw delta ({(double)stalkYawAtEnd}) must match the pure-roam control's ({(double)pureRoamPostLossDelta}) within {phaseContinuityToleranceRadians} rad"
+        );
+        // THE DISCRIMINATING CONTROL: a phase frozen for the whole sensed window (the bug this law guards against)
+        // would instead reproduce the fresh-roam trajectory — proving the tolerance above is not so loose the
+        // assertion is vacuously true.
+        Assert.True(
+            condition: (Math.Abs(value: ((double)freshRoamYawAfterPostLossTicks - (double)stalkYawAtEnd)) > (phaseContinuityToleranceRadians * 10)),
+            userMessage: $"the hunter's post-loss yaw ({(double)stalkYawAtEnd}) must measurably diverge from the frozen-phase prediction ({(double)freshRoamYawAfterPostLossTicks})"
+        );
+        Assert.NotEqual(
+            expected: FixedQ4816.Zero,
+            actual: pureRoamYawAtHandoff
+        );
+    }
 }

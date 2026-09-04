@@ -107,6 +107,35 @@ public static class BodyFactVocabulary {
         array: s_rows,
         converter: static row => row.Fact
     );
+    // Indexed by (int)ActionFact — a dense byte enum — so the per-body per-tick publish loop (WorldBody.Facts)
+    // reads a bit per fact without scanning s_rows. Built once from it, so the wire order stays the single
+    // s_rows declaration.
+    private static readonly BodyFacts[] s_bitByFact = BuildBitByFact();
+    private static readonly string[] s_tokenByFact = BuildTokenByFact();
+
+    private static BodyFacts[] BuildBitByFact() {
+        var table = new BodyFacts[(Enum.GetValues<ActionFact>().Length)];
+
+        foreach (var row in s_rows) {
+            table[(int)row.Fact] = row.Bit;
+        }
+
+        return table;
+    }
+    private static string[] BuildTokenByFact() {
+        var table = new string[(Enum.GetValues<ActionFact>().Length)];
+
+        Array.Fill(
+            array: table,
+            value: "affectedby"
+        );
+
+        foreach (var row in s_rows) {
+            table[(int)row.Fact] = row.Token;
+        }
+
+        return table;
+    }
 
     /// <summary>The body-state facts carrying a <see cref="BodyFacts"/> bit, in bit order — the order every echo
     /// joins them in.</summary>
@@ -116,15 +145,7 @@ public static class BodyFactVocabulary {
     /// bit (<see cref="ActionFact.AffectedBy"/>).</summary>
     /// <param name="fact">The fact to map.</param>
     /// <returns>The bit.</returns>
-    public static BodyFacts Bit(ActionFact fact) {
-        foreach (var row in s_rows) {
-            if (row.Fact == fact) {
-                return row.Bit;
-            }
-        }
-
-        return BodyFacts.None;
-    }
+    public static BodyFacts Bit(ActionFact fact) => s_bitByFact[(int)fact];
     /// <summary>Formats a mask as lower-case, <c>|</c>-joined tokens in bit order, or <c>none</c> when empty — the
     /// read-back spelling <c>body.where</c> echoes.</summary>
     /// <param name="facts">The mask to spell.</param>
@@ -192,15 +213,7 @@ public static class BodyFactVocabulary {
     /// <summary>Returns a publishable fact's lower-case wire spelling.</summary>
     /// <param name="fact">The fact to spell.</param>
     /// <returns>The token.</returns>
-    public static string Token(ActionFact fact) {
-        foreach (var row in s_rows) {
-            if (row.Fact == fact) {
-                return row.Token;
-            }
-        }
-
-        return "affectedby";
-    }
+    public static string Token(ActionFact fact) => s_tokenByFact[(int)fact];
 }
 /// <summary>The entity an action effect addresses.</summary>
 [JsonConverter(typeof(StrictEnumConverter<ActionTarget>))]
