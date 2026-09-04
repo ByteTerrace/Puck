@@ -548,6 +548,28 @@
         "name": "bone-claim",
         "range": 0,
         "right": "bone"
+      },
+      {
+        "coOccurrence": "Region",
+        "effects": [
+          {
+            "$type": "setState",
+            "key": "$left",
+            "state": "scale",
+            "value": 0.15
+          },
+          {
+            "$type": "setState",
+            "key": "$left",
+            "state": "drinkMeInside",
+            "value": 1
+          }
+        ],
+        "left": "wren",
+        "mode": "Level",
+        "name": "drink-me-inside",
+        "range": 0,
+        "right": "drinkMe"
       }
     ]
   },
@@ -1492,7 +1514,8 @@
   },
   "properties": {
     "names": [
-      "hound"
+      "hound",
+      "wren"
     ]
   },
   "prototypes": [
@@ -7128,35 +7151,37 @@
           "$type": "setState",
           "key": "0",
           "state": "scale",
-          "value": 0.15
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "GreaterOrEqual",
-        "state": "$region:drinkMe",
-        "value": 1
-      },
-      "mode": "Edge",
-      "name": "drink-me-shrink"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "key": "0",
-          "state": "scale",
           "value": 1
         }
       ],
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$region:drinkMe",
+        "key": "0",
+        "state": "drinkMeInside",
         "value": 0
       },
       "mode": "Edge",
       "name": "drink-me-restore"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "drinkMeInside",
+          "value": 0
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "key": "0",
+        "state": "drinkMeInside",
+        "value": 1
+      },
+      "mode": "Level",
+      "name": "drink-me-inside-reset"
     }
   ],
   "schema": "puck.world.def.v1",
@@ -7962,6 +7987,30 @@
         ],
         "kind": "text",
         "name": "drinkMeColors"
+      },
+      {
+        "capacity": 1,
+        "cells": [
+          {
+            "key": "0",
+            "value": 1
+          }
+        ],
+        "kind": "int",
+        "name": "wren"
+      },
+      {
+        "capacity": 1,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          }
+        ],
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "drinkMeInside"
       }
     ]
   },

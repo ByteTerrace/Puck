@@ -360,9 +360,16 @@ geometric scale is a document-declared multiplier (`bodies.scaleRow`, a keyed `s
 own `min`/`max` is the world's declared scale envelope), read and written like any other state cell —
 never a bespoke "shrink" mechanic. Collider volumes, resolved move speed and turn rate, and hold
 probe/standoff/reach all scale with it on the server; the client reads the same live cell into the
-rendered rig. An ordinary world rule gated on a placement's `region` facet is what turns a specific
-spot into a trigger — the garden's `drinkMe` bottle and `tabletop` table are one authored instance of
-that primitive, not new engine surface of their own.
+rendered rig and the seat chase camera's orbit distance and look-at height, so a shrunk body stays
+framed rather than shrinking to a speck on screen. `WorldServer.RestoreCheckpoint` and every other door
+that mints a `WorldBody` (a detached-seat/peer restore, a silo's checkpoint boot) resync the live value
+from the row, the same catch-up every other admission door already gives a freshly minted body — a
+restored session's bodies never disagree with their own `scale` row cells. A `Region` INTERACTION bound
+to a per-body carrier property is what turns a specific spot into a trigger, scoped to the one body it
+affects — never the aggregate `$region:<placement>` occupant count, which fires for any body standing in
+the region regardless of who and cannot express "this body left while another still stands there"; the
+garden's `drinkMe` bottle and `tabletop` table are one authored instance of that primitive, not new
+engine surface of their own.
 
 1. **Frames, as the envelope ratification** — one document shape, not two landings. Order: root/single
    frame, sibling frames, body-parented frames only on demand. **The envelope needs two inputs beyond

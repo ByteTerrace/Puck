@@ -83,4 +83,82 @@ public sealed class BodyScaleLawTests {
 
         Assert.Equal(expected: FixedQ4816.One, actual: body.Scale);
     }
+
+    // RestoreCheckpoint rebuilds every WorldBody at the constructed default (WorldPopulationCheckpoint carries no
+    // Scale field of its own — bodies.scaleRow is document state, restored with the definition), so this proves the
+    // catch-up resync — not merely that the document round-trips through serialization.
+    [Fact]
+    public void ScaleRow_AdmittedCell_SurvivesCheckpointRestoreIntoBodyScale() {
+        var authored = FixedQ4816.FromDouble(value: 0.15);
+        var document = WithScaleRow(cellValue: authored);
+
+        using var fixture = Fixtures.FreshServer(definition: document);
+        JoinBody(fixture: fixture);
+        fixture.Step();
+
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(
+            checkpoint: out var checkpoint,
+            hostRow: EmptyHostRow(),
+            reason: out var refusal
+        ), userMessage: refusal);
+
+        var restoredDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint!.Server.DefinitionJson);
+        using var restoredMachines = new WorldMachineHost(engines: [], screens: restoredDefinition.Screens);
+        var (restoredServer, _) = WorldServer.FromCheckpoint(
+            checkpoint: checkpoint,
+            instanceIdentity: "boot",
+            machines: restoredMachines,
+            profiles: FreshProfiles(definition: restoredDefinition)
+        );
+
+        Assert.Equal(expected: authored, actual: restoredServer.Body(index: 0)!.Scale);
+    }
+
+    // Control for the case above: a body carrying no scaleRow cell restores at the unscaled default, so the prior
+    // assertion is discriminating a real resync rather than every restored body reading 0.15 regardless.
+    [Fact]
+    public void ScaleRow_AbsentCell_CheckpointRestoreLeavesBodyScaleAtOne() {
+        using var fixture = Fixtures.FreshServer();
+        JoinBody(fixture: fixture);
+        fixture.Step();
+
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(
+            checkpoint: out var checkpoint,
+            hostRow: EmptyHostRow(),
+            reason: out var refusal
+        ), userMessage: refusal);
+
+        var restoredDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint!.Server.DefinitionJson);
+        using var restoredMachines = new WorldMachineHost(engines: [], screens: restoredDefinition.Screens);
+        var (restoredServer, _) = WorldServer.FromCheckpoint(
+            checkpoint: checkpoint,
+            instanceIdentity: "boot",
+            machines: restoredMachines,
+            profiles: FreshProfiles(definition: restoredDefinition)
+        );
+
+        Assert.Equal(expected: FixedQ4816.One, actual: restoredServer.Body(index: 0)!.Scale);
+    }
+
+    private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
+        AnnouncedCrossingHolds: [],
+        AppliedTransferHighWater: null,
+        AppliedTransferIds: [],
+        ElapsedEngineTicks: 0,
+        ForwardedBodies: [],
+        FreshCounter: 0,
+        InDoubtTransfers: [],
+        IsPaused: false,
+        NextTransferId: 1,
+        PortalOccupancy: [],
+        Retained: false,
+        ScheduleAccumulatorTicks: 0,
+        SeededArrivals: []
+    );
+
+    private static WorldOwnedWorlds FreshProfiles(WorldDefinition definition) => new(
+        directory: Directory.CreateTempSubdirectory(prefix: "puck-body-scale-tests-").FullName,
+        machineId: Guid.NewGuid(),
+        template: definition
+    );
 }

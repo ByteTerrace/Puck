@@ -323,8 +323,12 @@ action state — including its live `Scale` multiplier (`WorldBody.Scale.cs`),
 body's cell; `WorldPopulation.SyncBodyScale` resyncs every active body's
 `Scale` wholesale from that row at the same `Install`/admission choke points
 `WorldGrants.SyncState` resyncs its own drive-gate index at (construction,
-every `Install`, every seat join/peer admission), so a reused population slot
-never inherits a previous occupant's value. `Scale` multiplies the kit's
+every `Install`, every seat join/peer admission, `RestoreCheckpoint` after
+`WorldPopulation.Restore` rebuilds every body at the constructed default, and
+a detached-seat/peer transfer restore), so a reused population slot — or a
+body a checkpoint restore or transfer just minted fresh — never inherits a
+previous occupant's value nor sits at the unscaled default the row itself
+disagrees with. `Scale` multiplies the kit's
 shared collider volumes about the body's own root (never mutated in place —
 a per-call scratch span, scaled only when `Scale != 1`), the resolved move
 speed and turn rate, and hold probe height/standoff/reach; the client reads

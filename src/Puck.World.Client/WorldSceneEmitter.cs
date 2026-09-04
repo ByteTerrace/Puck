@@ -459,21 +459,11 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
         return null;
     }
-    // A world authoring no bodies.scaleRow (the common case) reads 1 without ever parsing a state binding. Reads
-    // through the same state.<row>[.<key>] resolve a creation driver's own signal uses (WorldGaitDrivers), so this
-    // needs no wire of its own: the value is whatever the live definition's own scale row cell holds.
-    private float LiveBodyScale(WorldDefinition definition, int index) {
-        if (definition.Population.ScaleRow is not { } scaleRow) {
-            return 1f;
-        }
-
-        return (WorldGaitDrivers.TryReadStateNumber(
-            definition: definition,
-            reference: $"state.{scaleRow}.{index}",
-            tick: m_client.Tick,
-            value: out var value
-        ) ? value : 1f);
-    }
+    private float LiveBodyScale(WorldDefinition definition, int index) => WorldGaitDrivers.LiveBodyScale(
+        definition: definition,
+        index: index,
+        tick: m_client.Tick
+    );
     private bool TryPresentedAppearance(int index, out Vector3 bodyColor, out WorldLook look, out byte catalogRig) {
         if (m_client.IsActive(index: index)) {
             bodyColor = m_client.BodyColor(index: index);

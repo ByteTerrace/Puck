@@ -1075,13 +1075,22 @@ gait and planted paws; Wren's own hold list is `wall` (grip, `spend` against the
 homes sit away from the pit and the platform edge — a wander radius that reaches either walks the
 creature onto the safety net, which it then paces beneath the platform.
 Away from the debugRoom cluster, near the pond, a `drinkMe` bottle placement (colors from the
-`drinkMeColors` text row) carries a `region` a couple world rules (`drink-me-shrink`/`drink-me-restore`,
-gated on `$region:drinkMe`) read to write body 0's cell of the keyed `scale` state row
-(`bodies.scaleRow`, envelope `[0.05, 1]`) — the Alice primitive: `Server.WorldBody.Scale` scales
-collider volumes, move speed/turn rate, and hold probes/standoff/reach, and the client multiplies the
-same live cell into the rendered rig. A `tabletop` placement (a solid pedestal table, 1.2 m clearance
-under its top) sits beyond the bottle, and the `table` spawn point stands a body north of both, facing
-south. `body.where`'s `scale=` echo is the read-back.
+`drinkMeColors` text row) carries a `region`. The trigger is a `Region` INTERACTION
+(`drink-me-inside`, `left: "wren"` — a one-cell carrier row naming body 0, never the aggregate
+`$region:drinkMe` occupant count, which fires for ANY body standing in the region regardless of who —
+against `right: "drinkMe"`), Level mode, writing body 0's cell of the keyed `scale` state row
+(`bodies.scaleRow`, envelope `[0.05, 1]`) and a `drinkMeInside` flag cell every tick she stands inside.
+Two world rules complete the round trip: `drink-me-restore` (Edge, gated on `drinkMeInside == 0`)
+restores `scale` to 1, and `drink-me-inside-reset` (Level, gated on `drinkMeInside == 1`, ORDERED AFTER
+`drink-me-restore` in the rules array — restore must read the flag before reset clears it, the same
+same-tick read-your-writes ordering any rule chain rides) clears the flag so the next tick's interaction
+re-asserts it only while she is still actually inside; a body lingering in the region after she leaves
+never blocks the restore. `Server.WorldBody.Scale` scales collider volumes, move speed/turn rate, and
+hold probes/standoff/reach; the client multiplies the same live cell into the rendered rig AND the seat
+chase camera's orbit distance and look-at height (`Client.WorldFramePresenter.ResolveCamera`), so a
+shrunk body stays framed instead of shrinking to a speck on screen. A `tabletop` placement (a solid
+pedestal table, 1.2 m clearance under its top) sits beyond the bottle, and the `table` spawn point
+stands a body north of both, facing south. `body.where`'s `scale=` echo is the read-back.
 An explicit path or the shipped default that cannot be loaded refuses the boot by name.
 `puck.world.frozen.json` ships beside them: the frozen floating-island diorama, reference-only,
 reachable via `--world`, never extended, deleted on owner order — the worked examples this file cites

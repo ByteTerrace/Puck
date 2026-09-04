@@ -1511,6 +1511,11 @@ public sealed partial class WorldInstanceHost {
                     color: member.BodyColor
                 );
 
+                // The restored WorldBody instance postdates the last Install/construction-time resync — the same
+                // reason every other admission door in WorldServer.Admission.cs catches a freshly minted body up
+                // from bodies.scaleRow before it starts stepping at the constructed default (Scale == One).
+                source.Server.Population.SyncBodyScale(definition: source.Server.Definition);
+
                 // A rollback re-installs rows this server itself captured and revoked an instant earlier, so the
                 // restored principal provably holds none of them at this moment and cannot administer its own
                 // restoration. The server administers it, exactly as it administers an admission mint.
