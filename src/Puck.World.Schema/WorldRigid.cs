@@ -13,7 +13,8 @@ namespace Puck.World;
 /// authoring only the mass, never the density or the tensor, keeps the derived-limits rule: the SHAPE decides how mass
 /// distributes, the author decides only how much of it there is.</summary>
 /// <param name="Mass">The body's mass, in the same units <c>gravity.attractors</c> masses use. Must be strictly
-/// positive — a rigid body with no mass is not a rigid body, it is a decoration.</param>
+/// positive after fixed-point compilation and yield representable room-scale mass/inertia properties — a rigid body
+/// with no compiled mass is not a rigid body, it is a decoration.</param>
 /// <param name="Restitution">The coefficient of restitution against the static world and against another rigid body,
 /// in <c>[0, 1]</c>. Zero (the default) is a dead-stop collision; one is a lossless bounce.</param>
 /// <param name="Friction">The Coulomb friction coefficient at a contact point, against the static world and — as
@@ -58,14 +59,55 @@ public readonly record struct FixedWorldRigid(
     private const int InertiaFractionBitCount = 32;
 
     /// <summary>Compiles an authored <see cref="WorldRigid"/> facet against its kit's already-compiled collider.
-    /// Validation (<see cref="WorldDefinitionValidator"/>) has already refused a rigid kit with no collider, a
-    /// non-primitive collider, or an out-of-range authored value by the time this runs.</summary>
+    /// Validation (<see cref="WorldDefinitionValidator"/>) has already proved that the derived room-scale mass
+    /// properties are representable by the time this runs.</summary>
     /// <param name="rigid">The authored facet.</param>
     /// <param name="collider">The kit's own compiled collider — exactly one volume, a sphere, capsule, or box.</param>
-    /// <exception cref="InvalidOperationException">The derived mass properties are not representable at
-    /// <see cref="Scales"/> — practically unreachable for the authored range the validator admits, kept as a loud
-    /// failure rather than a silently wrong body.</exception>
+    /// <exception cref="InvalidOperationException">The caller bypassed document validation and the derived mass
+    /// properties are not representable at <see cref="Scales"/>.</exception>
     public static FixedWorldRigid Compile(WorldRigid rigid, FixedWorldCollider collider) {
+        if (!TryCompile(rigid: rigid, collider: collider, compiled: out var compiled, reason: out var reason)) {
+            throw new InvalidOperationException(message: reason);
+        }
+
+        return compiled;
+    }
+
+    /// <summary>Attempts the fixed-point mass-property derivation without throwing, so the document validator can
+    /// refuse values whose authored primitives or mass leave the engine's room-scale representation.</summary>
+    /// <param name="rigid">The authored facet.</param>
+    /// <param name="collider">The kit's one already-compiled primitive collider.</param>
+    /// <param name="compiled">The compiled facet on success; otherwise the default value.</param>
+    /// <param name="reason">The named representation failure; empty on success.</param>
+    /// <returns><see langword="true"/> exactly when every derived mass property is representable.</returns>
+    public static bool TryCompile(WorldRigid rigid, FixedWorldCollider collider, out FixedWorldRigid compiled, out string reason) {
+        compiled = default;
+
+        if (collider.Volumes is not { Length: 1 }) {
+            reason = "A rigid kit requires exactly one primitive collider volume.";
+            return false;
+        }
+
+        var fixedMaximum = (double)FixedQ4816.MaxValue;
+
+        if (
+            !float.IsFinite(f: rigid.Mass) ||
+            !float.IsFinite(f: rigid.Restitution) ||
+            !float.IsFinite(f: rigid.Friction) ||
+            !float.IsFinite(f: rigid.RollingFriction) ||
+            !float.IsFinite(f: rigid.LinearDamping) ||
+            !float.IsFinite(f: rigid.AngularDamping) ||
+            (Math.Abs(value: rigid.Mass) > fixedMaximum) ||
+            (Math.Abs(value: rigid.Restitution) > fixedMaximum) ||
+            (Math.Abs(value: rigid.Friction) > fixedMaximum) ||
+            (Math.Abs(value: rigid.RollingFriction) > fixedMaximum) ||
+            (Math.Abs(value: rigid.LinearDamping) > fixedMaximum) ||
+            (Math.Abs(value: rigid.AngularDamping) > fixedMaximum)
+        ) {
+            reason = "A rigid kit's authored coefficients leave the engine's fixed-point representation.";
+            return false;
+        }
+
         var volume = collider.Volumes[0];
 
         // FixedMassProperties' own volume kernels are internal to Puck.Maths, so density is instead solved
@@ -90,7 +132,8 @@ public readonly record struct FixedWorldRigid(
                     mass: out unitMass,
                     inertia: out var inertia
                 )) {
-                    throw new InvalidOperationException(message: "A rigid sphere's mass properties are not representable.");
+                    reason = "A rigid sphere's mass properties are not representable.";
+                    return false;
                 }
 
                 unitIxx = inertia;
@@ -116,7 +159,8 @@ public readonly record struct FixedWorldRigid(
                     axial: out var axial,
                     perpendicular: out var perpendicular
                 )) {
-                    throw new InvalidOperationException(message: "A rigid capsule's mass properties are not representable.");
+                    reason = "A rigid capsule's mass properties are not representable.";
+                    return false;
                 }
 
                 // The capsule collider's own axis is world/body Y (see FixedWorldCollider.Compile); the mass kernel
@@ -143,7 +187,8 @@ public readonly record struct FixedWorldRigid(
                     iyy: out unitIyy,
                     izz: out unitIzz
                 )) {
-                    throw new InvalidOperationException(message: "A rigid box's mass properties are not representable.");
+                    reason = "A rigid box's mass properties are not representable.";
+                    return false;
                 }
 
                 centerOffset = volume.Center;
@@ -151,13 +196,25 @@ public readonly record struct FixedWorldRigid(
                 break;
             }
             default:
-                throw new InvalidOperationException(message: $"A rigid kit's collider kind '{volume.Kind}' has no closed-form mass properties.");
+                reason = $"A rigid kit's collider kind '{volume.Kind}' has no closed-form mass properties.";
+                return false;
         }
 
         // targetMass/unitMass at MassFractionBitCount, then each unit-density inertia component scaled by that
         // ratio — the same result density = targetMass/unitMass fed back into TryXxxBody would produce, since every
         // formula above is linear in density.
-        var targetMassRaw = (FixedQ4816.FromDouble(value: rigid.Mass).Value << (MassFractionBitCount - FixedQ4816.FractionBitCount));
+        var targetMass = FixedQ4816.FromDouble(value: rigid.Mass);
+        const int massScaleShift = (MassFractionBitCount - FixedQ4816.FractionBitCount);
+
+        if (
+            (targetMass <= FixedQ4816.Zero) ||
+            (targetMass.Value > (long.MaxValue >> massScaleShift))
+        ) {
+            reason = "A rigid kit's authored mass is not representable at the engine's mass scale.";
+            return false;
+        }
+
+        var targetMassRaw = (targetMass.Value << massScaleShift);
 
         if (
             !FusedArithmetic.TryScaledReciprocal(
@@ -199,7 +256,8 @@ public readonly record struct FixedWorldRigid(
             result: out var izz
         )
         ) {
-            throw new InvalidOperationException(message: "A rigid kit's mass/inertia scaling is not representable.");
+            reason = "A rigid kit's mass/inertia scaling is not representable.";
+            return false;
         }
 
         var mass = targetMassRaw;
@@ -228,11 +286,12 @@ public readonly record struct FixedWorldRigid(
             invYZ: out _
         )
         ) {
-            throw new InvalidOperationException(message: "A rigid kit's inverse mass/inertia is not representable at the engine's room-scale placement.");
+            reason = "A rigid kit's inverse mass/inertia is not representable at the engine's room-scale placement.";
+            return false;
         }
 
-        return new FixedWorldRigid(
-            Mass: FixedQ4816.FromDouble(value: rigid.Mass),
+        compiled = new FixedWorldRigid(
+            Mass: targetMass,
             InverseMassRaw: inverseMass,
             InverseInertiaXX: invXX,
             InverseInertiaYY: invYY,
@@ -245,5 +304,7 @@ public readonly record struct FixedWorldRigid(
             CenterOffset: centerOffset,
             BoundingRadius: boundingRadius
         );
+        reason = "";
+        return true;
     }
 }

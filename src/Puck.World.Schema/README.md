@@ -1746,21 +1746,27 @@ simulation rate). A rigid kit REQUIRES `collider` (sphere, capsule, or box — n
 `bodyContact: solid` (a rigid body that never depenetrates is inert). Mass and
 inertia derive from the collider's own shape and the authored mass through
 `Puck.Maths.FixedMassProperties` — density and the inertia tensor are never
-authored directly, matching the engine's derived-limits convention. See the
+authored directly, matching the engine's derived-limits convention. The
+validator also proves the authored coefficients and the collider-derived
+room-scale mass/inertia fit the engine's fixed-point placements; values that
+would quantize to zero, saturate, or overflow are refused before world boot.
+See the
 [server reference](../Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)
 for integration, contact, and checkpoint/hash coverage.
 
 A kit's optional `carry` facet (`WorldCarry.cs`: `offset`, `massEquivalent`,
 `maxCarryFraction` default 1, `maxReach` default 1.5) is a distinct facet
 from `rigid` — presence lets a body pick up another one via
-`body.carry`/`body.release`. `offset` is the carry point in the carrier's own
-body-local axes; `massEquivalent` stands in for a locomotion kit's own
+`body.carry`/`body.release`. `offset` is the full-scale carry point in the
+carrier's own body-local axes and scales with the carrier's live `Scale`;
+`massEquivalent` stands in for a locomotion kit's own
 inertial mass, which `WorldKit.Mass` (gravitational) does not carry;
 `maxCarryFraction` scales `massEquivalent` into the carry-mass ceiling
 `WorldBody.TryBeginCarry` compares a candidate's own live-scaled `RigidMass`
 against; `maxReach` bounds the carrier-to-target distance the same call
-admits. All four must be finite; `massEquivalent`/`maxReach` strictly
-positive, `maxCarryFraction` non-negative. See the
+admits. All four must fit the engine's fixed-point representation (including
+the derived mass product); `massEquivalent`/`maxReach` are strictly positive
+after fixed-point compilation, and `maxCarryFraction` is non-negative. See the
 [server reference](../Puck.World.Server/README.md#carry-as-attachment-worldbodycarrycs-worldpopulationcarrycs)
 for the attachment mechanics.
 

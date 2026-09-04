@@ -284,7 +284,34 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.{name} must be finite and non-negative.");
             }
         }
+
+        if (
+            ColliderCanDeriveRigidMass(collider: collider) &&
+            (FixedWorldCollider.Compile(collider: collider, creations: []) is { } fixedCollider) &&
+            !FixedWorldRigid.TryCompile(
+                rigid: rigid,
+                collider: fixedCollider,
+                compiled: out _,
+                reason: out var reason
+            )
+        ) {
+            errors.Add(item: $"{path} cannot compile deterministic mass properties: {reason}");
+        }
     }
+    private static bool ColliderCanDeriveRigidMass(WorldCollider? collider) => (collider switch {
+        WorldCollider.Sphere sphere => float.IsFinite(f: sphere.Radius) && (sphere.Radius > 0f),
+        WorldCollider.Capsule capsule => float.IsFinite(f: capsule.Radius) &&
+            (capsule.Radius > 0f) &&
+            IsFinite(value: capsule.Endpoint) &&
+            (capsule.Endpoint.LengthSquared() > 0f),
+        WorldCollider.Box box => IsFinite(value: box.HalfExtents) &&
+            (box.HalfExtents.X > 0f) &&
+            (box.HalfExtents.Y > 0f) &&
+            (box.HalfExtents.Z > 0f) &&
+            float.IsFinite(f: box.Rotation.LengthSquared()) &&
+            (box.Rotation.LengthSquared() > 0f),
+        _ => false,
+    });
     private static void ValidateCarry(WorldCarry? carry, string path, List<string> errors) {
         if (carry is null) {
             return;
@@ -312,6 +339,10 @@ public static partial class WorldDefinitionValidator {
             name: $"{path}.maxReach",
             errors: errors
         );
+
+        if (!FixedWorldCarry.TryCompile(carry: carry, compiled: out _, reason: out var reason)) {
+            errors.Add(item: $"{path} cannot compile deterministically: {reason}");
+        }
     }
     private static void ValidateCollider(WorldCollider? collider, IReadOnlyList<WorldPrototype> creations, string path, List<string> errors) {
         if (collider is null) {
