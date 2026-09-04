@@ -27,6 +27,15 @@ public enum WorldBoardQueryKind : byte {
     CellOf,
     /// <summary>The cell reached by an arbitrary (dx, dz) grid step from the key cell, or -1.</summary>
     Offset,
+    /// <summary>Whether the key cell is attacked: walking each of a short authored direction list from the key
+    /// cell, the first occupied cell in at least one of them carries a value within an inclusive range. A ray that
+    /// hits an occupied cell outside the range is blocked (stops there, counts as a miss) exactly like
+    /// <see cref="RayCell"/> — this is <see cref="RayCell"/>'s single-direction blocker test, unioned over the
+    /// authored directions and filtered to a value range, so a slider's reach at one square is one query instead of
+    /// one rule per direction. It does not by itself know a piece's movement shape (the caller supplies the
+    /// direction list and the range), and it says nothing about non-sliding attackers (king/knight/pawn) — those
+    /// stay <see cref="Neighbour"/>/<see cref="Offset"/> composition, cheap enough not to need a primitive.</summary>
+    Attacks,
 }
 
 /// <summary>A bounded board query with all structural arguments compiled once.</summary>
@@ -41,10 +50,12 @@ public enum WorldBoardQueryKind : byte {
 /// <param name="MaxVisits">The greatest settled nodes in one search.</param>
 /// <param name="Dx">The signed +X grid step for <see cref="WorldBoardQueryKind.Offset"/>.</param>
 /// <param name="Dz">The signed +Z grid step for <see cref="WorldBoardQueryKind.Offset"/>.</param>
-/// <param name="Upper">The inclusive upper bound of a <see cref="WorldBoardQueryKind.Mask"/> range; <paramref name="Value"/> is its lower bound.</param>
+/// <param name="Upper">The inclusive upper bound of a <see cref="WorldBoardQueryKind.Mask"/> or
+/// <see cref="WorldBoardQueryKind.Attacks"/> range; <paramref name="Value"/> is its lower bound.</param>
+/// <param name="Directions">The 1..4 direction ordinals an <see cref="WorldBoardQueryKind.Attacks"/> query walks.</param>
 public sealed record CompiledWorldBoardQuery(CompiledWorldTopology Topology, WorldBoardQueryKind Kind,
     int Direction = 0, int Length = 0, long Value = 0, bool Exact = false, int Target = 0, long MaxCost = 0, int MaxVisits = 0,
-    int Dx = 0, int Dz = 0, long Upper = 0);
+    int Dx = 0, int Dz = 0, long Upper = 0, IReadOnlyList<int>? Directions = null);
 
 /// <summary>The most cells a board may hold for its occupancy to read as one 64-bit mask.</summary>
 public static class WorldBoardMask {
@@ -75,6 +86,7 @@ public static partial class WorldRuleCompiler {
             "canonicalMask" => WorldBoardQueryKind.CanonicalMask,
             "cellOf" => WorldBoardQueryKind.CellOf,
             "offset" => WorldBoardQueryKind.Offset,
+            "attacks" => WorldBoardQueryKind.Attacks,
             _ => throw Invalid($"unknown board operation '{tokens[1]}'"),
         };
         if (kind is WorldBoardQueryKind.Mask or WorldBoardQueryKind.Image or WorldBoardQueryKind.CanonicalMask && topology.CellCount > WorldBoardMask.MaxCells) {
@@ -132,6 +144,25 @@ public static partial class WorldRuleCompiler {
                 throw Invalid("pathCost requires <targetCell>:<maxCost>:<maxVisits> on an integer terrain row");
             }
             query = query with { Target = target, MaxCost = cost, MaxVisits = visits };
+        } else if (kind == WorldBoardQueryKind.Attacks) {
+            if (tokens.Length != 6 || row.Kind is not (CellKind.Int or CellKind.Bool) ||
+                !long.TryParse(tokens[3], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var attackLower) ||
+                !long.TryParse(tokens[4], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var attackUpper) || attackLower > attackUpper) {
+                throw Invalid("attacks requires <min>:<max> integer bounds, min <= max, on an integer or boolean board row");
+            }
+            var directionNames = tokens[5].Split(',');
+            if (directionNames.Length is < 1 or > 4) {
+                throw Invalid("attacks requires 1..4 comma-separated directions");
+            }
+            var directions = new int[directionNames.Length];
+            for (var index = 0; index < directionNames.Length; index++) {
+                var directionOrdinal = topology.Direction(directionNames[index]);
+                if (directionOrdinal < 0) {
+                    throw Invalid($"'{directionNames[index]}' is not a direction valid for its topology");
+                }
+                directions[index] = directionOrdinal;
+            }
+            query = query with { Value = attackLower, Upper = attackUpper, Directions = directions };
         } else if (kind == WorldBoardQueryKind.Offset) {
             if (tokens.Length != 5 || !int.TryParse(tokens[3], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var dx) ||
                 !int.TryParse(tokens[4], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var dz)) {

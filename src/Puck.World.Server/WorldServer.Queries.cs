@@ -203,6 +203,23 @@ public sealed partial class WorldServer {
         )
         );
     }
+    // $upright: — a body's local +Y rotated by its live orientation, dotted against the up axis its gravity
+    // opposes. Absent bodies read Puck.Maths.FixedQ4816.One (perfectly upright) — never "knocked over" for a body
+    // that does not exist.
+    private FixedQ4816 ReadBodyUpright(CompiledBodyRef bodyRef, ulong tick) {
+        var index = ResolveBodyRef(
+            bodyRef: bodyRef,
+            tick: tick
+        );
+
+        return ((Body(index: index) is { } body)
+            ? FixedVector3.Dot(
+                left: body.FixedOrientation.Rotate(vector: s_localUp),
+                right: body.FixedUp
+            )
+            : FixedQ4816.One
+        );
+    }
     // $parked: — the remaining reconnect-grace ticks for ONE named body, resolved through the same ResolveBodyRef
     // walk $distance:/$los: use for each of their two body references. THREE REGIMES, deliberately distinct:
     // ABSENT (a reference resolving to no live body, or an unparked one) reads as 0 through
@@ -429,6 +446,10 @@ public sealed partial class WorldServer {
     )
         ? 1
         : 0), kind: CellKind.Bool),
+        WorldRuleFactKind.Upright => Finite(value: ReadBodyUpright(
+        bodyRef: operand.BodyA!.Value,
+        tick: tick
+    )),
         WorldRuleFactKind.Navigation => Finite(
             value: m_population.NavigationFact(
                 index: ResolveBodyRef(bodyRef: operand.BodyA!.Value, tick: tick),

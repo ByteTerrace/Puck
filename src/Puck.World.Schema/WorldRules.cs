@@ -222,6 +222,16 @@ public static class WorldRuleFacts {
     /// <see cref="DistancePrefix"/>'s deliberately-inverted sentinel (a boolean has no "too far" failure mode to
     /// guard against).</summary>
     public const string LineOfSightPrefix = "$los:";
+    /// <summary>The prefix; <c>$upright:&lt;bodyRef&gt;</c> reads one named body's own up axis (its local +Y rotated
+    /// by its live orientation) dotted against the world up its gravity opposes — <c>1</c> standing exactly upright,
+    /// <c>0</c> lying exactly on its side, negative past horizontal — the same single-body-reference grammar
+    /// <see cref="ParkedPrefix"/> spends. A gate compares it directly against an authored cosine threshold
+    /// (<c>compareState($upright:body:12, greaterOrEqual, 0.866)</c> admits up to 30 degrees of tilt) rather than a
+    /// second reserved channel duplicating the angle — the tabletop primitive's own worked use is gating a piece's
+    /// board occupancy derive on this so a knocked-over piece reads as displaced rather than occupying its last
+    /// resolved cell. A body reference resolving to no live body reads <c>1</c> (perfectly upright) — the neutral
+    /// value for an absent body, since nothing about "no body" should ever read as knocked over.</summary>
+    public const string UprightPrefix = "$upright:";
     /// <summary>The prefix; <c>$nav:&lt;bodyRef&gt;:&lt;facet&gt;</c> reads one body's live route state. Facets are
     /// <c>hasPath</c>, <c>active</c>, <c>arrived</c>, <c>unreachable</c>, <c>pending</c>, <c>capacity</c>, and <c>remaining</c> waypoints.</summary>
     public const string NavigationPrefix = "$nav:";
@@ -455,6 +465,9 @@ public enum WorldRuleFactKind : byte {
     /// <summary>One named body's remaining reconnect-park ticks (<see cref="WorldRuleFacts.ParkedPrefix"/>).</summary>
     Parked,
 
+    /// <summary>One named body's own up axis dotted against world up (<see cref="WorldRuleFacts.UprightPrefix"/>).</summary>
+    Upright,
+
     /// <summary>Simulation ticks since one named adjacency row last received a delivered neighbour refresh
     /// (<see cref="WorldRuleFacts.LinkPrefix"/>).</summary>
     LinkStaleness,
@@ -507,8 +520,9 @@ public enum WorldRuleFactKind : byte {
 /// <see cref="WorldRuleFactKind.ArgBody"/> (<see cref="WorldStateReduceOp.Max"/>/<see cref="WorldStateReduceOp.Min"/>
 /// only); <see cref="WorldStateReduceOp.None"/> otherwise.</param>
 /// <param name="BodyA">The first named body for <see cref="WorldRuleFactKind.BodyDistance"/>/
-/// <see cref="WorldRuleFactKind.LineOfSight"/>, or the one named body for <see cref="WorldRuleFactKind.Parked"/>
-/// and <see cref="WorldRuleFactKind.Navigation"/> (which read no second body); <see langword="null"/> otherwise.</param>
+/// <see cref="WorldRuleFactKind.LineOfSight"/>, or the one named body for <see cref="WorldRuleFactKind.Parked"/>,
+/// <see cref="WorldRuleFactKind.Upright"/>, and <see cref="WorldRuleFactKind.Navigation"/> (which read no second
+/// body); <see langword="null"/> otherwise.</param>
 /// <param name="BodyB">The second named body for <see cref="WorldRuleFactKind.BodyDistance"/>/
 /// <see cref="WorldRuleFactKind.LineOfSight"/>; <see langword="null"/> otherwise (including
 /// <see cref="WorldRuleFactKind.Parked"/>, which is single-body).</param>

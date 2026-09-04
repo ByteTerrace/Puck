@@ -385,6 +385,14 @@ choosing fixed-point primitives on sim value paths.
   piece leaving the frame (captured, knocked clear) rejects every sibling's
   write in the same settle; a piece resolving to no cell of its own (captured,
   lifted off) never itself registers as the mover on either side of a settle.
+  The same atomicity is why a per-side classify rule's own scratch cells
+  (a settle's vacated/occupied `trailingZeroCount`) must clamp an empty
+  mask to `-1` rather than writing the mask's own bit width (64): an
+  unclamped write refuses the WHOLE rule, leaving that settle's record
+  stale for every downstream reader. `$upright:<bodyRef>` (a body's own up
+  axis dotted against gravity-up) is the reserved channel a piece's own
+  occupancy derive gates on, so a knocked-over piece reads as displaced
+  rather than occupying its last resting cell.
   See [references/documents.md](references/documents.md)'s
   `state.lattices` section and `Puck.World.Schema/README.md`'s
   tabletop-primitive section; the garden's `chessBoard` is the worked example.
