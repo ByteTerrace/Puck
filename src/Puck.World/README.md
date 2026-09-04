@@ -445,20 +445,41 @@ one piece's own cell: `popCount`/`lowestSetBit` size and locate the XOR of
 two settles, and the shape of that delta (one square vacated and occupied, a
 second side's square vacated too, two-and-two on one side) sorts it into a
 quiet move, a capture, an en passant, a castle, or a perturbation — recorded
-into `move` (`from`, `to`, `mover`, `captured`, `kind`) once per settle.
-Movement legality and check read outward from the move's own squares: a
-slider's reach is "walking `$board:rayCell` from the destination back toward
-the origin lands on the origin" (no coordinate arithmetic), a leaper's is
-`$board:offset` matching the destination over its fixed jumps, and a king's
-square is attacked exactly the same way, probed for an enemy pawn/knight/
-king/slider. Castling rights read a `moveFromHistory` ring through the
-pattern language (one `$match:…NeverMoved:moveFromHistory` per king/rook home
-square). A piece that resolves to no cell, before or after (captured, lifted
-off, knocked clear), never itself qualifies as the mover, so its
-disappearance never registers a verdict, a turn change, or a `lastLegal`
-write under its own color. Illegal moves are recorded — `illegalCount`
-counts them, `verdict` names the last ruling — and never rejected, undone,
-or repositioned.
+into `move` (`from`, `to`, `mover`, `captured`, `kind`) once per settle. A
+capture whose defending vacate lands anywhere but the destination reads as
+en passant only when that square is also adjacent to the destination behind
+the mover's approach and the landed piece carries the pawn code; either test
+failing reads as a perturbation, not a forged capture — an unrelated
+other-side piece leaving the board in the same settle as an ordinary quiet
+move must never mint a bogus en passant record. A settle whose own side only
+occupies or only vacates clamps its empty half to `-1` rather than writing
+the mask's own bit width into a row that refuses it. Movement legality and
+check read outward from the move's own squares: a slider's reach is "walking
+`$board:rayCell` from the destination back toward the origin lands on the
+origin" (no coordinate arithmetic), a leaper's is `$board:offset` matching
+the destination over its fixed jumps, and a king's square is attacked
+exactly the same way, probed for an enemy pawn/knight/king/slider. A
+king-shaped (two-and-two) settle is judged by the castle legality check
+alone, never the single-step king check beside it — the classifier's own
+`from` sorts to whichever home cell has the lower index, which for a
+queenside castle is the rook's, and that square can sit one king-step from
+the landing square by coincidence. Castling rights are a one-way bitfield set
+the instant a king or rook home cell is vacated by any settle, legal or not
+— a capacity-bounded history ring answering "has this piece ever moved" can
+forget a departure once it scrolls out, reviving a right a long game never
+regains — and the legality check itself re-reads the physical squares: the
+king/rook homes held the right pieces immediately before this settle and
+hold neither immediately after, the transit squares were empty, and the
+rook's own landing square now holds it. A piece that resolves to no cell,
+before or after (captured, lifted off, knocked clear), never itself
+qualifies as the mover, so its disappearance never registers a verdict, a
+turn change, or a `lastLegal` write under its own color. Illegal moves are
+recorded — `illegalCount` counts them, `verdict` names the last ruling — and
+never rejected, undone, or repositioned. Promotion is a same-cell piece
+swap the mask classifier cannot see as a move at all (an occupied cell whose
+value changes stays out of both sides' vacated/occupied masks): reaching the
+last rank on an ordinary settle marks `promotionPending`, and a later settle
+where that cell no longer carries the pawn code clears it directly.
 `world.tabletop` reads the frame, live occupancy, and the bound convenience
 rows back. `boardSquareLight`/`boardSquareDark` placements (paired one to a
 cell, colors from the `boardColors` text row) render the board itself; the

@@ -541,24 +541,53 @@ finds which piece moved works over the WHOLE board rather than per piece —
 `board`/`previousBoard` rows, `popCount`/`lowestSetBit` size and locate the
 vacated/occupied deltas, and the shape of those deltas (one square vacated
 and occupied, a second side's square vacated too, two-and-two for castling)
-sorts a settle into a quiet move, a capture, an en passant, a castle, a
-promotion placement, or a perturbation — the world program's own record, not
-a per-piece rule. Movement legality asks the SAME small vocabulary outward
-from the move's own squares: a slider's reach is "walking `$board:rayCell`
-from the destination back toward the origin finds the origin itself" (no
-coordinate arithmetic — an occupied origin is always the ray's own answer
-when the path is clear), a leaper's is the `$board:offset` cell matching the
-destination over its fixed set of jumps, and check is the mover's king
-square read the same way, attacked or not by an enemy pawn/knight/king/
-slider probed outward from it. Castling rights read a `moveFromHistory` ring
-through the pattern language (`$match:<...>NeverMoved:moveFromHistory`, one
-pattern per king/rook home square, accepting a ring that never contains that
-square) rather than a separate boolean per piece. A piece that leaves the
-board entirely (captured, knocked clear, tilted) never itself registers as a
-mover, since it has no destination cell to rule on. Illegal moves are
-recorded — `illegalCount` counts them, `verdict` names the last ruling — and
-never rejected, undone, or repositioned; the table remembers the last legal
-position (`lastLegal`) for a human or a future AI body to act on. `plan` is
+sorts a settle into a quiet move, a capture, an en passant, a castle, or a
+perturbation — the world program's own record, not a per-piece rule. A
+capture whose vacated defending square sits anywhere but the destination is
+en passant ONLY when that square is also adjacent to the destination behind
+the mover's own approach AND the piece that landed carries the pawn code;
+either test failing (an unrelated other-side vacate landing on the settle by
+coincidence) reads as a perturbation instead of a forged capture. Movement
+legality asks the SAME small vocabulary outward from the move's own squares:
+a slider's reach is "walking `$board:rayCell` from the destination back
+toward the origin finds the origin itself" (no coordinate arithmetic — an
+occupied origin is always the ray's own answer when the path is clear), a
+leaper's is the `$board:offset` cell matching the destination over its fixed
+set of jumps, and check is the mover's king square read the same way,
+attacked or not by an enemy pawn/knight/king/slider probed outward from it.
+A king-shaped settle (two-and-two, the same mask shape castling has) is
+judged ONLY by the castle legality check, never by the single-step king
+check beside it — the mask classifier's own "from" is whichever of the two
+vacated home cells sorts lowest, which for a queenside castle is the rook's
+square, and that square can sit one step from the king's landing square by
+coincidence, letting an ordinary single-step check rubber-stamp a castle
+shape the castle check itself correctly refused. Castling rights are a
+one-way bitfield (`castleRights`, one bit per king/rook home square) a rule
+sets the instant that square's own piece departs — legally or not, since
+"has this piece ever left home" cannot un-happen and a capacity-bounded
+history ring answering the same question can forget it once the departure
+scrolls out, reviving rights a long game never truly regains. Castle
+legality also re-reads the physical squares this exact settle: the home
+cells held the king and rook immediately before it and hold neither
+immediately after, the transit squares were empty, and the rook's own
+landing square now holds it — a right can be intact and the physical board
+still refuse the move. A piece that leaves the board entirely (captured,
+knocked clear, tilted) never itself registers as a mover, since it has no
+destination cell to rule on. A settle that only occupies (nothing of that
+side's own vacates) or only vacates clamps its empty half to -1 rather than
+writing the mask's own bit width (64) into a row that refuses it, which
+would otherwise leave that settle's record silently stale for every rule
+reading it afterward. Illegal moves are recorded — `illegalCount` counts
+them, `verdict` names the last ruling — and never rejected, undone, or
+repositioned; the table remembers the last legal position (`lastLegal`) for
+a human or a future AI body to act on. Promotion is a same-cell piece swap —
+the pawn lifted off and a chosen piece set down on the SAME square — which
+the mask classifier cannot see at all (a cell whose occupant changes value
+but stays occupied never enters either side's vacated or occupied mask), so
+it is not a move kind: reaching the last rank on an ordinary quiet or
+capture settle marks `promotionPending`, and a later settle where that cell's
+piece no longer carries the pawn code clears it directly, independent of
+whatever move kind (if any) that settle classifies as. `plan` is
 the addon seam for candidate-highlight rendering: an ordinary board-typed row
 nothing in the engine writes, proved from the console
 (`world.state.cell.set plan <cell> 1`) rather than built. Boards are a

@@ -1709,224 +1709,7 @@
       }
     ]
   },
-  "patterns": [
-    {
-      "kind": "int",
-      "maxStates": 8,
-      "name": "wKingNeverMoved",
-      "pattern": {
-        "$type": "not",
-        "item": {
-          "$type": "sequence",
-          "items": [
-            {
-              "$type": "star",
-              "item": {
-                "$type": "any"
-              }
-            },
-            {
-              "$type": "symbol",
-              "name": "moved"
-            },
-            {
-              "$type": "star",
-              "item": {
-                "$type": "any"
-              }
-            }
-          ]
-        }
-      },
-      "symbols": [
-        {
-          "max": 4,
-          "min": 4,
-          "name": "moved"
-        }
-      ]
-    },
-    {
-      "kind": "int",
-      "maxStates": 8,
-      "name": "wRookANeverMoved",
-      "pattern": {
-        "$type": "not",
-        "item": {
-          "$type": "sequence",
-          "items": [
-            {
-              "$type": "star",
-              "item": {
-                "$type": "any"
-              }
-            },
-            {
-              "$type": "symbol",
-              "name": "moved"
-            },
-            {
-              "$type": "star",
-              "item": {
-                "$type": "any"
-              }
-            }
-          ]
-        }
-      },
-      "symbols": [
-        {
-          "max": 0,
-          "min": 0,
-          "name": "moved"
-        }
-      ]
-    },
-    {
-      "kind": "int",
-      "maxStates": 8,
-      "name": "wRookHNeverMoved",
-      "pattern": {
-        "$type": "not",
-        "item": {
-          "$type": "sequence",
-          "items": [
-            {
-              "$type": "star",
-              "item": {
-                "$type": "any"
-              }
-            },
-            {
-              "$type": "symbol",
-              "name": "moved"
-            },
-            {
-              "$type": "star",
-              "item": {
-                "$type": "any"
-              }
-            }
-          ]
-        }
-      },
-      "symbols": [
-        {
-          "max": 7,
-          "min": 7,
-          "name": "moved"
-        }
-      ]
-    },
-    {
-      "kind": "int",
-      "maxStates": 8,
-      "name": "bKingNeverMoved",
-      "pattern": {
-        "$type": "not",
-        "item": {
-          "$type": "sequence",
-          "items": [
-            {
-              "$type": "star",
-              "item": {
-                "$type": "any"
-              }
-            },
-            {
-              "$type": "symbol",
-              "name": "moved"
-            },
-            {
-              "$type": "star",
-              "item": {
-                "$type": "any"
-              }
-            }
-          ]
-        }
-      },
-      "symbols": [
-        {
-          "max": 60,
-          "min": 60,
-          "name": "moved"
-        }
-      ]
-    },
-    {
-      "kind": "int",
-      "maxStates": 8,
-      "name": "bRookANeverMoved",
-      "pattern": {
-        "$type": "not",
-        "item": {
-          "$type": "sequence",
-          "items": [
-            {
-              "$type": "star",
-              "item": {
-                "$type": "any"
-              }
-            },
-            {
-              "$type": "symbol",
-              "name": "moved"
-            },
-            {
-              "$type": "star",
-              "item": {
-                "$type": "any"
-              }
-            }
-          ]
-        }
-      },
-      "symbols": [
-        {
-          "max": 56,
-          "min": 56,
-          "name": "moved"
-        }
-      ]
-    },
-    {
-      "kind": "int",
-      "maxStates": 8,
-      "name": "bRookHNeverMoved",
-      "pattern": {
-        "$type": "not",
-        "item": {
-          "$type": "sequence",
-          "items": [
-            {
-              "$type": "star",
-              "item": {
-                "$type": "any"
-              }
-            },
-            {
-              "$type": "symbol",
-              "name": "moved"
-            },
-            {
-              "$type": "star",
-              "item": {
-                "$type": "any"
-              }
-            }
-          ]
-        }
-      },
-      "symbols": [
-        {
-          "max": 63,
-          "min": 63,
-          "name": "moved"
-        }
-      ]
-    }
-  ],
+  "patterns": [],
   "placements": {
     "rows": [
       {
@@ -12491,7 +12274,28 @@
                 "name": "$board:mask:board:6:6"
               },
               {
+                "$type": "popCount"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "constant",
+                "value": -1
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:board:6:6"
+              },
+              {
                 "$type": "trailingZeroCount"
+              },
+              {
+                "$type": "select"
               }
             ]
           },
@@ -12507,7 +12311,28 @@
                 "name": "$board:mask:board:-6:-6"
               },
               {
+                "$type": "popCount"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "constant",
+                "value": -1
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:board:-6:-6"
+              },
+              {
                 "$type": "trailingZeroCount"
+              },
+              {
+                "$type": "select"
               }
             ]
           },
@@ -12515,7 +12340,13 @@
           "state": "kingCell"
         }
       ],
-      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
       "name": "tabletop-king-cell"
     },
     {
@@ -12775,7 +12606,28 @@
                 "name": "cWhiteVacMask"
               },
               {
+                "$type": "popCount"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "constant",
+                "value": -1
+              },
+              {
+                "$type": "state",
+                "name": "cWhiteVacMask"
+              },
+              {
                 "$type": "trailingZeroCount"
+              },
+              {
+                "$type": "select"
               }
             ]
           },
@@ -12790,7 +12642,28 @@
                 "name": "cWhiteOccMask"
               },
               {
+                "$type": "popCount"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "constant",
+                "value": -1
+              },
+              {
+                "$type": "state",
+                "name": "cWhiteOccMask"
+              },
+              {
                 "$type": "trailingZeroCount"
+              },
+              {
+                "$type": "select"
               }
             ]
           },
@@ -12805,7 +12678,28 @@
                 "name": "cWhiteOtherVacMask"
               },
               {
+                "$type": "popCount"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "constant",
+                "value": -1
+              },
+              {
+                "$type": "state",
+                "name": "cWhiteOtherVacMask"
+              },
+              {
                 "$type": "trailingZeroCount"
+              },
+              {
+                "$type": "select"
               }
             ]
           },
@@ -13117,26 +13011,8 @@
                 "name": "cWhiteQuietSig"
               },
               {
-                "$type": "state",
-                "name": "cWhiteFromCell"
-              },
-              {
-                "$type": "state",
-                "name": "cWhiteToCell"
-              },
-              {
-                "$type": "equal"
-              },
-              {
-                "$type": "constant",
-                "value": 6
-              },
-              {
                 "$type": "constant",
                 "value": 1
-              },
-              {
-                "$type": "select"
               },
               {
                 "$type": "state",
@@ -13158,8 +13034,42 @@
                 "value": 2
               },
               {
+                "$type": "state",
+                "name": "cWhiteCapturedCell"
+              },
+              {
+                "$type": "state",
+                "key": "$cell:cWhiteToCell:$value",
+                "name": "$board:neighbour:board:N"
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "key": "$cell:cWhiteToCell:$value",
+                "name": "board"
+              },
+              {
+                "$type": "constant",
+                "value": 1
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
                 "$type": "constant",
                 "value": 3
+              },
+              {
+                "$type": "constant",
+                "value": 7
+              },
+              {
+                "$type": "select"
               },
               {
                 "$type": "select"
@@ -13381,7 +13291,28 @@
                 "name": "cBlackVacMask"
               },
               {
+                "$type": "popCount"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "constant",
+                "value": -1
+              },
+              {
+                "$type": "state",
+                "name": "cBlackVacMask"
+              },
+              {
                 "$type": "trailingZeroCount"
+              },
+              {
+                "$type": "select"
               }
             ]
           },
@@ -13396,7 +13327,28 @@
                 "name": "cBlackOccMask"
               },
               {
+                "$type": "popCount"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "constant",
+                "value": -1
+              },
+              {
+                "$type": "state",
+                "name": "cBlackOccMask"
+              },
+              {
                 "$type": "trailingZeroCount"
+              },
+              {
+                "$type": "select"
               }
             ]
           },
@@ -13411,7 +13363,28 @@
                 "name": "cBlackOtherVacMask"
               },
               {
+                "$type": "popCount"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "constant",
+                "value": -1
+              },
+              {
+                "$type": "state",
+                "name": "cBlackOtherVacMask"
+              },
+              {
                 "$type": "trailingZeroCount"
+              },
+              {
+                "$type": "select"
               }
             ]
           },
@@ -13723,26 +13696,8 @@
                 "name": "cBlackQuietSig"
               },
               {
-                "$type": "state",
-                "name": "cBlackFromCell"
-              },
-              {
-                "$type": "state",
-                "name": "cBlackToCell"
-              },
-              {
-                "$type": "equal"
-              },
-              {
-                "$type": "constant",
-                "value": 6
-              },
-              {
                 "$type": "constant",
                 "value": 1
-              },
-              {
-                "$type": "select"
               },
               {
                 "$type": "state",
@@ -13764,8 +13719,42 @@
                 "value": 2
               },
               {
+                "$type": "state",
+                "name": "cBlackCapturedCell"
+              },
+              {
+                "$type": "state",
+                "key": "$cell:cBlackToCell:$value",
+                "name": "$board:neighbour:board:S"
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "key": "$cell:cBlackToCell:$value",
+                "name": "board"
+              },
+              {
+                "$type": "constant",
+                "value": -1
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
                 "$type": "constant",
                 "value": 3
+              },
+              {
+                "$type": "constant",
+                "value": 7
+              },
+              {
+                "$type": "select"
               },
               {
                 "$type": "select"
@@ -15088,11 +15077,39 @@
             "tokens": [
               {
                 "$type": "state",
-                "name": "$match:wKingNeverMoved:moveFromHistory"
+                "name": "castleRights"
+              },
+              {
+                "$type": "constant",
+                "value": 1
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
               },
               {
                 "$type": "state",
-                "name": "$match:wRookHNeverMoved:moveFromHistory"
+                "name": "castleRights"
+              },
+              {
+                "$type": "constant",
+                "value": 4
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
               },
               {
                 "$type": "multiply"
@@ -15141,6 +15158,81 @@
               },
               {
                 "$type": "multiply"
+              },
+              {
+                "$type": "state",
+                "key": "4",
+                "name": "previousBoard"
+              },
+              {
+                "$type": "constant",
+                "value": 6
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "key": "7",
+                "name": "previousBoard"
+              },
+              {
+                "$type": "constant",
+                "value": 4
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "state",
+                "key": "4",
+                "name": "board"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "key": "7",
+                "name": "board"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "state",
+                "key": "5",
+                "name": "board"
+              },
+              {
+                "$type": "constant",
+                "value": 4
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "multiply"
               }
             ]
           },
@@ -15152,11 +15244,39 @@
             "tokens": [
               {
                 "$type": "state",
-                "name": "$match:wKingNeverMoved:moveFromHistory"
+                "name": "castleRights"
+              },
+              {
+                "$type": "constant",
+                "value": 1
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
               },
               {
                 "$type": "state",
-                "name": "$match:wRookANeverMoved:moveFromHistory"
+                "name": "castleRights"
+              },
+              {
+                "$type": "constant",
+                "value": 2
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
               },
               {
                 "$type": "multiply"
@@ -15220,6 +15340,81 @@
               },
               {
                 "$type": "multiply"
+              },
+              {
+                "$type": "state",
+                "key": "4",
+                "name": "previousBoard"
+              },
+              {
+                "$type": "constant",
+                "value": 6
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "key": "0",
+                "name": "previousBoard"
+              },
+              {
+                "$type": "constant",
+                "value": 4
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "state",
+                "key": "4",
+                "name": "board"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "key": "0",
+                "name": "board"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "state",
+                "key": "3",
+                "name": "board"
+              },
+              {
+                "$type": "constant",
+                "value": 4
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "multiply"
               }
             ]
           },
@@ -15231,11 +15426,39 @@
             "tokens": [
               {
                 "$type": "state",
-                "name": "$match:bKingNeverMoved:moveFromHistory"
+                "name": "castleRights"
+              },
+              {
+                "$type": "constant",
+                "value": 8
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
               },
               {
                 "$type": "state",
-                "name": "$match:bRookHNeverMoved:moveFromHistory"
+                "name": "castleRights"
+              },
+              {
+                "$type": "constant",
+                "value": 32
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
               },
               {
                 "$type": "multiply"
@@ -15284,6 +15507,81 @@
               },
               {
                 "$type": "multiply"
+              },
+              {
+                "$type": "state",
+                "key": "60",
+                "name": "previousBoard"
+              },
+              {
+                "$type": "constant",
+                "value": -6
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "key": "63",
+                "name": "previousBoard"
+              },
+              {
+                "$type": "constant",
+                "value": -4
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "state",
+                "key": "60",
+                "name": "board"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "key": "63",
+                "name": "board"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "state",
+                "key": "61",
+                "name": "board"
+              },
+              {
+                "$type": "constant",
+                "value": -4
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "multiply"
               }
             ]
           },
@@ -15295,11 +15593,39 @@
             "tokens": [
               {
                 "$type": "state",
-                "name": "$match:bKingNeverMoved:moveFromHistory"
+                "name": "castleRights"
+              },
+              {
+                "$type": "constant",
+                "value": 8
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
               },
               {
                 "$type": "state",
-                "name": "$match:bRookANeverMoved:moveFromHistory"
+                "name": "castleRights"
+              },
+              {
+                "$type": "constant",
+                "value": 16
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
               },
               {
                 "$type": "multiply"
@@ -15360,6 +15686,81 @@
               },
               {
                 "$type": "multiply"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "state",
+                "key": "60",
+                "name": "previousBoard"
+              },
+              {
+                "$type": "constant",
+                "value": -6
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "key": "56",
+                "name": "previousBoard"
+              },
+              {
+                "$type": "constant",
+                "value": -4
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "state",
+                "key": "60",
+                "name": "board"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "key": "56",
+                "name": "board"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "state",
+                "key": "59",
+                "name": "board"
+              },
+              {
+                "$type": "constant",
+                "value": -4
+              },
+              {
+                "$type": "equal"
               },
               {
                 "$type": "multiply"
@@ -15611,6 +16012,21 @@
               {
                 "$type": "state",
                 "name": "kingStepLegal"
+              },
+              {
+                "$type": "state",
+                "key": "kind",
+                "name": "move"
+              },
+              {
+                "$type": "constant",
+                "value": 4
+              },
+              {
+                "$type": "notEqual"
+              },
+              {
+                "$type": "multiply"
               },
               {
                 "$type": "state",
@@ -15930,7 +16346,13 @@
           "state": "closeCheckWhitePart0"
         }
       ],
-      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
       "name": "tabletop-check-closecheckwhitepart0"
     },
     {
@@ -16145,7 +16567,13 @@
           "state": "closeCheckWhitePart1"
         }
       ],
-      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
       "name": "tabletop-check-closecheckwhitepart1"
     },
     {
@@ -16258,7 +16686,13 @@
           "state": "closeCheckWhitePart2"
         }
       ],
-      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
       "name": "tabletop-check-closecheckwhitepart2"
     },
     {
@@ -16290,7 +16724,13 @@
           "state": "closeCheckWhite"
         }
       ],
-      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
       "name": "tabletop-check-closecheckwhite-combine"
     },
     {
@@ -16505,7 +16945,13 @@
           "state": "knightHitWhitePart0"
         }
       ],
-      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
       "name": "tabletop-check-knighthitwhitepart0"
     },
     {
@@ -16720,7 +17166,13 @@
           "state": "knightHitWhitePart1"
         }
       ],
-      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
       "name": "tabletop-check-knighthitwhitepart1"
     },
     {
@@ -16745,7 +17197,13 @@
           "state": "knightHitWhite"
         }
       ],
-      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
       "name": "tabletop-check-knighthitwhite-combine"
     },
     {
@@ -16988,7 +17446,13 @@
           "state": "slideHitWhitePart0"
         }
       ],
-      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
       "name": "tabletop-check-slidehitwhitepart0"
     },
     {
@@ -17231,7 +17695,13 @@
           "state": "slideHitWhitePart1"
         }
       ],
-      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
       "name": "tabletop-check-slidehitwhitepart1"
     },
     {
@@ -17256,7 +17726,13 @@
           "state": "slideHitWhite"
         }
       ],
-      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
       "name": "tabletop-check-slidehitwhite-combine"
     },
     {
@@ -17288,7 +17764,13 @@
           "state": "inCheckCombineWhite"
         }
       ],
-      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
       "name": "tabletop-check-total-white"
     },
     {
@@ -17503,7 +17985,13 @@
           "state": "closeCheckBlackPart0"
         }
       ],
-      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
       "name": "tabletop-check-closecheckblackpart0"
     },
     {
@@ -17718,7 +18206,13 @@
           "state": "closeCheckBlackPart1"
         }
       ],
-      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
       "name": "tabletop-check-closecheckblackpart1"
     },
     {
@@ -17831,7 +18325,13 @@
           "state": "closeCheckBlackPart2"
         }
       ],
-      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
       "name": "tabletop-check-closecheckblackpart2"
     },
     {
@@ -17863,7 +18363,13 @@
           "state": "closeCheckBlack"
         }
       ],
-      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
       "name": "tabletop-check-closecheckblack-combine"
     },
     {
@@ -18078,7 +18584,13 @@
           "state": "knightHitBlackPart0"
         }
       ],
-      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
       "name": "tabletop-check-knighthitblackpart0"
     },
     {
@@ -18293,7 +18805,13 @@
           "state": "knightHitBlackPart1"
         }
       ],
-      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
       "name": "tabletop-check-knighthitblackpart1"
     },
     {
@@ -18318,7 +18836,13 @@
           "state": "knightHitBlack"
         }
       ],
-      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
       "name": "tabletop-check-knighthitblack-combine"
     },
     {
@@ -18561,7 +19085,13 @@
           "state": "slideHitBlackPart0"
         }
       ],
-      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
       "name": "tabletop-check-slidehitblackpart0"
     },
     {
@@ -18804,7 +19334,13 @@
           "state": "slideHitBlackPart1"
         }
       ],
-      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
       "name": "tabletop-check-slidehitblackpart1"
     },
     {
@@ -18829,7 +19365,13 @@
           "state": "slideHitBlack"
         }
       ],
-      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
       "name": "tabletop-check-slidehitblack-combine"
     },
     {
@@ -18861,7 +19403,13 @@
           "state": "inCheckCombineBlack"
         }
       ],
-      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
       "name": "tabletop-check-total-black"
     },
     {
@@ -18879,7 +19427,13 @@
           "state": "inCheck"
         }
       ],
-      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
       "name": "tabletop-check-combine"
     },
     {
@@ -19087,135 +19641,6 @@
       },
       "mode": "Edge",
       "name": "tabletop-verdict"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "expression": {
-            "tokens": [
-              {
-                "$type": "state",
-                "key": "$cell:moverColor:$value",
-                "name": "promotionPending"
-              },
-              {
-                "$type": "state",
-                "key": "to",
-                "name": "move"
-              },
-              {
-                "$type": "equal"
-              },
-              {
-                "$type": "state",
-                "key": "mover",
-                "name": "move"
-              },
-              {
-                "$type": "abs"
-              },
-              {
-                "$type": "constant",
-                "value": 2
-              },
-              {
-                "$type": "equal"
-              },
-              {
-                "$type": "state",
-                "key": "mover",
-                "name": "move"
-              },
-              {
-                "$type": "abs"
-              },
-              {
-                "$type": "constant",
-                "value": 3
-              },
-              {
-                "$type": "equal"
-              },
-              {
-                "$type": "max"
-              },
-              {
-                "$type": "state",
-                "key": "mover",
-                "name": "move"
-              },
-              {
-                "$type": "abs"
-              },
-              {
-                "$type": "constant",
-                "value": 4
-              },
-              {
-                "$type": "equal"
-              },
-              {
-                "$type": "state",
-                "key": "mover",
-                "name": "move"
-              },
-              {
-                "$type": "abs"
-              },
-              {
-                "$type": "constant",
-                "value": 5
-              },
-              {
-                "$type": "equal"
-              },
-              {
-                "$type": "max"
-              },
-              {
-                "$type": "max"
-              },
-              {
-                "$type": "multiply"
-              }
-            ]
-          },
-          "state": "verdict"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "all",
-            "predicates": [
-              {
-                "$type": "compareState",
-                "comparison": "Equal",
-                "state": "$physics:quiescent",
-                "value": 1
-              },
-              {
-                "$type": "compareState",
-                "comparison": "NotEqual",
-                "key": "kind",
-                "state": "move",
-                "value": 0
-              }
-            ]
-          },
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "key": "kind",
-            "state": "move",
-            "value": 6
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-verdict-promotion"
     },
     {
       "effects": [
@@ -20156,54 +20581,6 @@
     {
       "effects": [
         {
-          "$type": "setState",
-          "key": "$cell:moverColor:$value",
-          "state": "promotionPending",
-          "value": -1
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "all",
-            "predicates": [
-              {
-                "$type": "compareState",
-                "comparison": "Equal",
-                "state": "$physics:quiescent",
-                "value": 1
-              },
-              {
-                "$type": "compareState",
-                "comparison": "NotEqual",
-                "key": "kind",
-                "state": "move",
-                "value": 0
-              }
-            ]
-          },
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "verdict",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "key": "kind",
-            "state": "move",
-            "value": 6
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-clear-promotion-pending"
-    },
-    {
-      "effects": [
-        {
           "$type": "pushState",
           "fromKey": "from",
           "fromState": "move",
@@ -20375,6 +20752,76 @@
               },
               {
                 "$type": "add"
+              },
+              {
+                "$type": "state",
+                "name": "$history:boardHistory:0"
+              },
+              {
+                "$type": "state",
+                "name": "$history:boardHistory:7"
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "add"
+              },
+              {
+                "$type": "state",
+                "name": "$history:boardHistory:0"
+              },
+              {
+                "$type": "state",
+                "name": "$history:boardHistory:8"
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "add"
+              },
+              {
+                "$type": "state",
+                "name": "$history:boardHistory:0"
+              },
+              {
+                "$type": "state",
+                "name": "$history:boardHistory:9"
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "add"
+              },
+              {
+                "$type": "state",
+                "name": "$history:boardHistory:0"
+              },
+              {
+                "$type": "state",
+                "name": "$history:boardHistory:10"
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "add"
+              },
+              {
+                "$type": "state",
+                "name": "$history:boardHistory:0"
+              },
+              {
+                "$type": "state",
+                "name": "$history:boardHistory:11"
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "add"
               }
             ]
           },
@@ -20412,6 +20859,237 @@
       },
       "mode": "Edge",
       "name": "tabletop-repetition-count"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "castleRights"
+              },
+              {
+                "$type": "state",
+                "key": "from",
+                "name": "move"
+              },
+              {
+                "$type": "constant",
+                "value": 4
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "constant",
+                "value": 1
+              },
+              {
+                "$type": "state",
+                "key": "from",
+                "name": "move"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "constant",
+                "value": 2
+              },
+              {
+                "$type": "state",
+                "key": "from",
+                "name": "move"
+              },
+              {
+                "$type": "constant",
+                "value": 7
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "constant",
+                "value": 4
+              },
+              {
+                "$type": "state",
+                "key": "from",
+                "name": "move"
+              },
+              {
+                "$type": "constant",
+                "value": 60
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "constant",
+                "value": 8
+              },
+              {
+                "$type": "state",
+                "key": "from",
+                "name": "move"
+              },
+              {
+                "$type": "constant",
+                "value": 56
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "constant",
+                "value": 16
+              },
+              {
+                "$type": "state",
+                "key": "from",
+                "name": "move"
+              },
+              {
+                "$type": "constant",
+                "value": 63
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "constant",
+                "value": 32
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "select"
+              },
+              {
+                "$type": "select"
+              },
+              {
+                "$type": "select"
+              },
+              {
+                "$type": "select"
+              },
+              {
+                "$type": "select"
+              },
+              {
+                "$type": "select"
+              },
+              {
+                "$type": "bitOr"
+              }
+            ]
+          },
+          "state": "castleRights"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "kind",
+            "state": "move",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-track-castle-rights"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "promotionPending",
+          "value": -1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "0",
+            "state": "promotionPending",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "$cell:promotionPending:0",
+            "state": "board",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-settle-promotion-white"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "1",
+          "state": "promotionPending",
+          "value": -1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "1",
+            "state": "promotionPending",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "$cell:promotionPending:1",
+            "state": "board",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-settle-promotion-black"
     }
   ],
   "schema": "puck.world.def.v1",
@@ -22630,7 +23308,7 @@
       },
       {
         "history": {
-          "capacity": 8,
+          "capacity": 12,
           "empty": -1
         },
         "kind": "int",
@@ -22644,7 +23322,7 @@
           }
         ],
         "kind": "int",
-        "max": 8,
+        "max": 12,
         "min": 0,
         "name": "repetitionCount"
       },
@@ -23593,6 +24271,13 @@
         ],
         "kind": "text",
         "name": "boardColors"
+      },
+      {
+        "kind": "int",
+        "max": 63,
+        "min": 0,
+        "name": "castleRights",
+        "value": 0
       }
     ]
   },

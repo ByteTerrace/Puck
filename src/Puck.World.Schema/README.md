@@ -267,8 +267,15 @@ after: `$board:mask:<row>:<min>:<max>` reads a whole side's occupancy as a
 e.g. positive codes for one color), and `popCount`/`lowestSetBit`/
 `clearLowestSetBit` size and walk the XOR of two settles' masks — one square
 vacated and occupied is a quiet move, a second side's square vacated too is a
-capture (the same square) or an en passant (a different one), two-and-two on
-one side is a castle. Movement legality and check read outward from the move's
+capture (the same square) or, when that square is instead adjacent to the
+destination behind the mover's approach AND the landed piece carries the pawn
+code, an en passant — either test failing reads as a perturbation rather than
+a forged capture, closing the loophole an unrelated other-side vacate in the
+same settle would otherwise open. Two-and-two on one side is a castle-shaped
+settle, judged only by the castle legality check (never a single-step check
+beside it, since the classifier's own "from" sorts to whichever home cell has
+the lower index and can coincidentally read as an adjacent king step).
+Movement legality and check read outward from the move's
 own squares rather than walking coordinates: a slider's reach is "does
 `$board:rayCell` from the destination back toward the origin land on the
 origin" (the origin is always the ray's own first-occupied answer when the

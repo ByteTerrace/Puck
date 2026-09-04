@@ -9,31 +9,56 @@ namespace Puck.World.Tests;
 /// `$board:mask` bitboard and walking the XOR of two settles rather than comparing each piece's own cell — sorts a
 /// synthetic delta into the same shapes the garden's chess rules read: a quiet move (one square vacated and
 /// occupied), a capture (a second side's square vacated too, at the destination), an en passant (the second side's
-/// vacated square is NOT the destination), a castle (two-and-two on one side), and a perturbation (any other
-/// shape) — proved once by breaking each shape into the one before it.
+/// vacated square is adjacent to the destination AND the mover carries the pawn code — not merely "not the
+/// destination", which is a loophole any unrelated simultaneous other-side vacate falls through), a castle
+/// (two-and-two on one side), and a perturbation (any other shape, including a same-shaped capture that fails the
+/// en passant adjacency/mover test) — proved once by breaking each shape into the one before it. Also proves the
+/// empty-mask clamp: `trailingZeroCount` of a mask with nothing set reads 64 (the mask's own bit width), which is
+/// outside every one of these cells' declared ranges and gets refused rather than silently written — so an
+/// occupy-only or vacate-only settle must clamp to -1 before writing, exactly as the garden's own
+/// cWhite/cBlackFromCell/ToCell/CapturedCell rows now do.
 /// </summary>
 public sealed class WorldTabletopClassifierLawTests {
     private const string Board = "board";
     private const string Prev = "previousBoard";
 
     private static WorldValueToken[] Eq(WorldValueToken[] a, long v) => [.. a, new WorldValueToken.Constant(v), new WorldValueToken.Equal()];
+    private static WorldValueToken[] Eq(WorldValueToken[] a, WorldValueToken[] b) => [.. a, .. b, new WorldValueToken.Equal()];
     private static WorldValueToken[] Mul(WorldValueToken[] a, WorldValueToken[] b) => [.. a, .. b, new WorldValueToken.Multiply()];
     private static WorldValueToken[] Row(string name) => [new WorldValueToken.State(name)];
+    // Reads `row[<key-row>'s own SlotKey cell]` -- the same dynamic ($cell:<row>:<key>) indirection the garden's
+    // board.$cell:cWhiteToCell:$value reads carry, spelled directly through WorldValueToken.State's own Key rather
+    // than the JSON convenience string.
+    private static WorldValueToken[] RowAt(string row, string keyRowSlotName) => [new WorldValueToken.State(row, $"$cell:{keyRowSlotName}:{WorldStateRow.SlotKey}")];
+    private static WorldValueToken[] Const(long v) => [new WorldValueToken.Constant(v)];
     private static WorldValueToken[] PopcountOf(string maskRow) => [.. Row(maskRow), new WorldValueToken.PopCount()];
     private static WorldValueToken[] Sig(long ownVac, long ownOcc, long otherVac, long otherOcc) => Mul(
         Mul(Eq(PopcountOf("ownVac"), ownVac), Eq(PopcountOf("ownOcc"), ownOcc)),
         Mul(Eq(PopcountOf("otherVac"), otherVac), Eq(PopcountOf("otherOcc"), otherOcc)));
-    private static WorldValueToken[] OwnVacMask() => [new WorldValueToken.State($"$board:mask:{Prev}:1:1"), new WorldValueToken.State($"$board:mask:{Board}:1:1"), new WorldValueToken.BitNot(), new WorldValueToken.BitAnd()];
-    private static WorldValueToken[] OwnOccMask() => [new WorldValueToken.State($"$board:mask:{Board}:1:1"), new WorldValueToken.State($"$board:mask:{Prev}:1:1"), new WorldValueToken.BitNot(), new WorldValueToken.BitAnd()];
+    // Range 1:2 stands in for the garden's own 1:6 (every own piece kind, pawn included) -- wide enough that a
+    // non-pawn own piece (code 2) still registers as "own", the same way the garden's mask range admits every
+    // piece kind while a narrower per-shape test (the en passant mover check below) picks out the pawn alone.
+    private static WorldValueToken[] OwnVacMask() => [new WorldValueToken.State($"$board:mask:{Prev}:1:2"), new WorldValueToken.State($"$board:mask:{Board}:1:2"), new WorldValueToken.BitNot(), new WorldValueToken.BitAnd()];
+    private static WorldValueToken[] OwnOccMask() => [new WorldValueToken.State($"$board:mask:{Board}:1:2"), new WorldValueToken.State($"$board:mask:{Prev}:1:2"), new WorldValueToken.BitNot(), new WorldValueToken.BitAnd()];
     private static WorldValueToken[] OtherVacMask() => [new WorldValueToken.State($"$board:mask:{Prev}:-1:-1"), new WorldValueToken.State($"$board:mask:{Board}:-1:-1"), new WorldValueToken.BitNot(), new WorldValueToken.BitAnd()];
     private static WorldValueToken[] OtherOccMask() => [new WorldValueToken.State($"$board:mask:{Board}:-1:-1"), new WorldValueToken.State($"$board:mask:{Prev}:-1:-1"), new WorldValueToken.BitNot(), new WorldValueToken.BitAnd()];
     private static WorldValueToken[] TZ(WorldValueToken[] m) => [.. m, new WorldValueToken.TrailingZeroCount()];
+    // The clamp finding #4/#8 add to the garden's own cWhite/cBlackFromCell/ToCell/CapturedCell and kingCell rows:
+    // an empty mask's trailingZeroCount (64, the mask's own bit width) never gets written raw -- a mask with
+    // nothing set reads as -1 ("no such cell") instead of leaking 64 into a row whose declared range refuses it.
+    private static WorldValueToken[] ClampedTZ(WorldValueToken[] m) => Select(Eq(PopcountOf2(m), 0), Const(-1), TZ(m));
+    private static WorldValueToken[] PopcountOf2(WorldValueToken[] m) => [.. m, new WorldValueToken.PopCount()];
     private static WorldValueToken[] Select(WorldValueToken[] c, WorldValueToken[] t, WorldValueToken[] f) => [.. c, .. t, .. f, new WorldValueToken.Select()];
     private static ActionEffect.SetState Set(string state, WorldValueToken[] expr) => new(State: state, Expression: new WorldValueExpression(expr));
 
     // kind: 0 none, 1 quiet, 2 capture, 3 en passant, 4 castle, 7 perturbation — the same codes the garden authors.
     // Split across several small rules, exactly as the garden's own classify-*-masks/counts/signatures/pick rules
     // are: one nested 64-token expression cannot hold the mask arithmetic AND four popCount signatures at once.
+    // The captured-adjacent-to-destination test stands in for the garden's own `$board:neighbour` probe (this
+    // synthetic 4-wide grid has no pawn geometry to name a "behind" direction against) — "capturedCell is one W
+    // step from toCell" plays the same structural role: without it (or the mover-code test beside it), ANY
+    // unrelated other-side vacate anywhere on the board would forge a kind-3 record, which is exactly finding #1's
+    // loophole.
     private static WorldRule[] ClassifyRules() => [
         new(WorldCellName.Parse("masks"), [
             Set("ownVac", OwnVacMask()), Set("ownOcc", OwnOccMask()), Set("otherVac", OtherVacMask()), Set("otherOcc", OtherOccMask()),
@@ -42,16 +67,20 @@ public sealed class WorldTabletopClassifierLawTests {
             Set("quiet", Sig(1, 1, 0, 0)), Set("capture", Sig(1, 1, 1, 0)),
             Set("castle", Sig(2, 2, 0, 0)), Set("noChange", Sig(0, 0, 0, 0)),
         ]),
-        new(WorldCellName.Parse("cellsFrom"), [Set("fromCell", TZ(Row("ownVac")))]),
-        new(WorldCellName.Parse("cellsTo"), [Set("toCell", TZ(Row("ownOcc")))]),
-        new(WorldCellName.Parse("cellsCaptured"), [Set("capturedCell", TZ(Row("otherVac")))]),
+        new(WorldCellName.Parse("cellsFrom"), [Set("fromCell", ClampedTZ(Row("ownVac")))]),
+        new(WorldCellName.Parse("cellsTo"), [Set("toCell", ClampedTZ(Row("ownOcc")))]),
+        new(WorldCellName.Parse("cellsCaptured"), [Set("capturedCell", ClampedTZ(Row("otherVac")))]),
         new(WorldCellName.Parse("kindRule"), [
-            Set("kind", Select(Row("quiet"),
-                Select([.. Row("fromCell"), .. Row("toCell"), new WorldValueToken.Equal()], [new WorldValueToken.Constant(6)], [new WorldValueToken.Constant(1)]),
+            Set("kind", Select(Row("quiet"), Const(1),
                 Select(Row("capture"),
-                    Select([.. Row("capturedCell"), .. Row("toCell"), new WorldValueToken.Equal()], [new WorldValueToken.Constant(2)], [new WorldValueToken.Constant(3)]),
-                    Select(Row("castle"), [new WorldValueToken.Constant(4)],
-                        Select(Row("noChange"), [new WorldValueToken.Constant(0)], [new WorldValueToken.Constant(7)]))))),
+                    Select(Eq(Row("capturedCell"), Row("toCell")), Const(2),
+                        Select(
+                            Mul(
+                                Eq(Row("capturedCell"), [.. Row("toCell"), .. Const(1), new WorldValueToken.Subtract()]),
+                                Eq(RowAt(Board, "toCell"), Const(1))),
+                            Const(3), Const(7))),
+                    Select(Row("castle"), Const(4),
+                        Select(Row("noChange"), Const(0), Const(7)))))),
         ]),
     ];
 
@@ -74,11 +103,12 @@ public sealed class WorldTabletopClassifierLawTests {
         };
     }
 
-    private static long Kind(long[] previous, long[] current) {
+    private static long Cell(long[] previous, long[] current, string row) {
         using var fixture = Fixtures.FreshServer(definition: Document(previous, current));
         fixture.Step();
-        return WorldDefinitionRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, "kind")!.Cells, WorldStateRow.SlotKey)!.Value;
+        return WorldDefinitionRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
     }
+    private static long Kind(long[] previous, long[] current) => Cell(previous, current, "kind");
 
     private static readonly long[] Start = [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0];
 
@@ -107,6 +137,35 @@ public sealed class WorldTabletopClassifierLawTests {
         var ep = (long[])Start.Clone();
         ep[1] = 0; ep[13] = 1; ep[12] = 0; // white moves cell1->cell13; the defender vacates cell12, not the (empty) destination cell13
         Assert.Equal(3L, Kind(Start, ep));
+
+        // the discriminating control: capturedCell not adjacent to toCell — an unrelated other-side vacate
+        // anywhere else on the board — reads as a perturbation, never a forged en passant.
+        var unrelated = (long[])Start.Clone();
+        unrelated[1] = 0; unrelated[9] = 1; unrelated[12] = 0; // own moves cell1->cell9; defender vacates cell12, two rows off cell9
+        Assert.Equal(7L, Kind(Start, unrelated));
+    }
+
+    [Fact]
+    public void AnEnPassantAlsoRequiresTheMoverToCarryThePawnCode() {
+        var nonPawnMover = (long[])Start.Clone();
+        nonPawnMover[1] = 0; nonPawnMover[13] = 2; nonPawnMover[12] = 0; // adjacency holds, but the landed value (2) is not the pawn code (1)
+        Assert.Equal(7L, Kind(Start, nonPawnMover));
+    }
+
+    [Fact]
+    public void AnOccupyOnlySettleClampsItsEmptySideToMinusOneRatherThanLeakingTrailingZeroCount() {
+        // own occupies cell5 with nothing vacating -- ownVac stays empty, so an unclamped trailingZeroCount would
+        // write 64 (the mask's own bit width) into fromCell, which every one of its declared ranges refuses.
+        var occupyOnly = (long[])Start.Clone();
+        occupyOnly[5] = 1;
+        Assert.Equal(7L, Kind(Start, occupyOnly));
+        Assert.Equal(-1L, Cell(Start, occupyOnly, "fromCell"));
+
+        // the dual: own vacates cell0 with nothing new occupied -- ownOcc stays empty, clamping toCell the same way.
+        var vacateOnly = (long[])Start.Clone();
+        vacateOnly[0] = 0;
+        Assert.Equal(7L, Kind(Start, vacateOnly));
+        Assert.Equal(-1L, Cell(Start, vacateOnly, "toCell"));
     }
 
     [Fact]
