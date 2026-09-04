@@ -529,26 +529,43 @@ facet (`WorldPlacementBoard`) anchors a discrete Grid topology (already
 carrying its own world-space origin/cellSize — no second frame member) to the
 placement, and a world rule derives an occupancy row from each piece's
 resting cell (`$board:cellOf:<row>:body:<n>`, a new reserved channel, Grid-
-only) on `$physics:quiescent`'s rising edge — never every tick. Legality is
-authorable, not engine-adjudicated: the shipped garden default checks
-occupancy and turn order only, over the piece whose own resting cell changed
-between two occupied board cells — a piece that leaves the board entirely
-(captured, knocked clear) never itself registers as a mover, since it has no
-destination cell to rule on; the capturing piece's own move records the
-whole event, and lifting a piece off the board without a compensating move
-records nothing, leaving `turn`/`lastLegal` untouched. A full piece-
-movement-geometry vocabulary (sliding pieces via `$board:rayCell`, leapers
-via the new `$board:offset` channel, check/castling/en passant/promotion) is
-the reserved authorable extension, not built. Illegal moves are recorded — `illegalCount` counts them,
-`verdict` names the last ruling — and never rejected, undone, or repositioned;
-the table remembers the last legal position (`lastLegal`) for a human or a
-future AI body to act on. `plan` is the addon seam for candidate-highlight
-rendering: an ordinary board-typed row nothing in the engine writes, proved
-from the console (`world.state.cell.set plan <cell> 1`) rather than built.
-Boards are a primitive the catalog reuses (checkers, go, cards on a table),
-never a chess-specific engine feature, and a topology is carried by at most
-one placement. The shipped `body.carry` facet is a separate primitive: it
-picks up a rigid body, never a placement or board. See
+only) on `$physics:quiescent`'s rising edge — never every tick, and gated by
+the `$upright:<bodyRef>` reserved channel (a body's own up axis dotted
+against the world up its gravity opposes) so a knocked-over piece reads as
+displaced rather than occupying its last resting cell. Legality is
+authorable, not engine-adjudicated, and the shipped garden's default set is
+everything short of adjudication: movement geometry for all six piece kinds,
+captures, check, castling, en passant, and promotion. The classifier that
+finds which piece moved works over the WHOLE board rather than per piece —
+`$board:mask` reads each side's occupancy as a 64-bit board straight off the
+`board`/`previousBoard` rows, `popCount`/`lowestSetBit` size and locate the
+vacated/occupied deltas, and the shape of those deltas (one square vacated
+and occupied, a second side's square vacated too, two-and-two for castling)
+sorts a settle into a quiet move, a capture, an en passant, a castle, a
+promotion placement, or a perturbation — the world program's own record, not
+a per-piece rule. Movement legality asks the SAME small vocabulary outward
+from the move's own squares: a slider's reach is "walking `$board:rayCell`
+from the destination back toward the origin finds the origin itself" (no
+coordinate arithmetic — an occupied origin is always the ray's own answer
+when the path is clear), a leaper's is the `$board:offset` cell matching the
+destination over its fixed set of jumps, and check is the mover's king
+square read the same way, attacked or not by an enemy pawn/knight/king/
+slider probed outward from it. Castling rights read a `moveFromHistory` ring
+through the pattern language (`$match:<...>NeverMoved:moveFromHistory`, one
+pattern per king/rook home square, accepting a ring that never contains that
+square) rather than a separate boolean per piece. A piece that leaves the
+board entirely (captured, knocked clear, tilted) never itself registers as a
+mover, since it has no destination cell to rule on. Illegal moves are
+recorded — `illegalCount` counts them, `verdict` names the last ruling — and
+never rejected, undone, or repositioned; the table remembers the last legal
+position (`lastLegal`) for a human or a future AI body to act on. `plan` is
+the addon seam for candidate-highlight rendering: an ordinary board-typed row
+nothing in the engine writes, proved from the console
+(`world.state.cell.set plan <cell> 1`) rather than built. Boards are a
+primitive the catalog reuses (checkers, go, cards on a table), never a
+chess-specific engine feature, and a topology is carried by at most one
+placement. The shipped `body.carry` facet is a separate primitive: it picks
+up a rigid body, never a placement or board. See
 the [schema reference](../src/Puck.World.Schema/README.md#discrete-boards-cards-and-turns)
 and `world.tabletop`'s console read-back.
 

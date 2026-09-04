@@ -261,6 +261,27 @@ before the census re-quiesces. The quiescent census is population-wide: an
 unrelated rigid body still settling elsewhere holds every board's derive at
 bay too.
 
+Classifying WHICH piece moved need not compare each piece's own cell before and
+after: `$board:mask:<row>:<min>:<max>` reads a whole side's occupancy as a
+64-bit board straight off the occupancy row (min/max select a value range,
+e.g. positive codes for one color), and `popCount`/`lowestSetBit`/
+`clearLowestSetBit` size and walk the XOR of two settles' masks — one square
+vacated and occupied is a quiet move, a second side's square vacated too is a
+capture (the same square) or an en passant (a different one), two-and-two on
+one side is a castle. Movement legality and check read outward from the move's
+own squares rather than walking coordinates: a slider's reach is "does
+`$board:rayCell` from the destination back toward the origin land on the
+origin" (the origin is always the ray's own first-occupied answer when the
+path is clear, so no coordinate arithmetic decides direction), a leaper's is
+`$board:offset` from the origin matching the destination over its fixed set
+of jumps, and a king's square is attacked exactly the same way, probed
+outward for an enemy pawn/knight/king/slider. The garden's `puck.world.json`
+chess rules are the worked example for both techniques; its bridge rules
+still hold to the one-rule-per-piece discipline this section already states —
+a captured or knocked-over piece's own board write refuses (a stale key, or
+`$upright:<bodyRef>` failing an authored angle threshold), and bundling that
+write into a shared rule wipes every sibling's write in the same settle.
+
 The [tabletop state fixture](../../tests/Puck.World.Canaries/tabletop-state/fixture.world.json)
 and its [positive script](../../tests/Puck.World.Canaries/tabletop-state/positive.script.txt)
 exercise movement, pile order, ray flips, phase progression, and replay through
@@ -1458,7 +1479,12 @@ cell — a 0-based entity index, or -1 for none; these also accept
 remaining reconnect-grace ticks, 0 when not parked or the reference resolves to
 no live body — the SAME single-body-reference grammar as an argmax/argmin
 token, so it composes with `$distance:`/`$argmax:` directly; see
-`Server.WorldPopulation`'s park-with-grace remarks), and
+`Server.WorldPopulation`'s park-with-grace remarks), `$upright:<bodyRef>`
+(one named body's own up axis, rotated by its live orientation, dotted
+against the world up its gravity opposes — 1 exactly upright, falling toward
+0 as it tips onto its side; an absent body reads the neutral 1, never a
+computed value; the tabletop primitive's own use is gating a piece's board
+occupancy derive so a knocked-over piece reads as displaced), and
 `$link:<adjacencyName>` (simulation ticks since that `adjacencies` row last
 received a delivered neighbour refresh, 0 when fresh and 0 forever when the row
 authors no `livenessGraceSeconds`; the row name is proven at compile time, and
