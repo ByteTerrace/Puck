@@ -87,6 +87,7 @@ public sealed class WorldPatternDifferentialLawTests {
         WorldPatternNode.Except e => Class(true, e.Name != "a", e.Name != "b", e.Name != "c"),
         WorldPatternNode.AnySymbol => "[wxyz]",
         WorldPatternNode.Nothing => "(?:)",
+        WorldPatternNode.None => "~(_*)",
         WorldPatternNode.Sequence q => "(?:" + string.Concat(q.Items.Select(Text)) + ")",
         WorldPatternNode.Choice ch => "(?:" + string.Join("|", ch.Items.Select(Text)) + ")",
         WorldPatternNode.Both both => "(?:" + string.Join("&", both.Items.Select(item => "(?:" + Text(item) + ")")) + ")",
@@ -105,6 +106,7 @@ public sealed class WorldPatternDifferentialLawTests {
             case WorldPatternNode.Except e: return [.. Enumerable.Range(0, Letters).Where(l => l != Ordinal(e.Name)).Select(l => ((char)('0' + l)).ToString())];
             case WorldPatternNode.AnySymbol: return [.. Enumerable.Range(0, Letters).Select(l => ((char)('0' + l)).ToString())];
             case WorldPatternNode.Nothing: return [string.Empty];
+            case WorldPatternNode.None: return [];
             case WorldPatternNode.Sequence q: {
                 var set = new HashSet<string> { string.Empty };
                 foreach (var item in q.Items) { set = Concat(set, Language(item, universe)); }
@@ -171,20 +173,21 @@ public sealed class WorldPatternDifferentialLawTests {
 
     private static WorldPatternNode Random(Xorshift random, int depth) {
         var leaf = depth >= 3 || random.Next(4) == 0;
-        var pick = random.Next(leaf ? 4 : 13);
+        var pick = random.Next(leaf ? 5 : 14);
         string Name() => random.Next(3) switch { 0 => "a", 1 => "b", _ => "c" };
         return pick switch {
             0 => new WorldPatternNode.Symbol(Name()),
             1 => new WorldPatternNode.Except(Name()),
             2 => new WorldPatternNode.AnySymbol(),
             3 => new WorldPatternNode.Nothing(),
-            4 or 5 => new WorldPatternNode.Sequence([Random(random, depth + 1), Random(random, depth + 1)]),
-            6 => new WorldPatternNode.Choice([Random(random, depth + 1), Random(random, depth + 1)]),
-            7 => new WorldPatternNode.Both([Random(random, depth + 1), Random(random, depth + 1)]),
-            8 => new WorldPatternNode.Complement(Random(random, depth + 1)),
-            9 => new WorldPatternNode.Optional(Random(random, depth + 1)),
-            10 => new WorldPatternNode.Star(Random(random, depth + 1)),
-            11 => new WorldPatternNode.Plus(Random(random, depth + 1)),
+            4 => new WorldPatternNode.None(),
+            5 or 6 => new WorldPatternNode.Sequence([Random(random, depth + 1), Random(random, depth + 1)]),
+            7 => new WorldPatternNode.Choice([Random(random, depth + 1), Random(random, depth + 1)]),
+            8 => new WorldPatternNode.Both([Random(random, depth + 1), Random(random, depth + 1)]),
+            9 => new WorldPatternNode.Complement(Random(random, depth + 1)),
+            10 => new WorldPatternNode.Optional(Random(random, depth + 1)),
+            11 => new WorldPatternNode.Star(Random(random, depth + 1)),
+            12 => new WorldPatternNode.Plus(Random(random, depth + 1)),
             _ => Repeat(random, depth),
         };
     }

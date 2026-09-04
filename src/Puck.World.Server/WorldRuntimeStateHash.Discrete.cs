@@ -24,6 +24,11 @@ public static partial class WorldRuntimeStateHash {
         AppendString(ref hash, row.Knowledge?.Source);
         AppendString(ref hash, row.Knowledge?.Mask);
         AppendVisibility(ref hash, row.Visibility);
+        if (row.History is { } history) {
+            hash.Add(history.Capacity);
+            hash.Add(history.Empty);
+            hash.Add(row.HistoryCursor);
+        }
         if (row.Phase is not { } phase) { return; }
         hash.Add(phase.Participants.Count);
         for (var index = 0; index < phase.Participants.Count; index++) { AppendString(ref hash, phase.Participants[index]); }

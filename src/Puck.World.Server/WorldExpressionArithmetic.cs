@@ -57,6 +57,14 @@ public static class WorldExpressionArithmetic {
                 if (kind != CellKind.Int || (ulong)right > 63UL) { return false; }
                 value = (long)BitOperations.RotateRight((ulong)left, (int)right);
                 return true;
+            case WorldExpressionOp.ParallelBitExtract:
+                if (kind != CellKind.Int) { return false; }
+                value = (long)ParallelExtract((ulong)left, (ulong)right);
+                return true;
+            case WorldExpressionOp.ParallelBitDeposit:
+                if (kind != CellKind.Int) { return false; }
+                value = (long)ParallelDeposit((ulong)left, (ulong)right);
+                return true;
             case WorldExpressionOp.Multiply:
                 return kind == CellKind.Int ? Narrow((Int128)left * right, out value) :
                     FusedArithmetic.TryMixedScaleProduct(left, FixedQ4816.FractionBitCount, right,
@@ -112,6 +120,62 @@ public static class WorldExpressionArithmetic {
             case WorldExpressionOp.BitReverse: value = (long)ReverseBits(bits); return true;
             default: return false;
         }
+    }
+
+    /// <summary>Extracts the unsigned bit field of <paramref name="width"/> bits at <paramref name="offset"/>.</summary>
+    /// <param name="value">The Int carrier.</param>
+    /// <param name="offset">The field's lowest bit, 0..63.</param>
+    /// <param name="width">The field's width, 1..64, with offset + width at most 64.</param>
+    /// <param name="field">The field, or zero on refusal.</param>
+    /// <returns>False when the field does not fit the carrier.</returns>
+    public static bool TryBitField(long value, long offset, long width, out long field) {
+        field = 0;
+        if ((ulong)offset > 63UL || width < 1 || width > 64 || offset + width > 64) { return false; }
+        field = (long)(((ulong)value >> (int)offset) & FieldMask((int)width));
+        return true;
+    }
+
+    /// <summary>Replaces the bit field of <paramref name="width"/> bits at <paramref name="offset"/> with the low
+    /// bits of <paramref name="field"/>.</summary>
+    /// <param name="value">The Int carrier.</param>
+    /// <param name="field">The replacement bits; those above the width are ignored.</param>
+    /// <param name="offset">The field's lowest bit, 0..63.</param>
+    /// <param name="width">The field's width, 1..64, with offset + width at most 64.</param>
+    /// <param name="inserted">The carrier with the field replaced, or zero on refusal.</param>
+    /// <returns>False when the field does not fit the carrier.</returns>
+    public static bool TryBitInsert(long value, long field, long offset, long width, out long inserted) {
+        inserted = 0;
+        if ((ulong)offset > 63UL || width < 1 || width > 64 || offset + width > 64) { return false; }
+        var mask = FieldMask((int)width) << (int)offset;
+        inserted = (long)(((ulong)value & ~mask) | (((ulong)field << (int)offset) & mask));
+        return true;
+    }
+
+    private static ulong FieldMask(int width) => (width == 64) ? ulong.MaxValue : ((1UL << width) - 1UL);
+
+    // The software forms of pext/pdep walk the mask's set bits from the bottom, so they are bit-exact with the
+    // hardware instructions on every machine and need no intrinsic check.
+    private static ulong ParallelExtract(ulong value, ulong mask) {
+        var result = 0UL;
+        var bit = 0;
+        while (mask != 0UL) {
+            var lowest = mask & (~mask + 1UL);
+            if ((value & lowest) != 0UL) { result |= 1UL << bit; }
+            bit++;
+            mask &= mask - 1UL;
+        }
+        return result;
+    }
+    private static ulong ParallelDeposit(ulong value, ulong mask) {
+        var result = 0UL;
+        var bit = 0;
+        while (mask != 0UL) {
+            var lowest = mask & (~mask + 1UL);
+            if (((value >> bit) & 1UL) != 0UL) { result |= lowest; }
+            bit++;
+            mask &= mask - 1UL;
+        }
+        return result;
     }
 
     // Bit reversal by successive swaps of halves, pairs, nibbles, then the byte order.

@@ -26,6 +26,104 @@ public sealed class WorldPatternLawTests {
         Assert.Equal(0L, Value(fixture, "south"));
         Assert.Equal(0L, Value(fixture, "narrow"));
         Assert.Contains("bracket kind=Int letters=3 states=", fixture.Server.DescribePatterns());
+        var narrated = fixture.Server.DescribeMatch("bracket", "board", null, "0", "E");
+        Assert.Contains("accept=1 prefix=3", narrated);
+        Assert.Contains("them", narrated);
+        Assert.Contains("direction", fixture.Server.DescribeMatch("bracket", "board", null, "0", "any"));
+        Assert.Contains("names no pattern", fixture.Server.DescribeMatch("missing", "board", null, "0", "E"));
+    }
+
+    [Fact]
+    public void PrefixAndEveryDirectionFacetsAnswerFlipCountsAndFlankMasks() {
+        // Row 0 of the 4x4 grid reads 1 2 2 1 eastward from cell 0, so the flank pattern accepts the 3-cell
+        // prefix and no other ray from cell 0 has a them+ run closed by me.
+        var board = new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0", 1), Cell("1", 2), Cell("2", 2), Cell("3", 1)], Board: new("map"));
+        var definition = Document([board, Slot("flips"), Slot("mask"), Slot("count"), Slot("handPrefix"),
+                new(Name("hand"), CellKind.Int, KeysFrom: "cards", Cells: [Cell("c1", 2), Cell("c2", 2), Cell("c3", 1), Cell("c4", 2)]),
+                new(Name("cards"), CellKind.Int, Capacity: 4, Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4")], Tokens: new())],
+            [Bracket("bracket")],
+            [
+                Mirror("flips", "$match:bracket:board:E:prefix", "0"),
+                Mirror("mask", "$match:bracket:board:any:mask", "0"),
+                Mirror("count", "$match:bracket:board:any:count", "0"),
+                Mirror("handPrefix", "$match:bracket:hand:prefix"),
+            ]);
+
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        fixture.Step();
+
+        Assert.Equal(3L, Value(fixture, "flips"));
+        Assert.Equal(1L, Value(fixture, "count"));
+        var mask = Value(fixture, "mask");
+        Assert.True(mask != 0L && (mask & (mask - 1L)) == 0L, $"one direction accepts, mask={mask}");
+        Assert.Equal(3L, Value(fixture, "handPrefix"));
+
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(Document([board, Slot("x")], [Bracket("bracket")], [Mirror("x", "$match:bracket:board:E:mask", "0")]), out var facetReason));
+        Assert.Contains("not a facet", facetReason);
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(Document([board, Slot("x")], [Bracket("bracket")], [Mirror("x", "$match:bracket:board:any:prefix", "0")]), out var anyReason));
+        Assert.Contains("not a facet", anyReason);
+    }
+
+    [Fact]
+    public void AValueExpressionReadsATupleOfAttributesPerTokenAndTokenBindsOnlyThere() {
+        // suit * 16 + rank: hearts are suit 1, so a heart of any rank lies in 16..31 and a heart flush is h{5}.
+        WorldValueExpression Tuple() => new(Tokens: [
+            new WorldValueToken.State(Name: "suit", Key: "$token"), new WorldValueToken.Constant(Value: 16m), new WorldValueToken.Multiply(),
+            new WorldValueToken.State(Name: "rank", Key: "$token"), new WorldValueToken.Add(),
+        ]);
+        var flush = new WorldPatternRow(Name("hearts"), CellKind.Int, Symbols: [new(Name("h"), 16, 31)], Pattern: new WorldPatternNode.Repeat(new WorldPatternNode.Symbol("h"), 5, 5), Value: Tuple());
+        var straightFlush = new WorldPatternRow(Name("royal"), CellKind.Int, Symbols: [.. Enumerable.Range(5, 5).Select(r => new WorldPatternSymbol(Name($"h{r}"), 16 + r, 16 + r))],
+            Pattern: new WorldPatternNode.Sequence([.. Enumerable.Range(5, 5).Select(r => (WorldPatternNode)new WorldPatternNode.Symbol($"h{r}"))]), Value: Tuple());
+        var suited = Hand() with { StateRaw = Hand().StateRaw! with { World = [.. Hand().State.Where(r => r.Name.Value != "straight").Select(r => r.Name.Value == "suit"
+            ? r with { Cells = [Cell("c1", 1), Cell("c2", 1), Cell("c3", 1), Cell("c4", 1), Cell("c5", 1)] }
+            : r),
+            Slot("flush"), Slot("royal")] } };
+        var definition = suited with { PatternsRaw = [flush, straightFlush], Rules = [Mirror("flush", "$match:hearts:hand"), Mirror("royal", "$match:royal:hand")] };
+
+        using var unsorted = Fixtures.FreshServer(definition: definition);
+        unsorted.Step();
+        Assert.Equal(1L, Value(unsorted, "flush"));
+        Assert.Equal(0L, Value(unsorted, "royal"));
+        Assert.Contains("accept=1", unsorted.Server.DescribeMatch("hearts", "hand", null, null, null));
+
+        var sorted = Apply(definition, new WorldStateTransform.Sort("hand", By: [new("rank")]));
+        using var ordered = Fixtures.FreshServer(definition: sorted);
+        ordered.Step();
+        Assert.Equal(1L, Value(ordered, "royal"));
+
+        var mixed = definition with { StateRaw = definition.StateRaw! with { World = [.. definition.State.Select(r => r.Name.Value == "suit" ? r with { Cells = [Cell("c1", 1), Cell("c2", 2), Cell("c3", 1), Cell("c4", 1), Cell("c5", 1)] } : r)] } };
+        using var broken = Fixtures.FreshServer(definition: mixed);
+        broken.Step();
+        Assert.Equal(0L, Value(broken, "flush"));
+
+        var stray = definition with { Rules = [new WorldRule(Name("stray"), [new ActionEffect.SetState(State: "flush", FromState: "rank", FromKey: "$token")])] };
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(stray, out var strayReason));
+        Assert.Contains("not bound here", strayReason);
+        var foreign = definition with { PatternsRaw = [flush with { Value = new(Tokens: [new WorldValueToken.State(Name: "flush", Key: "$token")]) }], Rules = [Mirror("flush", "$match:hearts:hand")] };
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(foreign, out var foreignReason));
+        Assert.Contains("$token", foreignReason);
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(definition with { PatternsRaw = [flush with { Attribute = "rank" }] }, out var bothReason));
+        Assert.Contains("both attribute and value", bothReason);
+    }
+
+    [Fact]
+    public void TheEmptyLanguageIsTheZeroOfChoiceAndTheAnnihilatorOfSequence() {
+        var dice = new WorldStateRow(Name("dice"), CellKind.Int, Capacity: 2, Cells: [Cell("d1", 1), Cell("d2", 1)]);
+        WorldPatternRow Row(string name, WorldPatternNode pattern) => new(Name(name), CellKind.Int, Symbols: [new(Name("a"), 1, 1)], Pattern: pattern);
+        var definition = Document([dice, Slot("zero"), Slot("choice"), Slot("annihilated"), Slot("everything")], [
+            Row("zero", new WorldPatternNode.None()),
+            Row("choice", new WorldPatternNode.Choice([new WorldPatternNode.None(), new WorldPatternNode.Repeat(new WorldPatternNode.Symbol("a"), 2, 2)])),
+            Row("annihilated", new WorldPatternNode.Sequence([new WorldPatternNode.Star(new WorldPatternNode.AnySymbol()), new WorldPatternNode.None()])),
+            Row("everything", new WorldPatternNode.Complement(new WorldPatternNode.None())),
+        ], [Mirror("zero", "$match:zero:dice"), Mirror("choice", "$match:choice:dice"), Mirror("annihilated", "$match:annihilated:dice"), Mirror("everything", "$match:everything:dice")]);
+
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        fixture.Step();
+
+        Assert.Equal(0L, Value(fixture, "zero"));
+        Assert.Equal(1L, Value(fixture, "choice"));
+        Assert.Equal(0L, Value(fixture, "annihilated"));
+        Assert.Equal(1L, Value(fixture, "everything"));
     }
 
     [Fact]
@@ -133,6 +231,7 @@ public sealed class WorldPatternLawTests {
                 new WorldPatternNode.Optional(new WorldPatternNode.Symbol("a")),
                 new WorldPatternNode.Repeat(new WorldPatternNode.Symbol("b"), 0, 1),
                 new WorldPatternNode.Complement(new WorldPatternNode.Both([new WorldPatternNode.Symbol("a"), new WorldPatternNode.AnySymbol()])),
+                new WorldPatternNode.Optional(new WorldPatternNode.None()),
             ]), MaxStates: 12);
         var definition = Hand() with { PatternsRaw = [.. Hand().Patterns, every], Rules = [.. Hand().Rules!, new WorldRule(Name("order"), [new ActionEffect.TransformState(new WorldStateTransform.Sort("hand", By: [new("suit"), new("rank", Descending: true)]))])] };
 

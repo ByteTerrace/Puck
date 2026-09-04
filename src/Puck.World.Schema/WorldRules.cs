@@ -156,10 +156,14 @@ public static class WorldRuleFacts {
     /// reference takes the same tokens <see cref="DistancePrefix"/> takes.</summary>
     public const string NearestPrefix = "$nearest:";
     /// <summary>The prefix; <c>$match:&lt;pattern&gt;:&lt;row&gt;[:&lt;direction&gt;]</c> runs a <c>patterns</c> row
-    /// over a word: a board ray from the operand key's origin (exclusive) in the direction, an ordered zone's
-    /// attribute values in pile order, or a keyed row's own cells. Reads 1 for a match, 0 for none, -1 when the word
-    /// exceeds the pattern's window.</summary>
+    /// over a word: a board ray from the operand key's origin (exclusive) in the direction (or every direction under
+    /// <c>any</c>), an ordered zone's attribute values in pile order, a history ring in push order, or a keyed row's
+    /// own cells. Reads acceptance 1 or 0, or under a facet the longest accepted prefix or the accepting
+    /// directions.</summary>
     public const string MatchPrefix = "$match:";
+    /// <summary>The prefix; <c>$history:&lt;row&gt;:&lt;age&gt;</c> reads the value pushed <c>age</c> pushes ago into a
+    /// history row (0 is the latest), or the ring's empty value past what it holds; age is 0..capacity-1.</summary>
+    public const string HistoryPrefix = "$history:";
     /// <summary>The prefix a cell KEY may carry in place of a literal: <c>$cell:&lt;row&gt;:&lt;key&gt;</c> resolves, at
     /// every read and every firing, to the integer value of that cell spelled as a key — so an effect or operand
     /// addresses "the cell named by another cell" (the target a body's <c>target</c> cell currently names). Admitted
@@ -175,6 +179,7 @@ public static class WorldRuleFacts {
         (RuleBinding.Each, "$each", "a rule declaring 'forEach'"),
         (RuleBinding.Left, "$left", "an interaction or flock-affinity expression"),
         (RuleBinding.Right, "$right", "a Distance interaction or flock-affinity expression"),
+        (RuleBinding.Token, "$token", "a pattern row's value expression, as the cell key of a row keyed over the zone's token domain"),
     ];
 
     /// <summary>The body-reference spelling of a binding's key token — the token without its leading <c>$</c>.</summary>
@@ -395,6 +400,8 @@ public enum RuleBinding : byte {
 
     /// <summary>The carrier matched as an interaction's <see cref="WorldInteraction.Right"/> (Distance only).</summary>
     Right,
+    /// <summary>The token a pattern value expression is evaluating for — a cell key, never a body.</summary>
+    Token,
 }
 /// <summary>The co-occurrence an interaction evaluates over every carrier pair — compiled from
 /// <see cref="WorldInteraction"/>; the evaluator binds <see cref="RuleBinding.Left"/>/<see cref="RuleBinding.Right"/>
@@ -471,9 +478,12 @@ public enum WorldRuleFactKind : byte {
     SocialClock,
     /// <summary>The last social evidence outcome ordinal.</summary>
     SocialResult,
-    /// <summary>A pattern-language match over a row's word (<see cref="WorldRuleFacts.MatchPrefix"/>): 1, 0, or -1
-    /// when undecided.</summary>
+    /// <summary>A pattern-language match over a row's word (<see cref="WorldRuleFacts.MatchPrefix"/>): acceptance 1
+    /// or 0, a longest accepted prefix, or the accepting directions of a board origin.</summary>
     Pattern,
+    /// <summary>One value of a history ring by age (<see cref="WorldRuleFacts.HistoryPrefix"/>): 0 is the latest push,
+    /// and an age the ring no longer holds reads the trait's empty value.</summary>
+    History,
 }
 /// <summary>One resolved operand of a world-rule comparison — the (<see cref="Kind"/>, <see cref="Row"/>,
 /// <see cref="Key"/>) address plus the <see cref="Screen"/>/<see cref="Address"/> machine coordinates, the live
@@ -521,6 +531,8 @@ public enum WorldRuleFactKind : byte {
 /// <param name="Board">The compiled discrete query, when present.</param>
 /// <param name="Social">The compiled directed social query, when present.</param>
 /// <param name="Pattern">The pattern a <see cref="WorldRuleFactKind.Pattern"/> operand runs; the word source is <paramref name="Row"/> and, for a zone, <paramref name="FilterRow"/> is its attribute row.</param>
+/// <param name="MatchFacet">What the pattern operand answers; a board query whose <c>Direction</c> is -1 walks every direction.</param>
+/// <param name="TokenExpression">For a zone source whose pattern carries a value expression, that expression compiled with <c>$token</c> keys bound per token.</param>
 public readonly record struct CompiledWorldOperand(
     WorldRuleFactKind Kind,
     string? Row,
@@ -542,8 +554,21 @@ public readonly record struct CompiledWorldOperand(
     WorldStateHandle FilterHandle = default,
     CompiledWorldBoardQuery? Board = null,
     CompiledWorldSocialQuery? Social = null,
-    string? Pattern = null
+    string? Pattern = null,
+    WorldMatchFacet MatchFacet = WorldMatchFacet.Accept,
+    CompiledWorldExpressionToken[]? TokenExpression = null
 );
+/// <summary>What a <c>$match:</c> operand answers about its word.</summary>
+public enum WorldMatchFacet : byte {
+    /// <summary>1 when the whole word is in the language, else 0.</summary>
+    Accept,
+    /// <summary>The length of the longest accepted prefix, or -1 when none is.</summary>
+    Prefix,
+    /// <summary>Over every direction of a board origin: bit d set when the ray in direction d is accepted.</summary>
+    DirectionMask,
+    /// <summary>Over every direction of a board origin: how many rays are accepted.</summary>
+    DirectionCount,
+}
 /// <summary>One operation in a compiled postfix Boolean gate.</summary>
 public enum CompiledWorldPredicateKind : byte {
     /// <summary>Evaluate one comparison.</summary>
@@ -658,6 +683,17 @@ public enum WorldExpressionOp : byte {
     Negate,
     /// <summary>Magnitude in the operand's kind (unary).</summary>
     Abs,
+    /// <summary>Parallel bit extract: the bits of value under the mask, packed low (Int).</summary>
+    ParallelBitExtract,
+    /// <summary>Parallel bit deposit: the low bits of value scattered to the mask's set positions (Int).</summary>
+    ParallelBitDeposit,
+    /// <summary>Bit-field extract: value, offset, width (Int).</summary>
+    BitField,
+    /// <summary>Bit-field insert: value, field, offset, width (Int).</summary>
+    BitInsert,
+    /// <summary>Topology-aware mask shift: every set bit moves to its neighbour in the compiled direction, and a bit
+    /// with no neighbour that way is dropped rather than wrapped (Int, unary).</summary>
+    BoardShift,
     /// <summary>Sign as Int -1, 0, 1 (unary, either kind).</summary>
     Sign,
 }
@@ -665,7 +701,8 @@ public enum WorldExpressionOp : byte {
 /// <param name="Operation">The stack operation.</param>
 /// <param name="Constant">The raw destination-kind literal for a constant token.</param>
 /// <param name="Operand">The live operand for an operand token.</param>
-public readonly record struct CompiledWorldExpressionToken(WorldExpressionOp Operation, long Constant = 0L, CompiledWorldOperand? Operand = null);
+/// <param name="Board">The compiled topology and direction of a <see cref="WorldExpressionOp.BoardShift"/> token.</param>
+public readonly record struct CompiledWorldExpressionToken(WorldExpressionOp Operation, long Constant = 0L, CompiledWorldOperand? Operand = null, CompiledWorldBoardQuery? Board = null);
 /// <summary>A world-driven body operation compiled entirely to deterministic numerics.</summary>
 /// <param name="Operation">The body instruction operation.</param>
 /// <param name="Value">The operation's fixed-point scalar.</param>
@@ -745,6 +782,8 @@ public enum WorldRuleEffectKind : byte {
     PaintField,
     /// <summary>An atomic discrete state transform.</summary>
     TransformState,
+    /// <summary>Push one evaluated value into a history row's ring.</summary>
+    PushState,
     /// <summary>Deliver evidence into bounded social memory.</summary>
     ObserveSocial,
     /// <summary>Forget a directed impression while retaining its duplicate-evidence ledger.</summary>

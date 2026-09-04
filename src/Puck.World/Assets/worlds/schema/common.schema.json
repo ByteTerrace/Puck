@@ -3175,6 +3175,63 @@
       },
       "additionalProperties": false
     },
+    "WorldValueTokenParallelBitExtract": {
+      "description": "Consumes value, mask and pushes the bits of value at the mask\u0027s set positions, packed toward bit 0 in order (pext): a bitboard\u0027s occupancy along a chosen set of squares as a dense index. Int only.",
+      "properties": {
+        "$type": {
+          "const": "parallelBitExtract"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldValueTokenParallelBitDeposit": {
+      "description": "Consumes value, mask and pushes the low bits of value scattered to the mask\u0027s set positions in order (pdep): a dense index back onto its squares. Int only.",
+      "properties": {
+        "$type": {
+          "const": "parallelBitDeposit"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldValueTokenBitField": {
+      "description": "Consumes value, offset, width and pushes the unsigned field of width bits starting at bit offset; width outside 1..64 or offset \u002B width above 64 fails evaluation. Int only.",
+      "properties": {
+        "$type": {
+          "const": "bitField"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldValueTokenBitInsert": {
+      "description": "Consumes value, field, offset, width and pushes value with the width bits at offset replaced by the low bits of field; the same bounds as BitField. Int only.",
+      "properties": {
+        "$type": {
+          "const": "bitInsert"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldValueTokenBoardShift": {
+      "description": "Consumes one Int mask over the named topology\u0027s cells (bit c is cell ordinal c, at most 64 cells) and pushes it with every set bit moved to that cell\u0027s neighbour in the named direction; a cell with no neighbour that way drops its bit instead of wrapping, so an attack map never crosses an edge. Int only.",
+      "properties": {
+        "$type": {
+          "const": "boardShift"
+        },
+        "topology": {
+          "description": "A discrete topology of state.lattices with at most 64 cells.",
+          "type": "string"
+        },
+        "direction": {
+          "description": "A direction of that topology.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "topology",
+        "direction"
+      ],
+      "additionalProperties": false
+    },
     "WorldValueToken": {
       "description": "One authored token in a WorldValueExpression.",
       "type": [
@@ -3301,6 +3358,21 @@
         },
         {
           "$ref": "#/$defs/WorldValueTokenSign"
+        },
+        {
+          "$ref": "#/$defs/WorldValueTokenParallelBitExtract"
+        },
+        {
+          "$ref": "#/$defs/WorldValueTokenParallelBitDeposit"
+        },
+        {
+          "$ref": "#/$defs/WorldValueTokenBitField"
+        },
+        {
+          "$ref": "#/$defs/WorldValueTokenBitInsert"
+        },
+        {
+          "$ref": "#/$defs/WorldValueTokenBoardShift"
         }
       ]
     },
@@ -3834,6 +3906,51 @@
       ],
       "additionalProperties": false
     },
+    "ActionEffectPushState": {
+      "description": "World scope only: pushes one numeric value into a history row\u0027s ring (see WorldStateHistory), the same source spellings as SetState minus text: exactly one of Value, FromState, or Expression.",
+      "properties": {
+        "$type": {
+          "const": "pushState"
+        },
+        "state": {
+          "description": "The history row.",
+          "type": "string"
+        },
+        "value": {
+          "description": "An exact decimal literal in the row\u0027s kind.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "fromState": {
+          "description": "A state row or reserved channel read live at every firing.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "fromKey": {
+          "description": "The cell of FromState, or null for its slot.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "expression": {
+          "$ref": "#/$defs/WorldValueExpressionNullable",
+          "description": "A bounded numeric expression evaluated in the row\u0027s kind.",
+          "default": null
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "additionalProperties": false
+    },
     "WorldStateTransformTransfer": {
       "description": "Moves one token, preserving identity. A random draw advances only when the whole transfer commits.",
       "properties": {
@@ -4104,6 +4221,101 @@
       ],
       "additionalProperties": false
     },
+    "WorldStateTransformSetMask": {
+      "description": "Writes one value into every cell of a board whose bit is set in a mask read from a state cell: the way a mask computed by $board:mask and the bit operators lands back on the board.",
+      "properties": {
+        "$type": {
+          "const": "setMask"
+        },
+        "row": {
+          "description": "The board row, over a topology of at most 64 cells.",
+          "type": "string"
+        },
+        "mask": {
+          "description": "The integer row the mask is read from.",
+          "type": "string"
+        },
+        "maskKey": {
+          "description": "The cell of that row, or null for its slot cell.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "value": {
+          "description": "The value written to every masked cell.",
+          "type": "integer",
+          "default": 0
+        }
+      },
+      "required": [
+        "row",
+        "mask"
+      ],
+      "additionalProperties": false
+    },
+    "WorldStateTransformCombine": {
+      "description": "Combines two board rows over one topology cell by cell as sets (a nonzero cell is a member) and writes 1 or 0 into every cell of the target: board algebra for topologies too large for one 64-bit mask.",
+      "properties": {
+        "$type": {
+          "const": "combine"
+        },
+        "target": {
+          "description": "The board row written, over the same topology as the operands.",
+          "type": "string"
+        },
+        "left": {
+          "description": "The left operand board.",
+          "type": "string"
+        },
+        "operation": {
+          "description": "The set operation.",
+          "enum": [
+            "And",
+            "Or",
+            "Xor",
+            "AndNot",
+            "Not"
+          ]
+        },
+        "right": {
+          "description": "The right operand board; null for Not only.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "target",
+        "left",
+        "operation"
+      ],
+      "additionalProperties": false
+    },
+    "WorldStateTransformPush": {
+      "description": "Appends one value to a history row\u0027s ring, overwriting the oldest slot once the ring is full, and advances its cursor by one.",
+      "properties": {
+        "$type": {
+          "const": "push"
+        },
+        "row": {
+          "description": "The history row.",
+          "type": "string"
+        },
+        "value": {
+          "description": "The raw value pushed, in the row\u0027s kind.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "row",
+        "value"
+      ],
+      "additionalProperties": false
+    },
     "WorldStateTransformMoveToken": {
       "description": "Moves a token along an affordable route, debiting movement points in the same candidate.",
       "properties": {
@@ -4184,6 +4396,15 @@
         },
         {
           "$ref": "#/$defs/WorldStateTransformSort"
+        },
+        {
+          "$ref": "#/$defs/WorldStateTransformSetMask"
+        },
+        {
+          "$ref": "#/$defs/WorldStateTransformCombine"
+        },
+        {
+          "$ref": "#/$defs/WorldStateTransformPush"
         },
         {
           "$ref": "#/$defs/WorldStateTransformMoveToken"
@@ -6067,6 +6288,9 @@
           "$ref": "#/$defs/ActionEffectAddState"
         },
         {
+          "$ref": "#/$defs/ActionEffectPushState"
+        },
+        {
           "$ref": "#/$defs/ActionEffectTransformState"
         },
         {
@@ -6914,6 +7138,10 @@
           "$ref": "#/$defs/WorldPatternNodeNothing"
         },
         {
+          "$ref": "#/$defs/WorldScreenSourceNone",
+          "description": "The empty language: no word at all, the zero of choice and the annihilator of sequence."
+        },
+        {
           "$ref": "#/$defs/WorldPatternNodeSequence"
         },
         {
@@ -6960,6 +7188,10 @@
         },
         {
           "$ref": "#/$defs/WorldPatternNodeNothing"
+        },
+        {
+          "$ref": "#/$defs/WorldScreenSourceNone",
+          "description": "The empty language: no word at all, the zero of choice and the annihilator of sequence."
         },
         {
           "$ref": "#/$defs/WorldPatternNodeSequence"

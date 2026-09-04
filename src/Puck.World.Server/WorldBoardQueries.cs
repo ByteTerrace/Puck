@@ -28,6 +28,15 @@ public static class WorldBoardQueries {
         if (query.Kind == WorldBoardQueryKind.Line) {
             return HasLine(query, values) ? 1 : 0;
         }
+        if (query.Kind == WorldBoardQueryKind.Mask) {
+            var mask = 0L;
+            for (var ordinal = 0; ordinal < topology.CellCount && ordinal < WorldBoardMask.MaxCells; ordinal++) {
+                if (values[ordinal] >= query.Value && values[ordinal] <= query.Upper) {
+                    mask |= 1L << ordinal;
+                }
+            }
+            return mask;
+        }
         if ((uint)source >= topology.CellCount) {
             return -1;
         }
@@ -48,6 +57,29 @@ public static class WorldBoardQueries {
             }
         }
         return -1;
+    }
+
+    /// <summary>Moves every set bit of a cell mask to its neighbour in the query's direction, dropping a bit whose
+    /// cell has no neighbour that way.</summary>
+    /// <param name="query">The compiled topology and direction.</param>
+    /// <param name="mask">Bit c set for cell ordinal c.</param>
+    /// <returns>The shifted mask.</returns>
+    public static long ShiftMask(CompiledWorldBoardQuery query, long mask) {
+        var topology = query.Topology;
+        var bits = (ulong)mask;
+        var shifted = 0UL;
+        while (bits != 0UL) {
+            var cell = System.Numerics.BitOperations.TrailingZeroCount(bits);
+            bits &= bits - 1UL;
+            if (cell >= topology.CellCount) {
+                continue;
+            }
+            var neighbour = topology.Neighbour(cell, query.Direction);
+            if (neighbour >= 0 && neighbour < WorldBoardMask.MaxCells) {
+                shifted |= 1UL << neighbour;
+            }
+        }
+        return (long)shifted;
     }
 
     private static bool HasLine(CompiledWorldBoardQuery query, ReadOnlySpan<long> values) {

@@ -8,6 +8,14 @@ namespace Puck.World;
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldStateTokens(int Capacity = 256);
 
+/// <summary>A ring of the last <paramref name="Capacity"/> values pushed into the row, oldest overwritten first:
+/// the temporal twin of a board ray, read by <c>$history:</c> facts and matched by <c>$match:</c> in push order.
+/// Cell keys are the ring slots <c>0..Capacity-1</c>; the row's <c>historyCursor</c> counts every push.</summary>
+/// <param name="Capacity">How many pushes the ring keeps, 1..128.</param>
+/// <param name="Empty">The value read for an age older than the ring holds.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldStateHistory(int Capacity, long Empty = 0);
+
 /// <summary>A bounded zone whose cell keys identify tokens. Cell order is pile order; values are membership bits.</summary>
 /// <param name="Tokens">The token-domain row. Every token belongs to exactly one zone of its domain.</param>
 /// <param name="Ordered">Whether first/last selection and insertion order have gameplay meaning.</param>
@@ -80,6 +88,9 @@ public enum WorldZoneSelector : byte {
 [JsonDerivedType(typeof(WorldStateTransform.TurnOrder), "turnOrder")]
 [JsonDerivedType(typeof(WorldStateTransform.Shuffle), "shuffle")]
 [JsonDerivedType(typeof(WorldStateTransform.Sort), "sort")]
+[JsonDerivedType(typeof(WorldStateTransform.SetMask), "setMask")]
+[JsonDerivedType(typeof(WorldStateTransform.Combine), "combine")]
+[JsonDerivedType(typeof(WorldStateTransform.Push), "push")]
 [JsonDerivedType(typeof(WorldStateTransform.MoveToken), "moveToken")]
 [JsonDerivedType(typeof(WorldStateTransform.Observe), "observe")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -144,6 +155,43 @@ public abstract record WorldStateTransform {
     /// <param name="By">The attribute keys for a zone, 1..8 in precedence order; null (required) for a keyed row.</param>
     /// <param name="Descending">Whether a keyed row's greatest value comes first; a zone's direction sits on each key.</param>
     public sealed record Sort(string Row, IReadOnlyList<WorldSortKey>? By = null, bool Descending = false) : WorldStateTransform;
+
+    /// <summary>Writes one value into every cell of a board whose bit is set in a mask read from a state cell: the
+    /// way a mask computed by <c>$board:mask</c> and the bit operators lands back on the board.</summary>
+    /// <param name="Row">The board row, over a topology of at most 64 cells.</param>
+    /// <param name="Mask">The integer row the mask is read from.</param>
+    /// <param name="MaskKey">The cell of that row, or null for its slot cell.</param>
+    /// <param name="Value">The value written to every masked cell.</param>
+    public sealed record SetMask(string Row, string Mask, string? MaskKey = null, long Value = 0) : WorldStateTransform;
+
+    /// <summary>Appends one value to a history row's ring, overwriting the oldest slot once the ring is full, and
+    /// advances its cursor by one.</summary>
+    /// <param name="Row">The history row.</param>
+    /// <param name="Value">The raw value pushed, in the row's kind.</param>
+    public sealed record Push(string Row, long Value) : WorldStateTransform;
+
+    /// <summary>Combines two board rows over one topology cell by cell as sets (a nonzero cell is a member) and
+    /// writes 1 or 0 into every cell of the target: board algebra for topologies too large for one 64-bit mask.</summary>
+    /// <param name="Target">The board row written, over the same topology as the operands.</param>
+    /// <param name="Left">The left operand board.</param>
+    /// <param name="Operation">The set operation.</param>
+    /// <param name="Right">The right operand board; null for <see cref="WorldBoardCombine.Not"/> only.</param>
+    public sealed record Combine(string Target, string Left, WorldBoardCombine Operation, string? Right = null) : WorldStateTransform;
+}
+
+/// <summary>The cell-wise set operations of a <see cref="WorldStateTransform.Combine"/>.</summary>
+[JsonConverter(typeof(StrictEnumConverter<WorldBoardCombine>))]
+public enum WorldBoardCombine : byte {
+    /// <summary>Members of both.</summary>
+    And,
+    /// <summary>Members of either.</summary>
+    Or,
+    /// <summary>Members of exactly one.</summary>
+    Xor,
+    /// <summary>Members of the left that are not members of the right.</summary>
+    AndNot,
+    /// <summary>Cells that are not members of the left; the right is absent.</summary>
+    Not,
 }
 
 /// <summary>One key of a zone <c>sort</c>: a keyed numeric attribute row over the zone's token domain.</summary>

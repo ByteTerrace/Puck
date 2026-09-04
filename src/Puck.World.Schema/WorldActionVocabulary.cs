@@ -129,6 +129,11 @@ public sealed record WorldValueExpression(IReadOnlyList<WorldValueToken> Tokens)
 [JsonDerivedType(typeof(WorldValueToken.Negate), typeDiscriminator: "negate")]
 [JsonDerivedType(typeof(WorldValueToken.Abs), typeDiscriminator: "abs")]
 [JsonDerivedType(typeof(WorldValueToken.Sign), typeDiscriminator: "sign")]
+[JsonDerivedType(typeof(WorldValueToken.ParallelBitExtract), typeDiscriminator: "parallelBitExtract")]
+[JsonDerivedType(typeof(WorldValueToken.ParallelBitDeposit), typeDiscriminator: "parallelBitDeposit")]
+[JsonDerivedType(typeof(WorldValueToken.BitField), typeDiscriminator: "bitField")]
+[JsonDerivedType(typeof(WorldValueToken.BitInsert), typeDiscriminator: "bitInsert")]
+[JsonDerivedType(typeof(WorldValueToken.BoardShift), typeDiscriminator: "boardShift")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldValueToken {
     /// <summary>A directed impression query, with its facet's declared numeric kind.</summary>
@@ -231,6 +236,24 @@ public abstract record WorldValueToken {
     public sealed record Abs : WorldValueToken;
     /// <summary>Consumes one value of either kind and pushes Int -1, 0, or 1 by its sign.</summary>
     public sealed record Sign : WorldValueToken;
+    /// <summary>Consumes value, mask and pushes the bits of value at the mask's set positions, packed toward bit 0
+    /// in order (pext): a bitboard's occupancy along a chosen set of squares as a dense index. Int only.</summary>
+    public sealed record ParallelBitExtract : WorldValueToken;
+    /// <summary>Consumes value, mask and pushes the low bits of value scattered to the mask's set positions in
+    /// order (pdep): a dense index back onto its squares. Int only.</summary>
+    public sealed record ParallelBitDeposit : WorldValueToken;
+    /// <summary>Consumes value, offset, width and pushes the unsigned field of <c>width</c> bits starting at bit
+    /// <c>offset</c>; width outside 1..64 or offset + width above 64 fails evaluation. Int only.</summary>
+    public sealed record BitField : WorldValueToken;
+    /// <summary>Consumes value, field, offset, width and pushes value with the <c>width</c> bits at <c>offset</c>
+    /// replaced by the low bits of field; the same bounds as <see cref="BitField"/>. Int only.</summary>
+    public sealed record BitInsert : WorldValueToken;
+    /// <summary>Consumes one Int mask over the named topology's cells (bit c is cell ordinal c, at most 64 cells) and
+    /// pushes it with every set bit moved to that cell's neighbour in the named direction; a cell with no neighbour
+    /// that way drops its bit instead of wrapping, so an attack map never crosses an edge. Int only.</summary>
+    /// <param name="Topology">A discrete topology of <c>state.lattices</c> with at most 64 cells.</param>
+    /// <param name="Direction">A direction of that topology.</param>
+    public sealed record BoardShift(string Topology, string Direction) : WorldValueToken;
 }
 
 /// <summary>How a rule-triggered body designation chooses its target.</summary>
@@ -387,6 +410,7 @@ public abstract record WorldTransactionStep {
 [JsonDerivedType(typeof(ActionEffect.PlanarImpulse), typeDiscriminator: "planarImpulse")]
 [JsonDerivedType(typeof(ActionEffect.SetState), typeDiscriminator: "setState")]
 [JsonDerivedType(typeof(ActionEffect.AddState), typeDiscriminator: "addState")]
+[JsonDerivedType(typeof(ActionEffect.PushState), typeDiscriminator: "pushState")]
 [JsonDerivedType(typeof(ActionEffect.TransformState), typeDiscriminator: "transformState")]
 [JsonDerivedType(typeof(ActionEffect.CountdownState), typeDiscriminator: "countdownState")]
 [JsonDerivedType(typeof(ActionEffect.StartTimer), typeDiscriminator: "startTimer")]
@@ -428,6 +452,21 @@ public abstract record ActionEffect {
     /// attitude at fire time and ridden at <paramref name="Speed"/> for <paramref name="DurationSeconds"/>, integrated
     /// through its own accumulator on top of the body's compiled motion — integration itself is untouched.</summary>
     public sealed record PlanarImpulse(DocumentVector3 BodyDirection, float Speed, float DurationSeconds, ActionTarget Target = ActionTarget.Self) : ActionEffect;
+    /// <summary>World scope only: pushes one numeric value into a history row's ring (see
+    /// <see cref="WorldStateHistory"/>), the same source spellings as <see cref="SetState"/> minus text: exactly one
+    /// of <paramref name="Value"/>, <paramref name="FromState"/>, or <paramref name="Expression"/>.</summary>
+    /// <param name="State">The history row.</param>
+    /// <param name="Value">An exact decimal literal in the row's kind.</param>
+    /// <param name="FromState">A state row or reserved channel read live at every firing.</param>
+    /// <param name="FromKey">The cell of <paramref name="FromState"/>, or null for its slot.</param>
+    /// <param name="Expression">A bounded numeric expression evaluated in the row's kind.</param>
+    public sealed record PushState(
+        string State,
+        decimal? Value = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromState = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromKey = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldValueExpression? Expression = null
+    ) : ActionEffect;
     /// <summary>Writes a named state cell — a kit counter slot at body scope, a <c>state</c>-section row's cell at
     /// world scope (see <see cref="WorldRule"/>).</summary>
     /// <param name="State">The counter slot (body scope) or state row name (world scope).</param>

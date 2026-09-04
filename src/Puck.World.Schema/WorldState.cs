@@ -180,6 +180,11 @@ public sealed record WorldStateCell(WorldCellName Key, long Value = 0, string? T
 /// <param name="Visibility">An opt-in observation policy; empty readers retains the row at the authority.</param>
 /// <param name="Knowledge">The source and visibility mask of a remembered board layer.</param>
 /// <param name="PhaseOf">The phase row required on external gameplay transforms that write this row.</param>
+/// <param name="History">The ring trait: the row keeps the last <see cref="WorldStateHistory.Capacity"/> pushed
+/// values in slots keyed <c>0..Capacity-1</c>; absent for ordinary rows.</param>
+/// <param name="HistoryCursor">How many values have ever been pushed into a <see cref="History"/> row — engine
+/// bookkeeping that names the next slot (<c>cursor mod capacity</c>) and how much of the ring is filled. Zero
+/// without the trait; refused negative.</param>
 public sealed record WorldStateRow(
     WorldCellName Name,
     CellKind Kind,
@@ -202,7 +207,9 @@ public sealed record WorldStateRow(
     WorldStateZone? Zone = null,
     string? KeysFrom = null,
     string? ValuesFrom = null,
-    WorldStatePhase? Phase = null, WorldStateVisibility? Visibility = null, WorldStateKnowledge? Knowledge = null, string? PhaseOf = null
+    WorldStatePhase? Phase = null, WorldStateVisibility? Visibility = null, WorldStateKnowledge? Knowledge = null, string? PhaseOf = null,
+    WorldStateHistory? History = null,
+    long HistoryCursor = 0
 ) {
     /// <summary>The prefix every engine-minted row or cell name carries, and the one an author may never spell. A
     /// row name starting with it is refused outright (nothing mints a row); a cell key starting with it is refused
@@ -235,7 +242,7 @@ public sealed record WorldStateRow(
     /// slot-addressable, since the first write mints its slot cell exactly as <c>world.state.cell.set</c> does.
     /// <see cref="IsSlot"/> asks whether a single value exists to read; this asks whether an omitted key can address
     /// one.</remarks>
-    public bool IsKeyed => ((Board is not null || Tokens is not null || Zone is not null || KeysFrom is not null || Phase is not null) || (Capacity is not null) || (Cells is { Count: > 1 }) || ((Cells is { Count: 1 } cells) && (cells[0].Key != SlotKey)));
+    public bool IsKeyed => ((Board is not null || Tokens is not null || Zone is not null || KeysFrom is not null || Phase is not null || History is not null) || (Capacity is not null) || (Cells is { Count: > 1 }) || ((Cells is { Count: 1 } cells) && (cells[0].Key != SlotKey)));
     /// <summary>Gets a value indicating whether this row is shaped as a scalar slot — no declared
     /// <see cref="Capacity"/> and exactly one cell keyed <see cref="SlotKey"/>. Drives whether
     /// <c>Puck.World.WorldStateRowJsonConverter</c> writes the row's one cell back as the bare <c>value</c> sugar or
@@ -243,7 +250,7 @@ public sealed record WorldStateRow(
     /// value column) resolve a live value for — a keyed row has no single value to show. A draw site is an ordinary
     /// slot: its one cell holds the drawn value, and its own bookkeeping (<see cref="DrawCursor"/>/
     /// <see cref="DrawDecks"/>) lives in row fields rather than in cells.</summary>
-    public bool IsSlot => ((Board is null && Tokens is null && Zone is null && KeysFrom is null && Phase is null) && (Capacity is null) && (Cells is { Count: 1 } cells) && (cells[0].Key == SlotKey));
+    public bool IsSlot => ((Board is null && Tokens is null && Zone is null && KeysFrom is null && Phase is null && History is null) && (Capacity is null) && (Cells is { Count: 1 } cells) && (cells[0].Key == SlotKey));
 
     /// <summary>Clamps <paramref name="value"/> into this row's declared numeric envelope: the
     /// <see cref="NonNegative"/> floor first, then an authored <see cref="Min"/>/<see cref="Max"/> pair.</summary>

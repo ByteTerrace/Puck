@@ -140,6 +140,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
     private static long EffectCost(CompiledWorldEffect effect, WorldDefinition definition) {
         var cost = effect.Kind switch {
             WorldRuleEffectKind.Write or WorldRuleEffectKind.Countdown or WorldRuleEffectKind.RemoveStateCell or WorldRuleEffectKind.ScheduleState => 512L,
+            WorldRuleEffectKind.PushState => 1_024L,
             WorldRuleEffectKind.Generate => 4_096L,
             WorldRuleEffectKind.TransformState => TransformCost(effect.Transform!, definition),
             WorldRuleEffectKind.UpsertHudPanel or WorldRuleEffectKind.RemoveHudPanel => 4_096L,
@@ -213,6 +214,19 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 var pile = WorldDefinitionRows.FindStateRow(definition.State, shuffle.Row)!;
                 cost += 2L * (pile.Capacity ?? pile.CellCeiling);
                 break;
+            case WorldStateTransform.SetMask setMask:
+                var masked = WorldDefinitionRows.FindStateRow(definition.State, setMask.Row)!;
+                var maskedCells = WorldTopologyCompilation.Find(definition.StateRaw, masked.Board!.Topology)!.CellCount;
+                cost += (long)maskedCells * (maskedCells + 1);
+                break;
+            case WorldStateTransform.Push push:
+                var ring = WorldDefinitionRows.FindStateRow(definition.State, push.Row)!;
+                cost += 2L * (ring.History?.Capacity ?? 1);
+                break;
+            case WorldStateTransform.Combine combine:
+                var combined = WorldDefinitionRows.FindStateRow(definition.State, combine.Target)!;
+                cost += 4L * WorldTopologyCompilation.Find(definition.StateRaw, combined.Board!.Topology)!.CellCount;
+                break;
             case WorldStateTransform.Observe observe:
                 var row = WorldDefinitionRows.FindStateRow(definition.State, observe.Row)!;
                 var cells = WorldTopologyCompilation.Find(definition.StateRaw, row.Board!.Topology)!.CellCount;
@@ -251,7 +265,8 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         }
         if (operand.Kind == WorldRuleFactKind.Pattern) {
             var pattern = definition.Patterns.FirstOrDefault(candidate => candidate.Name.Value == operand.Pattern);
-            return WorldPatternCapacity.MaxWord + (operand.Board?.Topology.CellCount ?? 0);
+            var rays = ((operand.Board is { Direction: < 0 } every) ? every.Topology.DirectionCount : 1);
+            return WorldPatternCapacity.MaxWord * (1L + (operand.TokenExpression?.Length ?? 0)) + ((operand.Board?.Topology.CellCount ?? 0) * rays);
         }
 
         return 1L;

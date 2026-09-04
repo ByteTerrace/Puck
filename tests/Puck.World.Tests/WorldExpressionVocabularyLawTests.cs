@@ -53,6 +53,39 @@ public sealed class WorldExpressionVocabularyLawTests {
     }
 
     [Fact]
+    public void ParallelBitsAndBitFieldsPackAndUnpackAndRefuseFieldsThatLeaveTheCarrier() {
+        var definition = Document(
+            state: [Slot("packed", 0L), Slot("spread", 0L), Slot("field", 0L), Slot("inserted", 0L), Slot("refused", 7L)],
+            rules: [
+                new WorldRule(Name: Name("pext"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.SetState(State: "packed", Expression: new WorldValueExpression(Tokens: [
+                    new WorldValueToken.Constant(Value: 176m), new WorldValueToken.Constant(Value: 240m), new WorldValueToken.ParallelBitExtract(),
+                ]))]),
+                new WorldRule(Name: Name("pdep"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.SetState(State: "spread", Expression: new WorldValueExpression(Tokens: [
+                    new WorldValueToken.Constant(Value: 11m), new WorldValueToken.Constant(Value: 240m), new WorldValueToken.ParallelBitDeposit(),
+                ]))]),
+                new WorldRule(Name: Name("field"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.SetState(State: "field", Expression: new WorldValueExpression(Tokens: [
+                    new WorldValueToken.Constant(Value: 4660m), new WorldValueToken.Constant(Value: 4m), new WorldValueToken.Constant(Value: 8m), new WorldValueToken.BitField(),
+                ]))]),
+                new WorldRule(Name: Name("insert"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.SetState(State: "inserted", Expression: new WorldValueExpression(Tokens: [
+                    new WorldValueToken.Constant(Value: 4660m), new WorldValueToken.Constant(Value: 255m), new WorldValueToken.Constant(Value: 4m), new WorldValueToken.Constant(Value: 8m), new WorldValueToken.BitInsert(),
+                ]))]),
+                new WorldRule(Name: Name("too-wide"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.SetState(State: "refused", Expression: new WorldValueExpression(Tokens: [
+                    new WorldValueToken.Constant(Value: 1m), new WorldValueToken.Constant(Value: 60m), new WorldValueToken.Constant(Value: 8m), new WorldValueToken.BitField(),
+                ]))]),
+            ]
+        );
+
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        fixture.Step();
+
+        Assert.Equal(expected: 0b1011L, actual: Value(fixture: fixture, row: "packed"));
+        Assert.Equal(expected: 0b1011_0000L, actual: Value(fixture: fixture, row: "spread"));
+        Assert.Equal(expected: 0x23L, actual: Value(fixture: fixture, row: "field"));
+        Assert.Equal(expected: 0x1FF4L, actual: Value(fixture: fixture, row: "inserted"));
+        Assert.Equal(expected: 7L, actual: Value(fixture: fixture, row: "refused"));
+    }
+
+    [Fact]
     public void ModuloComparisonsAndSelectComposeInBothKinds() {
         var half = FixedQ4816.FromRawBits(value: (FixedQ4816.One.Value / 2L)).Value;
         var definition = Document(
@@ -333,6 +366,9 @@ public sealed class WorldExpressionVocabularyLawTests {
             new WorldValueToken.LowestSetBit(), new WorldValueToken.ClearLowestSetBit(),
             new WorldValueToken.Constant(Value: 3m), new WorldValueToken.RotateLeft(), new WorldValueToken.Constant(Value: 3m), new WorldValueToken.RotateRight(),
             new WorldValueToken.ByteSwap(), new WorldValueToken.BitReverse(), new WorldValueToken.Negate(), new WorldValueToken.Abs(), new WorldValueToken.Sign(),
+            new WorldValueToken.Constant(Value: 12m), new WorldValueToken.ParallelBitExtract(), new WorldValueToken.Constant(Value: 12m), new WorldValueToken.ParallelBitDeposit(),
+            new WorldValueToken.Constant(Value: 1m), new WorldValueToken.Constant(Value: 2m), new WorldValueToken.BitField(),
+            new WorldValueToken.Constant(Value: 1m), new WorldValueToken.Constant(Value: 1m), new WorldValueToken.Constant(Value: 2m), new WorldValueToken.BitInsert(),
         ];
         var definition = Document(
             state: [Slot("target", 0L)],

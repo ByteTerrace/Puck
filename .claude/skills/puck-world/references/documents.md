@@ -2214,9 +2214,13 @@ A `patterns` section row is a regular language over cell values
 (`WorldPatterns.cs`: symbols as value ranges, a closed node vocabulary with
 complement and intersection, a derivative machine inside a state budget of at
 most 256) compiled at validation;
-rules read it through `$match:<pattern>:<row>[:<direction>]` over a board
-ray, an ordered zone's attribute word, or a keyed row, and the `sort`
-transform supplies the canonical order. Read back with `world.patterns`.
+rules read it through `$match:<pattern>:<row>[:<direction>|:any][:prefix|:mask|:count]` over a board
+ray, a zone's attribute word or per-token `value` expression (`$token` keys),
+a `history` ring (`push`/`pushState`, `$history:<row>:<age>`), or a keyed row;
+`$board:mask`, the `boardShift` token, and the `setMask`/`combine` transforms
+carry 64-bit and cell-wise board algebra; `world.match` narrates one word.
+The `sort` transform supplies the canonical order. Read back with
+`world.patterns` and `world.match`.
 
 `state.social` installs a `WorldSocialPolicy`/`CompiledWorldSocialPolicy` bank;
 `WorldSocialMemory` owns directed impressions and exact evidence receipts.

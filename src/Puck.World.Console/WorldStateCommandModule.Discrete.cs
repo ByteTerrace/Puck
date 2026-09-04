@@ -63,6 +63,23 @@ public sealed partial class WorldStateCommandModule {
                 }
                 return new CommandResult(Output: server.DescribePatterns());
             });
+        yield return CommandDefinition.WithWireArgs(
+            name: "world.match", bindability: CommandBindability.Unbindable,
+            description: "Walks one word through a pattern and narrates it: world.match <pattern> <row> [<attribute>] for a keyed row or zone, world.match <pattern> <board-row> <origin-cell> <direction|any> for a board.",
+            routing: CommandRouting.Immediate,
+            handler: (context, args) => {
+                if (args.Count is < 2 or > 4) {
+                    return CommandResult.Usage("world.match", "<pattern> <row> [<attribute>] | <pattern> <board-row> <origin-cell> <direction|any>");
+                }
+                if (!authority.TryResolveServer(context, "world.match", out var server, out var error)) {
+                    return error;
+                }
+                var pattern = args[0].ToString();
+                var row = args[1].ToString();
+                return new CommandResult(Output: (args.Count == 4)
+                    ? server.DescribeMatch(patternName: pattern, rowName: row, attribute: null, key: args[2].ToString(), direction: args[3].ToString())
+                    : server.DescribeMatch(patternName: pattern, rowName: row, attribute: (args.Count == 3) ? args[2].ToString() : null, key: null, direction: null));
+            });
     }
 
     private CommandResult SubmitTransform(CommandContext context, WireArgs args, bool guarded) {
@@ -97,6 +114,9 @@ public sealed partial class WorldStateCommandModule {
         }
         if (row.Board is { } board) {
             return $" topology={board.Topology} empty={board.Empty}";
+        }
+        if (row.History is { } history) {
+            return $" history capacity={history.Capacity} empty={history.Empty} cursor={row.HistoryCursor} held={Math.Min(row.HistoryCursor, history.Capacity)}";
         }
         if (row.Zone is { } zone) {
             return $" tokens={zone.Tokens} ordered={zone.Ordered}";

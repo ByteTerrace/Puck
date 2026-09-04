@@ -1120,6 +1120,11 @@ public static partial class WorldDefinitionValidator {
                 path: path,
                 row: row
             );
+            ValidateHistory(
+                errors: errors,
+                path: path,
+                row: row
+            );
             ValidateAdvance(
                 errors: errors,
                 numeric: numeric,

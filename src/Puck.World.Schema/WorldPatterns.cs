@@ -18,6 +18,7 @@ public sealed record WorldPatternSymbol(WorldCellName Name, decimal Min, decimal
 [JsonDerivedType(typeof(WorldPatternNode.AnySymbol), "any")]
 [JsonDerivedType(typeof(WorldPatternNode.Except), "except")]
 [JsonDerivedType(typeof(WorldPatternNode.Nothing), "empty")]
+[JsonDerivedType(typeof(WorldPatternNode.None), "none")]
 [JsonDerivedType(typeof(WorldPatternNode.Sequence), "sequence")]
 [JsonDerivedType(typeof(WorldPatternNode.Choice), "choice")]
 [JsonDerivedType(typeof(WorldPatternNode.Both), "all")]
@@ -36,6 +37,8 @@ public abstract record WorldPatternNode {
     public sealed record Except(string Name) : WorldPatternNode;
     /// <summary>The empty word.</summary>
     public sealed record Nothing : WorldPatternNode;
+    /// <summary>The empty language: no word at all, the zero of choice and the annihilator of sequence.</summary>
+    public sealed record None : WorldPatternNode;
     /// <summary>The items matched one after another.</summary>
     public sealed record Sequence(IReadOnlyList<WorldPatternNode> Items) : WorldPatternNode;
     /// <summary>Any one of the items.</summary>
@@ -62,6 +65,9 @@ public abstract record WorldPatternNode {
 /// <param name="Pattern">The language.</param>
 /// <param name="Attribute">For a zone source, the keyed row (over the zone's token domain) whose cell values form the
 /// word, in pile order; null reads the source row's own cell values.</param>
+/// <param name="Value">For a zone source, an expression in the pattern's kind evaluated once per token in pile order,
+/// where a state token keyed <c>$token</c> reads that token's cell of a row keyed over the zone's token domain: the
+/// word over a tuple of attributes (<c>suit * 16 + rank</c>) rather than one. Exclusive with <paramref name="Attribute"/>.</param>
 /// <param name="MaxStates">The machine-state budget the compile refuses past, 1..256.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldPatternRow(
@@ -70,7 +76,8 @@ public sealed record WorldPatternRow(
     IReadOnlyList<WorldPatternSymbol> Symbols,
     WorldPatternNode Pattern,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Attribute = null,
-    int MaxStates = WorldPatternCapacity.DefaultStates
+    int MaxStates = WorldPatternCapacity.DefaultStates,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldValueExpression? Value = null
 );
 
 /// <summary>Representation ceilings for the pattern section.</summary>
@@ -97,12 +104,14 @@ public static class WorldPatternCapacity {
 /// complement and intersection included, and the row's <c>maxStates</c> bounds it by name at validation.</remarks>
 public sealed class CompiledWorldPattern {
     private readonly RangeAlphabet m_alphabet;
+    private readonly ulong[] m_masks;
     private readonly int[] m_transitions;
     private readonly bool[] m_accepting;
 
-    private CompiledWorldPattern(WorldPatternRow source, RangeAlphabet alphabet, int[] transitions, bool[] accepting) {
+    private CompiledWorldPattern(WorldPatternRow source, RangeAlphabet alphabet, ulong[] masks, int[] transitions, bool[] accepting) {
         Source = source;
         m_alphabet = alphabet;
+        m_masks = masks;
         m_transitions = transitions;
         m_accepting = accepting;
     }
@@ -118,14 +127,58 @@ public sealed class CompiledWorldPattern {
     /// <param name="values">The word, raw in the pattern's kind.</param>
     /// <returns>1 when the whole word is in the language, 0 when it is not.</returns>
     public long Match(ReadOnlySpan<long> values) {
-        var letters = m_alphabet.LetterCount;
         var state = 0;
 
         for (var index = 0; index < values.Length; index++) {
-            state = m_transitions[(state * letters) + m_alphabet.LetterOf(value: values[index])];
+            state = Step(state: state, letter: LetterOf(value: values[index]));
         }
 
         return m_accepting[state] ? 1L : 0L;
+    }
+
+    /// <summary>Finds the longest prefix of a word that is in the language.</summary>
+    /// <param name="values">The word, raw in the pattern's kind.</param>
+    /// <returns>The length of the longest accepted prefix, 0 when only the empty word is accepted, or -1 when no
+    /// prefix is.</returns>
+    public long LongestAcceptedPrefix(ReadOnlySpan<long> values) {
+        var state = 0;
+        var longest = (m_accepting[0] ? 0L : -1L);
+
+        for (var index = 0; index < values.Length; index++) {
+            state = Step(state: state, letter: LetterOf(value: values[index]));
+
+            if (m_accepting[state]) {
+                longest = index + 1;
+            }
+        }
+
+        return longest;
+    }
+
+    /// <summary>Gets the letter a raw value reads as.</summary>
+    /// <param name="value">The raw value in the pattern's kind.</param>
+    public int LetterOf(long value) => m_alphabet.LetterOf(value: value);
+    /// <summary>Follows one transition of the machine.</summary>
+    /// <param name="state">The current state; 0 is the start.</param>
+    /// <param name="letter">The letter read.</param>
+    /// <returns>The next state.</returns>
+    public int Step(int state, int letter) => m_transitions[(state * m_alphabet.LetterCount) + letter];
+    /// <summary>Gets a value indicating whether a state accepts.</summary>
+    /// <param name="state">The state.</param>
+    public bool Accepts(int state) => m_accepting[state];
+    /// <summary>Names a letter by the symbols it belongs to.</summary>
+    /// <param name="letter">The letter.</param>
+    /// <returns>The symbol names joined by <c>|</c>, or <c>remainder</c> for the unnamed letter.</returns>
+    public string DescribeLetter(int letter) {
+        var names = new List<string>();
+
+        for (var symbol = 0; symbol < m_masks.Length; symbol++) {
+            if (((m_masks[symbol] >> letter) & 1UL) != 0UL) {
+                names.Add(Source.Symbols[symbol].Name.Value);
+            }
+        }
+
+        return (names.Count == 0) ? "remainder" : string.Join('|', names);
     }
 
     /// <summary>Compiles one authored row: refines its symbols into letters, lowers the node tree to a canonical term,
@@ -183,7 +236,7 @@ public sealed class CompiledWorldPattern {
             return false;
         }
 
-        compiled = new(source: row, alphabet: alphabet, transitions: transitions, accepting: accepting);
+        compiled = new(source: row, alphabet: alphabet, masks: masks, transitions: transitions, accepting: accepting);
         reason = string.Empty;
         return true;
     }
@@ -292,6 +345,9 @@ public sealed class CompiledWorldPattern {
                     return true;
                 case WorldPatternNode.Nothing:
                     term = Epsilon;
+                    return true;
+                case WorldPatternNode.None:
+                    term = Empty;
                     return true;
                 case WorldPatternNode.Sequence sequence: {
                     var items = sequence.Items ?? [];

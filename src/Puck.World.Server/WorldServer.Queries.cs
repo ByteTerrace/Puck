@@ -391,6 +391,7 @@ public sealed partial class WorldServer {
         WorldRuleFactKind.Phase => Finite(ReadPhaseFact(operand), CellKind.Int),
         WorldRuleFactKind.Board => Finite(ReadBoardFact(operand, tick), CellKind.Int),
         WorldRuleFactKind.Pattern => Finite(ReadPatternFact(operand, tick), CellKind.Int),
+        WorldRuleFactKind.History => Finite(ReadHistoryFact(operand, tick), operand.ValueKind),
         WorldRuleFactKind.Tick => Finite(value: unchecked((long)tick), kind: CellKind.Int),
         WorldRuleFactKind.Population => Finite(value: m_population.ActiveCount(), kind: CellKind.Int),
         WorldRuleFactKind.PhysicsQuiescent => Finite(value: (m_population.RigidBodiesQuiescent() ? 1 : 0), kind: CellKind.Bool),
@@ -553,6 +554,10 @@ public sealed partial class WorldServer {
     private string ResolveOperandKey(string? key, CompiledCellRef? keyFrom, ulong tick) {
         if (keyFrom is not { } indirection) {
             return key!;
+        }
+
+        if (indirection.Binding == RuleBinding.Token) {
+            return m_patternTokenKey ?? throw new InvalidOperationException("a $token key was read outside a pattern value expression");
         }
 
         var index = ((indirection.Binding != RuleBinding.None)

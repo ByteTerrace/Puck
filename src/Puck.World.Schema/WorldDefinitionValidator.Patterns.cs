@@ -8,6 +8,12 @@ public static partial class WorldDefinitionValidator {
         for (var index = 0; index < definition.Patterns.Count; index++) {
             var row = definition.Patterns[index];
 
+            if (row?.Attribute is not null && row.Value is not null) {
+                errors.Add(item: $"patterns[{index}] ('{row.Name}') carries both attribute and value; a zone word reads one attribute row or one expression over the token.");
+            }
+            if (row?.Value is { } value && value.Tokens is not { Count: > 0 }) {
+                errors.Add(item: $"patterns[{index}] ('{row.Name}') value expression carries no tokens.");
+            }
             if (row?.Attribute is not { } attribute) {
                 continue;
             }

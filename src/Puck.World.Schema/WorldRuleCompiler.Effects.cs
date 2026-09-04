@@ -694,6 +694,11 @@ public static partial class WorldRuleCompiler {
                 WorldValueToken.Negate => Unary(WorldExpressionOp.Negate),
                 WorldValueToken.Abs => Unary(WorldExpressionOp.Abs),
                 WorldValueToken.Sign => SignOf(),
+                WorldValueToken.ParallelBitExtract => IntBinary(WorldExpressionOp.ParallelBitExtract),
+                WorldValueToken.ParallelBitDeposit => IntBinary(WorldExpressionOp.ParallelBitDeposit),
+                WorldValueToken.BitField => IntArity(WorldExpressionOp.BitField, 3),
+                WorldValueToken.BitInsert => IntArity(WorldExpressionOp.BitInsert, 4),
+                WorldValueToken.BoardShift shift => ResolveBoardShift(shift),
                 null => throw Malformed("contains a null token"),
                 _ => throw Malformed($"contains unsupported token '{authored[index].GetType().Name}'"),
             };
@@ -771,6 +776,27 @@ public static partial class WorldRuleCompiler {
             if (kind != CellKind.Int) { throw Malformed($"token '{operation}' is admitted in kind=int expressions only"); }
             Require(operation, 1);
             RequireKind(operation, depth - 1, CellKind.Int);
+            return new CompiledWorldExpressionToken(Operation: operation);
+        }
+        CompiledWorldExpressionToken ResolveBoardShift(WorldValueToken.BoardShift shift) {
+            if (kind != CellKind.Int) { throw Malformed("token 'BoardShift' is admitted in kind=int expressions only"); }
+            if (WorldTopologyCompilation.Find(definition.StateRaw, shift.Topology ?? string.Empty) is not { } topology) {
+                throw Malformed($"token 'BoardShift' names no discrete topology '{shift.Topology}'");
+            }
+            if (topology.CellCount > WorldBoardMask.MaxCells) {
+                throw Malformed($"token 'BoardShift' shifts a mask of at most {WorldBoardMask.MaxCells} cells; '{shift.Topology}' has {topology.CellCount}");
+            }
+            var direction = topology.Direction(shift.Direction ?? string.Empty);
+            if (direction < 0) { throw Malformed($"token 'BoardShift' names no direction '{shift.Direction}' of '{shift.Topology}'"); }
+            Require(WorldExpressionOp.BoardShift, 1);
+            RequireKind(WorldExpressionOp.BoardShift, depth - 1, CellKind.Int);
+            return new CompiledWorldExpressionToken(Operation: WorldExpressionOp.BoardShift, Board: new CompiledWorldBoardQuery(topology, WorldBoardQueryKind.Neighbour, Direction: direction));
+        }
+        CompiledWorldExpressionToken IntArity(WorldExpressionOp operation, int arity) {
+            if (kind != CellKind.Int) { throw Malformed($"token '{operation}' is admitted in kind=int expressions only"); }
+            Require(operation, arity);
+            for (var slot = depth - arity; slot < depth; slot++) { RequireKind(operation, slot, CellKind.Int); }
+            depth -= (arity - 1);
             return new CompiledWorldExpressionToken(Operation: operation);
         }
         CompiledWorldExpressionToken Unary(WorldExpressionOp operation) {

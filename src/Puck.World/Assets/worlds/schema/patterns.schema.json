@@ -70,6 +70,11 @@
         "description": "The machine-state budget the compile refuses past, 1..256.",
         "type": "integer",
         "default": 64
+      },
+      "value": {
+        "$ref": "./common.schema.json#/$defs/WorldValueExpressionNullable",
+        "description": "For a zone source, an expression in the pattern\u0027s kind evaluated once per token in pile order, where a state token keyed $token reads that token\u0027s cell of a row keyed over the zone\u0027s token domain: the word over a tuple of attributes (suit * 16 \u002B rank) rather than one. Exclusive with Attribute.",
+        "default": null
       }
     },
     "required": [

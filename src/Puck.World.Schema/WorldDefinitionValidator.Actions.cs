@@ -267,6 +267,9 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 break;
+            case ActionEffect.PushState:
+                errors.Add(item: $"{path} is refused at body scope — 'pushState' writes a world history row; a world rule carries it.");
+                break;
             case ActionEffect.SetState set:
                 RefuseKey(
                     key: set.Key,

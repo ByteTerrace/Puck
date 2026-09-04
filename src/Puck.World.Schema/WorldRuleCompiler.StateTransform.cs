@@ -76,6 +76,31 @@ public static partial class WorldRuleCompiler {
                     throw Invalid("turnOrder requires a phase row, a direction of 1 or -1, and declared participants");
                 }
                 break;
+            case WorldStateTransform.SetMask setMask:
+                var masked = Row(setMask.Row);
+                var maskSource = Row(setMask.Mask);
+                if (masked.Board is not { } maskedBoard || WorldTopologyCompilation.Find(definition.StateRaw, maskedBoard.Topology) is not { } maskedTopology ||
+                    maskedTopology.CellCount > WorldBoardMask.MaxCells || maskSource.Kind != CellKind.Int ||
+                    (setMask.MaskKey is null ? !maskSource.IsSlot : (!maskSource.IsKeyed || !WorldCellName.TryParse(setMask.MaskKey, out _, out _))) ||
+                    masked.ClampToEnvelope(setMask.Value) != setMask.Value || (masked.Kind == CellKind.Bool && setMask.Value is not (0 or 1))) {
+                    throw Invalid($"setMask requires a board of at most {WorldBoardMask.MaxCells} cells, an integer mask cell, and an admitted value");
+                }
+                break;
+            case WorldStateTransform.Push push:
+                var ring = Row(push.Row);
+                if (ring.History is null || ring.ClampToEnvelope(push.Value) != push.Value) {
+                    throw Invalid("push requires a history row and an admitted value");
+                }
+                break;
+            case WorldStateTransform.Combine combine:
+                var combined = Row(combine.Target);
+                var leftBoard = Row(combine.Left);
+                if (combined.Board is not { } combinedBoard || combined.Kind is not (CellKind.Int or CellKind.Bool) || leftBoard.Board?.Topology != combinedBoard.Topology ||
+                    !Enum.IsDefined(combine.Operation) ||
+                    (combine.Operation == WorldBoardCombine.Not ? combine.Right is not null : (combine.Right is null || Row(combine.Right).Board?.Topology != combinedBoard.Topology))) {
+                    throw Invalid("combine requires boards over one topology, an integer or boolean target, and a right board for every operation but not");
+                }
+                break;
             default:
                 throw Invalid("unknown or null state transform");
         }

@@ -520,6 +520,9 @@ public sealed partial class WorldServer {
         if (effect.Kind == WorldRuleEffectKind.Transaction) {
             return FireWorldRuleTransaction(transaction: effect, ruleName: ruleName, tick: tick, stepTicks: stepTicks);
         }
+        if (effect.Kind == WorldRuleEffectKind.PushState) {
+            return FirePushState(effect: in effect, ruleName: ruleName, tick: tick, preflight: preflight);
+        }
         if (effect.Kind == WorldRuleEffectKind.EmitCue) {
             if (!preflight) {
                 FireGameplayCue(effect: effect, tick: tick);
@@ -884,6 +887,33 @@ public sealed partial class WorldServer {
                     var whenTrue = stack[--top];
                     var condition = stack[--top];
                     stack[top++] = ((condition != 0L) ? whenTrue : whenFalse);
+                    continue;
+                }
+                if (token.Operation == WorldExpressionOp.BitField) {
+                    var width = stack[--top];
+                    var offset = stack[--top];
+                    var input = stack[--top];
+                    if (!WorldExpressionArithmetic.TryBitField(input, offset, width, out var field)) {
+                        value = 0L;
+                        return false;
+                    }
+                    stack[top++] = field;
+                    continue;
+                }
+                if (token.Operation == WorldExpressionOp.BoardShift) {
+                    stack[top - 1] = WorldBoardQueries.ShiftMask(token.Board!, stack[top - 1]);
+                    continue;
+                }
+                if (token.Operation == WorldExpressionOp.BitInsert) {
+                    var width = stack[--top];
+                    var offset = stack[--top];
+                    var field = stack[--top];
+                    var input = stack[--top];
+                    if (!WorldExpressionArithmetic.TryBitInsert(input, field, offset, width, out var inserted)) {
+                        value = 0L;
+                        return false;
+                    }
+                    stack[top++] = inserted;
                     continue;
                 }
                 if (WorldExpressionArithmetic.IsUnary(token.Operation)) {

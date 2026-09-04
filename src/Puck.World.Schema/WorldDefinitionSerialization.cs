@@ -63,6 +63,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldValueToken.Select), TypeInfoPropertyName = "WorldValueTokenSelect")]
 [JsonSerializable(typeof(WorldPatternNode.Symbol), TypeInfoPropertyName = "WorldPatternNodeSymbol")]
 [JsonSerializable(typeof(WorldPatternNode.AnySymbol), TypeInfoPropertyName = "WorldPatternNodeAnySymbol")]
+[JsonSerializable(typeof(WorldPatternNode.None), TypeInfoPropertyName = "WorldPatternNodeNone")]
 [JsonSerializable(typeof(WorldPatternNode.Except), TypeInfoPropertyName = "WorldPatternNodeExcept")]
 [JsonSerializable(typeof(WorldPatternNode.Nothing), TypeInfoPropertyName = "WorldPatternNodeNothing")]
 [JsonSerializable(typeof(WorldPatternNode.Sequence), TypeInfoPropertyName = "WorldPatternNodeSequence")]
@@ -205,6 +206,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldStateKnowledge))]
 [JsonSerializable(typeof(WorldStateObservation))]
 [JsonSerializable(typeof(WorldStateZone))]
+[JsonSerializable(typeof(WorldStateHistory))]
 [JsonSerializable(typeof(WorldStateTokens))]
 [JsonSerializable(typeof(WorldStateLatticeTopology))]
 // The continuous-accumulation trait a state row's SLOT cell, or (independently) any of a keyed row's OWN cells, may
@@ -801,6 +803,8 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
         JsonElement? draw = null;
         JsonElement? drawCursor = null;
         JsonElement? drawDecks = null;
+        JsonElement? history = null;
+        JsonElement? historyCursor = null;
         JsonElement? board = null;
         string? keysFrom = null;
         string? phaseOf = null;
@@ -866,6 +870,12 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
                     break;
                 case "drawCursor":
                     drawCursor = JsonElement.ParseValue(reader: ref reader);
+                    break;
+                case "history":
+                    history = JsonElement.ParseValue(reader: ref reader);
+                    break;
+                case "historyCursor":
+                    historyCursor = JsonElement.ParseValue(reader: ref reader);
                     break;
                 case "tokens":
                     tokens = JsonElement.ParseValue(reader: ref reader);
@@ -1133,7 +1143,17 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
             Cycle: ((cycle is { } cycleElement)
             ? (cycleElement.Deserialize(jsonTypeInfo: WorldJsonContext.Default.WorldStateCycle)
                     ?? throw new JsonException(message: $"state row '{name}'.cycle must be an object."))
-            : null)
+            : null),
+            History: ((history is { } historyElement)
+            ? (historyElement.Deserialize(jsonTypeInfo: WorldJsonContext.Default.WorldStateHistory)
+                    ?? throw new JsonException(message: $"state row '{name}'.history must be an object."))
+            : null),
+            HistoryCursor: ((historyCursor is { } historyCursorElement)
+            ? RequireInt64(
+                    context: $"state row '{name}'.historyCursor",
+                    element: historyCursorElement
+                )
+            : 0L)
         );
     }
     public override void Write(Utf8JsonWriter writer, WorldStateRow value, JsonSerializerOptions options) {
@@ -1306,6 +1326,22 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
             writer.WriteNumber(
                 propertyName: "drawCursor",
                 value: value.DrawCursor
+            );
+        }
+
+        if (value.History is { } history) {
+            writer.WritePropertyName(propertyName: "history");
+            JsonSerializer.Serialize(
+                writer: writer,
+                value: history,
+                jsonTypeInfo: WorldJsonContext.Default.WorldStateHistory
+            );
+        }
+
+        if (value.HistoryCursor != 0L) {
+            writer.WriteNumber(
+                propertyName: "historyCursor",
+                value: value.HistoryCursor
             );
         }
 

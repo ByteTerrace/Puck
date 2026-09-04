@@ -45,6 +45,7 @@ Rule operands accept these bounded channels:
 | `$board:rayDistance:<row>:<direction>` | Distance to that cell, or -1 |
 | `$board:line:<row>:<length>:<value>:<exact\|atLeast>` | 1 when a matching line exists, otherwise 0 |
 | `$board:pathCost:<row>:<target>:<maxCost>:<maxVisits>` | Minimum terrain entry cost, -1 when unreachable/unaffordable, -2 when the visit budget is exhausted |
+| `$board:mask:<row>:<min>:<max>` | The 64-bit mask of cells whose value lies in min..max (bit c is cell ordinal c); the topology holds at most 64 cells |
 | `$phase:<row>:<current\|active\|ready\|sequence\|round\|deadline\|direction\|skipped>` | Persisted phase fact; active is -1 outside sequential phases |
 
 Board operands use the ordinary predicate/source `key` for their origin,
@@ -64,8 +65,14 @@ are separate from these piles: each `drawDecks` mask is four 64-bit words,
 serialized as exactly 64 hexadecimal digits, and supports 256 dealt entries.
 
 The closed `transformState` effect and transaction step carry one of `transfer`,
-`setRay`, `moveToken`, `completePhase`, `turnOrder`, `shuffle`, `sort`, or
-`observe`. The same operation travels
+`setRay`, `moveToken`, `completePhase`, `turnOrder`, `shuffle`, `sort`,
+`setMask`, `combine`, `push`, or `observe`. `setMask` (`row`, `mask`, `maskKey`,
+`value`) writes one value into every cell of a board (at most 64 cells) whose
+bit is set in a mask read from an integer cell, so a mask built by
+`$board:mask`, `boardShift`, and the bit operators lands back on the board;
+`combine` (`target`, `left`, `operation` and/or/xor/andNot/not, `right`)
+writes the cell-wise set operation of two boards over one topology into a
+third as 1/0, the board algebra for topologies too large for one mask. The same operation travels
 as the `TransformState` document mutation. Transfers preserve keys and accept
 `Key`, `First`, `Last`, or `Random` selectors; random selection names a
 redrawable integer `streamDraw` site. A cursor advances only with the committed
@@ -132,16 +139,35 @@ validation into a deterministic table the `$match:<pattern>:<row>[:<direction>]`
 operand runs allocation-free, one indexed step per token: `symbols` name value
 ranges in the pattern's `kind` (overlaps refine into letters; at most 32
 symbols, 64 letters) and `pattern` is the closed node vocabulary `symbol`,
-`any`, `except`, `empty`, `sequence`, `choice`, `all` (intersection), `not`
-(complement), `optional`, `star`, `plus`, `repeat` (`min`..`max`, at most
-64), matched against the whole word. The machine's states are the pattern's
+`any`, `except`, `empty` (the empty word), `none` (the empty language),
+`sequence`, `choice`, `all` (intersection), `not` (complement), `optional`,
+`star`, `plus`, `repeat` (`min`..`max`, at most 64), matched against the
+whole word. The machine's states are the pattern's
 Brzozowski derivatives, kept canonical by similarity, so stars, complements,
 and intersections are exact at any word length; `maxStates` (1..256, default
 64) is the state budget the compile refuses past, by name, at validation. The
 word is a board ray from the operand key's origin (exclusive) in the named
 direction, an ordered zone's cells read through the pattern's `attribute` row
-in pile order, or a keyed numeric row's own cells; the verdict is always 1 or
-0, and a board origin that names no cell reads the empty word. `sort` puts a
+in pile order or through its `value` expression (evaluated once per token in
+the pattern's kind, where a state token keyed `$token` reads that token's cell
+of any row keyed over the zone's domain, so `suit * 16 + rank` makes a
+straight flush one word over one alphabet), or a keyed numeric row's own
+cells; acceptance is always 1 or
+0, and a board origin that names no cell reads the empty word. A trailing
+`prefix` facet answers the length of the longest accepted prefix instead
+(-1 when none), which is Reversi's flip count on a ray; a board source may
+name `any` in place of a direction, answering the mask of accepting
+directions (bit d for direction ordinal d) or, with a trailing `count`, how
+many. `world.match` walks one word at the console and narrates every step:
+value, letter, state, verdict. A `history` row (`capacity` 1..128, `empty`)
+is a ring of the last pushed values, the temporal twin of a ray: `push`
+(`row`, `value`) and the `pushState` effect (`value`/`fromState`/
+`expression`, world scope) append to it and advance its `historyCursor`;
+`$history:<row>:<age>` reads the value `age` pushes ago (0 is the latest,
+`empty` past what the ring holds); `$match:<pattern>:<row>` reads the ring
+oldest first, so a combo, a rhythm window, or "three claims then silence" is
+one pattern. `world.state <row>` echoes capacity, cursor, and how much of
+the ring is held. `sort` puts a
 zone in canonical order by `by`, 1..8 attribute keys (`row`, `descending`) in
 precedence order, or a keyed row by its own values under `descending`, stably,
 which is what turns a multiset question into a regular one: Reversi's
@@ -1411,7 +1437,15 @@ expressions only, `bitAnd`/`bitOr`/`bitXor`/`bitNot`/`shiftLeft`/`shiftRight`
 the bit census `popCount`/`leadingZeroCount`/`trailingZeroCount` (64 for zero;
 `63 - leadingZeroCount` is the integer log2, `trailingZeroCount` the lowest
 occupied square), the piece walk `lowestSetBit`/`clearLowestSetBit`, and the
-8x8 board symmetries `byteSwap` (rank mirror) and `bitReverse` (half turn).
+8x8 board symmetries `byteSwap` (rank mirror) and `bitReverse` (half turn);
+`parallelBitExtract`/`parallelBitDeposit` (pext/pdep: occupancy along a set
+of squares as a dense index and back); `bitField` (value, offset, width) and
+`bitInsert` (value, field, offset, width) for packed fields, refusing a
+field that leaves the 64-bit carrier; and `boardShift` (`topology`,
+`direction`), which moves every set bit of a cell mask to its neighbour in
+that direction and drops a bit at the edge instead of wrapping, so
+`$board:mask` of one side shifted and masked against `$board:mask` of the
+other is an attack map in one expression.
 `negate`/`abs` keep their operand's kind and refuse the carrier's minimum;
 `sign` reads either kind and pushes `int` -1/0/1. The compiler proves
 the stack's shape AND each slot's kind, so a comparison's `int` result may feed
