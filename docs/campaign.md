@@ -506,6 +506,46 @@ placements are the proof fixture; see the
 [server](../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)
 and [schema](../src/Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs) references.
 
+**Locomotion feel is a kit field, not a baked constant (owner decision).**
+`WorldBody`'s per-tick catch-up bias against a curving surface (`StickSpeed`,
+the old flat `2.0`) is genuine feel, not a value derivable from the kit's own
+resolved move speed: a first pass tried deriving it from speed and measurably
+regressed slope climbing on any `GradientDerivedUp` world (a faster kit's
+larger inward bias converts into downhill drift under depenetration faster
+than it converts into held contact) — no shipped world caught it because none
+authors `GradientDerivedUp`. It is now its own `motion` row field
+(`groundStick`), independent of `motion.speed`, defaulting to the engine's old
+`2.0` bit for bit. The up-axis steering ceilings (how fast a solved gravity
+field, and separately a measured ground-contact normal, may turn a body's up
+axis), the drive frame's pitch clamp, and the non-walkable-contact witness's
+latch (displacement, idle threshold, grace) are likewise genuine feel, not
+derivable from anything else a document declares — each is a `motion` row
+field (`upTurn`, `turn.maxPitch`, `obstruction`) whose default reproduces the
+engine's old hardcoded value bit for bit, so no shipped world's behavior
+moved. `world.kits` echoes all five.
+
+**Discrete-topology capacity constants are derived, not restated (owner
+decision).** The hex radius ceiling, the document-wide board-storage budget,
+the zone-sort key ceiling, and the transfer-count ceiling were each a bare
+literal restating a relationship the code already knows (a topology's own
+cell-count formula, `MaxTopologies × MaxCells`, the section's own row
+ceiling, and the domain capacity ceiling respectively) — each now computes
+from the constant it actually follows from, so the two can never drift
+apart, and refusing an authored value past the bound names the derived
+number rather than a hardcoded twin of it.
+
+**A topology's opposite direction is compiled from its own vectors, never
+assumed from ordinal arithmetic (owner decision).** `(direction +
+DirectionCount / 2) % DirectionCount` happens to pair a Grid/Hex/Ring
+topology's directions correctly because each is authored as reciprocal
+pairs in that exact order; a `Box`'s 26 directions are not (they are ordered
+planar, then up-shifted planar, then down-shifted planar), so the same trick
+silently paired `N` with a diagonal-and-a-layer-off direction instead of `S`.
+`CompiledWorldTopology.Opposite` is now a table built once at compile time by
+negating each direction's own step vector and looking up the match, refusing
+compilation if a direction has none; `$board:line:…:exact` reads it instead
+of the ordinal trick.
+
 **Carry, as attachment (owner decision).** Picking up a rigid body is not a
 second attachment primitive beside the surface-hold system — it is a
 carrier-declared kit facet (`carry`: a body-local frame offset, a

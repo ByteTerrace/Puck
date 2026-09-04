@@ -22,7 +22,9 @@ public sealed class DiscreteStateLawTests {
         var cycle = WorldTopologyCompilation.Find(state, "ring")!;
         Assert.Equal(4, cycle.Neighbour(0, cycle.Direction("backward")));
         Assert.Equal(0, cycle.Neighbour(4, cycle.Direction("forward")));
-        Assert.False(WorldTopologyCompilation.TryValidate(hex with { Radius = 37 }, out _));
+        Assert.False(WorldTopologyCompilation.TryValidate(hex with { Radius = WorldTopologyCompilation.MaxHexRadius + 1 }, out var radiusReason));
+        Assert.Contains($"0..{WorldTopologyCompilation.MaxHexRadius}", radiusReason);
+        Assert.True(WorldTopologyCompilation.TryValidate(hex with { Radius = WorldTopologyCompilation.MaxHexRadius }, out _));
     }
 
     [Fact]

@@ -273,6 +273,24 @@ public static partial class WorldDefinitionValidator {
             path: $"{path}.holds",
             stateSlots: stateSlots
         );
+
+        ValidateUpTurn(
+            errors: errors,
+            path: $"{path}.upTurn",
+            upTurn: tuning.UpTurn
+        );
+
+        ValidateObstructionLatch(
+            errors: errors,
+            obstruction: tuning.Obstruction,
+            path: $"{path}.obstruction"
+        );
+
+        RequirePositive(
+            value: tuning.GroundStick,
+            name: $"{path}.groundStick",
+            errors: errors
+        );
     }
     // A kit's movement rate: a positive fallback speed, its optional seat-time envelope (absent is wide-open), and
     // its optional held multiplier (a misspelled channel name is otherwise a silent, permanent no-op).
@@ -337,6 +355,48 @@ public static partial class WorldDefinitionValidator {
         ) {
             errors.Add(item: $"{path}.falloff {turn.Falloff} must be within [0, 1].");
         }
+
+        // Strictly inside a right angle: the drive frame is built by rotating the flat frame's forward through this
+        // scalar, and a clamp at or past pi/2 would let it reach or pass vertical, where the yaw frame it derives
+        // from inverts.
+        if (
+            !float.IsFinite(f: turn.MaxPitch) ||
+            (turn.MaxPitch <= 0f) ||
+            (turn.MaxPitch >= (float)(Math.PI / 2.0))
+        ) {
+            errors.Add(item: $"{path}.maxPitch {turn.MaxPitch} must be within (0, pi/2).");
+        }
+    }
+    // A kit's up-axis steering ceilings: both positive, finite half-angle rates.
+    private static void ValidateUpTurn(WorldUpTurnRates upTurn, string path, List<string> errors) {
+        RequirePositive(
+            value: upTurn.Field,
+            name: $"{path}.field",
+            errors: errors
+        );
+        RequirePositive(
+            value: upTurn.Contact,
+            name: $"{path}.contact",
+            errors: errors
+        );
+    }
+    // A kit's obstruction-witness latch: a positive displacement and grace window, a non-negative idle threshold.
+    private static void ValidateObstructionLatch(WorldObstructionLatch obstruction, string path, List<string> errors) {
+        RequirePositive(
+            value: obstruction.Displacement,
+            name: $"{path}.displacement",
+            errors: errors
+        );
+        RequireNonNegative(
+            value: obstruction.IdleThreshold,
+            name: $"{path}.idleThreshold",
+            errors: errors
+        );
+        RequirePositive(
+            value: obstruction.GraceSeconds,
+            name: $"{path}.graceSeconds",
+            errors: errors
+        );
     }
     // A row nothing can ever make ineligible: bonded to no surface at all (Free), authoring neither a release
     // channel nor a spend. ResolveHold always takes such a row once every earlier candidate is ineligible, so a hold

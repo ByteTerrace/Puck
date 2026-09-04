@@ -67,6 +67,48 @@ public sealed class WorldBoxTopologyLawTests {
         Assert.Contains("belongs to a box", gridReason);
     }
 
+    [Fact]
+    public void AnExactLineOfFourIsTrueAndAContinuingFifthCellIsFalse() {
+        // Two boards over the same 5-wide, 2-layer box: "isolated" marks only x0..x3 along E/W (a genuine run of
+        // exactly four, flanked by real but unmarked/absent cells both ways) and "extended" marks x0..x4 (a run of
+        // five, so no four-cell window along it is isolated). Both live at layer 0; layer 1 exists only so a
+        // direction whose opposite the old (direction + DirectionCount/2) % DirectionCount formula miscomputed as a
+        // layer-shifted cell resolves to a real, unmarked cell instead of an out-of-range one — the case that used
+        // to slip past HasLine's exact check on "extended" and report a false positive.
+        static WorldStateRow Row(string name, params int[] indices) => new(
+            WorldCellName.Parse(name), CellKind.Int,
+            Cells: [.. indices.Select(i => new WorldStateCell(WorldCellName.Parse(i.ToString(System.Globalization.CultureInfo.InvariantCulture)), 7L))],
+            Board: new("box")
+        );
+        static WorldStateRow Winner(string name) => new(WorldCellName.Parse(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)]);
+
+        var isolated = Row("isolated", 0, 1, 2, 3);
+        var extended = Row("extended", 0, 1, 2, 3, 4);
+        var definition = Fixtures.BuildDocument() with {
+            StateRaw = new(World: [isolated, extended, Winner("winnerIsolated"), Winner("winnerExtended")], Lattices: [Box(5, 1, 2)]),
+            Rules = [
+                new WorldRule(WorldCellName.Parse("markIsolated"), [new ActionEffect.SetState(State: "winnerIsolated", FromState: "$board:line:isolated:4:7:exact")]),
+                new WorldRule(WorldCellName.Parse("markExtended"), [new ActionEffect.SetState(State: "winnerExtended", FromState: "$board:line:extended:4:7:exact")]),
+            ],
+        };
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        fixture.Step();
+        Assert.Equal(1L, Value(fixture, "winnerIsolated"));
+        Assert.Equal(0L, Value(fixture, "winnerExtended"));
+    }
+
+    [Fact]
+    public void OppositeIsDerivedFromEachDirectionsOwnVectorRatherThanHalvingTheOrdinal() {
+        var topology = WorldTopologyCompilation.Find(new WorldStateSection(Lattices: [Box(4, 4, 4)]), "box")!;
+        // The old (direction + DirectionCount/2) % DirectionCount trick puts N's (0) "opposite" at ordinal 13
+        // ("US"), not S (4) — the 26 box directions are not paired by half-count offset the way Grid/Hex/Ring are.
+        Assert.Equal(topology.Direction("S"), topology.Opposite(topology.Direction("N")));
+        Assert.Equal(topology.Direction("N"), topology.Opposite(topology.Direction("S")));
+        for (var direction = 0; direction < topology.DirectionCount; direction++) {
+            Assert.Equal(direction, topology.Opposite(topology.Opposite(direction)));
+        }
+    }
+
     private static WorldStateLatticeTopology Box(int width, int depth, int layers) =>
         new("box", new DocumentVector3(0, 0, 0), 0.5f, width, depth, Layers: layers, Kind: WorldTopologyKind.Box, LayerHeight: 0.5f);
     private static long Value(WorldFixture fixture, string row) =>

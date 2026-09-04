@@ -470,6 +470,13 @@ public sealed class DriveLawTests {
             (motion => motion with { Turn = motion.Turn with { Falloff = 1.5f } }, "turn.falloff"),
             (motion => motion with { Shaping = [motion.Shaping![0], motion.Shaping[1] with { Along = motion.Shaping[1].Along! with { Reverse = -1f } }] }, "along.reverse"),
             (motion => motion with { Turn = motion.Turn with { PitchRate = -1f } }, "turn.pitchRate"),
+            (motion => motion with { Turn = motion.Turn with { MaxPitch = 0f } }, "turn.maxPitch"),
+            (motion => motion with { UpTurnRaw = (motion.UpTurn with { Field = 0f }) }, "upTurn.field"),
+            (motion => motion with { UpTurnRaw = (motion.UpTurn with { Contact = -1f }) }, "upTurn.contact"),
+            (motion => motion with { ObstructionRaw = (motion.Obstruction with { Displacement = 0f }) }, "obstruction.displacement"),
+            (motion => motion with { ObstructionRaw = (motion.Obstruction with { IdleThreshold = -1f }) }, "obstruction.idleThreshold"),
+            (motion => motion with { ObstructionRaw = (motion.Obstruction with { GraceSeconds = 0f }) }, "obstruction.graceSeconds"),
+            (motion => motion with { GroundStick = 0f }, "groundStick"),
             (motion => motion with { Shaping = [motion.Shaping![0] with { When = new ActionPredicate.Held(Channel: "nope") }, motion.Shaping[1]] }, "shaping[0].when.channel"),
             (motion => motion with { Shaping = [motion.Shaping![0] with { Across = motion.Shaping[0].Across! with { Grip = 0f } }, motion.Shaping[1]] }, "shaping[0].across.grip"),
             (motion => motion with { Shaping = [motion.Shaping![0] with { TurnScale = 0f }, motion.Shaping[1]] }, "shaping[0].turnScale"),
@@ -488,5 +495,37 @@ public sealed class DriveLawTests {
             );
             Assert.Contains(actualString: reason, expectedSubstring: token);
         }
+    }
+    // The default kit (no maxPitch authored) climbs to exactly 1.2 radians — the engine's old hardcoded clamp, bit
+    // for bit. A kit authoring a tighter ceiling climbs to its OWN bound instead, never the engine default.
+    [Fact]
+    public void MaxPitchClampsTheDriveFrameAtItsAuthoredCeilingNotAHardcodedOne() {
+        Assert.Equal(expected: FixedQ4816.FromDouble(value: 1.2), actual: SaturatedDrivePitch(definition: BuildDriveDocument()));
+
+        var kits = BuildDriveDocument().Kits.ToList();
+        kits[0] = (kits[0] with { Motion = (kits[0].Motion! with { Turn = kits[0].Motion!.Turn with { MaxPitch = 0.3f } }) });
+        var narrowed = (BuildDriveDocument() with { KitRowsRaw = kits });
+
+        Assert.Equal(expected: FixedQ4816.FromDouble(value: 0.3), actual: SaturatedDrivePitch(definition: narrowed));
+    }
+    // Full-pitch input held far longer than either ceiling takes to reach, so both scenarios have fully saturated
+    // their own clamp by the last tick.
+    private static FixedQ4816 SaturatedDrivePitch(WorldDefinition definition) {
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        var actor = WorldPrincipal.Seat(slot: 0);
+
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: actor, Slot: actor.Index, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);
+
+        var body = fixture.Server.Body(index: actor.Index)!;
+        var intent = default(PlayerIntent)
+            .WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One)
+            .WithChannel(ordinal: PitchOrdinal, value: FixedQ4816.One);
+
+        for (var tick = 0; (tick < 600); tick++) {
+            body.SubmitIntent(intent: intent);
+            fixture.Step();
+        }
+
+        return body.CaptureTransferState().DrivePitch;
     }
 }

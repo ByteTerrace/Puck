@@ -20,6 +20,21 @@ public enum MotionMoveFrame : byte {
 /// <summary>The one-time fixed-point compilation of a world's motion defaults. Runtime simulation reads only this
 /// form.</summary>
 public readonly record struct FixedMotionDefaults(FixedQ4816 MoveSpeed, FixedQ4816 TurnSpeed, FixedQ4816 MaxSmoothError);
+/// <summary>The one-time fixed-point compilation of a kit's up-axis steering rates — see the authoring-side
+/// <c>WorldUpTurnRates</c>. Both are the HALF angle the steering rotor is built from, matching what
+/// <c>WorldBody.Step</c>'s <c>SteerUp</c> accumulates directly.</summary>
+/// <param name="Field">The ceiling on how fast a solved gravity field may turn the up axis.</param>
+/// <param name="Contact">The ceiling on how fast a measured ground-contact normal may turn the up axis.</param>
+public readonly record struct FixedUpTurnRates(FixedQ4816 Field, FixedQ4816 Contact);
+/// <summary>The one-time fixed-point compilation of a kit's obstruction-witness latch — see the authoring-side
+/// <c>WorldObstructionLatch</c>.</summary>
+/// <param name="DisplacementSquared">The squared world-unit distance a body must move from where the witness last
+/// latched before it counts as having genuinely moved on.</param>
+/// <param name="IdleThreshold">The raw role-channel magnitude below which the body counts as not actively
+/// driving.</param>
+/// <param name="GraceTicks">How many engine ticks an un-refreshed latch survives a solver pass reporting no push at
+/// all.</param>
+public readonly record struct FixedObstructionLatch(FixedQ4816 DisplacementSquared, FixedQ4816 IdleThreshold, ulong GraceTicks);
 /// <summary>The one-time fixed-point compilation of a shaping row's <c>dynamics</c> facet — the second-order
 /// follower alternative to a row's own <c>Along</c> facet, bound to the world's own simulation step width.
 /// <see cref="Planar"/> steps the planar/drive lanes <c>ShapeVelocity</c> reads and, for a kit authoring a medium
@@ -101,7 +116,9 @@ public readonly record struct FixedBodyShaping(
 /// <c>[0, 1]</c>; unread while <see cref="ReferenceSpeed"/> is zero.</param>
 /// <param name="PitchRate">The pitch rate (rad/s) the Pitch channel commands under a pitched frame; zero locks it
 /// planar.</param>
-public readonly record struct FixedTurn(FixedQ4816 Rate, FixedQ4816 ReferenceSpeed, FixedQ4816 Falloff, FixedQ4816 PitchRate);
+/// <param name="MaxPitch">The drive pitch clamp (radians) the integrator holds a pitched frame's facing inside;
+/// unread while <paramref name="PitchRate"/> is zero.</param>
+public readonly record struct FixedTurn(FixedQ4816 Rate, FixedQ4816 ReferenceSpeed, FixedQ4816 Falloff, FixedQ4816 PitchRate, FixedQ4816 MaxPitch);
 /// <summary>The one-time fixed-point compilation of a kit's <c>speed</c> row — the movement rate every planar
 /// motion operation reads.</summary>
 /// <param name="Value">The profileless fallback speed (u/s); a seated profile's own claim overrides it before
@@ -124,7 +141,10 @@ public readonly record struct FixedMotionTuning(
     ActionFact[] ShapingRecencyFacts,
     ulong[] ShapingRecencyWindows,
     MotionMoveFrame MoveFrame,
-    bool FacingSnap
+    bool FacingSnap,
+    FixedUpTurnRates UpTurn,
+    FixedObstructionLatch Obstruction,
+    FixedQ4816 GroundStick
 ) {
     /// <summary>Gets the number of recency clocks the shaping table's recency gates share.</summary>
     public int RecencySlots => ShapingRecencyFacts.Length;

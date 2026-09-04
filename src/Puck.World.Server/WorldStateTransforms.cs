@@ -123,8 +123,8 @@ public static partial class WorldStateTransforms {
         if ((transfer.Selector == WorldZoneSelector.Key) != (transfer.Key is not null) || (transfer.Selector == WorldZoneSelector.Random) != (transfer.Draw is not null)) {
             return Refuse("key selection requires only key; random selection requires only draw", out reason);
         }
-        if (transfer.Count < 1 || transfer.Count > WorldStateTokens.MaxCapacity || (transfer.Selector == WorldZoneSelector.Key && transfer.Count != 1)) {
-            return Refuse($"transfer count must be 1..{WorldStateTokens.MaxCapacity}, and exactly 1 for a key selection", out reason);
+        if (transfer.Count < 1 || transfer.Count > WorldStateTokens.MaxTransferCount || (transfer.Selector == WorldZoneSelector.Key && transfer.Count != 1)) {
+            return Refuse($"transfer count must be 1..{WorldStateTokens.MaxTransferCount}, and exactly 1 for a key selection", out reason);
         }
         var cells = (source.Cells ?? []).ToList();
         if (cells.Count < transfer.Count) {

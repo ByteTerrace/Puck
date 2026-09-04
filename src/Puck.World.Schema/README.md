@@ -208,8 +208,11 @@ is a ring of the last pushed values, the temporal twin of a ray: `push`
 oldest first, so a combo, a rhythm window, or "three claims then silence" is
 one pattern. `world.state <row>` echoes capacity, cursor, and how much of
 the ring is held. `sort` puts a
-zone in canonical order by `by`, 1..8 attribute keys (`row`, `descending`) in
-precedence order, or a keyed row by its own values under `descending`, stably,
+zone in canonical order by `by`, up to `MaxSortKeys` (`WorldStateCapacity`,
+derived from `MaxRows` -- a sort key names a declared row, so a sort can
+never carry more keys than a section can hold) attribute keys (`row`,
+`descending`) in precedence order, or a keyed row by its own values under
+`descending`, stably,
 which is what turns a multiset question into a regular one: Reversi's
 flank is `them+ me` on a ray, a straight is five consecutive rank symbols over
 a sorted hand, Yahtzee's large straight is a `choice` of two sequences over a
@@ -357,7 +360,14 @@ are non-game adjacency/federation stress content — each a `basis` delta over
 the `quilt-base` template (see "Document composition" below). Reusable defaults
 live in `standard.basis.json`. The movement platform
 every kit rides is documented on its kit's `WorldMotion`
-row (`Speed`/`Turn`, `MoveFrame`/`FacingSnap`), the
+row (`Speed`/`Turn`, `MoveFrame`/`FacingSnap`, the up-axis steering ceilings
+`upTurn` (field/contact) and the obstruction-witness latch `obstruction`
+(displacement/idleThreshold/graceSeconds) — both default to the engine's own
+rates; `Turn.MaxPitch` is the drive frame's own pitch clamp; `groundStick` is
+the inward speed a grounded body on a curving surface is held against,
+independent of `Speed` — a kit's own resolved move speed measurably
+over-corrects a shallow slope climb, so it is its own field, defaulting to the
+engine's old constant), the
 frame its MoveAdvance/MoveStrafe channel rows are authored in
 (`channels[].frame`, `ChannelFrame`: `World` raw, `Camera` camera-relative and
 facing its travel, `Heading` body-relative with `Turn` steering — the stick's
