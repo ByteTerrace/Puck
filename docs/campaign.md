@@ -522,6 +522,21 @@ free constant. `body.carry`/`body.release` are the console/wire surface (the
 same shape `body.impulse` already established for a rigid-solver-facing
 verb); a rule effect and an authored chord are follow-on work, not yet built.
 
+**Compiled rule operands are a closed union, built to the union pattern before the compiler
+has it (owner decision).** `CompiledWorldOperand` and `CompiledWorldEffect` are flattened
+structs carrying every fact kind's parameters at once, copied by value into every predicate,
+expression token, and reader; the shape is wrong, not merely large. The replacement is one
+sealed record per fact kind as the case types and an eight-byte carrier written to the C# 15
+basic union pattern by hand — a `[Union]` struct holding one `object?`, a constructor per
+case, `Value`, `HasValue`, and a `TryGetValue` per case — with the two attribute and
+interface types polyfilled internally until .NET 11 supplies them. Dispatch is a type-pattern
+switch over the cases; a law enumerates every fact kind against it until the compiler's
+exhaustiveness takes over. The day the toolchain moves, the flip is deleting the polyfills and
+switching on the carrier instead of its `Value`; nothing else moves. Case types stay classes,
+never structs, because a union boxes value cases on store. Row and key names leave the hot
+object for compiled handles, kept only in the refusal text. Sequenced after `garden/w3`
+merges, since it rewrites the compiler arms the lanes are producing operands in.
+
 **The tabletop primitive (owner decisions, Lane D).** Physics-first extends to
 board games: a chess set is 32 ordinary rigid bodies on a shared `piece` kit —
 no second entity kind, no engine-level "piece" concept. A placement's `board`
