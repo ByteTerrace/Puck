@@ -157,7 +157,7 @@ public sealed class SteeringIntentLawTests {
                 Holds: [
                     new WorldHold(
                         Bond: BodyHoldBond.Free,
-                        Gravity: new WorldHoldGravity(Fall: 23f, Rise: 14f, Terminal: 20f),
+                        Gravity: new WorldHoldGravity(Fall: 23f, Rise: 14f),
                         Hold: BodyHoldKind.Lift,
                         Lift: 1f,
                         Name: "air"
