@@ -66,9 +66,11 @@ public sealed partial class WorldBody {
     // The world contact field this body solves its swept grounded position against (null before a population assigns
     // the document-derived field) and the body's own capsule volume (null = a volumeless kit, never solved).
     /// <summary>Gets the inward speed a grounded body keeps against the surface it stands on, in world units per
-    /// second — the compiled kit's own resolved move speed, so the catch-up bias always covers at least the drop
-    /// that speed itself can open over a tick; depenetration removes whatever the surface does not curve away.</summary>
-    private FixedQ4816 StickSpeed => m_tuning.Speed.Value;
+    /// second — the same seat-time resolve <see cref="ResolveMoveSpeed"/> feeds Advance and
+    /// <see cref="EffectiveMoveSpeed"/>, so the catch-up bias always covers at least the drop the body's own
+    /// current move speed (seated profile, envelope, scale — whichever is live this tick) can open over a tick;
+    /// depenetration removes whatever the surface does not curve away.</summary>
+    private FixedQ4816 StickSpeed => ResolveMoveSpeed();
     // The half-angle rate SteerUp's rotor and its within-budget test both want, so accumulating it directly spares a
     // per-tick halving — see WorldBody.Step's SteerUp. Kit-authored (WorldMotion.UpTurn); see FixedUpTurnRates.
     private FixedQ4816 FieldUpTurnHalfRate => m_tuning.UpTurn.Field;

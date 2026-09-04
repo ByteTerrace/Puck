@@ -21,7 +21,8 @@ selection into its intrinsic host phases), the per-body trigger and action-state
 (`CompiledActionSpec`, `CompiledTrigger`, `CompiledFactTrigger`, `CompiledPredicate`,
 `CompiledBodyInstruction`, `CompiledActionStateSlot`, `CompiledActionStateEnvelope`),
 and the compiled fixed-point tunings the stages read (`FixedMotionTuning`,
-`FixedMotionDefaults`, `FixedMotionScalarEnvelope`, `FixedSpeed`, `FixedTurn`).
+`FixedMotionDefaults`, `FixedMotionScalarEnvelope`, `FixedSpeed`, `FixedTurn`,
+`FixedUpTurnRates`, `FixedObstructionLatch`).
 `ShapeVelocity` reads the one unified velocity-shaping table,
 `FixedMotionTuning.Shaping` (`FixedBodyShaping[]`): the first row whose gate
 opens governs — a row with no `Across` facet shapes the whole vector through

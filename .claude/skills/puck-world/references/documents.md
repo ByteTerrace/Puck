@@ -1205,13 +1205,25 @@ tick) — a flat record (`WorldMotionTuning.cs`), authored under `motion`.
 The row carries the movement platform every kit reads — `Speed` (`WorldSpeed`:
 `value`, an optional `envelope` clamp, and an optional `held` multiplier
 channel — a kart's "boost") and `Turn` (`WorldTurn`: `rate`, an optional
-speed-scaled authority curve — `referenceSpeed`/`falloff` — and `pitchRate`
-for a drive kit's flying variant) — plus `MoveFrame`/`FacingSnap`, and two
-rows beside them, each supplying its own tuning facet and each read by its
-own operations: `Holds` (below; the hold LIST is mandatory — the hold list is
-the only spelling of a vertical channel, so a Motion-kind kit authoring none
-refuses by name — while `ResolveHold`/`ApplyHold` are selected like any other
-op) and `Shaping` (required only when the program selects `ShapeVelocity`).
+speed-scaled authority curve — `referenceSpeed`/`falloff` — `pitchRate` for a
+drive kit's flying variant, and `maxPitch` — the radian ceiling the flying
+variant's climb/dive attitude is clamped to, unread while `pitchRate` is
+zero, defaulting to the engine's old hardcoded clamp) — plus
+`MoveFrame`/`FacingSnap`, and two rows beside them, each supplying its own
+tuning facet and each read by its own operations: `Holds` (below; the hold
+LIST is mandatory — the hold list is the only spelling of a vertical channel,
+so a Motion-kind kit authoring none refuses by name — while
+`ResolveHold`/`ApplyHold` are selected like any other op) and `Shaping`
+(required only when the program selects `ShapeVelocity`). Two more optional
+rows on `WorldMotion` itself carry feel the engine used to hardcode, each
+defaulting to the old constant bit-for-bit when omitted: `upTurn`
+(`WorldUpTurnRates`: `field`/`contact`, the half-angle-per-second ceilings on
+how fast a solved gravity field, respectively a measured ground-contact
+normal, may turn the body's up axis) and `obstruction`
+(`WorldObstructionLatch`: `displacement`/`idleThreshold`/`graceSeconds`, the
+non-walkable contact witness's persistence — how far the body must move to
+count as moved on, the driven-input floor below which it counts as idle, and
+how long an unrefreshed latch survives a solver pass reporting no push).
 Submerged locomotion is a kit authoring a `bond: "Medium"` hold row; a kart
 is a kit whose shaping table carries an `across` row.
 

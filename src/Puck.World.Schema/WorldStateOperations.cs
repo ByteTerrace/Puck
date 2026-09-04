@@ -160,8 +160,8 @@ public abstract record WorldStateTransform {
     /// first key deciding and each later key breaking the ties before it; a keyed numeric row by its own cell values.
     /// The canonical order a pattern reads a hand in.</summary>
     /// <param name="Row">The ordered zone or keyed numeric row.</param>
-    /// <param name="By">The attribute keys for a zone, 1..<see cref="WorldStateCapacity.MaxSortKeys"/> in precedence
-    /// order; null (required) for a keyed row.</param>
+    /// <param name="By">The attribute keys for a zone, 1..<see cref="WorldStateCapacity.MaxSortKeys"/> distinct
+    /// rows in precedence order; null (required) for a keyed row.</param>
     /// <param name="Descending">Whether a keyed row's greatest value comes first; a zone's direction sits on each key.</param>
     public sealed record Sort(string Row, IReadOnlyList<WorldSortKey>? By = null, bool Descending = false) : WorldStateTransform;
 

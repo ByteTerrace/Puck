@@ -12152,7 +12152,7 @@
                                   "type": "string"
                                 },
                                 "by": {
-                                  "description": "The attribute keys for a zone, 1..MaxSortKeys in precedence order; null (required) for a keyed row.",
+                                  "description": "The attribute keys for a zone, 1..MaxSortKeys distinct rows in precedence order; null (required) for a keyed row.",
                                   "type": [
                                     "array",
                                     "null"

@@ -208,8 +208,11 @@ is a ring of the last pushed values, the temporal twin of a ray: `push`
 oldest first, so a combo, a rhythm window, or "three claims then silence" is
 one pattern. `world.state <row>` echoes capacity, cursor, and how much of
 the ring is held. `sort` puts a
-zone in canonical order by `by`, 1..8 attribute keys (`row`, `descending`) in
-precedence order, or a keyed row by its own values under `descending`, stably,
+zone in canonical order by `by`, up to `MaxSortKeys` (`WorldStateCapacity`,
+derived from `MaxRows` -- a sort key names a declared row, so a sort can
+never carry more keys than a section can hold) attribute keys (`row`,
+`descending`) in precedence order, or a keyed row by its own values under
+`descending`, stably,
 which is what turns a multiset question into a regular one: Reversi's
 flank is `them+ me` on a ray, a straight is five consecutive rank symbols over
 a sorted hand, Yahtzee's large straight is a `choice` of two sequences over a
