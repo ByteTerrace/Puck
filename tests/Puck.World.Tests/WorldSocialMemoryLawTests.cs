@@ -1006,7 +1006,11 @@ public sealed class WorldSocialMemoryLawTests(ITestOutputHelper output) {
             }
             return GC.GetAllocatedBytesForCurrentThread() - bytes;
         }
-        _ = Run(source.Policy, packet); _ = Run(largePolicy, largePacket);
+        // Warm both paths past tier-up well before measuring: a single warm-up pair leaves the measured call racing
+        // a background re-JIT of TryImportObserver's shared generic-collection callees, whose completion timing
+        // depends on how much unrelated work the rest of the suite is putting on the thread pool -- an eight-round
+        // margin (256 calls per policy) keeps the measured allocation stable regardless of full-suite composition.
+        for (var warmup = 0; warmup < 8; warmup++) { _ = Run(source.Policy, packet); _ = Run(largePolicy, largePacket); }
         var small = Run(source.Policy, packet); var large = Run(largePolicy, largePacket);
         Assert.Equal(small, large);
         Assert.Equal(Read(source), Read(destination));
