@@ -600,7 +600,18 @@ cadence phase, cached steering, and overlap latches through checkpoint/hash.
 `solid` kits: at most 32 inspected candidates and 16 resolved pairs per body
 (defaults 16/8). Dense saturation omits later stable-index pairs. Do not couple
 these budgets to `collision.events`; sensing and physical correction are
-independent authored costs.
+independent authored costs. `rigidSubstepCeiling` (default 8, maximum 32)
+bounds a rigid body's own per-tick continuous-collision substep count — the
+count itself is derived per body per tick from speed and collider size, never
+authored directly.
+
+A kit's `rigid` facet (`mass`, `restitution`, `friction`, `rollingFriction`,
+`linearDamping`, `angularDamping`) hands its bodies to the rigid solver
+instead of a locomotion program — see
+[the server reference](../../../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs).
+`mass` is required and positive; the other four are non-negative per-second
+decay rates, never per-tick fractions. Requires `collider` (sphere, capsule,
+or box — never `fromCreation`) and `bodyContact: solid`.
 
 ### `navigation` — bounded surface, flight, and medium routes
 

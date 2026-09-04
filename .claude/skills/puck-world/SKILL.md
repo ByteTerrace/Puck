@@ -323,6 +323,19 @@ choosing fixed-point primitives on sim value paths.
 
 ## Boundaries worth knowing
 
+- A kit's `rigid` facet (`Puck.World.Schema.WorldRigid`) is a passive
+  physical entity — mass/restitution/friction/damping derived to
+  mass/inertia from the kit's own sphere/capsule/box collider, never a free
+  density or tensor. `WorldBody.AdvanceRigid` (`WorldBody.Rigid.cs`) hands the
+  whole step to the rigid solver instead of the grounded/free motion
+  program; dynamic-vs-dynamic contact rides the existing
+  `ResolveDynamicContacts` broadphase (`WorldPopulation.Rigid.cs`) through
+  `Puck.Physics.FixedTwoBodyKernel`. `body.impulse`, `world.rigid`, and the
+  `$physics:quiescent` rule operand are the console/rule surface; see
+  [references/documents.md](references/documents.md) if it grows a rigid
+  section, and the [server](../../../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)/[schema](../../../src/Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs)
+  references for the mechanics. The shipped garden's `billiardsTray`/
+  `bowlingLane` placements are the worked example.
 - `WorldBodiesLimits.CapacityCeiling` is 4096 (the largest authored
   `population.capacity` the validator admits), and `WorldClient.EntityCapacity`
   is SINGLE-SOURCED from it (`= WorldBodiesLimits.CapacityCeiling`, the F3
