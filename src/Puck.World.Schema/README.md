@@ -1495,6 +1495,66 @@ engine-tick duration when due. Human bodies, live sources, tapes, and pending
 external input remain full-rate. `bodyContact: solid` requires full-rate motion;
 large crowds that batch motion use the default `overlap` contact mode.
 
+### Body scale
+
+`bodies.scaleRow` names a keyed `state.world` row (`kind: fixed`, a declared
+`capacity`, and both `min`/`max` authored, `min` strictly positive and `max`
+no greater than `authoring.maxPlacementScale` — the row's own envelope is the
+world's own declared scale envelope, and the render capacity probe's worst
+case must cover the largest live body — refused by name otherwise) whose
+cells, keyed by 0-based body index, carry each body's live scale multiplier:
+absent (the default) leaves every body's `Server.WorldBody.Scale` at `1`
+forever, at no per-tick cost. A cell may not declare an `advance`/`cycle`/
+`dynamics` value-over-time trait — every resync reads at tick 0, so such a
+cell would read its base value forever instead of progressing. A `Region`
+INTERACTION scoped to the one affected body (`left` a one-cell carrier
+property naming it, `right` the placement) is the trigger shape for "this
+specific body standing in this region": the `$region:<placementId>` reserved
+channel is an AGGREGATE occupant count over the whole population and cannot
+express "this body, not any other" — an ordinary world rule gated on it
+shrinks whichever body happens to wander in, and restoring on "the aggregate
+reads zero" stays blocked while an unrelated body lingers in the same region.
+The interaction's own `Edge` mode (not `Level`) is what keeps the trigger a
+single write per crossing rather than a per-tick one: `Level` re-fires the
+effect every tick the co-occurrence holds, which for a `setState` effect is a
+document mutation, a stderr journal line, and a client definition delivery
+EVERY tick a body simply stands in the region. A shrink/restore pair is
+therefore two `Edge` interactions over two regions — one that lowers `Scale`
+on entering the shrinking region, a second, physically separate region that
+restores it on entering THAT one — never a single region's `Level` write
+paired with a self-resetting flag row, which is the same per-tick-write
+anti-pattern `ActionTriggerMode.Edge`'s own remarks warn against.
+`WorldPopulation.SyncBodyScale` resyncs every active body's `Scale` wholesale
+from the row at the same `Install`/admission choke points `WorldGrants.SyncState`
+resyncs its own drive gates at, PLUS `RestoreCheckpoint` (after
+`WorldPopulation.Restore` rebuilds every body at the constructed default) and
+a detached-seat/peer transfer restore, so a live write settles before the next
+tick and a reused population slot — or a body a checkpoint restore or transfer
+just minted fresh — never inherits a previous occupant's value nor sits at the
+unscaled default the row itself disagrees with. `Scale` multiplies the body's
+collider volumes (about its own root — contact resolution and hold probes/
+standoff/reach alike), its resolved move speed and turn rate, a hold's own
+gravity fall/rise/terminal magnitudes, a wall hold's travel speed, and a
+grip's pull rate (`WorldBody.Hold.cs`) — so a shrunk body settles onto and
+depenetrates from the ground at a proportionally gentler rate too, rather than
+free-falling one tick of full-scale gravity into a collider whose own skin
+margin it can no longer absorb — and, client-side, reading the same row live,
+its composed render scale (`Client.WorldSceneEmitter.ResolveStampCreation`)
+and the seat chase camera's orbit distance and look-at height
+(`Client.WorldFramePresenter.ResolveCamera`, scaled about the body's own root
+so a shrunk body stays framed instead of shrinking to a speck on screen).
+`body.where`'s `scale=` echo is the read-back. `WorldLook.Scale` is a
+different, presentation-only per-look constant layered on top (appearance
+only; it never touches collision or motion tuning) — the two multiply
+together, never one standing in for the other.
+
+Body-vs-body contact resolution, overlap/collision events, adjacency transfer
+sweeps, and the cross-boundary continuum trajectory all still read a kit's
+SHARED, unscaled collider volumes — only the self-collision sweep
+(`WorldBody.Step.cs`'s `ResolveProgramContacts`) reads the scaled copy. A
+shrunk body's own contact with the WORLD is correct; its contact with OTHER
+bodies is not yet — a known gap, not a silent claim.
+
 `collision.events` bounds overlap-event sensing without changing physical world
 contact. `candidateBudget` limits inspected broadphase candidates per body,
 `maxPairsPerBody` limits retained degree, and `beginBudget` limits new pairs per

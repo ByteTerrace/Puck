@@ -318,7 +318,29 @@ the reserved local seats and the rest host simulated stand-ins and network
 peers. The client reserves 128 full-detail catalog rigs and represents later
 active indices with one-instance coarse capsules, keeping the worst-case SDF
 program under its fixed instruction/transform ceilings. `WorldBody` owns one entry's integration, pose, tape, motion row, and
-action state. Bodies advance against the one contact-resolution seam
+action state — including its live `Scale` multiplier (`WorldBody.Scale.cs`),
+1 unless `bodies.scaleRow` names a keyed `state.world` row carrying this
+body's cell; `WorldPopulation.SyncBodyScale` resyncs every active body's
+`Scale` wholesale from that row at the same `Install`/admission choke points
+`WorldGrants.SyncState` resyncs its own drive-gate index at (construction,
+every `Install`, every seat join/peer admission, `RestoreCheckpoint` after
+`WorldPopulation.Restore` rebuilds every body at the constructed default, and
+a detached-seat/peer transfer restore), so a reused population slot — or a
+body a checkpoint restore or transfer just minted fresh — never inherits a
+previous occupant's value nor sits at the unscaled default the row itself
+disagrees with. `Scale` multiplies the kit's
+shared collider volumes about the body's own root (never mutated in place —
+a per-call scratch span, scaled only when `Scale != 1`), the resolved move
+speed and turn rate, hold probe height/standoff/reach, a hold's own gravity
+fall/rise/terminal, a wall hold's travel speed, and a grip's pull rate
+(`WorldBody.Hold.cs`) — a shrunk body's fall and depenetration stay
+proportionally gentle rather than free-falling one tick of full-scale gravity
+into a collider whose own contact skin margin it can no longer absorb; the
+client reads the same row live and folds it into the rendered rig. Only the
+self-collision sweep (`WorldBody.Step.cs`'s `ResolveProgramContacts`) reads
+the scaled volumes — body-vs-body contact, overlap events, adjacency transfer
+sweeps, and the cross-boundary continuum trajectory still read the kit's
+shared unscaled copy. Bodies advance against the one contact-resolution seam
 `IContactField.cs`, which has two providers: the analytic `WorldColliderSet`
 (document-derived convex colliders) and the SDF-backed `WorldSolidField.cs`.
 Both include solid scene rows, screen frames, and the shapes emitted by solid

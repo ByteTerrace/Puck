@@ -98,7 +98,8 @@
   ],
   "bodies": {
     "capacity": 64,
-    "localSeats": 2
+    "localSeats": 2,
+    "scaleRow": "scale"
   },
   "bodyMotionPrograms": [
     {
@@ -547,6 +548,38 @@
         "name": "bone-claim",
         "range": 0,
         "right": "bone"
+      },
+      {
+        "coOccurrence": "Region",
+        "effects": [
+          {
+            "$type": "setState",
+            "key": "$left",
+            "state": "scale",
+            "value": 0.15
+          }
+        ],
+        "left": "wren",
+        "mode": "Edge",
+        "name": "drink-me-shrink",
+        "range": 0,
+        "right": "drinkMe"
+      },
+      {
+        "coOccurrence": "Region",
+        "effects": [
+          {
+            "$type": "setState",
+            "key": "$left",
+            "state": "scale",
+            "value": 1
+          }
+        ],
+        "left": "wren",
+        "mode": "Edge",
+        "name": "eat-me-restore",
+        "range": 0,
+        "right": "eatMe"
       }
     ]
   },
@@ -2278,12 +2311,55 @@
         "prototypeId": "bowlingPin",
         "scale": 1,
         "yawDegrees": 0
+      },
+      {
+        "id": "drinkMe",
+        "position": [
+          -8,
+          -0.5,
+          15
+        ],
+        "prototypeId": "drinkMe",
+        "region": {
+          "radius": 4.0
+        },
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "tabletop",
+        "position": [
+          -8,
+          -0.5,
+          12
+        ],
+        "prototypeId": "tabletop",
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0
+      },
+      {
+        "id": "eatMe",
+        "position": [
+          -8,
+          -0.5,
+          20
+        ],
+        "prototypeId": "eatMe",
+        "region": {
+          "radius": 2.0
+        },
+        "scale": 1,
+        "yawDegrees": 0
       }
     ]
   },
   "properties": {
     "names": [
-      "hound"
+      "hound",
+      "wren"
     ]
   },
   "prototypes": [
@@ -7620,6 +7696,146 @@
         ]
       },
       "id": "bowlingLane"
+    },
+    {
+      "document": {
+        "name": "drinkMe",
+        "palette": [
+          {
+            "color": "state.drinkMeColors.glass"
+          },
+          {
+            "color": "state.drinkMeColors.cap"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0.12,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.05,
+              0.12,
+              0.05
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 1,
+            "name": "neck",
+            "position": [
+              0,
+              0.28,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.02,
+              0.04,
+              0.02
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          }
+        ]
+      },
+      "id": "drinkMe"
+    },
+    {
+      "document": {
+        "name": "tabletop",
+        "palette": [
+          {
+            "color": "#8A6A45"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "top",
+            "position": [
+              0,
+              1.25,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              1.0,
+              0.05,
+              1.0
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 0,
+            "name": "leg",
+            "position": [
+              0,
+              0.6,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.08,
+              0.6,
+              0.08
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          }
+        ]
+      },
+      "id": "tabletop"
+    },
+    {
+      "document": {
+        "name": "eatMe",
+        "palette": [
+          {
+            "color": "#D9A5C0"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "cake",
+            "position": [
+              0,
+              0.06,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.18,
+              0.06,
+              0.18
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          }
+        ]
+      },
+      "id": "eatMe"
     }
   ],
   "render": {
@@ -8251,6 +8467,15 @@
         16,
         0.5,
         22
+      ],
+      "yawDegrees": 0
+    },
+    {
+      "id": "table",
+      "position": [
+        -8,
+        0,
+        20
       ],
       "yawDegrees": 0
     }
@@ -8914,6 +9139,44 @@
         "kind": "bool",
         "name": "physicsSettled",
         "value": false
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": "1"
+          }
+        ],
+        "kind": "fixed",
+        "max": "1",
+        "min": "0.05",
+        "name": "scale"
+      },
+      {
+        "cells": [
+          {
+            "key": "glass",
+            "value": "#8FD6C8"
+          },
+          {
+            "key": "cap",
+            "value": "#C6435B"
+          }
+        ],
+        "kind": "text",
+        "name": "drinkMeColors"
+      },
+      {
+        "capacity": 1,
+        "cells": [
+          {
+            "key": "0",
+            "value": 1
+          }
+        ],
+        "kind": "int",
+        "name": "wren"
       }
     ]
   },

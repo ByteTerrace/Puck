@@ -879,6 +879,30 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             clock: in clock
         );
 
+        // The chase rig's authored orbit distance and look-at height are full-scale measurements — a shrunk body
+        // needs the SAME proportional framing, not a fixed-world-unit boom aimed at a point far above its (now tiny)
+        // head, so this scales BOTH offsets from the body's own root position by the seat's perceived body's live
+        // scale: the look target's height above the root, then the eye's offset from that rescaled target (the orbit
+        // radius the boom eases toward). Chase-rig-only, like the seatUp alignment below: a camera-mode application
+        // frames its own subject's pose directly and is not an orbit around this body at all.
+        if (ReferenceEquals(
+            objA: rig,
+            objB: chase
+        )) {
+            var liveScale = WorldGaitDrivers.LiveBodyScale(
+                definition: definition,
+                index: m_anchor.PerceivedBody(slot: slot),
+                tick: m_simulation.Tick
+            );
+
+            if ((liveScale > 0f) && (liveScale != 1f)) {
+                var scaledTarget = (bodyPosition + ((target - bodyPosition) * liveScale));
+
+                eye = (scaledTarget + ((eye - target) * liveScale));
+                target = scaledTarget;
+            }
+        }
+
         // The boom rides the SEAT's up, not the world's. Authored orbit yaw/pitch place the camera about world +Y,
         // which is behind and above a body standing on world up and somewhere arbitrary for one standing anywhere
         // else — on the side of a planetoid it can sit directly over the seat's head, looking straight down the axis

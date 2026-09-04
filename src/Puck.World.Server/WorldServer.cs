@@ -744,6 +744,9 @@ public sealed partial class WorldServer : IWorldServerHost {
         // The lattice exists (the population allocated it) and the instance identity is known only from here on, so
         // this is the first point a lattice row's draw fill can be seeded through the site ladder and painted.
         PaintLatticeDraws(definition: definition);
+        // AFTER ReconcileInhabitants above: every boot-declared body (seats and inhabited placements alike) now has
+        // a WorldBody to resync bodies.scaleRow's cells onto.
+        m_population.SyncBodyScale(definition: definition);
     }
 
 }

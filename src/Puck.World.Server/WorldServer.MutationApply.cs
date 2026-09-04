@@ -887,6 +887,11 @@ public sealed partial class WorldServer {
                 ordered: true
             );
         }
+
+        // AFTER the population branch above: a rebuild replaces every WorldBody, so resyncing scale before it would
+        // read bodies.scaleRow's cells into instances Rebuild is about to discard, leaving the fresh ones at their
+        // constructed default until the next Install happens to touch state again.
+        m_population.SyncBodyScale(definition: definition);
     }
     // A scalar state write changes runtime values, not declaration shape. Keep the authoritative document as the
     // journal/save source while retaining the compiled rule/catalog/group/machine products that depend only on
@@ -895,6 +900,7 @@ public sealed partial class WorldServer {
         m_definition = definition;
         m_grants.SyncState(definition: definition);
         m_population.InstallFields(definition: definition);
+        m_population.SyncBodyScale(definition: definition);
     }
 
     private static bool TryValidateMutationCandidate(WorldDefinition candidate, WorldMutation mutation, out string reason) => mutation switch {

@@ -96,6 +96,12 @@
         }
       },
       "additionalProperties": false
+    },
+    "scaleRow": {
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
   "additionalProperties": false,

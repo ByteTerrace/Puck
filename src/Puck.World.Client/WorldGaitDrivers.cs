@@ -363,6 +363,26 @@ public static class WorldGaitDrivers {
 
         return (row.Kind != CellKind.Text);
     }
+    /// <summary>Reads a body's live scale multiplier — the same <c>bodies.scaleRow</c> cell
+    /// <c>WorldPopulation.SyncBodyScale</c> reads server-side — for a presentation consumer that scales something OTHER
+    /// than the rendered stamp itself (a chase camera's orbit distance, say). A world authoring no scale row, or a
+    /// body with no cell of its own, reads 1.</summary>
+    /// <param name="definition">The live definition.</param>
+    /// <param name="index">The 0-based body index.</param>
+    /// <param name="tick">The tick a cycling scale row is read at.</param>
+    /// <returns>The body's live scale, or 1 when unauthored.</returns>
+    public static float LiveBodyScale(WorldDefinition definition, int index, ulong tick) {
+        if (definition.Population.ScaleRow is not { } scaleRow) {
+            return 1f;
+        }
+
+        return (TryReadStateNumber(
+            definition: definition,
+            reference: $"state.{scaleRow}.{index}",
+            tick: tick,
+            value: out var value
+        ) ? value : 1f);
+    }
     /// <summary>Reads a <c>state.&lt;row&gt;[.&lt;key&gt;]</c> text cell spelling a world-space <c>[x, y, z]</c>.</summary>
     /// <param name="definition">The live definition.</param>
     /// <param name="reference">The state reference.</param>

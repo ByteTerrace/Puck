@@ -1088,6 +1088,32 @@ gait and planted paws; Wren's own hold list is `wall` (grip, `spend` against the
 `jump` releases), `ground`, `air`, and her hands and feet are `effectors` on surface targets. Their
 homes sit away from the pit and the platform edge — a wander radius that reaches either walks the
 creature onto the safety net, which it then paces beneath the platform.
+Away from the debugRoom cluster, near the pond, a `drinkMe` bottle placement (colors from the
+`drinkMeColors` text row) carries a `region`, and a second, physically separate `eatMe` cake placement
+carries its own region straddling the approach back toward the `table` spawn point. Two `Region`
+INTERACTIONS — `left: "wren"` (a one-cell carrier row naming body 0, never the aggregate
+`$region:<placementId>` occupant count, which fires for ANY body standing in the region regardless of
+who), both Edge mode — write body 0's cell of the keyed `scale` state row (`bodies.scaleRow`, envelope
+`[0.05, 1]`): `drink-me-shrink` (`right: "drinkMe"`) sets it to 0.15 once on entering the bottle's
+region, and `eat-me-restore` (`right: "eatMe"`) sets it back to 1 once on entering the cake's. Edge is
+load-bearing, not a style choice: a `Level` trigger re-fires its `setState` every tick the co-occurrence
+holds, which for a body simply standing in the region is a document mutation, a stderr journal line, and
+a client definition delivery EVERY tick — the same per-tick-write anti-pattern `ActionTriggerMode`'s own
+remarks warn a Level-triggered write against. The two regions are never nested or otherwise contained
+one inside the other — the shrink region has no reach into where the restore region would fire, and the
+restore region has no reach back into the shrink region's own interior — so leaving one always reaches
+the other's edge before either could re-trigger itself. `Server.WorldBody.Scale` scales collider
+volumes, move speed/turn rate, hold probes/standoff/reach, a hold's own gravity fall/rise/terminal, a
+wall hold's travel speed, and a grip's pull rate; the client multiplies the same live cell into the
+rendered rig AND the seat chase camera's orbit distance and look-at height
+(`Client.WorldFramePresenter.ResolveCamera`), so a shrunk body stays framed instead of shrinking to a
+speck on screen. A `tabletop` placement (a solid pedestal table, 1.2 m clearance under its top) sits
+beyond the bottle, and the `table` spawn point stands a body north of both, facing south — inside the
+`eatMe` region already, so an unshrunk arrival reads `scale=1` from the first tick. `body.where`'s
+`scale=` echo is the read-back. Body-vs-body contact, overlap events, adjacency transfer sweeps, and the
+cross-boundary continuum trajectory still read a kit's shared UNSCALED collider volumes — only the
+self-collision sweep does not; a shrunk body's contact with the world is correct, its contact with
+other bodies is not yet.
 An explicit path or the shipped default that cannot be loaded refuses the boot by name.
 `puck.world.frozen.json` ships beside them: the frozen floating-island diorama, reference-only,
 reachable via `--world`, never extended, deleted on owner order — the worked examples this file cites
@@ -1502,10 +1528,12 @@ for presentation, which is how animation keys on regime without the client
 deriving one. `body.where` echoes it as `facts=` (lower-case, `|`-joined in
 bit order, `none` when empty), followed by `home=(x, y, z)` — the position the
 body was ACTIVATED at (a seat's spawn point, an inhabitant's placement plus its
-own distribution sample). A producer's inward pull steers against that home
-rather than the world origin, so a population spread over several placements
-keeps to its own ground instead of congregating; a teleport moves the body,
-never its home. Facts are NOT mutually exclusive: a body can be
+own distribution sample) — then `scale=` (`Server.WorldBody.Scale`'s read-back)
+and, for a routed local seat, `anchor=body:<n>` (the seat's currently routed
+entity index). A producer's inward pull steers against that home rather than the world origin,
+so a population spread over several placements keeps to its own ground
+instead of congregating; a teleport moves the body, never its home. Facts are
+NOT mutually exclusive: a body can be
 grounded and rising in one tick, and a body on a wall reads `airborne|climbing`
 because contact resolution keeps running under every hold.
 
