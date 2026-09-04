@@ -400,7 +400,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
         var downgraded = ((byte[])encoded.Clone());
 
-        // Version 4 predates checkpoint-only arbitrary-up, follower-seed, and attachment continuation state. The
+        // Version 4 predates checkpoint-only arbitrary-up, follower-seed, and tether continuation state. The
         // current decoder must reject that exact prior layout instead of reading its shorter population residue.
         downgraded[4] = 4;
         downgraded[5] = 0;

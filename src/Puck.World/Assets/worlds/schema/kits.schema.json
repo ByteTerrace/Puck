@@ -822,7 +822,7 @@
                 "type": "number"
               },
               "aimHalfAngleDegrees": {
-                "description": "The aim-assist cone half-angle, degrees, within [0, 180], an attach candidate\u0027s bearing must fall within around the body\u0027s facing.",
+                "description": "The aim-assist cone half-angle, degrees, within [0, 180], an attach candidate\u0027s bearing must fall within around the body\u0027s facing. Honoured only by a collider-list contact provider; a field provider\u0027s own directed march has no candidate list to score bearings over and ignores it (see WorldSolidField.TryNearestSurfaceAlongDirection\u0027s remarks).",
                 "type": "number"
               },
               "lengthRate": {

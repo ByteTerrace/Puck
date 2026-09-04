@@ -466,7 +466,8 @@ public sealed partial class WorldBody {
         // visit.
         m_carry = carry;
 
-        var hadTetherFacet = (m_tetherFacet is not null);
+        var previousTetherFacet = m_tetherFacet;
+        var hadTetherFacet = (previousTetherFacet is not null);
 
         m_tetherFacet = tether;
 
@@ -476,6 +477,23 @@ public sealed partial class WorldBody {
             ClearTether();
             m_attachPreviousBit = false;
             m_detachPreviousBit = false;
+
+            // The OLD facet's modeState row (bodyState/identityState declarations are world-global, so its ordinal
+            // resolves identically under any kit) may still read 1 from before the swap — CompileActionState just
+            // preserved every Durable slot's value across this recompile by name. Zero it directly: WriteTetherModeState
+            // reads the NEW facet (already null on a loss, or a different ordinal on a gain), so it cannot be the one
+            // to clear the old bit.
+            var previousModeStateOrdinal = (previousTetherFacet?.ModeStateOrdinal ?? -1);
+
+            if (previousModeStateOrdinal >= 0) {
+                ApplyRawState(
+                    reason: "tether.mode",
+                    requested: FixedQ4816.Zero.Value,
+                    slot: previousModeStateOrdinal,
+                    writer: "tether"
+                );
+                MarkDurableDirty(slot: previousModeStateOrdinal);
+            }
         }
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {

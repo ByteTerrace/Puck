@@ -14,7 +14,9 @@ namespace Puck.World;
 /// facing direction — also the tether's rope length at attach (the resolved anchor's actual distance, always within
 /// this ceiling).</param>
 /// <param name="AimHalfAngleDegrees">The aim-assist cone half-angle, degrees, within <c>[0, 180]</c>, an attach
-/// candidate's bearing must fall within around the body's facing.</param>
+/// candidate's bearing must fall within around the body's facing. Honoured only by a collider-list contact
+/// provider; a field provider's own directed march has no candidate list to score bearings over and ignores it
+/// (see <c>WorldSolidField.TryNearestSurfaceAlongDirection</c>'s remarks).</param>
 /// <param name="LengthRate">The non-negative world-units-per-second the held <see cref="ReelChannel"/> reels the
 /// rope at — positive reels out, negative in (the channel's own sign selects direction; this is a magnitude).</param>
 /// <param name="MinLength">The non-negative rope-length floor a reel-in clamps to.</param>

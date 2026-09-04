@@ -289,7 +289,7 @@ public static class FixedSurfaceQuery {
     /// <param name="colliders">The colliders compiled once (<see cref="FixedSurfaceColliderSource.Static"/>).</param>
     /// <param name="dynamicColliders">The colliders the caller recomputes per tick
     /// (<see cref="FixedSurfaceColliderSource.Dynamic"/>), or empty.</param>
-    /// <param name="probe">The world-space point to search from — a hand, a grapple muzzle, a foot.</param>
+    /// <param name="probe">The world-space point to search from — a hand, a tether muzzle, a foot.</param>
     /// <param name="reach">The non-negative maximum distance a result may sit from <paramref name="probe"/>; a
     /// result exactly at <paramref name="reach"/> is included. Always caller-supplied — never a constant here.</param>
     /// <param name="candidate">The nearest surface point within reach, or <see langword="default"/> when none
@@ -332,7 +332,7 @@ public static class FixedSurfaceQuery {
 
         return found;
     }
-    /// <summary>Finds the best grapple anchor candidate along an aim direction — a soft-lock cone rather than an
+    /// <summary>Finds the best tether anchor candidate along an aim direction — a soft-lock cone rather than an
     /// exact ray cast: every collider's own <see cref="TryNearest"/> point to <paramref name="origin"/> is a
     /// candidate, filtered to <paramref name="maxDistance"/> and to within <paramref name="assistHalfAngle"/> of
     /// <paramref name="direction"/>, then ranked by angular deviation first and distance second (a candidate closer
@@ -340,7 +340,7 @@ public static class FixedSurfaceQuery {
     /// <param name="colliders">The colliders compiled once (<see cref="FixedSurfaceColliderSource.Static"/>).</param>
     /// <param name="dynamicColliders">The colliders the caller recomputes per tick
     /// (<see cref="FixedSurfaceColliderSource.Dynamic"/>), or empty.</param>
-    /// <param name="origin">The world-space aim origin — a grapple muzzle.</param>
+    /// <param name="origin">The world-space aim origin — a tether muzzle.</param>
     /// <param name="direction">The aim direction; need not be pre-normalized (renormalized once here, not
     /// per-candidate).</param>
     /// <param name="maxDistance">The non-negative maximum distance a candidate's surface point may sit from

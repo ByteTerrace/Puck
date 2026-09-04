@@ -127,7 +127,7 @@ point, outward normal, owning collider identity, and distance within a
 caller-supplied reach across two spans (`FixedSurfaceColliderSource.Static`/
 `.Dynamic`, mirroring `FixedStaticContactSolver.Resolve`'s split), ranked by
 distance then a `(Source, ColliderIndex)` tie-break. `TryNearestDirected` is
-the aim-assist cone variant for grapple targeting: candidates are filtered to
+the aim-assist cone variant for tether targeting: candidates are filtered to
 a caller-supplied max distance and half-angle around an aim direction, then
 ranked by angular deviation before distance. Every reach, max distance, and
 half-angle is caller-supplied; nothing here derives one from a document.

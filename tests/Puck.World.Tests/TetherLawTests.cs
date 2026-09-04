@@ -2,6 +2,7 @@ using System.Numerics;
 using Puck.World.Authoring;
 using Puck.Hosting;
 using Puck.Maths;
+using Puck.Physics.Motion;
 using Puck.SignedDistance;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -72,7 +73,10 @@ public sealed class TetherLawTests {
     // Extends Fixtures.BuildDocument with a tether-ready world: a wall placement centered at (2,0,0) with
     // half-extents (0.2,3,3) and three composition channels (attach/detach/reel) appended after the base document's
     // forward/strafe/turn roles (ordinals 0..2), landing at 3/4/5, and the fixture's one kit given a tether facet.
-    private static WorldDefinition BuildTetherDocument(bool wallHoldable = true, string? attachChannelName = "attach", bool declareAttachChannel = true, bool includeWall = true, float wallHalfHeight = 3f) {
+    // modeState is left unset by default (matching every test written before that facet field existed); a caller
+    // wanting the row declares it by name (modeStateRowKind: ActionStateKind.Counter, the only kind the validator
+    // admits) or leaves it undeclared (modeStateRowKind: null) to exercise the validator's undeclared-name refusal.
+    private static WorldDefinition BuildTetherDocument(bool wallHoldable = true, string? attachChannelName = "attach", bool declareAttachChannel = true, bool includeWall = true, float wallHalfHeight = 3f, string? modeState = null, ActionStateKind? modeStateRowKind = ActionStateKind.Counter) {
         var wall = BuildBoxCreation(
             halfExtents: new Vector3(x: 0.2f, y: wallHalfHeight, z: 3f),
             id: "wall"
@@ -123,6 +127,7 @@ public sealed class TetherLawTests {
                 LengthRate: 2f,
                 MaxAnchorDistance: 20f,
                 MinLength: 1f,
+                ModeState: modeState,
                 ReelChannel: "reel",
                 ReleaseVelocityScale: 1f
             ),
@@ -135,6 +140,9 @@ public sealed class TetherLawTests {
             PlacementsRaw = (document.PlacementsRaw! with {
                 Rows = rows,
             }),
+            StateRaw = (((modeState is { Length: > 0 }) && (modeStateRowKind is { } kind))
+                ? new WorldStateSection(Body: [new ActionStateSlot(Name: modeState, Kind: kind)], World: [])
+                : document.StateRaw),
         };
     }
     private static WorldBody JoinBody(WorldFixture fixture, int slot = 0) {
@@ -280,6 +288,67 @@ public sealed class TetherLawTests {
 
         Assert.NotNull(@object: nearBody.TetherLength);
     }
+    [Fact]
+    public void HeldReelIn_ShrinksTheRopeThroughTheTickPathAndClampsAtMinLength() {
+        var document = BuildTetherDocument(includeWall: false);
+
+        using var fixture = Fixtures.FreshServer(definition: document);
+        var body = JoinBody(fixture: fixture);
+
+        body.SubmitIntent(intent: Attach());
+        fixture.Step();
+
+        var attachedLength = body.TetherLength;
+
+        Assert.NotNull(@object: attachedLength);
+        Assert.Equal(expected: FixedQ4816.One, actual: body.TetherMinLength);
+        Assert.True(condition: (attachedLength!.Value > FixedQ4816.One), userMessage: $"expected an initial rope longer than minLength to give the reel something to shrink; got {attachedLength}");
+
+        // lengthRate is 2 world-units/second at the fixture's 30 Hz tick rate and maxAnchorDistance caps the
+        // longest possible initial rope at 20 — comfortably enough ticks (19 / (2/30) ~= 285) to run the rope from
+        // its initial length down past minLength however far the post's near face resolved, proving the clamp
+        // rather than just an early sample.
+        for (var tick = 0; (tick < 400); tick++) {
+            body.SubmitIntent(intent: ReelIn());
+            fixture.Step();
+        }
+
+        Assert.Equal(expected: FixedQ4816.One, actual: body.TetherLength);
+
+        // The control: one further held reel-in tick leaves the rope exactly at the floor instead of continuing
+        // past it (a broken clamp would either go negative or leave a fixed-point residue below minLength).
+        body.SubmitIntent(intent: ReelIn());
+        fixture.Step();
+
+        Assert.Equal(expected: FixedQ4816.One, actual: body.TetherLength);
+    }
+    [Fact]
+    public void TetherModeStateFlipsThroughTheOrdinaryAttachAndDetachChannelEdges() {
+        var document = BuildTetherDocument(includeWall: false, modeState: "tethered");
+
+        using var fixture = Fixtures.FreshServer(definition: document);
+        var body = JoinBody(fixture: fixture);
+
+        Assert.True(condition: body.TryDescribeActionState(name: "tethered", kind: out var kind, lifetime: out _, playerWritable: out _, value: out var initial, timerTicks: out _));
+        Assert.Equal(expected: ActionStateKind.Counter, actual: kind);
+        Assert.Equal(expected: FixedQ4816.Zero, actual: initial);
+
+        body.SubmitIntent(intent: Attach());
+        fixture.Step();
+
+        Assert.NotNull(@object: body.TetherLength);
+        Assert.True(condition: body.TryDescribeActionState(name: "tethered", kind: out _, lifetime: out _, playerWritable: out _, value: out var afterAttach, timerTicks: out _));
+        Assert.Equal(expected: FixedQ4816.One, actual: afterAttach);
+
+        // Through the ordinary channel-driven edge (never DetachTether by reflection) — the same edge a client's
+        // body.detach press drives.
+        body.SubmitIntent(intent: Detach());
+        fixture.Step();
+
+        Assert.Null(@object: body.TetherLength);
+        Assert.True(condition: body.TryDescribeActionState(name: "tethered", kind: out _, lifetime: out _, playerWritable: out _, value: out var afterDetach, timerTicks: out _));
+        Assert.Equal(expected: FixedQ4816.Zero, actual: afterDetach);
+    }
     // DetachTether is private (the channel-driven path always runs it ahead of the SAME tick's ordinary motion
     // program, which would otherwise mask the scale under its own shaping/gravity), so this reaches it directly —
     // the same reflection idiom Win32ProbeKernelBenchCleanupTests already uses for a unit assertion the public
@@ -353,7 +422,31 @@ public sealed class TetherLawTests {
         Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: admitted, reason: out var admittedReason), userMessage: admittedReason);
     }
     [Fact]
-    public void KitWithNoTetherFacet_RefusesAttach_WhereATetherFacetIsAdmitted() {
+    public void ModeStateNamingAnUndeclaredSlot_RefusesValidation_WhereADeclaredCounterIsAdmitted() {
+        var denied = BuildTetherDocument(modeState: "no-such-row", modeStateRowKind: null);
+
+        Assert.False(
+            condition: WorldDefinitionValidator.TryValidateLocally(definition: denied, reason: out var deniedReason),
+            userMessage: "a modeState naming no declared state slot was expected to refuse"
+        );
+        Assert.Contains(actualString: deniedReason, expectedSubstring: "modeState");
+
+        var admitted = BuildTetherDocument(modeState: "tethered");
+
+        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: admitted, reason: out var admittedReason), userMessage: admittedReason);
+    }
+    [Fact]
+    public void ModeStateNamingATimerSlot_RefusesValidation() {
+        var denied = BuildTetherDocument(modeState: "tethered", modeStateRowKind: ActionStateKind.Timer);
+
+        Assert.False(
+            condition: WorldDefinitionValidator.TryValidateLocally(definition: denied, reason: out var deniedReason),
+            userMessage: "a modeState naming a Timer slot was expected to refuse"
+        );
+        Assert.Contains(actualString: deniedReason, expectedSubstring: "Counter");
+    }
+    [Fact]
+    public void KitWithNoTetherFacet_RefusesAttachThroughTheTickPath_WhereATetherFacetIsAdmitted() {
         var withoutFacet = Fixtures.BuildDocument();
 
         using var fixture = Fixtures.FreshServer(definition: withoutFacet);
@@ -361,12 +454,24 @@ public sealed class TetherLawTests {
 
         Assert.False(condition: body.HasTetherFacet);
 
+        // The channel-driven path itself, not just the flag: an attach edge against a facet-less kit's body never
+        // reaches TryAttachTether (ProcessTetherIntent's own early return on a null m_tetherFacet).
+        body.SubmitIntent(intent: Attach());
+        fixture.Step();
+
+        Assert.Null(@object: body.TetherLength);
+
         var withFacet = BuildTetherDocument(includeWall: false);
 
         using var tetheredFixture = Fixtures.FreshServer(definition: withFacet);
         var tetheredBody = JoinBody(fixture: tetheredFixture);
 
         Assert.True(condition: tetheredBody.HasTetherFacet);
+
+        tetheredBody.SubmitIntent(intent: Attach());
+        tetheredFixture.Step();
+
+        Assert.NotNull(@object: tetheredBody.TetherLength);
     }
     [Fact]
     public void PlacementGripWithoutSolid_RefusesValidation_WhereGripPairedWithSolidIsAdmitted() {

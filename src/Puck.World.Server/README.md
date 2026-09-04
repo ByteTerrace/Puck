@@ -369,8 +369,9 @@ vertical lane carries the scalar counterpart. Cross-world motion continuity
 round-trips their values through `TransferState`. A same-world authority
 checkpoint additionally carries their seeded latches, the arbitrary-up
 frame/reseat/turn fractions, and complete hold/tether state through
-`IntegrationResidue`/`WorldAuthorityCheckpointCodec` (`SupportedVersion`,
-bumped whenever the fail-closed wire shape changes).
+`IntegrationResidue`/`WorldAuthorityCheckpointCodec` (still under development —
+`SupportedVersion` stays fixed and the fail-closed wire shape changes directly,
+with no compatibility reader).
 
 `kit.autonomy` independently batches non-human motion and producer steering in
 engine-tick time. Bodies are deterministically phased across each interval;

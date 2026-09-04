@@ -10294,7 +10294,7 @@
             "name": "post",
             "position": [
               0,
-              3,
+              2.5,
               0
             ],
             "rotation": "state.transforms.identity",

@@ -702,7 +702,8 @@ public sealed partial class WorldPopulation {
                 rigid: m_kits[kitIndex].Rigid,
                 carry: m_kits[kitIndex].Carry,
                 maxSmoothError: m_fixedMotion.MaxSmoothError,
-                holds: m_kits[kitIndex].Holds
+                holds: m_kits[kitIndex].Holds,
+                tether: m_kits[kitIndex].Tether
             );
         }
 

@@ -345,7 +345,7 @@ public static partial class WorldDefinitionValidator {
         }
     }
     // A kit's tether facet: the aim/rope tuning, and every named channel/state slot resolvable. Absence refuses
-    // body.attach/body.detach/body.reel by name (see PlayerCommandModule.Attachment.cs).
+    // body.attach/body.detach/body.reel by name (see PlayerCommandModule.Tether.cs).
     private static void ValidateTether(WorldTether? tether, string path, ISet<string> channelNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, List<string> errors) {
         if (tether is not { } facet) {
             return;
