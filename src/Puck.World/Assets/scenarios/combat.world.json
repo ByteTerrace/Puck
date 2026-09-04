@@ -1,13 +1,9 @@
 {
-  "basis": "../worlds/prototypes/standard.world.json",
+  "basis": "../worlds/standard.basis.json",
   "$schema": "../worlds/puck.world.def.v1.schema.json",
   "motion": {
-    "speed": {
-      "value": 4
-    },
-    "turn": {
-      "rate": 2.5
-    },
+    "moveSpeed": 4,
+    "turnSpeed": 2.5,
     "maxSmoothError": 3
   },
   "spawnPoints": [
@@ -206,10 +202,6 @@
   ],
   "kits": {
     "rows": [
-      {
-        "name": "defaultKit",
-        "$drop": true
-      },
       {
         "name": "traveler",
         "bodyMotionProgram": "grounded",
@@ -532,7 +524,14 @@
       }
     ],
     "policy": {
-      "maxPlacementScale": 5
+      "authoringHeadroomPlacements": 8,
+      "authoringHeadroomScreens": 4,
+      "candidateCap": 16,
+      "candidateRadius": 32,
+      "derivedFaceScreens": 4,
+      "maxPlacementScale": 5,
+      "minPlacementScale": 0.2,
+      "previewDeadlineFrames": 12
     }
   },
   "speakers": [],
@@ -541,7 +540,16 @@
   "host": {
     "width": 1920,
     "height": 1080,
-    "fullscreen": true
+    "fullscreen": true,
+    "presentation": "Windowed",
+    "presentMode": "Immediate",
+    "surfaceFormat": "r8g8b8a8",
+    "targetHertz": 60,
+    "exitAfterSeconds": 0,
+    "rayQuery": true,
+    "timing": false,
+    "genlock": null,
+    "listen": null
   },
   "looks": {
     "rows": [],

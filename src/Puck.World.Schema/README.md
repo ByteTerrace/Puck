@@ -286,7 +286,8 @@ interpolated body pose, packed every frame by `Client/WorldStampPool.cs`, so
 the row visibly RIDES its body. An attached row therefore draws through the
 reserved stamp pool rather than as a static stamp
 (`Client/WorldPlacementStamper.IsStaticStamp`) and charges
-`WorldPlacementPolicy.MaxStampRegistrations` alongside animated rows; its
+`WorldPlacementPolicy.MaxStampRegistrations` (= `WorldBodiesLimits.DetailedRenderBand`,
+128) alongside animated rows; its
 authored `Position`/`YawDegrees` become inert. `Region`, `Solid` (under the
 analytic contact provider), and `Emission` all read the resolved DYNAMIC pose
 instead of refusing outright (`Server/WorldEventFeed.CollectRegions`,
@@ -1560,6 +1561,66 @@ engine-tick duration when due. Human bodies, live sources, tapes, and pending
 external input remain full-rate. `bodyContact: solid` requires full-rate motion;
 large crowds that batch motion use the default `overlap` contact mode.
 
+### Body scale
+
+`bodies.scaleRow` names a keyed `state.world` row (`kind: fixed`, a declared
+`capacity`, and both `min`/`max` authored, `min` strictly positive and `max`
+no greater than `authoring.maxPlacementScale` — the row's own envelope is the
+world's own declared scale envelope, and the render capacity probe's worst
+case must cover the largest live body — refused by name otherwise) whose
+cells, keyed by 0-based body index, carry each body's live scale multiplier:
+absent (the default) leaves every body's `Server.WorldBody.Scale` at `1`
+forever, at no per-tick cost. A cell may not declare an `advance`/`cycle`/
+`dynamics` value-over-time trait — every resync reads at tick 0, so such a
+cell would read its base value forever instead of progressing. A `Region`
+INTERACTION scoped to the one affected body (`left` a one-cell carrier
+property naming it, `right` the placement) is the trigger shape for "this
+specific body standing in this region": the `$region:<placementId>` reserved
+channel is an AGGREGATE occupant count over the whole population and cannot
+express "this body, not any other" — an ordinary world rule gated on it
+shrinks whichever body happens to wander in, and restoring on "the aggregate
+reads zero" stays blocked while an unrelated body lingers in the same region.
+The interaction's own `Edge` mode (not `Level`) is what keeps the trigger a
+single write per crossing rather than a per-tick one: `Level` re-fires the
+effect every tick the co-occurrence holds, which for a `setState` effect is a
+document mutation, a stderr journal line, and a client definition delivery
+EVERY tick a body simply stands in the region. A shrink/restore pair is
+therefore two `Edge` interactions over two regions — one that lowers `Scale`
+on entering the shrinking region, a second, physically separate region that
+restores it on entering THAT one — never a single region's `Level` write
+paired with a self-resetting flag row, which is the same per-tick-write
+anti-pattern `ActionTriggerMode.Edge`'s own remarks warn against.
+`WorldPopulation.SyncBodyScale` resyncs every active body's `Scale` wholesale
+from the row at the same `Install`/admission choke points `WorldGrants.SyncState`
+resyncs its own drive gates at, PLUS `RestoreCheckpoint` (after
+`WorldPopulation.Restore` rebuilds every body at the constructed default) and
+a detached-seat/peer transfer restore, so a live write settles before the next
+tick and a reused population slot — or a body a checkpoint restore or transfer
+just minted fresh — never inherits a previous occupant's value nor sits at the
+unscaled default the row itself disagrees with. `Scale` multiplies the body's
+collider volumes (about its own root — contact resolution and hold probes/
+standoff/reach alike), its resolved move speed and turn rate, a hold's own
+gravity fall/rise/terminal magnitudes, a wall hold's travel speed, and a
+grip's pull rate (`WorldBody.Hold.cs`) — so a shrunk body settles onto and
+depenetrates from the ground at a proportionally gentler rate too, rather than
+free-falling one tick of full-scale gravity into a collider whose own skin
+margin it can no longer absorb — and, client-side, reading the same row live,
+its composed render scale (`Client.WorldSceneEmitter.ResolveStampCreation`)
+and the seat chase camera's orbit distance and look-at height
+(`Client.WorldFramePresenter.ResolveCamera`, scaled about the body's own root
+so a shrunk body stays framed instead of shrinking to a speck on screen).
+`body.where`'s `scale=` echo is the read-back. `WorldLook.Scale` is a
+different, presentation-only per-look constant layered on top (appearance
+only; it never touches collision or motion tuning) — the two multiply
+together, never one standing in for the other.
+
+Body-vs-body contact resolution, overlap/collision events, adjacency transfer
+sweeps, and the cross-boundary continuum trajectory all still read a kit's
+SHARED, unscaled collider volumes — only the self-collision sweep
+(`WorldBody.Step.cs`'s `ResolveProgramContacts`) reads the scaled copy. A
+shrunk body's own contact with the WORLD is correct; its contact with OTHER
+bodies is not yet — a known gap, not a silent claim.
+
 `collision.events` bounds overlap-event sensing without changing physical world
 contact. `candidateBudget` limits inspected broadphase candidates per body,
 `maxPairsPerBody` limits retained degree, and `beginBudget` limits new pairs per
@@ -1571,7 +1632,44 @@ two `solid` kits. Its `candidateBudget` caps inspected x-overlapping sweep
 pairs per body (default 16, maximum 32); `maxPairsPerBody` caps corrections
 incident to one body per tick (default 8, maximum 16). Saturation omits later
 stable-index pairs, so even a fully coincident 4096-body stadium has linear,
-authored work rather than an accidental all-pairs frame.
+authored work rather than an accidental all-pairs frame. Its
+`rigidSubstepCeiling` (default 8, maximum 32) bounds a rigid body's own
+per-tick continuous-collision substep count — the actual count is DERIVED
+per body per tick from speed and collider size against `rigidSubstepTravelFraction`
+(default 0.5, strictly positive — the fraction of the collider's own
+bounding radius one substep may travel) floored by `rigidSubstepMinimumTravel`
+(default 0.001 world units, strictly positive), never authored directly; the
+ceiling only bounds worst-case cost. `rigidRestLinearSpeed`/`rigidRestAngularSpeed`
+(default 0.05/0.1, non-negative) and `rigidRestHoldSeconds` (default 0.25,
+non-negative) are the thresholds and hold window that decide when a grounded
+rigid body's `Resting` fact latches. `rigidPairRestitutionSpeed` (default
+0.05, non-negative) is the closing-speed floor below which a rigid-vs-rigid
+contact restitutes at zero rather than the authored coefficient — a rigid
+pair carries no rising-edge latch, so without this floor two touching bodies
+would restitute a hair apart every tick they are found overlapping and never
+fully settle. See the
+[server reference](../Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs).
+
+### Rigid dynamics (`WorldRigid.cs`)
+
+A kit's optional `rigid` facet (`WorldRigid`: `mass`, `restitution`,
+`friction`, `rollingFriction`, `linearDamping`, `angularDamping`) hands its
+bodies to the rigid solver instead of a locomotion motion program — a passive
+physical entity such as a billiard ball, a bowling pin, or a chess piece.
+`mass` is required and strictly positive; `restitution` lies in `[0, 1]`;
+`friction` is a Coulomb coefficient at a contact point (non-negative, not
+bounded by 1) — the SAME meaning against the static world and, as the pair's
+average, against another rigid body; `rollingFriction`/`linearDamping`/`angularDamping`
+are non-negative per-second decay RATES (applied as `1 - rate·dt`, never a
+flat per-tick fraction, so the same authored value decays identically at any
+simulation rate). A rigid kit REQUIRES `collider` (sphere, capsule, or box — never
+`fromCreation`, whose compound shape has no single closed-form inertia) and
+`bodyContact: solid` (a rigid body that never depenetrates is inert). Mass and
+inertia derive from the collider's own shape and the authored mass through
+`Puck.Maths.FixedMassProperties` — density and the inertia tensor are never
+authored directly, matching the engine's derived-limits convention. See the
+[server reference](../Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)
+for integration, contact, and checkpoint/hash coverage.
 
 ## The `probes` section — probe and binding rows
 

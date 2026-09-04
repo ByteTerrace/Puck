@@ -595,9 +595,9 @@ public sealed class WorldFieldLattice {
 
         return best;
     }
-    /// <summary>Reports whether a point lies inside one named live medium field. Unlike <see cref="MediumSurface"/>,
-    /// this keeps the authored field identity and requires the point to lie inside the lattice volume rather than
-    /// clamping it onto the top layer; medium-constrained navigation uses it to keep swimmer routes in their fluid.</summary>
+    /// <summary>Reports whether a point lies inside one named live medium field: the same authored-field identity
+    /// and body-coupling ceiling <see cref="MediumSurface"/> resolves through, narrowed to one field rather than
+    /// the tallest wet one; medium-constrained navigation uses it to keep swimmer routes in their fluid.</summary>
     public bool IsInsideMedium(string name, in FixedVector3 position) {
         return TryFieldIndex(name: name, field: out var field) && IsInsideMedium(field: field, position: in position);
     }
@@ -618,17 +618,21 @@ public sealed class WorldFieldLattice {
             (Int128)position.Z.Value - clearance.Value, (Int128)position.X.Value + clearance.Value,
             (Int128)position.Y.Value + clearance.Value, (Int128)position.Z.Value + clearance.Value);
     }
+    // A field's free surface (value * heightScale over the origin) is unbounded by its own topology's layer count
+    // — the same reach TryBodyCellOf already admits for reaction coupling — so the coupled cell is resolved through
+    // it (clamped onto the top layer) rather than through a bare TryCellOf, which would refuse any column whose
+    // surface rises past one voxel.
     private bool IsInsideMediumPoint(int field, in FixedVector3 position) {
-        if ((uint)field >= (uint)m_isMedium.Length || !m_isMedium[field] || !TryCellOf(position: in position, cell: out var cell)) {
+        if ((uint)field >= (uint)m_isMedium.Length || !m_isMedium[field] || !TryBodyCellOf(position: in position, cell: out var cell)) {
             return false;
         }
         var value = m_values[field][cell];
         return value > FixedQ4816.Zero && position.Y <= (m_origin.Y + (value * m_heightScale[field]));
     }
-    /// <summary>Conservatively proves an entire clearance-cube sweep inside one live medium. Each half-cell-or-shorter
-    /// piece checks its swept bounding box, not just sample points, including every crossed voxel's free surface.
-    /// Each piece checks at most 27 voxels. Clearance above half a cell, an invalid field, or a segment exceeding the
-    /// caller's subdivision ceiling refuses. Outward-rounded endpoints cannot leave a sub-quantum gap in the proof.</summary>
+    /// <summary>Conservatively proves an entire clearance-cube sweep inside one live medium's free surface. Each
+    /// half-cell-or-shorter piece checks its swept bounding box against the coupled column's surface height, not
+    /// just sample points. Clearance above half a cell, an invalid field, or a segment exceeding the caller's
+    /// subdivision ceiling refuses. Outward-rounded endpoints cannot leave a sub-quantum gap in the proof.</summary>
     public bool IsSegmentInsideMedium(int field, in FixedVector3 from, in FixedVector3 to, FixedQ4816 clearance, int maximumSubdivisions) {
         if (maximumSubdivisions <= 0 || clearance < FixedQ4816.Zero || clearance.Value > m_cellSize.Value / 2 ||
             (uint)field >= (uint)m_isMedium.Length || !m_isMedium[field]) {
@@ -664,6 +668,12 @@ public sealed class WorldFieldLattice {
         maximum = high / count + (high % count > 0 ? 1 : 0) + clearance;
     }
 
+    // Every voxel layer the box actually spans is checked on its own value: a dry cap between wet layers must
+    // still refuse. Only the TOP visited layer is special: a field's free surface (value * heightScale over the
+    // origin) is unbounded by its own topology's layer count — the same reach TryBodyCellOf admits for reaction
+    // coupling — so a box whose top rises past the voxel grid (up to the body-coupling ceiling) checks that
+    // layer's value against the box's true top rather than the layer's own slab top; every layer below it must
+    // be wet clear to ITS own slab top, since the box continues past it regardless of what lies above.
     private bool IsMediumBox(int field, Int128 minX, Int128 minY, Int128 minZ, Int128 maxX, Int128 maxY, Int128 maxZ) {
         if ((uint)field >= (uint)m_isMedium.Length || !m_isMedium[field]) { return false; }
         minX -= m_origin.X.Value; maxX -= m_origin.X.Value;
@@ -671,14 +681,14 @@ public sealed class WorldFieldLattice {
         minZ -= m_origin.Z.Value; maxZ -= m_origin.Z.Value;
         var size = m_cellSize.Value;
         if (minX < 0 || minY < 0 || minZ < 0 || maxX >= (Int128)size * m_width ||
-            maxY >= (Int128)size * m_layers || maxZ >= (Int128)size * m_depth) { return false; }
+            maxY > m_bodyCouplingCeiling.Value || maxZ >= (Int128)size * m_depth) { return false; }
         var x0 = (int)(minX / size); var x1 = (int)(maxX / size);
-        var y0 = (int)(minY / size); var y1 = (int)(maxY / size);
         var z0 = (int)(minZ / size); var z1 = (int)(maxZ / size);
+        var y0 = (int)Int128.Min(minY / size, m_layers - 1);
+        var y1 = (int)Int128.Min(maxY / size, m_layers - 1);
         for (var z = z0; z <= z1; z++) {
             for (var y = y0; y <= y1; y++) {
-                // A lower voxel can have a dry cap even when both the cube's bottom and the next layer are wet.
-                var requiredHeight = Int128.Min(maxY, (Int128)(y + 1) * size);
+                var requiredHeight = (y == m_layers - 1) ? maxY : Int128.Min(maxY, (Int128)(y + 1) * size);
                 for (var x = x0; x <= x1; x++) {
                     var value = m_values[field][CellIndex(x, y, z)];
                     if (value <= FixedQ4816.Zero || requiredHeight > (value * m_heightScale[field]).Value) { return false; }

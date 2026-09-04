@@ -2614,7 +2614,8 @@
         "Submerged",
         "AtSurface",
         "Climbing",
-        "Flying"
+        "Flying",
+        "Resting"
       ]
     },
     "ActionPredicateNow": {
@@ -6513,6 +6514,7 @@
         "AtSurface",
         "Climbing",
         "Flying",
+        "Resting",
         null
       ]
     },

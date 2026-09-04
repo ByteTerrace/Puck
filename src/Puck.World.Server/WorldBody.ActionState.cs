@@ -479,6 +479,7 @@ public sealed partial class WorldBody {
             ActionFact.AtSurface => m_atSurface,
             ActionFact.Climbing => HoldsUnwalkableSurface(),
             ActionFact.Flying => HoldsFree(),
+            ActionFact.Resting => m_resting,
             _ => (m_affectingSubject >= 0),
         };
     }

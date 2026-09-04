@@ -433,6 +433,27 @@ public sealed partial class NavigationLawTests {
     }
 
     [Fact]
+    public void MediumClearanceStraddlingTwoVoxelLayersRequiresBothWet() {
+        using var fixture = Fixtures.FreshServer(NavigationDocument(VolumeDomain("swim", WorldNavigationKind.Medium, "water"), withMedium: true));
+        var fields = fixture.Server.Population.Fields!;
+        var raw = new long[fields.CellCount];
+        Assert.True(fields.TryCellOf(new FixedVector3(FixedQ4816.Zero, FixedQ4816.Zero, FixedQ4816.Zero), out var bottomCell));
+        Assert.True(fields.TryCellOf(new FixedVector3(FixedQ4816.Zero, FixedQ4816.FromInteger(1), FixedQ4816.Zero), out var topCell));
+        Assert.NotEqual(bottomCell, topCell);
+        // Only the bottom layer is wet; its projected free surface (heightScale 8) reaches far past the
+        // top layer, but that layer's own voxel is dry and must still gate a box that touches it.
+        raw[bottomCell] = FixedQ4816.One.Value;
+        fields.Restore(new WorldFieldLattice.WorldFieldCheckpoint([raw]));
+        var straddling = new FixedVector3(FixedQ4816.Zero, FixedQ4816.FromDouble(.4), FixedQ4816.Zero);
+        Assert.False(fields.IsInsideMedium(0, straddling, FixedQ4816.FromDouble(.2)));
+        Assert.False(fields.IsSegmentInsideMedium(0, straddling, straddling, FixedQ4816.FromDouble(.2), 32));
+        raw[topCell] = FixedQ4816.One.Value;
+        fields.Restore(new WorldFieldLattice.WorldFieldCheckpoint([raw]));
+        Assert.True(fields.IsInsideMedium(0, straddling, FixedQ4816.FromDouble(.2)));
+        Assert.True(fields.IsSegmentInsideMedium(0, straddling, straddling, FixedQ4816.FromDouble(.2), 32));
+    }
+
+    [Fact]
     public void MediumSweepRejectsInvalidBoundsAndAllocatesNothingAfterWarmup() {
         using var fixture = Fixtures.FreshServer(NavigationDocument(VolumeDomain("swim", WorldNavigationKind.Medium, "water"), withMedium: true));
         var fields = fixture.Server.Population.Fields!;

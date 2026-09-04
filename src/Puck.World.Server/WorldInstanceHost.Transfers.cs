@@ -1511,6 +1511,11 @@ public sealed partial class WorldInstanceHost {
                     color: member.BodyColor
                 );
 
+                // The restored WorldBody instance postdates the last Install/construction-time resync — the same
+                // reason every other admission door in WorldServer.Admission.cs catches a freshly minted body up
+                // from bodies.scaleRow before it starts stepping at the constructed default (Scale == One).
+                source.Server.Population.SyncBodyScale(definition: source.Server.Definition);
+
                 // A rollback re-installs rows this server itself captured and revoked an instant earlier, so the
                 // restored principal provably holds none of them at this moment and cannot administer its own
                 // restoration. The server administers it, exactly as it administers an admission mint.
@@ -1701,6 +1706,15 @@ public sealed partial class WorldInstanceHost {
             (source.Server.Population.EntryBody(index: sourceSlot) is not { } body)
         ) {
             Console.Error.WriteLine(value: $"[world.transfer: refused (seat {(sourceSlot + 1)} is not active in '{sourceName}')]");
+
+            return false;
+        }
+
+        // A rigid kit's mass/inertia and momentum are meaningless without the source authority's own contact field
+        // and manifold state; carrying one across is out of scope, refused by name here rather than transferred
+        // silently as an inert avatar.
+        if (body.IsRigid) {
+            Console.Error.WriteLine(value: $"[world.transfer: refused (seat {(sourceSlot + 1)} in '{sourceName}' wears a rigid kit — cross-world transfer of a rigid body is not supported)]");
 
             return false;
         }
