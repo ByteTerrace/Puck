@@ -391,7 +391,9 @@ public sealed partial class WorldBody {
     /// <param name="maxSmoothError">The compiled world-distance correction smoothing threshold.</param>
     /// <param name="holds">The kit's compiled ordered hold list (<see cref="FixedWorldKit.Holds"/>), or
     /// <see langword="null"/> for a kit authoring none.</param>
-    public void RecompileKit(FixedMotionTuning tuning, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, FixedBodyHold[]? holds = null) {
+    /// <param name="rigid">The kit's compiled rigid-dynamics facet (<see cref="FixedWorldKit.Rigid"/>), or
+    /// <see langword="null"/> for a locomotion kit.</param>
+    public void RecompileKit(FixedMotionTuning tuning, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, FixedBodyHold[]? holds = null, FixedWorldRigid? rigid = null) {
         SetTuning(
             holds: holds,
             tuning: tuning
@@ -405,6 +407,7 @@ public sealed partial class WorldBody {
         m_roleOrdinals = roleOrdinals;
         CompileActionState(state: actionState);
         m_collider = collider;
+        m_rigid = rigid;
         m_maxSmoothError = maxSmoothError;
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {

@@ -1609,6 +1609,22 @@ public sealed partial class WorldServer {
                 }
 
                 break;
+            case WorldCommand.RigidImpulse impulse:
+                if (!body.IsRigid) {
+                    var denial = $"body:{command.EntityIndex} carries no rigid kit facet";
+
+                    Console.Error.WriteLine(value: $"[body.impulse denied: {denial}]");
+                    NoteDriveRefusalIfTracked(
+                        command: command,
+                        reason: denial
+                    );
+
+                    break;
+                }
+
+                body.ApplyRigidImpulse(impulse: FixedVector3.FromVector3(value: impulse.Impulse));
+
+                break;
             case WorldCommand.EnqueueSegment segment:
                 body.EnqueueRun(
                     intent: segment.Intent,

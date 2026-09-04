@@ -432,6 +432,23 @@ diagonal peers are not yet exercised by it — widening its scripts is future wo
 **Owner decision:** no sixth track. Track 5 is aimed at the charter from the start, so its rule
 primitives land with the content that proves them.
 
+**Authorable rigid dynamics (owner decisions).** A rigid body is a kit facet
+(`rigid`), never a second body kind: physics-first authoring derives mass and
+inertia from the kit's own collider and an authored mass, never a free density
+or tensor. A kinematic character contributes its velocity to a rigid contact
+but is never itself pushed unless its own kit says so. Substep count for
+continuous collision is derived per body per tick from speed and collider
+size against an authored ceiling, never a free per-tick knob. Restitution
+fires only on a genuine impact (the rising edge of contact), never every tick
+of continued rest — the naive per-tick reapplication is a stable
+non-decaying bounce, not a settling body. Friction and damping are authored
+per-second decay rates, not per-tick fractions, so one authored value decays
+identically at any simulation rate. Cross-world transfer of a rigid body is
+out of scope and refused by name. The garden's `billiardsTray`/`bowlingLane`
+placements are the proof fixture; see the
+[server](../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)
+and [schema](../src/Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs) references.
+
 ## After this arc
 
 Owner review of this branch gates the next wave. Recorded as decisions, not status — none of this has

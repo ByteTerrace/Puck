@@ -113,11 +113,17 @@ public sealed record WorldCollisionEvents(int CandidateBudget = 32, int MaxPairs
 /// <param name="CandidateBudget">The most sweep candidates inspected for one solid body. Must be at least
 /// <paramref name="MaxPairsPerBody"/>.</param>
 /// <param name="MaxPairsPerBody">The most physical pair corrections incident to one body in a tick.</param>
-public sealed record WorldBodyContactPolicy(int CandidateBudget = 16, int MaxPairsPerBody = 8) {
+/// <param name="RigidSubstepCeiling">The most substeps one rigid body's static-contact integration may take in a
+/// tick — the derived-count's own ceiling: the actual count is derived per body per tick from its speed and collider
+/// size (a fast ball takes more, a resting one takes one), never authored directly, but the ceiling bounds the
+/// worst-case per-tick cost and is echoed in <c>world.budget</c>.</param>
+public sealed record WorldBodyContactPolicy(int CandidateBudget = 16, int MaxPairsPerBody = 8, int RigidSubstepCeiling = 8) {
     /// <summary>The largest accepted candidate budget per solid body.</summary>
     public const int MaximumCandidateBudget = 32;
     /// <summary>The largest accepted resolved-contact degree per solid body.</summary>
     public const int MaximumPairsPerBody = 16;
+    /// <summary>The largest accepted rigid-body substep ceiling.</summary>
+    public const int MaximumRigidSubstepCeiling = 32;
     /// <summary>The policy used when <c>collision.bodyContacts</c> is absent.</summary>
     public static WorldBodyContactPolicy Default { get; } = new();
 }

@@ -428,6 +428,13 @@ public static partial class WorldDefinitionValidator {
         if (bodyContacts.CandidateBudget < bodyContacts.MaxPairsPerBody) {
             errors.Add(item: $"collision.bodyContacts.candidateBudget must be >= maxPairsPerBody ({bodyContacts.CandidateBudget} < {bodyContacts.MaxPairsPerBody}).");
         }
+        RequireIntRange(
+            value: bodyContacts.RigidSubstepCeiling,
+            min: 1,
+            max: WorldBodyContactPolicy.MaximumRigidSubstepCeiling,
+            name: "collision.bodyContacts.rigidSubstepCeiling",
+            errors: errors
+        );
     }
     private static void ValidateDistribution(WorldDistribution distribution, string path, HashSet<string> spawnPointIds, bool allowDisc, bool allowPoints, bool allowLattice, bool allowZeroDisc, List<string> errors, bool allowNoise = false, bool allowScatter = false) {
         if (

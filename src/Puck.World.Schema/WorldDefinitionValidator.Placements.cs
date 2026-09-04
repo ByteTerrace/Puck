@@ -238,6 +238,52 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
     }
+    // A rigid kit's mass properties derive from its own collider shape (WorldRigid.cs), so the collider it names must
+    // be one FixedMassProperties actually has a closed form for — a compound fromCreation shape is refused rather
+    // than silently approximated by its first primitive.
+    private static void ValidateRigid(WorldRigid? rigid, WorldCollider? collider, WorldBodyContactMode bodyContact, string path, List<string> errors) {
+        if (rigid is null) {
+            return;
+        }
+
+        if (collider is null) {
+            errors.Add(item: $"{path} requires a collider (sphere, capsule, or box) to derive mass properties from.");
+        } else if (collider is WorldCollider.FromCreation) {
+            errors.Add(item: $"{path} requires a sphere, capsule, or box collider; 'fromCreation' has no closed-form mass properties.");
+        }
+
+        if (bodyContact != WorldBodyContactMode.Solid) {
+            errors.Add(item: $"{path} requires bodyContact 'solid' — a rigid body that never depenetrates is inert.");
+        }
+
+        RequirePositive(
+            value: rigid.Mass,
+            name: $"{path}.mass",
+            errors: errors
+        );
+        RequireRange(
+            value: rigid.Restitution,
+            min: 0f,
+            max: 1f,
+            name: $"{path}.restitution",
+            errors: errors
+        );
+        // Friction, rolling friction, and both damping rates are per-second decay RATES (applied as 1 - rate·dt,
+        // clamped at apply time), not per-tick fractions — so they are bounded below only, never by 1.
+        foreach (var (value, name) in new (float Value, string Name)[] {
+            (rigid.Friction, "friction"),
+            (rigid.RollingFriction, "rollingFriction"),
+            (rigid.LinearDamping, "linearDamping"),
+            (rigid.AngularDamping, "angularDamping"),
+        }) {
+            if (
+                !float.IsFinite(f: value) ||
+                (value < 0f)
+            ) {
+                errors.Add(item: $"{path}.{name} must be finite and non-negative.");
+            }
+        }
+    }
     private static void ValidateCollider(WorldCollider? collider, IReadOnlyList<WorldPrototype> creations, string path, List<string> errors) {
         if (collider is null) {
             return;
@@ -925,6 +971,13 @@ public static partial class WorldDefinitionValidator {
                 collider: kit.Collider,
                 creations: definition.Creations,
                 path: $"{path}.collider",
+                errors: errors
+            );
+            ValidateRigid(
+                rigid: kit.Rigid,
+                collider: kit.Collider,
+                bodyContact: kit.BodyContact,
+                path: $"{path}.rigid",
                 errors: errors
             );
         }

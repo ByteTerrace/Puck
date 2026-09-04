@@ -373,6 +373,50 @@ stable population order decides which later pairs are omitted. The counters
 `DynamicContactResolvedPairs`, and `DynamicContactLimitedBodies` expose the
 actual work to tests and host diagnostics.
 
+### Rigid dynamics (`WorldBody.Rigid.cs`, `WorldPopulation.Rigid.cs`)
+
+A kit carrying a `rigid` facet (`FixedWorldRigid`, derived from the kit's own
+sphere/capsule/box collider and authored mass via `Puck.Maths.FixedMassProperties`)
+hands its bodies to the rigid solver instead of the grounded/free motion
+program: `WorldBody.Advance` branches to `AdvanceRigid` before any intent,
+action track, or hold runs. Static-world contact is a swept, substepped
+integration against the SAME `IContactField` every locomotion body resolves
+against — restitution and friction fire against the measured push, and a
+removed tangential (slip) velocity converts to rolling spin. Substep count is
+derived per body per tick from its speed and the collider's own bounding
+radius, capped by `collision.bodyContacts.rigidSubstepCeiling`; the derived
+count is echoed in `world.budget`'s `rigid` segment and `RigidStaticSubstepsThisTick`.
+Restitution fires only on the RISING EDGE of contact (`m_rigidContacting`
+false → true) — reapplying it every tick of continuous rest would read
+gravity's own per-tick pull as a fresh impact and never let the body settle.
+Friction, rolling friction, and both damping coefficients are authored
+per-second RATES, applied as `(1 - rate·dt)` each tick so the same value
+decays identically at any simulation rate.
+
+Dynamic-vs-dynamic rigid contact rides the SAME broadphase/narrowphase
+`ResolveDynamicContacts` already runs for two `solid` kits
+(`FixedDynamicBodyContacts.TryCorrection`): when at least one side is rigid,
+`WorldPopulation.ResolveRigidPairContact` replaces the plain positional split
+with an impulse computed through `Puck.Physics.FixedTwoBodyKernel` — real
+angular coupling when both sides are rigid. A kinematic (locomotion) side
+builds a STATIC phantom handle (`WorldBody.TwoBodyHandle`) carrying its own
+live velocity so it contributes to the closing-speed term without ever
+receiving an impulse back (`FixedRigidBody.IsDynamic` gates every write) —
+"a kinematic character contributes its velocity; it is never pushed by them."
+Positional depenetration still runs, restricted to the rigid side(s) alone
+against a kinematic partner.
+
+A body settles to `Puck.Physics.Motion.ActionFact.Resting` (`BodyFacts.Resting`)
+after its linear and angular speed stay below threshold for a short hold
+window while grounded; `body.impulse` (`WorldCommand.RigidImpulse`, checked
+for `IsRigid` server-side and refused by name otherwise) wakes it. `$physics:quiescent`
+(`WorldPopulation.RigidBodiesQuiescent`) reads 1 when every active rigid body
+rests, vacuously 1 for a world authoring none. `world.rigid` echoes the live
+census; checkpoint (`IntegrationResidue`) and the authoritative pose hash
+(`WorldReplaySnapshot.HashState`) both cover linear/angular velocity, the
+resting latch and hold-tick counter, and the restitution edge latch. Cross-world
+transfer of a rigid body is refused by name (`WorldInstanceHost.Transfers.cs`).
+
 World rules can carry [decision policies](../Puck.World.Schema/README.md#decision-policies).
 `WorldServer.Decisions.cs` owns each binding's selected option, local PCG state,
 reconsideration and commitment timers, and interrupt-edge memory. It reuses

@@ -968,6 +968,11 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteBoolean(value: residue.AttitudeLeaned);
         writer.WriteInt64(value: residue.AttitudeTurnRemainder);
         writer.WriteFixedVector(value: residue.Home);
+        writer.WriteFixedVector(value: residue.RigidVelocity);
+        writer.WriteFixedVector(value: residue.RigidAngularVelocity);
+        writer.WriteBoolean(value: residue.RigidResting);
+        writer.WriteUInt64(value: residue.RigidRestingHoldTicks);
+        writer.WriteBoolean(value: residue.RigidContacting);
     }
     private static WorldBody.IntegrationResidue ReadResidue(ref WireReader reader) {
         var previousPosition = reader.ReadFixedVector();
@@ -1003,6 +1008,11 @@ public static partial class WorldAuthorityCheckpointCodec {
         var attitudeLeaned = reader.ReadBoolean();
         var attitudeTurnRemainder = reader.ReadInt64();
         var home = reader.ReadFixedVector();
+        var rigidVelocity = reader.ReadFixedVector();
+        var rigidAngularVelocity = reader.ReadFixedVector();
+        var rigidResting = reader.ReadBoolean();
+        var rigidRestingHoldTicks = reader.ReadUInt64();
+        var rigidContacting = reader.ReadBoolean();
 
         return new WorldBody.IntegrationResidue(
             AffectingSubject: affectingSubject,
@@ -1034,7 +1044,12 @@ public static partial class WorldAuthorityCheckpointCodec {
             Up: up,
             UpNeedsReseat: upNeedsReseat,
             VerticalFollowerSeeded: verticalFollowerSeeded,
-            VerticalVelocityRemainder: verticalVelocityRemainder
+            VerticalVelocityRemainder: verticalVelocityRemainder,
+            RigidVelocity: rigidVelocity,
+            RigidAngularVelocity: rigidAngularVelocity,
+            RigidResting: rigidResting,
+            RigidRestingHoldTicks: rigidRestingHoldTicks,
+            RigidContacting: rigidContacting
         );
     }
     private static void WriteAttachmentResidue(WireWriter writer, WorldBody.AttachmentResidue residue) {
