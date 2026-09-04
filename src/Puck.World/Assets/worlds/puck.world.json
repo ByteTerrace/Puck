@@ -11200,6 +11200,32 @@
       "effects": [
         {
           "$type": "setState",
+          "fromKey": "0",
+          "fromState": "inCheck",
+          "key": "0",
+          "state": "previousInCheck"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "1",
+          "fromState": "inCheck",
+          "key": "1",
+          "state": "previousInCheck"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "tabletop-prev-check-snapshot"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
           "key": "0",
           "state": "board",
           "value": 0
@@ -11666,10 +11692,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "43",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-43"
@@ -11685,10 +11723,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "42",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-42"
@@ -11704,10 +11754,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "41",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-41"
@@ -11723,10 +11785,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "40",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-40"
@@ -11742,10 +11816,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "39",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-39"
@@ -11761,10 +11847,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "38",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-38"
@@ -11780,10 +11878,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "37",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-37"
@@ -11799,10 +11909,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "36",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-36"
@@ -11818,10 +11940,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "35",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-35"
@@ -11837,10 +11971,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "34",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-34"
@@ -11856,10 +12002,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "33",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-33"
@@ -11875,10 +12033,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "32",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-32"
@@ -11894,10 +12064,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "31",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-31"
@@ -11913,10 +12095,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "30",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-30"
@@ -11932,10 +12126,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "29",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-29"
@@ -11951,10 +12157,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "28",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-28"
@@ -11970,10 +12188,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "27",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-27"
@@ -11989,10 +12219,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "26",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-26"
@@ -12008,10 +12250,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "25",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-25"
@@ -12027,10 +12281,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "24",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-24"
@@ -12046,10 +12312,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "23",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-23"
@@ -12065,10 +12343,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "22",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-22"
@@ -12084,10 +12374,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "21",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-21"
@@ -12103,10 +12405,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "20",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-20"
@@ -12122,10 +12436,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "19",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-19"
@@ -12141,10 +12467,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "18",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-18"
@@ -12160,10 +12498,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "17",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-17"
@@ -12179,10 +12529,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "16",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-16"
@@ -12198,10 +12560,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "15",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-15"
@@ -12217,10 +12591,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "14",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-14"
@@ -12236,10 +12622,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "13",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-13"
@@ -12255,10 +12653,22 @@
         }
       ],
       "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "12",
+            "state": "pieceCell",
+            "value": -1
+          }
+        ]
       },
       "mode": "Edge",
       "name": "tabletop-write-board-12"
@@ -12975,7 +13385,49 @@
       "effects": [
         {
           "$type": "setState",
-          "fromState": "cWhiteFromCell",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "cWhiteCastleSig"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:previousBoard:6:6"
+              },
+              {
+                "$type": "popCount"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "constant",
+                "value": -1
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:previousBoard:6:6"
+              },
+              {
+                "$type": "trailingZeroCount"
+              },
+              {
+                "$type": "select"
+              },
+              {
+                "$type": "state",
+                "name": "cWhiteFromCell"
+              },
+              {
+                "$type": "select"
+              }
+            ]
+          },
           "state": "cFromWhite"
         },
         {
@@ -13660,7 +14112,49 @@
       "effects": [
         {
           "$type": "setState",
-          "fromState": "cBlackFromCell",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "cBlackCastleSig"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:previousBoard:-6:-6"
+              },
+              {
+                "$type": "popCount"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "constant",
+                "value": -1
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:previousBoard:-6:-6"
+              },
+              {
+                "$type": "trailingZeroCount"
+              },
+              {
+                "$type": "select"
+              },
+              {
+                "$type": "state",
+                "name": "cBlackFromCell"
+              },
+              {
+                "$type": "select"
+              }
+            ]
+          },
           "state": "cFromBlack"
         },
         {
@@ -14742,6 +15236,21 @@
               },
               {
                 "$type": "state",
+                "key": "kind",
+                "name": "move"
+              },
+              {
+                "$type": "constant",
+                "value": 2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "state",
                 "key": "to",
                 "name": "move"
               },
@@ -14760,6 +15269,21 @@
               {
                 "$type": "constant",
                 "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "state",
+                "key": "kind",
+                "name": "move"
+              },
+              {
+                "$type": "constant",
+                "value": 3
               },
               {
                 "$type": "equal"
@@ -14955,6 +15479,21 @@
               },
               {
                 "$type": "state",
+                "key": "kind",
+                "name": "move"
+              },
+              {
+                "$type": "constant",
+                "value": 2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "state",
                 "key": "to",
                 "name": "move"
               },
@@ -14973,6 +15512,21 @@
               {
                 "$type": "constant",
                 "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "state",
+                "key": "kind",
+                "name": "move"
+              },
+              {
+                "$type": "constant",
+                "value": 3
               },
               {
                 "$type": "equal"
@@ -15068,6 +15622,750 @@
       },
       "mode": "Edge",
       "name": "tabletop-shape-pawn-pick"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "key": "5",
+                "name": "$board:offset:previousBoard:1:2"
+              },
+              {
+                "$type": "constant",
+                "value": -2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "key": "5",
+                "name": "$board:offset:previousBoard:2:1"
+              },
+              {
+                "$type": "constant",
+                "value": -2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "5",
+                "name": "$board:offset:previousBoard:2:-1"
+              },
+              {
+                "$type": "constant",
+                "value": -2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "5",
+                "name": "$board:offset:previousBoard:1:-2"
+              },
+              {
+                "$type": "constant",
+                "value": -2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "5",
+                "name": "$board:offset:previousBoard:-1:-2"
+              },
+              {
+                "$type": "constant",
+                "value": -2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "5",
+                "name": "$board:offset:previousBoard:-2:-1"
+              },
+              {
+                "$type": "constant",
+                "value": -2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "5",
+                "name": "$board:offset:previousBoard:-2:1"
+              },
+              {
+                "$type": "constant",
+                "value": -2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "5",
+                "name": "$board:offset:previousBoard:-1:2"
+              },
+              {
+                "$type": "constant",
+                "value": -2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "5",
+                "name": "$board:offset:previousBoard:-1:1"
+              },
+              {
+                "$type": "constant",
+                "value": -1
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "key": "5",
+                "name": "$board:offset:previousBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": -1
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "5",
+                "name": "$board:attacks:previousBoard:-5:-4:N,S,E,W"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "5",
+                "name": "$board:attacks:previousBoard:-3:-3:NE,SE,SW,NW"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "5",
+                "name": "$board:attacks:previousBoard:-5:-5:NE,SE,SW,NW"
+              },
+              {
+                "$type": "max"
+              }
+            ]
+          },
+          "key": "wk",
+          "state": "castleTransitAttacked"
+        },
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "key": "3",
+                "name": "$board:offset:previousBoard:1:2"
+              },
+              {
+                "$type": "constant",
+                "value": -2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "key": "3",
+                "name": "$board:offset:previousBoard:2:1"
+              },
+              {
+                "$type": "constant",
+                "value": -2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "3",
+                "name": "$board:offset:previousBoard:2:-1"
+              },
+              {
+                "$type": "constant",
+                "value": -2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "3",
+                "name": "$board:offset:previousBoard:1:-2"
+              },
+              {
+                "$type": "constant",
+                "value": -2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "3",
+                "name": "$board:offset:previousBoard:-1:-2"
+              },
+              {
+                "$type": "constant",
+                "value": -2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "3",
+                "name": "$board:offset:previousBoard:-2:-1"
+              },
+              {
+                "$type": "constant",
+                "value": -2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "3",
+                "name": "$board:offset:previousBoard:-2:1"
+              },
+              {
+                "$type": "constant",
+                "value": -2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "3",
+                "name": "$board:offset:previousBoard:-1:2"
+              },
+              {
+                "$type": "constant",
+                "value": -2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "3",
+                "name": "$board:offset:previousBoard:-1:1"
+              },
+              {
+                "$type": "constant",
+                "value": -1
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "key": "3",
+                "name": "$board:offset:previousBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": -1
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "3",
+                "name": "$board:attacks:previousBoard:-5:-4:N,S,E,W"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "3",
+                "name": "$board:attacks:previousBoard:-3:-3:NE,SE,SW,NW"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "3",
+                "name": "$board:attacks:previousBoard:-5:-5:NE,SE,SW,NW"
+              },
+              {
+                "$type": "max"
+              }
+            ]
+          },
+          "key": "wq",
+          "state": "castleTransitAttacked"
+        },
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "key": "61",
+                "name": "$board:offset:previousBoard:1:2"
+              },
+              {
+                "$type": "constant",
+                "value": 2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "key": "61",
+                "name": "$board:offset:previousBoard:2:1"
+              },
+              {
+                "$type": "constant",
+                "value": 2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "61",
+                "name": "$board:offset:previousBoard:2:-1"
+              },
+              {
+                "$type": "constant",
+                "value": 2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "61",
+                "name": "$board:offset:previousBoard:1:-2"
+              },
+              {
+                "$type": "constant",
+                "value": 2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "61",
+                "name": "$board:offset:previousBoard:-1:-2"
+              },
+              {
+                "$type": "constant",
+                "value": 2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "61",
+                "name": "$board:offset:previousBoard:-2:-1"
+              },
+              {
+                "$type": "constant",
+                "value": 2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "61",
+                "name": "$board:offset:previousBoard:-2:1"
+              },
+              {
+                "$type": "constant",
+                "value": 2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "61",
+                "name": "$board:offset:previousBoard:-1:2"
+              },
+              {
+                "$type": "constant",
+                "value": 2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "61",
+                "name": "$board:offset:previousBoard:-1:-1"
+              },
+              {
+                "$type": "constant",
+                "value": 1
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "key": "61",
+                "name": "$board:offset:previousBoard:1:-1"
+              },
+              {
+                "$type": "constant",
+                "value": 1
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "61",
+                "name": "$board:attacks:previousBoard:4:5:N,S,E,W"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "61",
+                "name": "$board:attacks:previousBoard:3:3:NE,SE,SW,NW"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "61",
+                "name": "$board:attacks:previousBoard:5:5:NE,SE,SW,NW"
+              },
+              {
+                "$type": "max"
+              }
+            ]
+          },
+          "key": "bk",
+          "state": "castleTransitAttacked"
+        },
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "key": "59",
+                "name": "$board:offset:previousBoard:1:2"
+              },
+              {
+                "$type": "constant",
+                "value": 2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "key": "59",
+                "name": "$board:offset:previousBoard:2:1"
+              },
+              {
+                "$type": "constant",
+                "value": 2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "59",
+                "name": "$board:offset:previousBoard:2:-1"
+              },
+              {
+                "$type": "constant",
+                "value": 2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "59",
+                "name": "$board:offset:previousBoard:1:-2"
+              },
+              {
+                "$type": "constant",
+                "value": 2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "59",
+                "name": "$board:offset:previousBoard:-1:-2"
+              },
+              {
+                "$type": "constant",
+                "value": 2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "59",
+                "name": "$board:offset:previousBoard:-2:-1"
+              },
+              {
+                "$type": "constant",
+                "value": 2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "59",
+                "name": "$board:offset:previousBoard:-2:1"
+              },
+              {
+                "$type": "constant",
+                "value": 2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "59",
+                "name": "$board:offset:previousBoard:-1:2"
+              },
+              {
+                "$type": "constant",
+                "value": 2
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "59",
+                "name": "$board:offset:previousBoard:-1:-1"
+              },
+              {
+                "$type": "constant",
+                "value": 1
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "key": "59",
+                "name": "$board:offset:previousBoard:1:-1"
+              },
+              {
+                "$type": "constant",
+                "value": 1
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "59",
+                "name": "$board:attacks:previousBoard:4:5:N,S,E,W"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "59",
+                "name": "$board:attacks:previousBoard:3:3:NE,SE,SW,NW"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "59",
+                "name": "$board:attacks:previousBoard:5:5:NE,SE,SW,NW"
+              },
+              {
+                "$type": "max"
+              }
+            ]
+          },
+          "key": "bq",
+          "state": "castleTransitAttacked"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "kind",
+            "state": "move",
+            "value": 4
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-castle-transit-attacked"
     },
     {
       "effects": [
@@ -15230,6 +16528,36 @@
               },
               {
                 "$type": "equal"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "state",
+                "key": "0",
+                "name": "previousInCheck"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "key": "wk",
+                "name": "castleTransitAttacked"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "multiply"
               },
               {
                 "$type": "multiply"
@@ -15415,6 +16743,36 @@
               },
               {
                 "$type": "multiply"
+              },
+              {
+                "$type": "state",
+                "key": "0",
+                "name": "previousInCheck"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "key": "wq",
+                "name": "castleTransitAttacked"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "multiply"
               }
             ]
           },
@@ -15579,6 +16937,36 @@
               },
               {
                 "$type": "equal"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "state",
+                "key": "1",
+                "name": "previousInCheck"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "key": "bk",
+                "name": "castleTransitAttacked"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "multiply"
               },
               {
                 "$type": "multiply"
@@ -15761,6 +17149,36 @@
               },
               {
                 "$type": "equal"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "state",
+                "key": "1",
+                "name": "previousInCheck"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "key": "bq",
+                "name": "castleTransitAttacked"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "multiply"
               },
               {
                 "$type": "multiply"
@@ -20582,47 +22000,6 @@
       "effects": [
         {
           "$type": "pushState",
-          "fromKey": "from",
-          "fromState": "move",
-          "state": "moveFromHistory"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "all",
-            "predicates": [
-              {
-                "$type": "compareState",
-                "comparison": "Equal",
-                "state": "$physics:quiescent",
-                "value": 1
-              },
-              {
-                "$type": "compareState",
-                "comparison": "NotEqual",
-                "key": "kind",
-                "state": "move",
-                "value": 0
-              }
-            ]
-          },
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "verdict",
-            "value": 1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-push-history"
-    },
-    {
-      "effects": [
-        {
-          "$type": "pushState",
           "fromState": "$board:canonical:board",
           "state": "boardHistory"
         }
@@ -20675,35 +22052,7 @@
               },
               {
                 "$type": "state",
-                "name": "$history:boardHistory:1"
-              },
-              {
-                "$type": "equal"
-              },
-              {
-                "$type": "add"
-              },
-              {
-                "$type": "state",
-                "name": "$history:boardHistory:0"
-              },
-              {
-                "$type": "state",
                 "name": "$history:boardHistory:2"
-              },
-              {
-                "$type": "equal"
-              },
-              {
-                "$type": "add"
-              },
-              {
-                "$type": "state",
-                "name": "$history:boardHistory:0"
-              },
-              {
-                "$type": "state",
-                "name": "$history:boardHistory:3"
               },
               {
                 "$type": "equal"
@@ -20731,35 +22080,7 @@
               },
               {
                 "$type": "state",
-                "name": "$history:boardHistory:5"
-              },
-              {
-                "$type": "equal"
-              },
-              {
-                "$type": "add"
-              },
-              {
-                "$type": "state",
-                "name": "$history:boardHistory:0"
-              },
-              {
-                "$type": "state",
                 "name": "$history:boardHistory:6"
-              },
-              {
-                "$type": "equal"
-              },
-              {
-                "$type": "add"
-              },
-              {
-                "$type": "state",
-                "name": "$history:boardHistory:0"
-              },
-              {
-                "$type": "state",
-                "name": "$history:boardHistory:7"
               },
               {
                 "$type": "equal"
@@ -20787,35 +22108,7 @@
               },
               {
                 "$type": "state",
-                "name": "$history:boardHistory:9"
-              },
-              {
-                "$type": "equal"
-              },
-              {
-                "$type": "add"
-              },
-              {
-                "$type": "state",
-                "name": "$history:boardHistory:0"
-              },
-              {
-                "$type": "state",
                 "name": "$history:boardHistory:10"
-              },
-              {
-                "$type": "equal"
-              },
-              {
-                "$type": "add"
-              },
-              {
-                "$type": "state",
-                "name": "$history:boardHistory:0"
-              },
-              {
-                "$type": "state",
-                "name": "$history:boardHistory:11"
               },
               {
                 "$type": "equal"
@@ -21044,10 +22337,17 @@
           },
           {
             "$type": "compareState",
-            "comparison": "NotEqual",
+            "comparison": "GreaterOrEqual",
             "key": "$cell:promotionPending:0",
             "state": "board",
-            "value": 1
+            "value": 2
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "$cell:promotionPending:0",
+            "state": "board",
+            "value": 6
           }
         ]
       },
@@ -21081,10 +22381,17 @@
           },
           {
             "$type": "compareState",
-            "comparison": "NotEqual",
+            "comparison": "GreaterOrEqual",
             "key": "$cell:promotionPending:1",
             "state": "board",
-            "value": -1
+            "value": -6
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "$cell:promotionPending:1",
+            "state": "board",
+            "value": -2
           }
         ]
       },
@@ -23300,14 +24607,6 @@
       },
       {
         "history": {
-          "capacity": 16,
-          "empty": -1
-        },
-        "kind": "int",
-        "name": "moveFromHistory"
-      },
-      {
-        "history": {
           "capacity": 12,
           "empty": -1
         },
@@ -24278,6 +25577,48 @@
         "min": 0,
         "name": "castleRights",
         "value": 0
+      },
+      {
+        "capacity": 2,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          }
+        ],
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "previousInCheck"
+      },
+      {
+        "capacity": 4,
+        "cells": [
+          {
+            "key": "wk",
+            "value": 0
+          },
+          {
+            "key": "wq",
+            "value": 0
+          },
+          {
+            "key": "bk",
+            "value": 0
+          },
+          {
+            "key": "bq",
+            "value": 0
+          }
+        ],
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "castleTransitAttacked"
       }
     ]
   },

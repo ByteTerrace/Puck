@@ -451,7 +451,12 @@ en passant only when that square is also adjacent to the destination behind
 the mover's approach and the landed piece carries the pawn code; either test
 failing reads as a perturbation, not a forged capture — an unrelated
 other-side piece leaving the board in the same settle as an ordinary quiet
-move must never mint a bogus en passant record. A settle whose own side only
+move must never mint a bogus en passant record. A pawn's own diagonal-move
+legality then requires the settle's classified `kind` to match which capture
+it claims (2 for an ordinary capture, 3 for en passant) rather than trusting
+the target-square geometry alone — a diagonal hop onto the en passant target
+with the passed pawn left standing classifies as a quiet move (kind 1, since
+nothing was actually removed) and is refused. A settle whose own side only
 occupies or only vacates clamps its empty half to `-1` rather than writing
 the mask's own bit width into a row that refuses it. Movement legality and
 check read outward from the move's own squares: a slider's reach is "walking
@@ -461,16 +466,28 @@ the destination over its fixed jumps, and a king's square is attacked
 exactly the same way, probed for an enemy pawn/knight/king/slider. A
 king-shaped (two-and-two) settle is judged by the castle legality check
 alone, never the single-step king check beside it — the classifier's own
-`from` sorts to whichever home cell has the lower index, which for a
-queenside castle is the rook's, and that square can sit one king-step from
-the landing square by coincidence. Castling rights are a one-way bitfield set
-the instant a king or rook home cell is vacated by any settle, legal or not
-— a capacity-bounded history ring answering "has this piece ever moved" can
-forget a departure once it scrolls out, reviving a right a long game never
-regains — and the legality check itself re-reads the physical squares: the
-king/rook homes held the right pieces immediately before this settle and
-hold neither immediately after, the transit squares were empty, and the
-rook's own landing square now holds it. A piece that resolves to no cell,
+`from` is always the king's own home cell, read directly off the pre-move
+board's king mask rather than sorted from the two vacated cells, so it can
+never coincide with a single king step on either side of the board. Castling
+rights are a one-way bitfield set the instant a king or rook home cell is
+vacated by any settle, legal or not — a capacity-bounded history ring
+answering "has this piece ever moved" can forget a departure once it scrolls
+out, reviving a right a long game never regains; a castle event vacates the
+king's own home cell, so it burns that king's bit on both sides at once. The
+legality check itself re-reads the physical squares: the king/rook homes
+held the right pieces immediately before this settle and hold neither
+immediately after, the transit squares were empty, and the rook's own
+landing square now holds it. Two checks close the remaining gap that leaves
+open: the king must not already be in check on the position before this
+settle — read from a one-tick-old snapshot of the check verdict, since the
+board a rule reads mid-settle already reflects the physical move — and the
+square the king crosses must not be attacked either, via a
+`$board:attacks:<row>:<min>:<max>:<directions>` query that walks a short
+authored ray list from a fixed cell and reports whether the first occupied
+cell on any of them falls in an authored value range (a slider's reach at
+one square, one query call instead of one rule per direction); king and
+knight adjacency stay the cheap `$board:neighbour`/`$board:offset`
+composition, since neither depends on which color is attacking. A piece that resolves to no cell,
 before or after (captured, lifted off, knocked clear), never itself
 qualifies as the mover, so its disappearance never registers a verdict, a
 turn change, or a `lastLegal` write under its own color. Illegal moves are
@@ -478,8 +495,13 @@ recorded — `illegalCount` counts them, `verdict` names the last ruling — and
 never rejected, undone, or repositioned. Promotion is a same-cell piece
 swap the mask classifier cannot see as a move at all (an occupied cell whose
 value changes stays out of both sides' vacated/occupied masks): reaching the
-last rank on an ordinary settle marks `promotionPending`, and a later settle
-where that cell no longer carries the pawn code clears it directly.
+last rank on an ordinary settle marks `promotionPending`, and it stays
+pending across the pawn being lifted off — an empty cell settles nothing,
+since it is not a promoted piece either — until a later settle where that
+cell holds an actual piece of the mover's own color other than a pawn,
+which clears it directly. A hand promotion is ordinarily two settles (lift,
+then place); neither one needs to itself be a legal move for the clearing to
+land correctly.
 `world.tabletop` reads the frame, live occupancy, and the bound convenience
 rows back. `boardSquareLight`/`boardSquareDark` placements (paired one to a
 cell, colors from the `boardColors` text row) render the board itself; the

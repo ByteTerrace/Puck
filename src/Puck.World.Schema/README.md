@@ -51,6 +51,7 @@ Rule operands accept these bounded channels:
 | `$board:canonical:<row>` | The least 64-bit fingerprint of the whole board's values over every element, for boards of any size: pushed into a history ring, repetition up to symmetry is a pattern |
 | `$board:cellOf:<row>:<bodyRef>` | The Grid cell a body's resolved world position falls in, or -1 |
 | `$board:offset:<row>:<dx>:<dz>` | The cell reached by an arbitrary (dx, dz) grid step from the key cell, or -1 |
+| `$board:attacks:<row>:<min>:<max>:<directions>` | 1 when walking any of 1..4 comma-separated directions from the key cell finds, before any other occupied cell, one whose value lies in min..max; 0 otherwise. `rayCell`'s single-direction first-blocker rule, unioned over the authored directions and filtered to a range — a slider's reach at one square in one call |
 | `$phase:<row>:<current\|active\|ready\|sequence\|round\|deadline\|direction\|skipped>` | Persisted phase fact; active is -1 outside sequential phases |
 
 Board operands use the ordinary predicate/source `key` for their origin,
@@ -273,16 +274,29 @@ code, an en passant — either test failing reads as a perturbation rather than
 a forged capture, closing the loophole an unrelated other-side vacate in the
 same settle would otherwise open. Two-and-two on one side is a castle-shaped
 settle, judged only by the castle legality check (never a single-step check
-beside it, since the classifier's own "from" sorts to whichever home cell has
-the lower index and can coincidentally read as an adjacent king step).
-Movement legality and check read outward from the move's
+beside it, since the classifier's own "from" is always the king's own home
+cell, read directly off the pre-move board's king mask, so it can never
+coincidentally read as an adjacent king step). A capture reads legal only
+when the same classifier already agrees a piece was removed (kind 2 for an
+ordinary capture, kind 3 for en passant); the target-square geometry alone
+is not enough, so a diagonal hop onto the en passant square with the passed
+pawn left standing classifies as a quiet move and stays refused. Movement
+legality and check read outward from the move's
 own squares rather than walking coordinates: a slider's reach is "does
 `$board:rayCell` from the destination back toward the origin land on the
 origin" (the origin is always the ray's own first-occupied answer when the
 path is clear, so no coordinate arithmetic decides direction), a leaper's is
 `$board:offset` from the origin matching the destination over its fixed set
 of jumps, and a king's square is attacked exactly the same way, probed
-outward for an enemy pawn/knight/king/slider. The garden's `puck.world.json`
+outward for an enemy pawn/knight/king/slider. Castling additionally reads a
+one-tick-old snapshot of the check verdict (the king must not already have
+been in check before this settle) and, for the square the king crosses,
+`$board:attacks:<row>:<min>:<max>:<directions>` — walk a short authored
+direction list from a fixed cell and answer whether the first occupied cell
+on any of them falls in an authored value range, the same
+first-blocker-stops-the-walk contract as `rayCell`, unioned over several
+directions and filtered to a range in one call rather than one rule per
+direction. The garden's `puck.world.json`
 chess rules are the worked example for both techniques; its bridge rules
 still hold to the one-rule-per-piece discipline this section already states —
 a captured or knocked-over piece's own board write refuses (a stale key, or

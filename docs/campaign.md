@@ -557,37 +557,57 @@ set of jumps, and check is the mover's king square read the same way,
 attacked or not by an enemy pawn/knight/king/slider probed outward from it.
 A king-shaped settle (two-and-two, the same mask shape castling has) is
 judged ONLY by the castle legality check, never by the single-step king
-check beside it — the mask classifier's own "from" is whichever of the two
-vacated home cells sorts lowest, which for a queenside castle is the rook's
-square, and that square can sit one step from the king's landing square by
-coincidence, letting an ordinary single-step check rubber-stamp a castle
-shape the castle check itself correctly refused. Castling rights are a
+check beside it — the classifier's own "from" is always the king's own home
+cell (read directly off the pre-move board's king mask, never the lower of
+the two vacated cells), so it never coincides with a single king step by
+construction, on either side of the board. Castling rights are a
 one-way bitfield (`castleRights`, one bit per king/rook home square) a rule
 sets the instant that square's own piece departs — legally or not, since
 "has this piece ever left home" cannot un-happen and a capacity-bounded
 history ring answering the same question can forget it once the departure
-scrolls out, reviving rights a long game never truly regains. Castle
-legality also re-reads the physical squares this exact settle: the home
-cells held the king and rook immediately before it and hold neither
-immediately after, the transit squares were empty, and the rook's own
-landing square now holds it — a right can be intact and the physical board
-still refuse the move. A piece that leaves the board entirely (captured,
-knocked clear, tilted) never itself registers as a mover, since it has no
-destination cell to rule on. A settle that only occupies (nothing of that
-side's own vacates) or only vacates clamps its empty half to -1 rather than
-writing the mask's own bit width (64) into a row that refuses it, which
-would otherwise leave that settle's record silently stale for every rule
-reading it afterward. Illegal moves are recorded — `illegalCount` counts
-them, `verdict` names the last ruling — and never rejected, undone, or
-repositioned; the table remembers the last legal position (`lastLegal`) for
-a human or a future AI body to act on. Promotion is a same-cell piece swap —
-the pawn lifted off and a chosen piece set down on the SAME square — which
-the mask classifier cannot see at all (a cell whose occupant changes value
-but stays occupied never enters either side's vacated or occupied mask), so
-it is not a move kind: reaching the last rank on an ordinary quiet or
-capture settle marks `promotionPending`, and a later settle where that cell's
-piece no longer carries the pawn code clears it directly, independent of
-whatever move kind (if any) that settle classifies as. `plan` is
+scrolls out, reviving rights a long game never truly regains; a castle event
+itself always departs the king's own home cell, so it burns that king's bit
+on both sides at once, exactly as a king move must. Castle legality also
+re-reads the physical squares this exact settle: the home cells held the
+king and rook immediately before it and hold neither immediately after, the
+transit squares were empty, and the rook's own landing square now holds it —
+a right can be intact and the physical board still refuse the move. Two
+more checks close the same gate: the king must not already have been in
+check on the position before this settle (a one-tick snapshot of the prior
+settle's own check verdict, since the board a rule reads mid-settle is
+already the post-move board) and the square the king crosses must not be
+attacked either, read via a `$board:attacks:<row>:<min>:<max>:<directions>`
+query that walks a short authored ray list from a fixed cell and answers
+whether the first occupied cell on any of them falls in an authored value
+range — a slider's reach at one square in one call, instead of one rule per
+direction; king- and knight-adjacency stay the cheap `$board:neighbour`/
+`$board:offset` composition already used elsewhere, since those never
+depend on which color is attacking. A piece that leaves the board entirely
+(captured, knocked clear, tilted) never itself registers as a mover, since
+it has no destination cell to rule on. A settle that only occupies (nothing
+of that side's own vacates) or only vacates clamps its empty half to -1
+rather than writing the mask's own bit width (64) into a row that refuses
+it, which would otherwise leave that settle's record silently stale for
+every rule reading it afterward. A capture only reads legal when the
+settle's own delta classifier already agrees a piece was removed (kind 2 for
+an ordinary capture, kind 3 for en passant specifically) — geometry alone
+(landing on the en passant target square) is not enough, so a diagonal hop
+onto that square with the passed pawn left standing classifies as a quiet
+move and is refused rather than silently completing the capture for the
+hand that forgot to lift the other piece. Illegal moves are recorded —
+`illegalCount` counts them, `verdict` names the last ruling — and never
+rejected, undone, or repositioned; the table remembers the last legal
+position (`lastLegal`) for a human or a future AI body to act on. Promotion
+is a same-cell piece swap — the pawn lifted off and a chosen piece set down
+on the SAME square, ordinarily two separate settles — which the mask
+classifier cannot see at all (a cell whose occupant changes value but stays
+occupied never enters either side's vacated or occupied mask), so it is not
+a move kind: reaching the last rank on an ordinary quiet or capture settle
+marks `promotionPending`, and it stays pending across the pawn being lifted
+off (an empty cell is not a promoted piece either) until a later settle
+where that cell holds an actual piece of the mover's own color other than a
+pawn, which clears it directly, independent of whatever move kind (if any)
+that settle classifies as. `plan` is
 the addon seam for candidate-highlight rendering: an ordinary board-typed row
 nothing in the engine writes, proved from the console
 (`world.state.cell.set plan <cell> 1`) rather than built. Boards are a
