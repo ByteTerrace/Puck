@@ -32,8 +32,13 @@ boards together admit 65536 cells, and all declared state storage admits
 Grid keys are decimal `y * width + x` ordinals. Directions are `N`, `NE`, `E`,
 `SE`, `S`, `SW`, `W`, `NW`; `wrap` is `None`, `X`, `Y`, or `Both`. Rings use
 `width` cells, `depth: 1`, and `forward`/`backward`, with implicit wrapping.
-Hexes use axial coordinates, `radius`, `width: 1`, and `depth: 1`; ordinals
-follow ascending r then q. Hex directions are `E`, `NE`, `NW`, `W`, `SW`, `SE`.
+Hexes use `radius` over `Puck.Maths.HexagonalIndex`: ordinal `i` is index `i`
+(rings outward from the origin, consecutive ordinals adjacent), its
+`(q, r)` are Eisenstein coordinates, and cell `(q, r)` sits at origin +
+cellSize · (q − r/2, 0, r·√3/2). Hex directions are
+`HexagonalCoordinate.Direction(0..5)`, counterclockwise from +q, which on the
+board reads `E`, `SE`, `SW`, `W`, `NW`, `NE` — the same order `hexNeighbor`
+counts.
 All shapes still carry the registry's required `origin` and `cellSize` fields.
 Missing board entries read as the declared `empty` value. Wrapped scans stop
 before revisiting their origin.
@@ -87,10 +92,11 @@ Board operands use the ordinary predicate/source `key` for their origin,
 including the existing `$cell:` dynamic-key form; `cellOf` accepts no
 key — it takes a `bodyRef` in its place, the same `body:<n>`/
 `argmax:<row>`/`argmin:<row>`/`cell:<row>:<key>` vocabulary `$distance:`/
-`$los:`/`$nearest:` read. Both `cellOf` and `offset` require a `Grid`
-topology — the only kind carrying a rectangular world-space frame
-(`CompiledTopology.Origin`/`CellSize`, the same origin/cellSize every
-topology declares); a `Hex`/`Ring` row refuses them by name at compile.
+`$los:`/`$nearest:` read. Both `cellOf` and `offset` answer for a `Grid` or a
+`Hex` topology — a grid resolves world positions against its rectangular
+frame and steps `offset` in `(dx, dz)`; a hex rounds to the nearest lattice
+point and steps in `(dq, dr)` (`CompiledTopology.TryCellOf`/`TryOffset`/
+`CellCentre`); a `Ring` row refuses them by name at compile.
 A `Box` topology is `width` by `layers` by `depth` cells with the 26 space
 directions: the grid's eight compass names in the layer, each prefixed `U`
 or `D` for the layer above or below, and `U`/`D` alone; ordinals run
@@ -1368,11 +1374,29 @@ entry count and columns. A lookup prices as 2 plus the log of the entry count.
 ## The `rules` document — the per-body action primitive, one level up
 
 `WorldRules.cs` holds the optional `rules` section. A `WorldRule` is
-`(Name, Gate, Effects, Mode, ForEach, Decision)` over the same `ActionPredicate`, `ActionEffect` and
-`ActionTriggerMode` types a kit's per-body actions use. `WorldRuleCompiler`
-checks the world-scope subset at the document or mutation boundary. Gates admit
+`Puck.State`'s `Rule` (`Name, Gate, Effects, Mode, ForEach, Bindings`) plus the
+`Decision` only a world evaluates, over the same `ActionPredicate`, `ActionEffect`
+and `ActionTriggerMode` types a kit's per-body actions use. The compiler is
+`Puck.State.RuleCompiler`; `WorldRuleCompiler` composes its public pieces with
+the world's registered vocabulary and the decision compile, against a
+`WorldRuleCompileContext` (the document's state section, its tables, patterns
+and generators, topologies anchored through placement `board` facets, lattice
+fill draws, placement ordinals, body references). `WorldRuleVocabulary` is the
+one `RuleVocabulary` the world registers: an operand family for its reserved
+channels (`WorldRuleFacts` — bodies, distance, line of sight, screens, links,
+regions, the population, the music clock, `$board:cellOf`), one `EffectFamily`
+per world arm of `WorldEffect` with the `WorldTransactionStep` mirroring it,
+the four `WorldPredicate` body-program arms (which refuse in rule scope), and
+the `$pair:` key. The same vocabulary's `ExtendJson` is what `WorldJsonVocabulary`
+installs so those arms read and write under their `$type` discriminators. A
+compiled rule is a `CompiledWorldRule : CompiledRule` whose effects and operands
+are `Puck.State`'s class-typed facts plus the world's own (`WorldOperandKinds.cs`,
+`WorldEffectKinds.cs`); the world's operands read through `IWorldRuleReader`,
+the widening of `IRuleReader` that `WorldServer` implements. Gates admit
 `all`, `any`, `not`, `compareState`, and `compareValue`; they compile to a bounded postfix
 Boolean program, so nested logic does not allocate or recurse during a tick.
+Compile refusals travel in a `RuleException` carrying a `RuleRefusal` (the
+library's) or a `WorldRuleRefusal` (the world's arms).
 
 ### Decision policies
 

@@ -9870,7 +9870,7 @@
             "type": "string"
           },
           "f": {
-            "description": "The natural frequency f, Hz. Must be finite and positive; higher is snappier. A value that rounds to zero at Q16, or whose derived oscillation rate is too close to critical to resolve at the Q32 coefficient scale, is refused (see WorldDefinitionValidator.ValidateDynamics).",
+            "description": "The natural frequency f, Hz. Must be finite and positive; higher is snappier. A value that rounds to zero at Q16, or whose derived oscillation rate is too close to critical to resolve at the Q32 coefficient scale, is refused (the document project\u0027s validator refuses it by name).",
             "type": "number"
           },
           "zeta": {

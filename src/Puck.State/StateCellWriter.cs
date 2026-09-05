@@ -6,9 +6,8 @@ namespace Puck.State;
 /// <summary>
 /// The shared pure composition for one <see cref="StateRow"/> cell write — upsert-or-append plus the row's own
 /// <see cref="StateRow.Evicts"/> overflow policy. Extracted so the running world's own ordered mutation
-/// pipeline (<c>Server.WorldServer</c>'s <c>UpsertStateCell</c> compose arm) and any owned-identity document write
-/// outside that pipeline (<c>WorldIdentity.TryAppendEvictingText</c>, and through it the cross-document text
-/// delivery door, <c>Server.WorldOwnedWorlds.Decide</c>) run the identical rule and can never disagree about a
+/// pipeline (the evaluator's cell-upsert compose arm) and any owned-identity document write outside that pipeline (a
+/// document project's text-append door) run the identical rule and can never disagree about a
 /// victim, a duplicate key, or a reserved-cell refusal.
 /// </summary>
 public static class StateCellWriter {
@@ -144,7 +143,7 @@ public static class StateCellWriter {
     }
     /// <summary>Parses a human-authored wire token into a cell's raw-encoded operand, against a row <c>Kind</c>
     /// resolved from the candidate document at compose time — never at console submit time, where the row this token
-    /// targets may not exist yet in the same batch (see <c>WorldMutation.UpsertStateCell.RawToken</c>'s remarks for
+    /// targets may not exist yet in the same batch (see the document project's cell-upsert mutation for
     /// why the interpretation cannot happen any earlier). Mirrors the console's former per-verb parse exactly: decimal
     /// text for <see cref="CellKind.Fixed"/> (never raw <see cref="FixedQ4816"/> bits), <c>true</c>/<c>false</c> for
     /// <see cref="CellKind.Bool"/>, and a plain integer literal otherwise. Never called for <see cref="CellKind.Text"/>

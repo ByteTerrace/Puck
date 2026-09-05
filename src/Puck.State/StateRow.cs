@@ -49,7 +49,7 @@ public sealed record StateCell(CellName Key, long Value = 0, string? Text = null
 /// <see cref="SlotKey"/> and declares no <see cref="Capacity"/> is a slot (<see cref="IsSlot"/>).
 /// <para><see cref="NonNegative"/> enforces a floor of zero regardless of any authored <see cref="Min"/>. Every
 /// consumer that reads this row's cells — including the cross-document write-back channel in
-/// <c>Server.WorldOwnedWorlds.Decide</c> — must read this trait off the row rather than assume a floor of its
+/// the document project's identity-write door — must read this trait off the row rather than assume a floor of its
 /// own.</para>
 /// </remarks>
 /// <param name="Name">The row's stable string name (unique within the section).</param>
@@ -154,7 +154,7 @@ public record StateRow(
     /// <summary>The prefix every engine-minted row or cell name carries, and the one an author may never spell. A
     /// row name starting with it is refused outright (nothing mints a row); a cell key starting with it is refused
     /// unless it is exactly the engine-minted key legitimate for that row's shape — <see cref="SlotKey"/> on a slot.
-    /// Enforced by <c>WorldDefinitionValidator</c> at boot, at every live mutation, and on undo-replay.</summary>
+    /// Enforced by the document project's validator at boot, at every live mutation, and on undo-replay.</summary>
     public const string ReservedNamePrefix = "$";
 
     /// <summary>The reserved cell key a slot-shaped row's one implicit cell carries — the address the authored
@@ -204,7 +204,7 @@ public record StateRow(
     /// write mints its slot cell exactly as <c>world.state.cell.set</c> does.</remarks>
     public bool IsKeyed => (EffectiveDomain is not StateDomain.Slot);
     /// <summary>Gets a value indicating whether this row is shaped as a scalar slot. Drives whether
-    /// <c>Puck.World.WorldStateRowJsonConverter</c> writes the row's one cell back as the bare <c>value</c> sugar or
+    /// <see cref="StateRowJsonConverter{TRow}"/> writes the row's one cell back as the bare <c>value</c> sugar or
     /// as a <c>cells</c> array, and which read-backs (HUD <c>state.&lt;name&gt;</c> binding, <c>world.state</c>'s
     /// value column) resolve a live value for — a keyed row has no single value to show. A draw site is an ordinary
     /// slot: its one cell holds the drawn value, and its own bookkeeping (<see cref="DrawCursor"/>/
@@ -214,8 +214,8 @@ public record StateRow(
     /// <summary>Clamps <paramref name="value"/> into this row's declared numeric envelope: the
     /// <see cref="NonNegative"/> floor first, then an authored <see cref="Min"/>/<see cref="Max"/> pair.</summary>
     /// <remarks>Used for reads, never for writes: a computed value clamps through this method, but an explicit write
-    /// that falls outside the envelope is refused by <c>WorldDefinitionValidator</c> rather than clamped.
-    /// <see cref="StateAdvance.ComputeCurrentValue"/> uses this for its read clamp; <c>WorldServer.FireWorldRuleEffect</c>
+    /// that falls outside the envelope is refused by the document project's validator rather than clamped.
+    /// <see cref="StateAdvance.ComputeCurrentValue"/> uses this for its read clamp; the evaluator's write effect
     /// uses it only to test whether a rule's write could move the destination, never to alter the value the write
     /// submits.</remarks>
     /// <param name="value">The raw value to clamp, encoded per this row's <see cref="Kind"/>.</param>
@@ -261,8 +261,8 @@ public record StateRow(
 /// legitimately mints.
 /// </summary>
 /// <remarks>
-/// Stated once here because two doors ask it: the whole-document walk in <c>WorldDefinitionValidator</c> (which runs
-/// at boot, at every live mutation, and on every undo-replay entry) and the <c>WorldMutation.UpsertStateCell</c>
+/// Stated once here because two doors ask it: the whole-document walk in the document project's validator (which runs
+/// at boot, at every live mutation, and on every undo-replay entry) and the cell-upsert mutation
 /// compose arm, which refuses the same shape by name at the verb rather than letting the operator read a
 /// whole-document validation error for a cell they just typed.
 /// </remarks>
@@ -294,7 +294,7 @@ public static class StateReservedCells {
 }
 /// <summary>The <c>state</c> section schema caps the document validator enforces.</summary>
 /// <remarks>
-/// A HUD gauge element (see <c>WorldHudElementKind.Gauge</c>) may bind to <c>state.&lt;name&gt;</c>, legitimate only
+/// A document project's gauge element may bind to <c>state.&lt;name&gt;</c>, legitimate only
 /// for a slot-shaped row (see <see cref="StateRow.IsSlot"/>). A <see cref="CellKind.Int"/>/
 /// <see cref="CellKind.Fixed"/> row either carries no <see cref="StateRow.Min"/>/<see cref="StateRow.Max"/>
 /// at all, or carries both together with <c>Min &lt; Max</c> and every cell's own value inside <c>[Min, Max]</c> — a

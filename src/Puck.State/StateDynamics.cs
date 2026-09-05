@@ -2,7 +2,7 @@ namespace Puck.State;
 
 /// <summary>
 /// A <see cref="StateCell"/>/<see cref="StateRow"/>'s second-order easing trait: the STORED value stays the
-/// TRUTH (what rules, gates, and comparands read), while a read through <c>Puck.World.WorldStateReader.TryReadEased</c>
+/// TRUTH (what rules, gates, and comparands read), while an eased read (<see cref="StateReader"/>)
 /// computes a second-order follower's current sample from <see cref="Y0"/>/<see cref="V0"/> at <see cref="EpochTick"/>,
 /// chasing the stored value as its target — the closed-form counterpart to <see cref="StateAdvance"/>'s linear
 /// accumulation, no per-tick work either. An explicit write REBASES: the trait's <see cref="Y0"/>/<see cref="V0"/>

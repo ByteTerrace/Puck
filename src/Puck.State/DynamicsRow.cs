@@ -29,7 +29,7 @@ public static class DynamicsLimits {
 /// <c>dynamics</c>/<c>row</c> reference resolves against.</param>
 /// <param name="Frequency">The natural frequency f, Hz. Must be finite and positive; higher is snappier. A value that
 /// rounds to zero at Q16, or whose derived oscillation rate is too close to critical to resolve at the Q32
-/// coefficient scale, is refused (see <c>WorldDefinitionValidator.ValidateDynamics</c>).</param>
+/// coefficient scale, is refused (the document project's validator refuses it by name).</param>
 /// <param name="Damping">The damping ratio ζ (dimensionless). <c>0</c> rings forever; <c>&lt;1</c> overshoots and
 /// rings down; <c>1</c> is critically damped (the fastest approach that never overshoots); <c>&gt;1</c> is
 /// overdamped (slower, still no overshoot).</param>

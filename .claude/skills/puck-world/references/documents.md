@@ -252,7 +252,16 @@ named forms as calls, `row[key]` reads, `$table:t:col[key]` and nested
 `buffs[minion[$each]]` (the `$cell:` indirection), backquoted names, `0x`
 literals) as
 well as the postfix `{ "tokens": [...] }` object; the string parses to the same
-tokens (`ExpressionSpelling`) and writes back as a string. `$table:<name>[:<column>]:<key>` reads a static
+tokens (`ExpressionSpelling`) and writes back as a string. Beside arithmetic, comparison, bit ops, `select`,
+and the board ops, the call vocabulary carries one Maths family per prefix: `pair(x, y)`/`pairX`/`pairY` and
+the Szudzik algebra (`pairSwap`, `pairMax`, `pairMin`, `pairSum`, `pairDifference`, `pairTranslate`,
+`pairScale`); `morton`/`mortonX`/`mortonY`; `hilbert(order, x, y)`/`hilbertX`/`hilbertY`; the hex family
+over `HexagonalIndex` (`hex(q, r)`, `hexQ`, `hexR`, `hexRadius`, `hexNorm`, `hexDistance`, `hexNeighbor`,
+`hexRotate`, `hexConjugate`, `hexSwap`, `hexAdd`, `hexSubtract`, `hexMultiply`, `hexScale`, `hexTranslate`);
+the layer family over `LayerSequence` (`layer`, `layerOffset`, `layerStart`, `layerSize`, each
+`(index-or-layer, start, step, seed)` — `layer(i, 6, 6, 1)` is `hexRadius(i)`); and `sqrt` (both kinds),
+`sin`, `cos` (fixed radians). Every other function is int-only, and a domain fault fails the expression the way
+an overflow does. `$table:<name>[:<column>]:<key>` reads a static
 `tables` document (`puck.table.v1`, hash-pinned, outside simulation state) by an
 integer literal, a `$cell:` indirection, `$each`, or an int `$bind:`; a missing
 dynamic key is a `TableKeyMissing` refusal, never a value. Every top-level
@@ -703,10 +712,12 @@ spelling). `state.lattices` declares one or more topologies (name, origin,
 `cellSize`, `width` × `depth` × `layers`, `stepEveryTicks`, `reactions`); at
 most one is `Field`-kind and drives THIS trait (`WorldTopologyCompilation.
 FindPhysical` — reactions, lattice-derived geometry) — the rest are discrete
-`Grid`/`Ring`/`Hex` topologies, though only `Grid` carries the rectangular X/Z
-frame the `board` facet resolves against: a placement's `board` facet
-(`$board:cellOf`/`offset`, `world.tabletop`) anchors to a `Grid` topology
-alone (`Ring`/`Hex` refuse it), and a `Grid`'s `cellSize` must quantize to a
+`Grid`/`Ring`/`Hex` topologies: a placement's `board` facet
+(`$board:cellOf`/`offset`, `world.tabletop`) anchors a `Grid` or a `Hex`
+topology (`Ring` refuses it) — a grid resolves positions against its
+rectangular X/Z frame, a hex against its lattice (cell `(q, r)` at origin +
+cellSize · (q − r/2, 0, r·√3/2), ordinals in `HexagonalIndex` ring order,
+directions `E, SE, SW, W, NW, NE`) — and `cellSize` must quantize to a
 positive Q48.16 value — it is the divisor `$board:cellOf` resolves world
 positions against (the garden's `chessBoard` alongside its own `pondBasin`
 water field — see `Puck.World.Schema/README.md`'s tabletop-primitive

@@ -5,8 +5,7 @@ namespace Puck.State;
 
 /// <summary>
 /// The one deterministic sampling core behind every <see cref="Draw"/> site — shared by the live <c>Generate</c>
-/// mutation (<c>Puck.World.Server.WorldServer</c>) and the boot/first-fill resolver
-/// (<c>Puck.World.WorldDrawBootResolver</c>), which runs before a <c>Server.WorldServer</c> exists at all and
+/// mutation (the document project's evaluator) and its boot/first-fill resolver, which runs before an evaluator exists at all and
 /// therefore cannot reach into that project. Living here — the lowest layer both reach — is what keeps there from
 /// ever being a second implementation of "how a draw draws" to disagree with the first.
 /// </summary>
