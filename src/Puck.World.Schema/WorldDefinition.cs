@@ -147,6 +147,15 @@ public sealed record WorldDefinition(
     /// against, so a non-null basis on that path refuses rather than resolving.</remarks>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Basis { get; init; }
+    /// <summary>Gets the ordered fragment documents this file imports, each a file path resolved against this
+    /// document's own directory — the fan-in half of composition beside <see cref="Basis"/>'s single-parent chain
+    /// (see <c>WorldDocumentBasis</c>). Composition order is the basis chain, then each import in list order, then
+    /// this file's own body.</summary>
+    /// <remarks>Resolved and consumed at the file-load boundary exactly like <see cref="Basis"/>: a live document
+    /// always carries <see langword="null"/> here, the validator refuses anything else, and a wire-arriving document
+    /// (no directory to resolve imports against) refuses a non-null value the same way <see cref="Basis"/> does.</remarks>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? Imports { get; init; }
     /// <summary>Gets the per-world binding overlays — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldBindingOverlay> BindingOverlays => (BindingOverlaysRaw ?? []);

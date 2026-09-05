@@ -366,14 +366,15 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     var bytes = WorldDefinitionSerialization.SavePreservingBasis(
                         basisPath: out var basisPath,
                         definition: snapshot,
+                        imports: out var preservedImports,
                         note: out var note,
                         path: target
                     );
 
                     server.Compact();
 
-                    var derivation = ((basisPath is { })
-                        ? $", basis: {basisPath}"
+                    var derivation = (((basisPath is { }) || (preservedImports.Count > 0))
+                        ? $", basis: {(basisPath is { } ? basisPath : "none")}, imports: {(preservedImports.Count > 0 ? preservedImports.Count.ToString(provider: CultureInfo.InvariantCulture) : "0")}"
                         : ((note.Length > 0)
                             ? $", {note}"
                             : ""
@@ -494,6 +495,31 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     provider: CultureInfo.InvariantCulture,
                     handler: $"[world.status: source {source} basis {basis} schema {definition.Schema} rate {definition.SimulationRateHz}Hz kits {definition.Kits.Count} body-programs {definition.BodyMotionPrograms.Count} screens {definition.Screens.Count} cameras {definition.Cameras.Count} creations {definition.Creations.Count} placements {definition.Placements.Count} maxSmoothError {definition.Motion.MaxSmoothError:0.###} medium {medium} audio-curve {definition.Audio.DefaultCurve} half-radius-gain {halfRadiusGain:0.#####} session-drift {drift} dirty {dirty} undoable {undoable}]"
                 ));
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.imports",
+            description: "Reads the loaded world's whole basis-and-imports composition graph back: every file that contributed to it, in MERGE order (the deepest basis ancestor through every import to the file's own body last — a later entry's same key overrides an earlier one's), each paired with the top-level keys ITS OWN JSON declares. A flat file (no basis, no imports) reports just itself.",
+            handler: (_, args) => {
+                if (CommandResult.RequireNoArguments(args: args, verb: "world.imports") is { } refusal) {
+                    return refusal;
+                }
+
+                if (!WorldDefinitionFileSource.TryDescribeComposition(
+                    layers: out var layers,
+                    path: definitionSource.SourcePath,
+                    reason: out var describeReason
+                )) {
+                    return CommandResult.Error(output: $"[world.imports: {describeReason}]");
+                }
+
+                var formatted = string.Join(
+                    separator: " | ",
+                    values: layers.Select(selector: layer => $"{layer.Path} [{string.Join(separator: ",", values: layer.Keys)}]")
+                );
+
+                return new CommandResult(Output: $"[world.imports: {formatted}]");
             }
         );
         yield return CommandDefinition.WithWireArgs(

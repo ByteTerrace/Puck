@@ -364,7 +364,10 @@ inserts fold into their document homes; every advancing `state` row/cell
 settles to its live value with its projected epoch reset to 0, so a reload
 resumes exactly where the save observed it instead of reading frozen — the
 live document itself is never touched), and `world.status` reports source,
-counts, drift, and the journal length.
+counts, drift, and the journal length. `world.imports` reads back the whole
+basis-and-imports composition graph in merge order (see
+[`Puck.World.Schema`](../Puck.World.Schema/README.md)'s document-composition
+section).
 
 The root `state` section is the one authoring inventory for every ownership
 mode: `world` rows are document cells, `body` rows are ephemeral per-body

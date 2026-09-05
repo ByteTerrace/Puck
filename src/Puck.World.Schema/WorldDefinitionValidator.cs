@@ -895,6 +895,10 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"basis '{basis}' survived to validation — a basis resolves only at the file-load boundary; this document arrived somewhere no basis can be resolved, so it must be composed (flattened) before it can run.");
         }
 
+        if (definition.Imports is { } imports) {
+            errors.Add(item: $"imports [{string.Join(separator: ", ", values: imports)}] survived to validation — imports resolve only at the file-load boundary; this document arrived somewhere no import can be resolved, so it must be composed (flattened) before it can run.");
+        }
+
         ValidateExtensions(
             extensions: definition.Extensions,
             errors: errors

@@ -499,30 +499,47 @@ rows: `Screen`/`Address`/`Length`) — the machine-memory-watch event family's
 addon-scoped declaration.
 
 **Document composition.** A world file may name a `basis` — another document it
-layers over, resolved against its own directory. The file is then a delta:
-authored members override, omitted members inherit, an authored `null` clears,
-`$type`-changed union objects replace wholesale, and identity-keyed row lists
-(the first of `id`/`name`/`index` on every row of both sides) merge by key with
+layers over, resolved against its own directory — and/or `imports` — an ORDERED
+list of fragment documents it fans in, each resolved against its own directory
+the same way, letting several files each own one disjoint slice of a world (one
+per game in the garden) instead of forcing every slice through the single-parent
+basis chain. Composition order is the basis chain first, then each import fully
+resolved and folded left to right in list order, then the file's own body last.
+Within either step, authored members override, omitted members inherit, an
+authored `null` clears, `$type`-changed union objects replace wholesale, and
+identity-keyed row lists (the first of `id`/`name`/`key`/`index` on every row of
+both sides — `key` covers a state row's own `cells`) merge by key with
 `{"…", "$drop": true}` tombstones and a leading `{"$replace": true}` marker for
-wholesale replacement. `WorldDocumentBasis.cs` owns the merge and its inverse
-diff; `WorldDefinitionFileSource.cs` resolves the chain (depth-capped, cycles
-refused by name) on every file load — boot, `world.load`/`world.reload`, replay
-re-drives, and neighbour resolution — strips the consumed `basis` member, and
-hands the composed tree to the one strict parse → migrate → validate gate, so a
-live document never carries a basis and every wire egress is self-contained. A
-derived document's content pin folds the whole chain's raw bytes
-(`ComputeChainContentHash`), so a template edit moves every derived pin.
-`world.save` preserves the derivation of the file it overwrites
-(`SavePreservingBasis`): the written delta is proved by re-merging before
-anything lands, degrading to a flat save with a named note when it cannot.
-`world.status` echoes the source file's basis. A partial template cannot boot
-(the validator names its missing sections). `IWorldDocumentSource` generalizes
-the same chain walk onto any byte-level document source, so storage sync
+wholesale replacement. Between basis and a derived document that relationship is
+a refine (the derived row always wins); between two SIBLING imports it is a
+collision — a same-key row, a same-name object member, or the same list authored
+by both refuses by name UNLESS the importing file's own body also declares that
+same path (the explicit resolution; two imports merely agreeing on an inherited
+value, e.g. through a shared basis, never collides). `WorldDocumentBasis.cs`
+owns the merge, the import fold (`TryMergeImports`), and the inverse diff;
+`WorldDefinitionFileSource.cs` resolves the whole basis-and-import graph
+(depth-capped, cycles refused by name, both edge types sharing the one ceiling)
+on every file load — boot, `world.load`/`world.reload`, replay re-drives, and
+neighbour resolution — strips the consumed `basis`/`imports` members, and hands
+the composed tree to the one strict parse → migrate → validate gate, so a live
+document never carries either and every wire egress is self-contained. A
+derived document's content pin folds every touched file's raw bytes
+(`ComputeChainContentHash`), so a template or import edit moves every dependent
+pin. `world.save` preserves the derivation of the file it overwrites
+(`SavePreservingBasis`): the written delta is proved by re-merging the full
+basis-plus-imports stack before anything lands, degrading to a flat save with a
+named note when it cannot. `world.status` echoes the source file's basis;
+`world.imports` prints the whole resolved composition stack in merge order, each
+file paired with the top-level keys its own JSON declares. A partial template or
+import fragment cannot boot on its own (the validator names its missing
+sections). `IWorldDocumentSource` generalizes the basis-chain walk (not yet the
+import fan-in) onto any byte-level document source, so storage sync
 (`Puck.World.Server`'s `WorldStorageDocumentSource`, over a flat
-`puck/worlds/basis/` cloud namespace) composes a synced delta exactly like a
-directory load does — it no longer refuses one by name. The wire still never
-carries a basis-bearing document: a live document's `Basis` is always `null`
-(stripped at load), so nothing reaches the wire un-flattened regardless.
+`puck/worlds/basis/` cloud namespace) composes a synced basis delta exactly like
+a directory load does — it no longer refuses one by name. The wire still never
+carries a basis- or import-bearing document: a live document's `Basis`/`Imports`
+are always `null` (stripped at load), so nothing reaches the wire un-flattened
+regardless.
 
 **The validator is the one thick gate.** `WorldDefinitionValidator.cs` runs
 over the entire composed candidate document — at boot, on every live mutation,

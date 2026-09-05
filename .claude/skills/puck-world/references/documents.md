@@ -1163,31 +1163,58 @@ from it (rules, lattice chemistry, regions) live there, and it is the ONLY docum
 likewise-frozen `puck.basis.frozen.json`. The loader is
 `src/Puck.World.Schema/WorldDefinitionLoader.cs`.
 
-## Document composition (`basis`)
+## Document composition (`basis` and `imports`)
 
 `WorldDefinition.Basis` is the document-composition member: a file naming a `basis` (a file path resolved against
-its own directory) is a DELTA over that document — templates/prefabs for similar worlds. The mechanism is
+its own directory) is a DELTA over that document — templates/prefabs for similar worlds. `WorldDefinition.Imports`
+is the fan-in half beside it: an ORDERED list of fragment paths (each resolved against the importing file's own
+directory, exactly like `basis`), letting several documents each own one disjoint slice of a world — one per game
+in the garden — rather than forcing every slice through the single-parent basis chain. The mechanism is
 `WorldDocumentBasis` (`Puck.World.Schema/WorldDocumentBasis.cs`), invoked from `WorldDefinitionFileSource` on EVERY
 file load (boot, `world.load`/`world.reload`, the replay re-drive's apply-boundary re-read, and both neighbour
-resolvers), composing on the raw JSON trees BEFORE the strict parse — a partial template cannot model-parse
-(required members), so the model only ever sees the finished composition, and the consumed `basis` member is
-stripped: a LIVE document always carries `Basis == null`, the validator refuses anything else, and every wire
-egress (replica, replay embed) is self-contained by construction. Merge rules: objects merge member-wise
-(recursive), omitted inherits, authored `null` clears, a `$type`-changed union object replaces wholesale, and a
-row list whose rows all carry the settled identity vocabulary (first of `id`/`name`/`index` on every row of BOTH
-sides) merges BY KEY in basis order — new keys append, `{"<key>": …, "$drop": true}` tombstones remove (a stale
-tombstone refuses by name), a leading `{"$replace": true}` row replaces wholesale. Any other list replaces
-wholesale too — notably a state row's `cells` (keyed by `key`, outside the vocabulary) and an overlay's `chords`
-(unkeyed rows): adding one cell or one chord means restating that row's whole list. `$drop`/`$replace` are
-compose-time vocabulary only; chains are depth-capped (`WorldDocumentBasis.MaxChainDepth`, 8) and cycles refuse by
-name. The content pin folds the WHOLE chain's raw bytes (`ComputeChainContentHash`, length-delimited,
-derived-first), so editing a template moves every derived document's pin — flat documents keep the undelimited
-single-file pin unchanged. `world.save` preserves the derivation of the file it OVERWRITES
-(`SavePreservingBasis`): it peeks the target's `basis` at save time (the file is the one truth — nothing caches
-derivation between load and save), computes the merge-inverse diff (`WorldDocumentBasis.Diff`), PROVES it by
-re-merging before writing, and degrades to a flat save with a named note when it cannot (basis unreadable,
-deleted, or the delta cannot reproduce the document). Read-backs: `world.status` echoes `basis <path|none>`;
-`world.save`'s echo names the preserved basis or the flat-save note. Storage composes a synced delta too:
+resolvers), composing on the raw JSON trees BEFORE the strict parse — a partial template or import fragment cannot
+model-parse (required members), so the model only ever sees the finished composition, and the consumed `basis`/
+`imports` members are stripped: a LIVE document always carries `Basis == null` and `Imports == null`, the
+validator refuses anything else, and every wire egress (replica, replay embed) is self-contained by construction.
+Composition order is the basis chain first (each ancestor's own `basis`/`imports` resolved recursively through the
+same mechanism), then each import fully resolved and folded left to right in list order, then the file's own body
+last — each step an ordinary refine (basis, then the folded import layer, then the file's own body, each one
+overriding the layer before it, per the merge rules below).
+
+Merge rules: objects merge member-wise (recursive), omitted inherits, authored `null` clears, a `$type`-changed
+union object replaces wholesale, and a row list whose rows all carry the settled identity vocabulary (first of
+`id`/`name`/`key`/`index` on every row of BOTH sides — `key` covers a state row's own `cells` and any other list
+keyed the same way, which used to replace wholesale under this vocabulary) merges BY KEY in basis order — new keys
+append, `{"<key>": …, "$drop": true}` tombstones remove (a stale tombstone refuses by name), a leading
+`{"$replace": true}` row replaces wholesale. Any other list replaces wholesale too — notably an overlay's `chords`
+(unkeyed rows, no settled identity field of their own): adding one chord means restating that row's whole list.
+`$drop`/`$replace` are compose-time vocabulary only; the basis-and-import graph is depth-capped
+(`WorldDocumentBasis.MaxChainDepth`, 8, shared across both edge types on any one resolution path) and cycles
+refuse by name.
+
+**Collision policy — basis refines, imports collide.** Within the basis chain a derived row REFINES its same-key
+basis row (the rule above, unchanged: basis is a single-parent relationship, so there is never an ambiguity about
+which side wins). Imports are the opposite: siblings with no priority order between them, so a same-key row, a
+same-name object member, or the same list authored by TWO imports is a refusal by name (naming the two colliding
+import files) UNLESS the importing file's own body ALSO declares that same path — the explicit resolution, since
+the importing file's own body always wins the final override regardless of what the imports disagreed on. Two
+imports agreeing on a value (typically because they share a common ancestor somewhere in their own basis/import
+graphs — a shared basis diamond) never collide; only a genuine disagreement, which can only arise from each side's
+own authored content actually diverging, refuses. See `WorldDocumentBasis.TryMergeImports`'s remarks for the exact
+recursive algorithm.
+
+The content pin folds every touched file's raw bytes (`ComputeChainContentHash`, length-delimited, derived-first,
+basis chain then each import's own touched bytes in authored order), so editing a template or an imported fragment
+moves every dependent document's pin — flat documents keep the undelimited single-file pin unchanged. `world.save`
+preserves the derivation of the file it OVERWRITES (`SavePreservingBasis`): it peeks the target's `basis` AND
+`imports` at save time (the file is the one truth — nothing caches derivation between load and save), composes the
+full basis-plus-imports stack (`WorldDefinitionFileSource.TryComposeStackTree`), computes the merge-inverse diff
+against that stack (`WorldDocumentBasis.Diff`), PROVES it by re-merging before writing, and degrades to a flat save
+with a named note when it cannot (basis/import unreadable, deleted, or the delta cannot reproduce the document).
+Read-backs: `world.status` echoes `basis <path|none>`; `world.imports` prints the whole resolved composition stack
+in merge order, each file's path paired with the top-level keys its own JSON declares; `world.save`'s echo names
+the preserved basis/import count or the flat-save note. Storage composes a synced delta too, over `basis` only —
+`imports` is a local-directory-load feature today, not yet extended to the cloud sync path:
 `IWorldDocumentSource`/`WorldDefinitionFileSource.TryComposeChain` generalize the chain walk onto any byte source,
 and `Puck.World.Server`'s `WorldStorageDocumentSource` resolves basis members against a flat cloud
 `puck/worlds/basis/{name}` namespace (`WorldOwnedWorldSync.BasisAddressFor`) — the storage neighbour resolver and

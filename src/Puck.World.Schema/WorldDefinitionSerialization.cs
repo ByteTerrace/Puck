@@ -1775,25 +1775,29 @@ public static class WorldDefinitionSerialization {
         return bytes.LongLength;
     }
     /// <summary>Writes a definition to <paramref name="path"/>, preserving the derivation of the file it overwrites:
-    /// when that file exists and names a <c>basis</c>, the write is the delta whose merge over the composed basis
-    /// chain reproduces <paramref name="definition"/> exactly (<see cref="WorldDocumentBasis.Diff"/>, with its
-    /// <c>basis</c> member first), so a derived world's save stays a derived world. The computed delta is proved by
-    /// re-merging before anything is written; a delta that cannot reproduce the document — or a basis that cannot be
-    /// peeked or composed — degrades to the flat <see cref="Save"/> with <paramref name="note"/> naming why. A
-    /// target file that does not exist, or declares no basis, is the ordinary flat save.</summary>
+    /// when that file exists and names a <c>basis</c> and/or <c>imports</c>, the write is the delta whose merge over
+    /// the composed basis-plus-imports stack reproduces <paramref name="definition"/> exactly
+    /// (<see cref="WorldDocumentBasis.Diff"/>, with the preserved <c>basis</c>/<c>imports</c> members first), so a
+    /// derived or composed world's save stays derived. The computed delta is proved by re-merging before anything is
+    /// written; a delta that cannot reproduce the document — or a stack that cannot be peeked or composed —
+    /// degrades to the flat <see cref="Save"/> with <paramref name="note"/> naming why. A target file that does not
+    /// exist, or declares neither, is the ordinary flat save.</summary>
     /// <param name="definition">The definition to write.</param>
     /// <param name="path">The destination file path — also the file whose derivation is preserved.</param>
-    /// <param name="basisPath">The absolute basis path the write preserved, or <see langword="null"/> for a flat
-    /// save.</param>
+    /// <param name="basisPath">The absolute basis path the write preserved, or <see langword="null"/> when the
+    /// target declares none or the save degraded to flat.</param>
+    /// <param name="imports">The absolute import paths the write preserved, in authored order, or empty when the
+    /// target declares none or the save degraded to flat.</param>
     /// <param name="note">The one-line reason a derived target degraded to a flat save, or empty.</param>
     /// <returns>The number of bytes written.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/> or empty.</exception>
-    public static long SavePreservingBasis(WorldDefinition definition, string path, out string? basisPath, out string note) {
+    public static long SavePreservingBasis(WorldDefinition definition, string path, out string? basisPath, out IReadOnlyList<string> imports, out string note) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentException.ThrowIfNullOrEmpty(argument: path);
 
         basisPath = null;
+        imports = [];
         note = string.Empty;
 
         if (!File.Exists(path: path)) {
@@ -1804,11 +1808,11 @@ public static class WorldDefinitionSerialization {
         }
 
         if (!WorldDefinitionFileSource.TryPeekBasis(
-            basisPath: out var peeked,
+            basisPath: out var peekedBasis,
             path: path,
-            reason: out var peekReason
+            reason: out var peekBasisReason
         )) {
-            note = $"saved flat: {peekReason}";
+            note = $"saved flat: {peekBasisReason}";
 
             return Save(
                 definition: definition,
@@ -1816,17 +1820,33 @@ public static class WorldDefinitionSerialization {
             );
         }
 
-        if (peeked is null) {
+        if (!WorldDefinitionFileSource.TryPeekImports(
+            imports: out var peekedImports,
+            path: path,
+            reason: out var peekImportsReason
+        )) {
+            note = $"saved flat: {peekImportsReason}";
+
             return Save(
                 definition: definition,
                 path: path
             );
         }
 
-        if (!WorldDefinitionFileSource.TryComposeDocumentTree(
-            path: peeked,
+        if (
+            (peekedBasis is null) &&
+            (peekedImports.Count == 0)
+        ) {
+            return Save(
+                definition: definition,
+                path: path
+            );
+        }
+
+        if (!WorldDefinitionFileSource.TryComposeStackTree(
+            path: path,
             reason: out var composeReason,
-            tree: out var basisTree
+            stack: out var stackTree
         )) {
             note = $"saved flat: {composeReason}";
 
@@ -1838,13 +1858,13 @@ public static class WorldDefinitionSerialization {
 
         var targetTree = ((JsonObject)JsonNode.Parse(json: System.Text.Encoding.UTF8.GetString(bytes: Serialize(definition: definition)))!);
         var delta = WorldDocumentBasis.Diff(
-            basis: basisTree!,
+            basis: stackTree!,
             target: targetTree
         );
 
         if (
             !WorldDocumentBasis.TryMerge(
-            basis: basisTree!,
+            basis: stackTree!,
             composed: out var proved,
             overlay: delta,
             reason: out var mergeReason
@@ -1854,7 +1874,7 @@ public static class WorldDefinitionSerialization {
             node2: targetTree
         )
         ) {
-            note = $"saved flat: the computed delta could not reproduce the document over {peeked}{((mergeReason is { Length: > 0 })
+            note = $"saved flat: the computed delta could not reproduce the document over its basis/imports stack{((mergeReason is { Length: > 0 })
                 ? $" ({mergeReason})"
                 : "")}.";
 
@@ -1864,20 +1884,37 @@ public static class WorldDefinitionSerialization {
             );
         }
 
-        // `basis` leads the written document so a reader knows it is a delta before reading anything else. The
-        // authored spelling is the target-relative path with forward slashes — portable across the checked-in
-        // assets and a copied state directory alike.
+        // `basis`/`imports` lead the written document so a reader knows it is composed before reading anything
+        // else. The authored spelling is the target-relative path with forward slashes — portable across the
+        // checked-in assets and a copied state directory alike.
         var targetDirectory = (Path.GetDirectoryName(path: Path.GetFullPath(path: path)) ?? ".");
-        var relative = Path.GetRelativePath(
-            path: peeked,
-            relativeTo: targetDirectory
-        ).Replace(
-            newChar: '/',
-            oldChar: '\\'
-        );
-        var output = new JsonObject {
-            [propertyName: WorldDocumentBasis.BasisMemberName] = relative,
-        };
+        var output = new JsonObject();
+
+        if (peekedBasis is { } basis) {
+            output[propertyName: WorldDocumentBasis.BasisMemberName] = Path.GetRelativePath(
+                path: basis,
+                relativeTo: targetDirectory
+            ).Replace(
+                newChar: '/',
+                oldChar: '\\'
+            );
+        }
+
+        if (peekedImports.Count > 0) {
+            var importsArray = new JsonArray();
+
+            foreach (var import in peekedImports) {
+                importsArray.Add(value: Path.GetRelativePath(
+                    path: import,
+                    relativeTo: targetDirectory
+                ).Replace(
+                    newChar: '/',
+                    oldChar: '\\'
+                ));
+            }
+
+            output[propertyName: WorldDocumentBasis.ImportsMemberName] = importsArray;
+        }
 
         foreach (var (name, value) in delta) {
             output[propertyName: name] = value?.DeepClone();
@@ -1889,7 +1926,8 @@ public static class WorldDefinitionSerialization {
             bytes: bytes,
             path: path
         );
-        basisPath = peeked;
+        basisPath = peekedBasis;
+        imports = peekedImports;
 
         return bytes.LongLength;
     }

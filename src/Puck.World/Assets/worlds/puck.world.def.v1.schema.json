@@ -188,6 +188,9 @@
     "basis": {
       "$ref": "./schema/basis.schema.json"
     },
+    "imports": {
+      "$ref": "./schema/imports.schema.json"
+    },
     "documentId": {
       "$ref": "./schema/documentId.schema.json"
     },

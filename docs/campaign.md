@@ -838,6 +838,29 @@ and static per-tick work, never a fixed-size buffer or a per-world tunable),
 so the fix is to widen them rather than cut a lane: `MaxRows` 128 → 256,
 `MaxWorkUnitsPerTick` 1,000,000 → 2,000,000.
 
+**Games are imported fragments of one composed world (owner decision).** Each
+game in the garden — chess, poker, dominoes, billiards, bowling — lives in its
+own world file that `puck.world.json` imports, rather than all five sharing one
+ever-growing document. `WorldDefinition.Imports` is the fan-in half of
+composition beside `basis`'s single-parent chain: an ordered list of fragment
+paths, each fully resolved (its own `basis`/`imports` included) and folded left
+to right, then layered under the importing file's own body. The reasoning
+this decision rests on: a single-parent basis chain cannot express "five
+independent slices of one document" without artificial ordering between
+unrelated games; imports can, because siblings are checked for collision
+rather than silently overridden — a same-key row, object member, or list two
+games both declare refuses by name unless `puck.world.json` itself restates
+the key, so an accidental collision between two games' content is caught at
+load rather than silently resolved by import order. `key` joined the
+row-identity vocabulary (`id`/`name`/`key`/`index`) alongside this, so a state
+row's `cells` — the vocabulary a game's own counters and tables lean on —
+refines by cell rather than replacing wholesale under a basis delta. Every
+shipped world and canary was composed under the old and new vocabulary and
+proved `JsonNode.DeepEquals`; none needed migration. `world.imports` reads the
+resolved stack back. The garden's own `puck.world.json` is not yet split by
+this primitive — that split is its own follow-on change, sequenced after the
+motion-row wave this document's own `garden/w3` section describes.
+
 ## After this arc
 
 Owner review of this branch gates the next wave. Recorded as decisions, not status — none of this has
