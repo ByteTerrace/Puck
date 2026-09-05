@@ -323,8 +323,19 @@ public sealed partial class WorldServer {
             var index = ResolveBodyRef(bodyRef: operand.BodyA!.Value, tick: tick);
             return Body(index: index) is { } body && query.Topology.TryCellOf(position: body.FixedPosition, cell: out var cell) ? cell : -1;
         }
-        var row = WorldDefinitionRows.FindStateRow(m_definition.State, operand.Row!);
-        if (row?.Board is null) {
+        if (
+            !WorldStateReader.TryReadHandle(
+            catalog: m_definition.StateCatalog,
+            definition: m_definition,
+            handle: operand.StateHandle,
+            key: null,
+            rawValue: out _,
+            row: out var row,
+            text: out _,
+            tick: tick
+        ) ||
+            (row.Board is null)
+        ) {
             return -1;
         }
         if (query.Kind == WorldBoardQueryKind.Offset) {
