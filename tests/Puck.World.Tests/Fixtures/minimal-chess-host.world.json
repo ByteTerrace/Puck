@@ -50,6 +50,17 @@
       "SmoothUnionContact"
     ]
   },
+  "gravity": {
+    "attractors": [],
+    "gravitationalConstant": 0.0,
+    "softeningLength": 0.5,
+    "solver": "Pairwise",
+    "uniform": [
+      0,
+      -46,
+      0
+    ]
+  },
   "imports": [
     "../../../src/Puck.World/Assets/worlds/games/chess.world.json"
   ],

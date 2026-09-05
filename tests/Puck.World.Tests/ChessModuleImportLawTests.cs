@@ -77,7 +77,23 @@ public sealed class ChessModuleImportLawTests {
 
         body.Pose(x: x, y: SpawnHeight, z: z, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
 
-        for (var tick = 0; (tick < 3000); tick++) {
+        for (var tick = 0; (tick < 400); tick++) {
+            fixture.Step();
+        }
+    }
+
+    // 32 tightly-packed rigid pieces settling FROM SPAWN — never a real move — can cross $physics:quiescent's edge
+    // more than once before every piece has finished its own physical settle (a body still mid-shove reads resting
+    // for a moment, opens the population-wide gate, then keeps moving). The document itself debounces this: a
+    // `settleHold` counter (`tabletop-settle-hold`) only reaches its margin once quiescence has held continuously,
+    // and every tabletop rule gates on THAT rather than the raw edge, so a mid-settle wobble never opens the
+    // classifier at all. The first genuine settle (`gameStarted == 0`) is further routed through
+    // `tabletop-game-start`, which snapshots `previousBoard` from the just-derived `board` before any classifier
+    // reads it — the SAME reasoning that makes every later move's own `tabletop-board-snapshot` correct, applied
+    // once at boot instead of assuming `previousBoard`'s all-zero row default already matches an empty board. No
+    // row here is written by hand: this is real settle time, nothing else.
+    private static void SettleFromSpawn(WorldFixture fixture) {
+        for (var tick = 0; (tick < 400); tick++) {
             fixture.Step();
         }
     }
@@ -88,9 +104,7 @@ public sealed class ChessModuleImportLawTests {
 
         Assert.Equal(20f, fixture.Server.Definition.Placements.Single(p => p.Id == "tabletop").Position.X);
 
-        for (var tick = 0; (tick < 3000); tick++) {
-            fixture.Step();
-        }
+        SettleFromSpawn(fixture: fixture);
 
         // e2 (piece12, a white pawn) settles onto cell 12 (rank 1 = z index 1, file e = x index 4 => 1*8+4=12) and
         // stamps its code onto the board — the SAME chain WorldPlacementFrameCompilation (composed spawn pose) ->
@@ -105,9 +119,7 @@ public sealed class ChessModuleImportLawTests {
     public void E2E4RecordsLegal() {
         using var fixture = Fixtures.FreshServer(definition: LoadMinimalHost());
 
-        for (var tick = 0; (tick < 3000); tick++) {
-            fixture.Step();
-        }
+        SettleFromSpawn(fixture: fixture);
 
         var pawn = Piece(fixture, "piece12"); // e2
 
@@ -123,9 +135,7 @@ public sealed class ChessModuleImportLawTests {
     public void IllegalKnightMoveRecordsIllegal() {
         using var fixture = Fixtures.FreshServer(definition: LoadMinimalHost());
 
-        for (var tick = 0; (tick < 3000); tick++) {
-            fixture.Step();
-        }
+        SettleFromSpawn(fixture: fixture);
 
         var knight = Piece(fixture, "piece6"); // g1
         var illegalBefore = Slot(fixture, "illegalCount");
@@ -135,9 +145,11 @@ public sealed class ChessModuleImportLawTests {
         Assert.Equal(0, Slot(fixture, "verdict"));
         Assert.Equal((illegalBefore + 1), Slot(fixture, "illegalCount"));
 
-        // Control: the SAME knight making an ACTUALLY legal jump (g1-f3, a genuine L-shape) records legal — proving
-        // the illegal verdict above discriminates a real geometry failure rather than the knight always losing.
-        MoveTo(fixture, knight, file: 5, rank: 2); // f3 — legal knight jump from g1.
+        // Control: the SAME knight making an ACTUALLY legal jump records legal — proving the illegal verdict above
+        // discriminates a real geometry failure rather than the knight always losing. Illegal moves are recorded,
+        // never undone (the world never repositions a physical piece), so the knight PHYSICALLY sits at g3 (where
+        // the refused move above left it) — the next jump is FROM g3, not g1.
+        MoveTo(fixture, knight, file: 4, rank: 3); // e4 (dx=-2,dz=1 from g3) — a genuine L-shape onto an empty square.
         Assert.Equal(1, Slot(fixture, "verdict"));
     }
 
@@ -145,9 +157,7 @@ public sealed class ChessModuleImportLawTests {
     public void CaptureRecordsMoveKindTwo() {
         using var fixture = Fixtures.FreshServer(definition: LoadMinimalHost());
 
-        for (var tick = 0; (tick < 3000); tick++) {
-            fixture.Step();
-        }
+        SettleFromSpawn(fixture: fixture);
 
         var blackPawn = Piece(fixture, "piece16"); // a7
 
@@ -155,7 +165,16 @@ public sealed class ChessModuleImportLawTests {
 
         var knight = Piece(fixture, "piece1"); // b1
 
-        MoveTo(fixture, knight, file: 2, rank: 2); // c3 — a legal knight jump from b1 landing on the black pawn.
+        // A capture is ONE physical action, not two: the defender is lifted clear of the board (onto the tabletop's
+        // own margin beyond the 8x8 grid — $board:cellOf reads no cell there, so it stops contributing to `board`
+        // at all) in the SAME settle window the attacker lands in c3's now-vacated space. Posing both bodies before
+        // stepping means the population never re-quiesces in between, so the classifier sees one settle: black's
+        // own vacate at c3 with no matching occupy (a piece removed), white's vacate at b1 paired with occupy at
+        // c3 — the capture shape. Settling them separately would record two ordinary quiet moves instead, and
+        // dropping the knight directly onto the still-resting pawn leaves both bodies permanently interpenetrating,
+        // never quiescent again.
+        blackPawn.Pose(x: (OriginX + 1.7f), y: SpawnHeight, z: (OriginZ + 0.5f), yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        MoveTo(fixture, knight, file: 2, rank: 2); // c3 — a legal knight jump from b1, capturing the black pawn.
 
         Assert.Equal(1, Slot(fixture, "verdict"));
         Assert.Equal(2, Cell(Row(fixture, "move"), "kind"));

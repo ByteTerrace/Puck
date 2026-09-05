@@ -237,6 +237,70 @@ public sealed class GardenSplitLawTests {
     private static readonly HashSet<string> NewAnchorPlacementIds = ["dominoRun"];
     private static readonly HashSet<string> NewAnchorPrototypeIds = ["dominoRun"];
 
+    // 32 tightly-packed pieces settling from spawn can cross the population's raw $physics:quiescent edge before
+    // every piece finishes its own physical settle; every tabletop rule now gates on a 'settleHold' row (a counter
+    // that only reaches its margin once quiescence has held continuously) instead, and the first such settle is
+    // further routed through a one-time 'gameStarted' snapshot that seeds 'previousBoard' from the just-derived
+    // 'board' before any classifier reads it — see chess.world.json's own remarks. Neither is content the split is
+    // meant to preserve unchanged, so this subtracts the four rules/two state rows it added and reverts every
+    // rule's debounced gate back to the raw quiescent-edge spelling the pre-split fixture carries.
+    private static readonly HashSet<string> SettleHoldRuleNames = [
+        "tabletop-settle-hold-advance", "tabletop-settle-hold-reset", "tabletop-game-start-snapshot", "tabletop-game-start-flag",
+    ];
+    private static readonly HashSet<string> SettleHoldStateRowNames = ["settleHold", "gameStarted"];
+
+    // Two genuine legality-content fixes layered onto the split, neither of which the pre-split fixture ever got
+    // right either: 'turn' declared its initial value as 0 while 'moverColor' (tabletop-mover-color) reads 1 for
+    // white, so white's own first move could never satisfy tabletop-verdict's (moverColor == turn) term; and
+    // 'tabletop-shape-pawn-pick' compared moverColor against the wrong constant, selecting pawnLegalBlack for
+    // white's own move. Reverted here to the pre-split fixture's own (equally wrong) spelling so the comparison
+    // that remains is everything else — see chess.world.json's own remarks for why 1 and 1 are the CORRECT values.
+    private static void NormalizeSettleHoldDebounce(JsonObject tree) {
+        if (tree["rules"] is JsonArray rules) {
+            foreach (var rule in rules) {
+                if ((rule is not JsonObject ruleObject) || (ruleObject["name"] is not JsonValue nameValue)) {
+                    continue;
+                }
+
+                if ((nameValue.GetValue<string>() == "tabletop-shape-pawn-pick") && (ruleObject["effects"] is JsonArray pickEffects) && (pickEffects[0] is JsonObject pickEffect)) {
+                    ((JsonObject)((JsonArray)((JsonObject)pickEffect["expression"]!)["tokens"]!)[1]!)["value"] = 0;
+                }
+
+                RevertSettleHoldGate(ruleObject["gate"] as JsonObject);
+            }
+        }
+
+        if ((tree["state"] as JsonObject)?["world"] is JsonArray worldRows) {
+            foreach (var row in worldRows) {
+                if ((row is JsonObject rowObject) && (rowObject["name"] is JsonValue name) && (name.GetValue<string>() == "turn")) {
+                    rowObject["value"] = 0;
+                }
+            }
+        }
+
+        RemoveNamed(tree, "rules", SettleHoldRuleNames);
+        RemoveNamed(tree, "state.world", SettleHoldStateRowNames);
+    }
+
+    private static void RevertSettleHoldGate(JsonObject? gate) {
+        if (gate is null) {
+            return;
+        }
+
+        if ((gate["state"] is JsonValue state) && (state.GetValue<string>() == "settleHold") && (gate["value"]?.GetValue<int>() == 60)) {
+            gate["state"] = "$physics:quiescent";
+            gate["value"] = 1;
+
+            return;
+        }
+
+        if (gate["predicates"] is JsonArray predicates) {
+            foreach (var predicate in predicates) {
+                RevertSettleHoldGate(predicate as JsonObject);
+            }
+        }
+    }
+
     // Subtracts tic-tac-toe's own new rows/rules/lattice — the one genuinely new game the split added beside moving
     // the five pre-existing ones — so what remains describes exactly the pre-split fixture's own content.
     private static JsonObject PostSplitMinusTicTacToe() {
@@ -245,6 +309,7 @@ public sealed class GardenSplitLawTests {
         RemoveNamed(tree, "rules", TicTacToeRuleNames);
         RemoveNamed(tree, "state.world", TicTacToeStateRowNames);
         RemoveNamed(tree, "state.lattices", TicTacToeLatticeNames);
+        NormalizeSettleHoldDebounce(tree);
         // Resolved/normalized BEFORE the new anchor is subtracted — NormalizePlacementParents/NormalizeBoardAnchorOrigins
         // must still find 'dominoRun' in the tree to resolve what composes over it.
         NormalizeBoardAnchorOrigins(tree);

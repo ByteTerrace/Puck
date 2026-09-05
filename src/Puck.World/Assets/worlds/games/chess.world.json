@@ -2424,6 +2424,51 @@
     {
       "effects": [
         {
+          "$type": "addState",
+          "state": "settleHold",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Less",
+            "state": "settleHold",
+            "value": 60
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "tabletop-settle-hold-advance"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "settleHold",
+          "value": 0
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "NotEqual",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Level",
+      "name": "tabletop-settle-hold-reset"
+    },
+    {
+      "effects": [
+        {
           "$type": "setState",
           "fromKey": "0",
           "fromState": "board",
@@ -2875,8 +2920,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-board-snapshot"
@@ -2901,8 +2946,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-prev-check-snapshot"
@@ -3297,8 +3342,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-board-clear"
@@ -3319,8 +3364,8 @@
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
+            "state": "settleHold",
+            "value": 60
           },
           {
             "$type": "compareState",
@@ -3349,8 +3394,8 @@
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
+            "state": "settleHold",
+            "value": 60
           },
           {
             "$type": "not",
@@ -3383,8 +3428,8 @@
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
+            "state": "settleHold",
+            "value": 60
           },
           {
             "$type": "compareState",
@@ -3397,6 +3442,505 @@
       },
       "mode": "Edge",
       "name": "tabletop-write-board"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "0",
+          "fromState": "board",
+          "key": "0",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "1",
+          "fromState": "board",
+          "key": "1",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "2",
+          "fromState": "board",
+          "key": "2",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "3",
+          "fromState": "board",
+          "key": "3",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "4",
+          "fromState": "board",
+          "key": "4",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "5",
+          "fromState": "board",
+          "key": "5",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "6",
+          "fromState": "board",
+          "key": "6",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "7",
+          "fromState": "board",
+          "key": "7",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "8",
+          "fromState": "board",
+          "key": "8",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "9",
+          "fromState": "board",
+          "key": "9",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "10",
+          "fromState": "board",
+          "key": "10",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "11",
+          "fromState": "board",
+          "key": "11",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "12",
+          "fromState": "board",
+          "key": "12",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "13",
+          "fromState": "board",
+          "key": "13",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "14",
+          "fromState": "board",
+          "key": "14",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "15",
+          "fromState": "board",
+          "key": "15",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "16",
+          "fromState": "board",
+          "key": "16",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "17",
+          "fromState": "board",
+          "key": "17",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "18",
+          "fromState": "board",
+          "key": "18",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "19",
+          "fromState": "board",
+          "key": "19",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "20",
+          "fromState": "board",
+          "key": "20",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "21",
+          "fromState": "board",
+          "key": "21",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "22",
+          "fromState": "board",
+          "key": "22",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "23",
+          "fromState": "board",
+          "key": "23",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "24",
+          "fromState": "board",
+          "key": "24",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "25",
+          "fromState": "board",
+          "key": "25",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "26",
+          "fromState": "board",
+          "key": "26",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "27",
+          "fromState": "board",
+          "key": "27",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "28",
+          "fromState": "board",
+          "key": "28",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "29",
+          "fromState": "board",
+          "key": "29",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "30",
+          "fromState": "board",
+          "key": "30",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "31",
+          "fromState": "board",
+          "key": "31",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "32",
+          "fromState": "board",
+          "key": "32",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "33",
+          "fromState": "board",
+          "key": "33",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "34",
+          "fromState": "board",
+          "key": "34",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "35",
+          "fromState": "board",
+          "key": "35",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "36",
+          "fromState": "board",
+          "key": "36",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "37",
+          "fromState": "board",
+          "key": "37",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "38",
+          "fromState": "board",
+          "key": "38",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "39",
+          "fromState": "board",
+          "key": "39",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "40",
+          "fromState": "board",
+          "key": "40",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "41",
+          "fromState": "board",
+          "key": "41",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "42",
+          "fromState": "board",
+          "key": "42",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "43",
+          "fromState": "board",
+          "key": "43",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "44",
+          "fromState": "board",
+          "key": "44",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "45",
+          "fromState": "board",
+          "key": "45",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "46",
+          "fromState": "board",
+          "key": "46",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "47",
+          "fromState": "board",
+          "key": "47",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "48",
+          "fromState": "board",
+          "key": "48",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "49",
+          "fromState": "board",
+          "key": "49",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "50",
+          "fromState": "board",
+          "key": "50",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "51",
+          "fromState": "board",
+          "key": "51",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "52",
+          "fromState": "board",
+          "key": "52",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "53",
+          "fromState": "board",
+          "key": "53",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "54",
+          "fromState": "board",
+          "key": "54",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "55",
+          "fromState": "board",
+          "key": "55",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "56",
+          "fromState": "board",
+          "key": "56",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "57",
+          "fromState": "board",
+          "key": "57",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "58",
+          "fromState": "board",
+          "key": "58",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "59",
+          "fromState": "board",
+          "key": "59",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "60",
+          "fromState": "board",
+          "key": "60",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "61",
+          "fromState": "board",
+          "key": "61",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "62",
+          "fromState": "board",
+          "key": "62",
+          "state": "previousBoard"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "63",
+          "fromState": "board",
+          "key": "63",
+          "state": "previousBoard"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "settleHold",
+            "value": 60
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "gameStarted",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-game-start-snapshot"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "gameStarted",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "settleHold",
+            "value": 60
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "gameStarted",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-game-start-flag"
     },
     {
       "effects": [
@@ -3478,8 +4022,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-king-cell"
@@ -3564,8 +4108,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-mover-color"
@@ -3664,8 +4208,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-classify-white-masks"
@@ -3844,8 +4388,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-classify-white-counts"
@@ -4100,8 +4644,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-classify-white-signatures"
@@ -4291,8 +4835,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-classify-white-pick"
@@ -4391,8 +4935,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-classify-black-masks"
@@ -4571,8 +5115,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-classify-black-counts"
@@ -4827,8 +5371,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-classify-black-signatures"
@@ -5018,8 +5562,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-classify-black-pick"
@@ -5177,8 +5721,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-classify-pick"
@@ -5199,8 +5743,8 @@
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
+            "state": "settleHold",
+            "value": 60
           },
           {
             "$type": "compareState",
@@ -5293,8 +5837,8 @@
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
+            "state": "settleHold",
+            "value": 60
           },
           {
             "$type": "compareState",
@@ -5386,8 +5930,8 @@
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
+            "state": "settleHold",
+            "value": 60
           },
           {
             "$type": "compareState",
@@ -5479,8 +6023,8 @@
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
+            "state": "settleHold",
+            "value": 60
           },
           {
             "$type": "compareState",
@@ -5636,8 +6180,8 @@
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
+            "state": "settleHold",
+            "value": 60
           },
           {
             "$type": "compareState",
@@ -5793,8 +6337,8 @@
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
+            "state": "settleHold",
+            "value": 60
           },
           {
             "$type": "compareState",
@@ -6036,8 +6580,8 @@
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
+            "state": "settleHold",
+            "value": 60
           },
           {
             "$type": "compareState",
@@ -6279,8 +6823,8 @@
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
+            "state": "settleHold",
+            "value": 60
           },
           {
             "$type": "compareState",
@@ -6306,7 +6850,7 @@
               },
               {
                 "$type": "constant",
-                "value": 0
+                "value": 1
               },
               {
                 "$type": "equal"
@@ -6333,8 +6877,8 @@
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
+            "state": "settleHold",
+            "value": 60
           },
           {
             "$type": "compareState",
@@ -7077,8 +7621,8 @@
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
+            "state": "settleHold",
+            "value": 60
           },
           {
             "$type": "compareState",
@@ -7919,8 +8463,8 @@
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
+            "state": "settleHold",
+            "value": 60
           },
           {
             "$type": "compareState",
@@ -7987,8 +8531,8 @@
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
+            "state": "settleHold",
+            "value": 60
           },
           {
             "$type": "compareState",
@@ -8195,8 +8739,8 @@
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
+            "state": "settleHold",
+            "value": 60
           },
           {
             "$type": "compareState",
@@ -8262,8 +8806,8 @@
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
+            "state": "settleHold",
+            "value": 60
           },
           {
             "$type": "compareState",
@@ -8492,8 +9036,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-check-closecheckwhitepart0"
@@ -8713,8 +9257,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-check-closecheckwhitepart1"
@@ -8832,8 +9376,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-check-closecheckwhitepart2"
@@ -8870,8 +9414,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-check-closecheckwhite-combine"
@@ -9091,8 +9635,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-check-knighthitwhitepart0"
@@ -9312,8 +9856,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-check-knighthitwhitepart1"
@@ -9343,8 +9887,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-check-knighthitwhite-combine"
@@ -9592,8 +10136,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-check-slidehitwhitepart0"
@@ -9841,8 +10385,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-check-slidehitwhitepart1"
@@ -9872,8 +10416,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-check-slidehitwhite-combine"
@@ -9910,8 +10454,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-check-total-white"
@@ -10131,8 +10675,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-check-closecheckblackpart0"
@@ -10352,8 +10896,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-check-closecheckblackpart1"
@@ -10471,8 +11015,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-check-closecheckblackpart2"
@@ -10509,8 +11053,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-check-closecheckblack-combine"
@@ -10730,8 +11274,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-check-knighthitblackpart0"
@@ -10951,8 +11495,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-check-knighthitblackpart1"
@@ -10982,8 +11526,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-check-knighthitblack-combine"
@@ -11231,8 +11775,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-check-slidehitblackpart0"
@@ -11480,8 +12024,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-check-slidehitblackpart1"
@@ -11511,8 +12055,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-check-slidehitblack-combine"
@@ -11549,8 +12093,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-check-total-black"
@@ -11573,8 +12117,8 @@
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "$physics:quiescent",
-        "value": 1
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-check-combine"
@@ -11608,8 +12152,8 @@
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
+            "state": "settleHold",
+            "value": 60
           },
           {
             "$type": "compareState",
@@ -11735,8 +12279,8 @@
               {
                 "$type": "compareState",
                 "comparison": "Equal",
-                "state": "$physics:quiescent",
-                "value": 1
+                "state": "settleHold",
+                "value": 60
               },
               {
                 "$type": "compareState",
@@ -11802,8 +12346,8 @@
               {
                 "$type": "compareState",
                 "comparison": "Equal",
-                "state": "$physics:quiescent",
-                "value": 1
+                "state": "settleHold",
+                "value": 60
               },
               {
                 "$type": "compareState",
@@ -11857,8 +12401,8 @@
               {
                 "$type": "compareState",
                 "comparison": "Equal",
-                "state": "$physics:quiescent",
-                "value": 1
+                "state": "settleHold",
+                "value": 60
               },
               {
                 "$type": "compareState",
@@ -12373,8 +12917,8 @@
               {
                 "$type": "compareState",
                 "comparison": "Equal",
-                "state": "$physics:quiescent",
-                "value": 1
+                "state": "settleHold",
+                "value": 60
               },
               {
                 "$type": "compareState",
@@ -12413,8 +12957,8 @@
               {
                 "$type": "compareState",
                 "comparison": "Equal",
-                "state": "$physics:quiescent",
-                "value": 1
+                "state": "settleHold",
+                "value": 60
               },
               {
                 "$type": "compareState",
@@ -12534,8 +13078,8 @@
               {
                 "$type": "compareState",
                 "comparison": "Equal",
-                "state": "$physics:quiescent",
-                "value": 1
+                "state": "settleHold",
+                "value": 60
               },
               {
                 "$type": "compareState",
@@ -12679,8 +13223,8 @@
               {
                 "$type": "compareState",
                 "comparison": "Equal",
-                "state": "$physics:quiescent",
-                "value": 1
+                "state": "settleHold",
+                "value": 60
               },
               {
                 "$type": "compareState",
@@ -12738,8 +13282,8 @@
               {
                 "$type": "compareState",
                 "comparison": "Equal",
-                "state": "$physics:quiescent",
-                "value": 1
+                "state": "settleHold",
+                "value": 60
               },
               {
                 "$type": "compareState",
@@ -12855,8 +13399,8 @@
               {
                 "$type": "compareState",
                 "comparison": "Equal",
-                "state": "$physics:quiescent",
-                "value": 1
+                "state": "settleHold",
+                "value": 60
               },
               {
                 "$type": "compareState",
@@ -13020,8 +13564,8 @@
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
+            "state": "settleHold",
+            "value": 60
           },
           {
             "$type": "compareState",
@@ -13050,8 +13594,8 @@
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
+            "state": "settleHold",
+            "value": 60
           },
           {
             "$type": "compareState",
@@ -13094,8 +13638,8 @@
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
+            "state": "settleHold",
+            "value": 60
           },
           {
             "$type": "compareState",
@@ -14394,7 +14938,7 @@
         "max": 1,
         "min": 0,
         "name": "turn",
-        "value": 0
+        "value": 1
       },
       {
         "kind": "int",
@@ -14409,6 +14953,20 @@
         "min": 0,
         "name": "illegalCount",
         "nonNegative": true,
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 60,
+        "min": 0,
+        "name": "settleHold",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "gameStarted",
         "value": 0
       },
       {
