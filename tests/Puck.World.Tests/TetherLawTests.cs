@@ -76,7 +76,7 @@ public sealed class TetherLawTests {
     // modeState is left unset by default (matching every test written before that facet field existed); a caller
     // wanting the row declares it by name (modeStateRowKind: ActionStateKind.Counter, the only kind the validator
     // admits) or leaves it undeclared (modeStateRowKind: null) to exercise the validator's undeclared-name refusal.
-    private static WorldDefinition BuildTetherDocument(bool wallHoldable = true, string? attachChannelName = "attach", bool declareAttachChannel = true, bool includeWall = true, float wallHalfHeight = 3f, string? modeState = null, ActionStateKind? modeStateRowKind = ActionStateKind.Counter) {
+    private static WorldDefinition BuildTetherDocument(bool wallHoldable = true, string? attachChannelName = "attach", bool declareAttachChannel = true, bool includeWall = true, float wallHalfHeight = 3f, string? modeState = null, ActionStateKind? modeStateRowKind = ActionStateKind.Counter, string? detachChannelName = "detach", string? reelChannelName = "reel") {
         var wall = BuildBoxCreation(
             halfExtents: new Vector3(x: 0.2f, y: wallHalfHeight, z: 3f),
             id: "wall"
@@ -123,12 +123,12 @@ public sealed class TetherLawTests {
             Tether = new WorldTether(
                 AimHalfAngleDegrees: 30f,
                 AttachChannel: attachChannelName,
-                DetachChannel: "detach",
+                DetachChannel: detachChannelName,
                 LengthRate: 2f,
                 MaxAnchorDistance: 20f,
                 MinLength: 1f,
                 ModeState: modeState,
-                ReelChannel: "reel",
+                ReelChannel: reelChannelName,
                 ReleaseVelocityScale: 1f
             ),
         };
@@ -444,6 +444,91 @@ public sealed class TetherLawTests {
             userMessage: "a modeState naming a Timer slot was expected to refuse"
         );
         Assert.Contains(actualString: deniedReason, expectedSubstring: "Counter");
+    }
+    [Fact]
+    public void EmptyOptionalTetherNames_RefuseByField_WhereOmissionIsAdmitted() {
+        var cases = new (WorldDefinition Authored, WorldDefinition Omitted, string Token)[] {
+            (BuildTetherDocument(attachChannelName: ""), BuildTetherDocument(attachChannelName: null), "attachChannel"),
+            (BuildTetherDocument(detachChannelName: " "), BuildTetherDocument(detachChannelName: null), "detachChannel"),
+            (BuildTetherDocument(reelChannelName: "\t"), BuildTetherDocument(reelChannelName: null), "reelChannel"),
+            (BuildTetherDocument(modeState: ""), BuildTetherDocument(modeState: null), "modeState"),
+        };
+
+        foreach (var (authored, omitted, token) in cases) {
+            Assert.False(
+                condition: WorldDefinitionValidator.TryValidateLocally(definition: authored, reason: out var reason),
+                userMessage: $"an authored empty {token} was expected to refuse"
+            );
+            Assert.Contains(actualString: reason, expectedSubstring: token);
+            Assert.True(
+                condition: WorldDefinitionValidator.TryValidateLocally(definition: omitted, reason: out var admittedReason),
+                userMessage: admittedReason
+            );
+        }
+    }
+    [Fact]
+    public void PositiveTetherTunables_RefuseWhenTheirCompiledValueWouldUnderflowToZero_WhereTheSmallestRepresentableIsAdmitted() {
+        // One raw Q48.16 unit, and the smallest whole-microdegree cone that still rounds to one raw radian unit.
+        const float smallestRepresentable = (1f / 65536f);
+        const float smallestRepresentableDegrees = 0.001f;
+
+        foreach (var (mutate, token, control) in new (Func<WorldTether, float, WorldTether> Mutate, string Token, float Control)[] {
+            ((tether, value) => tether with { MaxAnchorDistance = value }, "maxAnchorDistance", smallestRepresentable),
+            ((tether, value) => tether with { AimHalfAngleDegrees = value }, "aimHalfAngleDegrees", smallestRepresentableDegrees),
+            ((tether, value) => tether with { LengthRate = value }, "lengthRate", smallestRepresentable),
+            ((tether, value) => tether with { MinLength = value }, "minLength", smallestRepresentable),
+            ((tether, value) => tether with { ReleaseVelocityScale = value }, "releaseVelocityScale", smallestRepresentable),
+        }) {
+            var document = BuildTetherDocument();
+            var kits = document.Kits.ToList();
+
+            kits[0] = kits[0] with { Tether = mutate(kits[0].Tether!, float.Epsilon) };
+
+            Assert.False(
+                condition: WorldDefinitionValidator.TryValidateLocally(definition: document with { KitRowsRaw = kits }, reason: out var reason),
+                userMessage: $"a positive tether field underflowing at {token} was expected to refuse"
+            );
+            Assert.Contains(actualString: reason, expectedSubstring: token);
+
+            kits[0] = kits[0] with { Tether = mutate(kits[0].Tether!, control) };
+
+            Assert.True(
+                condition: WorldDefinitionValidator.TryValidateLocally(definition: document with { KitRowsRaw = kits }, reason: out var admittedReason),
+                userMessage: $"the smallest representable {token} was expected to be admitted: {admittedReason}"
+            );
+        }
+    }
+    [Fact]
+    public void LiveModeStateRetune_ClearsTheOldRowAndPublishesTheAttachedFactToTheNewRow() {
+        var document = BuildTetherDocument(includeWall: false, modeState: "oldTethered") with {
+            StateRaw = new WorldStateSection(
+                Identity: [
+                    new ActionStateSlot(Name: "oldTethered", Kind: ActionStateKind.Counter),
+                    new ActionStateSlot(Name: "newTethered", Kind: ActionStateKind.Counter),
+                ],
+                World: []
+            ),
+        };
+
+        using var fixture = Fixtures.FreshServer(definition: document);
+        var body = JoinBody(fixture: fixture);
+
+        body.SubmitIntent(intent: Attach());
+        fixture.Step();
+        Assert.NotNull(@object: body.TetherLength);
+
+        var retunedKit = fixture.Server.Definition.Kits[0] with {
+            Tether = fixture.Server.Definition.Kits[0].Tether! with { ModeState = "newTethered" },
+        };
+
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertKit(Principal: WorldPrincipal.Console, Kit: retunedKit));
+        fixture.Step();
+
+        Assert.NotNull(@object: body.TetherLength);
+        Assert.True(condition: body.TryDescribeActionState(name: "oldTethered", kind: out _, lifetime: out _, playerWritable: out _, value: out var oldValue, timerTicks: out _));
+        Assert.True(condition: body.TryDescribeActionState(name: "newTethered", kind: out _, lifetime: out _, playerWritable: out _, value: out var newValue, timerTicks: out _));
+        Assert.Equal(expected: FixedQ4816.Zero, actual: oldValue);
+        Assert.Equal(expected: FixedQ4816.One, actual: newValue);
     }
     [Fact]
     public void LiveTetherToTetherKitSwap_ClearsALiveAttach_WhereAKitSwapKeepingTheSameFacetDoesNot() {

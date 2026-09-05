@@ -10,17 +10,17 @@ namespace Puck.World;
 /// those channels by name. Surface holds are not authored here: they are a kit's own ordered
 /// <see cref="WorldMotion.Holds"/> list.
 /// </summary>
-/// <param name="MaxAnchorDistance">The non-negative world-unit ceiling an attach aim searches along the body's
+/// <param name="MaxAnchorDistance">The non-negative, fixed-representable world-unit ceiling an attach aim searches along the body's
 /// facing direction — also the tether's rope length at attach (the resolved anchor's actual distance, always within
 /// this ceiling).</param>
-/// <param name="AimHalfAngleDegrees">The aim-assist cone half-angle, degrees, within <c>[0, 180]</c>, an attach
+/// <param name="AimHalfAngleDegrees">The fixed-representable aim-assist cone half-angle, degrees, within <c>[0, 180]</c>, an attach
 /// candidate's bearing must fall within around the body's facing. Honoured only by a collider-list contact
 /// provider; a field provider's own directed march has no candidate list to score bearings over and ignores it
 /// (see <c>WorldSolidField.TryNearestSurfaceAlongDirection</c>'s remarks).</param>
-/// <param name="LengthRate">The non-negative world-units-per-second the held <see cref="ReelChannel"/> reels the
+/// <param name="LengthRate">The non-negative, fixed-representable world-units-per-second the held <see cref="ReelChannel"/> reels the
 /// rope at — positive reels out, negative in (the channel's own sign selects direction; this is a magnitude).</param>
-/// <param name="MinLength">The non-negative rope-length floor a reel-in clamps to.</param>
-/// <param name="ReleaseVelocityScale">The non-negative multiplier a detach applies to the body's velocity at the
+/// <param name="MinLength">The non-negative, fixed-representable rope-length floor a reel-in clamps to.</param>
+/// <param name="ReleaseVelocityScale">The non-negative, fixed-representable multiplier a detach applies to the body's velocity at the
 /// instant of release — 1 (the default) preserves it exactly, below 1 dampens, above 1 boosts.</param>
 /// <param name="AttachChannel">The declared channel name (validated) whose rising edge attaches the tether.
 /// <see langword="null"/> leaves attach unreachable from any channel.</param>

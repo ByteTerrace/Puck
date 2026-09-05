@@ -43,6 +43,18 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{name} {value} is positive but quantizes to zero in Q48.16.");
         }
     }
+    // The non-negative sibling: zero is an admitted authored value, but a positive one must still survive Q48.16.
+    private static void RequireNonNegativeFixed(float value, string name, List<string> errors) {
+        RequireNonNegative(
+            errors: errors,
+            name: name,
+            value: value
+        );
+
+        if (float.IsFinite(f: value) && (value > 0f) && (FixedQ4816.FromDouble(value: value) <= FixedQ4816.Zero)) {
+            errors.Add(item: $"{name} {value} is positive but quantizes to zero in Q48.16.");
+        }
+    }
     // The op→facet mapping: walks a COMPILED program's selected operations (never the authored list — compilation
     // already rejected an unknown/inadmissible opcode) and unions the facets each one reads. Speed/Turn are
     // structurally mandatory fields of every WorldMotion row (unconditional for every Motion-kind program) —

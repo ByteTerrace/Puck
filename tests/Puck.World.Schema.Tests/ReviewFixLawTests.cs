@@ -199,4 +199,19 @@ public sealed class ReviewFixLawTests {
 
         Assert.Equal(expected: FixedQ4816.FromDouble(value: 5d), actual: authored.GroundStick);
     }
+    [Fact]
+    public void ObstructionGrace_CompilesDirectlyToExactEngineTicksWithoutFixedPointRounding() {
+        var tuning = WorldMotionTuningFactory.Compile(
+            tuning: new WorldMotion(
+                Speed: new WorldSpeed(Value: 1f),
+                Turn: new WorldTurn(Rate: 1f),
+                ObstructionRaw: new WorldObstructionLatch(GraceSeconds: 0.1m)
+            ),
+            channels: WorldChannelTable.Empty,
+            dynamics: [],
+            simulationRateHz: 240
+        );
+
+        Assert.Equal(expected: 5_040UL, actual: tuning.Obstruction.GraceTicks);
+    }
 }

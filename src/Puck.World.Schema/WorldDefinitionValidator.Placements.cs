@@ -1,5 +1,6 @@
 using System.Globalization;
 using Puck.Abstractions.Presentation;
+using Puck.Maths;
 using Puck.World.Authoring;
 using Puck.SignedDistance;
 using Puck.Text;
@@ -351,7 +352,7 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        RequireNonNegative(
+        RequireNonNegativeFixed(
             errors: errors,
             name: $"{path}.maxAnchorDistance",
             value: facet.MaxAnchorDistance
@@ -363,17 +364,20 @@ public static partial class WorldDefinitionValidator {
             name: $"{path}.aimHalfAngleDegrees",
             value: facet.AimHalfAngleDegrees
         );
-        RequireNonNegative(
+        if (float.IsFinite(f: facet.AimHalfAngleDegrees) && (facet.AimHalfAngleDegrees > 0f) && (FixedQ4816.FromDouble(value: (facet.AimHalfAngleDegrees * (Math.PI / 180d))) <= FixedQ4816.Zero)) {
+            errors.Add(item: $"{path}.aimHalfAngleDegrees {facet.AimHalfAngleDegrees} is positive but quantizes to zero radians in Q48.16.");
+        }
+        RequireNonNegativeFixed(
             errors: errors,
             name: $"{path}.lengthRate",
             value: facet.LengthRate
         );
-        RequireNonNegative(
+        RequireNonNegativeFixed(
             errors: errors,
             name: $"{path}.minLength",
             value: facet.MinLength
         );
-        RequireNonNegative(
+        RequireNonNegativeFixed(
             errors: errors,
             name: $"{path}.releaseVelocityScale",
             value: facet.ReleaseVelocityScale
@@ -381,38 +385,52 @@ public static partial class WorldDefinitionValidator {
 
         // Every channel name is OPTIONAL (a null lane is simply unreachable), but an AUTHORED one must resolve —
         // the same "declared or the field is pointless" door a kit's own speed.held channel already opens.
-        if (facet.AttachChannel is { Length: > 0 } attachChannel) {
-            _ = RequireDeclared(
-                declaredSet: channelNames,
-                errors: errors,
-                field: string.Empty,
-                path: $"{path}.attachChannel",
-                rowNoun: "channel",
-                value: attachChannel
-            );
+        if (facet.AttachChannel is { } attachChannel) {
+            if (string.IsNullOrWhiteSpace(value: attachChannel)) {
+                errors.Add(item: $"{path}.attachChannel is empty — name a declared composition channel or omit it.");
+            } else {
+                _ = RequireDeclared(
+                    declaredSet: channelNames,
+                    errors: errors,
+                    field: string.Empty,
+                    path: $"{path}.attachChannel",
+                    rowNoun: "channel",
+                    value: attachChannel
+                );
+            }
         }
-        if (facet.DetachChannel is { Length: > 0 } detachChannel) {
-            _ = RequireDeclared(
-                declaredSet: channelNames,
-                errors: errors,
-                field: string.Empty,
-                path: $"{path}.detachChannel",
-                rowNoun: "channel",
-                value: detachChannel
-            );
+        if (facet.DetachChannel is { } detachChannel) {
+            if (string.IsNullOrWhiteSpace(value: detachChannel)) {
+                errors.Add(item: $"{path}.detachChannel is empty — name a declared composition channel or omit it.");
+            } else {
+                _ = RequireDeclared(
+                    declaredSet: channelNames,
+                    errors: errors,
+                    field: string.Empty,
+                    path: $"{path}.detachChannel",
+                    rowNoun: "channel",
+                    value: detachChannel
+                );
+            }
         }
-        if (facet.ReelChannel is { Length: > 0 } reelChannel) {
-            _ = RequireDeclared(
-                declaredSet: channelNames,
-                errors: errors,
-                field: string.Empty,
-                path: $"{path}.reelChannel",
-                rowNoun: "channel",
-                value: reelChannel
-            );
+        if (facet.ReelChannel is { } reelChannel) {
+            if (string.IsNullOrWhiteSpace(value: reelChannel)) {
+                errors.Add(item: $"{path}.reelChannel is empty — name a declared composition channel or omit it.");
+            } else {
+                _ = RequireDeclared(
+                    declaredSet: channelNames,
+                    errors: errors,
+                    field: string.Empty,
+                    path: $"{path}.reelChannel",
+                    rowNoun: "channel",
+                    value: reelChannel
+                );
+            }
         }
-        if (facet.ModeState is { Length: > 0 } modeState) {
-            if (!stateSlots.TryGetValue(
+        if (facet.ModeState is { } modeState) {
+            if (string.IsNullOrWhiteSpace(value: modeState)) {
+                errors.Add(item: $"{path}.modeState is empty — name a declared Counter slot or omit it.");
+            } else if (!stateSlots.TryGetValue(
                 key: modeState,
                 value: out var slot
             )) {

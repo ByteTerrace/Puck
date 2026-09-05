@@ -118,8 +118,8 @@ public abstract record WorldStateTransform {
     /// <param name="Key">The token key for key selection.</param>
     /// <param name="InsertFirst">Insert at the first position rather than the last.</param>
     /// <param name="Draw">A streamDraw site for random selection; absent for other selectors.</param>
-    /// <param name="Count">How many tokens move in this one transfer, 1..256, each selected afresh from what remains
-    /// (a five-card deal is one mutation); a key selection moves exactly one.</param>
+    /// <param name="Count">How many tokens move in this one transfer, 1..<see cref="WorldStateTokens.MaxTransferCount"/>,
+    /// each selected afresh from what remains (a five-card deal is one mutation); a key selection moves exactly one.</param>
     public sealed record Transfer(string From, string To, WorldZoneSelector Selector = WorldZoneSelector.Key,
         string? Key = null, bool InsertFirst = false, string? Draw = null, int Count = 1) : WorldStateTransform;
 

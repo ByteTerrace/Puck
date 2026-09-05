@@ -449,7 +449,7 @@
                     "default": 1.5707964
                   },
                   "contact": {
-                    "description": "The ceiling on how fast a measured ground-contact normal may turn the up axis \u2014 a discontinuity filter, not a smoothing rate: it should sit an order of magnitude above the fastest curvature this kit\u0027s own top speed can walk, so ordinary running adopts the surface exactly and only a collider crease is spread across a few ticks.",
+                    "description": "The ceiling on how fast a measured ground-contact normal may turn the up axis \u2014 a discontinuity filter, not a smoothing rate: it should sit an order of magnitude above the fastest curvature this kit\u0027s own top speed can walk, so ordinary running adopts the surface exactly and only a collider crease is spread across a few ticks. Both rates must remain positive after Q48.16 compilation.",
                     "type": "number",
                     "default": 6.2831855
                   }
@@ -465,7 +465,7 @@
                 ],
                 "properties": {
                   "displacement": {
-                    "description": "World units a body must move from where the witness last (re)latched before it is considered to have genuinely moved on.",
+                    "description": "World units a body must move from where the witness last (re)latched before it is considered to have genuinely moved on. Its squared comparison threshold must remain positive after Q48.16 compilation.",
                     "type": "number",
                     "default": 2
                   },
@@ -475,7 +475,7 @@
                     "default": 0.05
                   },
                   "graceSeconds": {
-                    "description": "How long, in real time, an un-refreshed latch survives a solver pass reporting no push at all \u2014 absorbs ordinary query noise near a surface (a gradient/quantization boundary, or a body settled into a wall/ground corner under blended contact geometry).",
+                    "description": "How long, in real time, an un-refreshed latch survives a solver pass reporting no push at all \u2014 absorbs ordinary query noise near a surface (a gradient/quantization boundary, or a body settled into a wall/ground corner under blended contact geometry). Must convert to a positive exact whole engine-tick count.",
                     "type": "number",
                     "default": 0.5
                   }
@@ -484,7 +484,7 @@
                 "default": null
               },
               "groundStick": {
-                "description": "The inward speed (world units/second) a grounded body on a curving surface (the up policy is not world-up) is held against while it is not already moving into it at least that fast \u2014 depenetration removes whatever the surface curves away, so a walker\u0027s own speed cannot carry it clean off a convex surface between ticks. Independent of Speed: scaling this bias with a kit\u0027s own resolved move speed over-corrects a shallow slope, where a larger inward bias converts into downhill drift under depenetration faster than it converts into held contact. The default reproduces the engine\u0027s old hardcoded constant.",
+                "description": "The inward speed (world units/second) a grounded body on a curving surface (the up policy is not world-up) is held against while it is not already moving into it at least that fast \u2014 depenetration removes whatever the surface curves away, so a walker\u0027s own speed cannot carry it clean off a convex surface between ticks. Independent of Speed: scaling this bias with a kit\u0027s own resolved move speed over-corrects a shallow slope, where a larger inward bias converts into downhill drift under depenetration faster than it converts into held contact. The default reproduces the engine\u0027s old hardcoded constant. Must remain positive after Q48.16 compilation.",
                 "type": "number",
                 "default": 2
               }
@@ -884,23 +884,23 @@
             ],
             "properties": {
               "maxAnchorDistance": {
-                "description": "The non-negative world-unit ceiling an attach aim searches along the body\u0027s facing direction \u2014 also the tether\u0027s rope length at attach (the resolved anchor\u0027s actual distance, always within this ceiling).",
+                "description": "The non-negative, fixed-representable world-unit ceiling an attach aim searches along the body\u0027s facing direction \u2014 also the tether\u0027s rope length at attach (the resolved anchor\u0027s actual distance, always within this ceiling).",
                 "type": "number"
               },
               "aimHalfAngleDegrees": {
-                "description": "The aim-assist cone half-angle, degrees, within [0, 180], an attach candidate\u0027s bearing must fall within around the body\u0027s facing. Honoured only by a collider-list contact provider; a field provider\u0027s own directed march has no candidate list to score bearings over and ignores it (see WorldSolidField.TryNearestSurfaceAlongDirection\u0027s remarks).",
+                "description": "The fixed-representable aim-assist cone half-angle, degrees, within [0, 180], an attach candidate\u0027s bearing must fall within around the body\u0027s facing. Honoured only by a collider-list contact provider; a field provider\u0027s own directed march has no candidate list to score bearings over and ignores it (see WorldSolidField.TryNearestSurfaceAlongDirection\u0027s remarks).",
                 "type": "number"
               },
               "lengthRate": {
-                "description": "The non-negative world-units-per-second the held ReelChannel reels the rope at \u2014 positive reels out, negative in (the channel\u0027s own sign selects direction; this is a magnitude).",
+                "description": "The non-negative, fixed-representable world-units-per-second the held ReelChannel reels the rope at \u2014 positive reels out, negative in (the channel\u0027s own sign selects direction; this is a magnitude).",
                 "type": "number"
               },
               "minLength": {
-                "description": "The non-negative rope-length floor a reel-in clamps to.",
+                "description": "The non-negative, fixed-representable rope-length floor a reel-in clamps to.",
                 "type": "number"
               },
               "releaseVelocityScale": {
-                "description": "The non-negative multiplier a detach applies to the body\u0027s velocity at the instant of release \u2014 1 (the default) preserves it exactly, below 1 dampens, above 1 boosts.",
+                "description": "The non-negative, fixed-representable multiplier a detach applies to the body\u0027s velocity at the instant of release \u2014 1 (the default) preserves it exactly, below 1 dampens, above 1 boosts.",
                 "type": "number",
                 "default": 1
               },

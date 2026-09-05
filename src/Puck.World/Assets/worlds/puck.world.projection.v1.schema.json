@@ -6174,7 +6174,7 @@
                     "default": 1.5707964
                   },
                   "contact": {
-                    "description": "The ceiling on how fast a measured ground-contact normal may turn the up axis \u2014 a discontinuity filter, not a smoothing rate: it should sit an order of magnitude above the fastest curvature this kit\u0027s own top speed can walk, so ordinary running adopts the surface exactly and only a collider crease is spread across a few ticks.",
+                    "description": "The ceiling on how fast a measured ground-contact normal may turn the up axis \u2014 a discontinuity filter, not a smoothing rate: it should sit an order of magnitude above the fastest curvature this kit\u0027s own top speed can walk, so ordinary running adopts the surface exactly and only a collider crease is spread across a few ticks. Both rates must remain positive after Q48.16 compilation.",
                     "type": "number",
                     "default": 6.2831855
                   }
@@ -6190,7 +6190,7 @@
                 ],
                 "properties": {
                   "displacement": {
-                    "description": "World units a body must move from where the witness last (re)latched before it is considered to have genuinely moved on.",
+                    "description": "World units a body must move from where the witness last (re)latched before it is considered to have genuinely moved on. Its squared comparison threshold must remain positive after Q48.16 compilation.",
                     "type": "number",
                     "default": 2
                   },
@@ -6200,7 +6200,7 @@
                     "default": 0.05
                   },
                   "graceSeconds": {
-                    "description": "How long, in real time, an un-refreshed latch survives a solver pass reporting no push at all \u2014 absorbs ordinary query noise near a surface (a gradient/quantization boundary, or a body settled into a wall/ground corner under blended contact geometry).",
+                    "description": "How long, in real time, an un-refreshed latch survives a solver pass reporting no push at all \u2014 absorbs ordinary query noise near a surface (a gradient/quantization boundary, or a body settled into a wall/ground corner under blended contact geometry). Must convert to a positive exact whole engine-tick count.",
                     "type": "number",
                     "default": 0.5
                   }
@@ -6209,7 +6209,7 @@
                 "default": null
               },
               "groundStick": {
-                "description": "The inward speed (world units/second) a grounded body on a curving surface (the up policy is not world-up) is held against while it is not already moving into it at least that fast \u2014 depenetration removes whatever the surface curves away, so a walker\u0027s own speed cannot carry it clean off a convex surface between ticks. Independent of Speed: scaling this bias with a kit\u0027s own resolved move speed over-corrects a shallow slope, where a larger inward bias converts into downhill drift under depenetration faster than it converts into held contact. The default reproduces the engine\u0027s old hardcoded constant.",
+                "description": "The inward speed (world units/second) a grounded body on a curving surface (the up policy is not world-up) is held against while it is not already moving into it at least that fast \u2014 depenetration removes whatever the surface curves away, so a walker\u0027s own speed cannot carry it clean off a convex surface between ticks. Independent of Speed: scaling this bias with a kit\u0027s own resolved move speed over-corrects a shallow slope, where a larger inward bias converts into downhill drift under depenetration faster than it converts into held contact. The default reproduces the engine\u0027s old hardcoded constant. Must remain positive after Q48.16 compilation.",
                 "type": "number",
                 "default": 2
               }
@@ -11977,7 +11977,7 @@
                                   "default": null
                                 },
                                 "count": {
-                                  "description": "How many tokens move in this one transfer, 1..256, each selected afresh from what remains (a five-card deal is one mutation); a key selection moves exactly one.",
+                                  "description": "How many tokens move in this one transfer, 1..MaxTransferCount, each selected afresh from what remains (a five-card deal is one mutation); a key selection moves exactly one.",
                                   "type": "integer",
                                   "default": 1
                                 }
@@ -12863,7 +12863,7 @@
                                             "default": null
                                           },
                                           "count": {
-                                            "description": "How many tokens move in this one transfer, 1..256, each selected afresh from what remains (a five-card deal is one mutation); a key selection moves exactly one.",
+                                            "description": "How many tokens move in this one transfer, 1..MaxTransferCount, each selected afresh from what remains (a five-card deal is one mutation); a key selection moves exactly one.",
                                             "type": "integer",
                                             "default": 1
                                           }

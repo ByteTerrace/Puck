@@ -48,7 +48,7 @@ namespace Puck.World;
 /// convex surface between ticks. Independent of <see cref="Speed"/>: scaling this bias with a kit's own resolved
 /// move speed over-corrects a shallow slope, where a larger inward bias converts into downhill drift under
 /// depenetration faster than it converts into held contact. The default reproduces the engine's old hardcoded
-/// constant.</param>
+/// constant. Must remain positive after Q48.16 compilation.</param>
 public sealed record WorldMotion(
     WorldSpeed Speed,
     WorldTurn Turn,
@@ -76,7 +76,7 @@ public sealed record WorldMotion(
 /// <param name="Contact">The ceiling on how fast a measured ground-contact normal may turn the up axis — a
 /// discontinuity filter, not a smoothing rate: it should sit an order of magnitude above the fastest curvature this
 /// kit's own top speed can walk, so ordinary running adopts the surface exactly and only a collider crease is spread
-/// across a few ticks.</param>
+/// across a few ticks. Both rates must remain positive after Q48.16 compilation.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldUpTurnRates(float Field = 1.5707963267948966f, float Contact = 6.283185307179586f) {
     /// <summary>Gets the rates every kit authoring none advances under.</summary>
@@ -87,14 +87,15 @@ public sealed record WorldUpTurnRates(float Field = 1.5707963267948966f, float C
 /// hasn't moved since, so a solver tick that happens not to re-register the push cannot flicker the witness back to
 /// "none" mid-obstruction.</summary>
 /// <param name="Displacement">World units a body must move from where the witness last (re)latched before it is
-/// considered to have genuinely moved on.</param>
+/// considered to have genuinely moved on. Its squared comparison threshold must remain positive after Q48.16
+/// compilation.</param>
 /// <param name="IdleThreshold">The raw <c>MoveAdvance</c>/<c>MoveStrafe</c> role-channel magnitude (each reads in
 /// <c>[-1, 1]</c>) below which the body counts as not actively driving.</param>
 /// <param name="GraceSeconds">How long, in real time, an un-refreshed latch survives a solver pass reporting no push
 /// at all — absorbs ordinary query noise near a surface (a gradient/quantization boundary, or a body settled into a
-/// wall/ground corner under blended contact geometry).</param>
+/// wall/ground corner under blended contact geometry). Must convert to a positive exact whole engine-tick count.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldObstructionLatch(float Displacement = 2f, float IdleThreshold = 0.05f, float GraceSeconds = 0.5f) {
+public sealed record WorldObstructionLatch(float Displacement = 2f, float IdleThreshold = 0.05f, decimal GraceSeconds = 0.5m) {
     /// <summary>Gets the latch every kit authoring none advances under.</summary>
     public static WorldObstructionLatch Default { get; } = new();
 }
@@ -343,6 +344,16 @@ public static class WorldMotionTuningFactory {
     /// divisor.</param>
     /// <returns>The compiled tuning.</returns>
     public static FixedMotionTuning Compile(WorldMotion tuning, WorldChannelTable channels, IReadOnlyList<WorldDynamicsRow> dynamics, int simulationRateHz) {
+        if (!FixedTickConversion.TryDurationEngineTicksExact(
+            seconds: tuning.Obstruction.GraceSeconds,
+            ticks: out var obstructionGraceTicks
+        )) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: tuning.Obstruction.GraceSeconds,
+                message: $"obstruction.graceSeconds does not convert to an exact whole engine tick across the {FixedTickConversion.TicksPerSecond} engine-tick bridge; WorldDefinitionValidator refuses it before compilation.",
+                paramName: nameof(tuning)
+            );
+        }
         var recencyFacts = new List<ActionFact>();
         var recencyWindows = new List<ulong>();
         var shaping = CompileShaping(
@@ -389,7 +400,7 @@ public static class WorldMotionTuningFactory {
             Obstruction: new FixedObstructionLatch(
                 DisplacementSquared: FixedQ4816.FromDouble(value: ((double)tuning.Obstruction.Displacement * tuning.Obstruction.Displacement)),
                 IdleThreshold: FixedQ4816.FromDouble(value: tuning.Obstruction.IdleThreshold),
-                GraceTicks: FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: tuning.Obstruction.GraceSeconds))
+                GraceTicks: obstructionGraceTicks
             ),
             GroundStick: FixedQ4816.FromDouble(value: tuning.GroundStick)
         );

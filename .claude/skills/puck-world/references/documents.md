@@ -1115,7 +1115,7 @@ one inside the other — the shrink region has no reach into where the restore r
 restore region has no reach back into the shrink region's own interior — so leaving one always reaches
 the other's edge before either could re-trigger itself. `Server.WorldBody.Scale` scales collider
 volumes, move speed/turn rate, hold probes/standoff/reach, a hold's own gravity fall/rise and its
-vertical-channel envelope, a wall hold's travel speed, and a pull's own rate; the client multiplies the same live cell into the
+vertical-channel envelope (including a medium's idle/settle target), a wall hold's travel speed, and a pull's own rate; the client multiplies the same live cell into the
 rendered rig AND the seat chase camera's orbit distance and look-at height
 (`Client.WorldFramePresenter.ResolveCamera`), so a shrunk body stays framed instead of shrinking to a
 speck on screen. A `tabletop` placement (a solid pedestal table, 1.2 m clearance under its top) carries
@@ -1223,13 +1223,16 @@ normal, may turn the body's up axis) and `obstruction`
 (`WorldObstructionLatch`: `displacement`/`idleThreshold`/`graceSeconds`, the
 non-walkable contact witness's persistence — how far the body must move to
 count as moved on, the driven-input floor below which it counts as idle, and
-how long an unrefreshed latch survives a solver pass reporting no push). A
-third scalar, `groundStick`, is the inward speed (world units/second) a
+how long an unrefreshed latch survives a solver pass reporting no push). The
+positive fixed rates must survive Q48.16 compilation, `displacement` must do
+so after squaring, and `graceSeconds` must be a positive exact whole engine-
+tick duration. A third scalar, `groundStick`, is the inward speed (world
+units/second) a
 grounded body on a curving surface is held against; it is independent of
 `Speed` — a kit's own resolved move speed measurably over-corrects a shallow
 slope climb (the bias converts to downhill drift under depenetration faster
 than to held contact) — and also defaults to the engine's old constant.
-Submerged locomotion is a kit authoring a `bond: "Medium"` hold row; a kart
+In-medium locomotion is a kit authoring a `bond: "Medium"` hold row; a kart
 is a kit whose shaping table carries an `across` row.
 
 **`shaping` (`WorldShaping[]`) — the unified velocity-shaping table.** One
@@ -1576,7 +1579,9 @@ and cone (`maxAnchorDistance`/`aimHalfAngleDegrees`), the rope
 three channel names, and an optional `modeState` counter-slot name the facet
 writes `1`/`0` to while attached/not — resolved to an ordinal at kit compile
 time, the camera program's `select` op keys off it like any `state.<row>`
-value. Surface holds are not authored here.
+value. Positive numeric values must survive their Q48.16 compilation as
+nonzero (including the cone's degree-to-radian conversion). Surface holds are
+not authored here.
 
 **Body facts on the wire (`BodyFacts`, `Puck.Physics.Motion`).** The engine
 publishes each body's per-tick fact set on `EntitySnapshot.Facts` — one bit
