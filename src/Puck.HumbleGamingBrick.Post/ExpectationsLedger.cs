@@ -20,6 +20,8 @@ internal static partial class ExpectationsLedger {
         public string? Reason { get; init; }
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public int? DiffPixels { get; init; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ExpectedImageHash { get; init; }
     }
 
     [JsonSourceGenerationOptions(WriteIndented = true)]
@@ -51,6 +53,7 @@ internal static partial class ExpectationsLedger {
         foreach (var dto in dtos) {
             var entry = new LedgerEntry(
                 DiffPixels: dto.DiffPixels,
+                ExpectedImageHash: dto.ExpectedImageHash,
                 Model: dto.Model,
                 Outcome: ParseOutcome(text: dto.Outcome),
                 Path: dto.Path,
@@ -60,16 +63,29 @@ internal static partial class ExpectationsLedger {
                 Suite: dto.Suite
             );
 
-            entries[entry.Key] = entry;
+            if (!entries.TryAdd(
+                key: entry.Key,
+                value: entry
+            )) {
+                // A duplicate (suite, path, model) row folds silently to whichever one lands last unless this throws —
+                // the file is generated and sorted by that same key, so two rows sharing it is always a bug, either in
+                // whatever produced the file or in a hand edit, never a legitimate shape to tolerate.
+                throw new InvalidDataException(message: $"Duplicate ledger entry for suite '{entry.Suite}', path '{entry.Path}', model '{entry.Model}' in {path}.");
+            }
         }
 
         return entries;
     }
+    /// <summary>Computes a file's ledger hash.</summary>
+    /// <param name="path">The file's absolute path.</param>
+    /// <returns>The lowercase hexadecimal FNV-1a hash of the file's bytes.</returns>
+    public static string HashFile(string path) =>
+        Fnv1aHash.Compute(values: File.ReadAllBytes(path: path)).ToString(format: "x16");
     /// <summary>Computes a ROM image's ledger hash.</summary>
     /// <param name="romPath">The ROM's absolute path.</param>
     /// <returns>The lowercase hexadecimal FNV-1a hash of the file's bytes.</returns>
     public static string HashRom(string romPath) =>
-        Fnv1aHash.Compute(values: File.ReadAllBytes(path: romPath)).ToString(format: "x16");
+        HashFile(path: romPath);
     /// <summary>Renders a probe kind as the ledger's stable string form.</summary>
     public static string ProbeName(ProbeKind probe) =>
         probe switch {
@@ -101,6 +117,7 @@ internal static partial class ExpectationsLedger {
         )
             .Select(selector: static entry => new EntryDto {
                 DiffPixels = entry.DiffPixels,
+                ExpectedImageHash = entry.ExpectedImageHash,
                 Model = entry.Model,
                 Outcome = RenderOutcome(outcome: entry.Outcome),
                 Path = entry.Path,
@@ -129,6 +146,7 @@ internal static partial class ExpectationsLedger {
             "pass" => LedgerOutcome.Pass,
             "fail" => LedgerOutcome.Fail,
             "unrunnable" => LedgerOutcome.Unrunnable,
+            "inconclusive" => LedgerOutcome.Inconclusive,
             _ => throw new InvalidDataException(message: $"Unknown ledger outcome '{text}'."),
         };
     private static string RenderOutcome(LedgerOutcome outcome) =>
@@ -136,6 +154,7 @@ internal static partial class ExpectationsLedger {
             LedgerOutcome.Pass => "pass",
             LedgerOutcome.Fail => "fail",
             LedgerOutcome.Unrunnable => "unrunnable",
+            LedgerOutcome.Inconclusive => "inconclusive",
             _ => throw new NotSupportedException(message: $"Unhandled ledger outcome '{outcome}'."),
         };
 }

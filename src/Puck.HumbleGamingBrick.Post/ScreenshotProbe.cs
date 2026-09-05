@@ -14,6 +14,12 @@ namespace Puck.HumbleGamingBrick.Post;
 /// divergence or a resolution mismatch, both reported as a failure.
 /// </summary>
 internal static class ScreenshotProbe {
+    /// <summary>Resolves a screenshot case's expected image: the first of <see cref="LedgerCase.ExpectedImageCandidates"/>
+    /// that exists on disk.</summary>
+    /// <param name="ledgerCase">The case to resolve.</param>
+    /// <returns>The winning candidate's path, or <see langword="null"/> when none exist (or none are configured).</returns>
+    public static string? ResolveExpectedImage(LedgerCase ledgerCase) =>
+        ledgerCase.ExpectedImageCandidates?.FirstOrDefault(predicate: File.Exists);
     /// <summary>Runs a case to a verdict.</summary>
     /// <param name="ledgerCase">The case to run; <see cref="LedgerCase.ExpectedImageCandidates"/> must be non-empty.</param>
     /// <returns>The probe outcome, carrying the differing-pixel count on a pixel mismatch.</returns>
@@ -30,7 +36,7 @@ internal static class ScreenshotProbe {
             );
         }
 
-        var imagePath = candidates.FirstOrDefault(predicate: File.Exists);
+        var imagePath = ResolveExpectedImage(ledgerCase: ledgerCase);
 
         if (imagePath is null) {
             return new ProbeOutcome(
@@ -45,11 +51,19 @@ internal static class ScreenshotProbe {
             model: ledgerCase.Model,
             rom: rom
         );
+        using var liveness = LivenessGate.Attach(cpu: machine.GetRequiredService<Sm83>());
 
         PostMachine.RunFrames(
             frames: ledgerCase.FrameCap,
             instance: machine
         );
+
+        if (!liveness.IsAlive) {
+            return new ProbeOutcome(
+                Detail: liveness.Reason,
+                Verdict: ProbeVerdict.Inconclusive
+            );
+        }
 
         var framebuffer = machine.GetRequiredService<IFramebuffer>();
         var actualRgba = FramebufferRgba.Pack(pixels: (ledgerCase.Palette switch {

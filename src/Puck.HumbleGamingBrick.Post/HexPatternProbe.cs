@@ -10,7 +10,11 @@ namespace Puck.HumbleGamingBrick.Post;
 /// screen row (20 digits at 160px wide) continues into the next row exactly as the reference tester's own pointer
 /// arithmetic does. A pixel is expected pure white or pure black once the low 3 bits of each channel are masked off
 /// (gambatte's own comparison mask), which is why this probe needs no CGB color-space conversion: a genuinely gray or
-/// black pixel maps to the same masked value whether or not it passed through gambatte's CGB mix.
+/// black pixel maps to the same masked value whether or not it passed through gambatte's CGB mix. A pattern character
+/// with no glyph is <see cref="ProbeVerdict.Inconclusive"/> rather than a silent early pass. The cell right after the
+/// last digit is deliberately NOT required to be clear: several real cases (the <c>cgbpal_m3</c>/<c>display_startstate</c>
+/// families among them) tile further hex-shaped content immediately past their own result digits as part of the
+/// screen they draw, so that cell being occupied is not evidence of a truncated pattern.
 /// </summary>
 internal static class HexPatternProbe {
     private const uint ChannelMask = 0xF8F8F8;
@@ -72,7 +76,10 @@ internal static class HexPatternProbe {
             var glyph = GlyphFor(character: pattern[digit]);
 
             if (glyph is null) {
-                break;
+                return new ProbeOutcome(
+                    Detail: $"pattern '{pattern}' has no glyph for digit {digit} ('{pattern[digit]}')",
+                    Verdict: ProbeVerdict.Inconclusive
+                );
             }
 
             var baseOffset = (digit * GlyphSize);

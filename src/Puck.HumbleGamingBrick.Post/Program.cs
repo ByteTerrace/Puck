@@ -3,9 +3,10 @@ using Puck.HumbleGamingBrick.Post;
 // Puck.HumbleGamingBrick.Post — the HumbleGamingBrick machine's power-on self-test and the primary way the
 // machine is validated. It runs an ordered battery of self-checking stages and exits 0 (all passed), 1 (a check failed),
 // or 2 (a stage could not run). There is no rich CLI: hand-parsed knobs for where artifacts land, an optional
-// tier/name subset for iterating, and the ledger controls (--record, --require-assets). Tier A runs anywhere on a
-// synthetic ROM; Tier B needs the reference corpus, found via the PUCK_GB_TESTROMS environment variable and skipped
-// when absent; Tier C (the cross-machine serial link) is self-contained like Tier A and runs anywhere.
+// tier/name subset for iterating, and the ledger controls (--record, --require-assets, --record-accept-regressions,
+// --record-allow-shrink). Tier A runs anywhere on a synthetic ROM; Tier B needs the reference corpus, found via the
+// PUCK_GB_TESTROMS environment variable and skipped when absent; Tier C (the cross-machine serial link) is
+// self-contained like Tier A and runs anywhere.
 
 if (Diagnostics.TryRun(
     args: args,
@@ -46,6 +47,8 @@ var sstRoot = CommandLineArguments.ResolveDirectoryRoot(
 );
 // --record regenerates Expectations.json from measured outcomes instead of gating against it; --require-assets turns
 // a ledger-recorded ROM that is absent from the resolved corpus into an infrastructure failure instead of a skip.
+// --record-accept-regressions and --record-allow-shrink acknowledge the two dangerous shapes a recording pass can
+// produce (see the write gate below) — omitting them is the safe default, not an oversight to work around.
 var recordMode = args.Contains(
     comparer: StringComparer.OrdinalIgnoreCase,
     value: "--record"
@@ -53,6 +56,14 @@ var recordMode = args.Contains(
 var requireAssets = args.Contains(
     comparer: StringComparer.OrdinalIgnoreCase,
     value: "--require-assets"
+);
+var recordAcceptRegressions = args.Contains(
+    comparer: StringComparer.OrdinalIgnoreCase,
+    value: "--record-accept-regressions"
+);
+var recordAllowShrink = args.Contains(
+    comparer: StringComparer.OrdinalIgnoreCase,
+    value: "--record-allow-shrink"
 );
 var ledgerPath = ExpectationsLedger.ResolvePath();
 var stages = PostStages.Create()
@@ -82,37 +93,120 @@ var report = new PostBattery<PostContext>(
 report.Write(artifactsDirectory: artifactsDirectory);
 
 if (recordMode) {
-    // A recording run rewrites the ledger from what it measured, so a run that only selected part of the battery
-    // must merge over the entries already on file — replacing wholesale would delete every suite the filter did not
-    // select, silently discarding the ratchet for the rest of the corpus. An unfiltered run replaces wholesale, which
-    // is what lets it drop entries for ROMs the corpus no longer carries.
-    var isFiltered = ((tierFilter is not null) || (nameFilter is not null));
-    var recorded = context.RecordedEntries;
-    var entries = ((IEnumerable<LedgerEntry>)recorded);
+    var infraStages = report.Results
+        .Where(predicate: static result => (result.Outcome.Verdict == PostVerdict.Infra))
+        .Select(selector: static result => result.Name)
+        .ToArray();
 
-    if (isFiltered) {
-        // A suite this run actually measured is replaced wholesale (an entry the new discovery no longer produces
-        // must not survive as a stale, never-checked row); a suite this run did not touch keeps its existing rows.
-        var measuredSuites = new HashSet<string>(
-            collection: recorded.Select(selector: static entry => entry.Suite),
-            comparer: StringComparer.Ordinal
-        );
-        var merged = ExpectationsLedger
-            .Load(path: ledgerPath)
-            .Where(predicate: pair => !measuredSuites.Contains(item: pair.Value.Suite))
-            .ToDictionary(
-            elementSelector: static pair => pair.Value,
-            keySelector: static pair => pair.Key
-        );
+    if (infraStages.Length > 0) {
+        Console.Error.WriteLine(value: $"--record refused: {infraStages.Length} stage(s) ended in infrastructure failure ({string.Join(separator: ", ", values: infraStages)}); a ledger built from an incomplete run is worse than no ledger at all.");
 
-        foreach (var entry in recorded) {
-            merged[entry.Key] = entry;
-        }
-
-        entries = merged.Values;
+        return 2;
     }
 
-    var written = entries.ToArray();
+    var recorded = context.RecordedEntries;
+    var duplicateGroup = recorded
+        .GroupBy(keySelector: static entry => entry.Key)
+        .FirstOrDefault(predicate: static group => (group.Count() > 1));
+
+    if (duplicateGroup is not null) {
+        Console.Error.WriteLine(value: $"--record refused: {duplicateGroup.Count()} measured entries share suite '{duplicateGroup.Key.Suite}', path '{duplicateGroup.Key.Path}', model '{duplicateGroup.Key.Model}' — two stages are tagging the same case.");
+
+        return 2;
+    }
+
+    // A suite this run actually measured is replaced wholesale (an entry the new discovery no longer produces must
+    // not survive as a stale, never-checked row); a suite this run did not touch (an unselected --tier/--filter, or —
+    // legitimately — a suite this corpus checkout does not carry) keeps its existing rows untouched and out of the
+    // diff below.
+    var isFiltered = ((tierFilter is not null) || (nameFilter is not null));
+    var measuredSuites = new HashSet<string>(
+        collection: recorded.Select(selector: static entry => entry.Suite),
+        comparer: StringComparer.Ordinal
+    );
+    var existing = ExpectationsLedger.Load(path: ledgerPath);
+    var merged = existing
+        .Where(predicate: pair => !measuredSuites.Contains(item: pair.Value.Suite))
+        .ToDictionary(
+        elementSelector: static pair => pair.Value,
+        keySelector: static pair => pair.Key
+    );
+
+    foreach (var entry in recorded) {
+        merged[entry.Key] = entry;
+    }
+
+    // A suite this run never measured is carried into merged unchanged (same key, same entry), so diffing every
+    // existing row against merged only ever surfaces a real difference for a suite this run actually touched.
+    // Fail -> Pass is the one direction a recording pass is trusted to apply on its own: it is always a deliberate
+    // fix landing in the same change. Every other change of outcome — including a recorded Fail losing its signature
+    // entirely into Inconclusive, which the corroboration/liveness gates above can produce on a case whose old
+    // register-dump/pixel/audio verdict was never actually corroborated — is a regression: a resolved verdict either
+    // moved to a different resolved verdict, or was lost to "we no longer know," and both need the same
+    // acknowledgment a Pass regressing does.
+    var regressed = new List<string>();
+    var ratcheted = new List<string>();
+    var dropped = new List<string>();
+
+    foreach (var old in existing.Values) {
+        if (!merged.TryGetValue(
+            key: old.Key,
+            value: out var current
+        )) {
+            dropped.Add(item: $"{old.Suite}/{old.Path}[{old.Model}] recorded {old.Outcome}, no longer discovered");
+
+            continue;
+        }
+
+        if (old.Outcome == current.Outcome) {
+            continue;
+        }
+
+        if (
+            (old.Outcome == LedgerOutcome.Fail) &&
+            (current.Outcome == LedgerOutcome.Pass)
+        ) {
+            ratcheted.Add(item: $"{old.Suite}/{old.Path}[{old.Model}] recorded fail -> now pass");
+        } else {
+            regressed.Add(item: $"{old.Suite}/{old.Path}[{old.Model}] recorded {old.Outcome} -> now {current.Outcome} ({current.Reason})");
+        }
+    }
+
+    foreach (var line in ratcheted) {
+        Console.Out.WriteLine(value: $"ratchet: {line}");
+    }
+
+    foreach (var line in regressed) {
+        Console.Out.WriteLine(value: $"regression: {line}");
+    }
+
+    foreach (var line in dropped) {
+        Console.Out.WriteLine(value: $"dropped: {line}");
+    }
+
+    var refusals = new List<string>();
+
+    if (
+        (regressed.Count > 0) &&
+        !recordAcceptRegressions
+    ) {
+        refusals.Add(item: $"{regressed.Count} case(s) regressed from a recorded verdict (pass --record-accept-regressions to acknowledge)");
+    }
+
+    if (
+        (dropped.Count > 0) &&
+        !recordAllowShrink
+    ) {
+        refusals.Add(item: $"{dropped.Count} recorded case(s) are no longer discovered (pass --record-allow-shrink to acknowledge)");
+    }
+
+    if (refusals.Count > 0) {
+        Console.Error.WriteLine(value: $"--record refused: {string.Join(separator: "; ", values: refusals)}.");
+
+        return 2;
+    }
+
+    var written = merged.Values.ToArray();
 
     ExpectationsLedger.Save(
         entries: written,

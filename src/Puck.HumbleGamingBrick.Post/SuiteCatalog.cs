@@ -1014,15 +1014,19 @@ internal static class SuiteCatalog {
                 path1: directory,
                 path2: (stem + ".png")
             );
-
-            if (!File.Exists(path: image)) {
-                continue;
-            }
-
             var relativePath = Rel(
                 fullPath: rom,
                 root: suiteRoot
             );
+
+            if (!File.Exists(path: image)) {
+                const string reason = "no expected screenshot shipped beside this ROM";
+
+                cases.Add(item: new LedgerCase(Disposition: CaseDisposition.Unrunnable, FrameCap: TurtleFrameCap, FullPath: rom, Model: ConsoleModel.DmgC, Probe: ProbeKind.Screenshot, RelativePath: relativePath, Suite: "turtle-tests", UnrunnableReason: reason));
+                cases.Add(item: new LedgerCase(Disposition: CaseDisposition.Unrunnable, FrameCap: TurtleFrameCap, FullPath: rom, Model: ConsoleModel.CgbE, Probe: ProbeKind.Screenshot, RelativePath: relativePath, Suite: "turtle-tests", UnrunnableReason: reason));
+
+                continue;
+            }
 
             cases.Add(item: new LedgerCase(ExpectedImageCandidates: [image], FrameCap: TurtleFrameCap, FullPath: rom, Model: ConsoleModel.DmgC, Probe: ProbeKind.Screenshot, RelativePath: relativePath, Suite: "turtle-tests"));
             cases.Add(item: new LedgerCase(ExpectedImageCandidates: [image], FrameCap: TurtleFrameCap, FullPath: rom, Model: ConsoleModel.CgbE, Probe: ProbeKind.Screenshot, RelativePath: relativePath, Suite: "turtle-tests"));
