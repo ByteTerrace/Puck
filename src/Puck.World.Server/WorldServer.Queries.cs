@@ -422,9 +422,6 @@ public sealed partial class WorldServer {
     // Shared by both sides of a compareState conjunct — the primary operand and, when present, the comparand — so
     // the two reads can never diverge in how a reserved channel or a declared row resolves to a live fact.
     private WorldFact ReadWorldFact(CompiledWorldOperand operand, ulong tick) => operand.Kind switch {
-        WorldRuleFactKind.Social => Finite(ReadSocialFact(operand.Social!.Value, tick), operand.ValueKind),
-        WorldRuleFactKind.SocialClock => Finite(SocialInteger(m_social?.EngineTick ?? 0), CellKind.Int),
-        WorldRuleFactKind.SocialResult => Finite(m_lastSocialResult, CellKind.Int),
         WorldRuleFactKind.Phase => Finite(ReadPhaseFact(operand, tick), CellKind.Int),
         WorldRuleFactKind.Board => Finite(ReadBoardFact(operand, tick), CellKind.Int),
         WorldRuleFactKind.Pattern => Finite(ReadPatternFact(operand, tick), CellKind.Int),

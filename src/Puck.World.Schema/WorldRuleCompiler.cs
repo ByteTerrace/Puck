@@ -64,9 +64,6 @@ public static partial class WorldRuleCompiler {
         detail: "an effect row is null"
     ),
         ActionEffect.TransformState transform => ResolveStateTransform(transform.Transform, ruleName, definition),
-        ActionEffect.ObserveSocial observe => ResolveSocialObservation(observe.Evidence, ruleName, definition),
-        ActionEffect.ForgetSocial forget => new CompiledWorldEffect(WorldRuleEffectKind.ForgetSocial, string.Empty, string.Empty, default, 0, null,
-            "forgetSocial", SocialRelationship: ResolveSocialRelationship(forget.Relationship, ruleName, definition)),
         ActionEffect.SetState set => ResolveWrite(
         rowName: set.State,
         key: set.Key,
@@ -2211,7 +2208,6 @@ public static partial class WorldRuleCompiler {
             );
         } finally {
             s_bindingScope = null;
-            s_socialPolicy = null;
         }
     }
     /// <summary>Compiles every rule in the definition's <c>rules</c> section, in document order.</summary>
@@ -2455,7 +2451,6 @@ public static partial class WorldRuleCompiler {
                 );
             } finally {
                 s_bindingScope = null;
-                s_socialPolicy = null;
             }
         }
 

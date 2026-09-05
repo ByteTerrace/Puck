@@ -165,18 +165,6 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
             var diameter = ((2L * paint.Radius) + 1L);
             cost = SaturatingAdd(left: cost, right: SaturatingMultiply(left: diameter, right: SaturatingMultiply(left: diameter, right: diameter)));
         }
-        if (effect.SocialRelationship is { } relationship) {
-            cost = SaturatingAdd(cost, SocialRelationshipCost(relationship, definition));
-        }
-        if (effect.SocialObservation is { } social) {
-            cost = SaturatingAdd(cost, SocialRelationshipCost(social.Relationship, definition));
-            cost = SaturatingAdd(cost, SocialEntityCost(social.Origin, definition));
-            if (social.Source is { } sourceEntity) { cost = SaturatingAdd(cost, SocialEntityCost(sourceEntity, definition)); }
-            cost = SaturatingAdd(cost, ExpressionCost(social.Sequence, definition));
-            cost = SaturatingAdd(cost, ExpressionCost(social.OccurredAt, definition));
-            cost = SaturatingAdd(cost, ExpressionCost(social.Value, definition));
-            cost = SaturatingAdd(cost, ExpressionCost(social.Quality, definition));
-        }
         if (effect.Effects is { } main) {
             var mainCost = EffectsCost(effects: main, definition: definition);
             var failureCost = EffectsCost(effects: (effect.OnFailure ?? []), definition: definition);
@@ -252,7 +240,6 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
     }
 
     private static long OperandCost(CompiledWorldOperand operand, WorldDefinition definition) {
-        if (operand.Social is { } social) { return SocialRelationshipCost(social.Relationship, definition); }
         if (operand.Board is { } board) {
             var visits = board.Kind switch {
                 WorldBoardQueryKind.Line => (long)board.Topology.CellCount * board.Topology.DirectionCount * (board.Length + 2),
@@ -281,13 +268,6 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
 
         return 1L;
     }
-
-    private static long SocialRelationshipCost(CompiledWorldSocialRelationship relationship, WorldDefinition definition) =>
-        SaturatingAdd(1, SaturatingAdd(SocialEntityCost(relationship.Observer, definition), SocialEntityCost(relationship.Subject, definition)));
-
-    private static long SocialEntityCost(CompiledWorldSocialEntity entity, WorldDefinition definition) =>
-        entity.Body is { Kind: CompiledBodyRefKind.ArgMax or CompiledBodyRefKind.ArgMin, Row: { } row }
-            ? RowCapacity(definition, row) : 1;
 
     private static long SaturatingAdd(long left, long right) => ((left > (long.MaxValue - right)) ? long.MaxValue : (left + right));
     private static long SaturatingMultiply(long left, long right) => ((left == 0L) || (right == 0L))

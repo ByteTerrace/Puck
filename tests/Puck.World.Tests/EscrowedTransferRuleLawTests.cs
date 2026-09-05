@@ -47,11 +47,25 @@ public sealed class EscrowedTransferRuleLawTests {
     private static ActionEffect.AddState AddNegated(string state, string key, string fromState) => new(
         State: state, Key: key, Expression: new WorldValueExpression([new WorldValueToken.State(Name: fromState), new WorldValueToken.Negate()])
     );
-    // The bps-net-of-fee/fee-only split every settle arm needs — a live escrowed amount times (10000 - bps) or bps,
-    // divided by 10000, wholly in the destination row's own Int domain.
-    private static WorldValueExpression BpsShare(string fromState, int share) => new([
-        new WorldValueToken.State(Name: fromState), new WorldValueToken.Constant(Value: share), new WorldValueToken.Multiply(),
+    // The fee/net-of-fee split every settle arm needs. Both sides derive from the SAME single division so
+    // fee + net always equals amount exactly: net is amount minus the one computed fee, never a second,
+    // independently truncated division (amount*bps/10000 and amount*(10000-bps)/10000 can each round down, so their
+    // sum can fall short of amount). "fromState" reads a live row's slot cell; "fromValue" splits a compile-time
+    // authored constant instead (the buyout's fixed price).
+    private static WorldValueToken AmountToken(string? fromState, long? fromValue) => (fromState, fromValue) switch {
+        ({ } state, null) => new WorldValueToken.State(Name: state),
+        (null, { } value) => new WorldValueToken.Constant(Value: value),
+        _ => throw new System.ArgumentException("exactly one of fromState/fromValue"),
+    };
+    private static WorldValueExpression Fee(int bps, string? fromState = null, long? fromValue = null) => new([
+        AmountToken(fromState, fromValue), new WorldValueToken.Constant(Value: bps), new WorldValueToken.Multiply(),
         new WorldValueToken.Constant(Value: 10_000m), new WorldValueToken.Divide(),
+    ]);
+    private static WorldValueExpression NetOfFee(int bps, string? fromState = null, long? fromValue = null) => new([
+        AmountToken(fromState, fromValue),
+        AmountToken(fromState, fromValue), new WorldValueToken.Constant(Value: bps), new WorldValueToken.Multiply(),
+        new WorldValueToken.Constant(Value: 10_000m), new WorldValueToken.Divide(),
+        new WorldValueToken.Subtract(),
     ]);
     private static ActionPredicate.CompareState Cmp(string state, ActionStateComparison comparison, decimal? value = null, string? comparandState = null, string? comparandKey = null, string? key = null) =>
         new(State: state, Comparison: comparison, Value: value, Key: key, ComparandState: comparandState, ComparandKey: comparandKey);
@@ -135,8 +149,8 @@ public sealed class EscrowedTransferRuleLawTests {
                     Effects: [
                         new ActionEffect.AddState(State: "goods", Key: $"{WorldRuleFacts.CellKeyPrefix}auctionCurrentBidder:{WorldStateRow.SlotKey}", FromState: "auctionEscrowItem"),
                         Set(state: "auctionEscrowItem", value: 0),
-                        new ActionEffect.AddState(State: "coins", Key: "0", Expression: BpsShare(fromState: "auctionEscrowCoin", share: (10_000 - FeeBasisPoints))),
-                        new ActionEffect.AddState(State: "feeReserve", Expression: BpsShare(fromState: "auctionEscrowCoin", share: FeeBasisPoints)),
+                        new ActionEffect.AddState(State: "coins", Key: "0", Expression: NetOfFee(bps: FeeBasisPoints, fromState: "auctionEscrowCoin")),
+                        new ActionEffect.AddState(State: "feeReserve", Expression: Fee(bps: FeeBasisPoints, fromState: "auctionEscrowCoin")),
                         Set(state: "auctionEscrowCoin", value: 0),
                         Set(state: "auctionCurrentBidder", value: -1),
                         Set(state: "auctionActive", value: 0),
@@ -181,8 +195,8 @@ public sealed class EscrowedTransferRuleLawTests {
                     Mode: ActionTriggerMode.Edge,
                     Effects: [
                         Add(state: "coins", value: -BuyoutPrice, key: "3"),
-                        Add(state: "coins", value: (BuyoutPrice * (10_000 - FeeBasisPoints)) / 10_000, key: "0"),
-                        Add(state: "feeReserve", value: (BuyoutPrice * FeeBasisPoints) / 10_000),
+                        new ActionEffect.AddState(State: "coins", Key: "0", Expression: NetOfFee(bps: FeeBasisPoints, fromValue: BuyoutPrice)),
+                        new ActionEffect.AddState(State: "feeReserve", Expression: Fee(bps: FeeBasisPoints, fromValue: BuyoutPrice)),
                         AddFrom(state: "goods", key: "3", fromState: "buyoutEscrowItem"),
                         Set(state: "buyoutEscrowItem", value: 0),
                         Set(state: "buyoutActive", value: 0),
@@ -289,6 +303,32 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(expected: 1L, actual: Read(definition: fixture.Server.Definition, row: "goods", key: "0")); // the seller's own remaining unit (unlisted, for the buyout demo)
         Assert.Equal(expected: 135L, actual: Read(definition: fixture.Server.Definition, row: "coins", key: "0")); // 150 net of 10% fee
         Assert.Equal(expected: 15L, actual: ReadSlot(definition: fixture.Server.Definition, row: "feeReserve"));
+    }
+    // A control at a bid the 10% fee split does not divide evenly (155): the seller's net share and the fee share
+    // must still sum to exactly the escrowed amount, proving the split never destroys or manufactures a coin.
+    [Fact]
+    public void EnglishAuction_OddBid_SettlesWithoutLosingOrMintingACoin() {
+        using var fixture = Fixtures.FreshServer(definition: BuildDocument());
+        long TotalCoins() => Read(definition: fixture.Server.Definition, row: "coins", key: "1")
+            + Read(definition: fixture.Server.Definition, row: "coins", key: "2")
+            + ReadSlot(definition: fixture.Server.Definition, row: "auctionEscrowCoin")
+            + ReadSlot(definition: fixture.Server.Definition, row: "feeReserve")
+            + Read(definition: fixture.Server.Definition, row: "coins", key: "0");
+        var before = TotalCoins();
+
+        Write(fixture: fixture, row: "auctionListRequest", value: 1);
+        fixture.Step();
+        Write(fixture: fixture, row: "auctionBidRequest1", value: 155);
+        fixture.Step();
+
+        for (var index = 0; (index < 25); index++) {
+            fixture.Step();
+        }
+
+        Assert.Equal(expected: 0L, actual: ReadSlot(definition: fixture.Server.Definition, row: "auctionActive"));
+        Assert.Equal(expected: 140L, actual: Read(definition: fixture.Server.Definition, row: "coins", key: "0")); // 155 - floor(155*10%)
+        Assert.Equal(expected: 15L, actual: ReadSlot(definition: fixture.Server.Definition, row: "feeReserve")); // floor(155*10%)
+        Assert.Equal(expected: before, actual: TotalCoins());
     }
     [Fact]
     public void EnglishAuction_NoBidThenDeadline_ReturnsTheItemToTheSeller() {

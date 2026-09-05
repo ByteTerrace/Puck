@@ -462,56 +462,6 @@
   "interactions": {
     "interactions": [
       {
-        "coOccurrence": "Distance",
-        "effects": [
-          {
-            "$type": "observeSocial",
-            "evidence": {
-              "aspect": "meet",
-              "occurredAt": {
-                "tokens": [
-                  {
-                    "$type": "socialClock"
-                  }
-                ]
-              },
-              "origin": {
-                "body": "right"
-              },
-              "relationship": {
-                "dimension": "affection",
-                "observer": {
-                  "body": "left"
-                },
-                "subject": {
-                  "body": "right"
-                }
-              },
-              "sequence": {
-                "tokens": [
-                  {
-                    "$type": "socialClock"
-                  }
-                ]
-              },
-              "value": {
-                "tokens": [
-                  {
-                    "$type": "constant",
-                    "value": 0.5
-                  }
-                ]
-              }
-            }
-          }
-        ],
-        "left": "hound",
-        "mode": "Edge",
-        "name": "hounds-meet",
-        "range": 1.6,
-        "right": "hound"
-      },
-      {
         "coOccurrence": "Region",
         "effects": [
           {
@@ -1025,44 +975,15 @@
               "alignmentAffinity": {
                 "tokens": [
                   {
-                    "$type": "social",
-                    "query": {
-                      "facet": "Value",
-                      "relationship": {
-                        "dimension": "competence",
-                        "observer": {
-                          "body": "left"
-                        },
-                        "subject": {
-                          "body": "right"
-                        }
-                      }
-                    }
+                    "$type": "state",
+                    "key": "$left",
+                    "name": "boneHolderTrust"
                   }
                 ]
               },
               "arrivalDistance": 1.2,
               "candidateBudget": 16,
               "cohesion": 0.6,
-              "cohesionAffinity": {
-                "tokens": [
-                  {
-                    "$type": "social",
-                    "query": {
-                      "facet": "Value",
-                      "relationship": {
-                        "dimension": "affection",
-                        "observer": {
-                          "body": "left"
-                        },
-                        "subject": {
-                          "body": "right"
-                        }
-                      }
-                    }
-                  }
-                ]
-              },
               "goal": 0.8,
               "halfAngleDegrees": 180,
               "inertia": 0.2,
@@ -13424,45 +13345,32 @@
     {
       "effects": [
         {
-          "$type": "observeSocial",
-          "evidence": {
-            "aspect": "bone.claim",
-            "occurredAt": {
-              "tokens": [
-                {
-                  "$type": "socialClock"
-                }
-              ]
-            },
-            "origin": {
-              "body": "cell:boneHolder:0"
-            },
-            "relationship": {
-              "dimension": "competence",
-              "observer": {
-                "body": "each"
+          "$type": "addState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "constant",
+                "value": 1
               },
-              "subject": {
-                "body": "cell:boneHolder:0"
+              {
+                "$type": "state",
+                "key": "$each",
+                "name": "boneHolderTrust"
+              },
+              {
+                "$type": "subtract"
+              },
+              {
+                "$type": "constant",
+                "value": 0.3
+              },
+              {
+                "$type": "multiply"
               }
-            },
-            "sequence": {
-              "tokens": [
-                {
-                  "$type": "state",
-                  "name": "claimSeq"
-                }
-              ]
-            },
-            "value": {
-              "tokens": [
-                {
-                  "$type": "constant",
-                  "value": 1.0
-                }
-              ]
-            }
-          }
+            ]
+          },
+          "key": "$each",
+          "state": "boneHolderTrust"
         }
       ],
       "forEach": "hound",
@@ -13564,48 +13472,60 @@
     {
       "effects": [
         {
-          "$type": "observeSocial",
-          "evidence": {
-            "aspect": "bone.claim",
-            "occurredAt": {
-              "tokens": [
-                {
-                  "$type": "socialClock"
-                }
-              ]
-            },
-            "origin": {
-              "body": "cell:boneHolder:0"
-            },
-            "relationship": {
-              "dimension": "competence",
-              "observer": {
-                "body": "each"
+          "$type": "addState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "constant",
+                "value": 1
               },
-              "subject": {
-                "body": "cell:boneHolder:0"
+              {
+                "$type": "state",
+                "key": "$each",
+                "name": "boneHolderTrust"
+              },
+              {
+                "$type": "subtract"
+              },
+              {
+                "$type": "constant",
+                "value": 0.15
+              },
+              {
+                "$type": "multiply"
               }
-            },
-            "sequence": {
-              "tokens": [
-                {
-                  "$type": "state",
-                  "name": "claimSeq"
-                }
-              ]
-            },
-            "source": {
-              "body": "cell:reporter:0"
-            },
-            "value": {
-              "tokens": [
-                {
-                  "$type": "constant",
-                  "value": 1.0
-                }
-              ]
-            }
-          }
+            ]
+          },
+          "key": "$each",
+          "state": "boneHolderTrust"
+        },
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "key": "0",
+                "name": "boneHolder"
+              },
+              {
+                "$type": "constant",
+                "value": 32
+              },
+              {
+                "$type": "shiftLeft"
+              },
+              {
+                "$type": "state",
+                "name": "claimSeq"
+              },
+              {
+                "$type": "bitOr"
+              }
+            ]
+          },
+          "key": "$each",
+          "state": "boneHolderClaimMark"
         }
       ],
       "forEach": "hound",
@@ -13653,6 +13573,43 @@
             "comparison": "LessOrEqual",
             "state": "$distance:each:cell:reporter:0",
             "value": 6
+          },
+          {
+            "$type": "compareValue",
+            "comparison": "NotEqual",
+            "kind": "Int",
+            "left": {
+              "tokens": [
+                {
+                  "$type": "state",
+                  "key": "$each",
+                  "name": "boneHolderClaimMark"
+                }
+              ]
+            },
+            "right": {
+              "tokens": [
+                {
+                  "$type": "state",
+                  "key": "0",
+                  "name": "boneHolder"
+                },
+                {
+                  "$type": "constant",
+                  "value": 32
+                },
+                {
+                  "$type": "shiftLeft"
+                },
+                {
+                  "$type": "state",
+                  "name": "claimSeq"
+                },
+                {
+                  "$type": "bitOr"
+                }
+              ]
+            }
           }
         ]
       },
@@ -13730,34 +13687,9 @@
             "score": {
               "tokens": [
                 {
-                  "$type": "social",
-                  "query": {
-                    "facet": "Value",
-                    "relationship": {
-                      "dimension": "competence",
-                      "observer": {
-                        "body": "left"
-                      },
-                      "subject": {
-                        "body": "right"
-                      }
-                    }
-                  }
-                },
-                {
-                  "$type": "social",
-                  "query": {
-                    "facet": "Value",
-                    "relationship": {
-                      "dimension": "affection",
-                      "observer": {
-                        "body": "left"
-                      },
-                      "subject": {
-                        "body": "right"
-                      }
-                    }
-                  }
+                  "$type": "state",
+                  "key": "$left",
+                  "name": "boneHolderTrust"
                 },
                 {
                   "$type": "constant",
@@ -13765,9 +13697,6 @@
                 },
                 {
                   "$type": "multiply"
-                },
-                {
-                  "$type": "add"
                 }
               ]
             }
@@ -26142,35 +26071,6 @@
         "wrap": "None"
       }
     ],
-    "social": {
-      "dimensions": [
-        {
-          "name": "affection"
-        },
-        {
-          "baseline": 0,
-          "maximum": 1,
-          "minimum": 0,
-          "name": "competence"
-        },
-        {
-          "baseline": 0.5,
-          "maximum": 1,
-          "minimum": 0,
-          "name": "trust"
-        }
-      ],
-      "directWeight": 1,
-      "evidenceAttemptsPerTick": 256,
-      "evidenceLifetimeSeconds": 30,
-      "expiredReceiptsPerTick": 256,
-      "impressionCapacity": 4096,
-      "impressionsPerObserver": 64,
-      "receiptCapacity": 4096,
-      "reliabilityDimension": "trust",
-      "reportWeight": 0.5,
-      "unfamiliarReliability": 0.5
-    },
     "world": [
       {
         "cells": [
@@ -30215,6 +30115,19 @@
         "name": "bettor",
         "value": 1,
         "visibility": {}
+      },
+      {
+        "capacity": 64,
+        "kind": "fixed",
+        "max": "1",
+        "min": "0",
+        "name": "boneHolderTrust"
+      },
+      {
+        "capacity": 64,
+        "kind": "int",
+        "name": "boneHolderClaimMark",
+        "nonNegative": true
       }
     ]
   },

@@ -1200,7 +1200,6 @@ public static partial class WorldDefinitionValidator {
         // resolves against (a kit naming an undeclared generator or destination row refuses HERE, at load, rather
         // than at first fire) and what a state.<row>/state.<row>.<key> HUD binding resolves against —
         // refuse-unknown-by-name, the same discipline every other HudBindingVocabulary token gets.
-        ValidateSocial(definition, errors);
         var stateRows = ValidateState(
             rows: definition.State,
             generators: definition.Generators,

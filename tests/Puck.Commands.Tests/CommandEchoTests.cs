@@ -164,15 +164,15 @@ public sealed class CommandEchoTests {
     }
     [Fact]
     public void HeadThenFieldsFormsOneSegmentDistinctFromAPureFieldSegment() {
-        // world.groups' own two segment shapes side by side: config is pure Field tokens (no Head), a group opens
-        // with the declared Head "group".
-        var line = CommandEcho.Open(verb: "world.groups")
+        // A synthetic two-segment example, not any real verb's shape: the first segment is pure Field tokens (no
+        // Head), the second opens with a declared Head.
+        var line = CommandEcho.Open(verb: "demo.groups")
             .Field(key: "kindCount", value: 1)
             .Segment()
             .Head(head: "group").Field(key: "id", value: 1).Field(key: "status", value: "Active")
             .Close();
 
-        Assert.Equal(actual: line, expected: "[world.groups: kindCount=1 | group id=1 status=Active]");
+        Assert.Equal(actual: line, expected: "[demo.groups: kindCount=1 | group id=1 status=Active]");
     }
     [Fact]
     public void ASplicedTagSurvivesTheRoundTripBackThroughTheConsole() {

@@ -20,7 +20,7 @@ only stability contract is observable behavior under the gates.
 ## ✨ Key features
 
 - *Everything as data:* one document family (`puck.world.def.v1`) carries the
-  world, its screens, entities, adjacencies, admission, market, and metadata; a
+  world, its screens, entities, adjacencies, admission, and metadata; a
   document may be a delta over a `basis`, so similar worlds compose instead of
   restating everything. One thick validator gates every instance before it swaps
   in, and the same composition path serves a file on disk and a copy in the

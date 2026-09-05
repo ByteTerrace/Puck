@@ -696,6 +696,33 @@ world that wants a market authors it; the engine no longer ships one. `world.und
 market-finality carve-out goes with it — a rule-authored settlement is an ordinary journal entry
 like any other state write, undoable like any other.
 
+**Social memory dissolved into ordinary keyed rows; evidence deduplication is the one thing an
+ordinary rule cannot already express, and it needed no new engine mechanism either.**
+`WorldSocialMemory` (and its checkpoint/federation-transfer machinery), `WorldSocialPolicy`,
+`state.social`, the `observeSocial`/`forgetSocial` effects, and the `social`/`socialClock`/
+`socialResult` facts are gone. An impression is a keyed `state` row (one cell per observer),
+updated by an authored `AddState` expression that blends new evidence toward the row's own
+bound — `(1 - value) * rate`. A Level-mode rule re-evaluates its gate every tick it holds, so the
+one thing that needed guarding against was re-blending a standing, unchanged claim every tick
+instead of once per event; the fix is an authored `CompareValue` gate comparing a packed
+`(origin, sequence)` Int64 (`shiftLeft`/`bitOr`) against a companion marker cell the rule sets
+once admitted — ordinary postfix arithmetic, not a new dedup primitive. An Edge-mode rule or a
+Distance interaction needs no such gate: the engine's own edge/per-pair latch already refuses a
+re-fire while the gate stays continuously true. Proven, with a control row that has no freshness
+gate and keeps re-blending every tick, by
+`tests/Puck.World.Tests/KeyedImpressionDedupLawTests.cs`. Because social memory no longer lives
+in a bespoke parallel store, it never had a federation-transfer story to dissolve either: an
+ordinary keyed row is local to its world, exactly like every other `state` row, so an individual's
+beliefs simply do not travel with it across a transfer — a real behavior change from the old
+system's frozen-observer export/import, and a deliberate one (nothing shipped exercised it). The
+garden re-authors `witness-claim`/`rumor`/`choose-companion` and the pack kit's `alignmentAffinity`
+onto a `boneHolderTrust` row keyed by observer, moving its hash. `hounds-meet` and its `affection`
+dimension are retired rather than re-keyed: it was a Distance interaction (`O(population²)`
+worst-case reach) whose only effect was a delivery an ordinary `AddState` now prices at the
+engine's real conservative per-write cost — at this population size that product alone exceeds the
+declared work-unit ceiling, a genuine cost the old bespoke effect's flat pricing had been hiding
+rather than a regression to work around.
+
 **The tabletop primitive (owner decisions, Lane D).** Physics-first extends to
 board games: a chess set is 32 ordinary rigid bodies on a shared `piece` kit —
 no second entity kind, no engine-level "piece" concept. A placement's `board`

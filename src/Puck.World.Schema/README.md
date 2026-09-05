@@ -1352,7 +1352,8 @@ individuals from at most 32 inspected points per reconsideration:
 }
 ```
 
-The option can score a social query from `left` to `right`, then enter with
+The option can score a keyed belief row for `left` (see "Keyed belief rows and
+evidence dedup" below), then enter with
 `{"$type":"designateBody","key":"$each","register":"companion","kind":"Body","targetKey":"$right"}`.
 The register must be declared, and a producer must consume it to cause movement.
 A fixed "alone" option can clear the same register. This selects a movement
@@ -1403,78 +1404,80 @@ render-frame timing never drives it. These are world-authority rules: using
 them for limited creature knowledge requires scoring the creature's observed
 state, not unrestricted world facts.
 
-### Social evidence and belief queries
+### Keyed belief rows and evidence dedup
 
-`state.social` is an optional memory policy. It declares named dimensions such
-as helpfulness or navigation competence, with independent bounds, baselines,
-learning rates, uncertainty, and memory/work limits. It does not make creatures
-omniscient or infer their personality. For example, add this member to `state`:
-
-```json
-"social": {
-  "dimensions": [{ "name": "helpfulness", "maximumChange": 0.25 }],
-  "impressionCapacity": 65536,
-  "impressionsPerObserver": 256,
-  "receiptCapacity": 65536,
-  "evidenceAttemptsPerTick": 1024,
-  "expiredReceiptsPerTick": 1024,
-  "evidenceLifetimeSeconds": 60
-}
-```
-
-Every relationship names an observer, a subject, and a dimension. An individual
-reference contains exactly one of `body` (the ordinary rule grammar, including
-`body:0`, `each`, `left`, `right`, `cell:row:key`, or `argmax:row`) and `identity`
-(`authority`, `index`, `generation`). Live bodies resolve to their original
-mobility incarnation; literal identities remain usable while absent. An
-inactive body is unresolved, not the previous occupant.
-
-An `observeSocial` effect carries `evidence`: a `relationship`, an event
-`origin`, an `aspect` such as `help.attempt`, and numeric expressions for
-`sequence`, `occurredAt`, `value`, and optional `quality`. Sequence and original
-occurrence time are non-negative Int values; time uses engine ticks, with
-`socialClock` supplying the current clock. Value and quality are Fixed;
-quality defaults to one. Optional `source` makes the evidence a report rather
-than direct observation. Relays preserve the original event identity and time.
-Rules must explicitly gate perception; an effect is a delivery, not a sensor.
-`forgetSocial` takes a relationship and removes its impression without erasing
-unexpired duplicate receipts. These effects are world-only and cannot be state
-transaction steps.
-
-The expression token below reads one belief. Its `query.facet` defaults to
-`Value`; `Value`, `Confidence`, `Uncertainty`, and `Weight` produce Fixed values.
-`Known`, `EventCount`, and `Age` produce Int values (Age is engine ticks).
-An unknown valid identity reads the authored baseline with zero confidence;
-an unresolved body reads zero for every facet. Check `Known` when that distinction
-matters. EventCount and Age saturate at Int64.MaxValue.
+An impression (what one individual has learned about another) is an ordinary
+keyed state row, not a bespoke memory bank: one cell per observer, holding a
+Fixed value in an authored range, updated by an ordinary `addState`/`setState`
+expression that reads the row's own current value. There is no dedicated
+policy section, effect, or fact family for this — it is the same keyed-row
+vocabulary every other table in `state` uses, paying no schema cost of its own.
 
 ```json
 {
-  "$type": "social",
-  "query": {
-    "relationship": {
-      "observer": { "body": "each" },
-      "subject": { "body": "body:0" },
-      "dimension": "helpfulness"
-    },
-    "facet": "Confidence"
-  }
+  "name": "boneHolderTrust",
+  "kind": "fixed",
+  "capacity": 64,
+  "min": "0",
+  "max": "1"
 }
 ```
 
-Social queries work in ordinary numeric effects and decision scores.
-`compareValue` compares `left` and `right` expressions using a `comparison`
-and one explicit `kind` (`Int` or `Fixed`, default Fixed). Kind mismatches
-refuse compilation; failed arithmetic closes the predicate. `socialResult`
-returns the last evidence/forgetting outcome as an Int ordinal, or -1 before
-an attempt. Sequential effects can store it in an authored row for branching.
-The outcome enum and memory semantics live in the
-[server contract](../Puck.World.Server/README.md#social-memory-component).
+A rule blends new evidence toward the bound with an authored expression —
+`(1 - trust) * rate` added to the row's own cell:
 
-`world.social [<query-json>]` is an operator read-back under `Observe/all`.
-Its query uses the same shape as the token's `query`, but cannot use rule-local
-bindings. No argument reports policy and work. Memory is runtime state, carried
-by authority checkpoints and hashes rather than public document cells.
+```json
+{
+  "$type": "addState",
+  "state": "boneHolderTrust",
+  "key": "$each",
+  "expression": { "tokens": [
+    { "$type": "constant", "value": 1 },
+    { "$type": "state", "name": "boneHolderTrust", "key": "$each" },
+    { "$type": "subtract" },
+    { "$type": "constant", "value": 0.3 },
+    { "$type": "multiply" }
+  ] }
+}
+```
+
+`compareValue` compares `left` and `right` expressions using a `comparison`
+and one explicit `kind` (`Int` or `Fixed`, default Fixed); kind mismatches
+refuse compilation and failed arithmetic closes the predicate. The one thing
+an ordinary rule cannot express on its own is evidence deduplication: a
+Level-mode rule re-evaluates its gate every tick it holds, so without a
+freshness check a standing claim would re-blend the belief every tick rather
+than once per event. There is no dedicated dedup primitive for this either —
+pack the event's (origin, sequence) pair into one Int64 with `shiftLeft`/
+`bitOr`, remember it in a companion Int cell, and gate on `compareValue`
+against the live pair:
+
+```json
+{
+  "$type": "compareValue",
+  "comparison": "NotEqual",
+  "kind": "Int",
+  "left": { "tokens": [{ "$type": "state", "name": "boneHolderClaimMark", "key": "$each" }] },
+  "right": { "tokens": [
+    { "$type": "state", "name": "boneHolder" },
+    { "$type": "constant", "value": 32 },
+    { "$type": "shiftLeft" },
+    { "$type": "state", "name": "claimSeq" },
+    { "$type": "bitOr" }
+  ] }
+}
+```
+
+A companion `setState` records the packed pair into the marker cell once the
+gate has admitted it, so a repeat of the same (origin, sequence) pair reads
+false on the next tick. An Edge-mode rule or a Distance interaction needs no
+such gate at all: the engine's own edge/per-pair latch already refuses a
+re-fire while the gate stays continuously true, which is exactly why
+witness-claim and hounds-meet-shaped rules never needed one — only a
+Level-mode re-evaluation does. See
+[`KeyedImpressionDedupLawTests`](../../tests/Puck.World.Tests/KeyedImpressionDedupLawTests.cs)
+for the worked proof, including a control row with no freshness gate that
+keeps re-blending every tick.
 
 ### World-rule state effects
 
@@ -1682,41 +1685,28 @@ rule's own EFFECTS act as `WorldPrincipal.World`, which the server's admission
 predicate exempts STRUCTURALLY — the same standing a per-body `ActionEffect`
 always had.
 
-### Social flock affinities
+### Keyed belief rows and flock affinities
 
 A flock profile can prefer particular neighbors without assigning one universal
 friendship score. `cohesionAffinity` weights neighbors in the attraction centroid;
-`alignmentAffinity` independently weights their headings. For example, add these
-optional fields to a kit producer's `flock` profile to stay near affectionate
-companions while following demonstrated navigation competence:
+`alignmentAffinity` independently weights their headings. For example, add this
+optional field to a kit producer's `flock` profile to follow whichever neighbor
+the observer itself has come to trust (see "Keyed belief rows and evidence
+dedup" above — the belief is keyed by observer alone, not by the specific pair):
 
 ```json
 {
-  "cohesionAffinity": {
-    "tokens": [{ "$type": "social", "query": {
-      "relationship": {
-        "observer": { "body": "left" }, "subject": { "body": "right" },
-        "dimension": "affection"
-      }, "facet": "Value"
-    }}]
-  },
   "alignmentAffinity": {
-    "tokens": [{ "$type": "social", "query": {
-      "relationship": {
-        "observer": { "body": "left" }, "subject": { "body": "right" },
-        "dimension": "navigation-competence"
-      }, "facet": "Value"
-    }}]
+    "tokens": [{ "$type": "state", "name": "boneHolderTrust", "key": "$left" }]
   }
 }
 ```
 
-Declare those dimensions in `state.social`; the names have no engine-defined
-meaning. Expressions may combine Fixed social facets, Fixed state cells and
-state-backed reductions/symmetry with ordinary postfix arithmetic. `left` is
-the observer and `right` the sampled neighbor; state keys use `$left`/`$right`.
-`each` is unavailable. Movement-dependent world facts are refused so every body
-reads the same state/social image during a movement pass.
+Expressions may combine Fixed state cells, reductions, and symmetry with
+ordinary postfix arithmetic. `left` is the observer and `right` the sampled
+neighbor; state keys use `$left`/`$right`. `each` is unavailable.
+Movement-dependent world facts are refused so every body
+reads the same state image during a movement pass.
 
 Absent expressions give uniform weight one. Each result clamps to [0,1], with
 arithmetic failure reading zero. Negative affection therefore means no cohesion

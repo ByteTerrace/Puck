@@ -308,7 +308,7 @@ individuals, binding left/each to the observer and right to the candidate only
 inside that option. Inspect candidateBudget as well as maxCandidates: rejected
 points and incumbent rechecks consume attention. Incarnation-addressed choices,
 not merely option ordinals, own commitment and entry transitions. Positions freeze
-before ordinary rules; social/state gates still read in normal document order.
+before ordinary rules; state gates still read in normal document order.
 See the Schema README's `decision-policies` section for the complete authoring
 contract. Keep choice state, local random draws, and timers in checkpoint/hash
 coverage; refresh compiled handles while retaining unchanged policy episodes.
@@ -562,19 +562,23 @@ still use the one document door, not a separate flock mutation API.
 
 Optional `cohesionAffinity`/`alignmentAffinity` use the ordinary Fixed postfix
 expression evaluator. Left is the observer, right the retained neighbor; only
-state-backed/social operands are admitted because body/channel/navigation reads
-change during the movement pass. Keep separate dimensions for companion
-attraction and heading expertise. Missing expressions read one, results clamp
+state-backed operands are admitted because body/channel/navigation reads
+change during the movement pass. A belief row keyed by observer (`$left`) is
+the ordinary way to feed one — see "Keyed belief rows and evidence dedup"
+below. Missing expressions read one, results clamp
 to [0,1], arithmetic failure reads zero with a counter. These are relative
 weighted-mean inputs, not separation filters or absolute term strength. They
-refresh with perception cadence, not on every social update. Rebind compiled
-state handles and dimension ordinals on every declaration installation; key
+refresh with perception cadence, not on every belief-row update. Rebind compiled
+state handles on every declaration installation; key
 bindings by authored kit/producer names, not object identity (wire restore
 deserializes fresh objects). Cached neighbor contributions already carry the
 result through checkpoint/hash. Charge both programs and all indirect scans for
 every retained neighbor in the worst-case simultaneous population refresh,
-under the shared rule work ceiling. See the
-[authoring example](../../../../src/Puck.World.Schema/README.md#social-flock-affinities).
+under the shared rule work ceiling — an O(population²) Distance interaction
+firing an ordinary state-write effect on every pair is priced at the engine's
+real per-write cost, not a bespoke cheap one; keep that shape to a linear
+forEach/flock-affinity reach instead. See the
+[authoring example](../../../../src/Puck.World.Schema/README.md#keyed-belief-rows-and-flock-affinities).
 
 ### Crowd scale policies
 
@@ -2299,17 +2303,13 @@ carry 64-bit and cell-wise board algebra; `world.match` narrates one word.
 The `sort` transform supplies the canonical order. Read back with
 `world.patterns` and `world.match`.
 
-`state.social` installs a `WorldSocialPolicy`/`CompiledWorldSocialPolicy` bank;
-`WorldSocialMemory` owns directed impressions and exact evidence receipts.
-World-only `observeSocial`/`forgetSocial` effects and numeric `social` queries
-use ordinary rule bindings; `compareValue` compares numeric expressions and
-closes on arithmetic failure. They are not sensor or transfer implementations.
-Preserve original mobility incarnation and event
-provenance; never replace stable IDs with current body slots or give relays fresh
-event IDs. Forgetting an impression must not clear its unexpired duplicate ledger.
-Keep ingestion attempts and expiry work separately bounded. Read the
-[component contract](../../../../src/Puck.World.Server/README.md#social-memory-component)
-before extending the seam. Authority checkpoints carry the bank and last outcome;
-changed policy content resets memory, unchanged recompilation retains it.
-The `world.social` read-back is operator inspection under Observe/all, not a
-per-creature disclosure API. Keep an actual-world read-back and replay proof.
+An impression is an ordinary keyed `state` row, not a bespoke policy section or
+memory component — see "Keyed belief rows and evidence dedup" in the Schema
+README. `compareValue` compares numeric expressions and closes on arithmetic
+failure; it is the same primitive that gates a rule's freshness check (a packed
+`(origin, sequence)` Int64 against a companion marker cell), the one thing an
+ordinary rule effect cannot express on its own. There is no sensor or transfer
+implementation to preserve: gating who witnesses an event is the author's own
+rule, and an ordinary keyed row is local to its world like any other `state`
+row — it does not travel with a body across a transfer. Keep an actual-world
+read-back and replay proof.

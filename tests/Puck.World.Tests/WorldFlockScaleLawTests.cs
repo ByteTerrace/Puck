@@ -10,10 +10,6 @@ namespace Puck.World.Tests;
 
 /// <summary>Whole-population acceptance evidence for the dense few-thousand-creature representation.</summary>
 public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
-    private static WorldCellName Name(string text) => WorldCellName.Parse(text);
-    private static WorldValueExpression SocialAffinity(string dimension) => new([
-        new WorldValueToken.Social(new(new(new(Body: "left"), new(Body: "right"), dimension)))
-    ]);
     private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
         AnnouncedCrossingHolds: [], AppliedTransferHighWater: null, AppliedTransferIds: [], ElapsedEngineTicks: 0,
         ForwardedBodies: [], FreshCounter: 0, InDoubtTransfers: [], IsPaused: false, NextTransferId: 1,
@@ -24,19 +20,13 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
         }
     }
     private static WorldDefinition DenseDocument(float updateSeconds = 0.1f, bool flocking = true, bool colliders = false,
-        float motionSeconds = (1f / 60f), float steeringSeconds = 0.1f, bool socialAffinities = false) {
+        float motionSeconds = (1f / 60f), float steeringSeconds = 0.1f) {
         var definition = Fixtures.BuildDocument();
         var profile = new WorldFlockProfile(
             Range: 20, SeparationRadius: 1, CandidateBudget: 32, MaxNeighbors: 16,
             UpdateSeconds: updateSeconds, Space: WorldFlockSpace.Tangent,
             Separation: 1, Alignment: 0.5f, Cohesion: 0.5f, Goal: 0, Inertia: 0.25f,
             ArrivalDistance: 0, HalfAngleDegrees: 180, RequiresLineOfSight: false);
-        if (socialAffinities) {
-            profile = profile with {
-                AlignmentAffinity = SocialAffinity("competence"),
-                CohesionAffinity = SocialAffinity("affection"),
-            };
-        }
         return definition with {
             PopulationRaw = definition.Population with {
                 CapacityRaw = WorldBodiesLimits.CapacityCeiling,
@@ -53,15 +43,6 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
                     ["flock"] = new(Scalars: new Dictionary<string, float>(), Channels: new Dictionary<string, string>(), Flock: profile),
                 },
             }],
-            StateRaw = socialAffinities
-                ? new WorldStateSection(Social: new WorldSocialPolicy(
-                    Dimensions: [new(Name("affection")), new(Name("competence"))],
-                    ImpressionCapacity: 65536,
-                    ImpressionsPerObserver: 256,
-                    ReceiptCapacity: 65536,
-                    EvidenceAttemptsPerTick: 1024,
-                    ExpiredReceiptsPerTick: 1024))
-                : definition.StateRaw,
         };
     }
 
@@ -130,40 +111,6 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
             watch.Stop();
             output.WriteLine($"dense flock={sample.Flocking} perception={sample.Perception}s motion={sample.Motion}s steering={sample.Steering}s: {watch.Elapsed.TotalMilliseconds / 20:F2} ms/tick, {GC.GetAllocatedBytesForCurrentThread() - before} bytes");
         }
-    }
-
-    [Fact]
-    public void FourThousandSociallyFilteredCreaturesStayInsideAuthoredAttentionAndAllocationBudgets() {
-        using var fixture = Fixtures.FreshServer(DenseDocument(socialAffinities: true));
-        var count = WorldBodiesLimits.CapacityCeiling - fixture.Server.Population.LocalSeatCount;
-        Assert.Equal(count, fixture.Server.Population.SetSimulatedCount(count));
-        Coincide(fixture);
-        // Wide enough that every hot callee the measured window below allocates against has already promoted to
-        // Tier1 before that window opens — a background tier-up recompilation landing INSIDE the measured window
-        // reads as extra allocation under a busy full-suite run even though steady-state is unchanged (the same
-        // JIT-tiering flake WorldSocialMemoryLawTests' own ImportScratchDoesNotScaleWithSourcePolicyCapacity hit and
-        // was widened past).
-        for (var tick = 0; tick < 240; tick++) { fixture.Step(); }
-
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        var start = Stopwatch.GetTimestamp();
-        var maximumEvaluations = 0;
-        var maximumWork = 0L;
-        for (var tick = 0; tick < 120; tick++) {
-            fixture.Step();
-            maximumEvaluations = Math.Max(maximumEvaluations, fixture.Server.Population.FlockStatistics.AffinityEvaluations);
-            maximumWork = Math.Max(maximumWork, fixture.Server.Population.FlockStatistics.AffinityWorkUnits);
-        }
-        var elapsed = Stopwatch.GetElapsedTime(start);
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        var declared = WorldRuleWorkBudget.Measure(fixture.Server.Definition);
-
-        output.WriteLine($"dense social flock: {count} creatures, 120 ticks in {elapsed.TotalMilliseconds:F1} ms "
-            + $"({elapsed.TotalMilliseconds / 120:F2} ms/tick), {allocated} thread bytes, "
-            + $"max {maximumEvaluations} affinity evaluations/{maximumWork} work units");
-        Assert.InRange(maximumEvaluations, 1, 172 * 16 * 2);
-        Assert.InRange(maximumWork, 1, declared.FlockAffinityWorkUnitsPerTick);
-        Assert.InRange(allocated, 0, 512 * 120);
     }
 
     [Fact]

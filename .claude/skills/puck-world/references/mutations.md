@@ -105,15 +105,6 @@ journal → echo. Precisely:
 A mutation's visual effect is a side effect of the delivered definition —
 rendering derives from it on revision moves, never from a draw call.
 
-`CanInstallSocial` runs before install-side writes on mutation, rebuild, and
-the final undo candidate. A changed or removed social policy refuses while
-source ownership holds or destination import reservations remain unresolved;
-equal policy content and unrelated edits remain admissible. Do not move this
-check into `ReconcileSocial`, after the definition or solids have already been
-swapped. Full authority restore instead reinstates validated checkpoint state.
-The [Server memory contract](../../../../src/Puck.World.Server/README.md#social-memory-component)
-owns the hold and release semantics.
-
 **Timing classes.** Most kinds apply LIVE on delivery. `IsDocumentDefaults`
 (`SetRenderDefaults`, `SetPopulationDefaults`, `SetHostDefaults`) edit what
 the NEXT boot wakes on while live session levers keep their values
@@ -275,8 +266,8 @@ Rules the catalog encodes:
 
 ## Adding a mutation kind, end to end
 
-**FIRST — the catalog declares 68 kinds on a 128-bit lane (0–74 with 37/38 and
-65-70 retired).** Ordinals 75–127 are free; a colliding ordinal is still a boot failure, not an
+**FIRST — the catalog declares 68 kinds on a 128-bit lane (0–75 with 37/38 and
+65-70 retired).** Ordinals 76–127 are free; a colliding ordinal is still a boot failure, not an
 option. A genuinely new kind is
 a SUBSTRATE decision, not a lane's, and must SURVIVE CONSOLIDATION REVIEW first:
 is this an existing kind's payload? Most proposals are — a new section reuses

@@ -39,20 +39,7 @@ from there into a standalone child. Files (all in
   Decision policies additionally hash their sorted binding keys, generations,
   selected options/body incarnations, cadence/commitment timers, interrupt latches, and local PCG
   states/counters. The authority checkpoint codec carries these rows as well
-  (version 1), together with social policy identity, clock, impressions, exact
-  evidence receipts, import identity/storage reservations, bounded-work counters,
-  and last outcome. Reservations carry the complete transfer key and ordered
-  observer allowances, are included in the cached logical hash, and survive clock
-  advancement and restore until explicit cancellation or successful group intake.
-  The decoder bounds both group count and aggregate observer claims before
-  allocating. Frozen source observers additionally carry their exact transfer
-  key and freeze clock, survive restore, and keep their receipts outside the
-  expiry index. Frozen exports remain pinned to that clock; ordinary reads age
-  against the current authority clock. Matching-key thaw reinstates original
-  expiry anchors; matching-key retirement removes the held history. Both source
-  holds and destination reservations refuse live policy replacement through
-  mutation, rebuild, or undo before install writes. Escrow leases carry detached
-  observer exports and must match their bank's import allowances on restore.
+  (version 1).
   Host recovery rows persist rollback-only and commit-confirmed phases; the two
   cannot coexist. Partial rollback removes paired body/profile rows without
   allowing a partial commit retry. Confirmed commits retain source histories and
@@ -67,19 +54,6 @@ from there into a standalone child. Files (all in
   and remote routes reconnect lazily from endpoint/definition seeds. No live
   streams or held-input lease IDs are captured. These are checkpointed routing
   and transaction facts, not taped transfer handshakes.
-  Malformed social
-  state refuses before authority restore changes live state. Social row counts
-  must fit the remaining wire bytes before allocation. Social observer indexes
-  and the indexed expiry heap are rebuilt from logical records, excluded from
-  hashes and checkpoint bytes. Receipt retirement removes the exact heap node;
-  no tombstone or allocation-history state survives a checkpoint.
-  Social aging anchors are signed 128-bit times, encoded low 64-bit limb first;
-  receipts retain their immutable original event timestamp separately. Both
-  limbs enter the logical hash. `CaptureObserver` can rebase those anchors onto
-  an explicitly supplied destination clock without resetting age; it returns a
-  detached subset with compacted receipt ordinals and fresh work counters, not
-  a transfer or full-authority checkpoint;
-  see the [Server memory contract](../../../../src/Puck.World.Server/README.md#social-memory-component).
   Rule-latch hashing sorts
   into reusable scratch; storage layout is not part of the hash. Neighbor decision
   grids and diagnostic counters are derived, not persisted. The reconsideration
@@ -277,7 +251,7 @@ diagnostic; the replay verdict instead compares
 That scope includes poses, stored/resolved world-state rows and traits, live
 field cells, rule/interaction latches, body action state, cached navigation and
 shared destination-tree/scheduler/pending-request state,
-flock perception/cadence/sample state (including the cached result of social/state
+flock perception/cadence/sample state (including the cached result of state
 affinity expressions), slot generations, and previous positions. Affinity programs
 are derived again from authored kit/producer names and current state handles on
 restore; their diagnostic evaluation/failure counters do not enter the hash.
@@ -451,8 +425,8 @@ from child tick 30. Omitted, a drive runs to the tape's end.
   when the tape's world declares screens and a machine has stepped or a
   screen op applied, when the tape pins addons and a guest has pumped (the
   rebuild door reuses an unchanged row's guest with its state), or when an
-  engagement is in flight. Social ownership holds, import reservations,
-  transfer transactions or mobility credentials, remote occupants, and
+  engagement is in flight. Transfer transactions or mobility credentials,
+  remote occupants, and
   host-owned queued/in-doubt transfers or forwarding history also refuse:
   a single-authority tape cannot rewind another authority's obligations.
   The ownership check and reset hold the same authority gate, preventing a
@@ -464,7 +438,7 @@ from child tick 30. Omitted, a drive runs to the tape's end.
   boot document's path is the path hint so relative machine content keeps
   resolving), then the complete authority checkpoint a fresh server reaches
   after `SeatRecordedSeats` joins the recorded seats on their pinned rates.
-  `WorldServer.RestoreCheckpoint` resets clocks, social memory, decisions,
+  `WorldServer.RestoreCheckpoint` resets clocks, decisions,
   rule latches, fields, grants, held input, events, and population together.
   `VerifyMountedAddons` then pins the live receipts. On
   success `LoopbackTransport.InputMasked = true` and the mode is

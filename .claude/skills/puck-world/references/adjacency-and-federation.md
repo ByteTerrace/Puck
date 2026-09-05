@@ -115,14 +115,9 @@ continuity values at commit and checkpoint restore; mutating a caller's original
 lists cannot rewrite the accepted receipt. Independently allocated equal values
 remain idempotent; altered edge bits, held values, names, register kinds, values,
 or timers refuse as a different commit.
-The same reservation carries a detached, private social-memory export for each
-mobility incarnation. Freeze at the source before reserve; reserve destination
-identity and memory quota with body slots; prepare all memories before landing
-bodies; retire source histories only after confirmed commit. An ambiguous reply
-retains frozen source histories. Restore bodies before thawing on non-commit;
-failed source restoration retains rollback-only recovery and never retries Commit.
+Failed source restoration on non-commit retains rollback-only recovery and never retries Commit.
 Non-atomic parties split before any parent reservation. Full details and limits:
-[Server memory contract](../../../../src/Puck.World.Server/README.md#social-memory-component).
+[Server transfer-recovery contract](../../../../src/Puck.World.Server/README.md#transfer-recovery-and-forwarding).
 Host restore preflights every in-doubt and forwarding record before installing that host slice.
 It preserves unresolved peer addresses and source-boundary completion data across
 repeated restarts. A later local admission resolves by exact authority identity;

@@ -4,11 +4,6 @@ using Puck.Maths;
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
-    private static void ValidateSocial(WorldDefinition definition, List<string> errors) {
-        if (definition.StateRaw?.Social is not { } policy) { return; }
-        try { _ = CompiledWorldSocialPolicy.Compile(policy); }
-        catch (ArgumentException exception) { errors.Add($"state.social: {exception.Message}"); }
-    }
     /// <summary>Validates the bounded value surface affected by one scalar state-cell mutation. The containing
     /// definition has already passed full validation; this check is therefore intentionally limited to properties
     /// an <c>UpsertStateCell</c> mutation can change.</summary>

@@ -117,9 +117,6 @@ public sealed partial class WorldServer {
             kept.Add(item: entry);
         }
 
-        if (!CanInstallSocial(candidate, out var undoSocialReason)) {
-            return RefuseUndo(connectionId: connectionId, correlationId: correlationId, refusal: $"undo refused: {undoSocialReason}");
-        }
         // Field storage is boot allocated. Prove the final replay result can retain the live lattice before building
         // or swapping any other derived runtime product; InstallFields is then an infallible compatible plan swap.
         if (!m_population.CanInstallFields(
@@ -292,8 +289,8 @@ public sealed partial class WorldServer {
     }
 
     /// <summary>This server's own checkpointed fields — journal, base/definition documents, buffered pending ops,
-    /// step clock, rule-edge latches, per-binding decisions, and social memory/work state. Every other subsystem's own section lives beside this one on
-    /// <see cref="WorldAuthorityCheckpoint"/>.</summary>
+    /// step clock, rule-edge latches, and per-binding decisions. Every other subsystem's own section lives beside
+    /// this one on <see cref="WorldAuthorityCheckpoint"/>.</summary>
     public sealed record WorldServerCheckpoint(
         byte[] DefinitionJson,
         byte[] BaseDefinitionJson,
@@ -318,9 +315,7 @@ public sealed partial class WorldServer {
         string? MusicDirectorLastEmbellishmentPatchId,
         ulong? MusicDirectorLastEmbellishmentTick,
         IReadOnlyList<(int EntityIndex, string JudgeRef, string? Grade, ulong Tick)> JudgeGrades,
-        IReadOnlyList<WorldDecisionCheckpoint> Decisions,
-        WorldSocialMemoryCheckpoint? Social,
-        int LastSocialResult
+        IReadOnlyList<WorldDecisionCheckpoint> Decisions
     );
 
     /// <summary>The engine-tick threshold beyond which a checkpoint capture is refused rather than silently taken
@@ -424,8 +419,6 @@ public sealed partial class WorldServer {
                 Intents: [.. m_intents],
                 Pending: [],
                 Decisions: CaptureDecisions(),
-                Social: m_social?.Capture(),
-                LastSocialResult: m_lastSocialResult,
                 RuleGateHeld: ruleGateHeld,
                 InteractionGateHeld: interactionGateHeld,
                 LastDocumentReceipt: m_lastDocumentReceipt,
@@ -479,8 +472,6 @@ public sealed partial class WorldServer {
         var restoredDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: server.DefinitionJson);
         m_events.ValidateCheckpoint(checkpoint: checkpoint.EventFeed);
         ValidateDecisionCheckpoint(server, restoredDefinition);
-        var restoredSocial = RestoreSocialCheckpoint(server, restoredDefinition);
-        WorldTransferEscrow.ValidateSocialCheckpoint(checkpoint.Escrow, restoredSocial);
 
         m_definition = restoredDefinition;
         m_base = WorldDefinitionSerialization.Deserialize(utf8Json: server.BaseDefinitionJson);
@@ -579,10 +570,6 @@ public sealed partial class WorldServer {
             }
         }
 
-        m_social = restoredSocial;
-        m_socialSource = restoredDefinition.StateRaw?.Social;
-        m_socialClock = server.LastCompletedEngineTicks;
-        m_lastSocialResult = server.LastSocialResult;
         m_transferEscrow.Restore(checkpoint: checkpoint.Escrow);
         m_inputHold.Restore(checkpoint: checkpoint.InputHold);
         m_events.Restore(checkpoint: checkpoint.EventFeed);

@@ -81,11 +81,11 @@ Optional `cohesionAffinity` and `alignmentAffinity` expressions assign independe
 relative weights to each retained neighbor: "stay near this companion" need not
 mean "follow its heading." Both use the ordinary Fixed postfix evaluator, with
 `left` bound to the observer and `right` to the neighbor (`$left`/`$right` for
-state-cell keys). Only state-backed and social facts are admitted; live body,
+state-cell keys). Only state-backed facts are admitted; live body,
 channel, navigation, and machine facts could change midway through movement and
-make an observer depend on body iteration order. Social observations produced by
-world rules therefore affect the next eligible perception sample, not movement
-that already happened. State handles and dimension ordinals recompile on document
+make an observer depend on body iteration order. A rule-authored belief row
+therefore affects the next eligible perception sample, not movement
+that already happened. State handles recompile on document
 installation even when the population does not rebuild.
 
 An omitted affinity is one. Results clamp to [0,1]; arithmetic failure supplies
@@ -97,9 +97,9 @@ from the corresponding weighted mean, never from separation or collision. All
 retained neighbors still spend the same perception budget; the engine does not
 scan farther until it finds a friend. Weighted means are normalized before the
 outer flock weights apply, so equally scaling every nonzero affinity does not
-reduce term strength. Unknown beliefs use the authored dimension baseline;
-confidence is a separate input, and nothing creates reciprocal friendship.
-See the [authoring example](../Puck.World.Schema/README.md#social-flock-affinities).
+reduce term strength. An unwritten belief row reads its authored initial value;
+nothing creates reciprocal friendship.
+See the [authoring example](../Puck.World.Schema/README.md#keyed-belief-rows-and-flock-affinities).
 
 `world.flock` describes profiles and work; `world.budget` repeats the structural
 cost, including movement-domain checks/refusals, affinity evaluations/failures,
@@ -115,7 +115,7 @@ the producer ends. It is not pathfinding or recovery: a displaced/outside creatu
 may remain stranded. Later impulse overlays, body contacts, tethers, and authority
 teleports are separate physical/authority operations, not silently cancelled by
 this locomotion constraint. Surface-domain constraints are not implemented here.
-Flock weights alone imply no containment, social memory, shared routes, or
+Flock weights alone imply no containment, remembered belief, shared routes, or
 obstacle avoidance.
 
 ## Gravity fields
@@ -197,7 +197,7 @@ other fields do not. Rebuilds invalidate domain-local caches. This first shared
 implementation restarts affected trees rather than incrementally repairing them:
 rapidly changing water can delay a distant request indefinitely under a small
 budget. It does not provide crowd collision avoidance, bottleneck reservations,
-hierarchical long-distance routing, or social/group membership.
+hierarchical long-distance routing, or group membership.
 
 The many-agents/one-destination approach is informed by
 [Emerson's crowd pathfinding chapter](https://www.gameaipro.com/GameAIPro/GameAIPro_Chapter23_Crowd_Pathfinding_and_Steering_Using_Flow_Field_Tiles.pdf).
@@ -723,178 +723,20 @@ the live mutation codec, which refuses a world actor on both encode and decode.
 The committed codec admits only the canonical world actor and does not relax
 nested grant validation.
 
-### Social memory component
+### Transfer recovery and forwarding
 
-`WorldSocialMemory` stores what one individual has learned about another,
-separately for each named dimension. An optional `state.social` policy installs
-the bank in the server. World rules deliver explicitly perceived evidence through
-`observeSocial`, query beliefs through numeric `social` expressions, and remove
-impressions through `forgetSocial`. This is not a sensor: the author must gate
-who witnesses or receives an event. The component API also accepts authorized
-`WorldSocialEvidence` directly; `TryRead` returns the current impression and
-confidence, and `Capture` exposes stored receipts and work counters.
-
-The server advances the bank once per engine-clock boundary, before ordered
-mutations and rule evaluation. Effects execute in document order, so a later
-effect, gate, or decision can read an earlier observation in the same tick.
-Unchanged policy content retains memory through recompilation. A changed or
-removed policy resets it; old dimension ordinals are never reinterpreted. While
-source transfer holds or destination import reservations remain unresolved,
-mutation, load/reload/reset, and undo refuse a policy replacement before changing
-the live definition, journal, or derived state. Equal detached policy content and
-unrelated edits remain admissible. A full authority restore instead reinstates
-the checkpoint's validated memory and holds together.
-Authored rules have the same structural authority as other world effects:
-permission is checked at rule authorship, not through nonexistent World grant
-rows. These runtime-only writes do not broadcast private beliefs into the public
-world document, and are not admitted inside state-cell transactions.
-
-`world.social` is operator inspection, requiring the stamped caller's
-`Observe/all` grant. With no arguments it reports policy, clock, limits, and the
-last outcome. A query JSON argument reads one directed impression. This is not
-a per-creature network disclosure API. `world.budget` includes declared social
-storage and ingestion/expiry budgets; rule costs include numeric expressions
-and any row scans used to resolve their body references. The authoring syntax
-lives in [Schema](../Puck.World.Schema/README.md#social-evidence-and-belief-queries).
-
-The full authority checkpoint includes the social policy identity, impressions,
-receipts, frozen source observers, import reservations, work counters, clock, and last outcome. Restore validates detached
-records before allocating the new bank or changing live state. Social decoder row counts must fit their remaining
-wire bytes before allocating. The existing whole-checkpoint 64 MiB wire limit
-still applies; maximum component capacities are not a guarantee that a full
-authority checkpoint fits that envelope. Individual reservations carry private
-observer exports inside the federation protocol's separate 32 MiB frame limit.
-
-`CaptureObserver` copies one original incarnation's memory, including receipts
-whose impressions were forgotten and expired receipts awaiting reclamation.
-It traverses only that observer's entries, then sorts those entries into a
-canonical checkpoint; it does not scan the authority's other memories. Receipt
-ordinals are compacted without moving an old event across a forgetting boundary.
-Unrelated observers' event counts and authority work counters are not exported.
-The result is detached and retains the exact policy. Without a destination clock
-it retains the source clock; supplying `engineTick` rebases the stored aging
-anchors while preserving age, decay progress, and original event timestamps.
-An anchor may precede the destination's clock origin, so it is signed 128-bit
-engine time rather than an unsigned tick that could underflow. Rebasing models
-an instantaneous logical cutover; it does not guess transport delay from wall
-time. A rebase outside the signed representation refuses without changing the
-source. Restoring creates an independent bank with a fresh ingestion allowance;
-neither operation reserves destination capacity, removes source ownership, or
-by itself performs a transfer. Capturing many individuals at once still allocates
-and sorts all of their selected records.
-
-`RemoveObserver` retires one original incarnation's locally owned impressions
-and receipts, without touching what other individuals remember about it. It is
-not `Forget`: removing the receipts deliberately ends this bank's deduplication
-protection for that owner. Callers must secure any required durable copy and
-resolve ownership first; temporary separation or an ambiguous transfer must not
-call it. The operation allocates nothing, visits only that owner's records,
-and removes each receipt from the indexed expiry heap in logarithmic time.
-There are no deferred heap tombstones to accumulate during repeated crossings.
-It preserves the bank's clock, work counters, and next admission ordinal. This
-component operation is not the handoff's release operation: confirmed transfers
-use matching-key `RetireFrozenObserver` instead.
-
-`TryFreezeObserver` holds an incarnation's entire history for one exact transfer
-key, including empty and receipt-only histories. Equal retries retain the first
-freeze clock; competing keys and incoming reservations refuse. While held,
-`Observe` returns `ObserverFrozen`, `Forget` returns false, and ordinary
-`RemoveObserver` throws. Held receipts leave the expiry index, so they neither
-expire nor block other observers' bounded reclamation. Their storage remains
-occupied. The maximum number of simultaneous source holds is
-`WorldBodiesLimits.CapacityCeiling`; this includes empty histories.
-
-`CaptureFrozenObserver` copies the exact freeze-time history for its matching
-key. It remains logically identical across unrelated learning, clock advancement,
-and checkpoint restore. Ordinary reads still show current lazy age. No second
-full history is retained internally: freeze/thaw visit only the owner's receipts
-and allocate nothing, while capture remains an allocating cold path. The hold
-metadata is checkpointed and hashed, but is not carried inside an observer export.
-`world.social` reports whether a queried observer is frozen; the budget reports
-the total held observers.
-
-After a confirmed non-commit, `ThawObserver` releases only the matching hold and
-returns receipts to normal bounded expiry without refreshing their age. After a
-confirmed destination commit, `RetireFrozenObserver` removes the matching hold
-and all locally owned records, leaving others' memories about that creature intact.
-A deadline alone proves neither outcome; unresolved transfers must retain their
-source holds until ownership is established.
-
-`TryImportObserver` atomically adds an absent incarnation's exported memory to
-an existing bank. It validates the complete incoming history before writing,
-rebases age onto the destination clock, and assigns new local receipt ordinals
-without losing forgetting boundaries. It neither overwrites an existing owner
-nor evicts memories to fit. Malformed records, mixed observers, insufficient
-total/per-observer storage, and clock or ordinal overflow refuse without changing
-the destination. The source policy must exactly describe the checkpoint;
-destination capacity and work budgets may differ, but its dimension declarations
-(including order), learning coefficients, reliability rules, and evidence lifetime
-must have the same meaning. Differing semantics refuse rather than reinterpret
-the individual's memories. Validation copies and scratch scale with the incoming
-records, not the source policy's maximum capacities. The operation preserves
-destination work counters and is not ordinary evidence ingestion.
-
-`TryReserveImport` holds both storage and absent observer identities for an
-ordered group under one `WorldTransferKey`. Ordinary learning and unreserved
-intake cannot consume the held slots; even a zero-record arrival has an exclusive
-identity claim. Equal retries are idempotent, changed retries refuse, and the
-caller retains ownership of its original list. The total number of outstanding
-observer claims is bounded by `WorldBodiesLimits.CapacityCeiling`, including
-empty claims. Memory-entry quotas remain independently authored. Reservation
-counts and their cached logical digest enter checkpoints and state hashes;
-`world.social` and `world.budget` echo groups, observers, and held storage.
-
-`TryImportReserved` validates every incoming member, its source policy, its own
-allowance, and all clock/ordinal arithmetic before applying any member. Quotas
-are checked against detached records as well as caller-supplied collection counts.
-A late
-refusal leaves the whole group and reservation untouched. Success consumes the
-reservation and releases any unused allowance; it preserves ordinary work
-counters. Preparation allocates scratch proportional to the incoming records,
-not bank capacity. `CancelImportReservation` releases only a matching hold and
-does not remove memory. Clock advances never implicitly release holds: the
-enclosing transfer owns its deadline and must cancel an expired or aborted
-reservation explicitly. Checkpoint restore reconstructs the same holds before
-ordinary learning resumes, and rejects duplicate, overlapping, or over-capacity
-claims. `CaptureObserver` never exports the source authority's reservations.
-
-`TryPrepareReservedImport` returns an owned, single-use token without changing
-the bank. `TryCommitReservedImport` installs that token without allocating;
-changing the bank, reservation instance, clock, or admission ordinal invalidates
-it before any write. Updating an existing receipt without a new admission does
-not invalidate it. This split lets body admission follow complete memory validation.
-
-The host freezes each traveler's memory before requesting destination space.
-`WorldTransferEscrow` owns a detached copy of that export and reserves both its
-observer identity and exact storage quota alongside the body slots. No-source-bank
-arrivals receive empty identity claims when the destination has a social policy.
-A destination without a policy refuses any supplied social export, including an
-empty one; incompatible memory meanings also refuse. Transfer policy JSON is
-bounded to 65,536 UTF-16 characters before parsing. Capacity and work budgets may
-differ without changing memory meanings.
-
-Commit validates and prepares all histories before landing any body. Only after
-all bodies land does it install the prepared histories; a refusal releases the
-body and memory leases. Exact retries cannot replace the saved histories or
-rewrite reply slots. Authority restore checks that each saved body lease has its
-matching social quota before changing live state.
-
-The source retires its frozen records only after confirmed destination commit.
-A lost commit response retains body recovery and frozen memory for exact status
-reconciliation. Confirmed non-commit restores bodies before thawing their memories.
 An occupied source slot retains its pending recovery; a rollback-only checkpoint
 keeps only the remaining paired body/profile records and can never retry Commit.
 Restoration reinstalls the original mobility identity even if that slot was reused.
 A contradictory peer commit verdict after rollback leaves recovery held and
 reports once; it cannot create another body or stop unrelated worlds.
 Non-atomic parties split before reservation, so a parent lease cannot block its
-own children. Each child has its own capacity verdict and memory transaction.
+own children. Each child has its own capacity verdict.
 
-This protocol uses the freeze-time logical cutover described above, not an
-estimate of network delay. Component stress and replay MATCH alone do not prove
+Component stress and replay MATCH alone do not prove
 federated delivery; transport and host recovery require their own checks. The
-host retains unresolved destination identities, remote endpoints, exact commit
-payloads, and frozen social histories through repeated capture and restore.
+host retains unresolved destination identities, remote endpoints, and exact commit
+payloads through repeated capture and restore.
 `RestoreRow` validates all in-doubt and forwarding records before changing host state. A local
 destination can be admitted later: reconciliation matches its authority identity,
 not merely its registry name. Reinstalling a host slice replaces its transaction
@@ -950,69 +792,6 @@ four local seats using their one-based display numbers; `party` selects the acti
 local-seat cohort. Explicit body targets do not bypass Drive grants or destination
 admission, and an index outside the source world's actual capacity is refused at
 the transfer drain.
-
-Use `WorldMobilityIdentity.Incarnation` for observer, subject, source, and event
-origin identities. A current body index is not a durable individual: the next
-occupant of that slot must not inherit the previous occupant's relationships.
-The bank does not find bodies, disclose private intent, or certify an event's
-provenance. Its caller must enforce those boundaries before submitting evidence.
-An event's origin, aspect, sequence, and original occurrence tick must survive
-relaying. Giving a rumor a new identity every time it is repeated defeats exact
-deduplication and is a caller error.
-
-An event's original `OccurredAt` and its local aging anchor are separate. For a
-new event, the component caller may supply `LocalOccurredAt` to project the
-original instant into the receiving bank's clock; otherwise `OccurredAt` must
-already use that clock. The caller owns the projection's provenance, including
-after a receipt has expired and been reclaimed. A retained receipt uses its own
-anchor regardless of a relay's offered projection, so a repeated report cannot
-extend its admission window. World-rule observations currently use the local
-clock; the component does not infer an unknown foreign event's age from its
-timestamp alone.
-
-Dimensions have authored baselines, bounds, inertia, learning rates, and maximum
-per-event changes. Source reliability is an independent, optional [0,1] dimension,
-so liking someone is not the same as believing them. Quality and source reliability
-scale reports. Only a new direct event receives an uncertainty-driven follow-up
-boost. Repeated copies add no support; the first contradictory report about the
-same event may raise uncertainty once, and a later direct observation can correct
-that report once without counting as another independent event. The first direct
-observation then dominates later copies. This is bounded game logic, not a claim
-to infer objective truth or calibrated psychological probabilities.
-
-`Forget` removes an impression but keeps its unexpired receipt history, including
-across later relearning of the same individual. The exact ledger never evicts an
-unexpired receipt. Full storage returns `ReceiptCapacityLimited` or
-`ImpressionCapacityLimited`; the caller decides whether to defer or discard an
-attempt. Ingestion counts invalid and duplicate attempts against an authored
-per-boundary budget. Unfrozen receipt expiry uses a separately bounded oldest-first heap, ordered
-by projected occurrence time and admission ordinal. A large clock jump grants one
-budget, not an unbounded catch-up loop. Unprocessed expired entries may therefore
-temporarily keep the ledger full.
-
-Optional weight decay and recovery toward baseline are evaluated lazily from
-the last accepted update; reading never rebases the clock. Imported ages beyond
-the unsigned 64-bit read-back range saturate that read-back, without truncating
-the stored aging anchors or overflowing decay arithmetic. Simulation arithmetic
-uses Q48.16 values and widened integer intermediates, truncating toward zero at
-each narrowing. Storage is reserved at construction. The cached logical-state
-digest excludes dictionary layout, the per-observer ownership indexes, and the
-expiry heap's layout; checkpoint restore rebuilds those indexes and validates bounds, identity,
-duplicates, and capacity into a new bank before exposing it. The digest is for
-replay diagnostics, not cryptographic authentication. Component laws, numeric
-oracles, per-observer capture/forgetting/retirement laws, and the 4,096-observer
-allocation, capture, repeated ownership-replacement, and component round-trip probes live in
-[`WorldSocialMemoryLawTests`](../../tests/Puck.World.Tests/WorldSocialMemoryLawTests.cs).
-Reserved quota, empty-identity claims, late-failure atomicity, restart, and the
-4,096-observer reserved-group round trip are covered by
-[`WorldSocialImportReservationLawTests`](../../tests/Puck.World.Tests/WorldSocialImportReservationLawTests.cs).
-Source hold, stable export, thaw, retirement, malformed checkpoint, and allocation
-laws live in its [frozen-history partial](../../tests/Puck.World.Tests/WorldSocialImportReservationLawTests.Frozen.cs).
-World-rule, grant, checkpoint, and full-step allocation laws live in
-[`WorldSocialRuleLawTests`](../../tests/Puck.World.Tests/WorldSocialRuleLawTests.cs).
-Its [frozen-history partial](../../tests/Puck.World.Tests/WorldSocialRuleLawTests.Frozen.cs)
-checks wire continuation, rule-write refusals, and policy-replacement gates.
-Those probes do not measure physical population, rendering, or whole-game FPS.
 
 A disconnected seat or peer does not drop its body on the spot — it PARKS
 (`Entry.Parked`/`ParkedUntilTick`) for `bodies.reconnectGraceSeconds` (converted to ticks at compile),
@@ -1552,11 +1331,11 @@ uses with its default namespace.
 `replay.drive <name> [to <tick>]` re-drives a saved tape into the running
 session: a forced `world.load` of the embedded definition plus the complete
 boot authority checkpoint from a shadow server the recorded seats joined reset
-the live world. This resets clocks, social memory, decisions, latches, fields,
+the live world. This resets clocks, decisions, latches, fields,
 grants, held input, and population together. `WorldServer.Advance` continues
 from the restored clock; console waits retain a separate monotonic host-work
 count, and local route epochs refresh so input can resume immediately.
-Live replay refuses unresolved social ownership, transfer reservations or
+Live replay refuses unresolved transfer reservations or
 credentials, remote occupants, and host-owned transfer history. A tape owns
 one authority's inputs; it cannot rewind obligations held by another world.
 The ownership check and reset share the authority gate, so concurrent

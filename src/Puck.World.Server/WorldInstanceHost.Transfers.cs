@@ -235,7 +235,6 @@ public sealed partial class WorldInstanceHost {
         var reservationMembers = new WorldTransferReservationMember[members.Length];
         // Use the source row's authenticated namespace, not a locally invented composite label.
         var sourceAuthority = source.Server.AuthorityIdentity;
-        using var sourceSocial = new SourceSocialHold(source.Server, new(sourceAuthority, transfer.TransferId), members.Length);
 
         for (var reservationIndex = 0; (reservationIndex < members.Length); reservationIndex++) {
             var sourceSlot = members[reservationIndex];
@@ -249,14 +248,6 @@ public sealed partial class WorldInstanceHost {
                 return (Identity: body?.Profile, Source: (body?.Source ?? IntentSource.Idle), BodyColor: source.Server.Population.BodyColor(index: sourceSlot), CatalogRig: source.Server.Population.CatalogRig(index: sourceSlot), Mobility: mobility);
             });
 
-            if (!sourceSocial.TryCapture(traveler.Mobility, out var social, out var socialReason)) {
-                Console.Error.WriteLine($"[world.transfer: transfer={transfer.TransferId} refused ({socialReason}) — every source member remains attached]");
-                if (spawned) { ReapIfEmpty(name: targetName); }
-                NoteResolvedTransferOutcome(in transfer, transfer.SourceInstance, targetName, $"refused-social:{socialReason}");
-                CloseAdjacencyAfterRefusal(reason: socialReason, transfer: in transfer);
-                return;
-            }
-
             reservationMembers[reservationIndex] = new WorldTransferReservationMember(
                 Principal: MemberTravelPrincipal(
                     server: source.Server,
@@ -268,8 +259,7 @@ public sealed partial class WorldInstanceHost {
                 Source: traveler.Source,
                 BodyColor: traveler.BodyColor,
                 CatalogRig: traveler.CatalogRig,
-                Mobility: traveler.Mobility,
-                Social: social
+                Mobility: traveler.Mobility
             );
         }
 
@@ -622,7 +612,6 @@ public sealed partial class WorldInstanceHost {
                     CommitMembers: commitMembers,
                     MemberCount: members.Length
                 ));
-                sourceSocial.KeepForResolution(landed);
                 Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} IN-DOUBT ('{targetName}' commit acknowledgement was lost: {commitReason}) — recovery state retained for status reconciliation]");
                 return;
             }
@@ -641,10 +630,9 @@ public sealed partial class WorldInstanceHost {
             } catch (Exception exception) when (exception is IOException or System.Net.Sockets.SocketException or OperationCanceledException) {
                 // No ambiguous commit reaches this arm. A failed abort leaves only the expiring destination lease.
             }
-            if (!RestoreDetachedMembers(source, new(sourceAuthority, transfer.TransferId), landed, commitMembers)) {
+            if (!RestoreDetachedMembers(source, landed, commitMembers)) {
                 m_inDoubtTransfers.Add(new(transfer with { FrozenCohortSlots = [.. members] }, targetAuthority, sourceAuthority, targetName, spawned,
                     reservationRequest.DeadlineSourceTick, landed, commitMembers, members.Length, RollbackOnly: true));
-                sourceSocial.KeepForResolution(landed);
                 Console.Error.WriteLine($"[world.transfer: transfer={transfer.TransferId} ROLLBACK-PENDING ({abortReason}) — {landed.Count} source member(s) retain recovery state]");
                 return;
             }
@@ -676,7 +664,6 @@ public sealed partial class WorldInstanceHost {
             sourceAuthority, targetName, spawned, reservationRequest.DeadlineSourceTick, landed, commitMembers,
             members.Length, CommitConfirmed: true);
         m_inDoubtTransfers.Add(confirmed);
-        sourceSocial.KeepForResolution(landed);
         if (TryPublishCommittedTransfer(confirmed)) {
             m_inDoubtTransfers.Remove(confirmed);
             CompleteCommittedTransfer(confirmed);
@@ -1239,8 +1226,8 @@ public sealed partial class WorldInstanceHost {
         }
 
     }
-    // Only after all route/roster publication returned successfully may recovery, source memory, and the
-    // destination's exact-retry receipt be retired. No external publication callback runs during memory retirement.
+    // Only after all route/roster publication returned successfully may recovery and the destination's exact-retry
+    // receipt be retired. No external publication callback runs during retirement.
     private void CompleteCommittedTransfer(InDoubtTransfer pending) {
         var transfer = pending.Transfer;
         var targetAuthority = pending.TargetAuthority!.Value;
@@ -1249,12 +1236,6 @@ public sealed partial class WorldInstanceHost {
         var landed = pending.Landed;
         var memberCount = pending.MemberCount;
         var sourceInstance = m_instances[transfer.SourceInstance];
-        var sourceKey = new WorldTransferKey(pending.SourceAuthority, transfer.TransferId);
-        sourceInstance.Server.ExecuteAuthorityOperation(() => {
-            foreach (var member in landed) {
-                sourceInstance.Server.SocialMemory?.RetireFrozenObserver(member.Mobility.Incarnation, sourceKey);
-            }
-        });
 
         // A freshly spawned destination that seated NOBODY (every member skipped at detach — see the defense-in-
         // depth branch above) is worth cleaning up rather than leaking an empty one-shot instance. ReapIfEmpty
@@ -1528,6 +1509,16 @@ public sealed partial class WorldInstanceHost {
             }
             return restored;
         });
+    }
+    // Remove successful restores from BOTH lists so checkpoint profile ordinals still match. Failed restores keep
+    // their recovery record; no retry may overwrite an occupied source slot.
+    private static bool RestoreDetachedMembers(WorldInstance source, List<LandedMember> members, List<WorldTransferCommitMember> commits) {
+        for (var index = 0; index < members.Count;) {
+            if (!RestoreDetachedMember(source, members[index])) { index++; continue; }
+            members.RemoveAt(index);
+            commits.RemoveAt(index);
+        }
+        return members.Count == 0;
     }
     private static void SeedArrivalOccupancy(WorldInstance instance, int seat) {
         if (

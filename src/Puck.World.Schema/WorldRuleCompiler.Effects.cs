@@ -657,9 +657,6 @@ public static partial class WorldRuleCompiler {
                         Constant: LiteralToRaw(kind: kind, literal: constant.Value, ruleName: ruleName, verb: verb)
                     ), kind),
                 WorldValueToken.State state => ResolveState(state),
-                WorldValueToken.Social social => ResolveSocialToken(social.Query),
-                WorldValueToken.SocialClock => ResolveSocialMetadata(WorldRuleFactKind.SocialClock),
-                WorldValueToken.SocialResult => ResolveSocialMetadata(WorldRuleFactKind.SocialResult),
                 WorldValueToken.Add => Binary(WorldExpressionOp.Add),
                 WorldValueToken.Subtract => Binary(WorldExpressionOp.Subtract),
                 WorldValueToken.Multiply => Binary(WorldExpressionOp.Multiply),
@@ -714,16 +711,6 @@ public static partial class WorldRuleCompiler {
 
         return tokens;
 
-        CompiledWorldExpressionToken ResolveSocialMetadata(WorldRuleFactKind fact) {
-            _ = RequireSocialPolicy(ruleName, definition);
-            if (kind != CellKind.Int) { throw Malformed($"{fact} requires kind Int"); }
-            return Push(new(WorldExpressionOp.Operand, Operand: new(fact, null, null, ValueKind: CellKind.Int)), CellKind.Int);
-        }
-        CompiledWorldExpressionToken ResolveSocialToken(WorldSocialQuery query) {
-            var compiled = ResolveSocialQuery(query, ruleName, definition);
-            if (compiled.Kind != kind) { throw Malformed($"social facet {query.Facet} requires kind {compiled.Kind}"); }
-            return Push(new(WorldExpressionOp.Operand, Operand: new(WorldRuleFactKind.Social, null, null, ValueKind: kind, Social: compiled)), kind);
-        }
         CompiledWorldExpressionToken ResolveState(WorldValueToken.State state) {
             var resolved = ResolveOperand(
                 allowText: false,

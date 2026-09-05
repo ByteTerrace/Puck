@@ -1,6 +1,7 @@
 using Xunit;
 
 using Puck.Maths;
+using Puck.Physics.Motion;
 using Puck.World.Protocol;
 
 namespace Puck.World.Tests;
@@ -114,6 +115,46 @@ public sealed class StateDynamicsRebaseLawTests {
         // confirm convergence to 600, never back to the old truth of 300.
         Assert.True(condition: WorldStateReader.TryReadEased(definition: fixture.Server.Definition, key: "0", rawValue: out var settled, row: out _, rowName: "gauge", text: out _, tick: (rewriteTick + 10_000UL)));
         Assert.Equal(actual: settled, expected: 600L);
+    }
+    // A rule's AddState effect compiles to the same WorldMutation.UpsertStateCell RebaseCellTraits switches on
+    // (Server.WorldServer.Step's Write arm), so a rule-authored write rebases exactly like a directly-submitted one.
+    [Fact]
+    public void RuleAddState_FromRest_AlsoRebasesAndKicksTheVelocity() {
+        var gauge = new WorldStateRow(
+            Name: WorldCellName.Parse(candidate: "gauge"),
+            Kind: CellKind.Int,
+            Capacity: 8,
+            Cells: [
+                new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: 0, Dynamics: new WorldStateDynamics(EpochTick: 0, Row: "kickPos", V0: 0, Y0: 0)),
+            ]
+        );
+        var trigger = new WorldStateRow(Name: WorldCellName.Parse(candidate: "trigger"), Kind: CellKind.Int,
+            Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0)]);
+        var document = (Fixtures.BuildDocument().WithWorldState(rows: [gauge, trigger]) with {
+            DynamicsRaw = [.. Fixtures.StandardDynamics, KickPositive, KickZero, KickNegative],
+            Rules = [new WorldRule(
+                Name: WorldCellName.Parse(candidate: "bump"),
+                Gate: new ActionPredicate.CompareState(State: "trigger", Comparison: ActionStateComparison.Equal, Value: 1),
+                Mode: ActionTriggerMode.Edge,
+                Effects: [new ActionEffect.AddState(State: "gauge", Value: 300, Key: "0")]
+            )],
+        });
+
+        using var fixture = Fixtures.FreshServer(definition: document);
+
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
+            Principal: Actor, Row: "trigger", Key: WorldStateRow.SlotKey.Value, Value: 1, Kind: WorldDocumentWriteKind.Set
+        ));
+        fixture.Step();
+
+        var appliedTick = (fixture.Server.NextInputTick - 1UL);
+        var trait = ReadTrait(definition: fixture.Server.Definition);
+
+        Assert.Equal(actual: trait.Y0, expected: 0L);
+        Assert.Equal(actual: trait.EpochTick, expected: unchecked((long)appliedTick));
+        Assert.Equal(actual: System.Math.Sign(value: trait.V0), expected: 1);
+        Assert.True(condition: WorldStateReader.TryRead(definition: fixture.Server.Definition, key: "0", rawValue: out var truth, row: out _, rowName: "gauge", text: out _, tick: appliedTick));
+        Assert.Equal(actual: truth, expected: 300L);
     }
     [Fact]
     public void Undo_RestoresTheRebasedTraitBitExactly() {

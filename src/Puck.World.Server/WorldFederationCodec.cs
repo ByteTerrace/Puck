@@ -418,8 +418,6 @@ public static partial class WorldFederationCodec {
             return false;
         }
 
-        var social = reader.ReadBoolean() ? WorldAuthorityCheckpointCodec.ReadSocialMemory(ref reader) : null;
-        if (reader.Failed) { failure = reader.Failure; return false; }
         member = new WorldTransferReservationMember(
             Principal: WorldPrincipal.Console,
             PreferredSlot: preferred,
@@ -427,8 +425,7 @@ public static partial class WorldFederationCodec {
             Source: source,
             BodyColor: bodyColor,
             CatalogRig: catalogRig,
-            Mobility: mobility,
-            Social: social
+            Mobility: mobility
         );
         failure = default;
 
@@ -650,8 +647,6 @@ public static partial class WorldFederationCodec {
                 writer.WriteNullableFixed(value: projected.MoveSpeed);
                 writer.WriteNullableFixed(value: projected.TurnSpeed);
             }
-            writer.WriteBoolean(member.Social is not null);
-            if (member.Social is { } social) { WorldAuthorityCheckpointCodec.WriteSocialMemory(writer, social); }
         }
 
         return writer.ToArray();
