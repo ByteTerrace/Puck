@@ -5,8 +5,9 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>Pins the board-mask vocabulary: occupancy read as a 64-bit mask, the topology-aware shift that drops bits
-/// at an edge, the mask landing back on a board, cell-wise board algebra, and the ceilings that refuse.</summary>
+/// <summary>Pins the one cell-set vocabulary: occupancy read as a 64-bit mask, the topology-aware shift that drops
+/// bits at an edge, bit-algebra composing two masks, the composed set landing back on a board via <c>writeSet</c>,
+/// and the ceilings that refuse.</summary>
 public sealed class WorldBoardMaskLawTests {
     [Fact]
     public void OccupancyReadsAsAMaskAndABoardShiftFollowsTheTopologyWithoutWrapping() {
@@ -37,39 +38,50 @@ public sealed class WorldBoardMaskLawTests {
     }
 
     [Fact]
-    public void AMaskLandsBackOnTheBoardAndBoardsCombineCellWise() {
-        var board = new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0", 1)], Board: new("map"));
+    public void ASetLandsBackOnTheBoardThroughWriteSetAndBitAlgebraComposesTwoBoardsIntoOne() {
+        var board = new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0", 1), Cell("1", 7), Cell("3", 7)], Board: new("map"));
         var other = new WorldStateRow(Name("other"), CellKind.Int, Cells: [Cell("0", 1), Cell("5", 1)], Board: new("map"));
         var target = new WorldStateRow(Name("target"), CellKind.Bool, Board: new("map"));
-        var definition = Document([board, other, target, Slot("mask", 0b1010L)], [], []);
+        var definition = Document([board, other, target, Slot("mask", 0b1010L), Slot("both"), Slot("either"), Slot("onlyLeft"), Slot("complement")], [
+            new WorldRule(Name("both"), [new ActionEffect.SetState(State: "both", Expression: new WorldValueExpression(Tokens: [
+                new WorldValueToken.State(Name: "$board:mask:board:1:100"), new WorldValueToken.State(Name: "$board:mask:other:1:100"), new WorldValueToken.BitAnd(),
+            ]))]),
+            new WorldRule(Name("either"), [new ActionEffect.SetState(State: "either", Expression: new WorldValueExpression(Tokens: [
+                new WorldValueToken.State(Name: "$board:mask:board:1:100"), new WorldValueToken.State(Name: "$board:mask:other:1:100"), new WorldValueToken.BitOr(),
+            ]))]),
+            new WorldRule(Name("onlyLeft"), [new ActionEffect.SetState(State: "onlyLeft", Expression: new WorldValueExpression(Tokens: [
+                new WorldValueToken.State(Name: "$board:mask:board:1:100"), new WorldValueToken.State(Name: "$board:mask:other:1:100"), new WorldValueToken.BitNot(), new WorldValueToken.BitAnd(),
+            ]))]),
+            new WorldRule(Name("complement"), [new ActionEffect.SetState(State: "complement", Expression: new WorldValueExpression(Tokens: [
+                new WorldValueToken.State(Name: "$board:mask:other:1:100"), new WorldValueToken.BitNot(),
+            ]))]),
+        ]);
 
-        var painted = Apply(definition, new WorldStateTransform.SetMask("board", "mask", Value: 7));
+        var painted = Apply(definition, new WorldStateTransform.WriteSet("board", "mask", Value: 7));
         var cells = Find(painted, "board").Cells!;
         Assert.Equal(7L, WorldDefinitionRows.FindCell(cells, Name("1"))!.Value);
         Assert.Equal(7L, WorldDefinitionRows.FindCell(cells, Name("3"))!.Value);
         Assert.Equal(1L, WorldDefinitionRows.FindCell(cells, Name("0"))!.Value);
 
-        var both = Apply(painted, new WorldStateTransform.Combine("target", "board", WorldBoardCombine.And, "other"));
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        fixture.Step();
+        // Every op the old row-vs-row `combine` transform offered is now composed once from $board:mask reads and
+        // the generic bit operators, then lands back on the target board through the one writeSet transform: no
+        // second vocabulary for the same board algebra.
+        var both = Apply(fixture.Server.Definition, new WorldStateTransform.WriteSet("target", "both", Value: 1));
         Assert.Equal(new[] { "0" }, Members(both, "target"));
-        var either = Apply(painted, new WorldStateTransform.Combine("target", "board", WorldBoardCombine.Or, "other"));
-        Assert.Equal(new[] { "0", "1", "3", "5" }, Members(either, "target"));
-        var onlyLeft = Apply(painted, new WorldStateTransform.Combine("target", "board", WorldBoardCombine.AndNot, "other"));
-        Assert.Equal(new[] { "1", "3" }, Members(onlyLeft, "target"));
-        var complement = Apply(painted, new WorldStateTransform.Combine("target", "other", WorldBoardCombine.Not));
-        Assert.Equal(14, Members(complement, "target").Length);
-        // A zero-empty target stays sparse: only members are written; a nonzero empty forces every cell explicit.
         Assert.Single(Find(both, "target").Cells!);
-        var loud = painted with { StateRaw = painted.StateRaw! with { World = [.. painted.State.Select(r => r.Name.Value == "target" ? r with { Board = new("map", Empty: 1) } : r)] } };
-        var dense = Apply(loud, new WorldStateTransform.Combine("target", "board", WorldBoardCombine.And, "other"));
-        Assert.Equal(16, Find(dense, "target").Cells!.Count);
-        Assert.Equal(new[] { "0" }, Members(dense, "target"));
-
-        Assert.False(WorldStateTransforms.TryApply(painted, new WorldStateTransform.Combine("target", "board", WorldBoardCombine.Not, "other"), WorldPrincipal.World, 0, "test", out _, out var notReason));
-        Assert.Contains("takes no right", notReason);
+        var either = Apply(fixture.Server.Definition, new WorldStateTransform.WriteSet("target", "either", Value: 1));
+        Assert.Equal(new[] { "0", "1", "3", "5" }, Members(either, "target"));
+        var onlyLeft = Apply(fixture.Server.Definition, new WorldStateTransform.WriteSet("target", "onlyLeft", Value: 1));
+        Assert.Equal(new[] { "1", "3" }, Members(onlyLeft, "target"));
+        // BitNot complements past the topology's own cell count; writeSet clips the write to the board's real cells.
+        var complement = Apply(fixture.Server.Definition, new WorldStateTransform.WriteSet("target", "complement", Value: 1));
+        Assert.Equal(14, Members(complement, "target").Length);
     }
 
     [Fact]
-    public void MasksRefuseTopologiesPastSixtyFourCellsAndCombineRefusesMixedTopologies() {
+    public void MasksRefuseTopologiesPastSixtyFourCells() {
         var wide = new WorldStateRow(Name("wide"), CellKind.Int, Board: new("big"));
         var small = new WorldStateRow(Name("small"), CellKind.Int, Board: new("map"));
         var definition = Document([wide, small, Slot("mask")], [new WorldRule(Name("mask"), [new ActionEffect.SetState(State: "mask", FromState: "$board:mask:wide:1:1")])], [],
@@ -84,9 +96,7 @@ public sealed class WorldBoardMaskLawTests {
         Assert.Contains("at most 64", shiftReason);
 
         var mixed = Document([wide, small, Slot("mask")], [], [], lattices: [Grid("map", 4), Grid("big", 9)]);
-        Assert.False(WorldStateTransforms.TryApply(mixed, new WorldStateTransform.Combine("small", "wide", WorldBoardCombine.Or, "small"), WorldPrincipal.World, 0, "test", out _, out var mixedReason));
-        Assert.Contains("same topology", mixedReason);
-        Assert.False(WorldDefinitionValidator.TryValidateLocally(mixed with { Rules = [new WorldRule(Name("bad"), [new ActionEffect.TransformState(new WorldStateTransform.SetMask("wide", "mask"))])] }, out var setReason));
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(mixed with { Rules = [new WorldRule(Name("bad"), [new ActionEffect.TransformState(new WorldStateTransform.WriteSet("wide", "mask"))])] }, out var setReason));
         Assert.Contains("at most 64", setReason);
     }
 

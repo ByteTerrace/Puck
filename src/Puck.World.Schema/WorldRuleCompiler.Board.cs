@@ -14,15 +14,12 @@ public enum WorldBoardQueryKind : byte {
     Line,
     /// <summary>Minimum nonnegative entry cost, -1 if unreachable, -2 if the visit budget was exhausted.</summary>
     PathCost,
-    /// <summary>The 64-bit mask of cells whose value lies in an inclusive range; bit c is cell ordinal c.</summary>
+    /// <summary>The 64-bit cell-set mask of cells whose value lies in an inclusive range; bit c is cell ordinal c. A
+    /// mask carries through the topology's point group with the <c>image</c>/<c>shift</c> expression ops.</summary>
     Mask,
-    /// <summary>The mask of a range's cells carried through one point-group element.</summary>
-    Image,
     /// <summary>The least 64-bit fingerprint of the board's values over every point-group element: equal for two
     /// boards that are the same up to symmetry.</summary>
     Canonical,
-    /// <summary>The least image mask of a range over every point-group element.</summary>
-    CanonicalMask,
     /// <summary>The grid cell a referenced body's world position falls in, or -1.</summary>
     CellOf,
     /// <summary>The cell reached by an arbitrary (dx, dz) grid step from the key cell, or -1.</summary>
@@ -82,22 +79,20 @@ public static partial class WorldRuleCompiler {
             "line" => WorldBoardQueryKind.Line,
             "pathCost" => WorldBoardQueryKind.PathCost,
             "mask" => WorldBoardQueryKind.Mask,
-            "image" => WorldBoardQueryKind.Image,
             "canonical" => WorldBoardQueryKind.Canonical,
-            "canonicalMask" => WorldBoardQueryKind.CanonicalMask,
             "cellOf" => WorldBoardQueryKind.CellOf,
             "offset" => WorldBoardQueryKind.Offset,
             "attacks" => WorldBoardQueryKind.Attacks,
             _ => throw Invalid($"unknown board operation '{tokens[1]}'"),
         };
-        if (kind is WorldBoardQueryKind.Mask or WorldBoardQueryKind.Image or WorldBoardQueryKind.CanonicalMask && topology.CellCount > WorldBoardMask.MaxCells) {
+        if (kind is WorldBoardQueryKind.Mask && topology.CellCount > WorldBoardMask.MaxCells) {
             throw Invalid($"{tokens[1]} reads at most {WorldBoardMask.MaxCells} cells as bits; '{board.Topology}' has {topology.CellCount}");
         }
         if (kind is WorldBoardQueryKind.CellOf or WorldBoardQueryKind.Offset && topology.Kind != WorldTopologyKind.Grid) {
             throw Invalid($"'{tokens[1]}' requires a Grid topology, not {topology.Kind}");
         }
         CompiledCellRef? keyFrom = null;
-        if (kind is not (WorldBoardQueryKind.Line or WorldBoardQueryKind.Mask or WorldBoardQueryKind.Image or WorldBoardQueryKind.Canonical or WorldBoardQueryKind.CanonicalMask or WorldBoardQueryKind.CellOf)) {
+        if (kind is not (WorldBoardQueryKind.Line or WorldBoardQueryKind.Mask or WorldBoardQueryKind.Canonical or WorldBoardQueryKind.CellOf)) {
             if (TryResolveDynamicKey(definition: definition, key: key, ruleName: ruleName, verb: "board", keyFieldLabel: "key", cell: out var dynamicKey)) {
                 keyFrom = dynamicKey;
             } else if (key is null || !topology.TryCell(key, out _)) {
@@ -119,18 +114,6 @@ public static partial class WorldRuleCompiler {
             if (tokens.Length != 3) {
                 throw Invalid("canonical takes no arguments beyond the row");
             }
-        } else if (kind is WorldBoardQueryKind.Image or WorldBoardQueryKind.CanonicalMask) {
-            var boundsAt = (kind == WorldBoardQueryKind.Image) ? 4 : 3;
-            if (tokens.Length != boundsAt + 2 || row.Kind is not (CellKind.Int or CellKind.Bool) ||
-                !long.TryParse(tokens[boundsAt], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var low) ||
-                !long.TryParse(tokens[boundsAt + 1], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var high) || low > high) {
-                throw Invalid($"{tokens[1]} requires {((kind == WorldBoardQueryKind.Image) ? "<element>:" : string.Empty)}<min>:<max> integer bounds, min <= max, on an integer or boolean board row");
-            }
-            var element = (kind == WorldBoardQueryKind.Image) ? topology.Element(tokens[3]) : 0;
-            if (element < 0) {
-                throw Invalid($"'{tokens[3]}' is not a symmetry element of '{board.Topology}'");
-            }
-            query = query with { Direction = element, Value = low, Upper = high };
         } else if (kind == WorldBoardQueryKind.Mask) {
             if (tokens.Length != 5 || row.Kind is not (CellKind.Int or CellKind.Bool) ||
                 !long.TryParse(tokens[3], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var lower) ||

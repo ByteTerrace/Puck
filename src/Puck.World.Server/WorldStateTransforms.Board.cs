@@ -1,29 +1,27 @@
-using System.Buffers;
-
 namespace Puck.World.Server;
 
 public static partial class WorldStateTransforms {
-    private static bool TrySetMask(WorldDefinition definition, WorldStateRow[] rows, WorldStateTransform.SetMask setMask, out string reason) {
-        if (!TryFind(rows, setMask.Row, out var index, out reason) || !TryFind(rows, setMask.Mask, out var maskIndex, out reason)) {
+    private static bool TryWriteSet(WorldDefinition definition, WorldStateRow[] rows, WorldStateTransform.WriteSet writeSet, out string reason) {
+        if (!TryFind(rows, writeSet.Row, out var index, out reason) || !TryFind(rows, writeSet.Set, out var setIndex, out reason)) {
             return false;
         }
         var row = rows[index];
-        var maskRow = rows[maskIndex];
+        var setRow = rows[setIndex];
         if (row.Board is not { } board || WorldTopologyCompilation.Find(definition.StateRaw, board.Topology) is not { } topology || topology.CellCount > WorldBoardMask.MaxCells) {
-            return Refuse($"setMask requires a board row over a topology of at most {WorldBoardMask.MaxCells} cells", out reason);
+            return Refuse($"writeSet requires a board row over a topology of at most {WorldBoardMask.MaxCells} cells", out reason);
         }
-        if (maskRow.Kind != CellKind.Int || WorldDefinitionRows.FindCell(maskRow.Cells, WorldCellName.Parse(setMask.MaskKey ?? WorldStateRow.SlotKey)) is not { } maskCell) {
-            return Refuse("setMask reads its mask from an integer cell", out reason);
+        if (setRow.Kind != CellKind.Int || WorldDefinitionRows.FindCell(setRow.Cells, WorldCellName.Parse(writeSet.SetKey ?? WorldStateRow.SlotKey)) is not { } setCell) {
+            return Refuse("writeSet reads its cell set from an integer cell", out reason);
         }
-        if (row.ClampToEnvelope(setMask.Value) != setMask.Value || (row.Kind == CellKind.Bool && setMask.Value is not (0 or 1))) {
-            return Refuse("setMask writes a value the board row does not admit", out reason);
+        if (row.ClampToEnvelope(writeSet.Value) != writeSet.Value || (row.Kind == CellKind.Bool && writeSet.Value is not (0 or 1))) {
+            return Refuse("writeSet writes a value the board row does not admit", out reason);
         }
         var cells = (row.Cells ?? []).ToList();
         var position = new Dictionary<WorldCellName, int>(cells.Count);
         for (var cellIndex = 0; cellIndex < cells.Count; cellIndex++) {
             position[cells[cellIndex].Key] = cellIndex;
         }
-        var bits = (ulong)maskCell.Value;
+        var bits = (ulong)setCell.Value;
         while (bits != 0UL) {
             var cell = System.Numerics.BitOperations.TrailingZeroCount(bits);
             bits &= bits - 1UL;
@@ -32,10 +30,10 @@ public static partial class WorldStateTransforms {
             }
             var key = topology.CellName(cell);
             if (position.TryGetValue(key, out var existing)) {
-                cells[existing] = cells[existing] with { Value = setMask.Value };
+                cells[existing] = cells[existing] with { Value = writeSet.Value };
             } else {
                 position[key] = cells.Count;
-                cells.Add(new(key, setMask.Value));
+                cells.Add(new(key, writeSet.Value));
             }
         }
         rows[index] = row with { Cells = cells };
@@ -72,116 +70,4 @@ public static partial class WorldStateTransforms {
         return true;
     }
 
-    // Membership is decided cell by cell over pooled scratch; the target is written SPARSELY when its empty value is
-    // zero (only members, as 1), and densely as 1/0 only when a nonzero empty value would otherwise read absent
-    // cells as members.
-    private static bool TryCombine(WorldDefinition definition, WorldStateRow[] rows, WorldStateTransform.Combine combine, out string reason) {
-        if (!TryFind(rows, combine.Target, out var targetIndex, out reason) || !TryFind(rows, combine.Left, out var leftIndex, out reason)) {
-            return false;
-        }
-        var target = rows[targetIndex];
-        var left = rows[leftIndex];
-        if (target.Board is not { } board || WorldTopologyCompilation.Find(definition.StateRaw, board.Topology) is not { } topology ||
-            left.Board?.Topology != board.Topology || target.Kind is not (CellKind.Int or CellKind.Bool)) {
-            return Refuse("combine requires an integer or boolean target board and a left board over the same topology", out reason);
-        }
-        WorldStateRow? right = null;
-        if (combine.Operation == WorldBoardCombine.Not) {
-            if (combine.Right is not null) {
-                return Refuse("combine not takes no right board", out reason);
-            }
-        } else {
-            if (combine.Right is null || !TryFind(rows, combine.Right, out var rightIndex, out reason)) {
-                return Refuse("combine needs a right board for every operation but not", out reason);
-            }
-            right = rows[rightIndex];
-            if (right.Board?.Topology != board.Topology) {
-                return Refuse("combine requires the right board to share the target's topology", out reason);
-            }
-        }
-        var count = topology.CellCount;
-        var scratch = ArrayPool<long>.Shared.Rent(2 * count);
-        try {
-            var leftValues = scratch.AsSpan(0, count);
-            var rightValues = scratch.AsSpan(count, count);
-            WorldBoardQueries.Read(left, topology, leftValues);
-            if (right is not null) {
-                WorldBoardQueries.Read(right, topology, rightValues);
-            } else {
-                rightValues.Clear();
-            }
-            var dense = board.Empty != 0L;
-            var members = 0;
-            for (var cell = 0; cell < count; cell++) {
-                if (Member(combine.Operation, leftValues[cell] != 0L, rightValues[cell] != 0L)) {
-                    members++;
-                }
-            }
-            var cells = new WorldStateCell[dense ? count : members];
-            var next = 0;
-            for (var cell = 0; cell < count; cell++) {
-                var member = Member(combine.Operation, leftValues[cell] != 0L, rightValues[cell] != 0L);
-                if (dense) {
-                    cells[next++] = new(topology.CellName(cell), member ? 1L : 0L);
-                } else if (member) {
-                    cells[next++] = new(topology.CellName(cell), 1L);
-                }
-            }
-            rows[targetIndex] = target with { Cells = cells };
-            return true;
-        } finally {
-            ArrayPool<long>.Shared.Return(scratch);
-        }
-    }
-
-    // The image board holds source[c] at image(c); cells at the source's empty value are omitted when the target's
-    // empty value agrees, so a sparse board stays sparse.
-    private static bool TryMapBoard(WorldDefinition definition, WorldStateRow[] rows, WorldStateTransform.MapBoard mapped, out string reason) {
-        if (!TryFind(rows, mapped.Target, out var targetIndex, out reason) || !TryFind(rows, mapped.Source, out var sourceIndex, out reason)) {
-            return false;
-        }
-        var target = rows[targetIndex];
-        var source = rows[sourceIndex];
-        if (target.Board is not { } board || WorldTopologyCompilation.Find(definition.StateRaw, board.Topology) is not { } topology ||
-            source.Board?.Topology != board.Topology || target.Kind != source.Kind) {
-            return Refuse("mapBoard requires source and target boards of one kind over one topology", out reason);
-        }
-        var element = topology.Element(mapped.Element ?? string.Empty);
-        if (element < 0) {
-            return Refuse($"'{mapped.Element}' is not a symmetry element of '{board.Topology}'", out reason);
-        }
-        var count = topology.CellCount;
-        var scratch = ArrayPool<long>.Shared.Rent(count);
-        try {
-            var values = scratch.AsSpan(0, count);
-            WorldBoardQueries.Read(source, topology, values);
-            var dense = board.Empty != source.Board.Empty;
-            var written = 0;
-            for (var cell = 0; cell < count; cell++) {
-                if (dense || values[cell] != source.Board.Empty) {
-                    written++;
-                }
-            }
-            var cells = new WorldStateCell[written];
-            var next = 0;
-            for (var cell = 0; cell < count; cell++) {
-                if (dense || values[cell] != source.Board.Empty) {
-                    cells[next++] = new(topology.CellName(topology.Image(element, cell)), values[cell]);
-                }
-            }
-            Array.Sort(cells, static (a, b) => string.CompareOrdinal(a.Key.Value, b.Key.Value));
-            rows[targetIndex] = target with { Cells = cells };
-            return true;
-        } finally {
-            ArrayPool<long>.Shared.Return(scratch);
-        }
-    }
-
-    private static bool Member(WorldBoardCombine operation, bool a, bool b) => operation switch {
-        WorldBoardCombine.And => a && b,
-        WorldBoardCombine.Or => a || b,
-        WorldBoardCombine.Xor => a != b,
-        WorldBoardCombine.AndNot => a && !b,
-        _ => !a,
-    };
 }

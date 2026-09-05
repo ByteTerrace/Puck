@@ -18,10 +18,8 @@ public static partial class WorldStateTransforms {
         WorldStateTransform.TurnOrder order => [order.Row],
         WorldStateTransform.Shuffle shuffle => [shuffle.Row, shuffle.Draw],
         WorldStateTransform.Sort sort => sort.By is null ? [sort.Row] : [sort.Row, .. sort.By.Select(key => key.Row)],
-        WorldStateTransform.SetMask setMask => [setMask.Row],
-        WorldStateTransform.Combine combine => [combine.Target],
+        WorldStateTransform.WriteSet writeSet => [writeSet.Row],
         WorldStateTransform.Push push => [push.Row],
-        WorldStateTransform.MapBoard mapped => [mapped.Target],
         _ => [],
     };
 
@@ -50,10 +48,8 @@ public static partial class WorldStateTransforms {
                 WorldStateTransform.TurnOrder order => TryOrder(rows, order, actor, out reason),
                 WorldStateTransform.Shuffle shuffle => TryShuffle(definition, rows, shuffle, instance, out reason),
                 WorldStateTransform.Sort sort => TrySort(rows, sort, out reason),
-                WorldStateTransform.SetMask setMask => TrySetMask(definition, rows, setMask, out reason),
-                WorldStateTransform.Combine combine => TryCombine(definition, rows, combine, out reason),
+                WorldStateTransform.WriteSet writeSet => TryWriteSet(definition, rows, writeSet, out reason),
                 WorldStateTransform.Push push => TryPush(rows, push, out reason),
-                WorldStateTransform.MapBoard mapped => TryMapBoard(definition, rows, mapped, out reason),
                 _ => Refuse("unknown state transform", out reason),
             };
         } catch (OverflowException exception) {
