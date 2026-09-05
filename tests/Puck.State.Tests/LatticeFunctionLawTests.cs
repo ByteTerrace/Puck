@@ -108,6 +108,55 @@ public sealed class LatticeFunctionLawTests {
     }
 
     [Fact]
+    public void SubsetsRankColexicographicallyAsBitmasks() {
+        Assert.Equal(2598960L, Eval("binomial(52, 5)"));
+        Assert.Equal(1L, Eval("binomial(7, 0)"));
+        Assert.Equal(0L, Eval("binomial(3, 5)"));
+        Assert.Equal(2432902008176640000L, Eval("factorial(20)"));
+        Assert.False(TryEval("factorial(21)"));
+        Assert.False(TryEval("binomial(-1, 0)"));
+        Assert.False(TryEval("binomial(70, 35)"));                       // exceeds 2^63
+
+        // Every 3-subset of 0..7 round-trips through its rank; combElement reads the subset the mask spells.
+        for (var rank = 0L; rank < 56L; rank++) {
+            var mask = Eval($"combUnrank(8, 3, {rank})");
+            Assert.Equal(3L, Eval($"popCount({mask})"));
+            Assert.Equal(rank, Eval($"combRank(8, {mask})"));
+            for (var index = 0; index < 3; index++) {
+                var element = Eval($"combElement(8, 3, {rank}, {index})");
+                Assert.NotEqual(0L, mask & (1L << ((int)element)));
+                Assert.Equal(index, System.Numerics.BitOperations.PopCount(((ulong)mask) & ((1UL << ((int)element)) - 1UL)));
+            }
+        }
+        Assert.Equal(0L, Eval("combRank(8, 7)"));                       // {0,1,2} is the first 3-subset
+        Assert.Equal(55L, Eval("combRank(8, 224)"));                    // {5,6,7} is the last
+        Assert.False(TryEval("combRank(8, 256)"));                      // bit 8 is outside 0..7
+        Assert.False(TryEval("combUnrank(8, 3, 56)"));
+        Assert.True(TryEval("combRank(64, -1)"));                       // the full word is a 64-subset of 0..63
+        // A poker hand's identity: a 5-card mask over 52 ranks below binomial(52, 5).
+        Assert.True(Eval("combRank(52, (1 << 0) | (1 << 13) | (1 << 26) | (1 << 39) | (1 << 51))") < 2598960L);
+    }
+
+    [Fact]
+    public void PermutationsRankLexicographicallyAsNibbles() {
+        Assert.Equal(0L, Eval("permRank(3, 0x210)"));                  // (0, 1, 2)
+        Assert.Equal(5L, Eval("permRank(3, 0x012)"));                  // (2, 1, 0)
+        Assert.Equal(0x012L, Eval("permUnrank(3, 5)"));
+        Assert.Equal(2L, Eval("permElement(3, 5, 0)"));
+        Assert.False(TryEval("permRank(3, 0x211)"));                   // a repeated element
+        Assert.False(TryEval("permUnrank(3, 6)"));
+        Assert.False(TryEval("permUnrank(17, 0)"));
+        Assert.Equal(unchecked((long)0xFEDCBA9876543210UL), Eval("permUnrank(16, 0)"));
+        for (var rank = 0L; rank < 120L; rank++) {
+            var packed = Eval($"permUnrank(5, {rank})");
+            Assert.Equal(rank, Eval($"permRank(5, {packed})"));
+            for (var position = 0; position < 5; position++) {
+                Assert.Equal((packed >> (4 * position)) & 0xF, Eval($"permElement(5, {rank}, {position})"));
+            }
+        }
+    }
+
+    [Fact]
     public void PrimesAreExactAndTheTableIsBounded() {
         long[] first = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29];
 

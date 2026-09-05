@@ -121,6 +121,14 @@ public static class ExpressionSpelling {
         ["mex"] = (1, static () => new ValueToken.MinimumExcluded()),
         ["isPrime"] = (1, static () => new ValueToken.IsPrime()),
         ["prime"] = (1, static () => new ValueToken.Prime()),
+        ["binomial"] = (2, static () => new ValueToken.Binomial()),
+        ["factorial"] = (1, static () => new ValueToken.Factorial()),
+        ["combRank"] = (2, static () => new ValueToken.CombinationRank()),
+        ["combUnrank"] = (3, static () => new ValueToken.CombinationUnrank()),
+        ["combElement"] = (4, static () => new ValueToken.CombinationElement()),
+        ["permRank"] = (2, static () => new ValueToken.PermutationRank()),
+        ["permUnrank"] = (2, static () => new ValueToken.PermutationUnrank()),
+        ["permElement"] = (3, static () => new ValueToken.PermutationElement()),
     };
 
     /// <summary>Parses an infix spelling to its postfix token list.</summary>

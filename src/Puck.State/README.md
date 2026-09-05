@@ -106,7 +106,13 @@ Nothing here carries a `World` name — a state library names no world.
   (the smallest clear bit of a 64-bit set); `isPrime(n)` (exact over 64 bits
   in bounded work) and `prime(i)` (the first 256 primes, derived once) — never
   a next-prime or n-th-prime search, which is unbounded on the tick path and
-  belongs to a generator draw source; the layer family over
+  belongs to a generator draw source; `binomial(n, k)` and `factorial(n)`
+  (n ≤ 20); the combinatorial number system over a subset spelled as a bitmask
+  (`combRank(n, mask)`, `combUnrank(n, k, rank)`, `combElement(n, k, rank, i)`,
+  colexicographic, n ≤ 64 — a poker hand is one rank below `binomial(52, 5)`);
+  the factorial number system over a permutation packed as nibbles, position
+  i in bits 4i..4i+3 (`permRank(n, packed)`, `permUnrank(n, rank)`,
+  `permElement(n, rank, i)`, lexicographic Lehmer codes, n ≤ 16); the layer family over
   `LayerSequence` (`layer`, `layerOffset`, `layerStart`, `layerSize`, each
   `(index-or-layer, start, step, seed)`); and `sqrt` (int floor root or fixed
   root), `sin`, `cos` (fixed radians). Every function is int-only except

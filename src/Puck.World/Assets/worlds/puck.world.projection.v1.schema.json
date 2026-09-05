@@ -5640,6 +5640,78 @@
                                               }
                                             },
                                             "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "n choose k, exact; zero when k exceeds n.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "binomial"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "n! for n in 0..20.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "factorial"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The colexicographic rank of a k-subset of 0..n\u22121 given as a bitmask (bit e set = element e chosen), in [0, binomial(n, k)); n at most 64.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "combRank"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The k-subset of 0..n\u22121 at a colexicographic rank, as a bitmask; the inverse of combRank.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "combUnrank"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The i-th smallest element (i from 0) of the k-subset of 0..n\u22121 at a colexicographic rank, without building the subset.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "combElement"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The lexicographic (Lehmer) rank of a permutation of 0..n\u22121 packed as nibbles \u2014 position i in bits 4i..4i\u002B3 \u2014 in [0, n!); n at most 16.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "permRank"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The permutation of 0..n\u22121 at a lexicographic rank, packed as nibbles; the inverse of permRank.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "permUnrank"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The element at position i of the permutation of 0..n\u22121 at a lexicographic rank.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "permElement"
+                                              }
+                                            },
+                                            "additionalProperties": false
                                           }
                                         ]
                                       }

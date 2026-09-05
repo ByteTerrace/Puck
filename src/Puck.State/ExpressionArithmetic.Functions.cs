@@ -37,6 +37,10 @@ public static partial class ExpressionArithmetic {
             or ExpressionOp.SquareSubtract or ExpressionOp.SquareMultiply or ExpressionOp.SquareScale
             or ExpressionOp.GreatestCommonDivisor or ExpressionOp.LeastCommonMultiple or ExpressionOp.FloorModulo => 2,
         ExpressionOp.SquareTranslate or ExpressionOp.CycleForward or ExpressionOp.CycleDistance => 3,
+        ExpressionOp.Factorial => 1,
+        ExpressionOp.Binomial or ExpressionOp.CombinationRank or ExpressionOp.PermutationRank or ExpressionOp.PermutationUnrank => 2,
+        ExpressionOp.CombinationUnrank or ExpressionOp.PermutationElement => 3,
+        ExpressionOp.CombinationElement => 4,
         _ => 0,
     };
 
@@ -365,6 +369,62 @@ public static partial class ExpressionArithmetic {
                     if ((arguments[0] < 0L) || (arguments[0] >= s_primes.Length)) { return false; }
                     value = s_primes[arguments[0]];
                     return true;
+                case ExpressionOp.Binomial:
+                    if (!IsInt(arguments[0]) || !IsInt(arguments[1])) { return false; }
+                    return TryLong(Combinatorics.Binomial(n: ((int)arguments[0]), k: ((int)arguments[1])), out value);
+                case ExpressionOp.Factorial:
+                    if (!IsInt(arguments[0])) { return false; }
+                    return TryLong(Combinatorics.Factorial(n: ((int)arguments[0])), out value);
+                case ExpressionOp.CombinationRank: {
+                    var n = arguments[0];
+                    var mask = arguments[1];
+                    if ((n < 0L) || (n > MaskBits) || ((n < MaskBits) && ((((ulong)mask) >> ((int)n)) != 0UL))) { return false; }
+                    Span<int> elements = stackalloc int[MaskBits];
+                    var count = 0;
+                    for (var remaining = (ulong)mask; remaining != 0UL; remaining &= (remaining - 1UL)) {
+                        elements[count++] = System.Numerics.BitOperations.TrailingZeroCount(remaining);
+                    }
+                    return TryLong(Combinatorics.CombinationRank(n: ((int)n), combination: elements[..count]), out value);
+                }
+                case ExpressionOp.CombinationUnrank: {
+                    var n = arguments[0];
+                    var k = arguments[1];
+                    if ((n < 0L) || (n > MaskBits) || (k < 0L) || (k > n) || (arguments[2] < 0L)) { return false; }
+                    Span<int> elements = stackalloc int[MaskBits];
+                    Combinatorics.CombinationUnrank(n: ((int)n), rank: ((ulong)arguments[2]), destination: elements[..((int)k)]);
+                    var mask = 0UL;
+                    for (var index = 0; index < k; index++) { mask |= (1UL << elements[index]); }
+                    value = unchecked((long)mask);
+                    return true;
+                }
+                case ExpressionOp.CombinationElement:
+                    if (!IsInt(arguments[0]) || !IsInt(arguments[1]) || (arguments[2] < 0L) || !IsInt(arguments[3])) { return false; }
+                    value = Combinatorics.CombinationElement(n: ((int)arguments[0]), k: ((int)arguments[1]), rank: ((ulong)arguments[2]), index: ((int)arguments[3]));
+                    return true;
+                case ExpressionOp.PermutationRank: {
+                    var n = arguments[0];
+                    if ((n < 0L) || (n > NibbleSlots)) { return false; }
+                    Span<int> elements = stackalloc int[NibbleSlots];
+                    for (var index = 0; index < n; index++) { elements[index] = ((int)((((ulong)arguments[1]) >> (4 * index)) & 0xFUL)); }
+                    return TryLong(Combinatorics.PermutationRank(permutation: elements[..((int)n)]), out value);
+                }
+                case ExpressionOp.PermutationUnrank:
+                case ExpressionOp.PermutationElement: {
+                    var n = arguments[0];
+                    if ((n < 0L) || (n > NibbleSlots) || (arguments[1] < 0L)) { return false; }
+                    Span<int> elements = stackalloc int[NibbleSlots];
+                    Combinatorics.PermutationUnrank(rank: ((ulong)arguments[1]), destination: elements[..((int)n)]);
+                    if (operation == ExpressionOp.PermutationElement) {
+                        var position = arguments[2];
+                        if ((position < 0L) || (position >= n)) { return false; }
+                        value = elements[(int)position];
+                        return true;
+                    }
+                    var packed = 0UL;
+                    for (var index = 0; index < n; index++) { packed |= (((ulong)elements[index]) << (4 * index)); }
+                    value = unchecked((long)packed);
+                    return true;
+                }
                 default:
                     return false;
             }
@@ -378,6 +438,14 @@ public static partial class ExpressionArithmetic {
     }
 
     private static bool IsInt(long value) => ((value >= int.MinValue) && (value <= int.MaxValue));
+    // A subset is a bitmask, so its universe is at most the word; a permutation is nibble-packed, so at most 16 slots.
+    private const int MaskBits = 64;
+    private const int NibbleSlots = 16;
+
+    private static bool TryLong(ulong count, out long value) {
+        value = unchecked((long)count);
+        return (count <= long.MaxValue);
+    }
 
     private static bool TrySquare(long value, out Puck.Maths.SquareIndex cell) {
         if ((value < 0L) || (value > Puck.Maths.SquareIndex.MaxValue)) {

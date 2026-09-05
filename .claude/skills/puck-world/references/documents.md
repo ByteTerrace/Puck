@@ -265,7 +265,12 @@ grid cell still bridges through `%`/`/` or `$board:offset`; `gcd`/`lcm` (`gcd(dx
 with no interior point); the floored `mod(a, m)` with `cycleForward(a, b, m)`/`cycleDistance(a, b, m)` for
 track and pit races (`%` stays C truncation); `mex(mask)`, the Sprague–Grundy value of a set of options; `isPrime(n)` (exact, bounded) and `prime(i)` for
 i in 0..255 (a Gödel multiset in one cell: add is `* prime(k)`, presence is `% prime(k) == 0`) — no next-prime or
-n-th-prime search, which is unbounded and belongs to a generator draw source;
+n-th-prime search, which is unbounded and belongs to a generator draw source; `binomial(n, k)`, `factorial(n)`
+(n ≤ 20); a subset as a bitmask — `combRank(n, mask)` (colex rank below `binomial(n, popCount(mask))`, n ≤ 64),
+`combUnrank(n, k, rank)`, `combElement(n, k, rank, i)` — so a poker hand or a drafted set is one cell; a
+permutation of 0..n−1 packed as nibbles (position i in bits 4i..4i+3, n ≤ 16) — `permRank(n, packed)`
+(lexicographic Lehmer code below `factorial(n)`), `permUnrank(n, rank)`, `permElement(n, rank, i)` — so a
+turn order or a shuffled short deck is one cell, read back with `bitField(packed, 4 * i, 4)`;
 the layer family over `LayerSequence` (`layer`, `layerOffset`, `layerStart`, `layerSize`, each
 `(index-or-layer, start, step, seed)` — `layer(i, 6, 6, 1)` is `hexRadius(i)`); and `sqrt` (both kinds),
 `sin`, `cos` (fixed radians). Every other function is int-only, and a domain fault fails the expression the way

@@ -1362,12 +1362,14 @@ call (`pairX(pair(x, y))` is `x`), a domain fault fails the expression the way
 an overflow does, and the compile-time kind proof admits each family only in
 the kind it means (`sin`/`cos` fixed, `sqrt` both, the rest int).
 `ModularTransform` stays a C# concern: a quasicrystal inflation would arrive as
-a generator draw source, not as an author-facing matrix. Two families await
-consumer integration over [Puck.Maths `Combinatorics`](../src/Puck.Maths/README.md#combination-and-permutation-ranks):
-the combinatorial number system (binomials and colex rank, poker's hand
-identity) and factoradic permutation codes — the latter over a row, so its
-home is a reduction operand, not a call. The Maths APIs carry exact `ulong`
-ranks; complete permutation spaces fit through 20 elements.
+a generator draw source, not as an author-facing matrix. The combinatorial and
+factorial number systems over [Puck.Maths `Combinatorics`](../src/Puck.Maths/README.md#combination-and-permutation-ranks)
+are calls over one cell each: a subset is a bitmask (`combRank`/`combUnrank`/
+`combElement`, colex, n ≤ 64 — a poker hand's identity is one rank below
+`binomial(52, 5)`) and a permutation is nibble-packed (`permRank`/`permUnrank`/
+`permElement`, Lehmer codes, n ≤ 16 — a turn order or a short deck in one
+cell), with `binomial` and `factorial` beside them; a permutation longer than
+sixteen is row-shaped and waits on a reduction operand.
 
 **Hex boards have grid parity, on one convention.** A hex topology is
 `HexagonalIndex` made spatial: cell `i` is index `i` (rings outward from the

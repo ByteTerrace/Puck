@@ -213,4 +213,20 @@ public enum ExpressionOp : byte {
     IsPrime,
     /// <summary>The i-th prime for i in 0..255 (2, 3, 5, … 1619): the bounded table a Gödel multiset or a coprime stride reaches for.</summary>
     Prime,
+    /// <summary>n choose k, exact; zero when k exceeds n.</summary>
+    Binomial,
+    /// <summary>n! for n in 0..20.</summary>
+    Factorial,
+    /// <summary>The colexicographic rank of a k-subset of 0..n−1 given as a bitmask (bit e set = element e chosen), in [0, binomial(n, k)); n at most 64.</summary>
+    CombinationRank,
+    /// <summary>The k-subset of 0..n−1 at a colexicographic rank, as a bitmask; the inverse of combRank.</summary>
+    CombinationUnrank,
+    /// <summary>The i-th smallest element (i from 0) of the k-subset of 0..n−1 at a colexicographic rank, without building the subset.</summary>
+    CombinationElement,
+    /// <summary>The lexicographic (Lehmer) rank of a permutation of 0..n−1 packed as nibbles — position i in bits 4i..4i+3 — in [0, n!); n at most 16.</summary>
+    PermutationRank,
+    /// <summary>The permutation of 0..n−1 at a lexicographic rank, packed as nibbles; the inverse of permRank.</summary>
+    PermutationUnrank,
+    /// <summary>The element at position i of the permutation of 0..n−1 at a lexicographic rank.</summary>
+    PermutationElement,
 }

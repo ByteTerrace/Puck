@@ -130,6 +130,14 @@ public sealed record ValueExpression(IReadOnlyList<ValueToken> Tokens) {
 [JsonDerivedType(typeof(ValueToken.MinimumExcluded), typeDiscriminator: "mex")]
 [JsonDerivedType(typeof(ValueToken.IsPrime), typeDiscriminator: "isPrime")]
 [JsonDerivedType(typeof(ValueToken.Prime), typeDiscriminator: "prime")]
+[JsonDerivedType(typeof(ValueToken.Binomial), typeDiscriminator: "binomial")]
+[JsonDerivedType(typeof(ValueToken.Factorial), typeDiscriminator: "factorial")]
+[JsonDerivedType(typeof(ValueToken.CombinationRank), typeDiscriminator: "combRank")]
+[JsonDerivedType(typeof(ValueToken.CombinationUnrank), typeDiscriminator: "combUnrank")]
+[JsonDerivedType(typeof(ValueToken.CombinationElement), typeDiscriminator: "combElement")]
+[JsonDerivedType(typeof(ValueToken.PermutationRank), typeDiscriminator: "permRank")]
+[JsonDerivedType(typeof(ValueToken.PermutationUnrank), typeDiscriminator: "permUnrank")]
+[JsonDerivedType(typeof(ValueToken.PermutationElement), typeDiscriminator: "permElement")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record ValueToken {
     /// <summary>An exact authored decimal, converted to the destination row's numeric kind at compile time.</summary>
@@ -376,6 +384,22 @@ public abstract record ValueToken {
     public sealed record IsPrime : ValueToken;
     /// <summary>The i-th prime for i in 0..255 (2, 3, 5, … 1619): the bounded table a Gödel multiset or a coprime stride reaches for.</summary>
     public sealed record Prime : ValueToken;
+    /// <summary>n choose k, exact; zero when k exceeds n.</summary>
+    public sealed record Binomial : ValueToken;
+    /// <summary>n! for n in 0..20.</summary>
+    public sealed record Factorial : ValueToken;
+    /// <summary>The colexicographic rank of a k-subset of 0..n−1 given as a bitmask (bit e set = element e chosen), in [0, binomial(n, k)); n at most 64.</summary>
+    public sealed record CombinationRank : ValueToken;
+    /// <summary>The k-subset of 0..n−1 at a colexicographic rank, as a bitmask; the inverse of combRank.</summary>
+    public sealed record CombinationUnrank : ValueToken;
+    /// <summary>The i-th smallest element (i from 0) of the k-subset of 0..n−1 at a colexicographic rank, without building the subset.</summary>
+    public sealed record CombinationElement : ValueToken;
+    /// <summary>The lexicographic (Lehmer) rank of a permutation of 0..n−1 packed as nibbles — position i in bits 4i..4i+3 — in [0, n!); n at most 16.</summary>
+    public sealed record PermutationRank : ValueToken;
+    /// <summary>The permutation of 0..n−1 at a lexicographic rank, packed as nibbles; the inverse of permRank.</summary>
+    public sealed record PermutationUnrank : ValueToken;
+    /// <summary>The element at position i of the permutation of 0..n−1 at a lexicographic rank.</summary>
+    public sealed record PermutationElement : ValueToken;
 }
 
 /// <summary>Converts an exact authored decimal literal into the Q48.16 fixed-point carrier a state cell holds — the one
