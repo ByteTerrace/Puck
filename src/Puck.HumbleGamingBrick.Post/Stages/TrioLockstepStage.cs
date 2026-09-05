@@ -26,15 +26,15 @@ internal sealed class TrioLockstepStage : IPostStage<PostContext> {
         var rom = SyntheticRom.Create();
 
         using var dmg = PostMachine.Build(
-            model: ConsoleModel.Dmg,
+            model: ConsoleModel.DmgC,
             rom: rom
         );
         using var dmgTwin = PostMachine.Build(
-            model: ConsoleModel.Dmg,
+            model: ConsoleModel.DmgC,
             rom: rom
         );
         using var cgb = PostMachine.Build(
-            model: ConsoleModel.Cgb,
+            model: ConsoleModel.CgbE,
             rom: rom
         );
         using var agb = PostMachine.Build(

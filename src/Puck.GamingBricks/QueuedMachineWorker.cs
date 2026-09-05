@@ -20,6 +20,13 @@ namespace Puck.GamingBricks;
 /// so it never stalls emulation. The save-flush debounce keys on native-frame transitions, so the interval means native
 /// ~59.73 Hz frames regardless of submission cadence.
 /// </para>
+/// <para>
+/// A worker can also LEND its core to a <see cref="LinkedMachineGroup"/> for the life of a cable link
+/// (<see cref="LendCore"/>/<see cref="ReturnCore"/>). A lent worker has no execution thread: the link steps the whole
+/// group through one deterministic interleave and calls <see cref="PublishLentStep"/> per member, so this worker's
+/// framebuffer, audio ring, feedback, and step count stay live for every consumer while <see cref="Step"/> and
+/// <see cref="Submit"/> refuse work and the peek/poke/reconfigure/flush seams marshal onto the link's thread.
+/// </para>
 /// </summary>
 public sealed class QueuedMachineWorker : IDisposable {
     // ~5 seconds at 59.73 fps between battery-save disk writes while dirty; counted in native frames, not work items.
@@ -47,6 +54,10 @@ public sealed class QueuedMachineWorker : IDisposable {
     private int m_disposed;
     private Vector3 m_emittedLight;
     private long m_frameVersion;
+    private IMachineCoreLender? m_lender;
+    private bool m_lent;
+    private long m_lentFlushNativeFrame;
+    private long m_lentStagedNativeFrame;
     private float m_motorLevel;
     private byte[] m_rgbaBack;
     private byte[] m_rgbaFront;
@@ -165,6 +176,11 @@ public sealed class QueuedMachineWorker : IDisposable {
     }
     /// <summary>Gets a value indicating whether a core is attached.</summary>
     public bool IsAssigned => (m_core is not null);
+    /// <summary>Gets a value indicating whether the attached core is lent to a link. A lent worker has no execution
+    /// thread of its own: the link steps the core and calls <see cref="PublishLentStep"/> to keep this worker's
+    /// framebuffer, audio ring, feedback, and completed-step count current, so every host-facing read stays live while
+    /// <see cref="Step"/> and <see cref="Submit"/> refuse work.</summary>
+    public bool IsLent => m_lent;
     /// <summary>Gets the finite pending-segment capacity.</summary>
     public int MaximumPendingSteps =>
         m_maximumPendingSteps;
@@ -211,33 +227,48 @@ public sealed class QueuedMachineWorker : IDisposable {
         ).Status;
 
     // Stop accepting, append an ordered stop marker so the worker drains every already-accepted tick/input and flush item
-    // before it acknowledges shutdown (load/eject/dispose never discard deterministic history), join it, then dispose the
-    // core (a forced final save flush rides its Dispose).
-    private void DetachCore() {
+    // before it acknowledges shutdown (load/eject/dispose never discard deterministic history), then join it. The core
+    // survives: lending keeps it, detaching disposes it.
+    private void StopWorker() {
         var worker = m_worker;
 
-        if (worker is not null) {
-            using var completion = new ManualResetEventSlim(initialState: false);
-            var queued = false;
-
-            lock (m_workLock) {
-                m_acceptingWork = false;
-                Monitor.PulseAll(obj: m_workLock);
-
-                if (m_workerFault is null) {
-                    m_work.Enqueue(item: WorkItem.Stop(completion: completion));
-                    Monitor.Pulse(obj: m_workLock);
-                    queued = true;
-                }
-            }
-
-            if (queued) {
-                completion.Wait();
-            }
-
-            worker.Join();
-            m_worker = null;
+        if (worker is null) {
+            return;
         }
+
+        using var completion = new ManualResetEventSlim(initialState: false);
+        var queued = false;
+
+        lock (m_workLock) {
+            m_acceptingWork = false;
+            Monitor.PulseAll(obj: m_workLock);
+
+            if (m_workerFault is null) {
+                m_work.Enqueue(item: WorkItem.Stop(completion: completion));
+                Monitor.Pulse(obj: m_workLock);
+                queued = true;
+            }
+        }
+
+        if (queued) {
+            completion.Wait();
+        }
+
+        worker.Join();
+        m_worker = null;
+    }
+    // Stops the worker and disposes the core (a forced final save flush rides its Dispose). A lent core is severed from
+    // its link first, so the link never steps a core that is being torn down.
+    private void DetachCore() {
+        if (m_lent) {
+            var lender = m_lender;
+
+            m_lent = false;
+            m_lender = null;
+            lender?.SeverLink();
+        }
+
+        StopWorker();
 
         if (m_timeTravel is { } timeTravel) {
             m_timeTravel = null;
@@ -563,6 +594,19 @@ public sealed class QueuedMachineWorker : IDisposable {
     // core arrays/mapper state the worker mutates while stepping, so they must never be driven cross-thread), blocking
     // until it completes between steps. A no-op leaving the default result (peek 0) when no core is attached.
     private void RunMemoryAccess(MemoryRequest request) {
+        if (TryRunOnLink(work: () => {
+            ExecuteMemoryAccess(
+                core: m_core!,
+                request: request
+            );
+
+            if (request.IsWrite) {
+                m_lender?.InvalidateLinkHistory();
+            }
+        })) {
+            return;
+        }
+
         var worker = m_worker;
 
         if (worker is null) {
@@ -596,6 +640,20 @@ public sealed class QueuedMachineWorker : IDisposable {
 
         return request;
     }
+    // Routes one unit of core-touching work onto the link's execution thread while the core is lent, so it observes the
+    // same coherent inter-instruction boundary the worker thread would have given it. Returns false when the core is not
+    // lent (the caller falls back to its own worker) or when no core is attached at all.
+    private bool TryRunOnLink(Action work) {
+        if (
+            !m_lent ||
+            (m_lender is not { } lender) ||
+            (m_core is null)
+        ) {
+            return false;
+        }
+
+        return lender.RunOnLinkThread(work: work);
+    }
     private void StageBlackFrame() {
         Array.Clear(array: m_rgbaBack);
 
@@ -623,13 +681,21 @@ public sealed class QueuedMachineWorker : IDisposable {
 
         PublishBackBuffer(light: light);
     }
-    private void StartWorker(IQueuedMachineCore core) {
+    // A fresh attach resets the queue counters; resuming a returned core keeps them, so a host's step count survives a
+    // cable link rather than appearing to reboot the machine. Either way the pending window reopens empty.
+    private void StartWorker(IQueuedMachineCore core, bool resetCounters = true) {
         lock (m_workLock) {
             m_work.Clear();
             m_workerFault = null;
-            m_submittedSteps = 0L;
-            m_completedSteps = 0L;
-            m_backpressureEvents = 0L;
+
+            if (resetCounters) {
+                m_submittedSteps = 0L;
+                m_completedSteps = 0L;
+                m_backpressureEvents = 0L;
+            } else {
+                m_submittedSteps = m_completedSteps;
+            }
+
             m_acceptingWork = true;
         }
 
@@ -656,6 +722,11 @@ public sealed class QueuedMachineWorker : IDisposable {
             }
 
             return m_work.Dequeue();
+        }
+    }
+    private void ThrowIfLent(string operation) {
+        if (m_lent) {
+            throw new InvalidOperationException(message: $"The {m_workerName} core is lent to a cable link; sever the link before attempting to {operation} it.");
         }
     }
     private void ThrowIfWorkerFaulted() {
@@ -823,6 +894,7 @@ public sealed class QueuedMachineWorker : IDisposable {
                 return;
             }
 
+            ThrowIfLent(operation: "eject");
             DetachCore();
             StageBlackFrame();
             ResetAudioRing();
@@ -832,6 +904,10 @@ public sealed class QueuedMachineWorker : IDisposable {
     /// emulation), a no-op when no core is attached.</summary>
     /// <param name="force">When <see langword="true"/>, flush even when only a clock-style change is pending.</param>
     public void FlushSave(bool force = false) {
+        if (TryRunOnLink(work: () => m_core!.FlushSave(force: force))) {
+            return;
+        }
+
         var worker = m_worker;
 
         if (worker is null) {
@@ -865,7 +941,7 @@ public sealed class QueuedMachineWorker : IDisposable {
                 condition: (0 != Volatile.Read(location: ref m_disposed)),
                 instance: this
             );
-
+            ThrowIfLent(operation: "load content into");
             DetachCore();
             m_core = core;
             m_timeTravel = new MachineTimeTravel<MachinePadState>(
@@ -881,6 +957,138 @@ public sealed class QueuedMachineWorker : IDisposable {
             ResetAudioRing();
             StageMachineFrame(core: core);
             StartWorker(core: core);
+        }
+    }
+    /// <summary>Quiesces this worker at a frame boundary and lends its core to a link, which then steps it. The worker
+    /// drains every already-accepted segment, joins its execution thread, and drops its own rewind ring (the link owns
+    /// coupled time travel for the whole group); the core itself, its battery save, and every published surface stay
+    /// this worker's. While lent, <see cref="Step"/> and <see cref="Submit"/> refuse work and the host-facing
+    /// peek/poke/reconfigure/flush seams marshal onto the link's thread through <paramref name="lender"/>.</summary>
+    /// <param name="lender">The link taking the core.</param>
+    /// <returns>The lent core, or <see langword="null"/> when no core is attached.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="lender"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The core is already lent to a link.</exception>
+    public IQueuedMachineCore? LendCore(IMachineCoreLender lender) {
+        ArgumentNullException.ThrowIfNull(argument: lender);
+
+        lock (m_lifecycleLock) {
+            ThrowIfLent(operation: "lend");
+
+            if (m_core is not { } core) {
+                return null;
+            }
+
+            StopWorker();
+
+            if (m_timeTravel is { } timeTravel) {
+                m_timeTravel = null;
+                timeTravel.Dispose();
+            }
+
+            m_lender = lender;
+            m_lent = true;
+            m_lentFlushNativeFrame = core.NativeFrameIndex;
+            m_lentStagedNativeFrame = core.NativeFrameIndex;
+
+            return core;
+        }
+    }
+    /// <summary>Publishes one link-driven step's results through this worker's own surfaces — the framebuffer stage,
+    /// the audio ring drain, the feedback sample, the completed-step count, and the native-frame-keyed save-flush
+    /// debounce — so a linked member looks exactly like an independently stepped one to every consumer. Call on the
+    /// link's execution thread after the group's step, once per member. A no-op when the core is not lent.</summary>
+    /// <param name="forceStage">When <see langword="true"/>, repack the framebuffer even when no native frame
+    /// completed (the synchronous step path's contract).</param>
+    public void PublishLentStep(bool forceStage) {
+        if (
+            !m_lent ||
+            (m_core is not { } core)
+        ) {
+            return;
+        }
+
+        lock (m_frameLock) {
+            m_motorLevel = core.MotorLevel;
+        }
+
+        if (m_audioSampleRate > 0) {
+            DrainAudio(core: core);
+        }
+
+        var nativeFrame = core.NativeFrameIndex;
+
+        if (
+            forceStage ||
+            (nativeFrame != m_lentStagedNativeFrame)
+        ) {
+            StageMachineFrame(core: core);
+            m_lentStagedNativeFrame = nativeFrame;
+        }
+
+        lock (m_workLock) {
+            ++m_completedSteps;
+            Monitor.PulseAll(obj: m_workLock);
+        }
+
+        if ((nativeFrame - m_lentFlushNativeFrame) >= SaveFlushIntervalFrames) {
+            m_lentFlushNativeFrame = nativeFrame;
+            core.FlushSave(force: false);
+        }
+    }
+    /// <summary>Re-stages the lent core's framebuffer and feedback and clears the host audio ring — the publication a
+    /// link performs after a coupled rewind moved the group, so no consumer sees pixels, rumble, or samples from the
+    /// abandoned future. Unlike <see cref="PublishLentStep"/> it does not count a step: no segment ran. Call on the
+    /// link's execution thread; a no-op when the core is not lent.</summary>
+    public void RestageLentFrame() {
+        if (
+            !m_lent ||
+            (m_core is not { } core)
+        ) {
+            return;
+        }
+
+        ResetAudioRing();
+
+        lock (m_frameLock) {
+            m_motorLevel = core.MotorLevel;
+        }
+
+        m_lentStagedNativeFrame = core.NativeFrameIndex;
+
+        StageMachineFrame(core: core);
+    }
+    /// <summary>Takes the core back from a severed link and restarts this worker's own execution thread on it, so the
+    /// machine steps independently again. The completed/submitted step counts carry across the link rather than
+    /// restarting. A no-op when the core is not lent; when the worker is being disposed it only clears the lend, since
+    /// the core is about to be torn down.</summary>
+    /// <param name="hostAccumulator">The link's tick-to-cycle accumulator phase at the sever, adopted as this worker's
+    /// own so the conversion carries no drift across the seam.</param>
+    public void ReturnCore(ulong hostAccumulator) {
+        lock (m_lifecycleLock) {
+            if (!m_lent) {
+                return;
+            }
+
+            m_lent = false;
+            m_lender = null;
+
+            if (
+                (0 != Volatile.Read(location: ref m_disposed)) ||
+                (m_core is not { } core)
+            ) {
+                return;
+            }
+
+            m_cycleRemainder = hostAccumulator;
+            m_timeTravel = new MachineTimeTravel<MachinePadState>(
+                core: core,
+                cyclesPerSecond: core.CyclesPerSecond
+            );
+
+            StartWorker(
+                core: core,
+                resetCounters: false
+            );
         }
     }
     /// <summary>Drops the GPU upload after a device loss: the next <see cref="PublishFrame"/> rebuilds it on the fresh
@@ -1002,6 +1210,20 @@ public sealed class QueuedMachineWorker : IDisposable {
     /// <returns>Whether the reconfigure was accepted, and the engine's reason/advisory text.</returns>
     public (bool Ok, string Reason) Reconfigure(string? options) {
         var request = new ReconfigureRequest { Options = options };
+
+        if (TryRunOnLink(work: () => {
+            ExecuteReconfigure(
+                core: m_core!,
+                request: request
+            );
+
+            if (request.Ok) {
+                m_lender?.InvalidateLinkHistory();
+            }
+        })) {
+            return (Ok: request.Ok, Reason: request.Reason);
+        }
+
         var worker = m_worker;
 
         if (worker is null) {

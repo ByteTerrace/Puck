@@ -42,7 +42,7 @@ internal sealed class VictoryRegionStage : IPostStage<PostContext> {
         ); // MBC5+RAM+BATTERY, 128 KiB RAM
 
         using var machine = PostMachine.Build(
-            model: ConsoleModel.Cgb,
+            model: ConsoleModel.CgbE,
             rom: rom
         );
 
@@ -125,7 +125,7 @@ internal sealed class VictoryRegionStage : IPostStage<PostContext> {
 
         // The region round-trips through a battery save into a fresh machine (deterministic resume).
         using var reboot = PostMachine.Build(
-            model: ConsoleModel.Cgb,
+            model: ConsoleModel.CgbE,
             rom: rom
         );
 

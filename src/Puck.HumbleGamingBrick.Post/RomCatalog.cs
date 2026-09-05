@@ -8,10 +8,10 @@ internal static class RomCatalog {
     // a ROM that never reports — a genuine failure to detect — not the common path.
     private const int ConformanceFrameCap = 5_000;
     private const int AcceptanceFrameCap = 600;
-    // We target exactly two SoC revisions: the Dmg tier (DMG-CPU C) and the Cgb tier (CPU CGB E). An acceptance-corpus
-    // revision tag naming any other revision is skipped rather than counted as a failure.
-    private const char DmgTargetRevision = 'C';
-    private const char CgbTargetRevision = 'E';
+    // A family tag that names no revision runs on that family's target revision — the stepping the accuracy work holds
+    // to the whole suite. An untagged ROM runs on both targets.
+    private const ConsoleModel CgbTarget = ConsoleModel.CgbE;
+    private const ConsoleModel DmgTarget = ConsoleModel.DmgC;
 
     /// <summary>Enumerates the conformance ROMs directly inside a sub-path of the corpus's on-disk <c>blargg</c> directory.</summary>
     /// <param name="root">The resolved corpus root, or <see langword="null"/> when no corpus is available.</param>
@@ -58,9 +58,9 @@ internal static class RomCatalog {
         ))
             .ToArray();
     }
-    /// <summary>Enumerates the acceptance ROMs under a relative directory, one case per (ROM, eligible model).
-    /// The model eligibility comes from the file-name tag, narrowed to the two target revisions; off-target revisions
-    /// (dmg0, mgb, cgb0, agb, ags, sgb) yield nothing and are skipped rather than failed.</summary>
+    /// <summary>Enumerates the acceptance ROMs under a relative directory, one case per (ROM, eligible revision). The
+    /// eligibility comes from the file-name tag: an untagged ROM runs on both family targets, a tag naming a family
+    /// runs on that family's target, and a tag naming explicit revisions runs on each of those we model.</summary>
     /// <param name="root">The resolved corpus root, or <see langword="null"/> when no corpus is available.</param>
     /// <param name="group">The group name to tag the cases with.</param>
     /// <param name="relativeDirectory">The path under the corpus's on-disk <c>mooneye-test-suite/acceptance/</c> (empty for the root).</param>
@@ -126,95 +126,248 @@ internal static class RomCatalog {
             ? fileName[(dash + 1)..]
             : string.Empty);
     }
-    // Maps an acceptance-corpus model tag to the emulated models it is expected to pass on, narrowed to the two target
-    // revisions. An untagged test runs on both models; a group tag (letters G/S/C/A) expands to its families; a named
-    // tag (dmg/cgb + revision letters) matches only when our target revision is in range; off-target tags yield nothing.
+    // Maps an acceptance-corpus model tag to the revisions the case is expected to pass on. The corpus names hardware
+    // three ways:
+    //
+    //   no tag         the suite's baseline, i.e. both family targets
+    //   group letters  G = dmg+mgb, S = sgb+sgb2, C = cgb+agb+ags, A = agb+ags, concatenated (GS, C)
+    //   model names    dmg / mgb / sgb / sgb2 / cgb / agb / ags, each optionally followed by its revision run
+    //                  (dmg0, dmgABC, cgbABCDE), and several may be concatenated (dmgABCmgb)
+    //
+    // A model name with no revision run names every revision of that family, which resolves to the family target; a
+    // revision run names exactly the revisions it lists.
     private static IReadOnlyList<ConsoleModel> ParseEligibleModels(string tag) {
-        var isGroupTag = ((tag.Length > 0) && (tag.Length <= 4) && tag.All(predicate: static c => (c is 'G' or 'S' or 'C' or 'A')));
-        var hasModelName = ContainsAny(
-            value: tag,
-            "dmg",
-            "mgb",
-            "sgb",
-            "cgb",
-            "agb",
-            "ags"
+        if (tag.Length == 0) {
+            return [DmgTarget, CgbTarget];
+        }
+
+        var models = new List<ConsoleModel>(capacity: 4);
+
+        if ((tag.Length <= 4) && tag.All(predicate: static character => (character is 'G' or 'S' or 'C' or 'A'))) {
+            AddGroups(
+                models: models,
+                tag: tag
+            );
+
+            return models;
+        }
+
+        AddNamedModels(
+            models: models,
+            tag: tag
         );
+
+        return ((models.Count == 0)
+            ? [DmgTarget, CgbTarget]
+            : models);
+    }
+    private static void AddGroups(string tag, List<ConsoleModel> models) {
+        if (tag.Contains(value: 'G')) {
+            Add(
+                model: DmgTarget,
+                models: models
+            );
+            Add(
+                model: ConsoleModel.Mgb,
+                models: models
+            );
+        }
+
+        if (tag.Contains(value: 'S')) {
+            Add(
+                model: ConsoleModel.Sgb,
+                models: models
+            );
+            Add(
+                model: ConsoleModel.Sgb2,
+                models: models
+            );
+        }
+
+        if (tag.Contains(value: 'C')) {
+            Add(
+                model: CgbTarget,
+                models: models
+            );
+        }
 
         if (
-            !isGroupTag &&
-            !hasModelName
+            tag.Contains(value: 'A') ||
+            tag.Contains(value: 'C')
         ) {
-            return [ConsoleModel.Dmg, ConsoleModel.Cgb];
-        }
-
-        bool dmg;
-        bool cgb;
-
-        if (isGroupTag) {
-            // G = dmg+mgb (includes DMG-CPU C); C = cgb+agb+ags (includes CPU CGB E).
-            dmg = tag.Contains(value: 'G');
-            cgb = tag.Contains(value: 'C');
-        } else {
-            // mgb-only and agb/ags-only tags name hardware we do not target, so they match nothing here.
-            dmg = RevisionMatches(
-                prefix: "dmg",
-                revision: DmgTargetRevision,
-                tag: tag
+            Add(
+                model: ConsoleModel.Agb,
+                models: models
             );
-            cgb = RevisionMatches(
-                prefix: "cgb",
-                revision: CgbTargetRevision,
-                tag: tag
+            Add(
+                model: ConsoleModel.Ags,
+                models: models
             );
         }
-
-        var models = new List<ConsoleModel>(capacity: 2);
-
-        if (dmg) {
-            models.Add(item: ConsoleModel.Dmg);
-        }
-
-        if (cgb) {
-            models.Add(item: ConsoleModel.Cgb);
-        }
-
-        return models;
     }
-    // True when the tag names a model family and our target revision is in scope: either no revision letters follow the
-    // prefix (the test applies to every revision of that family) or the explicit revision run contains the target.
-    private static bool RevisionMatches(string tag, string prefix, char revision) {
-        var index = tag.IndexOf(
-            comparisonType: StringComparison.OrdinalIgnoreCase,
-            value: prefix
-        );
+    // The family names a tag may concatenate, longest first so "sgb2" is never read as "sgb" with a stray revision
+    // digit. Each carries the target revision a bare name resolves to and the revisions its trailing run can name.
+    private static readonly (string Name, ConsoleModel Target, ConsoleModel[] Revisions)[] FamilyNames = [
+        ("sgb2", ConsoleModel.Sgb2, []),
+        ("dmg", DmgTarget, [ConsoleModel.Dmg0, ConsoleModel.DmgB, ConsoleModel.DmgC]),
+        ("mgb", ConsoleModel.Mgb, []),
+        ("sgb", ConsoleModel.Sgb, []),
+        ("cgb", CgbTarget, [ConsoleModel.Cgb0, ConsoleModel.CgbA, ConsoleModel.CgbB, ConsoleModel.CgbC, ConsoleModel.CgbD, ConsoleModel.CgbE]),
+        ("agb", ConsoleModel.Agb, []),
+        ("ags", ConsoleModel.Ags, []),
+    ];
 
-        if (index < 0) {
-            return false;
+    // Scans the tag left to right as a run of family names, each optionally followed by its revision letters. A
+    // revision run ends where the next family name begins, so "dmgABCmgb" reads as dmg{A,B,C} then mgb.
+    private static void AddNamedModels(string tag, List<ConsoleModel> models) {
+        var cursor = 0;
+
+        while (cursor < tag.Length) {
+            var family = MatchFamily(
+                cursor: cursor,
+                tag: tag
+            );
+
+            if (family is null) {
+                ++cursor;
+
+                continue;
+            }
+
+            var (name, target, revisions) = family.Value;
+
+            cursor += name.Length;
+
+            var matched = false;
+
+            while (
+                (cursor < tag.Length) &&
+                (MatchFamily(
+                cursor: cursor,
+                tag: tag
+            ) is null)
+            ) {
+                var stepping = SteppingOf(character: tag[cursor]);
+
+                if (stepping < 0) {
+                    break;
+                }
+
+                matched = true;
+                ++cursor;
+
+                foreach (var revision in revisions) {
+                    if (revision.Stepping() == stepping) {
+                        Add(
+                            model: revision,
+                            models: models
+                        );
+                    }
+                }
+            }
+
+            if (!matched) {
+                Add(
+                    model: target,
+                    models: models
+                );
+            }
         }
-
-        var sawLetters = false;
-        var matched = false;
-
-        for (var cursor = (index + prefix.Length); (cursor < tag.Length); ++cursor) {
-            var character = char.ToUpperInvariant(c: tag[cursor]);
-
-            if (character is (>= 'A' and <= 'E') or (>= '0' and <= '9')) {
-                sawLetters = true;
-                matched |= (character == revision);
-            } else {
-                break;
+    }
+    private static (string Name, ConsoleModel Target, ConsoleModel[] Revisions)? MatchFamily(string tag, int cursor) {
+        foreach (var candidate in FamilyNames) {
+            if (string.Compare(
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                indexA: cursor,
+                indexB: 0,
+                length: candidate.Name.Length,
+                strA: tag,
+                strB: candidate.Name
+            ) == 0) {
+                return candidate;
             }
         }
 
-        return (
-            !sawLetters ||
-            matched
-        );
+        return null;
     }
-    private static bool ContainsAny(string value, params string[] needles) =>
-        needles.Any(predicate: needle => value.Contains(
-        comparisonType: StringComparison.OrdinalIgnoreCase,
-        value: needle
-    ));
+    // A revision letter's stepping number: '0'-'9' literally, 'A'-'Z' as its alphabet position. Anything else is not a
+    // revision character.
+    private static int SteppingOf(char character) =>
+        char.ToUpperInvariant(c: character) switch {
+            (>= '0' and <= '9') => (character - '0'),
+            (>= 'A' and <= 'Z') => ((char.ToUpperInvariant(c: character) - 'A') + 1),
+            _ => -1,
+        };
+    private static void Add(List<ConsoleModel> models, ConsoleModel model) {
+        if (!models.Contains(item: model)) {
+            models.Add(item: model);
+        }
+    }
+    /// <summary>Enumerates the ROMs directly under an arbitrary directory using the acceptance suite's own "-tag"
+    /// model-eligibility convention (<see cref="ModelTag"/> and <see cref="ParseEligibleModels"/>) — the same rule
+    /// <see cref="AcceptanceRoms"/> applies under <c>mooneye-test-suite/acceptance</c>, generalized to the mooneye
+    /// family's other directories (<c>misc/</c>, <c>emulator-only/</c>) and to the wilbertpol fork's mirrors of them.</summary>
+    /// <param name="root">The resolved corpus root, or <see langword="null"/> when no corpus is available.</param>
+    /// <param name="group">The group name to tag the cases with.</param>
+    /// <param name="suiteRelativeDirectory">The path under <paramref name="root"/> to enumerate (forward slashes).</param>
+    /// <param name="recurse">Whether to descend into sub-directories.</param>
+    /// <param name="frameCap">The frame ceiling before a case is declared inconclusive.</param>
+    /// <returns>The classified cases, ordered by path; empty when the corpus or directory is absent.</returns>
+    public static IReadOnlyList<RomCase> TaggedRoms(string? root, string group, string suiteRelativeDirectory, bool recurse, int frameCap) {
+        if (root is null) {
+            return [];
+        }
+
+        var directory = SuiteDirectory(
+            relative: suiteRelativeDirectory,
+            root: root
+        );
+
+        if (!Directory.Exists(path: directory)) {
+            return [];
+        }
+
+        var cases = new List<RomCase>();
+
+        foreach (var file in EnumerateGbFiles(
+            directory: directory,
+            recurse: recurse
+        )) {
+            var name = Path.GetFileNameWithoutExtension(path: file);
+
+            foreach (var model in ParseEligibleModels(tag: ModelTag(fileName: name))) {
+                cases.Add(item: new RomCase(
+                    FrameCap: frameCap,
+                    FullPath: file,
+                    Group: group,
+                    Model: model,
+                    Name: name
+                ));
+            }
+        }
+
+        return cases;
+    }
+    private static IReadOnlyList<string> EnumerateGbFiles(string directory, bool recurse) =>
+        Directory
+            .EnumerateFiles(
+            path: directory,
+            searchOption: (recurse
+            ? SearchOption.AllDirectories
+            : SearchOption.TopDirectoryOnly),
+            searchPattern: "*.gb"
+        )
+            .OrderBy(
+            keySelector: static path => path,
+            comparer: StringComparer.OrdinalIgnoreCase
+        )
+            .ToArray();
+    private static string SuiteDirectory(string root, string relative) =>
+        Path.Combine(
+        path1: root,
+        path2: relative.Replace(
+            newChar: Path.DirectorySeparatorChar,
+            oldChar: '/'
+        )
+    );
 }

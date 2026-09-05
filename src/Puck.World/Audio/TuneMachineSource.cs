@@ -35,7 +35,7 @@ public sealed class TuneMachineSource : IAudioBlockSource, IDisposable {
         ArgumentNullException.ThrowIfNull(argument: document);
         m_machine = MachineFactory.Create(
             configuration: new MachineConfiguration(
-                model: ConsoleModel.Cgb,
+                model: ConsoleModel.CgbE,
                 cartridgeRom: TuneRom.Build(document: document)
             ),
             compose: static services => services.AddHumbleGamingBrickComponents()

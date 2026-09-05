@@ -54,7 +54,7 @@ internal static class LinkExplore {
         ) ?? ".");
         var modelA = ModelArg(
             args: args,
-            fallback: ConsoleModel.Cgb,
+            fallback: ConsoleModel.CgbE,
             name: "--modelA"
         );
         var modelB = ModelArg(
@@ -227,8 +227,8 @@ internal static class LinkExplore {
         );
 
         return value?.ToLowerInvariant() switch {
-            "dmg" => ConsoleModel.Dmg,
-            "cgb" => ConsoleModel.Cgb,
+            "dmg" => ConsoleModel.DmgC,
+            "cgb" => ConsoleModel.CgbE,
             "agb" => ConsoleModel.Agb,
             _ => fallback,
         };

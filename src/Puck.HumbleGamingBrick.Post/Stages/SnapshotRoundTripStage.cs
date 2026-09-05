@@ -40,7 +40,7 @@ internal sealed class SnapshotRoundTripStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
         using var machine = PostMachine.Build(
-            model: ConsoleModel.Dmg,
+            model: ConsoleModel.DmgC,
             rom: SyntheticRom.Create()
         );
 

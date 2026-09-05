@@ -29,11 +29,11 @@ internal sealed class SerialSuspendIdleGuardStage : IPostStage<PostContext> {
         var secondRom = SyntheticRom.Create(cartridgeType: 0x00);
 
         using var first = PostMachine.Build(
-            model: ConsoleModel.Dmg,
+            model: ConsoleModel.DmgC,
             rom: firstRom
         );
         using var second = PostMachine.Build(
-            model: ConsoleModel.Cgb,
+            model: ConsoleModel.CgbE,
             rom: secondRom
         );
 

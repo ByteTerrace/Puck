@@ -28,7 +28,7 @@ internal sealed class TuneInstrumentMachine : IScreenMachine, IAudioMachine, IIn
         m_inner = new MachineHost(
             audioSampleRate: audioSampleRate,
             cartridgeRom: ((document is null) ? null : TuneRom.Build(document: document)),
-            model: ConsoleModel.Cgb,
+            model: ConsoleModel.CgbE,
             savePath: savePath
         );
 

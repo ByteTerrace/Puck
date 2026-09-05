@@ -93,7 +93,7 @@ internal sealed class Sm83StopPendingInterruptStage : IPostStage<PostContext> {
         );
 
         return PostMachine.Build(
-            model: ConsoleModel.Dmg,
+            model: ConsoleModel.DmgC,
             rom: rom
         );
     }

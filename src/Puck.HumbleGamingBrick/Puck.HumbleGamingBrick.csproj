@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <Description>The shared SM83 machine across the DMG, CGB, and AGB compatibility costumes: CPU, PPU, APU, timers, DMA, cartridge mappers and battery saves, and serial/infrared/printer link, hosted through the IScreenMachineEngine adapter over Puck.GamingBricks. Console differences are expressed as capability gates on one core, never as forked implementations.</Description>
+        <Description>The shared SM83 machine across every DMG, MGB, SGB, CGB, and AGB-compatibility hardware revision: CPU, PPU, APU, timers, DMA, cartridge mappers and battery saves, and serial/infrared/printer link, hosted through the IScreenMachineEngine adapter over Puck.GamingBricks. Hardware differences are expressed as named capability gates on one core, never as forked implementations.</Description>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.HumbleGamingBrick</PackageId>
         <PackageTags>agb;cgb;determinism;dmg;emulation;sm83</PackageTags>

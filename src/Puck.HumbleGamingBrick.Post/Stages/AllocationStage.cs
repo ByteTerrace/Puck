@@ -21,7 +21,7 @@ internal sealed class AllocationStage : IPostStage<PostContext> {
     public PostStageOutcome Run(PostContext context) =>
         MachineStageProbes.VerifyZeroAllocation(
             build: static () => PostMachine.Build(
-                model: ConsoleModel.Dmg,
+                model: ConsoleModel.DmgC,
                 rom: SyntheticRom.Create()
             ),
             measureFrames: MeasureFrames,

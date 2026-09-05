@@ -105,7 +105,10 @@ an absent capability.
   purpose), `AudioDocumentCompiler` (compiles a `Puck.Assets.Documents`
   `AudioDocument` into driver streams; shares `ApuNotePeriod`'s integer math
   exactly, so the document path and the hand-authored path cannot drift),
-  `VerifyMachineSettle`.
+  `VerifyMachineSettle`, and the boot-ROM family — `BootRomBuilder`,
+  `BootRomLayout`, `BootRomProgram`, `BootRomColorTiming`,
+  `BootRomProbeCartridge`, `BootRomLowWindow`, `BootRomChecksumTable`,
+  `BootRomHandoff`, `BootRomHandoffCases` (see below).
 
 ## The framework cartridge (`FrameworkCartridge`)
 
@@ -121,6 +124,45 @@ an absent capability.
 - A cart built here is booted with no boot ROM (A = 0x11 seeded at the
   post-boot handoff), so logo/checksums aren't needed to boot; they are written
   anyway so the `.gbc` is valid on real hardware.
+
+## The authored boot ROMs (`BootRomBuilder`)
+
+`BootRomBuilder.Build(ConsoleModel)` emits the boot ROM a revision executes from
+reset: 256 bytes for a monochrome revision, 2304 for a Color one (mapped
+0x0000-0x00FF and 0x0200-0x08FF, the cartridge header showing through the gap).
+It is a real boot program — logo and header-checksum verification with a wedge on
+mismatch (the companion-console revisions check neither), a mark scrolled in, the
+start-up chime, the compatibility-mode selector and compatibility-palette load for
+a cartridge without the color flag, the revision's register handoff, and the unmap
+at 0x00FE so the program counter falls into 0x0100.
+
+- **The handoff counter is the contract.** `BootDivPrediction`'s tables are the
+  budget; the Color image carries those same tables and computes its target from
+  the cartridge header. The program resets the divider and then consumes exactly
+  the predicted count, so everything before the reset is free and everything
+  after it is straight line.
+- **The straight line is SOLVED, not counted.** `BootRomBuilder` boots the image
+  it just emitted against `BootRomProbeCartridge` headers and adjusts two
+  machine-cycle constants until the handoff counter and scanline land. Never
+  hand-count instruction timings into these constants.
+- **The compatibility palettes are the index registers' cause.** The image carries
+  `CompatibilityPalette`'s selection tables and loads the chosen background and two
+  object palettes eight bytes at a time through BCPD/OCPD auto-increment, which is
+  the only thing that lands BCPS/OCPS on 0x88/0x90 (read back 0xC8/0xD0). The data
+  ports read sealed in compatibility mode, so palette RAM contents are not compared
+  there and the seeded path carries no palette-RAM seed. Space for those tables
+  comes from the low window (`BootRomLowWindow`, between the entry jump and the
+  unmap) and from carrying the divider's checksum contributions as one common value
+  plus a row per checksum that differs (`BootRomChecksumTable`).
+- **Equivalence surface.** `BootRomHandoff.Compare` is the shared check the forge
+  tests and the POST's `boot-rom-handoff` stage both run: the processor register
+  file, the divider counter, every readable high-page register, the
+  interrupt-enable register, and Color palette RAM. The picture-pipeline and
+  audio-generator sub-register phase is NOT reachable from an executing program
+  and is outside it; so is the LY-comparison bit on the revisions whose seeded
+  handoff parks on the first line.
+- `MachineIdentity` fingerprints the boot image, so a booted machine's snapshots
+  never interchange with a seeded machine's.
 
 ## Kernel + WRAM convention (`FrameworkMemoryMap.cs` is the source of truth)
 

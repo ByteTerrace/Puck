@@ -3,7 +3,7 @@ using Puck.HumbleGamingBrick.Interfaces;
 namespace Puck.HumbleGamingBrick.Post;
 
 /// <summary>
-/// Tier-C stage for the cross-gen-cart trade harness. Two <see cref="ConsoleModel.Cgb"/> machines
+/// Tier-C stage for the cross-gen-cart trade harness. Two <see cref="ConsoleModel.CgbE"/> machines
 /// boot a real cross-gen trade cartridge, each with a distinct crafted <see cref="TradeSaveFactory"/> battery save
 /// already in SRAM (side A leads with RATTATA, side B with PIDGEY), linked through a <see cref="SerialLinkSession"/> and
 /// driven together under the frozen <see cref="ScriptedTradeHarness.ContinueScript"/>. The gate proves the crafted saves are

@@ -33,7 +33,7 @@ internal sealed class AgbCostumeStage : IPostStage<PostContext> {
             rom: rom
         );
         using var cgb = PostMachine.Build(
-            model: ConsoleModel.Cgb,
+            model: ConsoleModel.CgbE,
             rom: rom
         );
 

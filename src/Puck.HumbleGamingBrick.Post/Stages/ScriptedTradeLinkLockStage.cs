@@ -4,11 +4,11 @@ namespace Puck.HumbleGamingBrick.Post;
 
 /// <summary>
 /// Tier-C stage that runs a scripted two-machine cross-gen-cart Cable Club trade between two
-/// <see cref="ConsoleModel.Cgb"/> machines and asserts the trade committed deterministically.
+/// <see cref="ConsoleModel.CgbE"/> machines and asserts the trade committed deterministically.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Two <see cref="ConsoleModel.Cgb"/> machines boot a real cross-gen trade cartridge, each with a distinct crafted
+/// Two <see cref="ConsoleModel.CgbE"/> machines boot a real cross-gen trade cartridge, each with a distinct crafted
 /// <see cref="TradeSaveFactory"/> battery save already in SRAM (side A leads with RATTATA 0x13, side B with PIDGEY
 /// 0x10), linked through a <see cref="SerialLinkSession"/> and driven together by <see cref="ScriptedTradeDriver"/>'s
 /// peek-gated phase machine: turn to the Trade Center receptionist, mash through the dialogue + save prompt, the

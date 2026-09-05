@@ -21,7 +21,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// runs the normal (~8192&#160;Hz) serial clock — a property of this game, not a licence to pin the emulator's
 /// serial to a real-time rate. KEY1 legitimately doubles the serial shift clock on hardware and in
 /// <see cref="SerialComponent"/> (the fast-clock bit taps DIV bit 3 instead of bit 8); this cart simply never arms it.
-/// Both machines are pinned to <see cref="ConsoleModel.Cgb"/> here.
+/// Both machines are pinned to <see cref="ConsoleModel.CgbE"/> here.
 /// </para>
 /// </remarks>
 internal static class TradeSaveFactory {

@@ -7,8 +7,10 @@ namespace Puck.HumbleGamingBrick;
 /// gets the default palette. The tables are that built-in checksum-to-palette assignment (factual interop data, the
 /// same data every accurate emulator carries), each palette four little-endian BGR555 colors.
 /// </summary>
-internal static class CompatibilityPalette {
-    private const int FirstDuplicateIndex = 65;
+public static class CompatibilityPalette {
+    /// <summary>The first row of <see cref="TitleChecksums"/> whose checksum is shared with a later row, and so needs
+    /// the fourth title letter to tell the two apart. <see cref="DuplicateFourthLetters"/> is indexed from here.</summary>
+    public const int FirstDuplicateIndex = 65;
 
     private static readonly byte[] TitleChecksums = [
         0x00, 0x88, 0x16, 0x36, 0xD1, 0xDB, 0xF2, 0x3C, 0x8C, 0x92, 0x3D, 0x5C, 0x58, 0xC9, 0x3E, 0x70,
@@ -52,6 +54,25 @@ internal static class CompatibilityPalette {
         0x7FFF, 0x03FF, 0x001F, 0x0000, 0x03FF, 0x001F, 0x000C, 0x0000, 0x7FFF, 0x033F, 0x0193, 0x0000, 0x0000, 0x4200, 0x037F, 0x7FFF,
         0x7FFF, 0x7E8C, 0x7C00, 0x0000, 0x7FFF, 0x1BEF, 0x6180, 0x0000, 0x7FFF, 0x7FEA, 0x7D5F, 0x0000, 0x4778, 0x3290, 0x1D87, 0x0861,
     ];
+
+    /// <summary>Gets the title checksums the boot ROM's built-in table recognizes, in row order.</summary>
+    public static ReadOnlySpan<byte> TitleChecksumRows =>
+        TitleChecksums;
+    /// <summary>Gets the palette combination each checksum row selects; only the low seven bits are the
+    /// combination.</summary>
+    public static ReadOnlySpan<byte> CombinationPerRow =>
+        PalettePerChecksum;
+    /// <summary>Gets the fourth title letter that disambiguates each duplicated checksum row past
+    /// <see cref="FirstDuplicateIndex"/>.</summary>
+    public static ReadOnlySpan<byte> DuplicateLetters =>
+        DuplicateFourthLetters;
+    /// <summary>Gets the palette combinations, three byte offsets into <see cref="Colors"/>'s little-endian byte image
+    /// per combination: object palette 0, object palette 1, then the background palette.</summary>
+    public static ReadOnlySpan<byte> Combinations =>
+        PaletteCombinations;
+    /// <summary>Gets the palette pool the combinations offset into, four little-endian BGR555 colors per palette.</summary>
+    public static ReadOnlySpan<ushort> Colors =>
+        Palettes;
 
     /// <summary>Resolves the palettes the boot ROM assigns to a monochrome cartridge.</summary>
     /// <param name="header">The parsed cartridge header (title hash + licensee).</param>

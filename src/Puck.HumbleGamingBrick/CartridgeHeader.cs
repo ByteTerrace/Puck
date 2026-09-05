@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Text;
 
 namespace Puck.HumbleGamingBrick;
@@ -12,6 +13,19 @@ public sealed class CartridgeHeader {
     private const int CartridgeTypeOffset = 0x0147;
     private const int ColorFlagOffset = 0x0143;
     private const byte FirstPartyOldLicensee = 0x01;
+    // The region the companion console's boot ROM forwards, one bit at a time: 0x0104 through 0x014F inclusive.
+    private const int ForwardedEnd = 0x014F;
+    /// <summary>The header offset of the 48-byte boot logo bitmap the boot program forwards and compares.</summary>
+    public const int LogoOffset = 0x0104;
+
+    /// <summary>Gets the 48-byte boot logo bitmap every bootable cartridge carries at <see cref="LogoOffset"/>.</summary>
+    public static ReadOnlySpan<byte> Logo =>
+        [
+            0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83, 0x00, 0x0C, 0x00, 0x0D,
+            0x00, 0x08, 0x11, 0x1F, 0x88, 0x89, 0x00, 0x0E, 0xDC, 0xCC, 0x6E, 0xE6, 0xDD, 0xDD, 0xD9, 0x99,
+            0xBB, 0xBB, 0x67, 0x63, 0x6E, 0x0E, 0xEC, 0xCC, 0xDD, 0xDC, 0x99, 0x9F, 0xBB, 0xB9, 0x33, 0x3E,
+        ];
+    private const int ForwardedStart = 0x0104;
     private const int NewLicenseeOffset = 0x0144;
     private const byte NewLicenseeSentinel = 0x33;
     private const int OldLicenseeOffset = 0x014B;
@@ -34,9 +48,11 @@ public sealed class CartridgeHeader {
         byte fourthTitleLetter,
         byte oldLicenseeCode,
         byte newLicenseeCode0,
-        byte newLicenseeCode1
+        byte newLicenseeCode1,
+        int forwardedSetBitCount
     ) {
         ColorOnly = colorOnly;
+        ForwardedSetBitCount = forwardedSetBitCount;
         FourthTitleLetter = fourthTitleLetter;
         HasBattery = hasBattery;
         HasRam = hasRam;
@@ -82,6 +98,10 @@ public sealed class CartridgeHeader {
     public byte NewLicenseeCode0 { get; }
     /// <summary>Gets the second character of the new licensee code (<c>0x0145</c>).</summary>
     public byte NewLicenseeCode1 { get; }
+    /// <summary>Gets the number of set bits in <c>0x0104</c>–<c>0x014F</c>. The companion console's boot ROM forwards
+    /// that region bit by bit and sends a set bit one machine cycle faster than a clear one, so its running time — and
+    /// therefore the divider value it hands off — is a linear function of this count.</summary>
+    public int ForwardedSetBitCount { get; }
     /// <summary>Gets whether the cartridge carries the first-party publisher code (legacy <c>0x01</c>, or legacy
     /// <c>0x33</c> with new code <c>"01"</c>) — the gate for the boot ROM's title-based colorization and timing paths.</summary>
     public bool IsFirstPartyGame =>
@@ -126,8 +146,19 @@ public sealed class CartridgeHeader {
             fourthTitleLetter: rom[(TitleStart + 3)],
             oldLicenseeCode: rom[OldLicenseeOffset],
             newLicenseeCode0: rom[NewLicenseeOffset],
-            newLicenseeCode1: rom[(NewLicenseeOffset + 1)]
+            newLicenseeCode1: rom[(NewLicenseeOffset + 1)],
+            forwardedSetBitCount: CountForwardedSetBits(rom: rom)
         );
+    }
+
+    private static int CountForwardedSetBits(byte[] rom) {
+        var count = 0;
+
+        for (var offset = ForwardedStart; (offset <= ForwardedEnd); ++offset) {
+            count += BitOperations.PopCount(value: rom[offset]);
+        }
+
+        return count;
     }
 
     // The boot ROM's title hash: the 8-bit sum of every byte from 0x0134 through 0x0143 (the color flag included).

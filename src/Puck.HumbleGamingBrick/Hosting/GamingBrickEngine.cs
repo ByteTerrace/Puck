@@ -4,16 +4,45 @@ namespace Puck.HumbleGamingBrick;
 
 /// <summary>
 /// The <see cref="IScreenMachineEngine"/> for the SM83-family GamingBrick — the first implementation of the neutral
-/// screen-machine contract. Its <see cref="Id"/> is <c>gaming-brick</c>, and its options vocabulary is a hardware model
-/// (<c>dmg</c>/<c>cgb</c>/<c>agb</c>, default <c>dmg</c>) plus an optional <c>dmgspeed</c> fairness pin, in any order.
+/// screen-machine contract. Its <see cref="Id"/> is <c>gaming-brick</c>, and its options vocabulary is a hardware
+/// revision (a family token <c>dmg</c>/<c>cgb</c>/<c>agb</c>, default <c>dmg</c>, or a specific revision such as
+/// <c>cgb0</c> or <c>sgb2</c>) plus an optional <c>dmgspeed</c> fairness pin, in any order.
 /// A host resolves this engine by id and hands it cartridge bytes; the machine it builds is a <see cref="MachineHost"/>.
-/// It also carries <see cref="IMachineLinkingEngine"/>: two of its machines can be cable-linked over the deterministic
-/// <see cref="SerialLinkSession"/> interleave.
+/// It also carries <see cref="IMachineLinkingEngine"/>: two of its running machines can be cable-linked into one
+/// <see cref="LinkedMachineGroup"/>, which takes ownership of both cores and advances them over the deterministic
+/// <see cref="SerialLinkSession"/> interleave until the link is disposed.
 /// </summary>
 public sealed class GamingBrickEngine : IScreenMachineEngine, IMachineLinkingEngine {
     /// <summary>The <c>dmgspeed</c> option token — the fairness speed pin (a fixed per-tick cycle budget regardless of the
     /// KEY1 double-speed latch).</summary>
     internal const string DmgSpeedToken = "dmgspeed";
+    // The serial port carries exactly one peer, so a cable link is a pair.
+    private const int CableSeats = 2;
+
+    // The revision a bare family token selects: the two steppings the accuracy work targets, plus the Advanced console.
+    private const ConsoleModel ColorFamilyDefault = ConsoleModel.CgbE;
+    private const ConsoleModel DefaultModel = DmgFamilyDefault;
+    private const ConsoleModel DmgFamilyDefault = ConsoleModel.DmgC;
+
+    // The option vocabulary: the three family tokens, then one token per revision named after its enum member.
+    private static readonly Dictionary<string, ConsoleModel> ModelTokens = new(comparer: StringComparer.OrdinalIgnoreCase) {
+        ["dmg"] = DmgFamilyDefault,
+        ["cgb"] = ColorFamilyDefault,
+        ["agb"] = ConsoleModel.Agb,
+        ["dmg0"] = ConsoleModel.Dmg0,
+        ["dmgb"] = ConsoleModel.DmgB,
+        ["dmgc"] = ConsoleModel.DmgC,
+        ["mgb"] = ConsoleModel.Mgb,
+        ["sgb"] = ConsoleModel.Sgb,
+        ["sgb2"] = ConsoleModel.Sgb2,
+        ["cgb0"] = ConsoleModel.Cgb0,
+        ["cgba"] = ConsoleModel.CgbA,
+        ["cgbb"] = ConsoleModel.CgbB,
+        ["cgbc"] = ConsoleModel.CgbC,
+        ["cgbd"] = ConsoleModel.CgbD,
+        ["cgbe"] = ConsoleModel.CgbE,
+        ["ags"] = ConsoleModel.Ags,
+    };
 
     /// <inheritdoc/>
     public string Id => "gaming-brick";
@@ -43,33 +72,80 @@ public sealed class GamingBrickEngine : IScreenMachineEngine, IMachineLinkingEng
             return false;
         }
 
+        // The console's serial port is a point-to-point cable: it carries exactly one peer, so a wider set is refused by
+        // name rather than silently linking the first two.
+        if (machines.Count > CableSeats) {
+            reason = $"the gaming-brick serial cable links exactly {CableSeats} machines; {machines.Count} were supplied";
+
+            return false;
+        }
+
+        var hosts = new MachineHost[machines.Count];
+
         for (var index = 0; (index < machines.Count); index++) {
-            if (machines[index] is not MachineHost) {
+            if (machines[index] is not MachineHost host) {
                 reason = $"member {index} is not a gaming-brick machine";
 
                 return false;
             }
+
+            if (!host.IsAssigned) {
+                reason = $"member {index} has no cartridge loaded";
+
+                return false;
+            }
+
+            if (host.Worker.IsLent) {
+                reason = $"member {index} is already cable-linked";
+
+                return false;
+            }
+
+            for (var earlier = 0; (earlier < index); earlier++) {
+                if (ReferenceEquals(
+                    objA: hosts[earlier],
+                    objB: host
+                )) {
+                    reason = $"member {index} is the same machine as member {earlier}";
+
+                    return false;
+                }
+            }
+
+            hosts[index] = host;
         }
 
-        // The neutral queued host owns each machine's core on its OWN worker thread, and SerialLinkSession requires the
-        // two MachineInstances driven from ONE thread through its instruction-atomic interleave. Wiring that safely means
-        // quiescing both workers and lending their cores to the pair-stepper — a further Puck.HumbleGamingBrick seam
-        // (risk 1 in the arc plan). Until it lands, a link is reported DORMANT with this reason rather than moving bytes
-        // through an unsafe cross-thread step.
-        reason = "live cable linking of running gaming-brick machines is not yet wired for the queued host";
+        try {
+            link = new LinkedMachineGroup(
+                createCore: static cores => new SerialLinkGroupCore(
+                    first: ((HumbleGamingBrickCore)cores[0]),
+                    second: ((HumbleGamingBrickCore)cores[1])
+                ),
+                machines: hosts,
+                maximumPendingSteps: MachineHost.DefaultMaximumPendingSteps,
+                workerName: "Puck GamingBrick link",
+                workers: [.. hosts.Select(selector: static host => host.Worker)]
+            );
+        } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException)) {
+            reason = exception.Message;
 
-        return false;
+            return false;
+        }
+
+        reason = string.Empty;
+
+        return true;
     }
 
-    /// <summary>Parses the space-separated options string (order-independent) into a hardware model and the fairness
-    /// pin — the ONE options grammar, shared by <see cref="Create"/> and a host's live reconfigure. A model keyword sets
-    /// the console costume; the <c>dmgspeed</c> token applies the fairness pin. An unknown token throws so a typo is
-    /// loud, not silently defaulted.</summary>
+    /// <summary>Parses the space-separated options string (order-independent) into a hardware revision and the fairness
+    /// pin — the one options grammar, shared by <see cref="Create"/> and a host's live reconfigure. A model keyword sets
+    /// the revision; the <c>dmgspeed</c> token applies the fairness pin. An unknown token throws so a typo is loud, not
+    /// silently defaulted.</summary>
     /// <param name="options">The engine-specific options string, or <see langword="null"/> for defaults.</param>
-    /// <returns>The parsed model and fairness pin.</returns>
+    /// <returns>The parsed revision and fairness pin.</returns>
     /// <exception cref="ArgumentException">A token is not a recognized option.</exception>
     internal static (ConsoleModel Model, bool DmgSpeed) ParseOptions(string? options) {
-        var model = ConsoleModel.Dmg;
+        var model = DefaultModel;
         var dmgSpeed = false;
 
         if (string.IsNullOrWhiteSpace(value: options)) {
@@ -82,46 +158,45 @@ public sealed class GamingBrickEngine : IScreenMachineEngine, IMachineLinkingEng
         )) {
             if (token.Equals(
                 comparisonType: StringComparison.OrdinalIgnoreCase,
-                value: "dmg"
-            )) {
-                model = ConsoleModel.Dmg;
-            } else if (token.Equals(
-                comparisonType: StringComparison.OrdinalIgnoreCase,
-                value: "cgb"
-            )) {
-                model = ConsoleModel.Cgb;
-            } else if (token.Equals(
-                comparisonType: StringComparison.OrdinalIgnoreCase,
-                value: "agb"
-            )) {
-                model = ConsoleModel.Agb;
-            } else if (token.Equals(
-                comparisonType: StringComparison.OrdinalIgnoreCase,
                 value: DmgSpeedToken
             )) {
                 dmgSpeed = true;
+            } else if (TryParseModelToken(
+                model: out var parsed,
+                token: token
+            )) {
+                model = parsed;
             } else {
-                throw new ArgumentException(message: $"unknown gaming-brick option '{token}' — expected dmg|cgb|agb or {DmgSpeedToken}");
+                throw new ArgumentException(message: $"unknown gaming-brick option '{token}' — expected one of {string.Join(
+                    separator: '|',
+                    values: ModelTokens.Keys
+                )} or {DmgSpeedToken}");
             }
         }
 
         return (Model: model, DmgSpeed: dmgSpeed);
     }
-    /// <summary>Formats a model + fairness pin back into the canonical options string — the inverse of
+    /// <summary>Formats a revision + fairness pin back into the canonical options string — the inverse of
     /// <see cref="ParseOptions"/>, so a host's <c>screen.options</c> echo and <c>world.save</c> readback speak the same
-    /// vocabulary an author wrote.</summary>
-    /// <param name="model">The current model.</param>
+    /// vocabulary an author wrote. A family's default revision formats as the bare family token.</summary>
+    /// <param name="model">The current revision.</param>
     /// <param name="dmgSpeed">Whether the fairness pin is set.</param>
     /// <returns>The options string (e.g. <c>cgb</c> or <c>dmg dmgspeed</c>).</returns>
     internal static string FormatOptions(ConsoleModel model, bool dmgSpeed) {
         var modelToken = model switch {
-            ConsoleModel.Cgb => "cgb",
-            ConsoleModel.Agb => "agb",
-            _ => "dmg",
+            DmgFamilyDefault => "dmg",
+            ColorFamilyDefault => "cgb",
+            _ => model.ToString().ToLowerInvariant(),
         };
 
         return (dmgSpeed
             ? $"{modelToken} {DmgSpeedToken}"
             : modelToken);
     }
+
+    private static bool TryParseModelToken(string token, out ConsoleModel model) =>
+        ModelTokens.TryGetValue(
+            key: token,
+            value: out model
+        );
 }

@@ -154,15 +154,18 @@ public sealed partial class Sm83 {
             (opcode <= 0x7F)
         ) {
             if (opcode == 0x76) {
-                // HALT with interrupts disabled while a line is already pending does not halt at all — it arms the HALT
-                // bug, making the next opcode fetch fail to advance PC. An EI whose delayed enable is still counting
-                // down escapes the bug: IME lands during the halt and the interrupt is serviced normally.
-                if (
-                    !m_interruptMasterEnable &&
-                    (m_interruptEnableCountdown == 0) &&
-                    (m_interrupts.Pending != InterruptKind.None)
-                ) {
-                    m_haltBug = true;
+                // A line already pending at HALT's own dispatch never enters halt at all. With IME clear that arms the
+                // HALT bug (the next opcode fetch fails to advance PC, so that byte executes twice). With IME already
+                // set — including an EI delay that lands on this very dispatch, since StepInstruction applies it before
+                // reaching here — the CPU does not halt either: PC snaps back onto this opcode so the pending line
+                // dispatches on the very next step with the return address pointing at this HALT, which re-executes
+                // once the handler returns.
+                if (m_interrupts.Pending != InterruptKind.None) {
+                    if (m_interruptMasterEnable) {
+                        m_programCounter = ((ushort)(m_programCounter - 1));
+                    } else {
+                        m_haltBug = true;
+                    }
                 } else {
                     m_halted = true;
 
@@ -371,7 +374,7 @@ public sealed partial class Sm83 {
                     !m_interruptMasterEnable &&
                     (m_interruptEnableCountdown == 0)
                 ) {
-                    m_interruptEnableCountdown = 2;
+                    m_interruptEnableCountdown = 1;
                 }
 
                 break;

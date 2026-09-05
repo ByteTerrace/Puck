@@ -22,7 +22,7 @@ internal sealed class QueuedHostMemoryAccessStage : IPostStage<PostContext> {
     public PostStageOutcome Run(PostContext context) {
         var result = QueuedHostContractProbe.VerifyConcurrentMemoryAccess(
             withContent: () => new MachineHost(
-                model: ConsoleModel.Dmg,
+                model: ConsoleModel.DmgC,
                 cartridgeRom: SyntheticRom.Create()
             ),
             scratchAddress: 0xC200,

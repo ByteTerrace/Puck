@@ -39,7 +39,7 @@ internal sealed class Sm83SstHarness : IDisposable {
     public Sm83SstHarness() {
         m_instance = MachineFactory.Create(
             configuration: new MachineConfiguration(
-                model: ConsoleModel.Dmg,
+                model: ConsoleModel.DmgC,
                 cartridgeRom: SyntheticRom.Create()
             ),
             compose: services => {
@@ -132,6 +132,7 @@ internal sealed class Sm83SstHarness : IDisposable {
         eiPending: out eiPending,
         halted: out _,
         ime: out ime,
+        lockedUp: out _,
         scratch: m_writer
     );
     private void CompareRegisters(Sm83SstState expected, List<string> mismatches) {

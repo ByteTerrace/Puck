@@ -73,6 +73,9 @@ public sealed class Sm83Emitter {
     // --- 16-bit register pairs. -----------------------------------------------------------------------------------------
     /// <summary>ld rr, nn — load a 16-bit immediate into a register pair.</summary>
     public void LoadImmediate(Reg16 pair, ushort value) => EmitImmediate16(opcode: ((byte)(0x01 + (((byte)pair) * 16))), value: value);
+    /// <summary>ld rr, nn — load the ADDRESS of a label into a register pair, resolved against the load address passed
+    /// to <see cref="ToArray"/>; the operand form a computed jump (<see cref="JumpToHl"/>) or a table walk needs.</summary>
+    public void LoadImmediateAddressOf(Reg16 pair, int label) => EmitAbsolute(label: label, opcode: ((byte)(0x01 + (((byte)pair) * 16))));
     /// <summary>inc rr — increment a 16-bit register pair.</summary>
     public void Increment(Reg16 pair) => m_code.Add(item: ((byte)(0x03 + (((byte)pair) * 16))));
     /// <summary>dec rr — decrement a 16-bit register pair.</summary>
@@ -214,6 +217,24 @@ public sealed class Sm83Emitter {
 
     /// <summary>The current byte length of the emitted stream (used to place data that trails the routine).</summary>
     public int Length => m_code.Count;
+
+    /// <summary>Appends raw bytes to the stream — a table or bitmap the code reaches through a label rather than
+    /// executes. Place it past the routine's last instruction.</summary>
+    /// <param name="value">The bytes to append.</param>
+    public void EmitData(ReadOnlySpan<byte> value) {
+        foreach (var item in value) {
+            m_code.Add(item: item);
+        }
+    }
+    /// <summary>Appends raw little-endian 16-bit words to the stream, for a table the code indexes by a doubled
+    /// offset.</summary>
+    /// <param name="value">The words to append.</param>
+    public void EmitData(ReadOnlySpan<ushort> value) {
+        foreach (var item in value) {
+            m_code.Add(item: ((byte)(item & 0xFF)));
+            m_code.Add(item: ((byte)(item >> 8)));
+        }
+    }
 
     /// <summary>Resolves the fixups and returns the finished machine code. <paramref name="baseAddress"/> is the address
     /// the routine will be loaded at (0 for a position-independent routine); absolute jumps add it to the label offset.</summary>

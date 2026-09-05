@@ -73,12 +73,12 @@ internal static class BenchDiagnostic {
         if (romPaths.Length > 0) {
             rom = File.ReadAllBytes(path: romPaths[0]);
             model = (((rom.Length > 0x0143) && (0 != (rom[0x0143] & 0x80)))
-                ? ConsoleModel.Cgb
-                : ConsoleModel.Dmg);
+                ? ConsoleModel.CgbE
+                : ConsoleModel.DmgC);
             romName = Path.GetFileName(path: romPaths[0]);
         } else {
             rom = SyntheticRom.Create();
-            model = ConsoleModel.Dmg;
+            model = ConsoleModel.DmgC;
             romName = "synthetic";
         }
 
@@ -548,8 +548,8 @@ internal static class BenchDiagnostic {
 
             roms[index] = bytes;
             models[index] = (((bytes.Length > 0x0143) && (0 != (bytes[0x0143] & 0x80)))
-                ? ConsoleModel.Cgb
-                : ConsoleModel.Dmg);
+                ? ConsoleModel.CgbE
+                : ConsoleModel.DmgC);
             names[index] = Path.GetFileName(path: romPaths[index]);
             mappers[index] = CartridgeHeader.Parse(rom: bytes).Mapper;
         }

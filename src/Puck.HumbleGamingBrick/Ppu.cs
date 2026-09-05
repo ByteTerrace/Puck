@@ -4,6 +4,18 @@ using Puck.HumbleGamingBrick.Timing;
 
 namespace Puck.HumbleGamingBrick;
 
+/// <summary>Host-side co-simulation trace sink for <see cref="Ppu"/> (Puck.HumbleGamingBrick.Post's CosimDiagnostic).
+/// Never serialized and never touched by the battery — a plain nullable field the per-dot render path tests once, the
+/// same dormant-guard shape as <c>SystemBus</c>'s debug watchpoints.</summary>
+public interface IPpuTraceSink {
+    /// <summary>Fires when the polled STAT mode changes, after the dot's schedule has settled. Carries the pair a
+    /// CPU reads out of the register file — the LY register and the STAT mode bits — rather than the internal line
+    /// counter and mode those views trail.</summary>
+    void OnModeTransition(byte ly, int mode);
+    /// <summary>Fires once per popped pixel, carrying the column and the mixer's final packed <c>0x00RRGGBB</c> color.</summary>
+    void OnPixelPop(byte ly, int x, uint color);
+}
+
 /// <summary>
 /// The picture processing unit, the machine's first LCD-domain clocked component: it ticks once per dot regardless of
 /// CPU speed. It owns the LCD registers — control/status, scroll, the DMG palettes and the CGB color-palette RAM, and
@@ -25,6 +37,11 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     private const byte BackgroundEnable = 0x01;
     private const byte BackgroundTileMap = 0x08;
     private const byte ColorRamSize = 64;
+    // The frame position the revision-0 monochrome boot ROM hands off at. The line is stated by Pan Docs; the dot is
+    // constrained only to 88-211 by the acceptance boot_hwio-dmg0 case (which pins the reported LY and STAT ten lines
+    // later), so the midpoint of that window is used.
+    private const int Dmg0PostBootDot = 150;
+    private const byte Dmg0PostBootLcdY = 0x91;
     private const int DotsPerScanline = 456;
     private const int FifoSize = 8;
     private const byte LcdEnable = 0x80;
@@ -43,27 +60,30 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     private const int LineEventLyWriteVBlankDot = 2;
     private const int LineEventLyWriteVisibleDot = 3;
     private const int VBlankEntryDot = 5;
-    // The first line after an LCD enable is a machine cycle short and never shows mode 2 — internally the scan period
-    // runs as mode 0 (object memory stays open and no sprites are collected), the polled mode holds at 0 until drawing
-    // (becoming visible slightly before the pipeline engages), and no OAM STAT pulse is raised. Drawing engages at the
-    // usual dot but with no entry latency (the first line's horizontal blank lands four dots ahead of a normal line's),
-    // so the whole pipeline — and the memory locks trailing its mode-0 edge — runs early.
+    // The first line after an LCD enable is four dots short and never shows mode 2 — the scan period runs as mode 0
+    // (object memory stays open and no sprites are collected), no OAM STAT pulse is raised, and the whole mode-3 group
+    // arrives early: the polled mode shows 3 at dot 82 with the memory locks, and the pipeline engages at 84, four
+    // dots ahead of a normal line's. The acceptance lcdon_timing and lcdon_write_timing tables read these dots back.
     private const int FirstLineLength = 452;
+    private const int FirstLineMode3Delay = 4;
     private const int FirstLineMode3Dot = 80;
     private const int FirstLinePolledMode3Dot = 82;
-    // Dots the CPU-facing memory unlocks trail the internal mode-3→0 edge (the pop of the 160th pixel; the hardware's
-    // mode-3 latch sits one dot behind it, which these lags fold in). Object-memory reads unlock two dots behind the
-    // rest. Video-RAM READS release with the polled STAT mode-0 flip (+4): hardware never shows the CPU an instant
-    // where STAT reads mode 0 but a VRAM read is still blocked — mode-3 exit clears STAT and the VRAM read lock
-    // together — and a read lock trailing the STAT flip breaks the poll-STAT-then-read idiom real software uses; the
-    // cross-machine link-trade replay is the pinned reproducer. Writes keep the fetcher's real bus occupancy (+5).
-    private const int OamReadUnlockLag = 6;
-    private const int OamWriteUnlockLag = 5;
-    private const int VideoRamReadUnlockLag = 4;
-    private const int VideoRamWriteUnlockLag = 5;
+    // Dots the CPU-facing memory unlocks trail the internal mode-3→0 edge (the pop of the 160th pixel). Everything but
+    // object-memory reads releases on the edge dot itself, alongside the polled STAT mode-0 flip: hardware never shows
+    // the CPU an instant where STAT reads mode 0 but a VRAM read is still blocked — mode-3 exit clears STAT and the
+    // VRAM read lock together — and a read lock trailing the STAT flip breaks the poll-STAT-then-read idiom real
+    // software uses; the cross-machine link-trade replay is the pinned reproducer. Color silicon from revision D on
+    // holds object-memory reads one dot longer.
+    private const int OamReadUnlockLag = 1;
+    private const int OamReadUnlockLagColor = 2;
+    private const int OamWriteUnlockLag = 1;
+    private const int VideoRamReadUnlockLag = 0;
+    private const int VideoRamWriteUnlockLag = 1;
     // The dot within the OAM scan at which object memory closes to WRITES — the hardware leaves it writable for the
     // first machine cycle of the line (lcdon_write_timing's line-start rows); reads lock from the top of the line.
     private const int OamWriteLockDot = 4;
+    // Dots of the mode-3 entry latency that still accept object-memory and video-RAM writes before the locks engage.
+    private const int Mode3AccessLockDots = 4;
     private const int MaxSpritesPerLine = 10;
     private const byte Mode0InterruptEnable = 0x08;
     private const byte Mode1InterruptEnable = 0x10;
@@ -108,11 +128,13 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     private readonly byte[] m_spriteY = new byte[MaxSpritesPerLine];
 
     // The model-capability gates: mutable so a LIVE device swap (ApplyModel) can re-derive them without a reboot. Kept as
-    // plain fields — never properties — so the per-dot render path reads them at full field speed. The immutable cartridge
-    // header capability is retained separately because the dmgCompatibility/cgbNative split folds it in.
+    // plain fields — never properties — so the per-dot render path reads them at full field speed. m_dmgCompatibility is
+    // re-derived from m_dmgCompatibilityState (the shared authority) rather than folding the header capability in locally.
     private bool m_supportsColor;
+    // Whether the background fetcher latches its row at the tile step (see ConsoleModelExtensions.LatchesFetchRowAtTileStep).
+    private bool m_latchesFetchRow;
 
-    private readonly bool m_cartridgeSupportsColor;
+    private readonly DmgCompatibilityState m_dmgCompatibilityState;
     private readonly CartridgeHeader m_header;
 
     // Color hardware running a monochrome cartridge boots into compatibility mode: rendering keeps the DMG rules (BGP/OBP
@@ -126,6 +148,13 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     private readonly uint[] m_compatObject0 = new uint[4];
     private readonly uint[] m_compatObject1 = new uint[4];
 
+    // Dormant co-simulation trace seam: null on every battery run and every ordinary boot, so the per-dot render path
+    // pays one predicted-not-taken field test at each guarded call site and nothing else. m_traceLastMode holds the
+    // last polled STAT mode reported, and is written only inside that guard, so it stays inert (and unread) whenever
+    // no sink is armed.
+    private IPpuTraceSink? m_traceSink;
+    private int m_traceLastMode = -1;
+
     // The coupled mode-3, LY/LYC/STAT-schedule and window timing knobs, resolved once from the injected parameters into
     // fields so the per-dot path never touches the parameter object. The defaults reproduce the shipped, oracle-tuned
     // behavior; a sweep harness supplies alternatives to co-tune them against the hardware-verdict grader without a
@@ -135,11 +164,13 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     private readonly int m_lycEventPhase;
     private readonly int m_mode0IrqLag;
     private readonly int m_mode3DelayReload;
+    // The m_mode3Delay value at and below which the CPU-facing memory locks have engaged: the locks land
+    // Mode3AccessLockDots into the entry latency, leaving (reload - Mode3AccessLockDots) on the counter.
+    private readonly int m_mode3LockedAtOrBelow;
     private readonly int m_oamPulseOffset;
+    private readonly int m_polledEventPhase;
     private readonly int m_polledMode0Lag;
     private readonly int m_polledMode3Lag;
-    private readonly int m_windowActivationDotsDouble;
-    private readonly int m_windowActivationDotsSingle;
     private readonly int m_windowYCheckGridPhase;
 
     private byte m_backgroundColorPaletteIndex;
@@ -170,6 +201,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     private int m_objectFetchPhase;
     private int m_objectFetchSlot;
     private byte m_objectFetchTile;
+    private int m_lcdColumn;
     private int m_positionInLine;
     private int m_statMode;
     // Countdowns, in dots, from the internal mode-3→0 edge to the polled STAT bits showing 0 and to the mode-0
@@ -208,11 +240,10 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     private byte m_windowX;
     private byte m_windowY;
     private bool m_windowFetching;
+    private bool m_windowHandoverStall;
 
     private int m_windowLineCounter = -1;
 
-    private int m_windowActivationDots;
-    private byte m_windowActivationX;
     private bool m_windowYTriggered;
     private bool m_wxTriggerSuppressed;
 
@@ -228,8 +259,9 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     /// <param name="timing">The coupled mode-3 pixel-pipeline timing knobs (pre-roll delay, coarse-column phase).</param>
     /// <param name="header">The cartridge header, which selects Color-native or compatibility rendering and steers the
     /// boot ROM's handoff (the frame position it leaves, and the compatibility palettes it assigns).</param>
+    /// <param name="dmgCompatibility">The shared DMG-compatibility authority.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    public Ppu(InterruptController interrupts, SystemMemory memory, Framebuffer framebuffer, MachineConfiguration configuration, Key1Component key1, PpuTimingParameters timing, CartridgeHeader header) {
+    public Ppu(InterruptController interrupts, SystemMemory memory, Framebuffer framebuffer, MachineConfiguration configuration, Key1Component key1, PpuTimingParameters timing, CartridgeHeader header, DmgCompatibilityState dmgCompatibility) {
         ArgumentNullException.ThrowIfNull(argument: interrupts);
         ArgumentNullException.ThrowIfNull(argument: memory);
         ArgumentNullException.ThrowIfNull(argument: framebuffer);
@@ -237,26 +269,28 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
         ArgumentNullException.ThrowIfNull(argument: key1);
         ArgumentNullException.ThrowIfNull(argument: timing);
         ArgumentNullException.ThrowIfNull(argument: header);
+        ArgumentNullException.ThrowIfNull(argument: dmgCompatibility);
 
         m_framebuffer = framebuffer;
         m_interrupts = interrupts;
         m_key1 = key1;
         m_memory = memory;
         m_header = header;
-        m_cartridgeSupportsColor = header.SupportsColor;
+        m_dmgCompatibilityState = dmgCompatibility;
         m_supportsColor = configuration.Model.SupportsColor();
-        m_dmgCompatibility = (m_supportsColor && !m_cartridgeSupportsColor);
+        m_latchesFetchRow = configuration.Model.LatchesFetchRowAtTileStep();
+        m_dmgCompatibility = dmgCompatibility.IsActive;
         m_cgbNative = (m_supportsColor && !m_dmgCompatibility);
         m_coarseColumnPhase = timing.CoarseColumnPhase;
         m_lineEventPhase = timing.LineEventPhase;
         m_lycEventPhase = timing.LycEventPhase;
         m_mode0IrqLag = timing.Mode0IrqLag;
         m_mode3DelayReload = timing.Mode3PixelPipelineDelay;
+        m_mode3LockedAtOrBelow = (timing.Mode3PixelPipelineDelay - Mode3AccessLockDots);
         m_oamPulseOffset = timing.OamPulseOffset;
+        m_polledEventPhase = timing.PolledEventPhase;
         m_polledMode0Lag = timing.PolledMode0Lag;
         m_polledMode3Lag = timing.PolledMode3Lag;
-        m_windowActivationDotsDouble = timing.WindowActivationDotsDouble;
-        m_windowActivationDotsSingle = timing.WindowActivationDotsSingle;
         m_windowYCheckGridPhase = timing.WyCheckGridPhase;
         m_irqMode = -1;
         m_lyForComparison = 0;
@@ -286,6 +320,16 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
                 m_lyRegister = m_ly;
                 m_lyForComparison = m_ly;
                 m_irqMode = 1;
+            } else if (configuration.Model == ConsoleModel.Dmg0) {
+                // The rearranged revision-0 monochrome boot ROM runs long enough to hand off mid vertical blank rather
+                // than at the top of a frame, so LY reads 0x91 and STAT reports mode 1.
+                m_ly = Dmg0PostBootLcdY;
+                m_dot = Dmg0PostBootDot;
+                m_mode = 1;
+                m_statMode = 1;
+                m_lyRegister = m_ly;
+                m_lyForComparison = m_ly;
+                m_irqMode = 1;
             }
 
             if (m_cgbNative) {
@@ -294,6 +338,14 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
                     m_backgroundColorRam[index] = 0xFF;
                     m_backgroundColorRam[(index + 1)] = 0x7F;
                 }
+            } else if (m_dmgCompatibility) {
+                // The boot ROM loads the compatibility palette through the same BCPS/OCPS auto-increment write path a
+                // Color game's own palette upload uses — one full 8-byte background palette (auto-increment ends at
+                // index 8) and two 8-byte object palettes (ends at index 16) — so BCPS/OCPS read back 0x88/0x90 (bit 7
+                // armed) even though the resolved shades this engine renders with (ResolveCompatibilityPalettes) never
+                // round-trip back through color RAM: BCPD/OCPD read sealed in compatibility mode (see ReadRegister).
+                m_backgroundColorPaletteIndex = 0x88;
+                m_objectColorPaletteIndex = 0x90;
             }
         }
 
@@ -332,7 +384,8 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
         var wasDmgCompatibility = m_dmgCompatibility;
 
         m_supportsColor = model.SupportsColor();
-        m_dmgCompatibility = (m_supportsColor && !m_cartridgeSupportsColor);
+        m_latchesFetchRow = model.LatchesFetchRowAtTileStep();
+        m_dmgCompatibility = m_dmgCompatibilityState.IsActive;
         m_cgbNative = (m_supportsColor && !m_dmgCompatibility);
 
         if (
@@ -358,7 +411,9 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     // lcdon_write_timing dot-80 window) — a window the first line after an LCD enable never has, because its pipeline
     // engages with no entry latency.
     public bool BlocksOamWrites =>
-        (((m_mode == 2) && (m_dot >= OamWriteLockDot)) || ((m_mode == 3) && (m_mode3Delay == 0)) || (m_oamWriteUnlockCountdown > 0));
+        (((m_mode == 2) && (m_dot >= OamWriteLockDot)) ||
+        ((m_mode == 3) && (m_mode3Delay <= m_mode3LockedAtOrBelow)) ||
+        (m_oamWriteUnlockCountdown > 0));
     /// <inheritdoc/>
     public bool BlocksVideoRamReads =>
         ((m_mode == 3) || (m_videoRamReadUnlockCountdown > 0));
@@ -366,7 +421,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     // Writes ride the fetcher's actual bus occupancy: they still land during the entry-latency dots after the mode-3
     // flip (reads are already locked there), so the write lock shares the OAM write window's shape.
     public bool BlocksVideoRamWrites =>
-        (((m_mode == 3) && (m_mode3Delay == 0)) || (m_videoRamWriteUnlockCountdown > 0));
+        (((m_mode == 3) && (m_mode3Delay <= m_mode3LockedAtOrBelow)) || (m_videoRamWriteUnlockCountdown > 0));
 
     // Whether the CPU can reach color-palette RAM through the data ports: the PPU locks it while drawing (mode 3), like
     // VRAM — blocked reads return open bus and blocked writes are dropped, while the index ports stay fully live. The
@@ -476,21 +531,24 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
         // a fixed boundary, so HDMA's HBlank trigger sees the true mode-0 edge. The CPU-visible views of all of this —
         // the LY register, the LY comparison, the polled mode bits, and the interrupt sources — run on their own
         // schedule, applied by ApplyStatSchedule below.
+        // The dot the line crosses out of its scan period into drawing. A normal line crosses at the end of the 80-dot
+        // object scan; the first line after an LCD enable crosses earlier, so the boundary is resolved before the scan
+        // period is tested rather than inside it.
+        var mode3Dot = (m_firstLineAfterEnable
+            ? FirstLineMode3Dot
+            : OamScanDots);
+
         if (m_ly >= VisibleScanlines) {
             m_mode = 1;
-        } else if (m_dot < OamScanDots) {
+        } else if (m_dot < mode3Dot) {
             // The first line after an LCD enable runs its scan period as mode 0: object memory stays open to the CPU
-            // and no sprites are collected — drawing still engages at the usual dot.
+            // and no sprites are collected.
             m_mode = (m_firstLineAfterEnable
                 ? 0
                 : 2);
         } else {
-            // The dot at 80 crosses out of the scan period into drawing; arm the pipeline for the line. The first line
-            // after an LCD enable crosses at the same dot, but with no entry latency (see StartScanline) its pixels —
-            // and its mode-0 edge — run four dots ahead of a normal line's.
-            if (m_dot == (m_firstLineAfterEnable
-                ? FirstLineMode3Dot
-                : OamScanDots)) {
+            // Arm the pipeline for the line on the crossing dot.
+            if (m_dot == mode3Dot) {
                 m_mode = 3;
 
                 StartScanline();
@@ -505,7 +563,23 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
         ApplyStatSchedule();
         UpdateLycComparison();
         UpdateStatInterrupt();
+
+        if (
+            (m_traceSink is not null) &&
+            (m_statMode != m_traceLastMode)
+        ) {
+            m_traceLastMode = m_statMode;
+
+            m_traceSink.OnModeTransition(
+                ly: m_lyRegister,
+                mode: m_statMode
+            );
+        }
     }
+    /// <summary>Arms or clears the co-simulation trace sink. Host-side debug state — never snapshotted, never touched
+    /// by the battery.</summary>
+    public void SetTraceSink(IPpuTraceSink? sink) =>
+        m_traceSink = sink;
     /// <inheritdoc/>
     public byte ReadRegister(ushort address) =>
         address switch {
@@ -525,11 +599,15 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
             MemoryMap.WindowY => m_windowY,
             MemoryMap.WindowX => m_windowX,
             MemoryMap.BackgroundColorPaletteIndex => ((byte)(m_backgroundColorPaletteIndex | 0x40)),
-            MemoryMap.BackgroundColorPaletteData => (IsColorRamAccessible
+            // The data port is sealed in DMG-compatibility mode: nothing this engine renders with round-trips through
+            // color RAM there (see ResolveCompatibilityPalettes), matching KEY1/RP/SVBK's "CGB mode only" hardware
+            // fact (Pan Docs "Power-Up Sequence"). The index port above stays live either way — see the constructor's
+            // compatibility-mode boot-handoff seed.
+            MemoryMap.BackgroundColorPaletteData => ((IsColorRamAccessible && !m_dmgCompatibility)
         ? m_backgroundColorRam[m_backgroundColorPaletteIndex & PaletteIndexMask]
         : (byte)0xFF),
             MemoryMap.ObjectColorPaletteIndex => ((byte)(m_objectColorPaletteIndex | 0x40)),
-            MemoryMap.ObjectColorPaletteData => (IsColorRamAccessible
+            MemoryMap.ObjectColorPaletteData => ((IsColorRamAccessible && !m_dmgCompatibility)
         ? m_objectColorRam[m_objectColorPaletteIndex & PaletteIndexMask]
         : (byte)0xFF),
             _ => 0xFF,
@@ -680,6 +758,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
         writer.WriteByte(value: m_objectColorPaletteIndex);
         writer.WriteBytes(value: m_backgroundColorRam);
         writer.WriteBytes(value: m_objectColorRam);
+        writer.WriteInt32(value: m_lcdColumn);
         writer.WriteInt32(value: m_positionInLine);
         writer.WriteInt32(value: m_mode3Delay);
         writer.WriteBoolean(value: m_duringObjectFetch);
@@ -707,8 +786,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
         writer.WriteInt32(value: m_windowLineCounter);
         writer.WriteBoolean(value: m_windowYTriggered);
         writer.WriteBoolean(value: m_windowFetching);
-        writer.WriteInt32(value: m_windowActivationDots);
-        writer.WriteByte(value: m_windowActivationX);
+        writer.WriteBoolean(value: m_windowHandoverStall);
         writer.WriteBoolean(value: m_wxTriggerSuppressed);
         writer.WriteInt32(value: m_spriteCount);
         writer.WriteByte(value: m_objectFifoHead);
@@ -755,6 +833,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
         m_objectColorPaletteIndex = reader.ReadByte();
         reader.ReadBytes(destination: m_backgroundColorRam);
         reader.ReadBytes(destination: m_objectColorRam);
+        m_lcdColumn = reader.ReadInt32();
         m_positionInLine = reader.ReadInt32();
         m_mode3Delay = reader.ReadInt32();
         m_duringObjectFetch = reader.ReadBoolean();
@@ -782,8 +861,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
         m_windowLineCounter = reader.ReadInt32();
         m_windowYTriggered = reader.ReadBoolean();
         m_windowFetching = reader.ReadBoolean();
-        m_windowActivationDots = reader.ReadInt32();
-        m_windowActivationX = reader.ReadByte();
+        m_windowHandoverStall = reader.ReadBoolean();
         m_wxTriggerSuppressed = reader.ReadBoolean();
         m_spriteCount = reader.ReadInt32();
         m_objectFifoHead = reader.ReadByte();
@@ -837,16 +915,17 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
         m_backgroundFifoCount = FifoSize;
         m_duringObjectFetch = false;
         m_firstFetchOfLine = true;
-        // The first line after an LCD enable skips the entry latency outright: the video circuit is already mid
-        // start-up, the pipeline engages the moment drawing begins, and the line's mode-0 edge lands four dots early
-        // (the lcdon_timing tables). Skipping the latency also skips the object-memory write window it opens.
+        // The first line after an LCD enable runs a shortened entry latency: the video circuit is already mid start-up,
+        // so the pipeline engages six dots sooner and the line's mode-0 edge lands that much early (the lcdon_timing
+        // tables). The shortened latency also closes the object-memory write window a full latency would open.
         m_mode3Delay = (m_firstLineAfterEnable
-            ? 0
+            ? FirstLineMode3Delay
             : m_mode3DelayReload);
         m_objectFetchPhase = 0;
+        m_lcdColumn = 0;
         m_positionInLine = -(FifoSize + (m_scrollX & 0x07));
         m_windowFetching = false;
-        m_windowActivationDots = 0;
+        m_windowHandoverStall = false;
 
         m_objectFifoHead = 0;
         Array.Clear(array: m_objectFifoColor);
@@ -903,57 +982,40 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
             // The window trigger is LIVE: every drawing dot compares the pipeline's output position against WX as it
             // reads NOW (so mid-line WX rewrites and LCDC.5 toggles land), with a WY-latch check that just landed on
             // this dot masking the comparison for the dot.
+            // The window hand-over is immediate: the match dot drops the background FIFO and rewinds the fetcher to
+            // its tile step, and the classic window penalty is simply the refill that costs — no separate stall. The
+            // enable bit is sampled live at the match dot, so a disable spanning it skips the window for the line.
             if (m_wxTriggerSuppressed) {
                 m_wxTriggerSuppressed = false;
             } else if (
-                (m_windowActivationDots == 0) &&
                 !m_windowFetching &&
                 m_windowYTriggered &&
-                WindowTriggerMatches()
+                ((m_lcdc & WindowEnable) != 0) &&
+                WindowTriggerMatches(out var desynced)
             ) {
-                // The WX match latches a pending activation REGARDLESS of the window-enable bit, carrying the WX it
-                // matched on — a disable spanning the match dot with a re-enable inside the phase still opens the
-                // window, while a WX change cancels the pending activation. At single speed the commit lands in the
-                // second half of the machine's 4-dot grid, stretching the phase by up to two dots.
-                if (
-                    m_supportsColor &&
-                    m_key1.IsDoubleSpeed
-                ) {
-                    m_windowActivationDots = m_windowActivationDotsDouble;
-                } else {
-                    var commitPhase = (m_dot + m_windowActivationDotsSingle) & 3;
+                ++m_windowLineCounter;
 
-                    m_windowActivationDots = (m_windowActivationDotsSingle + ((commitPhase < 2)
-                        ? (2 - commitPhase)
-                        : 0));
+                StartWindowFetch();
+
+                // Monochrome panels start the window a pixel early and the LCD column slips back with it, so the pixel
+                // already at that column is overwritten and the line ends a column short.
+                if (
+                    desynced &&
+                    (m_lcdColumn > 0)
+                ) {
+                    --m_lcdColumn;
                 }
 
-                m_windowActivationX = m_windowX;
-            }
+                // Monochrome silicon spends one extra dot handing over when the window starts inside the fine-scroll
+                // discard (WX 0 with a non-zero SCX low nibble).
+                if (
+                    !m_supportsColor &&
+                    (m_windowX == 0) &&
+                    ((m_scrollX & 0x07) != 0)
+                ) {
+                    m_windowHandoverStall = true;
 
-            // The activation phase samples the window-enable bit LIVE every dot: while it holds, the pipeline freezes
-            // (these dots are the hardware's window penalty beyond the six restart dots); a dot that reads it disabled
-            // lets the pipeline run normally, so a mid-phase disable cancels the remaining stall outright. The phase
-            // commits the FIFO clear and window fetcher restart only if it ENDS with the window enabled and WX still
-            // holding the matched value.
-            if (m_windowActivationDots > 0) {
-                if (m_windowX != m_windowActivationX) {
-                    m_windowActivationDots = 0;
-                } else {
-                    var windowStillEnabled = ((m_lcdc & WindowEnable) != 0);
-
-                    if (
-                        (--m_windowActivationDots == 0) &&
-                        windowStillEnabled
-                    ) {
-                        ++m_windowLineCounter;
-
-                        StartWindowFetch();
-                    }
-
-                    if (windowStillEnabled) {
-                        return;
-                    }
+                    return;
                 }
             }
 
@@ -964,6 +1026,12 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
         // let a pixel through between them), and the background fetcher only advances on the dots the fetch allows.
         if (m_objectFetchPhase != 0) {
             ObjectFetchDot();
+
+            return;
+        }
+
+        if (m_windowHandoverStall) {
+            m_windowHandoverStall = false;
 
             return;
         }
@@ -1001,20 +1069,34 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
             objectColor = 0;
         }
 
-        m_framebuffer.SetPixel(
-            x: m_positionInLine,
-            y: m_ly,
-            color: (m_stopBlackout
+        var mixedColor = (m_stopBlackout
             ? 0x000000u
             : MixPixel(
                 backgroundAttribute: attribute,
                 backgroundColor: color,
                 objectAttribute: objectAttribute,
                 objectColor: objectColor
-            ))
+            ));
+
+        m_framebuffer.SetPixel(
+            x: m_lcdColumn,
+            y: m_ly,
+            color: mixedColor
         );
 
+        if (m_traceSink is not null) {
+            m_traceSink.OnPixelPop(
+                color: mixedColor,
+                ly: m_ly,
+                x: m_lcdColumn
+            );
+        }
+
+        ++m_lcdColumn;
+
         if (++m_positionInLine == ScreenWidth) {
+            FillDesyncedColumns();
+
             m_mode = 0;
 
             // The internal mode-0 edge lands here on time (HDMA and the bus gates see it immediately); the polled STAT
@@ -1045,9 +1127,11 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
                 m_irqMode0Countdown = irqLag;
             }
 
-            // The CPU-facing memory unlocks trail the edge by their own lags (object-memory reads release last;
-            // video-RAM reads release with the polled STAT flip).
-            m_oamReadUnlockCountdown = OamReadUnlockLag;
+            // The CPU-facing memory unlocks trail the edge by their own lags (Color silicon holds object-memory reads
+            // one dot longer; everything else releases with the polled STAT flip on the edge dot).
+            m_oamReadUnlockCountdown = (m_supportsColor
+                ? OamReadUnlockLagColor
+                : OamReadUnlockLag);
             m_oamWriteUnlockCountdown = OamWriteUnlockLag;
             m_videoRamReadUnlockCountdown = VideoRamReadUnlockLag;
             m_videoRamWriteUnlockCountdown = VideoRamWriteUnlockLag;
@@ -1112,13 +1196,13 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
         if (m_objectFetchPhase == 1) {
             // The ready threshold: the oracle exits its wait once the fetcher has reached the high data byte's read
             // step with pixels behind it, and its first two fixed dots finish that read and park the fetcher. Our
-            // per-dot order ticks the fetcher BEFORE the pixel pop while the oracle advances it after, and the
-            // oracle's push state parks until the FIFO drains where our push step resets to the tile step at once —
+            // per-dot order ticks the fetcher before the pixel pop while the oracle advances it after, and the
+            // oracle's push state parks until the FIFO drains where our push step resets to the tile step at once �
             // so from the second background tile of the line on, the check-time fetcher state here trails the
-            // oracle's by exactly one step. Accepting the high byte's ADDRESS dot as ready once the first push has
+            // oracle's by exactly one step. Accepting the high byte's address dot as ready once the first push has
             // landed restores the oracle's dot-exact wait length at every fetch phase (the two fixed lead dots below
-            // complete the address and the read either way); the first fetch of the line carries no skew — no push
-            // has run yet — so it keeps the read-dot threshold.
+            // complete the address and the read either way); the first fetch of the line carries no skew � no push
+            // has run yet � so it keeps the read-dot threshold.
             var highDataReady = ((m_fetchStep == 2) && ((m_fetchStepDot == 1) || !m_firstFetchOfLine));
             var fetcherReady = ((highDataReady || (m_fetchStep == 3)) && (m_backgroundFifoCount != 0));
 
@@ -1334,7 +1418,10 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     // and WX = 0 matches across the lead-in — anywhere in the junk-pop region when SCX carries a fine offset, or one
     // pop before the first visible pixel otherwise. WX past the visible line (166 on monochrome, 167 on Color) never
     // matches.
-    private bool WindowTriggerMatches() {
+    /// <param name="desynced">Set when the match came from the monochrome panel's one-pixel-early comparison.</param>
+    private bool WindowTriggerMatches(out bool desynced) {
+        desynced = false;
+
         if (m_windowX == 0) {
             return (
                 (m_positionInLine == -7) ||
@@ -1348,7 +1435,40 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
             return false;
         }
 
-        return (m_positionInLine == (m_windowX - 7));
+        if (m_positionInLine == (m_windowX - 7)) {
+            return true;
+        }
+
+        // Monochrome panels run a pixel out of step with the pixel pipeline, so the window also starts on the
+        // comparison one column early.
+        if (
+            !m_supportsColor &&
+            (m_positionInLine == (m_windowX - 6))
+        ) {
+            desynced = true;
+
+            return true;
+        }
+
+        return false;
+    }
+    // Fill the columns a monochrome window desync left short at the end of drawing: the panel holds the last color it
+    // was handed (or the first background shade when nothing was drawn at all).
+    private void FillDesyncedColumns() {
+        while (m_lcdColumn < ScreenWidth) {
+            m_framebuffer.SetPixel(
+                color: ((m_lcdColumn == 0)
+                    ? ResolveBackgroundColor(
+                        attribute: 0,
+                        color: 0
+                    )
+                    : m_framebuffer.Pixels[(((m_ly * ScreenWidth) + m_lcdColumn) - 1)]),
+                x: m_lcdColumn,
+                y: m_ly
+            );
+
+            ++m_lcdColumn;
+        }
     }
     // Hand the fetcher over to the window: drop the background FIFO and rewind to the window's first tile. The output
     // position is untouched — pops simply resume when the window's first tile lands — so the discard phase, if still
@@ -1357,6 +1477,25 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
         ResetBackgroundFetcher();
 
         m_windowFetching = true;
+    }
+    // Whether the push step must insert one transparent pixel instead of the fetched tile row. Monochrome silicon with
+    // the WY latch armed and the window switched off mid-line stalls the push for a dot when the pipeline reaches the
+    // column WX still names, leaking a single background-color-0 pixel. The logical column is the output position
+    // seven pixels ahead, wrapping to zero anywhere in the lead-in.
+    private bool WindowPixelInsertionGlitch() {
+        if (
+            m_supportsColor ||
+            !m_windowYTriggered ||
+            ((m_lcdc & WindowEnable) != 0)
+        ) {
+            return false;
+        }
+
+        var logicalPosition = ((byte)(m_positionInLine + 7));
+
+        return (m_windowX == ((logicalPosition > 167)
+            ? (byte)0
+            : logicalPosition));
     }
     // One sample of the hardware's WY = LY comparator: with the window enabled, a match arms the per-frame WY latch.
     // Returns whether this sample armed it.
@@ -1397,6 +1536,14 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     private void FetcherTick() {
         if (m_fetchStep == 3) {
             if (m_backgroundFifoCount == 0) {
+                if (WindowPixelInsertionGlitch()) {
+                    m_backgroundFifoColor[m_backgroundFifoHead] = 0;
+                    m_backgroundFifoAttribute[m_backgroundFifoHead] = 0;
+                    m_backgroundFifoCount = 1;
+
+                    return;
+                }
+
                 PushTile();
 
                 ++m_fetchTileX;
@@ -1507,10 +1654,10 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
         m_fetchMapAddress = ((ushort)((mapBase + (tileRow * TilesPerMapRow)) + tileColumn));
     }
     // Resolve the tile-data row address a data step reads — honoring the CGB Y-flip and tile-bank attribute bits and the
-    // signed/unsigned tile-data addressing mode as LCDC.4 reads at THIS dot. Color hardware (CGB-D and newer) uses the
-    // fetch row latched at the tile step; monochrome hardware re-derives it live, so a mid-fetch SCY write lands there.
+    // signed/unsigned tile-data addressing mode as LCDC.4 reads at this dot. Silicon that latches the fetch row uses the
+    // value the tile step captured; older silicon re-derives it live, so a mid-fetch SCY write lands there.
     private void ComputeDataAddress() {
-        var fetchY = (m_supportsColor
+        var fetchY = (m_latchesFetchRow
             ? m_fetcherY
             : (byte)(m_windowFetching
                 ? m_windowLineCounter
@@ -1670,7 +1817,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
             m_irqMode = -1;
         }
 
-        if (nominalDot == LineEventLyWriteVisibleDot) {
+        if (nominalDot == (LineEventLyWriteVisibleDot + m_polledEventPhase)) {
             m_lyRegister = ((byte)line);
 
             if (
@@ -1687,7 +1834,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
                 : 0);
         }
 
-        if (nominalDot == LineEventComparisonDot) {
+        if (nominalDot == (LineEventComparisonDot + m_polledEventPhase)) {
             m_statMode = 2;
         }
 
@@ -1704,9 +1851,11 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
             m_lyForComparison = LycNone;
         }
 
-        if (nominalDot == LineEventLyWriteVBlankDot) {
+        if (nominalDot == (LineEventLyWriteVBlankDot + m_polledEventPhase)) {
             m_lyRegister = VisibleScanlines;
+        }
 
+        if (nominalDot == LineEventLyWriteVBlankDot) {
             RequestVBlankOamQuirk();
         }
 
@@ -1714,8 +1863,11 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
             m_lyForComparison = VisibleScanlines;
         }
 
-        if (nominalDot == VBlankEntryDot) {
+        if (nominalDot == (VBlankEntryDot + m_polledEventPhase)) {
             m_statMode = 1;
+        }
+
+        if (nominalDot == VBlankEntryDot) {
             m_irqMode = 1;
 
             m_interrupts.Request(kind: InterruptKind.VBlank);
@@ -1728,7 +1880,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
             m_lyForComparison = LycNone;
         }
 
-        if (nominalDot == LineEventLyWriteVBlankDot) {
+        if (nominalDot == (LineEventLyWriteVBlankDot + m_polledEventPhase)) {
             m_lyRegister = ((byte)line);
         }
 
@@ -1745,11 +1897,11 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
             m_lyForComparison = LycNone;
         }
 
-        if (nominalDot == Line153LyWriteDot) {
+        if (nominalDot == (Line153LyWriteDot + m_polledEventPhase)) {
             m_lyRegister = ((byte)(ScanlinesPerFrame - 1));
         }
 
-        if (nominalDot == Line153HandoverDot) {
+        if (nominalDot == (Line153HandoverDot + m_polledEventPhase)) {
             if (!m_key1.IsDoubleSpeed) {
                 m_lyRegister = 0;
             }
@@ -1759,7 +1911,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
             m_lyForComparison = (ScanlinesPerFrame - 1);
         }
 
-        if (nominalDot == Line153ComparisonNoneDot) {
+        if (nominalDot == (Line153ComparisonNoneDot + m_polledEventPhase)) {
             m_lyRegister = 0;
         }
 

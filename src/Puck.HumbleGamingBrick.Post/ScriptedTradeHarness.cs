@@ -74,7 +74,7 @@ internal static class ScriptedTradeHarness {
     /// <returns>The assembled machine; the caller owns and disposes it.</returns>
     public static MachineInstance Build(byte[] rom, TradeTrainer trainer) {
         var machine = PostMachine.Build(
-            model: ConsoleModel.Cgb,
+            model: ConsoleModel.CgbE,
             rom: rom
         );
         var cartridge = machine.GetRequiredService<ICartridge>();
@@ -98,7 +98,7 @@ internal static class ScriptedTradeHarness {
     /// <param name="model">The console model to construct.</param>
     /// <param name="bootRom">An optional boot ROM image.</param>
     /// <returns>The assembled machine; the caller owns and disposes it.</returns>
-    public static MachineInstance BuildFromSave(byte[] rom, byte[] save, ConsoleModel model = ConsoleModel.Cgb, byte[]? bootRom = null) {
+    public static MachineInstance BuildFromSave(byte[] rom, byte[] save, ConsoleModel model = ConsoleModel.CgbE, byte[]? bootRom = null) {
         var machine = PostMachine.Build(
             bootRom: bootRom,
             model: model,
