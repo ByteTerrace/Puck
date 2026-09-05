@@ -84,11 +84,11 @@ public sealed record CompiledWorldDecisionNeighbors(WorldDecisionNeighbors Sourc
 public sealed record CompiledWorldDecision(
     CompiledWorldDecisionOption[] Options, WorldDecisionMode Mode, CellKind ScoreKind,
     ulong PeriodTicks, ulong CommitmentTicks, long IncumbentBonus, ulong Seed,
-    CompiledWorldPredicate[]? Interrupt, CompiledWorldEffect[] OnNoChoice, string PolicyIdentity
+    GateToken[]? Interrupt, EffectFact[] OnNoChoice, string PolicyIdentity
 );
 
 /// <summary>A decision option compiled through the ordinary world predicate, expression, and effect compilers.</summary>
 public sealed record CompiledWorldDecisionOption(
-    string Name, CompiledWorldPredicate[] Gate, CompiledWorldExpressionToken[] Score, CompiledWorldEffect[] Effects,
+    string Name, GateToken[] Gate, CompiledExpressionToken[] Score, EffectFact[] Effects,
     CompiledWorldDecisionNeighbors? Neighbors = null
 );

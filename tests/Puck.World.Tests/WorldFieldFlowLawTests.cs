@@ -192,7 +192,7 @@ public sealed class WorldFieldFlowLawTests {
         lattice.Restore(checkpoint: IntCheckpoint([4, 6]));
 
         var flow = Assert.IsType<WorldFieldNode.Flow>(@object: Assert.Single(collection: lattice.Program.Nodes));
-        WorldStateHandle written = default;
+        StateHandle written = default;
         var spilled = FixedQ4816.Zero;
         var calls = 0;
 

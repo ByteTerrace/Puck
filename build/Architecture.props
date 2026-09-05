@@ -148,12 +148,13 @@
              the campaign's Puck.State charter, phase one): expression syntax and tokens, the opcode enum and its
              arithmetic, tables and their document, state transforms, the validated-identifier family, and the
              reserved fact channels — no world, body, rendering, or presentation concept. Puck.Abstractions for the
-             converter contracts, Puck.Assets for the canonical-document boundary, Puck.Maths for the Q48.16 carrier,
-             Puck.Physics for the motion-program fact a reserved channel names. What exact equality enforces is the
-             ABSENCE of Puck.World.Schema and everything above it: the document project consumes and extends this
-             row, never the reverse, so a card game or a turn-based resolver can run rules over Puck.Maths and this
-             package alone. -->
-        <PuckArchitectureProfile Include="Puck.State" Closure="Puck.Abstractions;Puck.Assets;Puck.Maths;Puck.Physics" />
+             converter contracts, Puck.Assets for the canonical-document boundary, Puck.Maths for the Q48.16 carrier.
+             What exact equality enforces is the ABSENCE of Puck.Physics, Puck.World.Schema, and everything above
+             them: Puck.Physics consumes this row for the comparison and trigger-mode vocabulary its compiled
+             predicates share with a state rule, and the document project consumes and extends it, never the
+             reverse, so a card game or a turn-based resolver can run rules over Puck.Maths and this package
+             alone. -->
+        <PuckArchitectureProfile Include="Puck.State" Closure="Puck.Abstractions;Puck.Assets;Puck.Maths" />
         <!-- The headless P1 split's document row (docs/project-map.md's Puck.World.Schema row; formerly
              Puck.World.Data). Puck.World.Authoring is the authored-content document row (formerly the Authoring/
              half of Puck.World.Forge; the SM83 forge half moved to Puck.HumbleGamingBrick.Forge, taking the

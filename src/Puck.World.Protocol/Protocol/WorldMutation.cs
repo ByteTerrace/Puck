@@ -324,7 +324,7 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Defaults">The whole HUD defaults row.</param>
     [MutationKind(ordinal: 45, section: WorldSection.Hud)]
     public sealed record SetHudDefaults(WorldPrincipal Principal, WorldHudDefaults Defaults) : WorldMutation(Principal);
-    /// <summary>Upserts a <c>state</c> row addressed by <see cref="WorldStateRow.Name"/> — replaces the matching row
+    /// <summary>Upserts a <c>state</c> row addressed by <see cref="StateRow.Name"/> — replaces the matching row
     /// or appends a new one. Applies live. Checked twice: the standard <see cref="WorldCapability.Mutate"/> hold over
     /// <see cref="WorldSection.State"/> every mutation kind requires, plus a second, row-scoped
     /// <see cref="WorldCapability.Edit"/> hold over the concrete <c>state:&lt;name&gt;</c> subject the row names (or
@@ -345,8 +345,8 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// failure, definition unchanged) if <see cref="Row"/> names no state row; rejected by the whole-document
     /// revalidation if the resulting value falls outside the row's declared envelope, a non-negative row's value
     /// would go negative, the write would grow the row past its effective capacity, or (a <c>Text</c>-kind row) the
-    /// written text exceeds <see cref="WorldStateCapacity.MaxTextValueLength"/>. Reaches any row — a slot-shaped
-    /// row's implicit cell (keyed <see cref="WorldStateRow.SlotKey"/>) as much as an author-keyed cell, since a slot
+    /// written text exceeds <see cref="StateCapacity.MaxTextValueLength"/>. Reaches any row — a slot-shaped
+    /// row's implicit cell (keyed <see cref="StateRow.SlotKey"/>) as much as an author-keyed cell, since a slot
     /// is a table with one key (see <see cref="WorldStateRow"/>'s remarks); the console's <c>world.state.cell.set</c>
     /// (numeric/bool and text alike, dispatching on the row's declared kind) / <c>world.state.cell.remove</c> verbs are its whole
     /// spelling, in the same verb family the whole-row pair uses — <see cref="Value"/> carries the former,
@@ -377,7 +377,7 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// integer is exactly the decision that needs the row, and the row may not exist yet at submit time. Carrying the
     /// token uninterpreted and parsing it at compose, against the candidate row's <c>Kind</c> (the same document a
     /// same-batch <see cref="UpsertStateRow"/> ahead of this one has already installed into), is what makes a
-    /// same-batch declare-then-write deterministic: see <see cref="WorldStateCellWriter"/>'s token parser, which the
+    /// same-batch declare-then-write deterministic: see <see cref="StateCellWriter"/>'s token parser, which the
     /// compose arm runs when this is set.</param>
     /// <param name="CycleTokens">The human-authored tokens of an atomic cycle, or <see langword="null"/> for an ordinary
     /// set/add. When present (two or more), <see cref="Kind"/> must be <see cref="WorldDocumentWriteKind.Set"/>. The
@@ -402,7 +402,7 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     [MutationKind(ordinal: 48, section: WorldSection.InputHold)]
     public sealed record SetInputHold(WorldPrincipal Principal, WorldInputHoldSettings Settings) : WorldMutation(Principal);
     /// <summary>
-    /// Runs one emission of a generator row (a <see cref="WorldStateRow"/> declaring a <see cref="WorldGenerator"/>)
+    /// Runs one emission of a generator row (a <see cref="WorldStateRow"/> declaring a <see cref="StateGenerator"/>)
     /// and writes the space-joined result into a text cell — the sampling primitive the whole Markov family reduces
     /// to, and the one mechanism the <c>world.generate</c> console verb, a kit's <c>ActionEffect.Generate</c>, and a
     /// world rule's own generate effect all submit.
@@ -410,7 +410,7 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <remarks>
     /// <para><b>A pure function of the candidate document and the instance identity.</b> Composing this mutation
     /// resolves the site's source (named or inlined), seeks the PRNG to the position the site's own
-    /// <see cref="WorldStateRow.DrawCursor"/> records — an O(1) jump, never a replay — draws, and writes both the
+    /// <see cref="StateRow.DrawCursor"/> records — an O(1) jump, never a replay — draws, and writes both the
     /// drawn value and the advanced cursor/drawn masks into the same candidate. Nothing lives outside the document, so
     /// <c>world.undo</c> rewinds a draw position bit-identically by the ordinary whole-document restore — there is no
     /// separate runtime to reconcile, and no tape record of a draw to keep in step.</para>
@@ -424,12 +424,12 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// source it references, is an <see cref="UpsertStateRow"/> against that row and is gated there, which is where
     /// the interesting authority actually sits.</para>
     /// <para>Rejected loudly (compose failure, definition unchanged) if <see cref="Row"/> names no state row, names
-    /// one declaring no draw, or names one whose <see cref="WorldDraw.Timing"/> is
-    /// <see cref="WorldDrawTiming.Boot"/> (drawn once at first fill, never again); if the site's facet resolves to no
+    /// one declaring no draw, or names one whose <see cref="Draw.Timing"/> is
+    /// <see cref="DrawTiming.Boot"/> (drawn once at first fill, never again); if the site's facet resolves to no
     /// source; if the source's emission kind the site cannot hold; if a Markov walk reaches
-    /// <see cref="WorldGenerator.Bound"/> tokens without terminating; or if a
-    /// <see cref="WorldGeneratorMode.WithoutReplacement"/> context is exhausted. Rejected by the whole-document
-    /// revalidation if a joined emission exceeds <see cref="WorldStateCapacity.MaxTextValueLength"/>.</para>
+    /// <see cref="StateGenerator.Bound"/> tokens without terminating; or if a
+    /// <see cref="GeneratorMode.WithoutReplacement"/> context is exhausted. Rejected by the whole-document
+    /// revalidation if a joined emission exceeds <see cref="StateCapacity.MaxTextValueLength"/>.</para>
     /// </remarks>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Row">The draw site's row name.</param>
@@ -437,7 +437,7 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// every cell. Refused on a slot site.</param>
     [MutationKind(ordinal: 51, section: WorldSection.State)]
     public sealed record Generate(WorldPrincipal Principal, string Row, IReadOnlyList<string>? Keys = null) : WorldMutation(Principal);
-    /// <summary>Upserts a world rule addressed by <see cref="WorldRule.Name"/> — the authoring door for the
+    /// <summary>Upserts a world rule addressed by <see cref="Rule.Name"/> — the authoring door for the
     /// <c>rules</c> section, never the firing one: a rule evaluating and its effects applying both ride
     /// <see cref="WorldPrincipal.World"/> and never submit this kind. Rejected loudly if the rule fails to compile
     /// against the candidate document (an undeclared state row or cell, an inadmissible predicate/effect kind for
@@ -449,7 +449,7 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <summary>Removes the world rule named <paramref name="Name"/>. Rejected if no rule declares that name.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Name">The rule name to remove — a <see cref="CellName"/>, the same validated-identifier type
-    /// <see cref="WorldRule.Name"/> itself rides, so a name this mutation could never match is refused at the verb
+    /// <see cref="Rule.Name"/> itself rides, so a name this mutation could never match is refused at the verb
     /// (or the JSON converter) instead of travelling as a miss.</param>
     [MutationKind(ordinal: 53, section: WorldSection.Rules)]
     public sealed record RemoveWorldRule(WorldPrincipal Principal, CellName Name) : WorldMutation(Principal);
@@ -575,7 +575,7 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Row">The whole dynamics row.</param>
     [MutationKind(ordinal: 71, section: WorldSection.Dynamics)]
-    public sealed record UpsertDynamics(WorldPrincipal Principal, WorldDynamicsRow Row) : WorldMutation(Principal);
+    public sealed record UpsertDynamics(WorldPrincipal Principal, DynamicsRow Row) : WorldMutation(Principal);
     /// <summary>Removes a dynamics row by name. Rejected loudly by full-document revalidation while any consumer
     /// (a look, a kit, a camera program, a state cell) still names it.</summary>
     /// <param name="Principal">The acting identity.</param>
@@ -600,5 +600,5 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Transform">The typed operation.</param>
     /// <param name="Guard">Optional admission against a phase generation and the stamped actor.</param>
     [MutationKind(ordinal: 75, section: WorldSection.State)]
-    public sealed record TransformState(WorldPrincipal Principal, StateTransform Transform, WorldPhaseGuard? Guard = null) : WorldMutation(Principal);
+    public sealed record TransformState(WorldPrincipal Principal, StateTransform Transform, PhaseGuard? Guard = null) : WorldMutation(Principal);
 }

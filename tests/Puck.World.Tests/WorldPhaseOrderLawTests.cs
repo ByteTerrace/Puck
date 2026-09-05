@@ -15,7 +15,7 @@ public sealed class WorldPhaseOrderLawTests {
         Assert.True(WorldStateTransforms.CanAct(definition, new("turn", 0), WorldPrincipal.Seat(0)));
         Assert.False(WorldStateTransforms.CanAct(definition, new("turn", 1), WorldPrincipal.Seat(0)));
 
-        Assert.True(CompiledWorldPatterns.TryCompileAll(definition, out var patterns, []));
+        Assert.True(CompiledPatterns.TryCompileAll(definition.Patterns, out var patterns, []));
         Assert.True(WorldStateTransforms.TryApply(definition, Ray(), WorldPrincipal.Seat(0), 1, "test", out var candidate, out var reason, patterns), reason);
         var advanced = WorldStateTransforms.Advance(candidate, "turn");
 
@@ -83,14 +83,14 @@ public sealed class WorldPhaseOrderLawTests {
 
     private static WorldStateRow Phase(long sequence = 0) => new(CellName.Parse("turn"), CellKind.Int, Phase: new(sequence));
     private static WorldStateRow Board() => new(CellName.Parse("board"), CellKind.Int,
-        Cells: [new(CellName.Parse("0"), 1), new(CellName.Parse("1"), 2), new(CellName.Parse("2"), 2), new(CellName.Parse("3"), 1)], Domain: new WorldStateDomain.CellsOf("map"));
+        Cells: [new(CellName.Parse("0"), 1), new(CellName.Parse("1"), 2), new(CellName.Parse("2"), 2), new(CellName.Parse("3"), 1)], Domain: new StateDomain.CellsOf("map"));
     private static StateTransform.SetRay Ray() => new("board", "0", "E", "capture", 1);
     private static WorldDefinition Document(params WorldStateRow[] rows) => Fixtures.BuildDocument() with {
-        StateRaw = new(World: rows, Lattices: rows.Any(row => row.EffectiveDomain is WorldStateDomain.CellsOf) ? [new WorldStateLatticeTopology.Grid("map", new(0, 0, 0), 1, 4, 4)] : []),
+        StateRaw = new(World: rows, Lattices: rows.Any(row => row.EffectiveDomain is StateDomain.CellsOf) ? [new LatticeTopology.Grid("map", new(0, 0, 0), 1, 4, 4)] : []),
         PatternsRaw = [new(CellName.Parse("capture"), CellKind.Int,
             [new(CellName.Parse("through"), 2, 2), new(CellName.Parse("until"), 1, 1)],
-            new WorldPatternNode.Sequence([new WorldPatternNode.Plus(new WorldPatternNode.Symbol("through")), new WorldPatternNode.Symbol("until")]))],
+            new PatternNode.Sequence([new PatternNode.Plus(new PatternNode.Symbol("through")), new PatternNode.Symbol("until")]))],
         Rules = [],
     };
-    private static WorldStatePhase Read(WorldDefinition definition) => WorldDefinitionRows.FindStateRow(definition.State, "turn")!.Phase!;
+    private static StatePhase Read(WorldDefinition definition) => WorldDefinitionRows.FindStateRow(definition.State, "turn")!.Phase!;
 }

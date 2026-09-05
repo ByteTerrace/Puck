@@ -25,7 +25,7 @@ public sealed class BodyScaleLawTests {
             Min: EnvelopeMin.Value,
             Max: EnvelopeMax.Value,
             Capacity: 8,
-            Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "0"), Value: cellValue.Value)]
+            Cells: [new StateCell(Key: CellName.Parse(candidate: "0"), Value: cellValue.Value)]
         );
 
         return (baseDocument with {
@@ -248,7 +248,7 @@ public sealed class BodyScaleLawTests {
             Min: EnvelopeMin.Value,
             Max: EnvelopeMax.Value,
             Capacity: 8,
-            Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "0"), Value: cellValue.Value)]
+            Cells: [new StateCell(Key: CellName.Parse(candidate: "0"), Value: cellValue.Value)]
         );
 
         return source with {

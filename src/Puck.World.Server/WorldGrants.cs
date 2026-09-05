@@ -1893,10 +1893,10 @@ public sealed class WorldGrants : IWorldGrantsView {
     /// live <c>world.state.cell.set</c> that flips a gate row's cell is settled before the next tick's intent drain
     /// reads it. Resolves each candidate cell through
     /// <see cref="WorldStateReader.TryRead"/> — the section's one (row, key) read seam — rather than a bespoke scan
-    /// of <see cref="WorldStateCell.Value"/>, exactly the discipline the entity-addressable reductions already
+    /// of <see cref="StateCell.Value"/>, exactly the discipline the entity-addressable reductions already
     /// follow. The tick this resolves at is inert for every row this index can ever hold:
-    /// <see cref="WorldStateRow.GatesDrive"/> requires a declared <see cref="WorldStateRow.Capacity"/>
-    /// (WorldDefinitionValidator), and <see cref="WorldStateRow.Advance"/> — the only trait TryRead's tick argument
+    /// <see cref="WorldStateRow.GatesDrive"/> requires a declared <see cref="StateRow.Capacity"/>
+    /// (WorldDefinitionValidator), and <see cref="StateRow.Advance"/> — the only trait TryRead's tick argument
     /// affects — refuses beside one, so a gate row can never advance; <c>0</c> reads identically to any other tick.
     /// First-in-document-order gate wins a body (declaration-order tiebreak, the same convention same-tick rule
     /// effects resolve by).</summary>

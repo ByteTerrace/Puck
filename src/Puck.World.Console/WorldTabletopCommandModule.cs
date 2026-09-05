@@ -67,9 +67,12 @@ public sealed class WorldTabletopCommandModule(IWorldConsoleAuthority authority)
                 _ = text.Append(value: " origin=(").Append(value: DescribeFixed(topology.Origin.X)).Append(value: ',')
                     .Append(value: DescribeFixed(topology.Origin.Y)).Append(value: ',')
                     .Append(value: DescribeFixed(topology.Origin.Z)).Append(value: ')')
-                    .Append(value: " cellSize=").Append(value: DescribeFixed(topology.CellSize))
-                    .Append(value: " width=").Append(value: topology.Width)
-                    .Append(value: " depth=").Append(value: topology.Depth);
+                    .Append(value: " cellSize=").Append(value: DescribeFixed(topology.CellSize));
+                if (topology.Kind == TopologyKind.Hex) {
+                    _ = text.Append(value: " radius=").Append(value: topology.Radius);
+                } else {
+                    _ = text.Append(value: " width=").Append(value: topology.Width).Append(value: " depth=").Append(value: topology.Depth);
+                }
             }
 
             AppendCells(text: text, row: occupancy, label: "occupancy");

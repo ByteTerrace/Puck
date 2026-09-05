@@ -16,19 +16,19 @@ public sealed class WorldStateLiteralLawTests {
                 new WorldStateRow(
                     Name: sourceName,
                     Kind: CellKind.Int,
-                    Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: BeyondBinary32ExactInteger)]
+                    Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: BeyondBinary32ExactInteger)]
                 ),
                 new WorldStateRow(
                     Name: destinationName,
                     Kind: CellKind.Int,
-                    Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0L)]
+                    Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 0L)]
                 ),
             ]),
             Rules = [new WorldRule(
                 Name: CellName.Parse(candidate: "exact-literal"),
                 Gate: new ActionPredicate.CompareState(
                     State: sourceName.Value,
-                    Comparison: Puck.Physics.Motion.ActionStateComparison.Equal,
+                    Comparison: ActionStateComparison.Equal,
                     Value: BeyondBinary32ExactInteger
                 ),
                 Effects: [new ActionEffect.SetState(
@@ -55,12 +55,12 @@ public sealed class WorldStateLiteralLawTests {
         var destinationName = CellName.Parse(candidate: "wide-result");
         var definition = Fixtures.BuildDocument() with {
             StateRaw = new WorldStateSection(World: [
-                new WorldStateRow(Name: sourceName, Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: Value)]),
-                new WorldStateRow(Name: destinationName, Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0L)]),
+                new WorldStateRow(Name: sourceName, Kind: CellKind.Int, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: Value)]),
+                new WorldStateRow(Name: destinationName, Kind: CellKind.Int, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 0L)]),
             ]),
             Rules = [new WorldRule(
                 Name: CellName.Parse(candidate: "wide-literal"),
-                Gate: new ActionPredicate.CompareState(State: sourceName.Value, Comparison: Puck.Physics.Motion.ActionStateComparison.Equal, Value: Value),
+                Gate: new ActionPredicate.CompareState(State: sourceName.Value, Comparison: ActionStateComparison.Equal, Value: Value),
                 Effects: [new ActionEffect.SetState(State: destinationName.Value, Value: 1m)]
             )],
         };
@@ -77,8 +77,8 @@ public sealed class WorldStateLiteralLawTests {
         var second = CellName.Parse(candidate: "atomic-second");
         var definition = Fixtures.BuildDocument() with {
             StateRaw = new WorldStateSection(World: [
-                new WorldStateRow(Name: first, Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0L)]),
-                new WorldStateRow(Name: second, Kind: CellKind.Int, Min: 0L, Max: 1L, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0L)]),
+                new WorldStateRow(Name: first, Kind: CellKind.Int, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 0L)]),
+                new WorldStateRow(Name: second, Kind: CellKind.Int, Min: 0L, Max: 1L, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 0L)]),
             ]),
             Rules = [new WorldRule(
                 Name: CellName.Parse(candidate: "atomic-refusal"),
@@ -104,25 +104,25 @@ public sealed class WorldStateLiteralLawTests {
             StateRaw = new WorldStateSection(World: [new WorldStateRow(
                 Name: name,
                 Kind: CellKind.Int,
-                Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0L)]
+                Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 0L)]
             )]),
         };
         var rule = new WorldRule(
             Name: CellName.Parse(candidate: "oversized-literal"),
             Gate: new ActionPredicate.CompareState(
                 State: name.Value,
-                Comparison: Puck.Physics.Motion.ActionStateComparison.Equal,
+                Comparison: ActionStateComparison.Equal,
                 Value: decimal.MaxValue
             ),
             Effects: []
         );
 
-        var exception = Assert.Throws<WorldRuleException>(() => WorldRuleCompiler.Compile(
+        var exception = Assert.Throws<RuleException>(() => WorldRuleCompiler.Compile(
             definition: definition,
             rule: rule
         ));
 
-        Assert.Equal(expected: WorldRuleRefusal.StateCellUnaddressable, actual: exception.Refusal);
+        Assert.Equal(expected: RuleRefusal.StateCellUnaddressable, actual: exception.Refusal);
         Assert.Contains(expectedSubstring: "oversized-literal", actualString: exception.Message, comparisonType: StringComparison.Ordinal);
     }
 }

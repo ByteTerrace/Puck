@@ -6,7 +6,7 @@ namespace Puck.World.Tests;
 /// reference refusal (looks, kits, camera programs, state cells) against the exact validator message, each paired
 /// with an admitting control so the assertion is discriminating.</summary>
 public sealed class DynamicsAuthoringValidationLawTests {
-    private static WorldDynamicsRow Chase => new(Damping: 1f, Frequency: 1f, Name: "chase", Response: 0f);
+    private static DynamicsRow Chase => new(Damping: 1f, Frequency: 1f, Name: "chase", Response: 0f);
 
     [Fact]
     public void NonPositiveFrequencyRefusesWhilePositivePasses() {
@@ -174,12 +174,12 @@ public sealed class DynamicsAuthoringValidationLawTests {
         var document = WithDynamics(rows: [Chase]);
         var dangling = document with {
             StateRaw = new WorldStateSection(World: [
-                new WorldStateRow(Name: CellName.Parse(candidate: "gauge"), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0)], Dynamics: new WorldStateDynamics(Row: "missing", Y0: 0, V0: 0)),
+                new WorldStateRow(Name: CellName.Parse(candidate: "gauge"), Kind: CellKind.Int, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 0)], Dynamics: new StateDynamics(Row: "missing", Y0: 0, V0: 0)),
             ]),
         };
         var resolving = document with {
             StateRaw = new WorldStateSection(World: [
-                new WorldStateRow(Name: CellName.Parse(candidate: "gauge"), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0)], Dynamics: new WorldStateDynamics(Row: "chase", Y0: 0, V0: 0)),
+                new WorldStateRow(Name: CellName.Parse(candidate: "gauge"), Kind: CellKind.Int, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 0)], Dynamics: new StateDynamics(Row: "chase", Y0: 0, V0: 0)),
             ]),
         };
 
@@ -195,15 +195,15 @@ public sealed class DynamicsAuthoringValidationLawTests {
                 new WorldStateRow(
                     Name: CellName.Parse(candidate: "gauge"),
                     Kind: CellKind.Int,
-                    Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0)],
-                    Advance: new WorldStateAdvance(RateNumerator: 1, RateDenominator: 1),
-                    Dynamics: new WorldStateDynamics(Row: "chase", Y0: 0, V0: 0)
+                    Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 0)],
+                    Advance: new StateAdvance(RateNumerator: 1, RateDenominator: 1),
+                    Dynamics: new StateDynamics(Row: "chase", Y0: 0, V0: 0)
                 ),
             ]),
         };
         var admitted = document with {
             StateRaw = new WorldStateSection(World: [
-                new WorldStateRow(Name: CellName.Parse(candidate: "gauge"), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0)], Dynamics: new WorldStateDynamics(Row: "chase", Y0: 0, V0: 0)),
+                new WorldStateRow(Name: CellName.Parse(candidate: "gauge"), Kind: CellKind.Int, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 0)], Dynamics: new StateDynamics(Row: "chase", Y0: 0, V0: 0)),
             ]),
         };
 
@@ -212,7 +212,7 @@ public sealed class DynamicsAuthoringValidationLawTests {
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: admitted, neighbours: null, reason: out var controlReason), userMessage: controlReason);
     }
 
-    private static WorldDefinition WithDynamics(IReadOnlyList<WorldDynamicsRow> rows) => Fixtures.BuildDocument() with {
+    private static WorldDefinition WithDynamics(IReadOnlyList<DynamicsRow> rows) => Fixtures.BuildDocument() with {
         DynamicsRaw = rows,
     };
 }

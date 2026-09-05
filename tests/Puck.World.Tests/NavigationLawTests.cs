@@ -79,7 +79,7 @@ public sealed partial class NavigationLawTests {
         MaxPathNodes: 16
     );
 
-    private static WorldStateLatticeTopology.Field MediumTopology() => new(
+    private static WorldFieldTopology MediumTopology() => new(
         Name: "water-space",
         Origin: new DocumentVector3(x: -0.5f, y: -0.5f, z: -0.5f),
         CellSize: 1f,
@@ -615,7 +615,7 @@ public sealed partial class NavigationLawTests {
             StateRaw = new WorldStateSection(World: [new WorldStateRow(
                 Name: observed,
                 Kind: CellKind.Int,
-                Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0L)]
+                Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 0L)]
             )]),
             Rules = [new WorldRule(
                 Name: CellName.Parse(candidate: "observe-route"),

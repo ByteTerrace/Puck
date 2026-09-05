@@ -89,14 +89,14 @@ public sealed class WorldTabletopClassifierLawTests {
 
     private static WorldDefinition Document(long[] previous, long[] current) {
         var document = Fixtures.BuildDocument();
-        var topology = new WorldStateLatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, 4, 4);
-        WorldStateCell[] Cells(long[] values) => [.. Enumerable.Range(0, 16).Select(i => new WorldStateCell(CellName.Parse(i.ToString()), values[i]))];
-        WorldStateRow Slot(string name, long min, long max) => new(CellName.Parse(name), CellKind.Int, Min: min, Max: max, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0)]);
+        var topology = new LatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, 4, 4);
+        StateCell[] Cells(long[] values) => [.. Enumerable.Range(0, 16).Select(i => new StateCell(CellName.Parse(i.ToString()), values[i]))];
+        WorldStateRow Slot(string name, long min, long max) => new(CellName.Parse(name), CellKind.Int, Min: min, Max: max, Cells: [new StateCell(WorldStateRow.SlotKey, 0)]);
 
         return document with {
             StateRaw = new WorldStateSection(World: [
-                new WorldStateRow(CellName.Parse(Board), CellKind.Int, Min: -6, Max: 6, Cells: Cells(current), Domain: new WorldStateDomain.CellsOf("board")),
-                new WorldStateRow(CellName.Parse(Prev), CellKind.Int, Min: -6, Max: 6, Cells: Cells(previous), Domain: new WorldStateDomain.CellsOf("board")),
+                new WorldStateRow(CellName.Parse(Board), CellKind.Int, Min: -6, Max: 6, Cells: Cells(current), Domain: new StateDomain.CellsOf("board")),
+                new WorldStateRow(CellName.Parse(Prev), CellKind.Int, Min: -6, Max: 6, Cells: Cells(previous), Domain: new StateDomain.CellsOf("board")),
                 Slot("ownVac", 0, 65535), Slot("ownOcc", 0, 65535), Slot("otherVac", 0, 65535), Slot("otherOcc", 0, 65535),
                 Slot("quiet", 0, 1), Slot("capture", 0, 1), Slot("castle", 0, 1), Slot("noChange", 0, 1),
                 Slot("fromCell", -6, 16), Slot("toCell", -6, 16), Slot("capturedCell", -6, 16),
@@ -109,7 +109,7 @@ public sealed class WorldTabletopClassifierLawTests {
     private static long Cell(long[] previous, long[] current, string row) {
         using var fixture = Fixtures.FreshServer(definition: Document(previous, current));
         fixture.Step();
-        return WorldDefinitionRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
+        return StateRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
     }
     private static long Kind(long[] previous, long[] current) => Cell(previous, current, "kind");
 
@@ -144,8 +144,8 @@ public sealed class WorldTabletopClassifierLawTests {
     }
 
     private static WorldDefinition ShippedDocument(long[] previous, long[] current) {
-        WorldStateCell[] Cells(long[] values) => [.. values.Select((value, index) =>
-            new WorldStateCell(Key: CellName.Parse(index.ToString()), Value: value))];
+        StateCell[] Cells(long[] values) => [.. values.Select((value, index) =>
+            new StateCell(Key: CellName.Parse(index.ToString()), Value: value))];
 
         // Every classifier rule gates on 'settleHold' reaching its margin (see chess.world.json's own remarks) —
         // seeded already-at-margin here rather than pulling in tabletop-settle-hold-advance/-reset too, since this
@@ -158,7 +158,7 @@ public sealed class WorldTabletopClassifierLawTests {
         ).Select(row => row.Name.Value switch {
             Board => row with { Cells = Cells(current) },
             Prev => row with { Cells = Cells(previous) },
-            "settleHold" => row with { Cells = [new WorldStateCell(WorldStateRow.SlotKey, 60)] },
+            "settleHold" => row with { Cells = [new StateCell(WorldStateRow.SlotKey, 60)] },
             _ => row,
         }).ToArray();
         var source = Fixtures.BuildDocument();
@@ -176,7 +176,7 @@ public sealed class WorldTabletopClassifierLawTests {
         using var fixture = Fixtures.FreshServer(definition: ShippedDocument(previous, current));
         fixture.Step();
         var move = WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, "move")!;
-        long Read(string key) => WorldDefinitionRows.FindCell(move.Cells, CellName.Parse(key))!.Value;
+        long Read(string key) => StateRows.FindCell(move.Cells, CellName.Parse(key))!.Value;
         return (Read("kind"), Read("from"), Read("to"), Read("mover"), Read("captured"));
     }
 

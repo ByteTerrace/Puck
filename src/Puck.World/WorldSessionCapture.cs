@@ -27,7 +27,7 @@ namespace Puck.World;
 /// <see cref="DescribeDrift"/> is the honest cheap witness of whether the live session has since diverged from the
 /// loaded document, reported by <c>world.status</c> at verb time; it does not (and need not) cover this dimension, since
 /// an advancing row is expected to keep moving regardless of any save.
-/// <para><b>Advancing state settles at save too.</b> A row/cell's <c>WorldStateAdvance</c>
+/// <para><b>Advancing state settles at save too.</b> A row/cell's <c>StateAdvance</c>
 /// epoch is session-relative (ticks since process start), so writing it verbatim leaves a reloaded document reading
 /// frozen until the next session's tick counter climbs back past the old epoch — the fresh session's clock restarts at
 /// 0. <see cref="CaptureState"/> folds every advancing row's slot cell and every advancing keyed cell's own base into
@@ -194,9 +194,9 @@ internal static class WorldSessionCapture {
         return captured;
     }
     // The save-time settle: a row declaring its OWN Advance (a slot-shaped row) gets its one cell rebased to the live
-    // computed value at `tick`, epoch projected to 0; a KEYED row's independently-advancing cells (WorldStateCell.Advance)
+    // computed value at `tick`, epoch projected to 0; a KEYED row's independently-advancing cells (StateCell.Advance)
     // settle the same way, one at a time, leaving any non-advancing cell in the same row untouched. Both read through
-    // WorldStateAdvance.ComputeCurrentValue — the SAME computation world.state/a rule gate/a HUD binding already read live
+    // StateAdvance.ComputeCurrentValue — the SAME computation world.state/a rule gate/a HUD binding already read live
     // — so the projected base is exactly what an observer would have seen this session, never a re-derived guess. A
     // Dynamics trait settles the same way but on the TRAIT alone, never the cell's own stored truth: Y0/V0 become the
     // live eased value/velocity WorldStateReader.TryEvaluateDynamics reports at `tick`, epoch projected to 0, so a
@@ -348,8 +348,8 @@ internal static class WorldSessionCapture {
             return (row with {
                 Dynamics = (rowDynamics with {
                     EpochTick = 0,
-                    V0 = WorldStateReader.DynamicsFixedToTraitRaw(value: sample.Velocity),
-                    Y0 = WorldStateReader.DynamicsFixedToTraitRaw(value: sample.Value),
+                    V0 = StateReader.DynamicsFixedToTraitRaw(value: sample.Velocity),
+                    Y0 = StateReader.DynamicsFixedToTraitRaw(value: sample.Value),
                 }),
             });
         }
@@ -369,13 +369,13 @@ internal static class WorldSessionCapture {
             return row;
         }
 
-        List<WorldStateCell>? settledCells = null;
+        List<StateCell>? settledCells = null;
 
         for (var index = 0; (index < cells.Count); index++) {
             var cell = cells[index];
 
             if (cell.Advance is { } cellAdvance) {
-                settledCells ??= new List<WorldStateCell>(collection: cells);
+                settledCells ??= new List<StateCell>(collection: cells);
                 settledCells[index] = (cell with {
                     Value = cellAdvance.ComputeCurrentValue(
                     row: row,
@@ -389,7 +389,7 @@ internal static class WorldSessionCapture {
             }
 
             if (cell.Cycle is { } cellCycle) {
-                settledCells ??= new List<WorldStateCell>(collection: cells);
+                settledCells ??= new List<StateCell>(collection: cells);
                 settledCells[index] = (cell with {
                     Value = cellCycle.SettledPhase(baseValue: cell.Value, currentTick: tick, row: row),
                     Cycle = (cellCycle with { EpochTick = 0, SubstepTicks = cellCycle.SettledSubstep(currentTick: tick) }),
@@ -409,12 +409,12 @@ internal static class WorldSessionCapture {
                 trait: out _
             )
             ) {
-                settledCells ??= new List<WorldStateCell>(collection: cells);
+                settledCells ??= new List<StateCell>(collection: cells);
                 settledCells[index] = (cell with {
                     Dynamics = (cellDynamics with {
                         EpochTick = 0,
-                        V0 = WorldStateReader.DynamicsFixedToTraitRaw(value: cellSample.Velocity),
-                        Y0 = WorldStateReader.DynamicsFixedToTraitRaw(value: cellSample.Value),
+                        V0 = StateReader.DynamicsFixedToTraitRaw(value: cellSample.Velocity),
+                        Y0 = StateReader.DynamicsFixedToTraitRaw(value: cellSample.Value),
                     }),
                 });
             }

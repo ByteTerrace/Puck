@@ -13,12 +13,12 @@ public sealed class WorldBoxTopologyLawTests {
     [InlineData(4, 4, 2, 16)]
     [InlineData(4, 3, 2, 8)]
     public void ABoxDerivesItsSignedAxisPermutationsAndTwentySixDirections(int width, int depth, int layers, int elements) {
-        var topology = WorldTopologyCompilation.Find(new WorldStateSection(Lattices: [Box(width, depth, layers)]), "box")!;
+        var topology = TopologyCompilation.Find(new WorldStateSection(Lattices: [Box(width, depth, layers)]), "box")!;
         Assert.Equal(width * depth * layers, topology.CellCount);
         Assert.Equal(26, topology.DirectionCount);
         Assert.Equal(elements, topology.ElementCount);
         Assert.Equal("identity", topology.ElementName(0));
-        Assert.Equal(topology.Direction("UNE"), Array.IndexOf(CompiledWorldTopology.BoxDirectionNames, "UNE"));
+        Assert.Equal(topology.Direction("UNE"), Array.IndexOf(CompiledTopology.BoxDirectionNames, "UNE"));
         Assert.Equal(-1, topology.Direction("X"));
 
         var tables = Enumerable.Range(0, elements).Select(e => Enumerable.Range(0, topology.CellCount).Select(c => topology.Image(e, c)).ToArray()).ToList();
@@ -39,19 +39,19 @@ public sealed class WorldBoxTopologyLawTests {
 
     [Fact]
     public void YResolvesToALayer() {
-        var topology = WorldTopologyCompilation.Find(new WorldStateSection(Lattices: [Box(4, 4, 4)]), "box")!;
+        var topology = TopologyCompilation.Find(new WorldStateSection(Lattices: [Box(4, 4, 4)]), "box")!;
         Assert.True(topology.TryCellOf(new FixedVector3(FixedQ4816.FromDouble(0.6), FixedQ4816.FromDouble(0.8), FixedQ4816.FromDouble(0.1)), out var cell));
         Assert.Equal((1 * 4 + 0) * 4 + 1, cell);
         Assert.False(topology.TryCellOf(new FixedVector3(FixedQ4816.FromDouble(0.6), FixedQ4816.FromDouble(-0.1), FixedQ4816.FromDouble(0.1)), out _));
         Assert.False(topology.TryCellOf(new FixedVector3(FixedQ4816.FromDouble(0.6), FixedQ4816.FromDouble(2.5), FixedQ4816.FromDouble(0.1)), out _));
 
-        Assert.False(WorldTopologyCompilation.TryValidate(Box(4, 4, 4) with { LayerHeight = 0f }, out var heightReason));
+        Assert.False(TopologyCompilation.TryValidate(Box(4, 4, 4) with { LayerHeight = 0f }, out var heightReason));
         Assert.Contains("layerHeight", heightReason);
 
         // A grid's case type carries no 'layerHeight' property to author in the first place; the invariant a
         // runtime check once named ("layerHeight belongs to a box") is now enforced by the document's own
         // strict-parsed JSON shape instead.
-        var definition = Fixtures.BuildDocument() with { StateRaw = new(Lattices: [new WorldStateLatticeTopology.Grid("g", new DocumentVector3(0, 0, 0), 1, 4, 4)]) };
+        var definition = Fixtures.BuildDocument() with { StateRaw = new(Lattices: [new LatticeTopology.Grid("g", new DocumentVector3(0, 0, 0), 1, 4, 4)]) };
         var node = System.Text.Json.Nodes.JsonNode.Parse(System.Text.Encoding.UTF8.GetString(WorldDefinitionSerialization.Serialize(definition)))!.AsObject();
         node["state"]!["lattices"]!.AsArray()[0]!["layerHeight"] = 1f;
         var exception = Assert.Throws<InvalidDataException>(() => WorldDefinitionSerialization.Deserialize(System.Text.Encoding.UTF8.GetBytes(node.ToJsonString())));
@@ -64,10 +64,10 @@ public sealed class WorldBoxTopologyLawTests {
         // origin corner. A pattern of "one or more of the marked value" read with the prefix facet answers how far
         // the run continues past the origin cell exactly as a dedicated line query would, generalized to any
         // authored run shape rather than only exact-length equality.
-        static WorldStateCell Mark(int x, int y, int z) => new(CellName.Parse((((z * 4) + y) * 4 + x).ToString()), 1L);
-        var board = new WorldStateRow(CellName.Parse("cube"), CellKind.Int, Cells: [Mark(0, 0, 0), Mark(1, 1, 1), Mark(2, 2, 2), Mark(3, 3, 3)], Domain: new WorldStateDomain.CellsOf("box"));
-        var runOfOnes = new WorldPatternRow(CellName.Parse("runOfOnes"), CellKind.Int, Symbols: [new(CellName.Parse("one"), 1, 1)], Pattern: new WorldPatternNode.Star(new WorldPatternNode.Symbol("one")));
-        var run = new WorldStateRow(CellName.Parse("run"), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)]);
+        static StateCell Mark(int x, int y, int z) => new(CellName.Parse((((z * 4) + y) * 4 + x).ToString()), 1L);
+        var board = new WorldStateRow(CellName.Parse("cube"), CellKind.Int, Cells: [Mark(0, 0, 0), Mark(1, 1, 1), Mark(2, 2, 2), Mark(3, 3, 3)], Domain: new StateDomain.CellsOf("box"));
+        var runOfOnes = new PatternRow(CellName.Parse("runOfOnes"), CellKind.Int, Symbols: [new(CellName.Parse("one"), 1, 1)], Pattern: new PatternNode.Star(new PatternNode.Symbol("one")));
+        var run = new WorldStateRow(CellName.Parse("run"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]);
         var definition = Fixtures.BuildDocument() with {
             StateRaw = new(World: [board, run], Lattices: [Box(4, 4, 4)]),
             PatternsRaw = [runOfOnes],
@@ -94,14 +94,14 @@ public sealed class WorldBoxTopologyLawTests {
         // resolves to a real, unmarked cell rather than an out-of-range one.
         static WorldStateRow Row(string name, params int[] indices) => new(
             CellName.Parse(name), CellKind.Int,
-            Cells: [.. indices.Select(i => new WorldStateCell(CellName.Parse(i.ToString(System.Globalization.CultureInfo.InvariantCulture)), 7L))],
-            Domain: new WorldStateDomain.CellsOf("box")
+            Cells: [.. indices.Select(i => new StateCell(CellName.Parse(i.ToString(System.Globalization.CultureInfo.InvariantCulture)), 7L))],
+            Domain: new StateDomain.CellsOf("box")
         );
-        static WorldStateRow Winner(string name) => new(CellName.Parse(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)]);
-        var runTerminated = new WorldPatternRow(CellName.Parse("runTerminated"), CellKind.Int, Symbols: [new(CellName.Parse("seven"), 7, 7)],
-            Pattern: new WorldPatternNode.Sequence([
-                new WorldPatternNode.Repeat(new WorldPatternNode.Symbol("seven"), 3, 3),
-                new WorldPatternNode.Star(new WorldPatternNode.Except("seven")),
+        static WorldStateRow Winner(string name) => new(CellName.Parse(name), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]);
+        var runTerminated = new PatternRow(CellName.Parse("runTerminated"), CellKind.Int, Symbols: [new(CellName.Parse("seven"), 7, 7)],
+            Pattern: new PatternNode.Sequence([
+                new PatternNode.Repeat(new PatternNode.Symbol("seven"), 3, 3),
+                new PatternNode.Star(new PatternNode.Except("seven")),
             ]));
 
         var isolated = Row("isolated", 0, 1, 2, 3);
@@ -122,7 +122,7 @@ public sealed class WorldBoxTopologyLawTests {
 
     [Fact]
     public void OppositeIsDerivedFromEachDirectionsOwnVectorRatherThanHalvingTheOrdinal() {
-        var topology = WorldTopologyCompilation.Find(new WorldStateSection(Lattices: [Box(4, 4, 4)]), "box")!;
+        var topology = TopologyCompilation.Find(new WorldStateSection(Lattices: [Box(4, 4, 4)]), "box")!;
         // The old (direction + DirectionCount/2) % DirectionCount trick puts N's (0) "opposite" at ordinal 13
         // ("US"), not S (4) — the 26 box directions are not paired by half-count offset the way Grid/Hex/Ring are.
         Assert.Equal(topology.Direction("S"), topology.Opposite(topology.Direction("N")));
@@ -132,8 +132,8 @@ public sealed class WorldBoxTopologyLawTests {
         }
     }
 
-    private static WorldStateLatticeTopology.Box Box(int width, int depth, int layers) =>
+    private static LatticeTopology.Box Box(int width, int depth, int layers) =>
         new("box", new DocumentVector3(0, 0, 0), 0.5f, width, depth, layers, LayerHeight: 0.5f);
     private static long Value(WorldFixture fixture, string row) =>
-        WorldDefinitionRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
+        StateRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
 }

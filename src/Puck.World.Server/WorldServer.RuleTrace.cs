@@ -1,6 +1,5 @@
 using System.Globalization;
 using Puck.Maths;
-using Puck.Physics.Motion;
 
 namespace Puck.World.Server;
 
@@ -127,14 +126,14 @@ public sealed partial class WorldServer {
             m_traceEntry = null;
         }
     }
-    private string DescribeTracedEffect(CompiledWorldEffect effect, bool applied, bool refused) {
+    private string DescribeTracedEffect(EffectFact effect, bool applied, bool refused) {
         var value = ((m_traceEffectValue is { } computed) ? $" = {computed}" : string.Empty);
         m_traceEffectValue = null;
         var outcome = (refused
             ? $"refused ({m_lastRuleRefusal})"
             : (applied
                 ? "applied"
-                : (effect.Kind is WorldRuleEffectKind.EmitCue or WorldRuleEffectKind.Body or WorldRuleEffectKind.PaintField or WorldRuleEffectKind.Pose or WorldRuleEffectKind.Save
+                : (!effect.SubmitsMutation
                     ? "emitted"
                     : "skipped (could not move the destination)")));
         return $"{effect.Describe}{value}: {outcome}";

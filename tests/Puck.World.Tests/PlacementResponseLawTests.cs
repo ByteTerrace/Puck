@@ -57,11 +57,11 @@ public sealed class PlacementResponseLawTests {
             new WorldStateRow(
                 Name: CellName.Parse(candidate: FieldName),
                 Kind: CellKind.Fixed,
-                Domain: new WorldStateDomain.CellsOf(Topology: "world"), Field: new WorldStateFieldTrait(Initial: 0f, Min: 0f, Max: 1f)
+                Domain: new StateDomain.CellsOf(Topology: "world"), Field: new WorldStateFieldTrait(Initial: 0f, Min: 0f, Max: 1f)
             ),
         ],
         Lattices: [
-            new WorldStateLatticeTopology.Field(
+            new WorldFieldTopology(
                 Name: "world",
                 Origin: new DocumentVector3(value: Vector3.Zero),
                 CellSize: 1f,

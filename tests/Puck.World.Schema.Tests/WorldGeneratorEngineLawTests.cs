@@ -13,53 +13,53 @@ public sealed class WorldGeneratorEngineLawTests {
     private const string Instance = "instance-alpha";
     private const ulong WorldSeed = 0x0123_4567_89AB_CDEFUL;
 
-    private static readonly WorldGenerator s_stream = new(Source: WorldGeneratorSource.StreamDraw);
-    private static readonly WorldGenerator s_uniform = new(
-        Source: WorldGeneratorSource.UniformRange,
+    private static readonly StateGenerator s_stream = new(Source: GeneratorSource.StreamDraw);
+    private static readonly StateGenerator s_uniform = new(
+        Source: GeneratorSource.UniformRange,
         RangeMin: -17,
         RangeMax: 29
     );
-    private static readonly WorldGenerator s_weighted = new(
-        Source: WorldGeneratorSource.WeightedNumeric,
+    private static readonly StateGenerator s_weighted = new(
+        Source: GeneratorSource.WeightedNumeric,
         Weighted: [
-            new WorldGeneratorWeightedNumeric(Value: -11, Weight: 1UL),
-            new WorldGeneratorWeightedNumeric(Value: 7, Weight: 3UL),
-            new WorldGeneratorWeightedNumeric(Value: 101, Weight: 5UL),
+            new GeneratorWeightedNumeric(Value: -11, Weight: 1UL),
+            new GeneratorWeightedNumeric(Value: 7, Weight: 3UL),
+            new GeneratorWeightedNumeric(Value: 101, Weight: 5UL),
         ]
     );
-    private static readonly WorldGenerator s_twoTokenMarkov = new(
-        Source: WorldGeneratorSource.Markov,
+    private static readonly StateGenerator s_twoTokenMarkov = new(
+        Source: GeneratorSource.Markov,
         Start: Name(value: "start"),
         Bound: 2,
         Contexts: [
-            new WorldGeneratorContext(
+            new GeneratorContext(
                 Key: Name(value: "start"),
                 Alternatives: [
-                    new WorldGeneratorAlternative(Token: "red", Weight: 1UL, Next: Name(value: "tail")),
-                    new WorldGeneratorAlternative(Token: "blue", Weight: 2UL, Next: Name(value: "tail")),
+                    new GeneratorAlternative(Token: "red", Weight: 1UL, Next: Name(value: "tail")),
+                    new GeneratorAlternative(Token: "blue", Weight: 2UL, Next: Name(value: "tail")),
                 ]
             ),
-            new WorldGeneratorContext(
+            new GeneratorContext(
                 Key: Name(value: "tail"),
                 Alternatives: [
-                    new WorldGeneratorAlternative(Token: "fox", Weight: 1UL, Next: Name(value: "done")),
-                    new WorldGeneratorAlternative(Token: "hare", Weight: 1UL, Next: Name(value: "done")),
+                    new GeneratorAlternative(Token: "fox", Weight: 1UL, Next: Name(value: "done")),
+                    new GeneratorAlternative(Token: "hare", Weight: 1UL, Next: Name(value: "done")),
                 ]
             ),
-            new WorldGeneratorContext(Key: Name(value: "done")),
+            new GeneratorContext(Key: Name(value: "done")),
         ]
     );
 
     [Fact]
     public void SourcesDeclareTheFixedAdvanceCostCursorSeekingDependsOn() {
-        Assert.Equal(expected: 2UL, actual: WorldGeneratorEngine.AdvancesPerSample(source: WorldGeneratorSource.Markov));
-        Assert.Equal(expected: 1UL, actual: WorldGeneratorEngine.AdvancesPerSample(source: WorldGeneratorSource.UniformRange));
-        Assert.Equal(expected: 2UL, actual: WorldGeneratorEngine.AdvancesPerSample(source: WorldGeneratorSource.WeightedNumeric));
-        Assert.Equal(expected: 1UL, actual: WorldGeneratorEngine.AdvancesPerSample(source: WorldGeneratorSource.StreamDraw));
+        Assert.Equal(expected: 2UL, actual: GeneratorEngine.AdvancesPerSample(source: GeneratorSource.Markov));
+        Assert.Equal(expected: 1UL, actual: GeneratorEngine.AdvancesPerSample(source: GeneratorSource.UniformRange));
+        Assert.Equal(expected: 2UL, actual: GeneratorEngine.AdvancesPerSample(source: GeneratorSource.WeightedNumeric));
+        Assert.Equal(expected: 1UL, actual: GeneratorEngine.AdvancesPerSample(source: GeneratorSource.StreamDraw));
     }
     [Fact]
     public void NumericSourcesSeekToTheSameSampleAsWalkingEveryPriorCursor() {
-        foreach (var generator in ((WorldGenerator[])[s_stream, s_uniform, s_weighted])) {
+        foreach (var generator in ((StateGenerator[])[s_stream, s_uniform, s_weighted])) {
             for (var cursor = 0L; (cursor < 32L); cursor++) {
                 var fired = Fire(generator: generator, site: "state.loot", cursor: cursor);
 
@@ -95,12 +95,12 @@ public sealed class WorldGeneratorEngineLawTests {
     [Fact]
     public void TimingControlsTheMomentWithoutPerturbingTheSiteSequence() {
         var sourceName = Name(value: "shared");
-        var sources = ((IReadOnlyList<WorldGeneratorRow>)[new WorldGeneratorRow(Generator: s_weighted, Name: sourceName)]);
+        var sources = ((IReadOnlyList<GeneratorRow>)[new GeneratorRow(Generator: s_weighted, Name: sourceName)]);
 
-        foreach (var timing in Enum.GetValues<WorldDrawTiming>()) {
-            var draw = new WorldDraw(Source: sourceName, Timing: timing);
+        foreach (var timing in Enum.GetValues<DrawTiming>()) {
+            var draw = new Draw(Source: sourceName, Timing: timing);
 
-            Assert.True(condition: WorldGeneratorEngine.TryResolveSource(
+            Assert.True(condition: GeneratorEngine.TryResolveSource(
                 draw: draw,
                 generator: out var resolved,
                 generators: sources,
@@ -151,7 +151,7 @@ public sealed class WorldGeneratorEngineLawTests {
     }
     [Fact]
     public void PersistedCursorAndMaskReplayTheNextWithoutReplacementDraw() {
-        var generator = DrawGenerator(mode: WorldGeneratorMode.WithoutReplacement);
+        var generator = DrawGenerator(mode: GeneratorMode.WithoutReplacement);
         var site = "state.token";
         var cursor = 0L;
         IReadOnlyList<ClosedBitset256>? masks = null;
@@ -188,7 +188,7 @@ public sealed class WorldGeneratorEngineLawTests {
     }
     [Fact]
     public void RestartOnExhaustionStartsANewDeterministicPass() {
-        var generator = DrawGenerator(mode: WorldGeneratorMode.RestartOnExhaustion);
+        var generator = DrawGenerator(mode: GeneratorMode.RestartOnExhaustion);
         var site = "state.token";
         var cursor = 0L;
         IReadOnlyList<ClosedBitset256>? masks = null;
@@ -212,24 +212,24 @@ public sealed class WorldGeneratorEngineLawTests {
     }
 
     private static CellName Name(string value) => CellName.Parse(candidate: value);
-    private static WorldGenerator DrawGenerator(WorldGeneratorMode mode) => new(
-        Source: WorldGeneratorSource.Markov,
+    private static StateGenerator DrawGenerator(GeneratorMode mode) => new(
+        Source: GeneratorSource.Markov,
         Start: Name(value: "pool"),
         Contexts: [
-            new WorldGeneratorContext(
+            new GeneratorContext(
                 Key: Name(value: "pool"),
                 Alternatives: [
-                    new WorldGeneratorAlternative(Token: "one", Weight: 1UL, Next: Name(value: "done")),
-                    new WorldGeneratorAlternative(Token: "two", Weight: 1UL, Next: Name(value: "done")),
-                    new WorldGeneratorAlternative(Token: "three", Weight: 1UL, Next: Name(value: "done")),
+                    new GeneratorAlternative(Token: "one", Weight: 1UL, Next: Name(value: "done")),
+                    new GeneratorAlternative(Token: "two", Weight: 1UL, Next: Name(value: "done")),
+                    new GeneratorAlternative(Token: "three", Weight: 1UL, Next: Name(value: "done")),
                 ]
             ),
-            new WorldGeneratorContext(Key: Name(value: "done")),
+            new GeneratorContext(Key: Name(value: "done")),
         ],
         Mode: mode
     );
-    private static WorldGeneratorEngine.FireResult Fire(
-        WorldGenerator generator,
+    private static GeneratorEngine.FireResult Fire(
+        StateGenerator generator,
         string site,
         long cursor,
         IReadOnlyList<ClosedBitset256>? masks = null,
@@ -250,26 +250,26 @@ public sealed class WorldGeneratorEngineLawTests {
         return result;
     }
     private static bool TryFire(
-        WorldGenerator generator,
+        StateGenerator generator,
         string site,
         long cursor,
         IReadOnlyList<ClosedBitset256>? masks,
-        out WorldGeneratorEngine.FireResult result,
+        out GeneratorEngine.FireResult result,
         out string reason,
         ulong worldSeed = WorldSeed,
         string instance = Instance
-    ) => WorldGeneratorEngine.TryFire(
+    ) => GeneratorEngine.TryFire(
         generator: generator,
-        targetKind: ((generator.Source == WorldGeneratorSource.Markov) ? CellKind.Text : CellKind.Int),
-        seedState: WorldGeneratorEngine.ComputeSeedState(instanceIdentity: instance, site: site, worldSeed: worldSeed),
-        stream: WorldGeneratorEngine.ComputeStreamId(site: site),
+        targetKind: ((generator.Source == GeneratorSource.Markov) ? CellKind.Text : CellKind.Int),
+        seedState: GeneratorEngine.ComputeSeedState(instanceIdentity: instance, site: site, documentSeed: worldSeed),
+        stream: GeneratorEngine.ComputeStreamId(site: site),
         cursor: cursor,
         masks: masks,
         result: out result,
         reason: out reason
     );
     private static long[] NumericSequence(
-        WorldGenerator generator,
+        StateGenerator generator,
         string site,
         int count,
         ulong worldSeed = WorldSeed,
@@ -289,28 +289,28 @@ public sealed class WorldGeneratorEngineLawTests {
 
         return values;
     }
-    private static long NumericOracle(WorldGenerator generator, string site, long cursor) {
+    private static long NumericOracle(StateGenerator generator, string site, long cursor) {
         var rng = Pcg32XshRr.Create(
-            state: WorldGeneratorEngine.ComputeSeedState(instanceIdentity: Instance, site: site, worldSeed: WorldSeed),
-            stream: WorldGeneratorEngine.ComputeStreamId(site: site)
+            state: GeneratorEngine.ComputeSeedState(instanceIdentity: Instance, site: site, documentSeed: WorldSeed),
+            stream: GeneratorEngine.ComputeStreamId(site: site)
         );
 
-        rng.Advance(count: unchecked((((ulong)cursor) * WorldGeneratorEngine.AdvancesPerSample(source: generator.Source))));
+        rng.Advance(count: unchecked((((ulong)cursor) * GeneratorEngine.AdvancesPerSample(source: generator.Source))));
 
         return generator.Source switch {
-            WorldGeneratorSource.StreamDraw => rng.NextUInt32(),
-            WorldGeneratorSource.UniformRange => (generator.RangeMin!.Value + ((long)(((((ulong)((uint)(generator.RangeMax!.Value - generator.RangeMin.Value))) + 1UL) * rng.NextUnitFraction32().Value) >> 32))),
-            WorldGeneratorSource.WeightedNumeric => WeightedSampler.Create<long>(entries: generator.Weighted!.Select(selector: static row => (row.Value, row.Weight)).ToArray()).Sample(generator: ref rng),
+            GeneratorSource.StreamDraw => rng.NextUInt32(),
+            GeneratorSource.UniformRange => (generator.RangeMin!.Value + ((long)(((((ulong)((uint)(generator.RangeMax!.Value - generator.RangeMin.Value))) + 1UL) * rng.NextUnitFraction32().Value) >> 32))),
+            GeneratorSource.WeightedNumeric => WeightedSampler.Create<long>(entries: generator.Weighted!.Select(selector: static row => (row.Value, row.Weight)).ToArray()).Sample(generator: ref rng),
             _ => throw new ArgumentOutOfRangeException(paramName: nameof(generator)),
         };
     }
     private static string TwoTokenMarkovOracle(string site, long cursor) {
         var rng = Pcg32XshRr.Create(
-            state: WorldGeneratorEngine.ComputeSeedState(instanceIdentity: Instance, site: site, worldSeed: WorldSeed),
-            stream: WorldGeneratorEngine.ComputeStreamId(site: site)
+            state: GeneratorEngine.ComputeSeedState(instanceIdentity: Instance, site: site, documentSeed: WorldSeed),
+            stream: GeneratorEngine.ComputeStreamId(site: site)
         );
 
-        rng.Advance(count: unchecked((((ulong)cursor) * WorldGeneratorEngine.AdvancesPerSample(source: WorldGeneratorSource.Markov))));
+        rng.Advance(count: unchecked((((ulong)cursor) * GeneratorEngine.AdvancesPerSample(source: GeneratorSource.Markov))));
 
         var first = WeightedSampler.Create<string>(entries: ((ReadOnlySpan<(string Value, ulong Weight)>)[("red", 1UL), ("blue", 2UL)])).Sample(generator: ref rng);
         var second = WeightedSampler.Create<string>(entries: ((ReadOnlySpan<(string Value, ulong Weight)>)[("fox", 1UL), ("hare", 1UL)])).Sample(generator: ref rng);

@@ -122,7 +122,7 @@ public sealed record WorldProjectionDocument(
     WorldViewDefaults? Views,
     IReadOnlyList<WorldLook> Looks,
     WorldRowAssignment LookAssignment,
-    IReadOnlyList<WorldDynamicsRow> Dynamics,
+    IReadOnlyList<DynamicsRow> Dynamics,
     WorldHudSection Hud,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFieldsSection? Fields = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSimulationDefaults? Simulation = null,

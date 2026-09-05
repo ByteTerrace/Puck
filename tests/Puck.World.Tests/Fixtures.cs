@@ -374,9 +374,9 @@ internal static class Fixtures {
     /// <c>src/Puck.World/Assets/worlds/standard.world.json</c> authors — <c>chase</c> backs
     /// <see cref="StandardSeatRig"/>'s boom; <c>probe</c> is spare furniture a law can name without authoring its
     /// own row.</summary>
-    public static WorldDynamicsRow[] StandardDynamics { get; } = [
-        new WorldDynamicsRow(Name: "chase", Frequency: 0.9549f, Damping: 1f, Response: 1f),
-        new WorldDynamicsRow(Name: "probe", Frequency: 2f, Damping: 1f, Response: 0f),
+    public static DynamicsRow[] StandardDynamics { get; } = [
+        new DynamicsRow(Name: "chase", Frequency: 0.9549f, Damping: 1f, Response: 1f),
+        new DynamicsRow(Name: "probe", Frequency: 2f, Damping: 1f, Response: 0f),
     ];
     /// <summary>The standard chase framing, mirroring what <c>src/Puck.World/Assets/worlds/standard.world.json</c>
     /// authors. The engine holds no rig of its own, and a document whose census implies a body is refused for
@@ -679,16 +679,16 @@ internal static class Fixtures {
     /// no-op/zero <see cref="WorldFieldLattice.Step"/> itself falls back to when a caller omits a delegate.</summary>
     public sealed class LambdaHost(
         Func<int, FixedVector3?>? bodyPosition = null,
-        Func<WorldStateHandle, int, ulong, long>? readTag = null,
-        Action<WorldStateHandle, int, long, ulong>? writeTag = null,
-        Func<WorldStateHandle, ulong, FixedQ4816>? readScalar = null,
-        Action<WorldStateHandle, FixedQ4816, ulong>? addScalar = null
+        Func<StateHandle, int, ulong, long>? readTag = null,
+        Action<StateHandle, int, long, ulong>? writeTag = null,
+        Func<StateHandle, ulong, FixedQ4816>? readScalar = null,
+        Action<StateHandle, FixedQ4816, ulong>? addScalar = null
     ) : IWorldFieldLatticeHost {
         public FixedVector3? BodyPosition(int body) => bodyPosition?.Invoke(body);
-        public long ReadTag(WorldStateHandle row, int body, ulong tick) => (readTag?.Invoke(row, body, tick) ?? 0L);
-        public void WriteTag(WorldStateHandle row, int body, long value, ulong tick) => writeTag?.Invoke(row, body, value, tick);
-        public FixedQ4816 ReadScalar(WorldStateHandle row, ulong tick) => (readScalar?.Invoke(row, tick) ?? FixedQ4816.Zero);
-        public void AddScalar(WorldStateHandle row, FixedQ4816 amount, ulong tick) => addScalar?.Invoke(row, amount, tick);
+        public long ReadTag(StateHandle row, int body, ulong tick) => (readTag?.Invoke(row, body, tick) ?? 0L);
+        public void WriteTag(StateHandle row, int body, long value, ulong tick) => writeTag?.Invoke(row, body, value, tick);
+        public FixedQ4816 ReadScalar(StateHandle row, ulong tick) => (readScalar?.Invoke(row, tick) ?? FixedQ4816.Zero);
+        public void AddScalar(StateHandle row, FixedQ4816 amount, ulong tick) => addScalar?.Invoke(row, amount, tick);
     }
 
     /// <summary>Advances one <see cref="WorldFieldLattice"/> a single tick with no bodies, against
@@ -712,7 +712,7 @@ internal static class Fixtures {
             section = section with { World = [.. (section.World ?? []), .. state] };
         }
 
-        var catalog = WorldStateCatalog.Compile(section: section);
+        var catalog = StateCatalog.Compile(section: section);
 
         return new WorldFieldLattice(
             document: document,
@@ -733,7 +733,7 @@ internal static class Fixtures {
     public static WorldStateRow MediumRow(string topology = "world", string name = "medium", float heightScale = 5f) => new(
         Name: CellName.Parse(candidate: name),
         Kind: CellKind.Fixed,
-        Domain: new WorldStateDomain.CellsOf(Topology: topology),
+        Domain: new StateDomain.CellsOf(Topology: topology),
         Field: new WorldStateFieldTrait(
             Initial: 1f,
             Min: 0f,

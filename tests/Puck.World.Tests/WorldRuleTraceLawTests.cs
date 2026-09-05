@@ -1,5 +1,4 @@
 using Puck.Commands;
-using Puck.Physics.Motion;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
@@ -19,10 +18,10 @@ public sealed class WorldRuleTraceLawTests {
     }
 
     private static WorldStateRow Slot(string name, long value) =>
-        new(CellName.Parse(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, value)]);
+        new(CellName.Parse(name), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, value)]);
     private static ValueExpression Expr(string text) => ValueExpression.Parse(text);
     private static long Value(WorldFixture fixture, string row) =>
-        WorldDefinitionRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
+        StateRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
 
     // strike: dealt = min(damage, hp); hp -= dealt while hp > 0. The second evaluation binds dealt = 0 and its write
     // cannot move hp, which is the skipped outcome; the third closes the gate.
@@ -35,7 +34,7 @@ public sealed class WorldRuleTraceLawTests {
                 new ActionEffect.AddState(State: "hits", Value: 1m),
             ],
             Gate: new ActionPredicate.CompareState(State: "hp", Comparison: ActionStateComparison.GreaterOrEqual, Value: 0m),
-            Bindings: [new WorldRuleBinding(CellName.Parse("dealt"), CellKind.Int, Expr("min(damage, hp)"))]
+            Bindings: [new RuleBinding(CellName.Parse("dealt"), CellKind.Int, Expr("min(damage, hp)"))]
         )],
     };
 
@@ -76,7 +75,7 @@ public sealed class WorldRuleTraceLawTests {
         var dividing = Document() with {
             StateRaw = new WorldStateSection(World: [Slot("damage", 30L), Slot("hp", 20L), Slot("hits", 0L), Slot("zero", 0L)]),
             Rules = [Document().Rules![0] with {
-                Bindings = [new WorldRuleBinding(CellName.Parse("dealt"), CellKind.Int, Expr("damage / zero"))],
+                Bindings = [new RuleBinding(CellName.Parse("dealt"), CellKind.Int, Expr("damage / zero"))],
             }],
         };
         using var refused = Fixtures.FreshServer(definition: dividing);

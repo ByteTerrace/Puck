@@ -101,8 +101,8 @@ public sealed class WorldServerMutationJournalTapLawTests {
 
         Assert.NotNull(@object: restoredRow);
         Assert.Equal(
-            expected: WorldDefinitionRows.FindCell(cells: liveRow!.Cells, key: writtenKey)!.Value,
-            actual: WorldDefinitionRows.FindCell(cells: restoredRow!.Cells, key: writtenKey)!.Value
+            expected: StateRows.FindCell(cells: liveRow!.Cells, key: writtenKey)!.Value,
+            actual: StateRows.FindCell(cells: restoredRow!.Cells, key: writtenKey)!.Value
         );
     }
 }

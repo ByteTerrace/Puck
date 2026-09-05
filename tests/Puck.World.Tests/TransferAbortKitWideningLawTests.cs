@@ -147,7 +147,7 @@ public sealed class TransferAbortKitWideningLawTests {
                 // hold, which THIS row's own Recently clock then reflects (WorldBody.MotionRecency's own capture).
                 // Row 1 is the unconditional row (no gate), required last.
                 Shaping: [
-                    new WorldShaping(When: new ActionPredicate.Recently(Fact: ActionFact.Rising, WindowSeconds: 1f), Along: new WorldShapingAlong(Engage: 9f, Release: 5f)),
+                    new WorldShaping(When: new WorldPredicate.Recently(Fact: ActionFact.Rising, WindowSeconds: 1f), Along: new WorldShapingAlong(Engage: 9f, Release: 5f)),
                     new WorldShaping(Along: new WorldShapingAlong(Engage: 7f, Release: 3.5f)),
                 ],
                 Holds: [
@@ -207,7 +207,7 @@ public sealed class TransferAbortKitWideningLawTests {
                 ],
                 Identity: [new ActionStateSlot(Name: "surgeCounter", Kind: ActionStateKind.Counter, Initial: 0f)],
                 Lattices: [
-                    new WorldStateLatticeTopology.Field(
+                    new WorldFieldTopology(
                         Name: "world",
                         Origin: new DocumentVector3(x: -10f, y: 0f, z: -10f),
                         CellSize: 1f,
@@ -439,7 +439,7 @@ public sealed class TransferAbortKitWideningLawTests {
     // discriminates a missing restore rather than trivially passing regardless. Reverted immediately after
     // confirming red; the law suite as committed is the GREEN state.
 
-    private static WorldDynamicsRow Settle => new(Damping: 1f, Frequency: 2f, Name: "settle", Response: 0f);
+    private static DynamicsRow Settle => new(Damping: 1f, Frequency: 2f, Name: "settle", Response: 0f);
 
     [Fact]
     public void DetachThenRestore_GroundedDynamicsKitBody_PlanarFollowerStateRoundTripsExactly() {

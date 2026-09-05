@@ -30,21 +30,21 @@ public sealed class ClosedBitset256LawTests {
     [InlineData(136)]
     [InlineData(256)]
     public void CompleteDrawConservesEveryEntryAndResumesAtWordBoundaries(int count) {
-        var generator = new WorldGenerator(Source: WorldGeneratorSource.WeightedNumeric,
-            Mode: WorldGeneratorMode.WithoutReplacement,
-            Weighted: Enumerable.Range(0, count).Select(i => new WorldGeneratorWeightedNumeric(Value: i, Weight: 1)).ToArray());
+        var generator = new StateGenerator(Source: GeneratorSource.WeightedNumeric,
+            Mode: GeneratorMode.WithoutReplacement,
+            Weighted: Enumerable.Range(0, count).Select(i => new GeneratorWeightedNumeric(Value: i, Weight: 1)).ToArray());
         IReadOnlyList<ClosedBitset256>? masks = null;
         var seen = new HashSet<long>();
         for (var cursor = 0; cursor < count; cursor++) {
-            Assert.True(WorldGeneratorEngine.TryFire(generator, CellKind.Int, 123, 7, cursor, masks, out var draw, out var reason), reason);
+            Assert.True(GeneratorEngine.TryFire(generator, CellKind.Int, 123, 7, cursor, masks, out var draw, out var reason), reason);
             Assert.True(seen.Add(draw.Numeric!.Value));
             Assert.Equal(cursor + 1, draw.Masks![0].Count);
-            Assert.True(WorldGeneratorEngine.TryFire(generator, CellKind.Int, 123, 7, cursor, masks, out var replay, out reason), reason);
+            Assert.True(GeneratorEngine.TryFire(generator, CellKind.Int, 123, 7, cursor, masks, out var replay, out reason), reason);
             Assert.Equal(draw.Numeric, replay.Numeric);
             Assert.Equal(draw.Masks, replay.Masks);
             masks = draw.Masks;
         }
-        Assert.False(WorldGeneratorEngine.TryFire(generator, CellKind.Int, 123, 7, count, masks, out _, out _));
-        Assert.False(WorldGeneratorEngine.TryCheckBatchCapacity(generator, masks, 1, out _));
+        Assert.False(GeneratorEngine.TryFire(generator, CellKind.Int, 123, 7, count, masks, out _, out _));
+        Assert.False(GeneratorEngine.TryCheckBatchCapacity(generator, masks, 1, out _));
     }
 }

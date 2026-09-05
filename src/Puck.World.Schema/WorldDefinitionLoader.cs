@@ -160,7 +160,7 @@ public static class WorldDefinitionLoader {
     /// <see cref="WorldDefinitionFileSource.TryLoad"/> — the one implementation this console path and the replay
     /// tape's offline re-drive (<c>Server.WorldServer.ApplyRebuild</c>, on a replay drive) share, so a live read and a
     /// re-drive's later re-read of the same path compute the same content hash — and then resolves every first-fill
-    /// <see cref="WorldDraw"/> site (<see cref="WorldDrawBootResolver"/>) keyed off <paramref name="instanceIdentity"/>,
+    /// <see cref="Draw"/> site (<see cref="WorldDrawBootResolver"/>) keyed off <paramref name="instanceIdentity"/>,
     /// so a fresh boot and a fresh <c>world.instance.start</c> draw independently while each stays reproducible. The
     /// content hash the inner load computes (and replay CAS-pinning elsewhere compares) is taken over the raw authored
     /// bytes, before this resolution step — a draw's outcome never moves the pin.</summary>

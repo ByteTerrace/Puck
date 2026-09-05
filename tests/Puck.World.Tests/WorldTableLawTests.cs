@@ -1,4 +1,3 @@
-using Puck.Physics.Motion;
 using System.Text.Json;
 
 using Puck.Assets.Documents;
@@ -11,9 +10,9 @@ namespace Puck.World.Tests;
 /// a duplicate key refuses at validation, and the table is not simulation state.</summary>
 public sealed class WorldTableLawTests {
     private static WorldStateRow Slot(string name, long value) =>
-        new(CellName.Parse(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, value)]);
+        new(CellName.Parse(name), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, value)]);
     private static long Value(WorldFixture fixture, string row) =>
-        WorldDefinitionRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
+        StateRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
 
     private static (string Source, string Hash) WriteTable(string kind, params (long Key, decimal Value)[] entries) =>
         Write(new TableDocument(TableDocument.CurrentSchema, kind, [.. entries.Select(e => new TableEntryDocument(e.Key, Value: e.Value))]));
@@ -60,7 +59,7 @@ public sealed class WorldTableLawTests {
         var (source, hash) = WriteTable(TableDocument.FixedKind, (7, 1.5m));
         var baseline = Fixtures.BuildDocument() with {
             Tables = [new TableRow("rates", source, hash)],
-            StateRaw = new WorldStateSection(World: [new WorldStateRow(CellName.Parse("rate"), CellKind.Fixed, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)])]),
+            StateRaw = new WorldStateSection(World: [new WorldStateRow(CellName.Parse("rate"), CellKind.Fixed, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)])]),
             Rules = [new WorldRule(CellName.Parse("r"), [new ActionEffect.SetState(State: "rate", FromState: "$table:rates:7")])],
         };
         Assert.True(WorldDefinitionValidator.TryValidateLocally(definition: baseline, reason: out var okReason), okReason);
@@ -95,7 +94,7 @@ public sealed class WorldTableLawTests {
                 new WorldRule(
                     CellName.Parse("effect"),
                     [new ActionEffect.SetState(State: "multiplier", FromState: "$table:chart:$bind:pair")],
-                    Bindings: [new WorldRuleBinding(CellName.Parse("pair"), CellKind.Int, new ValueExpression([
+                    Bindings: [new RuleBinding(CellName.Parse("pair"), CellKind.Int, new ValueExpression([
                         new ValueToken.State("attack"), new ValueToken.Constant(100m), new ValueToken.Multiply(), new ValueToken.State("defend"), new ValueToken.Add(),
                     ]))]
                 ),

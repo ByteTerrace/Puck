@@ -536,7 +536,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "chat.log",
-            description: $"Appends one message to the acting player's OWN bounded, evicting chat-log row: chat.log <player 1..{PlayerRoster.MaxSlots}> <text...>. <player> is REQUIRED and LEADING (never a trailing optional index — free text could otherwise be misread as a player token); <text...> is the raw tail, spaces included, capped at {WorldStateCapacity.MaxTextValueLength} UTF-16 code units. Refuses by name with the remedy (declare chat.inbox first) if chat-log is undeclared. Owner-only, identically to chat.inbox. The echo names the evicted key when the write pushed the row past its {ChatCapacity}-entry capacity.",
+            description: $"Appends one message to the acting player's OWN bounded, evicting chat-log row: chat.log <player 1..{PlayerRoster.MaxSlots}> <text...>. <player> is REQUIRED and LEADING (never a trailing optional index — free text could otherwise be misread as a player token); <text...> is the raw tail, spaces included, capped at {StateCapacity.MaxTextValueLength} UTF-16 code units. Refuses by name with the remedy (declare chat.inbox first) if chat-log is undeclared. Owner-only, identically to chat.inbox. The echo names the evicted key when the write pushed the row past its {ChatCapacity}-entry capacity.",
             handler: Log,
             routing: CommandRouting.Simulation
         );

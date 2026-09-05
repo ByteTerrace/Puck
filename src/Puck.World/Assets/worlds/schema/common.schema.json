@@ -2196,6 +2196,7 @@
       "additionalProperties": false
     },
     "ActionStateComparison": {
+      "description": "A fixed comparison admitted by a compiled state predicate.",
       "enum": [
         "Equal",
         "NotEqual",
@@ -2604,62 +2605,14 @@
       ],
       "additionalProperties": false
     },
-    "ActionFact": {
-      "enum": [
-        "Grounded",
-        "Airborne",
-        "Rising",
-        "Falling",
-        "AffectedBy",
-        "InMedium",
-        "AtMediumBand",
-        "HoldingUnwalkable",
-        "Unsupported",
-        "Resting"
-      ]
-    },
-    "ActionPredicateNow": {
-      "description": "The fact holds this tick.",
-      "properties": {
-        "$type": {
-          "const": "now"
-        },
-        "fact": {
-          "$ref": "#/$defs/ActionFact"
-        }
-      },
-      "required": [
-        "fact"
-      ],
-      "additionalProperties": false
-    },
-    "ActionPredicateRecently": {
-      "description": "The fact held within the last WindowSeconds \u2014 a per-instance recency clock, refreshed while the fact holds and decaying otherwise (coyote time is Recently(Grounded, w)).",
-      "properties": {
-        "$type": {
-          "const": "recently"
-        },
-        "fact": {
-          "$ref": "#/$defs/ActionFact"
-        },
-        "windowSeconds": {
-          "type": "number"
-        }
-      },
-      "required": [
-        "fact",
-        "windowSeconds"
-      ],
-      "additionalProperties": false
-    },
     "ActionPredicateCompareState": {
-      "description": "Compares a named state cell against either a fixed authored value, or \u2014 world scope only \u2014 another named state cell/reserved channel read live at the same evaluation. Both spellings are authorable; exactly one of Value and ComparandState may be present (refused by name when both or neither are). The comparand-row spelling is what lets a gate track a moving threshold \u2014 $tick compared against a schedule row the rule\u0027s own effects advance is \u0022every N ticks\u0022; a round row compared against a declared length row is a round boundary \u2014 composition over the same two-sided comparison, never a new mechanism.",
+      "description": "Compares a named state cell against either a fixed authored value, or another named state cell/reserved channel read live at the same evaluation. Both spellings are authorable; exactly one of Value and ComparandState may be present (refused by name when both or neither are). The comparand-row spelling is what lets a gate track a moving threshold \u2014 $tick compared against a schedule row the rule\u0027s own effects advance is \u0022every N ticks\u0022; a round row compared against a declared length row is a round boundary \u2014 composition over the same two-sided comparison, never a new mechanism.",
       "properties": {
         "$type": {
           "const": "compareState"
         },
         "state": {
-          "description": "At body scope, a named counter slot the kit declares. At world scope (see WorldRule), a declared state-section row name, or one of RuleFacts\u0027s reserved channels.",
+          "description": "A declared state-section row name, or one of the reserved channels the compiler\u0027s vocabulary answers (RuleFacts and whatever a document project registers). Inside a host\u0027s per-participant action program, a named counter slot the program declares.",
           "type": "string"
         },
         "comparison": {
@@ -2667,7 +2620,7 @@
           "description": "The comparison to apply."
         },
         "value": {
-          "description": "The authored constant comparand, or null when ComparandState spells the comparand instead. Required (non-null) at body scope, where a comparand row reference is refused.",
+          "description": "The authored constant comparand, or null when ComparandState spells the comparand instead.",
           "type": [
             "number",
             "null"
@@ -2675,7 +2628,7 @@
           "default": null
         },
         "key": {
-          "description": "At world scope, the cell inside State to read \u2014 null reads the row\u0027s slot cell, which a keyed row does not have (refused by name rather than silently reading cells[0]). At body scope a non-null key is refused: a per-body action-state slot is not keyed, and a parsed-and-discarded field is worse than no field.",
+          "description": "The cell inside State to read \u2014 null reads the row\u0027s slot cell, which a keyed row does not have (refused by name rather than silently reading cells[0]).",
           "type": [
             "string",
             "null"
@@ -2683,7 +2636,7 @@
           "default": null
         },
         "comparandState": {
-          "description": "world scope only (refused at body scope, on the same terms as Key): another declared state-section row name, or one of RuleFacts\u0027s reserved channels, read live and compared instead of Value. A dotted spelling (an author reaching for row.key in one string) is refused by name \u2014 address the cell with ComparandKey instead. Comparing across incompatible cell kinds (an int row against a fixed row, say) is refused by name \u2014 mixing scales silently is worse than naming the mismatch.",
+          "description": "Another declared state-section row name, or a reserved channel, read live and compared instead of Value. A dotted spelling (an author reaching for row.key in one string) is refused by name \u2014 address the cell with ComparandKey instead. Comparing across incompatible cell kinds (an int row against a fixed row, say) is refused by name \u2014 mixing scales silently is worse than naming the mismatch.",
           "type": [
             "string",
             "null"
@@ -3129,6 +3082,348 @@
       ],
       "additionalProperties": false
     },
+    "ValueTokenPair": {
+      "description": "Szudzik\u0027s pairing of two non-negative integers into one; pairX/pairY invert it.",
+      "properties": {
+        "$type": {
+          "const": "pair"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenPairX": {
+      "description": "The first component of a paired value.",
+      "properties": {
+        "$type": {
+          "const": "pairX"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenPairY": {
+      "description": "The second component of a paired value.",
+      "properties": {
+        "$type": {
+          "const": "pairY"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenPairSwap": {
+      "description": "The pair with its components exchanged, computed without unpairing.",
+      "properties": {
+        "$type": {
+          "const": "pairSwap"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenPairMax": {
+      "description": "The larger component of a paired value.",
+      "properties": {
+        "$type": {
+          "const": "pairMax"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenPairMin": {
+      "description": "The smaller component of a paired value.",
+      "properties": {
+        "$type": {
+          "const": "pairMin"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenPairSum": {
+      "description": "The sum of a paired value\u0027s components.",
+      "properties": {
+        "$type": {
+          "const": "pairSum"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenPairDifference": {
+      "description": "The absolute difference of a paired value\u0027s components.",
+      "properties": {
+        "$type": {
+          "const": "pairDifference"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenPairTranslate": {
+      "description": "The pair with both components moved by the second argument.",
+      "properties": {
+        "$type": {
+          "const": "pairTranslate"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenPairScale": {
+      "description": "The pair with both components multiplied by the second argument.",
+      "properties": {
+        "$type": {
+          "const": "pairScale"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenMorton": {
+      "description": "Bit-interleaves two non-negative integers below 2^31 (x on the even bits); mortonX/mortonY invert it.",
+      "properties": {
+        "$type": {
+          "const": "morton"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenMortonX": {
+      "description": "The even-bit component of a Morton code.",
+      "properties": {
+        "$type": {
+          "const": "mortonX"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenMortonY": {
+      "description": "The odd-bit component of a Morton code.",
+      "properties": {
+        "$type": {
+          "const": "mortonY"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHilbert": {
+      "description": "The distance along the Hilbert curve of the given order (1..31) to (x, y); hilbertX/hilbertY invert it.",
+      "properties": {
+        "$type": {
+          "const": "hilbert"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHilbertX": {
+      "description": "The x of the point at a Hilbert distance for the given order.",
+      "properties": {
+        "$type": {
+          "const": "hilbertX"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHilbertY": {
+      "description": "The y of the point at a Hilbert distance for the given order.",
+      "properties": {
+        "$type": {
+          "const": "hilbertY"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexIndex": {
+      "description": "The ring-ordered index of the hex cell at Eisenstein coordinates (q, r); hexQ/hexR invert it.",
+      "properties": {
+        "$type": {
+          "const": "hex"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexQ": {
+      "description": "The q coordinate of a hex index.",
+      "properties": {
+        "$type": {
+          "const": "hexQ"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexR": {
+      "description": "The r coordinate of a hex index.",
+      "properties": {
+        "$type": {
+          "const": "hexR"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexRadius": {
+      "description": "The ring a hex index lies on.",
+      "properties": {
+        "$type": {
+          "const": "hexRadius"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexNorm": {
+      "description": "The Eisenstein norm q\u00B2 \u2212 q\u00B7r \u002B r\u00B2 of a hex index.",
+      "properties": {
+        "$type": {
+          "const": "hexNorm"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexDistance": {
+      "description": "The step distance between two hex indices.",
+      "properties": {
+        "$type": {
+          "const": "hexDistance"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexNeighbor": {
+      "description": "The hex index one step away in direction 0..5 (counterclockwise from \u002Bq; any integer, taken modulo 6).",
+      "properties": {
+        "$type": {
+          "const": "hexNeighbor"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexRotate": {
+      "description": "The hex index rotated about the origin by sixth turns (any integer, taken modulo 6).",
+      "properties": {
+        "$type": {
+          "const": "hexRotate"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexConjugate": {
+      "description": "The hex index reflected across the q axis.",
+      "properties": {
+        "$type": {
+          "const": "hexConjugate"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexSwap": {
+      "description": "The hex index with q and r exchanged.",
+      "properties": {
+        "$type": {
+          "const": "hexSwap"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexAdd": {
+      "description": "The hex index of the coordinate sum.",
+      "properties": {
+        "$type": {
+          "const": "hexAdd"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexSubtract": {
+      "description": "The hex index of the coordinate difference.",
+      "properties": {
+        "$type": {
+          "const": "hexSubtract"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexMultiply": {
+      "description": "The hex index of the Eisenstein product.",
+      "properties": {
+        "$type": {
+          "const": "hexMultiply"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexScale": {
+      "description": "The hex index scaled by an integer.",
+      "properties": {
+        "$type": {
+          "const": "hexScale"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexTranslate": {
+      "description": "The hex index moved by (q, r).",
+      "properties": {
+        "$type": {
+          "const": "hexTranslate"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenLayer": {
+      "description": "The layer holding an index in a layer sequence (index, start, step, seed): a core of seed indices wrapped by layers of start, start\u002Bstep, \u2026 indices.",
+      "properties": {
+        "$type": {
+          "const": "layer"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenLayerOffset": {
+      "description": "The position of an index within its layer, for the same (index, start, step, seed) sequence.",
+      "properties": {
+        "$type": {
+          "const": "layerOffset"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenLayerStart": {
+      "description": "The first index of a layer, for a (layer, start, step, seed) sequence.",
+      "properties": {
+        "$type": {
+          "const": "layerStart"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenLayerSize": {
+      "description": "The index count of a layer, for a (layer, start, step, seed) sequence.",
+      "properties": {
+        "$type": {
+          "const": "layerSize"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenSquareRoot": {
+      "description": "The square root: the floor root of a non-negative int, or the fixed-point root of a non-negative fixed value.",
+      "properties": {
+        "$type": {
+          "const": "sqrt"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenSine": {
+      "description": "The sine of a fixed-point angle in radians; fixed expressions only.",
+      "properties": {
+        "$type": {
+          "const": "sin"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenCosine": {
+      "description": "The cosine of a fixed-point angle in radians; fixed expressions only.",
+      "properties": {
+        "$type": {
+          "const": "cos"
+        }
+      },
+      "additionalProperties": false
+    },
     "ValueToken": {
       "description": "One authored token in a ValueExpression.",
       "type": "object",
@@ -3261,6 +3556,120 @@
         },
         {
           "$ref": "#/$defs/ValueTokenBoardImage"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenPair"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenPairX"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenPairY"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenPairSwap"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenPairMax"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenPairMin"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenPairSum"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenPairDifference"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenPairTranslate"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenPairScale"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenMorton"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenMortonX"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenMortonY"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHilbert"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHilbertX"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHilbertY"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexIndex"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexQ"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexR"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexRadius"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexNorm"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexDistance"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexNeighbor"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexRotate"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexConjugate"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexSwap"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexAdd"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexSubtract"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexMultiply"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexScale"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexTranslate"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenLayer"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenLayerOffset"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenLayerStart"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenLayerSize"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenSquareRoot"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenSine"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenCosine"
         }
       ]
     },
@@ -3296,7 +3705,7 @@
       ]
     },
     "ActionPredicateCompareValue": {
-      "description": "World-scope comparison of two bounded numeric expressions. Arithmetic failure makes this comparison false.",
+      "description": "Comparison of two bounded numeric expressions. Arithmetic failure makes this comparison false.",
       "properties": {
         "$type": {
           "const": "compareValue"
@@ -3328,21 +3737,6 @@
         "left",
         "comparison",
         "right"
-      ],
-      "additionalProperties": false
-    },
-    "ActionPredicateTimerElapsed": {
-      "description": "Whether a named timer slot has drained.",
-      "properties": {
-        "$type": {
-          "const": "timerElapsed"
-        },
-        "state": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "state"
       ],
       "additionalProperties": false
     },
@@ -3413,8 +3807,75 @@
       ],
       "additionalProperties": false
     },
-    "ActionPredicateHeld": {
-      "description": "The named composition channel\u0027s own live read is at or above its declared threshold \u2014 the same test a held sprint/drift channel makes today. Legitimate only inside a kit\u0027s shaping-row gate, where the world\u0027s channel table resolves Channel to an ordinal at kit-compile time; refused everywhere else a predicate is authored.",
+    "ActionFact": {
+      "enum": [
+        "Grounded",
+        "Airborne",
+        "Rising",
+        "Falling",
+        "AffectedBy",
+        "InMedium",
+        "AtMediumBand",
+        "HoldingUnwalkable",
+        "Unsupported",
+        "Resting"
+      ]
+    },
+    "WorldPredicateNow": {
+      "description": "The fact holds this tick.",
+      "properties": {
+        "$type": {
+          "const": "now"
+        },
+        "fact": {
+          "$ref": "#/$defs/ActionFact",
+          "description": "The body fact."
+        }
+      },
+      "required": [
+        "fact"
+      ],
+      "additionalProperties": false
+    },
+    "WorldPredicateRecently": {
+      "description": "The fact held within the last WindowSeconds \u2014 a per-instance recency clock, refreshed while the fact holds and decaying otherwise (coyote time is Recently(Grounded, w)).",
+      "properties": {
+        "$type": {
+          "const": "recently"
+        },
+        "fact": {
+          "$ref": "#/$defs/ActionFact",
+          "description": "The body fact."
+        },
+        "windowSeconds": {
+          "description": "The recency window.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "fact",
+        "windowSeconds"
+      ],
+      "additionalProperties": false
+    },
+    "WorldPredicateTimerElapsed": {
+      "description": "Whether a named timer slot has drained.",
+      "properties": {
+        "$type": {
+          "const": "timerElapsed"
+        },
+        "state": {
+          "description": "The timer slot.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "WorldPredicateHeld": {
+      "description": "The named composition channel\u0027s own live read is at or above its declared threshold. Legitimate only inside a kit\u0027s shaping-row gate, where the world\u0027s channel table resolves Channel to an ordinal at kit-compile time.",
       "properties": {
         "$type": {
           "const": "held"
@@ -3430,26 +3891,17 @@
       "additionalProperties": false
     },
     "ActionPredicate": {
-      "description": "A data-composable gate over body facts and named action state. A trigger fires only while its gate holds. The $type string is the JSON discriminator, the same convention every polymorphic row family uses; a new predicate kind is a new derived record plus its JsonDerivedTypeAttribute line.",
+      "description": "A data-composable gate over named state. A rule fires only while its gate holds. The $type string is the JSON discriminator, the same convention every polymorphic row family uses; the arms declared here are the ones this library owns, and a document project appends its own derived arms through a RuleVocabulary (see ExtendJson) rather than by editing this list.",
       "type": "object",
       "required": [
         "$type"
       ],
       "anyOf": [
         {
-          "$ref": "#/$defs/ActionPredicateNow"
-        },
-        {
-          "$ref": "#/$defs/ActionPredicateRecently"
-        },
-        {
           "$ref": "#/$defs/ActionPredicateCompareState"
         },
         {
           "$ref": "#/$defs/ActionPredicateCompareValue"
-        },
-        {
-          "$ref": "#/$defs/ActionPredicateTimerElapsed"
         },
         {
           "$ref": "#/$defs/ActionPredicateAll"
@@ -3461,7 +3913,16 @@
           "$ref": "#/$defs/ActionPredicateNot"
         },
         {
-          "$ref": "#/$defs/ActionPredicateHeld"
+          "$ref": "#/$defs/WorldPredicateNow"
+        },
+        {
+          "$ref": "#/$defs/WorldPredicateRecently"
+        },
+        {
+          "$ref": "#/$defs/WorldPredicateTimerElapsed"
+        },
+        {
+          "$ref": "#/$defs/WorldPredicateHeld"
         }
       ]
     },
@@ -3482,7 +3943,7 @@
       "additionalProperties": false
     },
     "ActionPredicateNullable": {
-      "description": "A data-composable gate over body facts and named action state. A trigger fires only while its gate holds. The $type string is the JSON discriminator, the same convention every polymorphic row family uses; a new predicate kind is a new derived record plus its JsonDerivedTypeAttribute line.",
+      "description": "A data-composable gate over named state. A rule fires only while its gate holds. The $type string is the JSON discriminator, the same convention every polymorphic row family uses; the arms declared here are the ones this library owns, and a document project appends its own derived arms through a RuleVocabulary (see ExtendJson) rather than by editing this list.",
       "type": [
         "object",
         "null"
@@ -3492,19 +3953,10 @@
       ],
       "anyOf": [
         {
-          "$ref": "#/$defs/ActionPredicateNow"
-        },
-        {
-          "$ref": "#/$defs/ActionPredicateRecently"
-        },
-        {
           "$ref": "#/$defs/ActionPredicateCompareState"
         },
         {
           "$ref": "#/$defs/ActionPredicateCompareValue"
-        },
-        {
-          "$ref": "#/$defs/ActionPredicateTimerElapsed"
         },
         {
           "$ref": "#/$defs/ActionPredicateAll"
@@ -3516,7 +3968,16 @@
           "$ref": "#/$defs/ActionPredicateNotNonNullable"
         },
         {
-          "$ref": "#/$defs/ActionPredicateHeld"
+          "$ref": "#/$defs/WorldPredicateNow"
+        },
+        {
+          "$ref": "#/$defs/WorldPredicateRecently"
+        },
+        {
+          "$ref": "#/$defs/WorldPredicateTimerElapsed"
+        },
+        {
+          "$ref": "#/$defs/WorldPredicateHeld"
         }
       ]
     },
@@ -3527,7 +3988,7 @@
       }
     },
     "ActionPredicateNullable2": {
-      "description": "A data-composable gate over body facts and named action state. A trigger fires only while its gate holds. The $type string is the JSON discriminator, the same convention every polymorphic row family uses; a new predicate kind is a new derived record plus its JsonDerivedTypeAttribute line.",
+      "description": "A data-composable gate over named state. A rule fires only while its gate holds. The $type string is the JSON discriminator, the same convention every polymorphic row family uses; the arms declared here are the ones this library owns, and a document project appends its own derived arms through a RuleVocabulary (see ExtendJson) rather than by editing this list.",
       "type": [
         "object",
         "null"
@@ -3537,19 +3998,10 @@
       ],
       "anyOf": [
         {
-          "$ref": "#/$defs/ActionPredicateNow"
-        },
-        {
-          "$ref": "#/$defs/ActionPredicateRecently"
-        },
-        {
           "$ref": "#/$defs/ActionPredicateCompareState"
         },
         {
           "$ref": "#/$defs/ActionPredicateCompareValue"
-        },
-        {
-          "$ref": "#/$defs/ActionPredicateTimerElapsed"
         },
         {
           "$ref": "#/$defs/ActionPredicateAll"
@@ -3561,97 +4013,31 @@
           "$ref": "#/$defs/ActionPredicateNot"
         },
         {
-          "$ref": "#/$defs/ActionPredicateHeld"
+          "$ref": "#/$defs/WorldPredicateNow"
+        },
+        {
+          "$ref": "#/$defs/WorldPredicateRecently"
+        },
+        {
+          "$ref": "#/$defs/WorldPredicateTimerElapsed"
+        },
+        {
+          "$ref": "#/$defs/WorldPredicateHeld"
         }
       ]
     },
-    "ActionEffectSetVerticalVelocity": {
-      "description": "Writes the body\u0027s vertical-velocity channel (the jump launch / the surge). Under the grounded program gravity owns its decay; under the free program it bleeds to zero at the tuning\u0027s rise gravity (no fall phase).",
-      "properties": {
-        "$type": {
-          "const": "setVerticalVelocity"
-        },
-        "velocity": {
-          "type": "number"
-        },
-        "target": {
-          "enum": [
-            "Self",
-            "ProducerTarget",
-            "AffectingSubject"
-          ],
-          "default": "Self"
-        }
-      },
-      "required": [
-        "velocity"
-      ],
-      "additionalProperties": false
-    },
-    "ActionEffectScaleVerticalVelocity": {
-      "description": "Multiplies the body\u0027s vertical velocity (the jump cut; gate on Rising).",
-      "properties": {
-        "$type": {
-          "const": "scaleVerticalVelocity"
-        },
-        "factor": {
-          "type": "number"
-        },
-        "target": {
-          "enum": [
-            "Self",
-            "ProducerTarget",
-            "AffectingSubject"
-          ],
-          "default": "Self"
-        }
-      },
-      "required": [
-        "factor"
-      ],
-      "additionalProperties": false
-    },
-    "ActionEffectPlanarImpulse": {
-      "description": "A timed planar velocity overlay (the dash): BodyDirection is rotated by the body\u0027s attitude at fire time and ridden at Speed for DurationSeconds, integrated through its own accumulator on top of the body\u0027s compiled motion \u2014 integration itself is untouched.",
-      "properties": {
-        "$type": {
-          "const": "planarImpulse"
-        },
-        "bodyDirection": {},
-        "speed": {
-          "type": "number"
-        },
-        "durationSeconds": {
-          "type": "number"
-        },
-        "target": {
-          "enum": [
-            "Self",
-            "ProducerTarget",
-            "AffectingSubject"
-          ],
-          "default": "Self"
-        }
-      },
-      "required": [
-        "bodyDirection",
-        "speed",
-        "durationSeconds"
-      ],
-      "additionalProperties": false
-    },
     "ActionEffectSetState": {
-      "description": "Writes a named state cell \u2014 a kit counter slot at body scope, a state-section row\u0027s cell at world scope (see WorldRule).",
+      "description": "Writes a named state cell \u2014 a state-section row\u0027s cell at rule scope, a counter slot inside a host\u0027s per-participant action program.",
       "properties": {
         "$type": {
           "const": "setState"
         },
         "state": {
-          "description": "The counter slot (body scope) or state row name (world scope).",
+          "description": "The state row name (or the host\u0027s counter slot).",
           "type": "string"
         },
         "value": {
-          "description": "The literal value to write, or null when FromState spells a live operand to copy instead \u2014 world scope only, exactly one of the two is authored (refused by name when both or neither are present, the same duality CompareState\u0027s own comparand carries). Required (non-null) at body scope, where a live copy source is refused.",
+          "description": "The literal value to write, or null when FromState spells a live operand to copy instead \u2014 exactly one of the source spellings is authored (refused by name when both or neither are present, the same duality CompareState\u0027s own comparand carries).",
           "type": [
             "number",
             "null"
@@ -3659,7 +4045,7 @@
           "default": null
         },
         "target": {
-          "description": "The addressed entity \u2014 body scope only; a non-Self target is refused at world scope, where there is no entity to select.",
+          "description": "The addressed participant \u2014 meaningful only inside a host\u0027s per-participant program; a non-Self target is refused at rule scope, where there is no participant to select.",
           "enum": [
             "Self",
             "ProducerTarget",
@@ -3668,7 +4054,7 @@
           "default": "Self"
         },
         "key": {
-          "description": "The cell inside State at world scope \u2014 null writes the row\u0027s slot cell, which a keyed row does not have (refused by name). Refused at body scope.",
+          "description": "The cell inside State \u2014 null writes the row\u0027s slot cell, which a keyed row does not have (refused by name).",
           "type": [
             "string",
             "null"
@@ -3676,7 +4062,7 @@
           "default": null
         },
         "fromState": {
-          "description": "world scope only (refused at body scope, on the same terms as Value): another declared state-section row name, or one of RuleFacts\u0027s reserved channels, read live at fire time and copied in place of an authored Value \u2014 the row that resets to another row\u0027s own current value (a shadow row mirroring a counter someone else advances), never only a standing literal. Resolved through the same operand walk CompareState\u0027s own ComparandState uses; mixing a fixed row into an int destination (or the reverse) is refused by name rather than coerced.",
+          "description": "Another declared state-section row name, or a reserved channel, read live at fire time and copied in place of an authored Value \u2014 the row that resets to another row\u0027s own current value (a shadow row mirroring a counter someone else advances), never only a standing literal. Resolved through the same operand walk CompareState\u0027s own ComparandState uses; mixing a fixed row into an int destination (or the reverse) is refused by name rather than coerced.",
           "type": [
             "string",
             "null"
@@ -3692,7 +4078,7 @@
           "default": null
         },
         "valueSeconds": {
-          "description": "world scope only (refused at body scope, on the same terms as Value and FromState \u2014 exactly one of the three is authored): an alternative to Value for a kind=int state row a companion CountdownState effect decrements once per simulation tick (a countdown/cooldown). Authored in seconds \u2014 a physical unit, not a tick count, so a world\u0027s rate can change without silently retuning every cooldown \u2014 and converted once at rule compile time to an exact whole engine-tick count via TryDurationEngineTicksExact, never re-derived at runtime and never rounded: a duration that is not an exact whole engine-tick count is refused rather than silently rounded away (DurationNotExactEngineTicks). Typed Decimal rather than float because JSON deserializes a number token to Decimal exactly (base-10, no binary-float intermediate), and most terminating decimals \u2014 the only ones an author can spell \u2014 have no exact binary float or fixed-point spelling either. See WorldRuleCompiler.",
+          "description": "An alternative to Value for a kind=int state row a companion CountdownState effect decrements once per simulation tick (a countdown/cooldown). Authored in seconds \u2014 a physical unit, not a tick count, so a document\u0027s rate can change without silently retuning every cooldown \u2014 and converted once at rule compile time to an exact whole engine-tick count via TryDurationEngineTicksExact, never re-derived at runtime and never rounded: a duration that is not an exact whole engine-tick count is refused rather than silently rounded away (DurationNotExactEngineTicks). Typed Decimal rather than float because JSON deserializes a number token to Decimal exactly (base-10, no binary-float intermediate), and most terminating decimals \u2014 the only ones an author can spell \u2014 have no exact binary float or fixed-point spelling either.",
           "type": [
             "number",
             "null"
@@ -3700,7 +4086,7 @@
           "default": null
         },
         "text": {
-          "description": "world scope only: the literal a kind=text state row\u0027s cell takes \u2014 the fourth spelling beside Value/FromState/ValueSeconds, exactly one authored. Because every state-bound document value (a creation palette colour, a look-assignment row name) re-resolves on the write, this is how a rule restyles what a body wears.",
+          "description": "The literal a kind=text state row\u0027s cell takes \u2014 the fourth spelling beside Value/FromState/ValueSeconds, exactly one authored. Every state-bound document value re-resolves on the write, so this is how a rule restyles what a state-bound document row names.",
           "type": [
             "string",
             "null"
@@ -3709,7 +4095,7 @@
         },
         "expression": {
           "$ref": "#/$defs/ValueExpression",
-          "description": "World scope only: a bounded numeric expression evaluated in the destination row\u0027s integer or fixed-point domain. Exactly one source spelling is authored.",
+          "description": "A bounded numeric expression evaluated in the destination row\u0027s integer or fixed-point domain. Exactly one source spelling is authored.",
           "default": null
         }
       },
@@ -3719,17 +4105,17 @@
       "additionalProperties": false
     },
     "ActionEffectAddState": {
-      "description": "Adds to a named state cell \u2014 a kit counter slot at body scope, a state-section row\u0027s cell at world scope (see WorldRule).",
+      "description": "Adds to a named state cell \u2014 the same shape as SetState, here the source is the addend rather than the replacement.",
       "properties": {
         "$type": {
           "const": "addState"
         },
         "state": {
-          "description": "The counter slot (body scope) or state row name (world scope).",
+          "description": "The state row name (or the host\u0027s counter slot).",
           "type": "string"
         },
         "value": {
-          "description": "The literal addend, or null when FromState spells a live addend instead \u2014 see Value\u0027s remarks; the same value/from duality, required (non-null) at body scope.",
+          "description": "The literal addend, or null when FromState spells a live addend instead \u2014 see Value\u0027s remarks.",
           "type": [
             "number",
             "null"
@@ -3737,7 +4123,7 @@
           "default": null
         },
         "target": {
-          "description": "The addressed entity \u2014 body scope only.",
+          "description": "The addressed participant \u2014 see Target.",
           "enum": [
             "Self",
             "ProducerTarget",
@@ -3746,7 +4132,7 @@
           "default": "Self"
         },
         "key": {
-          "description": "The cell inside State at world scope; refused at body scope.",
+          "description": "The cell inside State \u2014 see Key.",
           "type": [
             "string",
             "null"
@@ -3754,7 +4140,7 @@
           "default": null
         },
         "fromState": {
-          "description": "world scope only \u2014 see FromState\u0027s remarks; here the addend is read live rather than the replacement.",
+          "description": "See FromState\u0027s remarks; here the addend is read live rather than the replacement.",
           "type": [
             "string",
             "null"
@@ -3770,7 +4156,7 @@
           "default": null
         },
         "valueSeconds": {
-          "description": "world scope only \u2014 see ValueSeconds\u0027s remarks; here the converted tick count is the addend rather than the replacement.",
+          "description": "See ValueSeconds\u0027s remarks; here the converted tick count is the addend rather than the replacement.",
           "type": [
             "number",
             "null"
@@ -3779,7 +4165,7 @@
         },
         "expression": {
           "$ref": "#/$defs/ValueExpression",
-          "description": "World scope only \u2014 see Expression.",
+          "description": "See Expression.",
           "default": null
         }
       },
@@ -3789,7 +4175,7 @@
       "additionalProperties": false
     },
     "ActionEffectPushState": {
-      "description": "World scope only: pushes one numeric value into a history row\u0027s ring (see Ring), the same source spellings as SetState minus text: exactly one of Value, FromState, or Expression.",
+      "description": "Pushes one numeric value into a history row\u0027s ring (see Ring), the same source spellings as SetState minus text: exactly one of Value, FromState, or Expression.",
       "properties": {
         "$type": {
           "const": "pushState"
@@ -4137,7 +4523,7 @@
       "additionalProperties": false
     },
     "ActionEffectCountdownState": {
-      "description": "Decrements a world-state countdown by the current simulation step\u0027s engine-tick width, saturating at zero. world scope only: the destination must be a kind=int nonNegative=true row. Unlike an authored AddState constant, this effect consumes the runtime step width, so changing the world\u0027s authored tick rate never retunes the duration. When the remaining duration is shorter than one step, the computed decrement is exactly the remaining value; it reaches zero without asking the explicit-write door to admit a negative candidate.",
+      "description": "Decrements a state countdown by the current simulation step\u0027s engine-tick width, saturating at zero. The destination must be a kind=int nonNegative=true row. Unlike an authored AddState constant, this effect consumes the runtime step width, so changing the document\u0027s authored tick rate never retunes the duration. When the remaining duration is shorter than one step, the computed decrement is exactly the remaining value; it reaches zero without asking the explicit-write door to admit a negative candidate.",
       "properties": {
         "$type": {
           "const": "countdownState"
@@ -4160,60 +4546,8 @@
       ],
       "additionalProperties": false
     },
-    "ActionEffectStartTimer": {
-      "description": "Starts a named timer slot with an authored duration.",
-      "properties": {
-        "$type": {
-          "const": "startTimer"
-        },
-        "state": {
-          "type": "string"
-        },
-        "seconds": {
-          "type": "number"
-        },
-        "target": {
-          "enum": [
-            "Self",
-            "ProducerTarget",
-            "AffectingSubject"
-          ],
-          "default": "Self"
-        }
-      },
-      "required": [
-        "state",
-        "seconds"
-      ],
-      "additionalProperties": false
-    },
-    "ActionEffectDesignate": {
-      "description": "Submits the selected subject into a named target register.",
-      "properties": {
-        "$type": {
-          "const": "designate"
-        },
-        "register": {
-          "description": "The authored target-register name.",
-          "type": "string"
-        },
-        "target": {
-          "description": "The subject source.",
-          "enum": [
-            "Self",
-            "ProducerTarget",
-            "AffectingSubject"
-          ],
-          "default": "AffectingSubject"
-        }
-      },
-      "required": [
-        "register"
-      ],
-      "additionalProperties": false
-    },
     "ActionEffectGenerate": {
-      "description": "Redraws a draw site (a state row declaring a WorldDraw) \u2014 the one effect admissible at both scopes, and the join that makes authored randomness and world rules one arc rather than two: a kit action, a world rule, and the world.generate console verb all reduce to composing the same WorldMutation.Generate and letting it drain through the ordinary tick boundary, so journal/undo cover a draw for free wherever it was fired from. This is also how a draw\u0027s moment is authored: a TickPeriod site redraws on an ordinary $tick-scheduled rule and an Event site on an event-gated one, so timing costs no mutation ordinal. At body scope the firing is staged during the body\u0027s advance and enqueued for the next tick\u0027s drain (an honestly- reported one-tick latency: this is the first ActionEffect to write the document rather than per-body state, so it is the first to pay the pipeline\u0027s own round trip).",
+      "description": "Redraws a draw site (a state row declaring a Draw). A draw\u0027s moment is authored through the rule that fires this: a TickPeriod site redraws on an ordinary $tick-scheduled rule and a Event site on an event-gated one, so timing costs no mutation ordinal.",
       "properties": {
         "$type": {
           "const": "generate"
@@ -4225,6 +4559,426 @@
       },
       "required": [
         "row"
+      ],
+      "additionalProperties": false
+    },
+    "ActionEffectRemoveStateCell": {
+      "description": "Removes one addressed cell from a declared state row.",
+      "properties": {
+        "$type": {
+          "const": "removeStateCell"
+        },
+        "state": {
+          "description": "The row to remove from.",
+          "type": "string"
+        },
+        "key": {
+          "description": "The optional cell key.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "ActionEffectScheduleState": {
+      "description": "Writes an absolute simulation due tick into an integer state cell. The delay is converted against the document\u0027s authored simulation rate and rounded up, so it never fires early. A companion rule compares $tick against the cell and removes it after handling, forming a bounded, document-backed scheduler.",
+      "properties": {
+        "$type": {
+          "const": "scheduleState"
+        },
+        "state": {
+          "description": "The integer destination row.",
+          "type": "string"
+        },
+        "delaySeconds": {
+          "description": "The non-negative delay, rounded up to simulation ticks.",
+          "type": "number"
+        },
+        "key": {
+          "description": "The optional cell key.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "state",
+        "delaySeconds"
+      ],
+      "additionalProperties": false
+    },
+    "TransactionStepTransformStateStep": {
+      "description": "One atomic state transform.",
+      "properties": {
+        "$type": {
+          "const": "transformState"
+        },
+        "transform": {
+          "$ref": "#/$defs/StateTransform",
+          "description": "The bounded operation."
+        }
+      },
+      "required": [
+        "transform"
+      ],
+      "additionalProperties": false
+    },
+    "TransactionStepSetCell": {
+      "description": "Sets one state cell from exactly one numeric source spelling.",
+      "properties": {
+        "$type": {
+          "const": "setState"
+        },
+        "state": {
+          "description": "The destination row.",
+          "type": "string"
+        },
+        "key": {
+          "description": "The optional destination cell key.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "value": {
+          "description": "The literal source.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "fromState": {
+          "description": "The live source row or reserved channel.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "fromKey": {
+          "description": "The optional source cell key.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "valueSeconds": {
+          "description": "The exact engine-tick duration source.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "expression": {
+          "$ref": "#/$defs/ValueExpression",
+          "description": "The bounded postfix numeric source.",
+          "default": null
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "TransactionStepAddCell": {
+      "description": "Adds exactly one numeric source to a state cell.",
+      "properties": {
+        "$type": {
+          "const": "addState"
+        },
+        "state": {
+          "description": "The destination row.",
+          "type": "string"
+        },
+        "key": {
+          "description": "The optional destination cell key.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "value": {
+          "description": "The literal source.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "fromState": {
+          "description": "The live source row or reserved channel.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "fromKey": {
+          "description": "The optional source cell key.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "valueSeconds": {
+          "description": "The exact engine-tick duration source.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "expression": {
+          "$ref": "#/$defs/ValueExpression",
+          "description": "The bounded postfix numeric source.",
+          "default": null
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "TransactionStepCountdownCell": {
+      "description": "Consumes one non-negative integer countdown by the current engine-step width.",
+      "properties": {
+        "$type": {
+          "const": "countdownState"
+        },
+        "state": {
+          "description": "The countdown row.",
+          "type": "string"
+        },
+        "key": {
+          "description": "The optional cell key.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "TransactionStepScheduleCell": {
+      "description": "Writes one absolute simulation-tick deadline.",
+      "properties": {
+        "$type": {
+          "const": "scheduleState"
+        },
+        "state": {
+          "description": "The integer destination row.",
+          "type": "string"
+        },
+        "delaySeconds": {
+          "description": "The non-negative delay, converted with the document\u0027s simulation rate and rounded up.",
+          "type": "number"
+        },
+        "key": {
+          "description": "The optional cell key.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "state",
+        "delaySeconds"
+      ],
+      "additionalProperties": false
+    },
+    "TransactionStepGenerateStep": {
+      "description": "Redraws one declared state draw site.",
+      "properties": {
+        "$type": {
+          "const": "generate"
+        },
+        "row": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "row"
+      ],
+      "additionalProperties": false
+    },
+    "WorldTransactionStepEmitCueStep": {
+      "properties": {
+        "$type": {
+          "const": "emitCue"
+        },
+        "name": {
+          "type": "string"
+        },
+        "payload": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "key": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "WorldTransactionStepSetBodyVerticalVelocityStep": {
+      "properties": {
+        "$type": {
+          "const": "setBodyVerticalVelocity"
+        },
+        "key": {
+          "type": "string"
+        },
+        "velocity": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "key",
+        "velocity"
+      ],
+      "additionalProperties": false
+    },
+    "WorldTransactionStepScaleBodyVerticalVelocityStep": {
+      "properties": {
+        "$type": {
+          "const": "scaleBodyVerticalVelocity"
+        },
+        "key": {
+          "type": "string"
+        },
+        "factor": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "key",
+        "factor"
+      ],
+      "additionalProperties": false
+    },
+    "WorldTransactionStepApplyBodyImpulseStep": {
+      "properties": {
+        "$type": {
+          "const": "applyBodyImpulse"
+        },
+        "key": {
+          "type": "string"
+        },
+        "bodyDirection": {},
+        "speed": {
+          "type": "number"
+        },
+        "durationSeconds": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "key",
+        "bodyDirection",
+        "speed",
+        "durationSeconds"
+      ],
+      "additionalProperties": false
+    },
+    "WorldTransactionStepDesignateBodyStep": {
+      "properties": {
+        "$type": {
+          "const": "designateBody"
+        },
+        "key": {
+          "type": "string"
+        },
+        "register": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "Body",
+            "Clear"
+          ]
+        },
+        "targetKey": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "key",
+        "register",
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "WorldTransactionStepPaintFieldStep": {
+      "properties": {
+        "$type": {
+          "const": "paintField"
+        },
+        "field": {
+          "type": "string"
+        },
+        "x": {
+          "type": "integer"
+        },
+        "y": {
+          "type": "integer"
+        },
+        "z": {
+          "type": "integer"
+        },
+        "value": {
+          "type": "number"
+        },
+        "operation": {
+          "enum": [
+            "Set",
+            "Add"
+          ],
+          "default": "Set"
+        },
+        "radius": {
+          "type": "integer",
+          "default": 0
+        }
+      },
+      "required": [
+        "field",
+        "x",
+        "y",
+        "z",
+        "value"
       ],
       "additionalProperties": false
     },
@@ -4488,15 +5242,13 @@
       ],
       "additionalProperties": false
     },
-    "ActionEffectUpsertHudPanel": {
-      "description": "Upserts a whole HUD panel row \u2014 world scope only (refused at body scope: a per-body action has no HUD panel of its own to author). Admits WorldMutation.UpsertHudPanel into the world-rule effect set through the same seam Generate uses: the compiled effect submits the mutation stamped World, which WorldServer.TryAdmitMutation admits structurally, so the panel\u0027s own validation (capacity, unknown binding) is the ordinary whole-document revalidation every UpsertHudPanel submission \u2014 console, addon, or rule \u2014 already passes through.",
+    "WorldTransactionStepUpsertHudPanelStep": {
       "properties": {
         "$type": {
           "const": "upsertHudPanel"
         },
         "panel": {
-          "$ref": "#/$defs/WorldHudPanel",
-          "description": "The whole panel row, elements included."
+          "$ref": "#/$defs/WorldHudPanel"
         }
       },
       "required": [
@@ -4504,14 +5256,12 @@
       ],
       "additionalProperties": false
     },
-    "ActionEffectRemoveHudPanel": {
-      "description": "Removes a HUD panel row by id \u2014 world scope only. See UpsertHudPanel\u0027s remarks.",
+    "WorldTransactionStepRemoveHudPanelStep": {
       "properties": {
         "$type": {
           "const": "removeHudPanel"
         },
         "id": {
-          "description": "The panel id to remove.",
           "type": "string"
         }
       },
@@ -5023,381 +5773,7 @@
       ],
       "additionalProperties": false
     },
-    "ActionEffectUpsertPlacement": {
-      "description": "Upserts a whole placement row \u2014 world scope only (refused at body scope: a per-body action has no placement of its own to author). Admits WorldMutation.UpsertPlacement into the world-rule effect set through the same seam Generate uses.",
-      "properties": {
-        "$type": {
-          "const": "upsertPlacement"
-        },
-        "placement": {
-          "$ref": "#/$defs/WorldPlacement",
-          "description": "The whole placement row."
-        }
-      },
-      "required": [
-        "placement"
-      ],
-      "additionalProperties": false
-    },
-    "ActionEffectRemovePlacement": {
-      "description": "Removes a placement row by id \u2014 world scope only. See UpsertPlacement\u0027s remarks.",
-      "properties": {
-        "$type": {
-          "const": "removePlacement"
-        },
-        "id": {
-          "description": "The placement id to remove.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "id"
-      ],
-      "additionalProperties": false
-    },
-    "ActionEffectSave": {
-      "description": "Writes a session snapshot of the world to its own loaded file \u2014 world scope only (refused at body scope: a per-body action has no world file of its own to save). A rule gate now decides when a save happens (an every-N-ticks cadence, a boss-defeated edge), closing the one gap the mutation substrate could not: a rule could already express any cadence over $tick or a state fact, but had nothing to fire that composed a save \u2014 every prior save was a human typing world.save, so a crashed server rewound to the last manual one.",
-      "properties": {
-        "$type": {
-          "const": "save"
-        }
-      },
-      "additionalProperties": false
-    },
-    "ActionEffectPose": {
-      "description": "Teleports one body to a pose \u2014 the rule-side spelling of the body.pose verb, world scope only (refused at body scope). Like Save it submits no WorldMutation: a pose is body state, not document state, so nothing composes, validates, or journals, and a replay reproduces it by re-firing the same rule. Applied as the world\u0027s own act through WorldBody.Pose, deliberately outside the drive-admission gate: a body whose gatesDrive row reads nonzero is a body a rule still needs to move (a dead body back to its spawn). The client sees the same teleport continuity a body.pose produces.",
-      "properties": {
-        "$type": {
-          "const": "pose"
-        },
-        "key": {
-          "description": "The target body\u0027s 0-based entity index, spelled as a plain integer \u2014 the same literal addressing every other world-scope effect uses for a per-body cell.",
-          "type": "string"
-        },
-        "spawnPoint": {
-          "description": "A declared spawnPoints id (position and yaw from the point; pitch/roll zero). Exactly one of this and Position is authored.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "position": {
-          "description": "A literal world position. Exactly one of this and SpawnPoint is authored.",
-          "default": null
-        },
-        "yawDegrees": {
-          "description": "The yaw about \u002BY, degrees; legal only with Position and required to remain zero when SpawnPoint supplies the pose.",
-          "type": "number",
-          "default": 0
-        },
-        "pitchDegrees": {
-          "description": "The pitch about the body right, degrees; legal only with Position and required to remain zero with SpawnPoint.",
-          "type": "number",
-          "default": 0
-        },
-        "rollDegrees": {
-          "description": "The roll about the body forward, degrees; legal only with Position and required to remain zero with SpawnPoint.",
-          "type": "number",
-          "default": 0
-        }
-      },
-      "required": [
-        "key"
-      ],
-      "additionalProperties": false
-    },
-    "ActionEffectRemoveStateCell": {
-      "description": "Removes one addressed cell from a declared world-state row. World scope only.",
-      "properties": {
-        "$type": {
-          "const": "removeStateCell"
-        },
-        "state": {
-          "description": "The row to remove from.",
-          "type": "string"
-        },
-        "key": {
-          "description": "The optional cell key.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        }
-      },
-      "required": [
-        "state"
-      ],
-      "additionalProperties": false
-    },
-    "ActionEffectScheduleState": {
-      "description": "Writes an absolute simulation due tick into an integer state cell. The delay is converted against the world\u0027s authored simulation rate and rounded up, so it never fires early. A companion rule compares $tick against the cell and removes it after handling, forming a bounded, document-backed scheduler.",
-      "properties": {
-        "$type": {
-          "const": "scheduleState"
-        },
-        "state": {
-          "description": "The integer destination row.",
-          "type": "string"
-        },
-        "delaySeconds": {
-          "description": "The non-negative delay, rounded up to simulation ticks.",
-          "type": "number"
-        },
-        "key": {
-          "description": "The optional cell key.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        }
-      },
-      "required": [
-        "state",
-        "delaySeconds"
-      ],
-      "additionalProperties": false
-    },
-    "WorldTransactionStepTransformStateStep": {
-      "description": "One atomic state transform.",
-      "properties": {
-        "$type": {
-          "const": "transformState"
-        },
-        "transform": {
-          "$ref": "#/$defs/StateTransform",
-          "description": "The bounded operation."
-        }
-      },
-      "required": [
-        "transform"
-      ],
-      "additionalProperties": false
-    },
-    "WorldTransactionStepSetCell": {
-      "description": "Sets one state cell from exactly one numeric source spelling.",
-      "properties": {
-        "$type": {
-          "const": "setState"
-        },
-        "state": {
-          "description": "The destination row.",
-          "type": "string"
-        },
-        "key": {
-          "description": "The optional destination cell key.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "value": {
-          "description": "The literal source.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "fromState": {
-          "description": "The live source row or reserved channel.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "fromKey": {
-          "description": "The optional source cell key.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "valueSeconds": {
-          "description": "The exact engine-tick duration source.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "expression": {
-          "$ref": "#/$defs/ValueExpression",
-          "description": "The bounded postfix numeric source.",
-          "default": null
-        }
-      },
-      "required": [
-        "state"
-      ],
-      "additionalProperties": false
-    },
-    "WorldTransactionStepAddCell": {
-      "description": "Adds exactly one numeric source to a state cell.",
-      "properties": {
-        "$type": {
-          "const": "addState"
-        },
-        "state": {
-          "description": "The destination row.",
-          "type": "string"
-        },
-        "key": {
-          "description": "The optional destination cell key.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "value": {
-          "description": "The literal source.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "fromState": {
-          "description": "The live source row or reserved channel.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "fromKey": {
-          "description": "The optional source cell key.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "valueSeconds": {
-          "description": "The exact engine-tick duration source.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "expression": {
-          "$ref": "#/$defs/ValueExpression",
-          "description": "The bounded postfix numeric source.",
-          "default": null
-        }
-      },
-      "required": [
-        "state"
-      ],
-      "additionalProperties": false
-    },
-    "WorldTransactionStepCountdownCell": {
-      "description": "Consumes one non-negative integer countdown by the current engine-step width.",
-      "properties": {
-        "$type": {
-          "const": "countdownState"
-        },
-        "state": {
-          "description": "The countdown row.",
-          "type": "string"
-        },
-        "key": {
-          "description": "The optional cell key.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        }
-      },
-      "required": [
-        "state"
-      ],
-      "additionalProperties": false
-    },
-    "WorldTransactionStepScheduleCell": {
-      "description": "Writes one absolute simulation-tick deadline.",
-      "properties": {
-        "$type": {
-          "const": "scheduleState"
-        },
-        "state": {
-          "description": "The integer destination row.",
-          "type": "string"
-        },
-        "delaySeconds": {
-          "description": "The non-negative delay, converted with the world\u0027s simulation rate and rounded up.",
-          "type": "number"
-        },
-        "key": {
-          "description": "The optional cell key.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        }
-      },
-      "required": [
-        "state",
-        "delaySeconds"
-      ],
-      "additionalProperties": false
-    },
-    "WorldTransactionStepGenerateStep": {
-      "description": "Redraws one declared state draw site.",
-      "properties": {
-        "$type": {
-          "const": "generate"
-        },
-        "row": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "row"
-      ],
-      "additionalProperties": false
-    },
-    "WorldTransactionStepUpsertHudPanelStep": {
-      "description": "Upserts one world HUD panel.",
-      "properties": {
-        "$type": {
-          "const": "upsertHudPanel"
-        },
-        "panel": {
-          "$ref": "#/$defs/WorldHudPanel"
-        }
-      },
-      "required": [
-        "panel"
-      ],
-      "additionalProperties": false
-    },
-    "WorldTransactionStepRemoveHudPanelStep": {
-      "description": "Removes one world HUD panel.",
-      "properties": {
-        "$type": {
-          "const": "removeHudPanel"
-        },
-        "id": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "id"
-      ],
-      "additionalProperties": false
-    },
     "WorldTransactionStepUpsertPlacementStep": {
-      "description": "Upserts one placement row.",
       "properties": {
         "$type": {
           "const": "upsertPlacement"
@@ -5412,7 +5788,6 @@
       "additionalProperties": false
     },
     "WorldTransactionStepRemovePlacementStep": {
-      "description": "Removes one placement row.",
       "properties": {
         "$type": {
           "const": "removePlacement"
@@ -5427,7 +5802,6 @@
       "additionalProperties": false
     },
     "WorldTransactionStepPoseStep": {
-      "description": "Teleports an active body.",
       "properties": {
         "$type": {
           "const": "pose"
@@ -5463,175 +5837,8 @@
       ],
       "additionalProperties": false
     },
-    "WorldTransactionStepEmitCueStep": {
-      "description": "Emits one deterministic gameplay cue.",
-      "properties": {
-        "$type": {
-          "const": "emitCue"
-        },
-        "name": {
-          "type": "string"
-        },
-        "payload": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "key": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        }
-      },
-      "required": [
-        "name"
-      ],
-      "additionalProperties": false
-    },
-    "WorldTransactionStepSetBodyVerticalVelocityStep": {
-      "description": "Sets an active body\u0027s vertical velocity.",
-      "properties": {
-        "$type": {
-          "const": "setBodyVerticalVelocity"
-        },
-        "key": {
-          "type": "string"
-        },
-        "velocity": {
-          "type": "number"
-        }
-      },
-      "required": [
-        "key",
-        "velocity"
-      ],
-      "additionalProperties": false
-    },
-    "WorldTransactionStepScaleBodyVerticalVelocityStep": {
-      "description": "Scales an active body\u0027s vertical velocity.",
-      "properties": {
-        "$type": {
-          "const": "scaleBodyVerticalVelocity"
-        },
-        "key": {
-          "type": "string"
-        },
-        "factor": {
-          "type": "number"
-        }
-      },
-      "required": [
-        "key",
-        "factor"
-      ],
-      "additionalProperties": false
-    },
-    "WorldTransactionStepApplyBodyImpulseStep": {
-      "description": "Applies a timed body-local planar impulse.",
-      "properties": {
-        "$type": {
-          "const": "applyBodyImpulse"
-        },
-        "key": {
-          "type": "string"
-        },
-        "bodyDirection": {},
-        "speed": {
-          "type": "number"
-        },
-        "durationSeconds": {
-          "type": "number"
-        }
-      },
-      "required": [
-        "key",
-        "bodyDirection",
-        "speed",
-        "durationSeconds"
-      ],
-      "additionalProperties": false
-    },
-    "WorldTransactionStepDesignateBodyStep": {
-      "description": "Sets or clears an active body\u0027s target register.",
-      "properties": {
-        "$type": {
-          "const": "designateBody"
-        },
-        "key": {
-          "type": "string"
-        },
-        "register": {
-          "type": "string"
-        },
-        "kind": {
-          "enum": [
-            "Body",
-            "Clear"
-          ]
-        },
-        "targetKey": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        }
-      },
-      "required": [
-        "key",
-        "register",
-        "kind"
-      ],
-      "additionalProperties": false
-    },
-    "WorldTransactionStepPaintFieldStep": {
-      "description": "Sets or adds a bounded live field neighborhood.",
-      "properties": {
-        "$type": {
-          "const": "paintField"
-        },
-        "field": {
-          "type": "string"
-        },
-        "x": {
-          "type": "integer"
-        },
-        "y": {
-          "type": "integer"
-        },
-        "z": {
-          "type": "integer"
-        },
-        "value": {
-          "type": "number"
-        },
-        "operation": {
-          "enum": [
-            "Set",
-            "Add"
-          ],
-          "default": "Set"
-        },
-        "radius": {
-          "type": "integer",
-          "default": 0
-        }
-      },
-      "required": [
-        "field",
-        "x",
-        "y",
-        "z",
-        "value"
-      ],
-      "additionalProperties": false
-    },
-    "WorldTransactionStep": {
-      "description": "The finite, non-recursive effect vocabulary admitted inside an atomic world-rule transaction. It mirrors the rollback-safe world-scope effects explicitly; nested transactions and persistence I/O have no wire shape.",
+    "TransactionStep": {
+      "description": "The finite, non-recursive effect vocabulary admitted inside an atomic Transaction. It mirrors the rollback-safe effects explicitly; nested transactions have no wire shape. The arms declared here are the ones this library owns; a document project appends its own through a RuleVocabulary, each paired with the ActionEffect arm it lifts to.",
       "type": [
         "object",
         "null"
@@ -5641,41 +5848,26 @@
       ],
       "anyOf": [
         {
-          "$ref": "#/$defs/WorldTransactionStepTransformStateStep"
+          "$ref": "#/$defs/TransactionStepTransformStateStep"
         },
         {
-          "$ref": "#/$defs/WorldTransactionStepSetCell"
+          "$ref": "#/$defs/TransactionStepSetCell"
         },
         {
-          "$ref": "#/$defs/WorldTransactionStepAddCell"
+          "$ref": "#/$defs/TransactionStepAddCell"
         },
         {
-          "$ref": "#/$defs/WorldTransactionStepCountdownCell"
+          "$ref": "#/$defs/TransactionStepCountdownCell"
         },
         {
           "$ref": "#/$defs/ActionEffectRemoveStateCell",
           "description": "Removes one addressed state cell."
         },
         {
-          "$ref": "#/$defs/WorldTransactionStepScheduleCell"
+          "$ref": "#/$defs/TransactionStepScheduleCell"
         },
         {
-          "$ref": "#/$defs/WorldTransactionStepGenerateStep"
-        },
-        {
-          "$ref": "#/$defs/WorldTransactionStepUpsertHudPanelStep"
-        },
-        {
-          "$ref": "#/$defs/WorldTransactionStepRemoveHudPanelStep"
-        },
-        {
-          "$ref": "#/$defs/WorldTransactionStepUpsertPlacementStep"
-        },
-        {
-          "$ref": "#/$defs/WorldTransactionStepRemovePlacementStep"
-        },
-        {
-          "$ref": "#/$defs/WorldTransactionStepPoseStep"
+          "$ref": "#/$defs/TransactionStepGenerateStep"
         },
         {
           "$ref": "#/$defs/WorldTransactionStepEmitCueStep"
@@ -5694,11 +5886,26 @@
         },
         {
           "$ref": "#/$defs/WorldTransactionStepPaintFieldStep"
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepUpsertHudPanelStep"
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepRemoveHudPanelStep"
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepUpsertPlacementStep"
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepRemovePlacementStep"
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepPoseStep"
         }
       ]
     },
     "ActionEffectTransaction": {
-      "description": "Applies a bounded list of state, document, body, cue, and field effects atomically after preflight. When any effect refuses, none apply and OnFailure runs instead. Nested transactions and save effects are structurally unavailable because persistence I/O cannot be rolled back.",
+      "description": "Applies a bounded list of effects atomically after preflight. When any effect refuses, none apply and OnFailure runs instead. Nested transactions are structurally unavailable, and so is any effect a document project declares without a bounded rollback representation.",
       "properties": {
         "$type": {
           "const": "transaction"
@@ -5707,7 +5914,7 @@
           "description": "The main transaction branch.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/WorldTransactionStep"
+            "$ref": "#/$defs/TransactionStep"
           }
         },
         "onFailure": {
@@ -5717,7 +5924,7 @@
             "null"
           ],
           "items": {
-            "$ref": "#/$defs/WorldTransactionStep"
+            "$ref": "#/$defs/TransactionStep"
           },
           "default": null
         }
@@ -5727,18 +5934,145 @@
       ],
       "additionalProperties": false
     },
-    "ActionEffectEmitCue": {
-      "description": "Emits a deterministic, presentation-neutral gameplay cue. World scope only.",
+    "WorldEffectSetVerticalVelocity": {
+      "description": "Writes the body\u0027s vertical-velocity channel (the jump launch / the surge).",
+      "properties": {
+        "$type": {
+          "const": "setVerticalVelocity"
+        },
+        "velocity": {
+          "type": "number"
+        },
+        "target": {
+          "enum": [
+            "Self",
+            "ProducerTarget",
+            "AffectingSubject"
+          ],
+          "default": "Self"
+        }
+      },
+      "required": [
+        "velocity"
+      ],
+      "additionalProperties": false
+    },
+    "WorldEffectScaleVerticalVelocity": {
+      "description": "Multiplies the body\u0027s vertical velocity (the jump cut; gate on Rising).",
+      "properties": {
+        "$type": {
+          "const": "scaleVerticalVelocity"
+        },
+        "factor": {
+          "type": "number"
+        },
+        "target": {
+          "enum": [
+            "Self",
+            "ProducerTarget",
+            "AffectingSubject"
+          ],
+          "default": "Self"
+        }
+      },
+      "required": [
+        "factor"
+      ],
+      "additionalProperties": false
+    },
+    "WorldEffectPlanarImpulse": {
+      "description": "A timed planar velocity overlay (the dash): BodyDirection is rotated by the body\u0027s attitude at fire time and ridden as authored, never normalized, at Speed for DurationSeconds.",
+      "properties": {
+        "$type": {
+          "const": "planarImpulse"
+        },
+        "bodyDirection": {},
+        "speed": {
+          "type": "number"
+        },
+        "durationSeconds": {
+          "type": "number"
+        },
+        "target": {
+          "enum": [
+            "Self",
+            "ProducerTarget",
+            "AffectingSubject"
+          ],
+          "default": "Self"
+        }
+      },
+      "required": [
+        "bodyDirection",
+        "speed",
+        "durationSeconds"
+      ],
+      "additionalProperties": false
+    },
+    "WorldEffectStartTimer": {
+      "description": "Starts a named timer slot with an authored duration.",
+      "properties": {
+        "$type": {
+          "const": "startTimer"
+        },
+        "state": {
+          "type": "string"
+        },
+        "seconds": {
+          "type": "number"
+        },
+        "target": {
+          "enum": [
+            "Self",
+            "ProducerTarget",
+            "AffectingSubject"
+          ],
+          "default": "Self"
+        }
+      },
+      "required": [
+        "state",
+        "seconds"
+      ],
+      "additionalProperties": false
+    },
+    "WorldEffectDesignate": {
+      "description": "Submits the selected subject into a named target register.",
+      "properties": {
+        "$type": {
+          "const": "designate"
+        },
+        "register": {
+          "description": "The authored target-register name.",
+          "type": "string"
+        },
+        "target": {
+          "description": "The subject source.",
+          "enum": [
+            "Self",
+            "ProducerTarget",
+            "AffectingSubject"
+          ],
+          "default": "AffectingSubject"
+        }
+      },
+      "required": [
+        "register"
+      ],
+      "additionalProperties": false
+    },
+    "WorldEffectEmitCue": {
+      "description": "Emits a deterministic presentation-neutral cue (WorldGameplayCue).",
       "properties": {
         "$type": {
           "const": "emitCue"
         },
         "name": {
-          "description": "The stable authored cue identifier.",
+          "description": "The cue name; see IsValidName.",
           "type": "string"
         },
         "payload": {
-          "description": "The optional bounded consumer payload.",
+          "description": "An optional bounded payload.",
           "type": [
             "string",
             "null"
@@ -5746,7 +6080,7 @@
           "default": null
         },
         "key": {
-          "description": "The optional body key used for spatial presentation.",
+          "description": "The body the cue is about \u2014 a body index, a $cell: indirection, or a bound key.",
           "type": [
             "string",
             "null"
@@ -5759,166 +6093,17 @@
       ],
       "additionalProperties": false
     },
-    "ActionEffectSetBodyVerticalVelocity": {
-      "description": "Sets an active body\u0027s vertical velocity. Key accepts the ordinary body-key indirection and rule bindings.",
+    "WorldEffectSave": {
+      "description": "Saves the world through the host\u0027s save tap.",
       "properties": {
         "$type": {
-          "const": "setBodyVerticalVelocity"
-        },
-        "key": {
-          "description": "The body index or dynamic body-key spelling.",
-          "type": "string"
-        },
-        "velocity": {
-          "description": "The fixed-point vertical velocity.",
-          "type": "number"
+          "const": "save"
         }
       },
-      "required": [
-        "key",
-        "velocity"
-      ],
-      "additionalProperties": false
-    },
-    "ActionEffectScaleBodyVerticalVelocity": {
-      "description": "Scales an active body\u0027s vertical velocity.",
-      "properties": {
-        "$type": {
-          "const": "scaleBodyVerticalVelocity"
-        },
-        "key": {
-          "description": "The body index or dynamic body-key spelling.",
-          "type": "string"
-        },
-        "factor": {
-          "description": "The fixed-point scale factor.",
-          "type": "number"
-        }
-      },
-      "required": [
-        "key",
-        "factor"
-      ],
-      "additionalProperties": false
-    },
-    "ActionEffectApplyBodyImpulse": {
-      "description": "Applies a timed body-local planar impulse to an active body.",
-      "properties": {
-        "$type": {
-          "const": "applyBodyImpulse"
-        },
-        "key": {
-          "description": "The body index or dynamic body-key spelling.",
-          "type": "string"
-        },
-        "bodyDirection": {
-          "description": "The finite unit direction in body-local space."
-        },
-        "speed": {
-          "description": "The fixed-point impulse speed.",
-          "type": "number"
-        },
-        "durationSeconds": {
-          "description": "The non-negative exact engine-tick duration.",
-          "type": "number"
-        }
-      },
-      "required": [
-        "key",
-        "bodyDirection",
-        "speed",
-        "durationSeconds"
-      ],
-      "additionalProperties": false
-    },
-    "ActionEffectDesignateBody": {
-      "description": "Sets or clears one active body\u0027s declared target register.",
-      "properties": {
-        "$type": {
-          "const": "designateBody"
-        },
-        "key": {
-          "description": "The body whose register changes.",
-          "type": "string"
-        },
-        "register": {
-          "description": "The declared target-register name.",
-          "type": "string"
-        },
-        "kind": {
-          "description": "Whether to set a body target or clear the register.",
-          "enum": [
-            "Body",
-            "Clear"
-          ]
-        },
-        "targetKey": {
-          "description": "The required target body for Body.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        }
-      },
-      "required": [
-        "key",
-        "register",
-        "kind"
-      ],
-      "additionalProperties": false
-    },
-    "ActionEffectPaintField": {
-      "description": "Sets or adds a value over a bounded spherical neighborhood in a live lattice field.",
-      "properties": {
-        "$type": {
-          "const": "paintField"
-        },
-        "field": {
-          "description": "The declared lattice field.",
-          "type": "string"
-        },
-        "x": {
-          "description": "The center X coordinate, in lattice cells.",
-          "type": "integer"
-        },
-        "y": {
-          "description": "The center Y coordinate, in lattice cells.",
-          "type": "integer"
-        },
-        "z": {
-          "description": "The center Z coordinate, in lattice cells.",
-          "type": "integer"
-        },
-        "value": {
-          "description": "The fixed-point value to set or add.",
-          "type": "number"
-        },
-        "operation": {
-          "description": "The set or add operation.",
-          "enum": [
-            "Set",
-            "Add"
-          ],
-          "default": "Set"
-        },
-        "radius": {
-          "description": "The sphere radius, in lattice cells.",
-          "type": "integer",
-          "default": 0
-        }
-      },
-      "required": [
-        "field",
-        "x",
-        "y",
-        "z",
-        "value"
-      ],
       "additionalProperties": false
     },
     "ActionEffect": {
-      "description": "An authored operand row lowered to a BodyMotionOp and executed by the body instruction interpreter when its trigger fires.",
+      "description": "An authored effect row a rule fires when its gate holds. The arms declared here are the ones this library owns \u2014 every one addresses a state row and nothing else; a document project appends its own derived arms (a participant\u0027s kinematics, a presentation cue, a whole-row document upsert) through a RuleVocabulary (see ExtendJson) rather than by editing this list.",
       "type": [
         "object",
         "null"
@@ -5927,15 +6112,6 @@
         "$type"
       ],
       "anyOf": [
-        {
-          "$ref": "#/$defs/ActionEffectSetVerticalVelocity"
-        },
-        {
-          "$ref": "#/$defs/ActionEffectScaleVerticalVelocity"
-        },
-        {
-          "$ref": "#/$defs/ActionEffectPlanarImpulse"
-        },
         {
           "$ref": "#/$defs/ActionEffectSetState"
         },
@@ -5952,31 +6128,7 @@
           "$ref": "#/$defs/ActionEffectCountdownState"
         },
         {
-          "$ref": "#/$defs/ActionEffectStartTimer"
-        },
-        {
-          "$ref": "#/$defs/ActionEffectDesignate"
-        },
-        {
           "$ref": "#/$defs/ActionEffectGenerate"
-        },
-        {
-          "$ref": "#/$defs/ActionEffectUpsertHudPanel"
-        },
-        {
-          "$ref": "#/$defs/ActionEffectRemoveHudPanel"
-        },
-        {
-          "$ref": "#/$defs/ActionEffectUpsertPlacement"
-        },
-        {
-          "$ref": "#/$defs/ActionEffectRemovePlacement"
-        },
-        {
-          "$ref": "#/$defs/ActionEffectSave"
-        },
-        {
-          "$ref": "#/$defs/ActionEffectPose"
         },
         {
           "$ref": "#/$defs/ActionEffectRemoveStateCell"
@@ -5988,22 +6140,65 @@
           "$ref": "#/$defs/ActionEffectTransaction"
         },
         {
-          "$ref": "#/$defs/ActionEffectEmitCue"
+          "$ref": "#/$defs/WorldEffectSetVerticalVelocity"
         },
         {
-          "$ref": "#/$defs/ActionEffectSetBodyVerticalVelocity"
+          "$ref": "#/$defs/WorldEffectScaleVerticalVelocity"
         },
         {
-          "$ref": "#/$defs/ActionEffectScaleBodyVerticalVelocity"
+          "$ref": "#/$defs/WorldEffectPlanarImpulse"
         },
         {
-          "$ref": "#/$defs/ActionEffectApplyBodyImpulse"
+          "$ref": "#/$defs/WorldEffectStartTimer"
         },
         {
-          "$ref": "#/$defs/ActionEffectDesignateBody"
+          "$ref": "#/$defs/WorldEffectDesignate"
         },
         {
-          "$ref": "#/$defs/ActionEffectPaintField"
+          "$ref": "#/$defs/WorldEffectEmitCue"
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepSetBodyVerticalVelocityStep",
+          "description": "Writes a world-addressed body\u0027s vertical velocity."
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepScaleBodyVerticalVelocityStep",
+          "description": "Scales a world-addressed body\u0027s vertical velocity."
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepApplyBodyImpulseStep",
+          "description": "Rides a unit BodyDirection at Speed on a world-addressed body for an exact whole-engine-tick duration."
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepDesignateBodyStep",
+          "description": "Designates or clears a world-addressed body\u0027s target register."
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepPaintFieldStep",
+          "description": "Paints one lattice field cell, or the cube of Radius around it."
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepUpsertHudPanelStep",
+          "description": "Upserts a HUD panel document row."
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepRemoveHudPanelStep",
+          "description": "Removes a HUD panel document row by id."
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepUpsertPlacementStep",
+          "description": "Upserts a placement document row; inside a transaction it must sit in the closing suffix."
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepRemovePlacementStep",
+          "description": "Removes a placement document row by id; inside a transaction it must sit in the closing suffix."
+        },
+        {
+          "$ref": "#/$defs/WorldEffectSave"
+        },
+        {
+          "$ref": "#/$defs/WorldTransactionStepPoseStep",
+          "description": "Teleports a world-addressed body to a spawn point, or to a literal position with angles; exactly one of SpawnPoint and Position is authored."
         }
       ]
     },
@@ -6014,7 +6209,7 @@
       }
     },
     "ActionTrigger": {
-      "description": "One trigger channel of a lane binding: a gate, a press latch (the buffer \u2014 a press stays pending until the gate opens or the latch expires; the release channel latches nothing), and the effects a fire applies in order.",
+      "description": "One trigger of a kit\u0027s action program: the effects that fire, the gate that must hold, and the latch that keeps a press armed while the gate is closed.",
       "type": [
         "object",
         "null"
@@ -6022,15 +6217,15 @@
       "properties": {
         "effects": {
           "$ref": "#/$defs/ActionEffectList",
-          "description": "The effects applied on fire, in order."
+          "description": "The effects applied in order."
         },
         "gate": {
           "$ref": "#/$defs/ActionPredicateNullable2",
-          "description": "The predicate that must hold to fire, or null for always.",
+          "description": "The predicate that must hold, or null for always.",
           "default": null
         },
         "latchSeconds": {
-          "description": "How long a press stays pending waiting for the gate. 0 means this tick only \u2014 the press fires if the gate is open on its own edge tick and is dropped otherwise. Legitimate only on OnPress: the release channel latches nothing, so a non-zero value on OnRelease is refused by name at validation rather than parsed and discarded.",
+          "description": "How long a press stays armed waiting for the gate (the jump buffer).",
           "type": "number",
           "default": 0
         }
@@ -6494,8 +6689,8 @@
       ],
       "additionalProperties": false
     },
-    "WorldTopologyDirection": {
-      "description": "One authored direction of a discrete WorldStateLatticeTopology: the (X, Y, Z) cell step a neighbour walk, ray, or leaper offset takes, and the case-sensitive token a rule or $board:/$match: channel names it by. X/Y are the topology\u0027s own planar axes (a Grid\u0027s column/row, a Hex\u0027s q/r); Z is a Box\u0027s layer step and must be zero on every other kind.",
+    "TopologyDirection": {
+      "description": "One authored direction of a discrete LatticeTopology: the (X, Y, Z) cell step a neighbour walk, ray, or leaper offset takes, and the case-sensitive token a rule or $board:/$match: channel names it by. X/Y are the topology\u0027s own planar axes (a Grid\u0027s column/row, a Hex\u0027s q/r); Z is a Box\u0027s layer step and must be zero on every other kind.",
       "type": [
         "object",
         "null"
@@ -6526,7 +6721,7 @@
       ],
       "additionalProperties": false
     },
-    "WorldTopologyElementAlias": {
+    "TopologyElementAlias": {
       "description": "A friendlier name for one point-group element, resolved by Element alongside its canonical signed-axis spelling (ElementName always answers the canonical form).",
       "type": [
         "object",
@@ -6609,7 +6804,7 @@
       },
       "additionalProperties": false
     },
-    "WorldPatternNodeSymbol": {
+    "PatternNodeSymbol": {
       "description": "One token whose value falls in the named symbol.",
       "properties": {
         "$type": {
@@ -6624,7 +6819,7 @@
       ],
       "additionalProperties": false
     },
-    "WorldPatternNodeAnySymbol": {
+    "PatternNodeAnySymbol": {
       "description": "One token of any value, named symbols and the unnamed remainder alike.",
       "properties": {
         "$type": {
@@ -6633,7 +6828,7 @@
       },
       "additionalProperties": false
     },
-    "WorldPatternNodeExcept": {
+    "PatternNodeExcept": {
       "description": "One token whose value falls outside the named symbol.",
       "properties": {
         "$type": {
@@ -6648,7 +6843,7 @@
       ],
       "additionalProperties": false
     },
-    "WorldPatternNodeNothing": {
+    "PatternNodeNothing": {
       "description": "The empty word.",
       "properties": {
         "$type": {
@@ -6657,14 +6852,14 @@
       },
       "additionalProperties": false
     },
-    "WorldPatternNodeSequence": {
+    "PatternNodeSequence": {
       "description": "The items matched one after another.",
       "properties": {
         "$type": {
           "const": "sequence"
         },
         "items": {
-          "$ref": "#/$defs/WorldPatternNodeListNonNullable"
+          "$ref": "#/$defs/PatternNodeListNonNullable"
         }
       },
       "required": [
@@ -6672,20 +6867,20 @@
       ],
       "additionalProperties": false
     },
-    "WorldPatternNodeList": {
+    "PatternNodeList": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/WorldPatternNodeNullable"
+        "$ref": "#/$defs/PatternNodeNullable"
       }
     },
-    "WorldPatternNodeChoice": {
+    "PatternNodeChoice": {
       "description": "Any one of the items.",
       "properties": {
         "$type": {
           "const": "choice"
         },
         "items": {
-          "$ref": "#/$defs/WorldPatternNodeList"
+          "$ref": "#/$defs/PatternNodeList"
         }
       },
       "required": [
@@ -6693,14 +6888,14 @@
       ],
       "additionalProperties": false
     },
-    "WorldPatternNodeBoth": {
+    "PatternNodeBoth": {
       "description": "Every item at once: the word is in each item\u0027s language.",
       "properties": {
         "$type": {
           "const": "all"
         },
         "items": {
-          "$ref": "#/$defs/WorldPatternNodeList"
+          "$ref": "#/$defs/PatternNodeList"
         }
       },
       "required": [
@@ -6708,14 +6903,14 @@
       ],
       "additionalProperties": false
     },
-    "WorldPatternNodeComplement": {
+    "PatternNodeComplement": {
       "description": "Every word the item does not match.",
       "properties": {
         "$type": {
           "const": "not"
         },
         "item": {
-          "$ref": "#/$defs/WorldPatternNode"
+          "$ref": "#/$defs/PatternNode"
         }
       },
       "required": [
@@ -6723,14 +6918,14 @@
       ],
       "additionalProperties": false
     },
-    "WorldPatternNodeOptional": {
+    "PatternNodeOptional": {
       "description": "The item or nothing.",
       "properties": {
         "$type": {
           "const": "optional"
         },
         "item": {
-          "$ref": "#/$defs/WorldPatternNode"
+          "$ref": "#/$defs/PatternNode"
         }
       },
       "required": [
@@ -6738,14 +6933,14 @@
       ],
       "additionalProperties": false
     },
-    "WorldPatternNodeStar": {
+    "PatternNodeStar": {
       "description": "The item zero or more times.",
       "properties": {
         "$type": {
           "const": "star"
         },
         "item": {
-          "$ref": "#/$defs/WorldPatternNode"
+          "$ref": "#/$defs/PatternNode"
         }
       },
       "required": [
@@ -6753,14 +6948,14 @@
       ],
       "additionalProperties": false
     },
-    "WorldPatternNodePlus": {
+    "PatternNodePlus": {
       "description": "The item one or more times.",
       "properties": {
         "$type": {
           "const": "plus"
         },
         "item": {
-          "$ref": "#/$defs/WorldPatternNode"
+          "$ref": "#/$defs/PatternNode"
         }
       },
       "required": [
@@ -6768,14 +6963,14 @@
       ],
       "additionalProperties": false
     },
-    "WorldPatternNodeRepeat": {
+    "PatternNodeRepeat": {
       "description": "The item between Min and Max times.",
       "properties": {
         "$type": {
           "const": "repeat"
         },
         "item": {
-          "$ref": "#/$defs/WorldPatternNode"
+          "$ref": "#/$defs/PatternNode"
         },
         "min": {
           "type": "integer"
@@ -6791,7 +6986,7 @@
       ],
       "additionalProperties": false
     },
-    "WorldPatternNode": {
+    "PatternNode": {
       "description": "The closed pattern vocabulary over a row\u0027s cell values, matched against the whole word. Complement and intersection are first-class, so \u0022no two adjacent kings\u0022 and \u0022holds a 2 and a 5\u0022 are single patterns rather than rule arithmetic.",
       "type": "object",
       "required": [
@@ -6799,48 +6994,48 @@
       ],
       "anyOf": [
         {
-          "$ref": "#/$defs/WorldPatternNodeSymbol"
+          "$ref": "#/$defs/PatternNodeSymbol"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeAnySymbol"
+          "$ref": "#/$defs/PatternNodeAnySymbol"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeExcept"
+          "$ref": "#/$defs/PatternNodeExcept"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeNothing"
+          "$ref": "#/$defs/PatternNodeNothing"
         },
         {
           "$ref": "#/$defs/WorldScreenSourceNone",
           "description": "The empty language: no word at all, the zero of choice and the annihilator of sequence."
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeSequence"
+          "$ref": "#/$defs/PatternNodeSequence"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeChoice"
+          "$ref": "#/$defs/PatternNodeChoice"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeBoth"
+          "$ref": "#/$defs/PatternNodeBoth"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeComplement"
+          "$ref": "#/$defs/PatternNodeComplement"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeOptional"
+          "$ref": "#/$defs/PatternNodeOptional"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeStar"
+          "$ref": "#/$defs/PatternNodeStar"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodePlus"
+          "$ref": "#/$defs/PatternNodePlus"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeRepeat"
+          "$ref": "#/$defs/PatternNodeRepeat"
         }
       ]
     },
-    "WorldPatternNodeNullable": {
+    "PatternNodeNullable": {
       "description": "The closed pattern vocabulary over a row\u0027s cell values, matched against the whole word. Complement and intersection are first-class, so \u0022no two adjacent kings\u0022 and \u0022holds a 2 and a 5\u0022 are single patterns rather than rule arithmetic.",
       "type": [
         "object",
@@ -6851,51 +7046,51 @@
       ],
       "anyOf": [
         {
-          "$ref": "#/$defs/WorldPatternNodeSymbol"
+          "$ref": "#/$defs/PatternNodeSymbol"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeAnySymbol"
+          "$ref": "#/$defs/PatternNodeAnySymbol"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeExcept"
+          "$ref": "#/$defs/PatternNodeExcept"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeNothing"
+          "$ref": "#/$defs/PatternNodeNothing"
         },
         {
           "$ref": "#/$defs/WorldScreenSourceNone",
           "description": "The empty language: no word at all, the zero of choice and the annihilator of sequence."
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeSequence"
+          "$ref": "#/$defs/PatternNodeSequence"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeChoice"
+          "$ref": "#/$defs/PatternNodeChoice"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeBoth"
+          "$ref": "#/$defs/PatternNodeBoth"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeComplement"
+          "$ref": "#/$defs/PatternNodeComplement"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeOptional"
+          "$ref": "#/$defs/PatternNodeOptional"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeStar"
+          "$ref": "#/$defs/PatternNodeStar"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodePlus"
+          "$ref": "#/$defs/PatternNodePlus"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeRepeat"
+          "$ref": "#/$defs/PatternNodeRepeat"
         }
       ]
     },
-    "WorldPatternNodeListNonNullable": {
+    "PatternNodeListNonNullable": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/WorldPatternNodeNullable"
+        "$ref": "#/$defs/PatternNodeNullable"
       }
     }
   }

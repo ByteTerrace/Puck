@@ -49,7 +49,7 @@ public sealed class WorldDynamicsCommandModule(IWorldConsoleAuthority authority)
         format: "0.###",
         provider: CultureInfo.InvariantCulture
     );
-    private static string DescribeRow(WorldDynamicsRow row, IReadOnlyDictionary<string, ReferenceCounts> referenceCounts) {
+    private static string DescribeRow(DynamicsRow row, IReadOnlyDictionary<string, ReferenceCounts> referenceCounts) {
         // A validated row always compiles (ValidateDynamics runs this same derivation at the door), so no catch
         // masks a refusal here.
         var constants = SecondOrderDynamics.Create(

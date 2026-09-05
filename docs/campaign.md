@@ -1307,42 +1307,61 @@ that can be exceeded is not a bound), and a stepping debugger (there is no
 call stack; a rule's evaluation is one line of facts).
 
 **`Puck.State`: the state and rule engine as a standalone deterministic library.**
-Extract it, on the `Puck.Commands`/`Puck.Physics` precedent: a package with no
-world, body, rendering, or presentation concept, which `Puck.World.Schema`
-consumes and extends, so a card game, a turn-based resolver, or another
-engine's frontend can run authoritative rules over `Puck.Maths` and
-`Puck.State` alone. Three phases, each landing with every hash pin unchanged
-and `puck schema --check` byte-identical to before:
-1. The pure pieces move with no behaviour change — expression syntax and
-   tokens, the expression arithmetic, tables and their document, state
-   transforms, the identifier family, the reserved-channel prefixes, the opcode
-   enum. Consumers take a global using, and the moved types drop their
-   `World` prefix at once — a state library names no world — while the
-   world-only reserved channels (bodies, distance, line of sight, screens,
-   links, regions, the population) stay in the document project as
-   `WorldRuleFacts` beside the state-neutral `RuleFacts`.
-2. The extension seams. `Puck.State` owns the state vocabulary (rows, cells,
-   domains, draws, topologies), the predicate, effect, and operand base types
-   with their state-neutral arms, the rule compiler, the work budget, the
-   dataflow and hazard analyses, and the read side of every operand — a fact
-   reads itself through an `IRuleReader` the host implements, a virtual call
-   where a closed-union switch stood. The world extends the library through a
-   `RuleVocabulary` of registered families — an operand family owns its
-   spelling and compiles it, an effect or predicate family owns its JSON
-   discriminator and compiles its arm — each compiled fact pricing itself so
-   the work sheet stays derived, and the world's arms join the JSON union at
-   runtime through a type-info modifier rather than an attribute list the
-   library would have to know. Effect firing, the trace, interactions, and
-   decisions stay in the world until the evaluator moves; interactions stay
-   world-side until a pair domain over rows is designed rather than assumed.
-   The two enums the physics kits share with rules (`ActionStateComparison`,
-   `ActionTriggerMode`) move down into `Puck.State`, which references
-   nothing of `Puck.Physics`.
-3. The evaluator moves behind a state-host interface — the mutation door, the
-   journal, checkpoints, and the world-fact reader the operands answer through
-   — that `WorldServer` implements.
-Refused: a compatibility shim between old and new spellings at any phase, and
-moving the evaluator before the seams exist.
+A package with no world, body, rendering, or presentation concept, on the
+`Puck.Commands`/`Puck.Physics` precedent, which `Puck.World.Schema` consumes and
+extends, so a card game, a turn-based resolver, or another engine's frontend
+can run authoritative rules over `Puck.Maths` and `Puck.State` alone. The
+library owns the state vocabulary (rows, cells, domains, draws, topologies,
+patterns, tables), the rule record with its state-neutral predicate, effect,
+and transaction-step arms, the compiler over a `RuleCompileContext`, the work
+budget, the dataflow and hazard analyses, and the read side of every operand:
+a fact reads itself through an `IRuleReader` the host implements, a virtual
+call where a closed-union switch stood, and prices itself so the work sheet
+stays derived. The world extends it through one `RuleVocabulary` of registered
+families — an operand family owns its reserved spellings and compiles them, an
+effect or predicate family owns its JSON discriminator and compiles its arm, a
+key family answers a dynamic-key spelling — consulted before the library's own,
+and the world's arms join the JSON union at serializer resolution through a
+type-info modifier rather than an attribute list the library would have to
+know. Nothing in the library carries a `World` name. The two enums the physics
+kits share with rules (`ActionStateComparison`, `ActionTriggerMode`) live in
+`Puck.State`, which references nothing of `Puck.Physics`. Effect firing, the
+rule trace, interactions, and decisions stay in the world until the evaluator
+moves behind a state-host interface — the mutation door, the journal,
+checkpoints — that `WorldServer` implements; interactions stay world-side until
+a pair domain over rows is designed rather than assumed. Refused: a
+compatibility shim between old and new spellings at any phase, and moving the
+evaluator before the seams exist.
+
+**The exotic Maths functions are expression calls, one family per prefix.**
+An author reaches `Puck.Maths` from an expression by the name of the thing —
+`pair(x, y)`/`pairX`/`pairY` and the Szudzik algebra, `morton`/`mortonX`/
+`mortonY`, `hilbert(order, x, y)`/`hilbertX`/`hilbertY`, the hex family over
+`HexagonalIndex` (`hex(q, r)`, `hexQ`, `hexR`, `hexRadius`, `hexNorm`,
+`hexDistance`, `hexNeighbor`, `hexRotate`, `hexConjugate`, `hexSwap`,
+`hexAdd`, `hexSubtract`, `hexMultiply`, `hexScale`, `hexTranslate`), the layer
+family over `LayerSequence` (`layer`, `layerOffset`, `layerStart`, `layerSize`
+over `(index-or-layer, start, step, seed)`), and `sqrt`, `sin`, `cos` — never
+by a matrix or an ISA spelling. The inverse of every encoding is a sibling
+call (`pairX(pair(x, y))` is `x`), a domain fault fails the expression the way
+an overflow does, and the compile-time kind proof admits each family only in
+the kind it means (`sin`/`cos` fixed, `sqrt` both, the rest int).
+`ModularTransform` stays a C# concern: a quasicrystal inflation would arrive as
+a generator draw source, not as an author-facing matrix.
+
+**Hex boards have grid parity, on one convention.** A hex topology is
+`HexagonalIndex` made spatial: cell `i` is index `i` (rings outward from the
+origin, consecutive indices adjacent), its six directions are
+`HexagonalCoordinate.Direction(0..5)` — counterclockwise from +q in the
+Eisenstein basis, which on the board reads `E, SE, SW, W, NW, NE` — and cell
+`(q, r)` sits at origin + cellSize · (q − r/2, 0, r·√3/2), so +q is +X and +r
+leans toward +Z. Position-to-cell rounds to the nearest lattice point, axial
+offsets step in `(dq, dr)`, cell centres come from the topology itself, and a
+placement's `board` facet anchors a hex topology exactly as it anchors a grid.
+The hex line game's table (`games/hexlines.world.json`) is the first board on
+that convention; its tiles are placed by the same formula the engine answers
+with, and the law that proves them recomputes both sides from
+`HexagonalIndex` rather than from a second copy of the positions.
 
 **Placements compose, and a game addresses its bodies by placement.** A
 placement may name a `parent`: its position and yaw become a local offset and

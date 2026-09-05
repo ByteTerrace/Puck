@@ -3,7 +3,7 @@ using Puck.Maths;
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
-    private static HashSet<string> ValidateDynamics(IReadOnlyList<WorldDynamicsRow> dynamics, List<string> errors) {
+    private static HashSet<string> ValidateDynamics(IReadOnlyList<DynamicsRow> dynamics, List<string> errors) {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         for (var index = 0; (index < dynamics.Count); index++) {
@@ -26,12 +26,12 @@ public static partial class WorldDefinitionValidator {
 
             var admitted = true;
 
-            var frequencyValid = (float.IsFinite(f: row.Frequency) && (row.Frequency > 0f) && (row.Frequency <= WorldDynamics.MaxFrequencyHz));
+            var frequencyValid = (float.IsFinite(f: row.Frequency) && (row.Frequency > 0f) && (row.Frequency <= DynamicsLimits.MaxFrequencyHz));
 
             RequireRange(
                 value: row.Frequency,
                 min: 0f,
-                max: WorldDynamics.MaxFrequencyHz,
+                max: DynamicsLimits.MaxFrequencyHz,
                 name: $"{path}.f",
                 errors: errors,
                 minExclusive: true
@@ -41,12 +41,12 @@ public static partial class WorldDefinitionValidator {
                 admitted = false;
             }
 
-            var dampingValid = (float.IsFinite(f: row.Damping) && (row.Damping >= 0f) && (row.Damping <= WorldDynamics.MaxDamping));
+            var dampingValid = (float.IsFinite(f: row.Damping) && (row.Damping >= 0f) && (row.Damping <= DynamicsLimits.MaxDamping));
 
             RequireRange(
                 value: row.Damping,
                 min: 0f,
-                max: WorldDynamics.MaxDamping,
+                max: DynamicsLimits.MaxDamping,
                 name: $"{path}.zeta",
                 errors: errors
             );
@@ -55,12 +55,12 @@ public static partial class WorldDefinitionValidator {
                 admitted = false;
             }
 
-            var responseValid = (float.IsFinite(f: row.Response) && (row.Response >= WorldDynamics.MinResponse) && (row.Response <= WorldDynamics.MaxResponse));
+            var responseValid = (float.IsFinite(f: row.Response) && (row.Response >= DynamicsLimits.MinResponse) && (row.Response <= DynamicsLimits.MaxResponse));
 
             RequireRange(
                 value: row.Response,
-                min: WorldDynamics.MinResponse,
-                max: WorldDynamics.MaxResponse,
+                min: DynamicsLimits.MinResponse,
+                max: DynamicsLimits.MaxResponse,
                 name: $"{path}.r",
                 errors: errors
             );

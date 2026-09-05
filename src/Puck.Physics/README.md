@@ -53,8 +53,10 @@ stages that read and write a body's pose, velocity, and action state — belongs
 the host that owns that state (`Puck.World.Server.WorldBody`); this project supplies
 the program it executes, not the body it executes on.
 
-Both `Puck.Abstractions` (the strict by-name enum converter every authored enum in
-this vocabulary declares) and `Puck.Maths` are referenced.
+`Puck.Abstractions` (the strict by-name enum converter every authored enum in
+this vocabulary declares), `Puck.Maths`, and `Puck.State` (the comparison and
+trigger-mode vocabulary a compiled predicate and a state rule share:
+`ActionStateComparison`, `ActionTriggerMode`) are referenced.
 
 ## ✨ Key features
 

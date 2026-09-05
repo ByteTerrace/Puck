@@ -16,12 +16,12 @@ public sealed class WorldRuntimeStateHashLawTests {
                 new WorldStateRow(
                     Name: CellName.Parse(candidate: "count"),
                     Kind: CellKind.Int,
-                    Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 17L)]
+                    Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 17L)]
                 ),
                 new WorldStateRow(
                     Name: CellName.Parse(candidate: "label"),
                     Kind: CellKind.Text,
-                    Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Text: "café")]
+                    Cells: [new StateCell(Key: WorldStateRow.SlotKey, Text: "café")]
                 ),
             ]),
         };
@@ -65,15 +65,15 @@ public sealed class WorldRuntimeStateHashLawTests {
             StateRaw = new WorldStateSection(World: [new WorldStateRow(
                 Name: name,
                 Kind: CellKind.Int,
-                Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 5L)]
+                Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 5L)]
             )]),
         };
         var advancing = plain with {
             StateRaw = new WorldStateSection(World: [new WorldStateRow(
                 Name: name,
                 Kind: CellKind.Int,
-                Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 5L)],
-                Advance: new WorldStateAdvance(RateNumerator: 1L, RateDenominator: 1L, EpochTick: 0L)
+                Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 5L)],
+                Advance: new StateAdvance(RateNumerator: 1L, RateDenominator: 1L, EpochTick: 0L)
             )]),
         };
 
@@ -93,21 +93,21 @@ public sealed class WorldRuntimeStateHashLawTests {
             StateRaw = new WorldStateSection(World: [new WorldStateRow(
                 Name: name,
                 Kind: CellKind.Int,
-                Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 5L)]
+                Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 5L)]
             )]),
         };
         var drawn = plain with {
             StateRaw = new WorldStateSection(World: [new WorldStateRow(
                 Name: name,
                 Kind: CellKind.Int,
-                Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 5L)],
-                Draw: new WorldDraw(
-                    Generator: new WorldGenerator(
-                        Source: WorldGeneratorSource.UniformRange,
+                Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 5L)],
+                Draw: new Draw(
+                    Generator: new StateGenerator(
+                        Source: GeneratorSource.UniformRange,
                         RangeMin: 0L,
                         RangeMax: 10L
                     ),
-                    Timing: WorldDrawTiming.Event
+                    Timing: DrawTiming.Event
                 )
             )]),
         };

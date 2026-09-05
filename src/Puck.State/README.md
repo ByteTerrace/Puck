@@ -13,10 +13,10 @@ another engine's frontend can run authoritative rules over `Puck.Maths` and
 
 `dotnet pack` produces `ByteTerrace.Puck.State`; the first NuGet.org release has
 not been published yet. The project depends on `ByteTerrace.Puck.Abstractions`,
-`ByteTerrace.Puck.Assets`, `ByteTerrace.Puck.Maths`, and
-`ByteTerrace.Puck.Physics`, each named directly, so the package's declared
-dependencies are the whole closure rather than part of it plus whatever another
-package happens to carry along.
+`ByteTerrace.Puck.Assets`, and `ByteTerrace.Puck.Maths`, each named directly, so
+the package's declared dependencies are the whole closure rather than part of it
+plus whatever another package happens to carry along. `Puck.Physics` references
+this package, never the reverse.
 
 ## ⚖️ Licensing
 
@@ -35,23 +35,112 @@ binding noncommercial license;
 the plain-language summary of who needs which, and how to ask for commercial
 terms.
 
-## 📦 What the package holds today
+## 📦 What the package holds
 
-The extraction is the campaign's "`Puck.State`: the state and rule engine as a
-standalone deterministic library" charter in `docs/campaign.md`, landing in
-three phases. This is the first: the pure pieces, moved with no behaviour
-change. Nothing here carries a `World` name — a state library names no world.
+Nothing here carries a `World` name — a state library names no world.
 
-- *Expressions:* `ValueExpression` and its `ValueToken` postfix
-  vocabulary (constants, state reads, arithmetic, comparison, bit and board
-  operations, `select`), `ExpressionSpelling` (the infix spelling and its
-  inverse — syntax only, no second evaluator), `ValueExpressionJsonConverter`
-  (reads either spelling, writes each back in its own), `ExpressionOp` (the
-  compiled opcode), and `ExpressionArithmetic` (the allocation-free Int and
-  Q48.16 evaluator every opcode lowers to).
+- *The state section:* `IStateSection` is the contract every reader and
+  compiler consumes — the document-owned `Rows`, the `Lattices` they may lie
+  over, and two per-participant slot lanes (`ParticipantSlots`,
+  `IdentitySlots`, each an `IStateSlot`). `StateSection` is the standalone
+  document's own record of it; a document project declares its own record
+  over the same interface and adds what only it can name.
+- *Rows and cells:* `StateRow` (non-sealed — a document project derives its
+  own row to add traits only it reads) over the `StateCell` substrate, with
+  `StateCapacity`, `StateReservedCells`, and the `StateRows` finders. The row
+  converter `StateRowJsonConverter<TRow>` owns the wire shape (`value`-vs-
+  `cells`, the decimal fixed-point spelling) and exposes two hook points a
+  derived row's converter writes its own members at.
+- *Traits:* `StateAdvance` (exact rational accumulation), `StateDynamics`
+  (a second-order follower over a `DynamicsRow`), `StateCycle`/`CycleOutput`
+  (a tick-indexed rotation through a symmetry-lattice word), `StateVisibility`/
+  `HiddenCells`/`StateKnowledge`/`StateObservation` (observation policy),
+  `StatePhase`/`PhaseGuard` (a guarded submission generation).
+- *Domains:* the `StateDomain` union (`slot`, `keys`, `keysOf`, `cellsOf`,
+  `ring`), closed over `Union.cs`' `[Union]` marker.
+- *Topologies:* `LatticeTopology` (`grid`, `ring`, `hex`, `box` — a host
+  registers its dense `field` case as a further derived record),
+  `TopologyKind`/`TopologyWrap`/`TopologyDirection`/`TopologyElementAlias`,
+  `CompiledTopology` (adjacency, opposites, point-group images, element
+  aliases, cell centres, position-to-cell, axial offsets), and
+  `TopologyCompilation` (validate, normalize, compile with an anchor offset,
+  the unanchored find). A hex topology is `HexagonalIndex` made spatial: cell
+  `i` is index `i` (rings outward, consecutive indices adjacent), its six
+  directions are `HexagonalCoordinate.Direction(0..5)` named `E, SE, SW, W,
+  NW, NE`, and cell `(q, r)` sits at origin + cellSize · (q − r/2, 0, r·√3/2).
+- *The catalog and the reader:* `StateCatalog` compiles a section into
+  `StateDescriptor`s and catalog-bound `StateHandle`s by `StateLane`
+  (`Document`, `Participant`, `Identity`) and `StateStorageShape`;
+  `StateReader` is the one (row, key) → raw-value computation (advance, cycle,
+  eased reads, reductions, arg-extrema); `StateCellWriter` the one cell-write
+  composition with FIFO eviction.
+- *Authored randomness:* `Draw`/`DrawTiming` (the site facet),
+  `StateGenerator` with its context/alternative/weighted-outcome rows,
+  `GeneratorMode`/`GeneratorSource`/`GeneratorCapacity`, `ClosedBitset256`
+  (drawn masks), and `GeneratorEngine` (the seed ladder, the fixed-cost
+  advance-per-sample seek, every source's emission).
+- *Patterns:* `PatternRow`/`PatternSymbol`/`PatternNode`/`PatternCapacity`
+  and `CompiledPattern`/`CompiledPatterns` (a Brzozowski-derivative machine
+  inside a state budget).
+- *Expressions:* `ValueExpression` and its `ValueToken` postfix vocabulary,
+  `ExpressionSpelling` (the infix spelling and its inverse — syntax only, no
+  second evaluator), `ValueExpressionJsonConverter` (reads either spelling,
+  writes each back in its own), `ExpressionOp` (the compiled opcode), and
+  `ExpressionArithmetic` (the allocation-free Int and Q48.16 evaluator every
+  opcode lowers to). Beside arithmetic, comparison, bit and board operations,
+  and `select`, the call vocabulary carries one family per prefix over
+  `Puck.Maths`: `pair`/`pairX`/`pairY` and the Szudzik algebra (`pairSwap`,
+  `pairMax`, `pairMin`, `pairSum`, `pairDifference`, `pairTranslate`,
+  `pairScale`); `morton`/`mortonX`/`mortonY`; `hilbert(order, x, y)`/
+  `hilbertX`/`hilbertY`; the hex family over `HexagonalIndex` (`hex(q, r)`,
+  `hexQ`, `hexR`, `hexRadius`, `hexNorm`, `hexDistance`, `hexNeighbor`,
+  `hexRotate`, `hexConjugate`, `hexSwap`, `hexAdd`, `hexSubtract`,
+  `hexMultiply`, `hexScale`, `hexTranslate`); the layer family over
+  `LayerSequence` (`layer`, `layerOffset`, `layerStart`, `layerSize`, each
+  `(index-or-layer, start, step, seed)`); and `sqrt` (int floor root or fixed
+  root), `sin`, `cos` (fixed radians). Every function is int-only except
+  those three; a domain fault (a negative index, a component past the cell,
+  an order outside 1..31) fails the expression rather than wrapping.
+- *Rules:* `Rule` and `RuleBinding` (the authored row), `ActionPredicate`
+  (`compareState`, `compareValue`, `all`, `any`, `not`), `ActionEffect`
+  (`setState`, `addState`, `pushState`, `transformState`, `countdownState`,
+  `generate`, `removeStateCell`, `scheduleState`, `transaction`) with its
+  `TransactionStep` mirrors, `ActionTarget`, `ActionStateComparison`, and
+  `ActionTriggerMode` — the last two shared with `Puck.Physics`' compiled
+  per-body predicates, so neither can grow an arm the other lacks.
+- *The compiler:* `RuleCompiler` compiles a `Rule` against a
+  `RuleCompileContext` (the section, its catalog, its pinned `TableSource`s,
+  patterns, generators, and the simulation rate) into a `CompiledRule` —
+  `GateToken`s, `EffectFact`s, `CompiledRuleBinding`s, `CompiledExpressionToken`s.
+  Every piece (`CompileGate`, `CompileEffects`, `CompileExpression`,
+  `CompileBindings`, `ResolveOperand`, `TryResolveDynamicKey`) is public so a
+  document project composes them with its own arms. `RuleRefusal` names every
+  compile-time refusal; a `RuleException` carries one, or a document project's
+  own enum.
+- *The facts:* `OperandFact` (`StateCellOperand`, `BindingOperand`,
+  `TableOperand`, `TickOperand`, `ReductionOperand`, `SymmetryOperand`,
+  `BoardOperand`, `PhaseOperand`, `PatternOperand`, `HistoryOperand`) and
+  `EffectFact` (`WriteEffect`, `CountdownEffect`, `GenerateEffect`,
+  `RemoveStateCellEffect`, `ScheduleStateEffect`, `TransactionEffect`,
+  `TransformStateEffect`, `PushStateEffect`) are class hierarchies, never
+  unions: each answers `Read(IRuleReader)` (operands), `Cost(context)`, and
+  the cells it reads and writes (`CollectReads`/`CollectWrites` into
+  `RuleAccess` lists). `CompiledCellRef` is the one key-indirection carrier
+  (`$cell:`, a bound key, or a document project's `KeyFact`).
+- *Evaluation:* `IRuleReader` is what a fact reads through — the tick, the
+  rows and catalog, the bound keys and binding values, the tables, the
+  pattern and board scratch; `RuleEvaluation` holds `GateHolds`,
+  `TryEvaluateExpression`, `ResolveKey`, and the state reads they share.
+  Firing an effect stays with the evaluator that owns the mutation door.
+- *Analyses:* `RuleDataflow` (a rule's read and write sets), `RuleHazards`
+  (the write-after-read and write-after-write pairs document order decides,
+  skipping pairs whose gates pin one cell to disjoint ranges), and
+  `RuleWorkBudget` (the pinned-cell exclusion trie, contributor lines, writer
+  counts, gate/expression/effect costs) over the facts' own answers.
 - *Tables:* `TableDocument` (`puck.table.v1`), `TableEntryDocument`, and
   `TableCanonicalizer` (validate → normalize → canonicalize), with
-  `TableRow` as the name/source/hash reference a document pins one by.
+  `TableRow` as the name/source/hash reference a document pins one by and
+  `CompiledTable` as the sorted, binary-searched loaded form.
 - *State transforms:* the `StateTransform` union (`transfer`, `setRay`,
   `shuffle`, `sortZone`, `sortKeyed`, `writeSet`, `push`, `observe`),
   `ZoneSelector`, and `SortKey`.
@@ -61,34 +150,56 @@ change. Nothing here carries a `World` name — a state library names no world.
   `TryParseStringJsonConverter<T>` shape they share.
 - *Reserved channels:* `RuleFacts`, the state-neutral `$`-prefixed channels
   a rule may read instead of a declared row (`$tick`, `$bind:`, `$table:`,
-  `$cell:`, `$reduce:`, `$match:`, `$history:`, `$symmetry:`). The channels
-  only a world can answer — bodies, distance, line of sight, screens, links,
-  regions, the population — are the document project's `WorldRuleFacts`.
-- *Literals:* `NumericLiteral`, the one decimal→Q48.16 conversion
-  every authored constant and table value crosses.
+  `$cell:`, `$reduce:`, `$match:`, `$history:`, `$symmetry:`, `$phase:`,
+  `$board:`). The channels only a world can answer — bodies, distance, line
+  of sight, screens, links, regions, the population — are the document
+  project's.
+- *Literals and spellings:* `NumericLiteral`, the one decimal→Q48.16
+  conversion every authored constant and table value crosses, and
+  `StateSpelling`, the one home for how a refusal spells a kind, a generator
+  source, or a cycle output.
+
+## 🔌 How a document project extends it
+
+Extension is by registration and derivation, never by an edit inside this
+package:
+
+- A `RuleVocabulary` registers the families a document project adds: an
+  `OperandFamily` claims the reserved spellings it answers and compiles them
+  to its own `OperandFact`s; an `EffectFamily` owns an `ActionEffect`-derived
+  arm, its `$type` discriminator, the `TransactionStep` that mirrors it, and
+  its compile to an `EffectFact`; a `PredicateFamily` owns a predicate arm
+  (which may refuse in rule scope); a `KeyFamily` answers a dynamic-key
+  spelling with a `KeyFact`. Registered families are consulted before the
+  library's own. `RuleVocabulary.ExtendJson` is the `JsonTypeInfo` modifier a
+  document project's serializer installs so the registered arms read and
+  write under their discriminators.
+- A `RuleCompileContext` is derived to anchor what only the document knows
+  (`FindTopology` in a placement's frame, `FindDraw` through a lattice fill)
+  and to carry the per-compile scope the families cache into.
+- An evaluator implements `IRuleReader`, widened to whatever its registered
+  operands read through; a compiled fact casts the reader it is handed.
+- `CompiledRule` is non-sealed: a document project's rule overrides
+  `CollectReads`, `CollectWrites`, and `Cost` to add the branches it alone
+  carries, and every analysis follows.
+- A polymorphic base declared here (`LatticeTopology`) lists only the cases
+  this package owns; a document adds its own case as a derived record through
+  the same modifier. `StateRow` is non-sealed on the same terms, with
+  `StateRowJsonConverter<TRow>` as its converter base.
 
 ## 🧭 What it will hold
 
-The charter's next two phases, in order:
-
-1. *The extension seams.* The operand and effect unions become registries the
-   world project fills with its own arms, each arm carrying its own cost so the
-   work sheet stays derived; the compiler compiles state effects itself and
-   dispatches the rest; the budget, dataflow, hazards, and trace move with the
-   compiler.
-2. *The evaluator*, behind a state-host interface — the mutation door, the
-   journal, checkpoints, and the fact reader the operands answer through —
-   that `WorldServer` implements.
-
-Refused by the charter: a compatibility shim between old and new spellings at
-any phase, and moving the evaluator before the seams exist.
+The evaluator, behind a state-host interface — the mutation door, the
+journal, checkpoints — that a host implements; effect firing, the rule trace,
+interactions, and decisions move with it. Refused: a compatibility shim between
+old and new spellings, and moving the evaluator before the seams exist.
 
 ## 🔗 Where the rest lives
 
-The compiler (`WorldRuleCompiler`), the operand and effect unions, the state
-section's row vocabulary, and the validators stay in
-[`src/Puck.World.Schema`](../Puck.World.Schema/README.md) until their phase;
-the evaluator stays in [`src/Puck.World.Server`](../Puck.World.Server/README.md).
-`tests/Puck.State.Tests` proves the expression syntax's parse/print laws; the
-converter and schema facts that need the world document's JSON context stay in
-`tests/Puck.World.Schema.Tests`.
+The world's registered families (`WorldRuleVocabulary`, `WorldRuleCompileContext`,
+`IWorldRuleReader`), its rule and decision records, and the validators live in
+[`src/Puck.World.Schema`](../Puck.World.Schema/README.md); the evaluator stays in
+[`src/Puck.World.Server`](../Puck.World.Server/README.md).
+`tests/Puck.State.Tests` proves the expression syntax, the function families,
+and the hex topology; the converter and schema facts that need the world
+document's JSON context stay in `tests/Puck.World.Schema.Tests`.

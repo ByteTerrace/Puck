@@ -1,4 +1,3 @@
-using Puck.Physics.Motion;
 using Puck.Maths;
 using Xunit;
 
@@ -152,7 +151,7 @@ public sealed class WorldExpressionVocabularyLawTests {
             state: [Slot("target", 5L), Slot("failed", 0L), Slot("wrapped", long.MinValue), Slot("zero", 9L)],
             rules: [
                 new WorldRule(Name: Name("bad-shift"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.Transaction(
-                    Effects: [new WorldTransactionStep.SetCell(
+                    Effects: [new TransactionStep.SetCell(
                         State: "target",
                         Expression: new ValueExpression(Tokens: [
                             new ValueToken.Constant(Value: 1m),
@@ -160,10 +159,10 @@ public sealed class WorldExpressionVocabularyLawTests {
                             new ValueToken.ShiftLeft(),
                         ])
                     )],
-                    OnFailure: [new WorldTransactionStep.SetCell(State: "failed", Value: 1m)]
+                    OnFailure: [new TransactionStep.SetCell(State: "failed", Value: 1m)]
                 )]),
                 new WorldRule(Name: Name("bad-modulo"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.Transaction(
-                    Effects: [new WorldTransactionStep.SetCell(
+                    Effects: [new TransactionStep.SetCell(
                         State: "target",
                         Expression: new ValueExpression(Tokens: [
                             new ValueToken.Constant(Value: 1m),
@@ -171,7 +170,7 @@ public sealed class WorldExpressionVocabularyLawTests {
                             new ValueToken.Modulo(),
                         ])
                     )],
-                    OnFailure: [new WorldTransactionStep.AddCell(State: "failed", Value: 1m)]
+                    OnFailure: [new TransactionStep.AddCell(State: "failed", Value: 1m)]
                 )]),
                 new WorldRule(Name: Name("min-modulo"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.SetState(
                     State: "zero",
@@ -313,16 +312,16 @@ public sealed class WorldExpressionVocabularyLawTests {
                 Rule("trail", "trail", [new ValueToken.State(Name: "zero"), new ValueToken.TrailingZeroCount()]),
                 Rule("low", "low", [new ValueToken.State(Name: "zero"), new ValueToken.LowestSetBit()]),
                 new WorldRule(Name: Name("refuse-negate"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.Transaction(
-                    Effects: [new WorldTransactionStep.SetCell(State: "target", Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: "min"), new ValueToken.Negate()]))],
-                    OnFailure: [new WorldTransactionStep.AddCell(State: "failed", Value: 1m)]
+                    Effects: [new TransactionStep.SetCell(State: "target", Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: "min"), new ValueToken.Negate()]))],
+                    OnFailure: [new TransactionStep.AddCell(State: "failed", Value: 1m)]
                 )]),
                 new WorldRule(Name: Name("refuse-abs"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.Transaction(
-                    Effects: [new WorldTransactionStep.SetCell(State: "target", Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: "min"), new ValueToken.Abs()]))],
-                    OnFailure: [new WorldTransactionStep.AddCell(State: "failed", Value: 1m)]
+                    Effects: [new TransactionStep.SetCell(State: "target", Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: "min"), new ValueToken.Abs()]))],
+                    OnFailure: [new TransactionStep.AddCell(State: "failed", Value: 1m)]
                 )]),
                 new WorldRule(Name: Name("refuse-rotate"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.Transaction(
-                    Effects: [new WorldTransactionStep.SetCell(State: "target", Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: "low"), new ValueToken.Constant(Value: 64m), new ValueToken.RotateLeft()]))],
-                    OnFailure: [new WorldTransactionStep.AddCell(State: "failed", Value: 1m)]
+                    Effects: [new TransactionStep.SetCell(State: "target", Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: "low"), new ValueToken.Constant(Value: 64m), new ValueToken.RotateLeft()]))],
+                    OnFailure: [new TransactionStep.AddCell(State: "failed", Value: 1m)]
                 )]),
             ]
         );
@@ -390,12 +389,12 @@ public sealed class WorldExpressionVocabularyLawTests {
         StateRaw = new WorldStateSection(World: state),
         Rules = rules,
     };
-    private static WorldStateRow Slot(string name, long value) => new(Name: Name(name), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: value)]);
-    private static WorldStateRow FixedSlot(string name, long value) => new(Name: Name(name), Kind: CellKind.Fixed, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: value)]);
+    private static WorldStateRow Slot(string name, long value) => new(Name: Name(name), Kind: CellKind.Int, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: value)]);
+    private static WorldStateRow FixedSlot(string name, long value) => new(Name: Name(name), Kind: CellKind.Fixed, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: value)]);
     private static CellName Name(string value) => CellName.Parse(candidate: value);
     private static long Value(WorldFixture fixture, string row) {
         var declared = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: row)!;
 
-        return WorldDefinitionRows.FindCell(cells: declared.Cells, key: WorldStateRow.SlotKey)!.Value;
+        return StateRows.FindCell(cells: declared.Cells, key: WorldStateRow.SlotKey)!.Value;
     }
 }

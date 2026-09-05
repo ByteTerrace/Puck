@@ -78,7 +78,7 @@ public sealed class StrictParseLawTests {
     [Fact]
     public void DynamicsRow_UnmappedMember_RefusesByName() {
         var definition = Fixtures.BuildDocument() with {
-            DynamicsRaw = [new WorldDynamicsRow(Damping: 1f, Frequency: 1f, Name: "chase", Response: 0f)],
+            DynamicsRaw = [new DynamicsRow(Damping: 1f, Frequency: 1f, Name: "chase", Response: 0f)],
         };
         var node = JsonNode.Parse(json: Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.Serialize(definition: definition)))!.AsObject();
 
@@ -124,13 +124,13 @@ public sealed class StrictParseLawTests {
         var y0 = Puck.Maths.FixedQ4816.FromDouble(value: 12.5).Value;
         var v0 = Puck.Maths.FixedQ4816.FromDouble(value: -3.25).Value;
         var definition = Fixtures.BuildDocument() with {
-            DynamicsRaw = [.. Fixtures.StandardDynamics, new WorldDynamicsRow(Damping: 1f, Frequency: 1f, Name: "gauge", Response: 0f)],
+            DynamicsRaw = [.. Fixtures.StandardDynamics, new DynamicsRow(Damping: 1f, Frequency: 1f, Name: "gauge", Response: 0f)],
             StateRaw = new WorldStateSection(World: [
                 new WorldStateRow(
                     Name: CellName.Parse(candidate: "hp"),
                     Kind: CellKind.Fixed,
-                    Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0)],
-                    Dynamics: new WorldStateDynamics(EpochTick: 42, Row: "gauge", V0: v0, Y0: y0)
+                    Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 0)],
+                    Dynamics: new StateDynamics(EpochTick: 42, Row: "gauge", V0: v0, Y0: y0)
                 ),
             ]),
         };

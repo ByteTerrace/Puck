@@ -1,4 +1,3 @@
-using Puck.Physics.Motion;
 using Xunit;
 
 namespace Puck.World.Schema.Tests;
@@ -8,7 +7,7 @@ namespace Puck.World.Schema.Tests;
 /// tick, and never a pair of plain adds.</summary>
 public sealed class WorldRuleHazardLawTests {
     private static WorldStateRow Slot(string name) =>
-        new(CellName.Parse(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 5L)]);
+        new(CellName.Parse(name), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 5L)]);
     private static ActionPredicate PhaseIs(long value) =>
         new ActionPredicate.CompareState(State: "phase", Comparison: ActionStateComparison.Equal, Value: value);
     private static ActionPredicate HpAtMost(long value) =>
@@ -28,7 +27,7 @@ public sealed class WorldRuleHazardLawTests {
             Rule("damage", new ActionEffect.AddState(State: "hp", Value: -3m))
         ));
         var hazard = Assert.Single(hazards);
-        Assert.Equal(WorldRuleHazardKind.WriteAfterRead, hazard.Kind);
+        Assert.Equal(RuleHazardKind.WriteAfterRead, hazard.Kind);
         Assert.Equal(("faint", "damage", $"hp.{WorldStateRow.SlotKey}"), (hazard.First, hazard.Second, hazard.Cell));
         Assert.Contains("previous tick", hazard.Detail, StringComparison.Ordinal);
 
@@ -46,7 +45,7 @@ public sealed class WorldRuleHazardLawTests {
             Rule("regen", new ActionEffect.SetState(State: "hp", Value: 9m))
         ));
         var hazard = Assert.Single(sets);
-        Assert.Equal(WorldRuleHazardKind.WriteAfterWrite, hazard.Kind);
+        Assert.Equal(RuleHazardKind.WriteAfterWrite, hazard.Kind);
         Assert.Contains("'regen' wins", hazard.Detail, StringComparison.Ordinal);
 
         var setAfterAdd = Assert.Single(WorldRuleHazards.Analyze(Document(
@@ -77,10 +76,10 @@ public sealed class WorldRuleHazardLawTests {
     public void ReadAndWriteSetsFollowIndirectionsAndBranches() {
         var rule = WorldRuleCompiler.CompileAll(Document(
             Rule("r", new ActionEffect.Transaction(Effects: [
-                new WorldTransactionStep.SetCell(State: "armor", Value: 1m),
+                new TransactionStep.SetCell(State: "armor", Value: 1m),
             ]), HpAtMost(0))
         ))[0];
-        Assert.Contains(new WorldRuleAccess("hp", WorldStateRow.SlotKey), WorldRuleDataflow.Reads(rule));
-        Assert.Contains(new WorldRuleAccess("armor", WorldStateRow.SlotKey, IsSet: true), WorldRuleDataflow.Writes(rule));
+        Assert.Contains(new RuleAccess("hp", WorldStateRow.SlotKey), RuleDataflow.Reads(rule));
+        Assert.Contains(new RuleAccess("armor", WorldStateRow.SlotKey, IsSet: true), RuleDataflow.Writes(rule));
     }
 }

@@ -1,6 +1,5 @@
 using Xunit;
 
-using Puck.Physics.Motion;
 using Puck.World.Protocol;
 
 namespace Puck.World.Tests;
@@ -15,7 +14,7 @@ namespace Puck.World.Tests;
 public sealed class KeyedImpressionDedupLawTests {
     private static WorldStateRow Slot(string name, long initial = 0, bool nonNegative = false) => new(
         Name: CellName.Parse(candidate: name), Kind: CellKind.Int, NonNegative: nonNegative,
-        Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: initial)]
+        Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: initial)]
     );
     private static ValueExpression Packed() => new([
         new ValueToken.State(Name: "origin"), new ValueToken.Constant(Value: 32), new ValueToken.ShiftLeft(),
@@ -31,11 +30,11 @@ public sealed class KeyedImpressionDedupLawTests {
         var rows = new List<WorldStateRow> {
             Slot(name: "origin"), Slot(name: "seq", nonNegative: true),
             new(Name: CellName.Parse(candidate: "trust"), Kind: CellKind.Fixed, Capacity: 4, Min: 0L, Max: 65_536L,
-                Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "0"), Value: 0)]),
+                Cells: [new StateCell(Key: CellName.Parse(candidate: "0"), Value: 0)]),
             new(Name: CellName.Parse(candidate: "mark"), Kind: CellKind.Int, Capacity: 4, NonNegative: true,
-                Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "0"), Value: 0)]),
+                Cells: [new StateCell(Key: CellName.Parse(candidate: "0"), Value: 0)]),
             new(Name: CellName.Parse(candidate: "trustUngated"), Kind: CellKind.Fixed, Capacity: 4, Min: 0L, Max: 65_536L,
-                Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "0"), Value: 0)]),
+                Cells: [new StateCell(Key: CellName.Parse(candidate: "0"), Value: 0)]),
         };
 
         return Fixtures.BuildDocument().WithWorldState(rows: rows) with {
@@ -68,7 +67,7 @@ public sealed class KeyedImpressionDedupLawTests {
 
     private static long Read(WorldDefinition definition, string row) {
         var found = WorldDefinitionRows.FindStateRow(rows: definition.State, name: row)!;
-        return WorldDefinitionRows.FindCell(cells: found.Cells, key: CellName.Parse(candidate: "0"))?.Value ?? 0L;
+        return StateRows.FindCell(cells: found.Cells, key: CellName.Parse(candidate: "0"))?.Value ?? 0L;
     }
     private static void Write(WorldFixture fixture, string row, long value) => fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
         Principal: WorldPrincipal.Console, Row: row, Key: WorldStateRow.SlotKey.Value, Value: value, Kind: WorldDocumentWriteKind.Set

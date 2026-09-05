@@ -200,7 +200,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     // never to throw. Recomputed unconditionally: rules and state rows are both small-capacity sections, so there is
     // no AffectsRules classification predicate earning its keep here.
     private CompiledWorldRule[] m_rules = [];
-    private CompiledWorldTable[] m_tables = [];
+    private CompiledTable[] m_tables = [];
     // The EDGE latch, keyed by rule name and deliberately OUTSIDE m_rules: a rule's own effect installs a new
     // definition, which recompiles m_rules, so a latch living in the compiled record would clear itself every time it
     // fired — which is exactly the 503-entries-in-500-ticks shape edge mode exists to close. Surviving names keep
@@ -414,7 +414,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// check those two methods do not — a caller that only holds this property can never skip it.</summary>
     public IWorldGrantsView Grants => m_grants;
     /// <summary>Gets this server's own running-instance identity — the draw seed ladder's instance rung (see
-    /// <c>WorldGeneratorEngine.ComputeSeedState</c>). A live redraw folds the same value the boot/first-fill resolver
+    /// <c>GeneratorEngine.ComputeSeedState</c>). A live redraw folds the same value the boot/first-fill resolver
     /// used, so a site's first fill and its later redraws share one deterministic stream per instance.</summary>
     public string InstanceIdentity { get; }
     /// <summary>Gets the journal length — the number of applied mutations over the base (the <c>world.status</c> dirty
@@ -500,7 +500,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// (<c>WorldPostBuildWiring.Install</c>). <c>WorldReplaySnapshot.Drive</c> — the offline replay-verification
     /// drive — wires its own narration-only tap instead of the live closure, so replay verification stays
     /// side-effect-free: a fired save effect there is suppressed, never reaching disk, and is named on stderr rather
-    /// than left indistinguishable from a rule that never fired. See <c>ActionEffect.Save</c>'s remarks for why this
+    /// than left indistinguishable from a rule that never fired. See <c>WorldEffect.Save</c>'s remarks for why this
     /// effect submits no <see cref="WorldMutation"/> and so needs a seam other than <c>TryApplyMutation</c> at
     /// all.</summary>
     public Action<ulong>? SaveEffectTap { get; set; }
@@ -566,7 +566,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// peer singleton, not a private field this constructor builds, so the composition root disposes it (see
     /// <see cref="WorldMachineHost"/>'s own remarks on why).</param>
     /// <param name="instanceIdentity">This server's own running-instance identity — the draw seed ladder's instance
-    /// rung (see <c>WorldGeneratorEngine.ComputeSeedState</c> in <c>Puck.World.Schema</c>). Defaults to the boot
+    /// rung (see <c>GeneratorEngine.ComputeSeedState</c> in <c>Puck.World.Schema</c>). Defaults to the boot
     /// instance's own constant name (<c>Puck.World.WorldInstanceHost.BootInstanceName</c>, not referenced directly —
     /// this project sits below <c>Puck.World</c> in the layering).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>

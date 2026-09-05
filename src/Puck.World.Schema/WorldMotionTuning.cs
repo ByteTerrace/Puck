@@ -261,10 +261,10 @@ public static class WorldMotionTuningFactory {
         TurnSpeed: FixedQ4816.FromDouble(value: motion.TurnSpeed),
         MaxSmoothError: FixedQ4816.FromDouble(value: motion.MaxSmoothError)
     );
-    private static FixedMotionDynamics? CompileDynamics(string? name, IReadOnlyList<WorldDynamicsRow> dynamics, int simulationRateHz) {
+    private static FixedMotionDynamics? CompileDynamics(string? name, IReadOnlyList<DynamicsRow> dynamics, int simulationRateHz) {
         if (
             (name is not { Length: > 0 }) ||
-            (WorldDefinitionRows.FindDynamics(
+            (StateRows.FindDynamics(
             dynamics: dynamics,
             name: name
         ) is not { } row)
@@ -283,7 +283,7 @@ public static class WorldMotionTuningFactory {
             ticksPerSecond: FixedTickConversion.TicksPerSecond
         ));
     }
-    private static FixedBodyShaping[] CompileShaping(IReadOnlyList<WorldShaping>? shaping, WorldChannelTable channels, IReadOnlyList<WorldDynamicsRow> dynamics, int simulationRateHz, List<ActionFact> recencyFacts, List<ulong> recencyWindows) {
+    private static FixedBodyShaping[] CompileShaping(IReadOnlyList<WorldShaping>? shaping, WorldChannelTable channels, IReadOnlyList<DynamicsRow> dynamics, int simulationRateHz, List<ActionFact> recencyFacts, List<ulong> recencyWindows) {
         if (shaping is not { Count: > 0 } rows) {
             return [];
         }
@@ -343,7 +343,7 @@ public static class WorldMotionTuningFactory {
     /// <param name="simulationRateHz">The world's own simulation rate — a named dynamics row's step-width
     /// divisor.</param>
     /// <returns>The compiled tuning.</returns>
-    public static FixedMotionTuning Compile(WorldMotion tuning, WorldChannelTable channels, IReadOnlyList<WorldDynamicsRow> dynamics, int simulationRateHz) {
+    public static FixedMotionTuning Compile(WorldMotion tuning, WorldChannelTable channels, IReadOnlyList<DynamicsRow> dynamics, int simulationRateHz) {
         if (!FixedTickConversion.TryDurationEngineTicksExact(
             seconds: tuning.Obstruction.GraceSeconds,
             ticks: out var obstructionGraceTicks

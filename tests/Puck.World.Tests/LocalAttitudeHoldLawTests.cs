@@ -86,7 +86,7 @@ public sealed class LocalAttitudeHoldLawTests {
                 ]
             ),
             ActionsRaw: new Dictionary<string, ActionSpec> {
-                ["dash"] = new ActionSpec(OnPress: new ActionTrigger(Effects: [new ActionEffect.SetVerticalVelocity(Velocity: 5.5f)])),
+                ["dash"] = new ActionSpec(OnPress: new ActionTrigger(Effects: [new WorldEffect.SetVerticalVelocity(Velocity: 5.5f)])),
             },
             ProducersRaw: new Dictionary<string, BodyProgramParameters> {
                 ["roam"] = Fixtures.TravelerRoamParameters,

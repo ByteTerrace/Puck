@@ -50,11 +50,11 @@ public sealed partial class WorldStateCommandModule {
                     var names = (compiled is null)
                         ? "none"
                         : string.Join(",", Enumerable.Range(0, directionCount).Select(compiled.DirectionName));
-                    var normalized = WorldTopologyCompilation.Normalize(topology);
+                    var normalized = TopologyCompilation.Normalize(topology);
                     var origin = (compiled is null)
                         ? "none"
                         : $"({(double)compiled.Origin.X:0.####},{(double)compiled.Origin.Y:0.####},{(double)compiled.Origin.Z:0.####})";
-                    lines.Add($"[world.topology '{topology.Name}' kind={topology.Kind} cells={compiled?.CellCount ?? normalized.Width * normalized.Depth * normalized.Layers} directions={directionCount} names={names} wrap={normalized.Wrap} origin={origin}]");
+                    lines.Add($"[world.topology '{topology.Name}' kind={topology.Kind} cells={compiled?.CellCount ?? ((topology.Kind == TopologyKind.Hex) ? (1 + (3 * normalized.Radius * (normalized.Radius + 1))) : (normalized.Width * normalized.Depth * normalized.Layers))} directions={directionCount} names={names} wrap={normalized.Wrap} origin={origin}]");
                 }
                 return new CommandResult(Output: string.Join(Environment.NewLine, lines));
             });
@@ -139,7 +139,7 @@ public sealed partial class WorldStateCommandModule {
         if (args.Count < prefix) {
             return CommandResult.Usage(verb, guarded ? "<phase-row> <sequence> <transform-json>" : "<transform-json>");
         }
-        WorldPhaseGuard? guard = null;
+        PhaseGuard? guard = null;
         if (guarded) {
             if (!long.TryParse(args[1].ToString(), NumberStyles.None, CultureInfo.InvariantCulture, out var sequence)) {
                 return CommandResult.Error("phase sequence must be a nonnegative integer");
@@ -163,11 +163,11 @@ public sealed partial class WorldStateCommandModule {
             return $" phase sequence={phase.Sequence}";
         }
         var domain = row.EffectiveDomain switch {
-            WorldStateDomain.Slot => "domain=slot",
-            WorldStateDomain.Keys => "domain=keys",
-            WorldStateDomain.KeysOf keysOf => $"domain=keysOf row={keysOf.Row} ordered={keysOf.Ordered}",
-            WorldStateDomain.CellsOf cellsOf => $"domain=cellsOf topology={cellsOf.Topology} empty={cellsOf.Empty}",
-            WorldStateDomain.Ring ring => $"domain=ring capacity={ring.Capacity} empty={ring.Empty} cursor={row.HistoryCursor} held={Math.Min(row.HistoryCursor, ring.Capacity)}",
+            StateDomain.Slot => "domain=slot",
+            StateDomain.Keys => "domain=keys",
+            StateDomain.KeysOf keysOf => $"domain=keysOf row={keysOf.Row} ordered={keysOf.Ordered}",
+            StateDomain.CellsOf cellsOf => $"domain=cellsOf topology={cellsOf.Topology} empty={cellsOf.Empty}",
+            StateDomain.Ring ring => $"domain=ring capacity={ring.Capacity} empty={ring.Empty} cursor={row.HistoryCursor} held={Math.Min(row.HistoryCursor, ring.Capacity)}",
             var other => throw new InvalidOperationException($"unknown state domain '{other.GetType().Name}'"),
         };
         return row.ValuesFrom is { } valuesFrom ? $" {domain} valuesFrom={valuesFrom}" : $" {domain}";

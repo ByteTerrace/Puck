@@ -31,12 +31,12 @@ public sealed class PokerHandStrengthLawTests {
         return Path.Combine(directory!.FullName, "src", "Puck.World", "Assets", "worlds", "puck.world.json");
     }
 
-    private static WorldPatternRow Find(string name) =>
+    private static PatternRow Find(string name) =>
         Garden.Patterns.FirstOrDefault(p => p.Name.Value == name)
         ?? throw new InvalidOperationException($"puck.world.json carries no pattern '{name}'");
 
     private static long Match(string patternName, params long[] word) {
-        Assert.True(CompiledWorldPattern.TryCompile(Find(patternName), out var compiled, out var reason), reason);
+        Assert.True(CompiledPattern.TryCompile(Find(patternName), out var compiled, out var reason), reason);
         return compiled!.Match(word);
     }
 
@@ -99,7 +99,7 @@ public sealed class PokerHandStrengthLawTests {
         var definition = Fixtures.BuildDocument() with {
             StateRaw = new(World: [
                 new(Name("cards"), CellKind.Int, Capacity: 2, Cells: [Cell("AS", 0), Cell("KS", 0)]),
-                new(Name("hand1"), CellKind.Bool, Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards"), Ordered: true), Capacity: 2,
+                new(Name("hand1"), CellKind.Bool, Domain: new StateDomain.KeysOf(CellName.Parse("cards"), Ordered: true), Capacity: 2,
                     Cells: [Cell("AS", 1), Cell("KS", 1)],
                     Visibility: new(Readers: ["seat1"], ReadersFrom: "audience1")),
                 new(Name("audience1"), CellKind.Text, Capacity: 1),
@@ -111,7 +111,7 @@ public sealed class PokerHandStrengthLawTests {
         Assert.NotNull(WorldStateDisclosure.Compose(definition, WorldPrincipal.Seat(0))); // seat1: its own hand
 
         var revealed = definition.WithWorldState([.. definition.State.Select(r => r.Name.Value == "audience1"
-            ? r with { Cells = [new WorldStateCell(Name("0"), 0, Text: WorldPrincipal.Seat(1).Describe())] }
+            ? r with { Cells = [new StateCell(Name("0"), 0, Text: WorldPrincipal.Seat(1).Describe())] }
             : r)]);
 
         var seenBySeat2 = WorldStateDisclosure.Compose(revealed, WorldPrincipal.Seat(1));
@@ -122,5 +122,5 @@ public sealed class PokerHandStrengthLawTests {
     }
 
     private static CellName Name(string value) => CellName.Parse(value);
-    private static WorldStateCell Cell(string key, long value = 1) => new(Name(key), value);
+    private static StateCell Cell(string key, long value = 1) => new(Name(key), value);
 }

@@ -1,4 +1,3 @@
-using Puck.Physics.Motion;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
@@ -12,8 +11,8 @@ public sealed class WorldDealAndRevealLawTests {
     public void ACountedTransferDealsInOneMutationAndRefusesPastThePile() {
         var definition = Document([
             new(Name("cards"), CellKind.Int, Capacity: 6, Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4"), Cell("c5"), Cell("c6")]),
-            new(Name("deck"), CellKind.Bool, Capacity: 6, Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4"), Cell("c5"), Cell("c6")], Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards"), Ordered: true)),
-            new(Name("hand"), CellKind.Bool, Capacity: 6, Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards"), Ordered: true)),
+            new(Name("deck"), CellKind.Bool, Capacity: 6, Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4"), Cell("c5"), Cell("c6")], Domain: new StateDomain.KeysOf(CellName.Parse("cards"), Ordered: true)),
+            new(Name("hand"), CellKind.Bool, Capacity: 6, Domain: new StateDomain.KeysOf(CellName.Parse("cards"), Ordered: true)),
         ], []);
 
         var dealt = Apply(definition, new StateTransform.Transfer("deck", "hand", ZoneSelector.First, Count: 5));
@@ -32,8 +31,8 @@ public sealed class WorldDealAndRevealLawTests {
     public void ARuleQuantifiedOverTokenKeysBindsEachToTheKey() {
         var definition = Document([
             new(Name("cards"), CellKind.Int, Capacity: 3, Cells: [Cell("c1"), Cell("c2"), Cell("c3")]),
-            new(Name("rank"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards")), Capacity: 3, Cells: [Cell("c1", 5), Cell("c2", 9), Cell("c3", 2)]),
-            new(Name("doubled"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards")), Capacity: 3, Cells: [Cell("c1", 0), Cell("c2", 0), Cell("c3", 0)]),
+            new(Name("rank"), CellKind.Int, Domain: new StateDomain.KeysOf(CellName.Parse("cards")), Capacity: 3, Cells: [Cell("c1", 5), Cell("c2", 9), Cell("c3", 2)]),
+            new(Name("doubled"), CellKind.Int, Domain: new StateDomain.KeysOf(CellName.Parse("cards")), Capacity: 3, Cells: [Cell("c1", 0), Cell("c2", 0), Cell("c3", 0)]),
         ], [
             new WorldRule(Name("double"), Mode: ActionTriggerMode.Edge, ForEach: "rank", Effects: [new ActionEffect.SetState(State: "doubled", Key: "$each", Expression: new ValueExpression(Tokens: [
                 new ValueToken.State(Name: "rank", Key: "$each"), new ValueToken.Constant(Value: 2m), new ValueToken.Multiply(),
@@ -44,9 +43,9 @@ public sealed class WorldDealAndRevealLawTests {
         fixture.Step();
 
         var doubled = Find(fixture.Server.Definition, "doubled").Cells!;
-        Assert.Equal(10L, WorldDefinitionRows.FindCell(doubled, Name("c1"))!.Value);
-        Assert.Equal(18L, WorldDefinitionRows.FindCell(doubled, Name("c2"))!.Value);
-        Assert.Equal(4L, WorldDefinitionRows.FindCell(doubled, Name("c3"))!.Value);
+        Assert.Equal(10L, StateRows.FindCell(doubled, Name("c1"))!.Value);
+        Assert.Equal(18L, StateRows.FindCell(doubled, Name("c2"))!.Value);
+        Assert.Equal(4L, StateRows.FindCell(doubled, Name("c3"))!.Value);
     }
 
     [Fact]
@@ -54,7 +53,7 @@ public sealed class WorldDealAndRevealLawTests {
         var seat = WorldPrincipal.Seat(slot: 1);
         var hand = new WorldStateRow(Name("hand"), CellKind.Int, Capacity: 2, Cells: [Cell("c1", 11), Cell("c2", 12)],
             Visibility: new(Readers: [], ReadersFrom: "audience"));
-        var audience = new WorldStateRow(Name("audience"), CellKind.Text, Capacity: 4, Cells: [new WorldStateCell(Name("a1"), 0L, Text: "")]);
+        var audience = new WorldStateRow(Name("audience"), CellKind.Text, Capacity: 4, Cells: [new StateCell(Name("a1"), 0L, Text: "")]);
         var definition = Document([hand, audience, Slot("showdown", 0)], [
             new WorldRule(Name("reveal"), Mode: ActionTriggerMode.Edge,
                 Gate: new ActionPredicate.CompareState(State: "showdown", Comparison: ActionStateComparison.Equal, Value: 1m),
@@ -67,7 +66,7 @@ public sealed class WorldDealAndRevealLawTests {
         fixture.Step();
         Assert.Null(WorldStateDisclosure.Compose(fixture.Server.Definition, seat)?.FirstOrDefault(r => r.Name == "hand"));
 
-        var revealed = fixture.Server.Definition with { StateRaw = fixture.Server.Definition.StateRaw! with { World = [.. fixture.Server.Definition.State.Select(r => r.Name.Value == "showdown" ? r with { Cells = [new WorldStateCell(WorldStateRow.SlotKey, 1L)] } : r)] } };
+        var revealed = fixture.Server.Definition with { StateRaw = fixture.Server.Definition.StateRaw! with { World = [.. fixture.Server.Definition.State.Select(r => r.Name.Value == "showdown" ? r with { Cells = [new StateCell(WorldStateRow.SlotKey, 1L)] } : r)] } };
         using var shown = Fixtures.FreshServer(definition: revealed);
         shown.Step();
         var observed = WorldStateDisclosure.Compose(shown.Server.Definition, seat)?.FirstOrDefault(r => r.Name == "hand");
@@ -89,7 +88,7 @@ public sealed class WorldDealAndRevealLawTests {
     }
     private static string[] Keys(WorldDefinition document, string row) => (Find(document, row).Cells ?? []).Select(c => c.Key.Value).ToArray();
     private static CellName Name(string value) => CellName.Parse(value);
-    private static WorldStateCell Cell(string key, long value = 1) => new(Name(key), value);
-    private static WorldStateRow Slot(string name, long value) => new(Name(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, value)]);
+    private static StateCell Cell(string key, long value = 1) => new(Name(key), value);
+    private static WorldStateRow Slot(string name, long value) => new(Name(name), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, value)]);
     private static WorldStateRow Find(WorldDefinition document, string row) => WorldDefinitionRows.FindStateRow(document.State, row)!;
 }

@@ -55,7 +55,7 @@
         }
       },
       "pattern": {
-        "$ref": "./common.schema.json#/$defs/WorldPatternNode",
+        "$ref": "./common.schema.json#/$defs/PatternNode",
         "description": "The language."
       },
       "attribute": {

@@ -1,4 +1,3 @@
-using Puck.Physics.Motion;
 using Xunit;
 
 namespace Puck.World.Schema.Tests;
@@ -7,9 +6,9 @@ namespace Puck.World.Schema.Tests;
 /// charges the group its most expensive value; rules sharing a value, or gated on anything else, sum.</summary>
 public sealed class WorldRuleWorkBudgetExclusionLawTests {
     private static WorldStateRow Slot(string name) =>
-        new(CellName.Parse(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)]);
+        new(CellName.Parse(name), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]);
     private static WorldStateRow Keyed(string name, int capacity) =>
-        new(CellName.Parse(name), CellKind.Int, Capacity: capacity, Cells: [new WorldStateCell(CellName.Parse("0"), 0L)]);
+        new(CellName.Parse(name), CellKind.Int, Capacity: capacity, Cells: [new StateCell(CellName.Parse("0"), 0L)]);
     private static WorldRule Rule(string name, ActionPredicate? gate, string forEach = "many") =>
         new(CellName.Parse(name), [new ActionEffect.AddState(State: "count", Value: 1m)], Gate: gate, ForEach: forEach);
     private static ActionPredicate PhaseIs(long value) =>

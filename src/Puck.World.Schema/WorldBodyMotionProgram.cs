@@ -35,7 +35,9 @@ public sealed record ActionStateSlot(
     ActionFact? ResetFact = null,
     bool PlayerWritable = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ActionStateEnvelope? Envelope = null
-);
+) : IStateSlot {
+    StateValueKind IStateSlot.ValueKind => ((Kind == ActionStateKind.Timer) ? StateValueKind.Timer : StateValueKind.Counter);
+}
 /// <summary>An authored fixed-phase body motion program.</summary>
 /// <param name="Name">The stable name kits use to select the program.</param>
 /// <param name="Version">The instruction-set version.</param>
@@ -102,14 +104,14 @@ public static class BodyMotionProgramRoles {
 /// <see cref="ActionSpec"/> becomes the engine's compiled trigger form.</summary>
 public static class BodyActionSpecFactory {
     /// <summary>Flattens a predicate tree into a bounded postfix Boolean gate, allocating one shared recency slot per
-    /// <see cref="ActionPredicate.Recently"/> instance.</summary>
+    /// <see cref="WorldPredicate.Recently"/> instance.</summary>
     /// <param name="predicate">The authored predicate, or <see langword="null"/> for an open gate.</param>
     /// <param name="gate">Receives the flattened postfix program.</param>
     /// <param name="recencyFacts">The shared recency-clock fact table this gate appends to.</param>
     /// <param name="recencyWindows">The shared recency-clock window table, parallel to <paramref name="recencyFacts"/>.</param>
     /// <param name="stateSlots">The kit-wide named action-state lookup, or <see langword="null"/> when no slot may be
     /// referenced.</param>
-    /// <param name="channels">The world's compiled channel table, required to resolve a <see cref="ActionPredicate.Held"/>
+    /// <param name="channels">The world's compiled channel table, required to resolve a <see cref="WorldPredicate.Held"/>
     /// predicate's channel — legitimate only in a kit's <c>shaping</c>-row gate. <see langword="null"/> everywhere
     /// else; a <c>held</c> predicate reaching a flatten with no table throws, since validation has already refused
     /// authoring one outside a shaping gate.</param>
@@ -203,7 +205,7 @@ public static class BodyActionSpecFactory {
                 ));
 
                 break;
-            case ActionPredicate.Held held:
+            case WorldPredicate.Held held:
                 if (
                     (channels is not { } table) ||
                     !table.TryGetOrdinal(
@@ -225,7 +227,7 @@ public static class BodyActionSpecFactory {
                 ));
 
                 break;
-            case ActionPredicate.Now now:
+            case WorldPredicate.Now now:
                 gate.Add(item: new CompiledPredicate(
                     Fact: now.Fact,
                     RecencySlot: 0,
@@ -236,7 +238,7 @@ public static class BodyActionSpecFactory {
                 ));
 
                 break;
-            case ActionPredicate.Recently recently:
+            case WorldPredicate.Recently recently:
                 gate.Add(item: new CompiledPredicate(
                     Fact: recently.Fact,
                     RecencySlot: recencyFacts.Count,
@@ -281,7 +283,7 @@ public static class BodyActionSpecFactory {
                     Kind: CompiledPredicateKind.CompareState
                 ));
                 break;
-            case ActionPredicate.TimerElapsed elapsed:
+            case WorldPredicate.TimerElapsed elapsed:
                 gate.Add(item: new CompiledPredicate(
                     Fact: default,
                     RecencySlot: 0,
@@ -303,7 +305,7 @@ public static class BodyActionSpecFactory {
 
     private static CompiledBodyInstruction CompileEffect(ActionEffect effect, IReadOnlyDictionary<string, int> stateSlots, CompiledBodyMotionProgram program, string actionName) {
         var instruction = effect switch {
-            ActionEffect.SetVerticalVelocity set => new CompiledBodyInstruction(
+            WorldEffect.SetVerticalVelocity set => new CompiledBodyInstruction(
             Operation: BodyMotionOp.SetVerticalVelocity,
             Value: FixedQ4816.FromDouble(value: set.Velocity),
             Direction: default,
@@ -311,7 +313,7 @@ public static class BodyActionSpecFactory {
             StateSlot: -1,
             Target: set.Target
         ),
-            ActionEffect.ScaleVerticalVelocity scale => new CompiledBodyInstruction(
+            WorldEffect.ScaleVerticalVelocity scale => new CompiledBodyInstruction(
             Operation: BodyMotionOp.ScaleVerticalVelocity,
             Value: FixedQ4816.FromDouble(value: scale.Factor),
             Direction: default,
@@ -319,7 +321,7 @@ public static class BodyActionSpecFactory {
             StateSlot: -1,
             Target: scale.Target
         ),
-            ActionEffect.PlanarImpulse impulse => new CompiledBodyInstruction(
+            WorldEffect.PlanarImpulse impulse => new CompiledBodyInstruction(
             Operation: BodyMotionOp.PlanarImpulse,
             Value: FixedQ4816.FromDouble(value: impulse.Speed),
             Direction: new FixedVector3(
@@ -377,7 +379,7 @@ public static class BodyActionSpecFactory {
             Target: add.Target,
             StateName: add.State
         ),
-            ActionEffect.StartTimer timer => new CompiledBodyInstruction(
+            WorldEffect.StartTimer timer => new CompiledBodyInstruction(
             Operation: BodyMotionOp.StartTimer,
             Value: default,
             Direction: default,
@@ -389,7 +391,7 @@ public static class BodyActionSpecFactory {
             Target: timer.Target,
             StateName: timer.State
         ),
-            ActionEffect.Designate designate => new CompiledBodyInstruction(
+            WorldEffect.Designate designate => new CompiledBodyInstruction(
             Operation: BodyMotionOp.Designate,
             Value: default,
             Direction: default,
@@ -414,14 +416,14 @@ public static class BodyActionSpecFactory {
             // rows — a per-body
             // action has none of its own, so these are refused BY NAME here rather than parsed and discarded
             // (legitimate only inside a WorldRule; see WorldRuleCompiler.CompileEffect).
-            ActionEffect.CountdownState or ActionEffect.UpsertHudPanel or ActionEffect.RemoveHudPanel or ActionEffect.UpsertPlacement or ActionEffect.RemovePlacement =>
+            ActionEffect.CountdownState or WorldEffect.UpsertHudPanel or WorldEffect.RemoveHudPanel or WorldEffect.UpsertPlacement or WorldEffect.RemovePlacement =>
                 throw new InvalidOperationException(message: $"Action '{actionName}' uses effect '{effect.GetType().Name}', which has no body-scope meaning — it authors a WORLD document row and is admissible only inside a world rule's own effects."),
             // save writes the WORLD's own file — a per-body action has no world file of its own to save, so this is
             // refused BY NAME here too (legitimate only inside a WorldRule; see WorldRuleCompiler.CompileEffect and
-            // ActionEffect.Save's own remarks).
-            ActionEffect.Save =>
+            // WorldEffect.Save's own remarks).
+            WorldEffect.Save =>
                 throw new InvalidOperationException(message: $"Action '{actionName}' uses effect 'Save', which has no body-scope meaning — a per-body action has no world file of its own to save, and is admissible only inside a world rule's own effects."),
-            ActionEffect.Pose =>
+            WorldEffect.Pose =>
                 throw new InvalidOperationException(message: $"Action '{actionName}' uses effect 'Pose', which has no body-scope meaning — it teleports a body the world names, and is admissible only inside a world rule's own effects."),
             _ => throw new InvalidOperationException(message: $"Action '{actionName}' contains an unknown effect kind."),
         };

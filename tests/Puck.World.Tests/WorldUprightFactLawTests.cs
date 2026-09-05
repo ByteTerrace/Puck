@@ -85,9 +85,9 @@ public sealed class WorldUprightFactLawTests {
             PlacementRowsRaw = [new WorldPlacement(Id: "floor", PrototypeId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
             StateRaw = new WorldStateSection(World: [
                 new WorldStateRow(Name: CellName.Parse(candidate: UprightRow), Kind: CellKind.Fixed,
-                    Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0L)]),
+                    Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 0L)]),
                 new WorldStateRow(Name: CellName.Parse(candidate: AbsentRow), Kind: CellKind.Fixed,
-                    Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0L)]),
+                    Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 0L)]),
             ]),
             Rules = [
                 new WorldRule(Name: CellName.Parse(candidate: "upright-mirror"),

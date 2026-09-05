@@ -11,7 +11,7 @@ public static partial class WorldStateTransforms {
             return false;
         }
         var row = rows[index];
-        if (row.Knowledge is not { } knowledge || row.EffectiveDomain is not WorldStateDomain.CellsOf board || WorldTopologyCompilation.Find(definition, board.Topology) is not { } topology) {
+        if (row.Knowledge is not { } knowledge || row.EffectiveDomain is not StateDomain.CellsOf board || WorldTopologyCompilation.Find(definition, board.Topology) is not { } topology) {
             return Refuse("observe requires a knowledge board", out reason);
         }
         if (!TryFind(rows, knowledge.Source, out var sourceIndex, out reason) || !TryFind(rows, knowledge.Mask, out var maskIndex, out reason)) {
@@ -22,8 +22,8 @@ public static partial class WorldStateTransforms {
         var mask = rows[maskIndex];
         Span<long> values = stackalloc long[topology.CellCount];
         Span<long> visible = stackalloc long[topology.CellCount];
-        WorldBoardQueries.Read(source, topology, values);
-        WorldBoardQueries.Read(mask, topology, visible);
+        BoardQueries.Read(source, topology, values);
+        BoardQueries.Read(mask, topology, visible);
         var cells = (row.Cells ?? []).Select(c => c with { Observation = c.Observation is { } previous ? previous with { Visible = false } : null }).ToList();
         for (var cell = 0; cell < topology.CellCount; cell++) {
             if (visible[cell] == 0) {
@@ -32,7 +32,7 @@ public static partial class WorldStateTransforms {
 
             var key = topology.Key(cell);
             var found = cells.FindIndex(c => c.Key.Value == key);
-            var observed = new WorldStateCell(CellName.Parse(key), values[cell], Observation: new(checked((long)tick), true));
+            var observed = new StateCell(CellName.Parse(key), values[cell], Observation: new(checked((long)tick), true));
             if (found < 0) {
                 cells.Add(observed);
             } else {

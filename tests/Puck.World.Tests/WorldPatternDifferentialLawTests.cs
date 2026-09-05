@@ -10,7 +10,7 @@ public sealed class WorldPatternDifferentialLawTests {
     private const int LongestWord = 5;
     private const int Trees = 300;
 
-    private static readonly WorldPatternSymbol[] s_symbols = [
+    private static readonly PatternSymbol[] s_symbols = [
         new(CellName.Parse("a"), 1, 1),
         new(CellName.Parse("b"), 2, 2),
         new(CellName.Parse("c"), 3, 3),
@@ -26,9 +26,9 @@ public sealed class WorldPatternDifferentialLawTests {
 
         for (var tree = 0; tree < Trees; tree++) {
             var node = Random(random, depth: 0);
-            var row = new WorldPatternRow(CellName.Parse("t"), CellKind.Int, s_symbols, node, MaxStates: WorldPatternCapacity.MaxStates);
+            var row = new PatternRow(CellName.Parse("t"), CellKind.Int, s_symbols, node, MaxStates: PatternCapacity.MaxStates);
 
-            if (!CompiledWorldPattern.TryCompile(row, out var machine, out var reason)) {
+            if (!CompiledPattern.TryCompile(row, out var machine, out var reason)) {
                 Assert.Contains("states", reason);
                 refused++;
                 continue;
@@ -82,42 +82,42 @@ public sealed class WorldPatternDifferentialLawTests {
         return builder.Append(']').ToString();
     }
 
-    private static string Text(WorldPatternNode node) => node switch {
-        WorldPatternNode.Symbol s => Class(false, s.Name == "a", s.Name == "b", s.Name == "c"),
-        WorldPatternNode.Except e => Class(true, e.Name != "a", e.Name != "b", e.Name != "c"),
-        WorldPatternNode.AnySymbol => "[wxyz]",
-        WorldPatternNode.Nothing => "(?:)",
-        WorldPatternNode.None => "~(_*)",
-        WorldPatternNode.Sequence q => "(?:" + string.Concat(q.Items.Select(Text)) + ")",
-        WorldPatternNode.Choice ch => "(?:" + string.Join("|", ch.Items.Select(Text)) + ")",
-        WorldPatternNode.Both both => "(?:" + string.Join("&", both.Items.Select(item => "(?:" + Text(item) + ")")) + ")",
-        WorldPatternNode.Complement n => "~(" + Text(n.Item) + ")",
-        WorldPatternNode.Optional o => "(?:" + Text(o.Item) + ")?",
-        WorldPatternNode.Star s => "(?:" + Text(s.Item) + ")*",
-        WorldPatternNode.Plus p => "(?:" + Text(p.Item) + ")+",
-        WorldPatternNode.Repeat r => "(?:" + Text(r.Item) + "){" + r.Min + "," + r.Max + "}",
+    private static string Text(PatternNode node) => node switch {
+        PatternNode.Symbol s => Class(false, s.Name == "a", s.Name == "b", s.Name == "c"),
+        PatternNode.Except e => Class(true, e.Name != "a", e.Name != "b", e.Name != "c"),
+        PatternNode.AnySymbol => "[wxyz]",
+        PatternNode.Nothing => "(?:)",
+        PatternNode.None => "~(_*)",
+        PatternNode.Sequence q => "(?:" + string.Concat(q.Items.Select(Text)) + ")",
+        PatternNode.Choice ch => "(?:" + string.Join("|", ch.Items.Select(Text)) + ")",
+        PatternNode.Both both => "(?:" + string.Join("&", both.Items.Select(item => "(?:" + Text(item) + ")")) + ")",
+        PatternNode.Complement n => "~(" + Text(n.Item) + ")",
+        PatternNode.Optional o => "(?:" + Text(o.Item) + ")?",
+        PatternNode.Star s => "(?:" + Text(s.Item) + ")*",
+        PatternNode.Plus p => "(?:" + Text(p.Item) + ")+",
+        PatternNode.Repeat r => "(?:" + Text(r.Item) + "){" + r.Min + "," + r.Max + "}",
         _ => throw new InvalidOperationException(),
     };
 
     // The set of accepted words no longer than LongestWord, by the language equations themselves.
-    private static HashSet<string> Language(WorldPatternNode node, List<string> universe) {
+    private static HashSet<string> Language(PatternNode node, List<string> universe) {
         switch (node) {
-            case WorldPatternNode.Symbol s: return [((char)('0' + Ordinal(s.Name))).ToString()];
-            case WorldPatternNode.Except e: return [.. Enumerable.Range(0, Letters).Where(l => l != Ordinal(e.Name)).Select(l => ((char)('0' + l)).ToString())];
-            case WorldPatternNode.AnySymbol: return [.. Enumerable.Range(0, Letters).Select(l => ((char)('0' + l)).ToString())];
-            case WorldPatternNode.Nothing: return [string.Empty];
-            case WorldPatternNode.None: return [];
-            case WorldPatternNode.Sequence q: {
+            case PatternNode.Symbol s: return [((char)('0' + Ordinal(s.Name))).ToString()];
+            case PatternNode.Except e: return [.. Enumerable.Range(0, Letters).Where(l => l != Ordinal(e.Name)).Select(l => ((char)('0' + l)).ToString())];
+            case PatternNode.AnySymbol: return [.. Enumerable.Range(0, Letters).Select(l => ((char)('0' + l)).ToString())];
+            case PatternNode.Nothing: return [string.Empty];
+            case PatternNode.None: return [];
+            case PatternNode.Sequence q: {
                 var set = new HashSet<string> { string.Empty };
                 foreach (var item in q.Items) { set = Concat(set, Language(item, universe)); }
                 return set;
             }
-            case WorldPatternNode.Choice ch: {
+            case PatternNode.Choice ch: {
                 var set = new HashSet<string>();
                 foreach (var item in ch.Items) { set.UnionWith(Language(item, universe)); }
                 return set;
             }
-            case WorldPatternNode.Both both: {
+            case PatternNode.Both both: {
                 HashSet<string>? set = null;
                 foreach (var item in both.Items) {
                     var language = Language(item, universe);
@@ -125,15 +125,15 @@ public sealed class WorldPatternDifferentialLawTests {
                 }
                 return set!;
             }
-            case WorldPatternNode.Complement n: {
+            case PatternNode.Complement n: {
                 var set = new HashSet<string>(universe);
                 set.ExceptWith(Language(n.Item, universe));
                 return set;
             }
-            case WorldPatternNode.Optional o: { var set = Language(o.Item, universe); set.Add(string.Empty); return set; }
-            case WorldPatternNode.Star s: return Closure(Language(s.Item, universe));
-            case WorldPatternNode.Plus p: { var unit = Language(p.Item, universe); return Concat(unit, Closure(unit)); }
-            case WorldPatternNode.Repeat r: {
+            case PatternNode.Optional o: { var set = Language(o.Item, universe); set.Add(string.Empty); return set; }
+            case PatternNode.Star s: return Closure(Language(s.Item, universe));
+            case PatternNode.Plus p: { var unit = Language(p.Item, universe); return Concat(unit, Closure(unit)); }
+            case PatternNode.Repeat r: {
                 var unit = Language(r.Item, universe);
                 var power = new HashSet<string> { string.Empty };
                 var set = new HashSet<string>();
@@ -171,30 +171,30 @@ public sealed class WorldPatternDifferentialLawTests {
         return set;
     }
 
-    private static WorldPatternNode Random(Xorshift random, int depth) {
+    private static PatternNode Random(Xorshift random, int depth) {
         var leaf = depth >= 3 || random.Next(4) == 0;
         var pick = random.Next(leaf ? 5 : 14);
         string Name() => random.Next(3) switch { 0 => "a", 1 => "b", _ => "c" };
         return pick switch {
-            0 => new WorldPatternNode.Symbol(Name()),
-            1 => new WorldPatternNode.Except(Name()),
-            2 => new WorldPatternNode.AnySymbol(),
-            3 => new WorldPatternNode.Nothing(),
-            4 => new WorldPatternNode.None(),
-            5 or 6 => new WorldPatternNode.Sequence([Random(random, depth + 1), Random(random, depth + 1)]),
-            7 => new WorldPatternNode.Choice([Random(random, depth + 1), Random(random, depth + 1)]),
-            8 => new WorldPatternNode.Both([Random(random, depth + 1), Random(random, depth + 1)]),
-            9 => new WorldPatternNode.Complement(Random(random, depth + 1)),
-            10 => new WorldPatternNode.Optional(Random(random, depth + 1)),
-            11 => new WorldPatternNode.Star(Random(random, depth + 1)),
-            12 => new WorldPatternNode.Plus(Random(random, depth + 1)),
+            0 => new PatternNode.Symbol(Name()),
+            1 => new PatternNode.Except(Name()),
+            2 => new PatternNode.AnySymbol(),
+            3 => new PatternNode.Nothing(),
+            4 => new PatternNode.None(),
+            5 or 6 => new PatternNode.Sequence([Random(random, depth + 1), Random(random, depth + 1)]),
+            7 => new PatternNode.Choice([Random(random, depth + 1), Random(random, depth + 1)]),
+            8 => new PatternNode.Both([Random(random, depth + 1), Random(random, depth + 1)]),
+            9 => new PatternNode.Complement(Random(random, depth + 1)),
+            10 => new PatternNode.Optional(Random(random, depth + 1)),
+            11 => new PatternNode.Star(Random(random, depth + 1)),
+            12 => new PatternNode.Plus(Random(random, depth + 1)),
             _ => Repeat(random, depth),
         };
     }
 
-    private static WorldPatternNode Repeat(Xorshift random, int depth) {
+    private static PatternNode Repeat(Xorshift random, int depth) {
         var min = random.Next(3);
-        return new WorldPatternNode.Repeat(Random(random, depth + 1), min, min + random.Next(3));
+        return new PatternNode.Repeat(Random(random, depth + 1), min, min + random.Next(3));
     }
 
     private sealed class Xorshift(ulong state) {

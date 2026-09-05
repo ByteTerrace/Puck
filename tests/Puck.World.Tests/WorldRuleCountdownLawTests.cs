@@ -1,5 +1,4 @@
 using Xunit;
-using Puck.Physics.Motion;
 
 namespace Puck.World.Tests;
 
@@ -16,7 +15,7 @@ public sealed class WorldRuleCountdownLawTests {
                     Name: countdownName,
                     Kind: CellKind.Int,
                     NonNegative: true,
-                    Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 1183L)])
+                    Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 1183L)])
             ]),
             Rules = [
                 new WorldRule(
@@ -40,7 +39,7 @@ public sealed class WorldRuleCountdownLawTests {
         var control = DurationDocument(seconds: 1m);
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: denied, neighbours: null, reason: out var reason));
-        Assert.Contains(expectedSubstring: nameof(WorldRuleRefusal.DurationEngineTicksOutOfRange), actualString: reason, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(expectedSubstring: nameof(RuleRefusal.DurationEngineTicksOutOfRange), actualString: reason, comparisonType: StringComparison.Ordinal);
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: control, neighbours: null, reason: out var controlReason), userMessage: controlReason);
     }
 
@@ -53,7 +52,7 @@ public sealed class WorldRuleCountdownLawTests {
                     Name: countdownName,
                     Kind: CellKind.Int,
                     NonNegative: true,
-                    Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey)])
+                    Cells: [new StateCell(Key: WorldStateRow.SlotKey)])
             ]),
             Rules = [
                 new WorldRule(

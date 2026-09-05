@@ -47,14 +47,14 @@ public sealed class CreationCharacterLawTests {
             CurvesRaw = curves,
         };
     }
-    private static WorldStateCell Cell(string key, double value) => new(
+    private static StateCell Cell(string key, double value) => new(
         Key: CellName.Parse(candidate: key),
         Value: FixedQ4816.FromDouble(value: value).Value
     );
     private static WorldStateRow FixedRow(string name, double value) => new(
         Name: CellName.Parse(candidate: name),
         Kind: CellKind.Fixed,
-        Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: FixedQ4816.FromDouble(value: value).Value)]
+        Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: FixedQ4816.FromDouble(value: value).Value)]
     );
     private static string Refusal(WorldDefinition definition) => (WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var reason) ? string.Empty : reason);
     private static DocumentScalar Bound(string reference) =>
@@ -172,7 +172,7 @@ public sealed class CreationCharacterLawTests {
             drivers: [new CreationDriverDocument(Name: "clock", Signal: "state.label", Cadence: 1f, When: ["always"])],
             Limb(swing: new ShapeSwingDocument(Driver: "clock", Pivot: Vector3.Zero, Axis: Vector3.UnitZ, Amplitude: 1f))
         );
-        var textRow = new WorldStateRow(Name: CellName.Parse(candidate: "label"), Kind: CellKind.Text, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Text: "north")]);
+        var textRow = new WorldStateRow(Name: CellName.Parse(candidate: "label"), Kind: CellKind.Text, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Text: "north")]);
 
         Assert.Contains(expectedSubstring: "a signal reads an int or fixed cell", actualString: Refusal(definition: World(creation: clocked, state: [textRow])));
         Assert.Contains(expectedSubstring: "names no declared state row", actualString: Refusal(definition: World(creation: clocked)));

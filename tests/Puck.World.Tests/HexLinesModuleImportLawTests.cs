@@ -121,7 +121,7 @@ public sealed class HexLinesModuleImportLawTests {
         var compiled = WorldTopologyCompilation.Find(definition: definition, name: TopologyName);
 
         Assert.NotNull(compiled);
-        Assert.Equal(WorldTopologyKind.Hex, compiled!.Kind);
+        Assert.Equal(TopologyKind.Hex, compiled!.Kind);
         Assert.Equal(CellCount, compiled.CellCount);
         Assert.Equal(CellSize, (float)(double)compiled.CellSize, precision: 4);
 
@@ -130,10 +130,19 @@ public sealed class HexLinesModuleImportLawTests {
 
         AssertNear(expected, origin, "hexLinesBoard origin");
 
+        // The engine's own cell centres and position-to-cell answer the same convention the tiles were placed by.
+        for (var index = 0; (index < CellCount); index++) {
+            var centre = compiled.CellCentre(cell: index);
+            var engine = new Vector3((float)(double)centre.X, (float)(double)centre.Y, (float)(double)centre.Z);
+
+            AssertNear(CellCentre(origin, new HexagonalIndex(value: index).ToCoordinate()), engine, $"CellCentre({index})");
+            Assert.True(compiled.TryCellOf(position: in centre, cell: out var back) && (back == index), $"TryCellOf(CellCentre({index})) = {back}");
+        }
+
         var occupancy = WorldDefinitionRows.FindStateRow(definition.State, "hexBoard");
 
         Assert.NotNull(occupancy);
-        Assert.True(occupancy!.EffectiveDomain is WorldStateDomain.CellsOf { Topology: TopologyName });
+        Assert.True(occupancy!.EffectiveDomain is StateDomain.CellsOf { Topology: TopologyName });
         Assert.Equal([.. Enumerable.Range(0, CellCount).Select(n => n.ToString())], RowKeys(definition, "hexBoard"));
     }
 

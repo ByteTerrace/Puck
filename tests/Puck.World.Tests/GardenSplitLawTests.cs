@@ -512,7 +512,7 @@ public sealed class GardenSplitLawTests {
     }
 
     // A Grid topology a placement's 'board' facet anchors takes its world origin from that placement's composed
-    // frame plus its authored (now LOCAL) origin (WorldTopologyCompilation.Find(WorldDefinition, string) — see the
+    // frame plus its authored (now LOCAL) origin (TopologyCompilation.Find(WorldDefinition, string) — see the
     // schema reference's tabletop-primitive section). Resolved against the RAW tree (before NormalizePlacementParents
     // strips 'parent') so the anchor's own absolute position — itself possibly parent-composed — is available; the
     // pre-split fixture authors every topology's origin absolutely, so this is the same "compare absolute geometry,
@@ -550,7 +550,7 @@ public sealed class GardenSplitLawTests {
                 continue;
             }
 
-            // Only translation composes into a board's origin (WorldTopologyCompilation.Compile) — the anchor's own
+            // Only translation composes into a board's origin (TopologyCompilation.Compile) — the anchor's own
             // yaw is not applied to the grid's own axes.
             var anchorPosition = new List<double>();
             var cursor = anchor;
@@ -723,7 +723,7 @@ public sealed class GardenSplitLawTests {
     }
 
     // WorldDefinitionLoader.TryLoadFile (not the lower-level WorldDefinitionFileSource.TryLoad) — it also resolves
-    // every "boot"-timed WorldDraw site, exactly like the real Puck.World.exe boot path, so a creation driver naming
+    // every "boot"-timed Draw site, exactly like the real Puck.World.exe boot path, so a creation driver naming
     // a draw-filled cadence row validates the same way it does for a real server.
     private static WorldDefinition LoadGarden() {
         var path = Path.Combine(RepoRoot(), "src", "Puck.World", "Assets", "worlds", "puck.world.json");

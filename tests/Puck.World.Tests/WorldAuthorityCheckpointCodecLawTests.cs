@@ -258,7 +258,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         var motion = kit.Motion;
 
         document = document with {
-            DynamicsRaw = [.. Fixtures.StandardDynamics, new WorldDynamicsRow(Damping: 1f, Frequency: 2f, Name: "settle", Response: 0f)],
+            DynamicsRaw = [.. Fixtures.StandardDynamics, new DynamicsRow(Damping: 1f, Frequency: 2f, Name: "settle", Response: 0f)],
             KitRowsRaw = [kit with { Motion = motion with { Shaping = [motion.Shaping![0] with { Along = null, Dynamics = "settle" }] } }],
         };
 

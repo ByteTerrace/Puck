@@ -13,40 +13,40 @@ public sealed class WorldGeneratorExhaustionLawTests {
     private const string Site = "state.loot";
     private const ulong WorldSeed = 0x0123_4567_89AB_CDEFUL;
 
-    private static WorldGenerator Bag(WorldGeneratorMode mode) => new(
-        Source: WorldGeneratorSource.WeightedNumeric,
+    private static StateGenerator Bag(GeneratorMode mode) => new(
+        Source: GeneratorSource.WeightedNumeric,
         Mode: mode,
         Weighted: [
-            new WorldGeneratorWeightedNumeric(Value: 10, Weight: 1UL),
-            new WorldGeneratorWeightedNumeric(Value: 20, Weight: 3UL),
-            new WorldGeneratorWeightedNumeric(Value: 30, Weight: 5UL),
-            new WorldGeneratorWeightedNumeric(Value: 40, Weight: 2UL),
+            new GeneratorWeightedNumeric(Value: 10, Weight: 1UL),
+            new GeneratorWeightedNumeric(Value: 20, Weight: 3UL),
+            new GeneratorWeightedNumeric(Value: 30, Weight: 5UL),
+            new GeneratorWeightedNumeric(Value: 40, Weight: 2UL),
         ]
     );
-    private static bool TryFire(WorldGenerator generator, long cursor, IReadOnlyList<ClosedBitset256>? masks, out WorldGeneratorEngine.FireResult result, out string reason) =>
-        WorldGeneratorEngine.TryFire(
+    private static bool TryFire(StateGenerator generator, long cursor, IReadOnlyList<ClosedBitset256>? masks, out GeneratorEngine.FireResult result, out string reason) =>
+        GeneratorEngine.TryFire(
             generator: generator,
             targetKind: CellKind.Int,
-            seedState: WorldGeneratorEngine.ComputeSeedState(instanceIdentity: Instance, site: Site, worldSeed: WorldSeed),
-            stream: WorldGeneratorEngine.ComputeStreamId(site: Site),
+            seedState: GeneratorEngine.ComputeSeedState(instanceIdentity: Instance, site: Site, documentSeed: WorldSeed),
+            stream: GeneratorEngine.ComputeStreamId(site: Site),
             cursor: cursor,
             masks: masks,
             result: out result,
             reason: out reason
         );
-    private static WorldGeneratorEngine.FireResult Fire(WorldGenerator generator, long cursor, IReadOnlyList<ClosedBitset256>? masks) {
+    private static GeneratorEngine.FireResult Fire(StateGenerator generator, long cursor, IReadOnlyList<ClosedBitset256>? masks) {
         Assert.True(condition: TryFire(generator: generator, cursor: cursor, masks: masks, result: out var result, reason: out var reason), userMessage: reason);
 
         return result;
     }
-    private static string Validate(WorldGenerator generator, CellKind kind, WorldDrawTiming timing) {
+    private static string Validate(StateGenerator generator, CellKind kind, DrawTiming timing) {
         var definition = new WorldDefinition(
             Simulation: new WorldSimulationDefaults(RateHz: 240),
             StateRaw: new WorldStateSection(World: [
                 new WorldStateRow(
                     Name: CellName.Parse(candidate: "loot"),
                     Kind: kind,
-                    Draw: new WorldDraw(Generator: generator, Timing: timing)
+                    Draw: new Draw(Generator: generator, Timing: timing)
                 ),
             ])
         );
@@ -56,7 +56,7 @@ public sealed class WorldGeneratorExhaustionLawTests {
 
     [Fact]
     public void WithoutReplacement_DrawsEveryOutcomeOncePerPass_ThenRefusesByName() {
-        var bag = Bag(mode: WorldGeneratorMode.WithoutReplacement);
+        var bag = Bag(mode: GeneratorMode.WithoutReplacement);
         var cursor = 0L;
         IReadOnlyList<ClosedBitset256>? masks = null;
         var drawn = new List<long>();
@@ -80,7 +80,7 @@ public sealed class WorldGeneratorExhaustionLawTests {
     }
     [Fact]
     public void RestartOnExhaustion_StartsANewPass_AndEveryPassIsAPermutation() {
-        var bag = Bag(mode: WorldGeneratorMode.RestartOnExhaustion);
+        var bag = Bag(mode: GeneratorMode.RestartOnExhaustion);
         var cursor = 0L;
         IReadOnlyList<ClosedBitset256>? masks = null;
 
@@ -101,7 +101,7 @@ public sealed class WorldGeneratorExhaustionLawTests {
     }
     [Fact]
     public void PersistedCursorAndMask_ReplayTheSameDraw() {
-        var bag = Bag(mode: WorldGeneratorMode.RestartOnExhaustion);
+        var bag = Bag(mode: GeneratorMode.RestartOnExhaustion);
         var cursor = 0L;
         IReadOnlyList<ClosedBitset256>? masks = null;
         var trail = new List<(long Cursor, ClosedBitset256[]? Masks, long Value)>();
@@ -120,7 +120,7 @@ public sealed class WorldGeneratorExhaustionLawTests {
     }
     [Fact]
     public void WithReplacement_IgnoresAnyMaskAndPersistsNone() {
-        var bag = Bag(mode: WorldGeneratorMode.WithReplacement);
+        var bag = Bag(mode: GeneratorMode.WithReplacement);
         var plain = Fire(generator: bag, cursor: 7L, masks: null);
         var withStaleMask = Fire(generator: bag, cursor: 7L, masks: [new(Word0: 0b1011UL)]);
 
@@ -132,9 +132,9 @@ public sealed class WorldGeneratorExhaustionLawTests {
         // The same declaration as two instances (one fresh, one a copy through `with`) draws the identical sequence
         // as one instance drawn twice: the cache is keyed by instance, and the table is a pure function of the
         // declaration, so neither the first build nor a later hit can move a pick.
-        var first = Bag(mode: WorldGeneratorMode.WithReplacement);
+        var first = Bag(mode: GeneratorMode.WithReplacement);
         var second = (first with { });
-        var third = Bag(mode: WorldGeneratorMode.WithReplacement);
+        var third = Bag(mode: GeneratorMode.WithReplacement);
 
         for (var cursor = 0L; (cursor < 64L); cursor++) {
             var expected = Fire(generator: first, cursor: cursor, masks: null).Numeric;
@@ -146,26 +146,26 @@ public sealed class WorldGeneratorExhaustionLawTests {
     }
     [Fact]
     public void Validator_AdmitsModeOnTheExhaustingShapes_AndRefusesItElsewhere() {
-        Assert.Equal(expected: string.Empty, actual: Validate(generator: Bag(mode: WorldGeneratorMode.RestartOnExhaustion), kind: CellKind.Int, timing: WorldDrawTiming.Event));
-        Assert.Equal(expected: string.Empty, actual: Validate(generator: Bag(mode: WorldGeneratorMode.WithoutReplacement), kind: CellKind.Fixed, timing: WorldDrawTiming.Event));
+        Assert.Equal(expected: string.Empty, actual: Validate(generator: Bag(mode: GeneratorMode.RestartOnExhaustion), kind: CellKind.Int, timing: DrawTiming.Event));
+        Assert.Equal(expected: string.Empty, actual: Validate(generator: Bag(mode: GeneratorMode.WithoutReplacement), kind: CellKind.Fixed, timing: DrawTiming.Event));
 
-        var uniform = new WorldGenerator(Source: WorldGeneratorSource.UniformRange, Mode: WorldGeneratorMode.RestartOnExhaustion, RangeMin: 0, RangeMax: 9);
-        var stream = new WorldGenerator(Source: WorldGeneratorSource.StreamDraw, Mode: WorldGeneratorMode.WithoutReplacement);
+        var uniform = new StateGenerator(Source: GeneratorSource.UniformRange, Mode: GeneratorMode.RestartOnExhaustion, RangeMin: 0, RangeMax: 9);
+        var stream = new StateGenerator(Source: GeneratorSource.StreamDraw, Mode: GeneratorMode.WithoutReplacement);
 
-        Assert.Contains(expectedSubstring: "only markov, weightedNumeric and symmetryOrbit exhaust", actualString: Validate(generator: uniform, kind: CellKind.Int, timing: WorldDrawTiming.Event));
-        Assert.Contains(expectedSubstring: "only markov, weightedNumeric and symmetryOrbit exhaust", actualString: Validate(generator: stream, kind: CellKind.Int, timing: WorldDrawTiming.Event));
+        Assert.Contains(expectedSubstring: "only markov, weightedNumeric and symmetryOrbit exhaust", actualString: Validate(generator: uniform, kind: CellKind.Int, timing: DrawTiming.Event));
+        Assert.Contains(expectedSubstring: "only markov, weightedNumeric and symmetryOrbit exhaust", actualString: Validate(generator: stream, kind: CellKind.Int, timing: DrawTiming.Event));
 
         // A boot-timed state row draws once at first fill and keeps its facet, so an exhausting mode is admitted
         // there the same way it is for a Markov source; only the settle-and-clear document fields refuse an
         // exhausting source.
-        Assert.Equal(expected: string.Empty, actual: Validate(generator: Bag(mode: WorldGeneratorMode.RestartOnExhaustion), kind: CellKind.Int, timing: WorldDrawTiming.Boot));
+        Assert.Equal(expected: string.Empty, actual: Validate(generator: Bag(mode: GeneratorMode.RestartOnExhaustion), kind: CellKind.Int, timing: DrawTiming.Boot));
     }
     [Fact]
     public void PartiallyDrawnSampling_IsAliasTableIdentical_WithoutPerDrawTableAllocation() {
-        var generator = Bag(mode: WorldGeneratorMode.RestartOnExhaustion);
+        var generator = Bag(mode: GeneratorMode.RestartOnExhaustion);
         const ulong Mask = 0b0101UL;
-        var seed = WorldGeneratorEngine.ComputeSeedState(instanceIdentity: Instance, site: Site, worldSeed: WorldSeed);
-        var stream = WorldGeneratorEngine.ComputeStreamId(site: Site);
+        var seed = GeneratorEngine.ComputeSeedState(instanceIdentity: Instance, site: Site, documentSeed: WorldSeed);
+        var stream = GeneratorEngine.ComputeStreamId(site: Site);
         var weights = new ulong[] { 1UL, 3UL, 5UL, 2UL };
 
         for (var mask = 1UL; (mask < 0b1111UL); mask++) {
@@ -200,10 +200,10 @@ public sealed class WorldGeneratorExhaustionLawTests {
     }
     [Fact]
     public void ValidatorAndEngine_RefuseAnUndefinedMode() {
-        var invalid = Bag(mode: unchecked((WorldGeneratorMode)byte.MaxValue));
+        var invalid = Bag(mode: unchecked((GeneratorMode)byte.MaxValue));
 
-        Assert.Contains(expectedSubstring: "is not a defined WorldGeneratorMode", actualString: Validate(generator: invalid, kind: CellKind.Int, timing: WorldDrawTiming.Event));
+        Assert.Contains(expectedSubstring: "is not a defined GeneratorMode", actualString: Validate(generator: invalid, kind: CellKind.Int, timing: DrawTiming.Event));
         Assert.False(condition: TryFire(generator: invalid, cursor: 0L, masks: null, result: out _, reason: out var reason));
-        Assert.Contains(expectedSubstring: "is not a defined WorldGeneratorMode", actualString: reason);
+        Assert.Contains(expectedSubstring: "is not a defined GeneratorMode", actualString: reason);
     }
 }

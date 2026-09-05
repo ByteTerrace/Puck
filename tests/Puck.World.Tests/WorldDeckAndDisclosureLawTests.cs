@@ -33,7 +33,7 @@ public sealed class WorldDeckAndDisclosureLawTests {
         // keysOf collapsed the old ordered-zone/unordered-attribute-row split into one shape: cell order is either
         // gameplay-meaningful (a pile) or incidental, but a keyed row's cells can always be permuted either way.
         var unordered = Deck(4) with { };
-        unordered = unordered with { StateRaw = unordered.StateRaw! with { World = unordered.StateRaw.World!.Select(r => r.Name.Value == "deck" ? r with { Domain = new WorldStateDomain.KeysOf(CellName.Parse("cards"), Ordered: false) } : r).ToArray() } };
+        unordered = unordered with { StateRaw = unordered.StateRaw! with { World = unordered.StateRaw.World!.Select(r => r.Name.Value == "deck" ? r with { Domain = new StateDomain.KeysOf(CellName.Parse("cards"), Ordered: false) } : r).ToArray() } };
         Assert.True(WorldStateTransforms.TryApply(unordered, new StateTransform.Shuffle("deck", "dice"), WorldPrincipal.World, 0, "test", out _, out var unorderedReason), unorderedReason);
 
         var slotOnly = Deck(4) with { };
@@ -42,7 +42,7 @@ public sealed class WorldDeckAndDisclosureLawTests {
         Assert.Contains("keyed row", reason);
 
         var bootSite = Deck(4);
-        bootSite = bootSite with { StateRaw = bootSite.StateRaw! with { World = bootSite.StateRaw.World!.Select(r => r.Name.Value == "dice" ? r with { Draw = r.Draw! with { Timing = WorldDrawTiming.Boot } } : r).ToArray() } };
+        bootSite = bootSite with { StateRaw = bootSite.StateRaw! with { World = bootSite.StateRaw.World!.Select(r => r.Name.Value == "dice" ? r with { Draw = r.Draw! with { Timing = DrawTiming.Boot } } : r).ToArray() } };
         Assert.False(WorldStateTransforms.TryApply(bootSite, new StateTransform.Shuffle("deck", "dice"), WorldPrincipal.World, 0, "test", out _, out var siteReason));
         Assert.Contains("streamDraw site", siteReason);
 
@@ -54,7 +54,7 @@ public sealed class WorldDeckAndDisclosureLawTests {
 
     [Fact]
     public void HiddenCellsLeaveExactlyWhatThePolicyAllows() {
-        foreach (var (policy, cells, count) in new[] { (WorldHiddenCells.Omit, 0, 0), (WorldHiddenCells.Count, 0, 2), (WorldHiddenCells.Placeholder, 2, 2) }) {
+        foreach (var (policy, cells, count) in new[] { (HiddenCells.Omit, 0, 0), (HiddenCells.Count, 0, 2), (HiddenCells.Placeholder, 2, 2) }) {
             var definition = Hand(policy);
             var opponent = WorldStateDisclosure.Compose(definition, WorldPrincipal.Seat(1))!.Single(r => r.Name == "hand");
             var owner = WorldStateDisclosure.Compose(definition, WorldPrincipal.Seat(0))!.Single(r => r.Name == "hand");
@@ -68,15 +68,15 @@ public sealed class WorldDeckAndDisclosureLawTests {
             var json = Encoding.UTF8.GetString(WorldProjection.Serialize(WorldProjection.Compose(definition, WorldDisclosureTier.Presentation, "test", 1, WorldPrincipal.Seat(1))!));
             Assert.DoesNotContain("\"ace\"", json);
             Assert.DoesNotContain("\"king\"", json);
-            Assert.Equal(policy != WorldHiddenCells.Omit, json.Contains("hiddenCount"));
+            Assert.Equal(policy != HiddenCells.Omit, json.Contains("hiddenCount"));
         }
     }
 
     [Fact]
     public void HiddenPolicyRoundTripsThroughTheStrictWireShape() {
-        var definition = Hand(WorldHiddenCells.Placeholder);
+        var definition = Hand(HiddenCells.Placeholder);
         var parsed = WorldDefinitionSerialization.Deserialize(utf8Json: WorldDefinitionSerialization.Serialize(definition: definition));
-        Assert.Equal(WorldHiddenCells.Placeholder, Find(parsed, "hand").Visibility!.Hidden);
+        Assert.Equal(HiddenCells.Placeholder, Find(parsed, "hand").Visibility!.Hidden);
         Assert.True(WorldDefinitionValidator.TryValidateLocally(parsed, out var reason), reason);
     }
 
@@ -85,16 +85,16 @@ public sealed class WorldDeckAndDisclosureLawTests {
         return Fixtures.BuildDocument() with {
             StateRaw = new(World: [
                 new(Name("cards"), CellKind.Int, Cells: keys.Select(k => Cell(k)).ToArray(), Capacity: count),
-                new(Name("deck"), CellKind.Bool, Cells: keys.Select(k => Cell(k)).ToArray(), Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards"), Ordered: true), Capacity: count),
-                new(Name("dice"), CellKind.Int, Draw: new WorldDraw(Generator: new WorldGenerator(Source: WorldGeneratorSource.StreamDraw), Timing: WorldDrawTiming.Event)),
+                new(Name("deck"), CellKind.Bool, Cells: keys.Select(k => Cell(k)).ToArray(), Domain: new StateDomain.KeysOf(CellName.Parse("cards"), Ordered: true), Capacity: count),
+                new(Name("dice"), CellKind.Int, Draw: new Draw(Generator: new StateGenerator(Source: GeneratorSource.StreamDraw), Timing: DrawTiming.Event)),
             ]),
             Rules = [],
         };
     }
-    private static WorldDefinition Hand(WorldHiddenCells hidden) => Fixtures.BuildDocument() with {
+    private static WorldDefinition Hand(HiddenCells hidden) => Fixtures.BuildDocument() with {
         StateRaw = new(World: [
             new(Name("cards"), CellKind.Int, Cells: [Cell("ace", 101), Cell("king", 202)], Visibility: new()),
-            new(Name("hand"), CellKind.Bool, Cells: [Cell("ace") with { Visibility = new(["seat1"]) }, Cell("king") with { Visibility = new(["seat1"]) }], Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards"), Ordered: true), Visibility: new(Hidden: hidden)),
+            new(Name("hand"), CellKind.Bool, Cells: [Cell("ace") with { Visibility = new(["seat1"]) }, Cell("king") with { Visibility = new(["seat1"]) }], Domain: new StateDomain.KeysOf(CellName.Parse("cards"), Ordered: true), Visibility: new(Hidden: hidden)),
         ]),
         Rules = [],
     };
@@ -103,6 +103,6 @@ public sealed class WorldDeckAndDisclosureLawTests {
         return candidate!;
     }
     private static CellName Name(string value) => CellName.Parse(value);
-    private static WorldStateCell Cell(string key, long value = 1) => new(Name(key), value);
+    private static StateCell Cell(string key, long value = 1) => new(Name(key), value);
     private static WorldStateRow Find(WorldDefinition document, string row) => WorldDefinitionRows.FindStateRow(document.State, row)!;
 }

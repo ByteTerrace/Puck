@@ -15,7 +15,7 @@ namespace Puck.World;
 /// without re-authoring its shape, dispatching on the row's own declared kind (a numeric/bool token, or a raw-tail
 /// string for an already-live text-kind row); <c>world.state.cell.remove</c> removes one, <c>world.generate</c>
 /// redraws a draw site, and <c>world.state</c> reads all three grains back (every row, one row with its cells, one
-/// cell alone). A slot is a row with one cell keyed <see cref="WorldStateRow.SlotKey"/>, so there is no separate verb
+/// cell alone). A slot is a row with one cell keyed <see cref="StateRow.SlotKey"/>, so there is no separate verb
 /// family for it. Every write verb routes <see cref="CommandRouting.Simulation"/> (buffers, applies at the tick
 /// boundary, the stdin barrier serializes a following read); <c>world.state</c> is an
 /// <see cref="CommandRouting.Immediate"/> read of the live section.
@@ -30,7 +30,7 @@ namespace Puck.World;
 /// writes while denying the whole-row pair — the difference between bumping a row and redefining it. Revoking either
 /// grant, or narrowing its mask, refuses that principal's writes here, whichever verb produced them.</remarks>
 public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority authority, IServerLink link, WorldDeferredVerbEchoes echoes) : ICommandModule {
-    private static string DescribeCell(WorldServer server, WorldStateRow row, string key, long raw, string? text, WorldStateAdvance? advance, WorldStateDynamics? dynamics, WorldStateCycle? cycle) =>
+    private static string DescribeCell(WorldServer server, WorldStateRow row, string key, long raw, string? text, StateAdvance? advance, StateDynamics? dynamics, StateCycle? cycle) =>
         $"[world.state.cell '{row.Name}'.'{key}' value={DescribeValue(
             raw: raw,
             row: row,
@@ -44,7 +44,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
     // A cycle trait — what it is (generator, power and output), how fast it turns (ticks per step), where its clock
     // sits (epoch) and the period the generator derives; the value on the same line is the live rotation the stored
     // phase has been carried to.
-    private static string DescribeCycle(WorldStateCycle? cycle) =>
+    private static string DescribeCycle(StateCycle? cycle) =>
         ((cycle is { } c)
             ? $" cycle={DescribeWord(word: c.Word)}^{c.Power}:{c.Output}/{c.TicksPerStep}@epoch{c.EpochTick}{((c.SubstepTicks != 0L) ? $"+{c.SubstepTicks}" : string.Empty)} order={c.Order}"
             : string.Empty
@@ -57,7 +57,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
     // Formats an Advance trait — shared by DescribeRow's row line (against row.Advance) and DescribeCell's cell
     // line (against a keyed cell's own Advance): what the trait IS (rate) and where its clock sits (epoch), the
     // same "what it is, then where it is" precedent DescribeRow already follows for a generator's cursor.
-    private static string DescribeCellAdvance(WorldStateAdvance? advance) =>
+    private static string DescribeCellAdvance(StateAdvance? advance) =>
         ((advance is { } a)
             ? $" advance={a.RateNumerator}/{a.RateDenominator}@epoch{a.EpochTick}"
             : string.Empty
@@ -65,7 +65,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
     // A cell's own second-order easing trait — y0/v0 are the follower's continuous state, raw FixedQ4816 bits on
     // every row kind, so they print in the fixed spelling — plus the LIVE eased value in the row's own encoding, read
     // through the same WorldStateReader.TryReadEased the HUD's state.<row>[.<key>] binding resolves.
-    private static string DescribeDynamics(WorldServer server, WorldStateRow row, string key, WorldStateDynamics? dynamics) {
+    private static string DescribeDynamics(WorldServer server, WorldStateRow row, string key, StateDynamics? dynamics) {
         if (dynamics is not { } d) {
             return string.Empty;
         }
@@ -173,7 +173,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             return CommandResult.Error(output: $"[world.state {rowName} {key}: no such cell]");
         }
 
-        var cell = WorldDefinitionRows.FindCell(
+        var cell = StateRows.FindCell(
             cells: row.Cells,
             key: CellName.Parse(candidate: key)
         );
@@ -296,7 +296,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             text: slotText
         )}{tail}";
     }
-    private static string DescribeSourceShape(WorldGenerator? generator) =>
+    private static string DescribeSourceShape(StateGenerator? generator) =>
         ((generator is null)
             ? "?"
             : (char.ToLowerInvariant(c: generator.Source.ToString()[0]) + generator.Source.ToString()[1..])
@@ -304,7 +304,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
     private static string DescribeState(WorldServer server) {
         var rows = server.Definition.State;
         var lines = new List<string>(capacity: (1 + rows.Count)) {
-            $"[world.state: rows {rows.Count}/{WorldStateCapacity.MaxRows}]",
+            $"[world.state: rows {rows.Count}/{StateCapacity.MaxRows}]",
         };
 
         foreach (var row in rows) {
@@ -508,7 +508,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                 var output = new List<string>(capacity: shown + 1) { $"[world.rule.hazards: {hazards.Count} hazard(s), showing {shown}]" };
                 for (var index = 0; index < shown; index++) {
                     var hazard = hazards[index];
-                    output.Add(item: $"[world.rule.hazards {((hazard.Kind == WorldRuleHazardKind.WriteAfterRead) ? "write-after-read" : "write-after-write")} first='{hazard.First}' second='{hazard.Second}' cell={hazard.Cell}: {hazard.Detail}]");
+                    output.Add(item: $"[world.rule.hazards {((hazard.Kind == RuleHazardKind.WriteAfterRead) ? "write-after-read" : "write-after-write")} first='{hazard.First}' second='{hazard.Second}' cell={hazard.Cell}: {hazard.Detail}]");
                 }
                 return new CommandResult(Output: string.Join(separator: Environment.NewLine, values: output));
             },
@@ -517,7 +517,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.state.cell.set",
-            description: $"Upserts ONE cell inside an already-declared row, leaving the row's own shape untouched (declare or redeclare the row with world.row.set state <row-json>): world.state.cell.set <row> <key> <value> [add] | <row> <key> <text...>. DISPATCHES ON THE ROW'S OWN DECLARED KIND: when <row> is ALREADY LIVE as a text-kind row, everything after <key> is taken as the RAW TAIL — spaces included, no quoting needed, no 'add' (a string has no addition) — replacing the cell wholesale; otherwise (int/fixed/bool, or a row this SAME batch has not yet declared — the one case this door cannot see live, which falls through to this grammar exactly as it always has) <value> is a single token resolved AT COMPOSE against the row's declared kind (so a same-batch world.row.set state declaring <row> ahead of this line composes first and this line lands against it, deterministically): DECIMAL text for a fixed-kind row (e.g. \"12.5\"), a whole number for int, or true|false for bool — never raw FixedQ4816 bits. The optional trailing 'add' token adds <value> to the key's current value (0 if the key is absent) instead of replacing it — refused on bool, and never admitted on a text write. Reaches any row — pass the reserved key '{WorldStateRow.SlotKey}' to write a one-value row's own cell. Writing '{WorldStateRow.SlotKey}' on a row declaring 'advance' RE-BASES it: the written value becomes the new base and its epoch becomes this tick, exactly like redeclaring the row. Writing a KEYED cell that already carries its OWN advance re-bases that cell the same way, preserving its rate. A row or cell declaring 'dynamics' instead rebases the SAME way, preserving which dynamics row it names: its Y0/V0 become the live eased value/velocity at this tick (never the raw write) plus a velocity kick signed by that row's own response, and its epoch becomes this tick — the write moves TRUTH, never the follower's own position, which keeps chasing from wherever it actually was. A trailing 'add' adds to the row's LIVE truth — the accumulated value for 'advance', the stored value itself for 'dynamics' (never the eased follower position) — rather than to the stored base. Buffers and applies at the tick boundary; rejected loudly (against the CANDIDATE this batch has built so far, never a stale read) if <row> names no state row (declare it first), if a numeric/bool write targets a text-kind row or vice versa, if 'add' targets a bool-kind row, if <value> does not parse under <row>'s kind, if the written text exceeds WorldStateCapacity.MaxTextValueLength, if <key> carries the reserved '$' prefix and is not '{WorldStateRow.SlotKey}' (draw and generator bookkeeping — a cursor, the drawn masks — lives in the row's own fields, never a cell this door can reach), or — at whole-document revalidation — if the resulting value falls outside the row's declared envelope, a non-negative row's value would go negative, the write would grow the row past its capacity, or the acting principal lacks a Mutate/section:state or Edit/state:<row> hold admitting UpsertStateCell.",
+            description: $"Upserts ONE cell inside an already-declared row, leaving the row's own shape untouched (declare or redeclare the row with world.row.set state <row-json>): world.state.cell.set <row> <key> <value> [add] | <row> <key> <text...>. DISPATCHES ON THE ROW'S OWN DECLARED KIND: when <row> is ALREADY LIVE as a text-kind row, everything after <key> is taken as the RAW TAIL — spaces included, no quoting needed, no 'add' (a string has no addition) — replacing the cell wholesale; otherwise (int/fixed/bool, or a row this SAME batch has not yet declared — the one case this door cannot see live, which falls through to this grammar exactly as it always has) <value> is a single token resolved AT COMPOSE against the row's declared kind (so a same-batch world.row.set state declaring <row> ahead of this line composes first and this line lands against it, deterministically): DECIMAL text for a fixed-kind row (e.g. \"12.5\"), a whole number for int, or true|false for bool — never raw FixedQ4816 bits. The optional trailing 'add' token adds <value> to the key's current value (0 if the key is absent) instead of replacing it — refused on bool, and never admitted on a text write. Reaches any row — pass the reserved key '{WorldStateRow.SlotKey}' to write a one-value row's own cell. Writing '{WorldStateRow.SlotKey}' on a row declaring 'advance' RE-BASES it: the written value becomes the new base and its epoch becomes this tick, exactly like redeclaring the row. Writing a KEYED cell that already carries its OWN advance re-bases that cell the same way, preserving its rate. A row or cell declaring 'dynamics' instead rebases the SAME way, preserving which dynamics row it names: its Y0/V0 become the live eased value/velocity at this tick (never the raw write) plus a velocity kick signed by that row's own response, and its epoch becomes this tick — the write moves TRUTH, never the follower's own position, which keeps chasing from wherever it actually was. A trailing 'add' adds to the row's LIVE truth — the accumulated value for 'advance', the stored value itself for 'dynamics' (never the eased follower position) — rather than to the stored base. Buffers and applies at the tick boundary; rejected loudly (against the CANDIDATE this batch has built so far, never a stale read) if <row> names no state row (declare it first), if a numeric/bool write targets a text-kind row or vice versa, if 'add' targets a bool-kind row, if <value> does not parse under <row>'s kind, if the written text exceeds StateCapacity.MaxTextValueLength, if <key> carries the reserved '$' prefix and is not '{WorldStateRow.SlotKey}' (draw and generator bookkeeping — a cursor, the drawn masks — lives in the row's own fields, never a cell this door can reach), or — at whole-document revalidation — if the resulting value falls outside the row's declared envelope, a non-negative row's value would go negative, the write would grow the row past its capacity, or the acting principal lacks a Mutate/section:state or Edit/state:<row> hold admitting UpsertStateCell.",
             handler: (context, args) => {
                 if (!authority.TryResolveServer(
                     context: context,

@@ -254,7 +254,7 @@ public sealed class BindingDocumentWireShapeTests {
         Assert.Equal(
             actual: JsonSerializer.Serialize(
                 jsonTypeInfo: WorldJsonContext.Default.BindingProfileDocument,
-                value: reread
+                value: reread!
             ),
             expected: written
         );

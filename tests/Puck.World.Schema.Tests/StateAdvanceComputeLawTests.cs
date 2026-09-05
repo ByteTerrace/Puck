@@ -5,7 +5,7 @@ using Xunit;
 namespace Puck.World.Schema.Tests;
 
 /// <summary>
-/// CONTRACT UNDER TEST: <see cref="WorldStateAdvance.ComputeCurrentValue"/> — the compiled signed-64-bit allocation and
+/// CONTRACT UNDER TEST: <see cref="StateAdvance.ComputeCurrentValue"/> — the compiled signed-64-bit allocation and
 /// the exact <see cref="BigInteger"/> allocation behind it must be one function of (rate, kind, elapsed). Every read is
 /// checked against <c>⌊elapsed · |rate| · scale / denominator⌋</c> formed here in <see cref="BigInteger"/> arithmetic
 /// that shares no line with the subject, over rates the bounded form holds and rates it must decline.
@@ -16,9 +16,9 @@ public sealed class StateAdvanceComputeLawTests {
         Kind: kind,
         Min: min,
         Max: max,
-        Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0)]
+        Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 0)]
     );
-    private static long Oracle(WorldStateRow row, WorldStateAdvance advance, long baseValue, ulong tick) {
+    private static long Oracle(WorldStateRow row, StateAdvance advance, long baseValue, ulong tick) {
         var epoch = (ulong)Math.Max(val1: advance.EpochTick, val2: 0L);
         var elapsed = ((tick <= epoch) ? BigInteger.Zero : new BigInteger(value: (tick - epoch)));
         var scale = ((row.Kind == CellKind.Fixed) ? (BigInteger.One << FixedQ4816.FractionBitCount) : BigInteger.One);
@@ -46,7 +46,7 @@ public sealed class StateAdvanceComputeLawTests {
     public void ComputeCurrentValue_MatchesTheExactAllocation_OnEveryKindAndEpoch(long numerator, long denominator) {
         foreach (var kind in new[] { CellKind.Int, CellKind.Fixed }) {
             foreach (var epoch in new long[] { 0L, 17L, 1000L }) {
-                var advance = new WorldStateAdvance(EpochTick: epoch, RateDenominator: denominator, RateNumerator: numerator);
+                var advance = new StateAdvance(EpochTick: epoch, RateDenominator: denominator, RateNumerator: numerator);
                 var row = Row(kind: kind);
 
                 foreach (var baseValue in new long[] { 0L, 300L, -(1L << 20), (1L << 40) }) {
@@ -59,14 +59,14 @@ public sealed class StateAdvanceComputeLawTests {
     }
     [Fact]
     public void ComputeCurrentValue_ClampsIntoTheEnvelope_AfterTheExactSum() {
-        var advance = new WorldStateAdvance(EpochTick: 0, RateDenominator: 1, RateNumerator: 3);
+        var advance = new StateAdvance(EpochTick: 0, RateDenominator: 1, RateNumerator: 3);
         var row = Row(kind: CellKind.Int, max: 100L, min: -5L);
 
         Assert.Equal(expected: 30L, actual: advance.ComputeCurrentValue(baseValue: 0L, currentTick: 10UL, row: row));
         Assert.Equal(expected: 100L, actual: advance.ComputeCurrentValue(baseValue: 0L, currentTick: 1000UL, row: row));
         Assert.Equal(expected: 100L, actual: advance.ComputeCurrentValue(baseValue: long.MaxValue, currentTick: 1000UL, row: row));
 
-        var drain = new WorldStateAdvance(EpochTick: 0, RateDenominator: 1, RateNumerator: -3);
+        var drain = new StateAdvance(EpochTick: 0, RateDenominator: 1, RateNumerator: -3);
 
         Assert.Equal(expected: -5L, actual: drain.ComputeCurrentValue(baseValue: 0L, currentTick: 1000UL, row: row));
         Assert.Equal(expected: -5L, actual: drain.ComputeCurrentValue(baseValue: long.MinValue, currentTick: 1000UL, row: row));
@@ -74,7 +74,7 @@ public sealed class StateAdvanceComputeLawTests {
     [Fact]
     public void ComputeCurrentValue_IsStableAcrossAWithCopyThatChangesTheRate() {
         var row = Row(kind: CellKind.Fixed);
-        var slow = new WorldStateAdvance(EpochTick: 0, RateDenominator: 57600, RateNumerator: 1);
+        var slow = new StateAdvance(EpochTick: 0, RateDenominator: 57600, RateNumerator: 1);
         var slowValue = slow.ComputeCurrentValue(baseValue: 0L, currentTick: 100_000UL, row: row);
         var fast = (slow with { RateNumerator = 1000 });
 
@@ -86,8 +86,8 @@ public sealed class StateAdvanceComputeLawTests {
     [Fact]
     public void ComputeCurrentValue_DoesNotChangeRecordEqualityOrHashCode() {
         var row = Row(kind: CellKind.Fixed);
-        var left = new WorldStateAdvance(EpochTick: 7, RateDenominator: 3, RateNumerator: -5);
-        var right = new WorldStateAdvance(EpochTick: 7, RateDenominator: 3, RateNumerator: -5);
+        var left = new StateAdvance(EpochTick: 7, RateDenominator: 3, RateNumerator: -5);
+        var right = new StateAdvance(EpochTick: 7, RateDenominator: 3, RateNumerator: -5);
         var hashBefore = left.GetHashCode();
 
         Assert.Equal(expected: right, actual: left);

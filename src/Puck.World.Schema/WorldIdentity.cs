@@ -197,7 +197,7 @@ public sealed class WorldIdentity {
             Name: seqRowName,
             Kind: CellKind.Int,
             NonNegative: true,
-            Cells: [new WorldStateCell(
+            Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
                     Value: next
                 )]
@@ -214,7 +214,7 @@ public sealed class WorldIdentity {
             WriteState(row: new WorldStateRow(
                 Name: name,
                 Kind: CellKind.Fixed,
-                Cells: [new WorldStateCell(
+                Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
                         Value: value.Value
                     )]
@@ -330,7 +330,7 @@ public sealed class WorldIdentity {
             return false;
         }
 
-        if (!WorldStateCellWriter.TryComposeTextCell(
+        if (!StateCellWriter.TryComposeTextCell(
             cells: out var cells,
             evictedKey: out evictedKey,
             key: key,

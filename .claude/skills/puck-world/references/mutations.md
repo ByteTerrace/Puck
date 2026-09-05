@@ -261,7 +261,7 @@ Rules the catalog encodes:
   subject; the cursor advance is engine bookkeeping intrinsic to drawing, while
   re-authoring the site's facet, or the `generators` row it references, is an
   `UpsertStateRow` against that row, gated there. Sampling itself lives in
-  `Puck.World.Schema/WorldGeneratorEngine.cs` because the BOOT resolver — which
+  `Puck.State/GeneratorEngine.cs` because the BOOT resolver — which
   runs before any server exists — must reach the identical code.
 
 ## Adding a mutation kind, end to end

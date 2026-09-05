@@ -52,7 +52,7 @@ public readonly record struct WorldFieldNodeHandle {
 /// <param name="Literal">The compiled literal. Ignored when <paramref name="State"/> is valid.</param>
 /// <param name="State">The typed state-row handle resolved by the executing reaction, or the invalid handle for a
 /// literal.</param>
-public readonly record struct WorldFieldScalarInput(FixedQ4816 Literal, WorldStateHandle State) {
+public readonly record struct WorldFieldScalarInput(FixedQ4816 Literal, StateHandle State) {
     /// <summary>Gets whether this input reads a live state row.</summary>
     public bool IsState => State.IsValid;
 }
@@ -68,7 +68,7 @@ public readonly record struct WorldFieldScalarInput(FixedQ4816 Literal, WorldSta
 /// its value times <paramref name="HeightScale"/> over the lattice origin is a free surface bodies sample.</param>
 public readonly record struct WorldFieldDescriptor(
     WorldFieldHandle Handle,
-    WorldStateHandle State,
+    StateHandle State,
     string Name,
     FixedQ4816 Initial,
     FixedQ4816 Minimum,
@@ -110,8 +110,8 @@ public abstract record WorldFieldNode(
     WorldFieldWorkKind Work,
     ImmutableArray<WorldFieldHandle> FieldReads,
     ImmutableArray<WorldFieldHandle> FieldWrites,
-    ImmutableArray<WorldStateHandle> StateReads,
-    ImmutableArray<WorldStateHandle> StateWrites
+    ImmutableArray<StateHandle> StateReads,
+    ImmutableArray<StateHandle> StateWrites
 ) {
     /// <summary>Diffuses one field toward its face-neighbour mean.</summary>
     /// <param name="Handle">The program-bound node handle.</param>
@@ -122,7 +122,7 @@ public abstract record WorldFieldNode(
         WorldFieldNodeHandle Handle,
         WorldFieldHandle Field,
         WorldFieldScalarInput Rate,
-        ImmutableArray<WorldStateHandle> StateReads
+        ImmutableArray<StateHandle> StateReads
     ) : WorldFieldNode(Handle, WorldFieldWorkKind.Cells, [Field], [Field], StateReads, []);
     /// <summary>Decays one field toward zero.</summary>
     /// <param name="Handle">The program-bound node handle.</param>
@@ -133,7 +133,7 @@ public abstract record WorldFieldNode(
         WorldFieldNodeHandle Handle,
         WorldFieldHandle Field,
         WorldFieldScalarInput Rate,
-        ImmutableArray<WorldStateHandle> StateReads
+        ImmutableArray<StateHandle> StateReads
     ) : WorldFieldNode(Handle, WorldFieldWorkKind.Cells, [Field], [Field], StateReads, []);
     /// <summary>Applies ordered writes where every condition holds.</summary>
     /// <param name="Handle">The program-bound node handle.</param>
@@ -148,7 +148,7 @@ public abstract record WorldFieldNode(
         ImmutableArray<WorldFieldProgramWrite> Then,
         ImmutableArray<WorldFieldHandle> FieldReads,
         ImmutableArray<WorldFieldHandle> FieldWrites,
-        ImmutableArray<WorldStateHandle> StateReads
+        ImmutableArray<StateHandle> StateReads
     ) : WorldFieldNode(Handle, WorldFieldWorkKind.Cells, FieldReads, FieldWrites, StateReads, []);
     /// <summary>Deposits into a field for every body carrying a nonzero keyed tag.</summary>
     /// <param name="Handle">The program-bound node handle.</param>
@@ -158,10 +158,10 @@ public abstract record WorldFieldNode(
     /// <param name="StateReads">The canonical immutable tag and scalar-input read set.</param>
     public sealed record Emit(
         WorldFieldNodeHandle Handle,
-        WorldStateHandle Tag,
+        StateHandle Tag,
         WorldFieldHandle Field,
         WorldFieldScalarInput Amount,
-        ImmutableArray<WorldStateHandle> StateReads
+        ImmutableArray<StateHandle> StateReads
     ) : WorldFieldNode(Handle, WorldFieldWorkKind.Bodies, [Field], [Field], StateReads, []);
     /// <summary>Writes a keyed body row from a field test at each active body's cell.</summary>
     /// <param name="Handle">The program-bound node handle.</param>
@@ -175,8 +175,8 @@ public abstract record WorldFieldNode(
         WorldFieldHandle Field,
         WorldFieldComparison Comparison,
         WorldFieldScalarInput Value,
-        WorldStateHandle Row,
-        ImmutableArray<WorldStateHandle> StateReads
+        StateHandle Row,
+        ImmutableArray<StateHandle> StateReads
     ) : WorldFieldNode(Handle, WorldFieldWorkKind.Bodies, [Field], [], StateReads, [Row]);
     /// <summary>Moves one field downhill over a combined surface height, with an optional boundary spill. See
     /// <see cref="WorldReaction.Flow"/>.</summary>
@@ -198,10 +198,10 @@ public abstract record WorldFieldNode(
         WorldFieldHandle Field,
         WorldFieldScalarInput Rate,
         ImmutableArray<WorldFieldHandle> Over,
-        WorldStateHandle SpillRow,
+        StateHandle SpillRow,
         ImmutableArray<WorldFieldHandle> FieldReads,
-        ImmutableArray<WorldStateHandle> StateReads,
-        ImmutableArray<WorldStateHandle> StateWrites
+        ImmutableArray<StateHandle> StateReads,
+        ImmutableArray<StateHandle> StateWrites
     ) : WorldFieldNode(Handle, WorldFieldWorkKind.Cells, FieldReads, [Field], StateReads, StateWrites);
 }
 /// <summary>The typed, deterministic reaction program compiled from one lattice topology and its ordered reactions.</summary>
@@ -220,7 +220,7 @@ public sealed class WorldFieldProgram {
     private readonly ReadOnlyCollection<WorldFieldDependency> m_readOnlyDependencies;
     private readonly ReadOnlyCollection<WorldFieldNode> m_readOnlyNodes;
 
-    private WorldFieldProgram(object identity, WorldStateCatalog stateCatalog, WorldFieldsSection programSource, WorldFieldDescriptor[] fields, WorldFieldNode[] nodes, int cellCount) {
+    private WorldFieldProgram(object identity, StateCatalog stateCatalog, WorldFieldsSection programSource, WorldFieldDescriptor[] fields, WorldFieldNode[] nodes, int cellCount) {
         m_identity = identity;
         m_programSource = programSource;
         StateCatalog = stateCatalog;
@@ -240,7 +240,7 @@ public sealed class WorldFieldProgram {
     }
 
     /// <summary>Gets the canonical typed state catalog that resolves every state handle carried by this program.</summary>
-    public WorldStateCatalog StateCatalog { get; }
+    public StateCatalog StateCatalog { get; }
     /// <summary>Gets the number of cell-work reaction nodes.</summary>
     public int CellNodeCount { get; }
     /// <summary>Gets the lattice cell count traversed by each cell-work node.</summary>
@@ -282,7 +282,7 @@ public sealed class WorldFieldProgram {
     /// <exception cref="ArgumentNullException"><paramref name="document"/> or <paramref name="state"/> is null.</exception>
     /// <exception cref="InvalidOperationException">A field or state dependency cannot be resolved to its required
     /// storage and value shape.</exception>
-    public static WorldFieldProgram Compile(WorldFieldsSection document, WorldStateCatalog state) {
+    public static WorldFieldProgram Compile(WorldFieldsSection document, StateCatalog state) {
         ArgumentNullException.ThrowIfNull(argument: document);
         ArgumentNullException.ThrowIfNull(argument: state);
 
@@ -304,8 +304,8 @@ public sealed class WorldFieldProgram {
             var stateHandle = RequireState(
                 state: state,
                 name: row.Name,
-                storage: WorldStateStorageShape.Lattice,
-                valueKind: WorldStateValueKind.Fixed,
+                storage: StateStorageShape.Lattice,
+                valueKind: StateValueKind.Fixed,
                 location: $"fields[{index}]"
             );
 
@@ -340,8 +340,8 @@ public sealed class WorldFieldProgram {
                     location: $"fields.reactions[{reaction}] scalar",
                     name: row,
                     state: state,
-                    storage: WorldStateStorageShape.Slot,
-                    valueKind: WorldStateValueKind.Fixed
+                    storage: StateStorageShape.Slot,
+                    valueKind: StateValueKind.Fixed
                 )
             );
         }
@@ -424,9 +424,9 @@ public sealed class WorldFieldProgram {
             CanonicalStates(inputs: conditions.Select(selector: static condition => condition.Value).Concat(second: writes.Select(selector: static write => write.Value)))
         );
     }
-    private static WorldFieldNode CompileEmit(WorldReaction.Emit reaction, WorldFieldNodeHandle handle, int index, Func<string, int, WorldFieldHandle> field, Func<WorldLatticeScalar, int, WorldFieldScalarInput> scalar, WorldStateCatalog state) {
+    private static WorldFieldNode CompileEmit(WorldReaction.Emit reaction, WorldFieldNodeHandle handle, int index, Func<string, int, WorldFieldHandle> field, Func<WorldLatticeScalar, int, WorldFieldScalarInput> scalar, StateCatalog state) {
         var amount = scalar(reaction.Amount, index);
-        var tag = RequireState(state, reaction.Tag, WorldStateStorageShape.Keyed, WorldStateValueKind.Int, $"fields.reactions[{index}].tag");
+        var tag = RequireState(state, reaction.Tag, StateStorageShape.Keyed, StateValueKind.Int, $"fields.reactions[{index}].tag");
         var target = field(reaction.Field, index);
 
         return new WorldFieldNode.Emit(
@@ -437,9 +437,9 @@ public sealed class WorldFieldProgram {
             CanonicalStates(inputs: [new WorldFieldScalarInput(Literal: default, State: tag), amount])
         );
     }
-    private static WorldFieldNode CompileExpose(WorldReaction.Expose reaction, WorldFieldNodeHandle handle, int index, Func<string, int, WorldFieldHandle> field, Func<WorldLatticeScalar, int, WorldFieldScalarInput> scalar, WorldStateCatalog state) {
+    private static WorldFieldNode CompileExpose(WorldReaction.Expose reaction, WorldFieldNodeHandle handle, int index, Func<string, int, WorldFieldHandle> field, Func<WorldLatticeScalar, int, WorldFieldScalarInput> scalar, StateCatalog state) {
         var value = scalar(reaction.Value, index);
-        var row = RequireState(state, reaction.Row, WorldStateStorageShape.Keyed, WorldStateValueKind.Int, $"fields.reactions[{index}].row");
+        var row = RequireState(state, reaction.Row, StateStorageShape.Keyed, StateValueKind.Int, $"fields.reactions[{index}].row");
 
         return new WorldFieldNode.Expose(
             handle,
@@ -450,12 +450,12 @@ public sealed class WorldFieldProgram {
             StateReads(input: value)
         );
     }
-    private static WorldFieldNode CompileFlow(WorldReaction.Flow reaction, WorldFieldNodeHandle handle, int index, Func<string, int, WorldFieldHandle> field, Func<WorldLatticeScalar, int, WorldFieldScalarInput> scalar, WorldStateCatalog state) {
+    private static WorldFieldNode CompileFlow(WorldReaction.Flow reaction, WorldFieldNodeHandle handle, int index, Func<string, int, WorldFieldHandle> field, Func<WorldLatticeScalar, int, WorldFieldScalarInput> scalar, StateCatalog state) {
         var target = field(reaction.Field, index);
         var rate = scalar(reaction.Rate, index);
         var over = (reaction.Over ?? []).Select(selector: name => field(name, index)).ToImmutableArray();
         var spillRow = ((reaction.SpillRow is { } spillName)
-            ? RequireState(location: $"fields.reactions[{index}].spillRow", name: spillName, state: state, storage: WorldStateStorageShape.Slot, valueKind: WorldStateValueKind.Fixed)
+            ? RequireState(location: $"fields.reactions[{index}].spillRow", name: spillName, state: state, storage: StateStorageShape.Slot, valueKind: StateValueKind.Fixed)
             : default
         );
         var stateInputs = new List<WorldFieldScalarInput> { rate };
@@ -472,7 +472,7 @@ public sealed class WorldFieldProgram {
             spillRow,
             CanonicalFields(handles: over.Append(element: target)),
             CanonicalStates(inputs: stateInputs),
-            (spillRow.IsValid ? ImmutableArray.Create(item: spillRow) : ImmutableArray<WorldStateHandle>.Empty)
+            (spillRow.IsValid ? ImmutableArray.Create(item: spillRow) : ImmutableArray<StateHandle>.Empty)
         );
     }
     private static ImmutableArray<WorldFieldHandle> CanonicalFields(IEnumerable<WorldFieldHandle> handles) => handles
@@ -515,18 +515,18 @@ public sealed class WorldFieldProgram {
 
         return false;
     }
-    private static ImmutableArray<WorldStateHandle> CanonicalStates(IEnumerable<WorldFieldScalarInput> inputs) => inputs
+    private static ImmutableArray<StateHandle> CanonicalStates(IEnumerable<WorldFieldScalarInput> inputs) => inputs
         .Where(predicate: static input => input.IsState)
         .Select(selector: static input => input.State)
         .Distinct()
         .OrderBy(keySelector: static handle => handle.Ordinal)
         .ToImmutableArray();
-    private static ImmutableArray<WorldStateHandle> StateReads(WorldFieldScalarInput input) => (input.IsState
+    private static ImmutableArray<StateHandle> StateReads(WorldFieldScalarInput input) => (input.IsState
         ? [input.State]
         : []
     );
-    private static WorldStateHandle RequireState(WorldStateCatalog state, string name, WorldStateStorageShape storage, WorldStateValueKind valueKind, string location) {
-        if (!state.TryResolve(handle: out var handle, lane: WorldStateOwnershipLane.World, name: name)) {
+    private static StateHandle RequireState(StateCatalog state, string name, StateStorageShape storage, StateValueKind valueKind, string location) {
+        if (!state.TryResolve(handle: out var handle, lane: StateLane.Document, name: name)) {
             throw new InvalidOperationException(message: $"{location} names undeclared world state row '{name}'.");
         }
 

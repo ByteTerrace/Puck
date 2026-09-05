@@ -5,7 +5,7 @@ namespace Puck.World;
 public static partial class WorldDefinitionValidator {
     private static string PredicateKind(ActionPredicate predicate) => predicate switch {
         ActionPredicate.CompareState => "compareState",
-        ActionPredicate.TimerElapsed => "timerElapsed",
+        WorldPredicate.TimerElapsed => "timerElapsed",
         _ => "?",
     };
     private static void ValidateActionSpec(ActionSpec? spec, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, ISet<string> targetRegisterNames, IReadOnlyDictionary<string, WorldStateRow> stateRows, string path, List<string> errors) {
@@ -166,8 +166,8 @@ public static partial class WorldDefinitionValidator {
         var stateSlots = new Dictionary<string, ActionStateSlot>(comparer: StringComparer.Ordinal);
         var count = (definition.BodyState.Count + definition.IdentityState.Count);
 
-        if (count > WorldStateCapacity.MaxBodySlots) {
-            errors.Add(item: $"state body and identity lanes declare {count} slots; the combined maximum is {WorldStateCapacity.MaxBodySlots}.");
+        if (count > StateCapacity.MaxBodySlots) {
+            errors.Add(item: $"state body and identity lanes declare {count} slots; the combined maximum is {StateCapacity.MaxBodySlots}.");
         }
 
         void Add(IReadOnlyList<ActionStateSlot> rows, ActionStateLifetime lifetime, string lane) {
@@ -221,21 +221,21 @@ public static partial class WorldDefinitionValidator {
             case null:
                 errors.Add(item: $"{path} is required.");
                 break;
-            case ActionEffect.SetVerticalVelocity set:
+            case WorldEffect.SetVerticalVelocity set:
                 RequireFinite(
                     value: set.Velocity,
                     name: $"{path}.velocity",
                     errors: errors
                 );
                 break;
-            case ActionEffect.ScaleVerticalVelocity scale:
+            case WorldEffect.ScaleVerticalVelocity scale:
                 RequireFinite(
                     value: scale.Factor,
                     name: $"{path}.factor",
                     errors: errors
                 );
                 break;
-            case ActionEffect.PlanarImpulse impulse:
+            case WorldEffect.PlanarImpulse impulse:
                 RequireFinite(
                     value: impulse.Speed,
                     name: $"{path}.speed",
@@ -318,10 +318,10 @@ public static partial class WorldDefinitionValidator {
                     value: add.Value
                 );
                 break;
-            case ActionEffect.TransformState or ActionEffect.CountdownState or ActionEffect.RemoveStateCell or ActionEffect.ScheduleState or ActionEffect.Transaction or ActionEffect.EmitCue or ActionEffect.SetBodyVerticalVelocity or ActionEffect.ScaleBodyVerticalVelocity or ActionEffect.ApplyBodyImpulse or ActionEffect.DesignateBody or ActionEffect.PaintField:
+            case ActionEffect.TransformState or ActionEffect.CountdownState or ActionEffect.RemoveStateCell or ActionEffect.ScheduleState or ActionEffect.Transaction or WorldEffect.EmitCue or WorldEffect.SetBodyVerticalVelocity or WorldEffect.ScaleBodyVerticalVelocity or WorldEffect.ApplyBodyImpulse or WorldEffect.DesignateBody or WorldEffect.PaintField:
                 errors.Add(item: $"{path} is a world-rule effect, which has no body-action meaning — admissible only inside a world rule's own effects.");
                 break;
-            case ActionEffect.StartTimer timer:
+            case WorldEffect.StartTimer timer:
                 if (!stateSlots.TryGetValue(
                     key: timer.State,
                     value: out var timerSlot
@@ -336,7 +336,7 @@ public static partial class WorldDefinitionValidator {
                     errors: errors
                 );
                 break;
-            case ActionEffect.Designate designate:
+            case WorldEffect.Designate designate:
                 RequireDeclared(
                     value: designate.Register,
                     declaredSet: targetRegisterNames,
@@ -364,13 +364,13 @@ public static partial class WorldDefinitionValidator {
             // performs WORLD-scope engine I/O — a per-body action has none of either, so all five are refused BY NAME
             // here (this is the check that actually surfaces: it runs before CompiledBodyMotionProgram.Compile's own
             // mirroring refusal in WorldDefinition.cs, which a passing ValidateEffect never lets a candidate reach).
-            case ActionEffect.UpsertHudPanel or ActionEffect.RemoveHudPanel or ActionEffect.UpsertPlacement or ActionEffect.RemovePlacement:
+            case WorldEffect.UpsertHudPanel or WorldEffect.RemoveHudPanel or WorldEffect.UpsertPlacement or WorldEffect.RemovePlacement:
                 errors.Add(item: $"{path} authors a WORLD document row, which has no body-scope meaning — admissible only inside a world rule's own effects.");
                 break;
-            case ActionEffect.Save:
+            case WorldEffect.Save:
                 errors.Add(item: $"{path} has no body-scope meaning — a per-body action has no world file of its own to save, and is admissible only inside a world rule's own effects.");
                 break;
-            case ActionEffect.Pose:
+            case WorldEffect.Pose:
                 errors.Add(item: $"{path} has no body-scope meaning — 'pose' teleports a body the world names, and is admissible only inside a world rule's own effects.");
                 break;
             default:
@@ -431,13 +431,13 @@ public static partial class WorldDefinitionValidator {
         }
 
         static ActionTarget TargetOf(ActionEffect value) => value switch {
-            ActionEffect.SetVerticalVelocity item => item.Target,
-            ActionEffect.ScaleVerticalVelocity item => item.Target,
-            ActionEffect.PlanarImpulse item => item.Target,
+            WorldEffect.SetVerticalVelocity item => item.Target,
+            WorldEffect.ScaleVerticalVelocity item => item.Target,
+            WorldEffect.PlanarImpulse item => item.Target,
             ActionEffect.SetState item => item.Target,
             ActionEffect.AddState item => item.Target,
-            ActionEffect.StartTimer item => item.Target,
-            ActionEffect.Designate item => item.Target,
+            WorldEffect.StartTimer item => item.Target,
+            WorldEffect.Designate item => item.Target,
             _ => ActionTarget.Self,
         };
     }
@@ -463,7 +463,7 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        if (draw.Timing == WorldDrawTiming.Boot) {
+        if (draw.Timing == DrawTiming.Boot) {
             errors.Add(item: $"{path}.row '{row}' declares timing=boot — it draws once at first fill and is never redrawn.");
         }
 
@@ -476,12 +476,12 @@ public static partial class WorldDefinitionValidator {
         switch (predicate) {
             case null:
                 break;
-            case ActionPredicate.Now now when !Enum.IsDefined(value: now.Fact):
+            case WorldPredicate.Now now when !Enum.IsDefined(value: now.Fact):
                 errors.Add(item: $"{path}.fact '{now.Fact}' is not a defined ActionFact.");
                 break;
-            case ActionPredicate.Now:
+            case WorldPredicate.Now:
                 break;
-            case ActionPredicate.Recently recently:
+            case WorldPredicate.Recently recently:
                 if (!Enum.IsDefined(value: recently.Fact)) {
                     errors.Add(item: $"{path}.fact '{recently.Fact}' is not a defined ActionFact.");
                 }
@@ -493,7 +493,7 @@ public static partial class WorldDefinitionValidator {
                 );
 
                 break;
-            case ActionPredicate.Held held:
+            case WorldPredicate.Held held:
                 if (
                     string.IsNullOrWhiteSpace(value: held.Channel) ||
                     !channelNames.Contains(item: held.Channel)
@@ -550,7 +550,7 @@ public static partial class WorldDefinitionValidator {
 
                 break;
             case ActionPredicate.CompareState:
-            case ActionPredicate.TimerElapsed:
+            case WorldPredicate.TimerElapsed:
                 errors.Add(item: $"{path} is an action-state predicate ('{PredicateKind(predicate: predicate)}') — action-state predicates apply only to action triggers, not a shaping-row gate.");
                 break;
             default:
@@ -562,12 +562,12 @@ public static partial class WorldDefinitionValidator {
         switch (predicate) {
             case null:
                 break;
-            case ActionPredicate.Now now when !Enum.IsDefined(value: now.Fact):
+            case WorldPredicate.Now now when !Enum.IsDefined(value: now.Fact):
                 errors.Add(item: $"{path}.fact '{now.Fact}' is not a defined ActionFact.");
                 break;
-            case ActionPredicate.Now:
+            case WorldPredicate.Now:
                 break;
-            case ActionPredicate.Recently recently:
+            case WorldPredicate.Recently recently:
                 if (!Enum.IsDefined(value: recently.Fact)) {
                     errors.Add(item: $"{path}.fact '{recently.Fact}' is not a defined ActionFact.");
                 }
@@ -612,7 +612,7 @@ public static partial class WorldDefinitionValidator {
                     }
                 }
                 break;
-            case ActionPredicate.TimerElapsed elapsed:
+            case WorldPredicate.TimerElapsed elapsed:
                 if (!stateSlots.TryGetValue(
                     key: elapsed.State,
                     value: out var timerSlot
@@ -668,7 +668,7 @@ public static partial class WorldDefinitionValidator {
                     errors: errors
                 );
                 break;
-            case ActionPredicate.Held:
+            case WorldPredicate.Held:
                 errors.Add(item: $"{path} is 'held' — legitimate only inside a kit's shaping-row gate, not an action trigger.");
                 break;
             default:

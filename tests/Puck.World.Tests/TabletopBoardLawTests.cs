@@ -3,7 +3,6 @@ using System.Numerics;
 using Puck.Assets.Documents;
 using Puck.Maths;
 using Puck.SignedDistance;
-using Puck.Physics.Motion;
 using Puck.World.Authoring;
 using Puck.World.Protocol;
 
@@ -12,16 +11,16 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>Laws for the tabletop primitive: a Grid topology's world-space frame (<see
-/// cref="CompiledWorldTopology.TryCellOf"/>/<see cref="CompiledWorldTopology.TryOffset"/>) and the physical-to-
+/// cref="CompiledTopology.TryCellOf"/>/<see cref="CompiledTopology.TryOffset"/>) and the physical-to-
 /// logical bridge a world rule builds over the <c>$board:cellOf:</c> channel — a rigid body's resting cell derives a
 /// board row, and an illegal destination is recorded without disturbing <c>lastLegal</c>.</summary>
 public sealed class TabletopBoardLawTests {
     [Fact]
     public void GridFrameRoundTripsPositionToCellAndRejectsOutOfBoundsAndWrongKind() {
-        var grid = new WorldStateLatticeTopology.Grid("board", new DocumentVector3(10f, 2f, -5f), 0.5f, 4, 4);
-        var hex = new WorldStateLatticeTopology.Hex("hex", new DocumentVector3(0, 0, 0), 1, Radius: 1);
+        var grid = new LatticeTopology.Grid("board", new DocumentVector3(10f, 2f, -5f), 0.5f, 4, 4);
+        var hex = new LatticeTopology.Hex("hex", new DocumentVector3(0, 0, 0), 1, Radius: 1);
         var state = new WorldStateSection(Lattices: [grid, hex]);
-        var topology = WorldTopologyCompilation.Find(state, "board")!;
+        var topology = TopologyCompilation.Find(state, "board")!;
 
         // Every cell center resolves back to itself — the round trip the tabletop's cellOf/offset math promises.
         for (var z = 0; z < 4; z++) {
@@ -42,11 +41,11 @@ public sealed class TabletopBoardLawTests {
         Assert.Equal(0, highCell);
         Assert.True(topology.TryCellOf(position: new FixedVector3(FixedQ4816.FromDouble(10.25d), FixedQ4816.FromDouble(-498d), FixedQ4816.FromDouble(-4.75d)), cell: out var lowCell));
         Assert.Equal(0, lowCell);
-        var banded = WorldTopologyCompilation.Find(new WorldStateSection(Lattices: [.. state.Lattices!.Select(t => t.Name == "board" ? ((WorldStateLatticeTopology.Grid)t) with { Band = 0.3f } : t)]), "board")!;
+        var banded = TopologyCompilation.Find(new WorldStateSection(Lattices: [.. state.Lattices!.Select(t => t.Name == "board" ? ((LatticeTopology.Grid)t) with { Band = 0.3f } : t)]), "board")!;
         Assert.True(banded.TryCellOf(position: new FixedVector3(FixedQ4816.FromDouble(10.25d), FixedQ4816.FromDouble(2.2d), FixedQ4816.FromDouble(-4.75d)), cell: out var nearCell));
         Assert.Equal(0, nearCell);
         Assert.False(banded.TryCellOf(position: new FixedVector3(FixedQ4816.FromDouble(10.25d), FixedQ4816.FromDouble(1.5d), FixedQ4816.FromDouble(-4.75d)), cell: out _));
-        Assert.False(WorldTopologyCompilation.TryValidate(((WorldStateLatticeTopology.Grid)state.Lattices![0]) with { Band = -1f }, out var bandReason));
+        Assert.False(TopologyCompilation.TryValidate(((LatticeTopology.Grid)state.Lattices![0]) with { Band = -1f }, out var bandReason));
         Assert.Contains("band", bandReason);
 
         // Below the origin corner: outside the frame on both axes.
@@ -61,11 +60,14 @@ public sealed class TabletopBoardLawTests {
         Assert.False(topology.TryOffset(cell: 0, dx: -1, dz: 0, result: out _)); // off the west edge, no wrap declared
         Assert.False(topology.TryOffset(cell: 3, dx: 1, dz: 0, result: out _)); // off the east edge
 
-        // A CONTROL: neither spatial query means anything off a Grid topology — a hex frame answers false rather
-        // than silently reusing rectangular coordinates that were never declared for it.
-        var hexTopology = WorldTopologyCompilation.Find(state, "hex")!;
-        Assert.False(hexTopology.TryCellOf(position: new FixedVector3(FixedQ4816.Zero, FixedQ4816.Zero, FixedQ4816.Zero), cell: out _));
-        Assert.False(hexTopology.TryOffset(cell: 0, dx: 1, dz: 0, result: out _));
+        // A hex frame answers the same two queries in its own coordinates: the origin is cell 0, and an axial step
+        // of (+1, 0) from it is ring 1's first cell.
+        var hexTopology = TopologyCompilation.Find(state, "hex")!;
+        Assert.True(hexTopology.TryCellOf(position: new FixedVector3(FixedQ4816.Zero, FixedQ4816.Zero, FixedQ4816.Zero), cell: out var hexOrigin));
+        Assert.Equal(0, hexOrigin);
+        Assert.True(hexTopology.TryOffset(cell: 0, dx: 1, dz: 0, result: out var hexEast));
+        Assert.Equal(1, hexEast);
+        Assert.False(hexTopology.TryOffset(cell: 1, dx: 1, dz: 0, result: out _)); // off the radius-1 disk
     }
 
     // cellSize is the divisor TryCellOf resolves world positions against (localX / cellSize): zero divides by zero,
@@ -79,8 +81,8 @@ public sealed class TabletopBoardLawTests {
     [InlineData(1e30f, true)]  // does not quantize to Q48.16 — the same overflow guard fields.lattice.cellSize uses.
     [InlineData(0.2f, false)]  // the DISCRIMINATING control: an ordinary positive edge validates.
     public void GridTopologyRefusesNonPositiveOrUnrepresentableCellSize(float cellSize, bool refused) {
-        var grid = new WorldStateLatticeTopology.Grid("board", new DocumentVector3(0f, 0f, 0f), cellSize, 8, 8);
-        Assert.Equal(!refused, WorldTopologyCompilation.TryValidate(topology: grid, reason: out var reason));
+        var grid = new LatticeTopology.Grid("board", new DocumentVector3(0f, 0f, 0f), cellSize, 8, 8);
+        Assert.Equal(!refused, TopologyCompilation.TryValidate(topology: grid, reason: out var reason));
         if (refused) {
             Assert.Contains("cellSize", reason, StringComparison.Ordinal);
         }
@@ -88,8 +90,8 @@ public sealed class TabletopBoardLawTests {
 
     [Fact]
     public void GridTopologyRefusesAnOriginThatDoesNotFitQ4816() {
-        var grid = new WorldStateLatticeTopology.Grid("board", new DocumentVector3(1e30f, 0f, 0f), 0.2f, 8, 8);
-        Assert.False(WorldTopologyCompilation.TryValidate(topology: grid, reason: out var reason));
+        var grid = new LatticeTopology.Grid("board", new DocumentVector3(1e30f, 0f, 0f), 0.2f, 8, 8);
+        Assert.False(TopologyCompilation.TryValidate(topology: grid, reason: out var reason));
         Assert.Contains("origin", reason, StringComparison.Ordinal);
     }
 
@@ -124,16 +126,16 @@ public sealed class TabletopBoardLawTests {
         var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "rigid-floor");
         var creation = new WorldPrototype(Id: "floor", Document: canonical.Document, HashRaw: canonical.Hash);
         var rigid = new WorldRigid(Mass: 1f, Restitution: 0.05f, Friction: 1f, RollingFriction: 2f, LinearDamping: 1f, AngularDamping: 1f);
-        var topology = new WorldStateLatticeTopology.Grid("board", new DocumentVector3(0f, 0f, 0f), 1f, 2, 2);
+        var topology = new LatticeTopology.Grid("board", new DocumentVector3(0f, 0f, 0f), 1f, 2, 2);
 
         long[] starting = [0, 5, 0, 0];
         WorldStateRow BoardRow(string name, bool seeded) => new(CellName.Parse(name), CellKind.Int,
-            Cells: [.. Enumerable.Range(0, 4).Select(k => new WorldStateCell(CellName.Parse(k.ToString()), seeded ? starting[k] : 0))],
-            Domain: new WorldStateDomain.CellsOf("board"));
+            Cells: [.. Enumerable.Range(0, 4).Select(k => new StateCell(CellName.Parse(k.ToString()), seeded ? starting[k] : 0))],
+            Domain: new StateDomain.CellsOf("board"));
         WorldStateRow Keyed(string name, long initial) => new(CellName.Parse(name), CellKind.Int, Min: -1, Max: 3,
-            Cells: [new WorldStateCell(CellName.Parse("0"), initial)], Capacity: 1);
+            Cells: [new StateCell(CellName.Parse("0"), initial)], Capacity: 1);
         WorldStateRow Slot(string name, long initial) => new(CellName.Parse(name), CellKind.Int, Min: -1, Max: 5,
-            Cells: [new WorldStateCell(CellName.Parse(WorldStateRow.SlotKey), initial)]);
+            Cells: [new StateCell(CellName.Parse(WorldStateRow.SlotKey), initial)]);
 
         var quiescentEqualsOne = Cs(Quiescent, ActionStateComparison.Equal, 1m);
 
@@ -203,13 +205,13 @@ public sealed class TabletopBoardLawTests {
         var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "rigid-floor");
         var creation = new WorldPrototype(Id: "floor", Document: canonical.Document, HashRaw: canonical.Hash);
         var rigid = new WorldRigid(Mass: 1f, Restitution: 0.05f, Friction: 1f, RollingFriction: 2f, LinearDamping: 1f, AngularDamping: 1f);
-        var topology = new WorldStateLatticeTopology.Grid("board", new DocumentVector3(0f, 0f, 0f), 1f, 2, 2);
+        var topology = new LatticeTopology.Grid("board", new DocumentVector3(0f, 0f, 0f), 1f, 2, 2);
 
         WorldStateRow BoardRow(string name) => new(CellName.Parse(name), CellKind.Int,
-            Cells: [.. Enumerable.Range(0, 4).Select(k => new WorldStateCell(CellName.Parse(k.ToString()), 0))],
-            Domain: new WorldStateDomain.CellsOf("board"));
+            Cells: [.. Enumerable.Range(0, 4).Select(k => new StateCell(CellName.Parse(k.ToString()), 0))],
+            Domain: new StateDomain.CellsOf("board"));
         WorldStateRow Keyed(string name, long initial, int capacity) => new(CellName.Parse(name), CellKind.Int, Min: -1, Max: 3,
-            Cells: [.. Enumerable.Range(0, capacity).Select(k => new WorldStateCell(CellName.Parse(k.ToString()), initial))], Capacity: capacity);
+            Cells: [.. Enumerable.Range(0, capacity).Select(k => new StateCell(CellName.Parse(k.ToString()), initial))], Capacity: capacity);
 
         var quiescentEqualsOne = Cs(Quiescent, ActionStateComparison.Equal, 1m);
         ActionEffect[] deriveEffects = [

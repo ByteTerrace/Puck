@@ -85,7 +85,7 @@ public static class WorldCameraRigCompiler {
     public sealed class Cache {
         private IReadOnlyList<WorldCamera>? m_cameras;
         private IReadOnlyList<WorldCurveRow>? m_curves;
-        private IReadOnlyList<WorldDynamicsRow>? m_dynamics;
+        private IReadOnlyList<DynamicsRow>? m_dynamics;
         private bool m_interactive;
         private WorldCameraProgram? m_program;
         private IWorldCameraProgramRig? m_rig;
@@ -304,7 +304,7 @@ public static class WorldCameraRigCompiler {
                         // A row a mid-mutation document no longer declares emits no op, the same rule Blend's
                         // dangling-name case follows below — the validator refuses a dangling row at author time, so
                         // this can only transiently miss during a live document swap.
-                        if (WorldDefinitionRows.FindDynamics(
+                        if (StateRows.FindDynamics(
                             dynamics: definition.Dynamics,
                             name: dynamicsOp.Row
                         ) is { } row) {

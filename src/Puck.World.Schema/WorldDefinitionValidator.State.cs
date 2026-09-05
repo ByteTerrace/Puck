@@ -14,13 +14,13 @@ public static partial class WorldDefinitionValidator {
         if (
             WorldDefinitionRows.FindStateRow(rows: definition.State, name: rowName) is not { } row ||
             !CellName.TryParse(candidate: key, name: out var cellKey, reason: out _) ||
-            WorldDefinitionRows.FindCell(cells: row.Cells, key: cellKey) is not { } cell
+            StateRows.FindCell(cells: row.Cells, key: cellKey) is not { } cell
         ) {
             reason = $"state row '{rowName}' cell '{key}' did not resolve after composition";
             return false;
         }
 
-        if (row.EffectiveDomain is WorldStateDomain.KeysOf || row.Phase is not null || row.Knowledge is not null || cell.Visibility is not null || cell.Observation is not null) {
+        if (row.EffectiveDomain is StateDomain.KeysOf || row.Phase is not null || row.Knowledge is not null || cell.Visibility is not null || cell.Observation is not null) {
             return TryValidateLocally(definition, out reason);
         }
         var capacity = Math.Clamp(value: (row.Capacity ?? row.CellCeiling), min: 1, max: row.CellCeiling);
@@ -30,13 +30,13 @@ public static partial class WorldDefinitionValidator {
             return false;
         }
 
-        if (row.EffectiveDomain is WorldStateDomain.CellsOf board && (WorldTopologyCompilation.Find(definition, board.Topology) is not { } topology || !topology.TryCell(key, out _))) {
+        if (row.EffectiveDomain is StateDomain.CellsOf board && (WorldTopologyCompilation.Find(definition, board.Topology) is not { } topology || !topology.TryCell(key, out _))) {
             reason = $"state row '{rowName}' cell '{key}' is outside its topology";
             return false;
         }
         if (row.Kind == CellKind.Text) {
-            if (cell.Text is null || cell.Text.Length > WorldStateCapacity.MaxTextValueLength) {
-                reason = $"state row '{rowName}' cell '{key}' text is missing or exceeds {WorldStateCapacity.MaxTextValueLength} characters";
+            if (cell.Text is null || cell.Text.Length > StateCapacity.MaxTextValueLength) {
+                reason = $"state row '{rowName}' cell '{key}' text is missing or exceeds {StateCapacity.MaxTextValueLength} characters";
                 return false;
             }
 
@@ -93,9 +93,9 @@ public static partial class WorldDefinitionValidator {
             ? FixedQ4816.FromRawBits(value: raw).ToString()
             : raw.ToString(provider: CultureInfo.InvariantCulture)
         );
-    /// <summary>Validates a row's authored <see cref="WorldStateAdvance"/> continuous-accumulation trait. Whether
+    /// <summary>Validates a row's authored <see cref="StateAdvance"/> continuous-accumulation trait. Whether
     /// reaching a declared envelope bound clamps the computed value (it never rewrites the stored base/epoch) is the
-    /// settled read-side half of the envelope duality, documented on <see cref="WorldStateAdvance"/> itself and not a
+    /// settled read-side half of the envelope duality, documented on <see cref="StateAdvance"/> itself and not a
     /// validator concern — this method refuses only shapes the read side could not honestly compute over.</summary>
     private static void ValidateAdvance(WorldStateRow row, bool numeric, string path, List<string> errors) {
         if (row.Advance is not { } advance) {
@@ -107,7 +107,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (!numeric) {
-            errors.Add(item: $"{path} ('{row.Name}') declares advance on a {WorldRefusalSpelling.Kind(kind: row.Kind)} row — only int/fixed rows accumulate.");
+            errors.Add(item: $"{path} ('{row.Name}') declares advance on a {StateSpelling.Kind(kind: row.Kind)} row — only int/fixed rows accumulate.");
         }
 
         if (advance.RateDenominator <= 0) {
@@ -131,11 +131,11 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} ('{row.Name}') declares advance on a keyed row — advance is legitimate only on a scalar (slot) row, authored with 'value' or left empty until the first explicit set.");
         }
     }
-    /// <summary>Validates one cell's own <see cref="WorldStateAdvance"/> — the keyed counterpart of
+    /// <summary>Validates one cell's own <see cref="StateAdvance"/> — the keyed counterpart of
     /// <see cref="ValidateAdvance"/>, stated separately because it governs the opposite shape: a cell inside a
     /// table rather than a row's own slot. The two never overlap by construction (this rejects the slot key
     /// outright), so a cell's advance and its row's advance can never both claim the same cell.</summary>
-    private static void ValidateCellAdvance(WorldStateRow row, WorldStateCell cell, WorldStateAdvance advance, bool numeric, string cellPath, List<string> errors) {
+    private static void ValidateCellAdvance(WorldStateRow row, StateCell cell, StateAdvance advance, bool numeric, string cellPath, List<string> errors) {
         // The slot key's own accumulation is authored at the ROW level (beside 'value'), never here — refusing this
         // combination outright is what keeps "which advance governs the slot cell" from ever being two mechanisms
         // reading the same address.
@@ -144,7 +144,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (!numeric) {
-            errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares advance on a {WorldRefusalSpelling.Kind(kind: row.Kind)} cell — only int/fixed cells accumulate.");
+            errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares advance on a {StateSpelling.Kind(kind: row.Kind)} cell — only int/fixed cells accumulate.");
         }
 
         if (advance.RateDenominator <= 0) {
@@ -157,7 +157,7 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
     }
-    /// <summary>Validates a row's authored <see cref="WorldStateCycle"/> rotation trait: the generator, power and step length the
+    /// <summary>Validates a row's authored <see cref="StateCycle"/> rotation trait: the generator, power and step length the
     /// read side can compute over, an output the row's kind can carry, and the same scalar-row exclusivity the other
     /// traits hold.</summary>
     private static void ValidateCycle(WorldStateRow row, bool numeric, string path, List<string> errors) {
@@ -193,14 +193,14 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} ('{row.Name}') declares cycle on a keyed row — cycle is legitimate only on a scalar (slot) row, authored with 'value' or left empty; a keyed row's cells each declare their own 'cycle'.");
         }
 
-        if (WorldStateCycle.IsLatticeOutput(output: cycle.Output) && (cells.Count == 1) && (WorldStateCycle.Phase(baseValue: cells[0].Value, kind: row.Kind) is < 0 or >= SymmetryLattice.NodeCount)) {
-            errors.Add(item: $"{path} ('{row.Name}') value {DescribeValue(kind: row.Kind, raw: cells[0].Value)} is not a symmetry-lattice node — a {WorldRefusalSpelling.CycleOutput(output: cycle.Output)} cycle stores the node its ring walk starts from, 0..{SymmetryLattice.NodeCount - 1}.");
+        if (StateCycle.IsLatticeOutput(output: cycle.Output) && (cells.Count == 1) && (StateCycle.Phase(baseValue: cells[0].Value, kind: row.Kind) is < 0 or >= SymmetryLattice.NodeCount)) {
+            errors.Add(item: $"{path} ('{row.Name}') value {DescribeValue(kind: row.Kind, raw: cells[0].Value)} is not a symmetry-lattice node — a {StateSpelling.CycleOutput(output: cycle.Output)} cycle stores the node its ring walk starts from, 0..{SymmetryLattice.NodeCount - 1}.");
         }
     }
-    /// <summary>Validates one cell's own <see cref="WorldStateCycle"/> — the keyed counterpart of
+    /// <summary>Validates one cell's own <see cref="StateCycle"/> — the keyed counterpart of
     /// <see cref="ValidateCycle"/>, refusing the slot key so a cell's cycle and its row's cycle can never both claim
     /// the same cell.</summary>
-    private static void ValidateCellCycle(WorldStateRow row, WorldStateCell cell, WorldStateCycle cycle, bool numeric, string cellPath, List<string> errors) {
+    private static void ValidateCellCycle(WorldStateRow row, StateCell cell, StateCycle cycle, bool numeric, string cellPath, List<string> errors) {
         // A drive gate is resolved once per install and read as of tick zero (WorldGrants.SyncState); a cell that
         // turns with the tick would gate on a value nothing ever refreshes, so a gate row's cells never cycle.
         if (row.GatesDrive) {
@@ -220,23 +220,23 @@ public static partial class WorldDefinitionValidator {
             subject: $"{cellPath} ('{row.Name}'.'{cell.Key}')"
         );
 
-        if (WorldStateCycle.IsLatticeOutput(output: cycle.Output) && (WorldStateCycle.Phase(baseValue: cell.Value, kind: row.Kind) is < 0 or >= SymmetryLattice.NodeCount)) {
-            errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') value {DescribeValue(kind: row.Kind, raw: cell.Value)} is not a symmetry-lattice node — a {WorldRefusalSpelling.CycleOutput(output: cycle.Output)} cycle stores the node its ring walk starts from, 0..{SymmetryLattice.NodeCount - 1}.");
+        if (StateCycle.IsLatticeOutput(output: cycle.Output) && (StateCycle.Phase(baseValue: cell.Value, kind: row.Kind) is < 0 or >= SymmetryLattice.NodeCount)) {
+            errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') value {DescribeValue(kind: row.Kind, raw: cell.Value)} is not a symmetry-lattice node — a {StateSpelling.CycleOutput(output: cycle.Output)} cycle stores the node its ring walk starts from, 0..{SymmetryLattice.NodeCount - 1}.");
         }
     }
     // The field checks a row-level and a cell-level cycle share: a word that bakes to a moving generator, a power
     // that is not the identity, step length, epoch, and an output the carrying kind can read (step/node on int, the
     // fixed outputs on fixed, nothing on bool/text).
-    private static void ValidateCycleShape(WorldStateCycle cycle, CellKind kind, bool numeric, string path, string subject, List<string> errors) {
+    private static void ValidateCycleShape(StateCycle cycle, CellKind kind, bool numeric, string path, string subject, List<string> errors) {
         if (!Enum.IsDefined(value: cycle.Output)) {
-            errors.Add(item: $"{path}.output '{cycle.Output}' is not a defined WorldCycleOutput.");
+            errors.Add(item: $"{path}.output '{cycle.Output}' is not a defined CycleOutput.");
         }
 
         if (!numeric) {
-            errors.Add(item: $"{subject} declares cycle on a {WorldRefusalSpelling.Kind(kind: kind)} row — only int/fixed cells turn.");
+            errors.Add(item: $"{subject} declares cycle on a {StateSpelling.Kind(kind: kind)} row — only int/fixed cells turn.");
         }
-        else if (WorldStateCycle.IsIntegerOutput(output: cycle.Output) != (kind == CellKind.Int)) {
-            errors.Add(item: $"{path}.output '{WorldRefusalSpelling.CycleOutput(output: cycle.Output)}' does not suit a {WorldRefusalSpelling.Kind(kind: kind)} cell — Step, Node and Ring are read by int cells, Turns/Cos/Sin/ProjectionX/ProjectionY by fixed cells.");
+        else if (StateCycle.IsIntegerOutput(output: cycle.Output) != (kind == CellKind.Int)) {
+            errors.Add(item: $"{path}.output '{StateSpelling.CycleOutput(output: cycle.Output)}' does not suit a {StateSpelling.Kind(kind: kind)} cell — Step, Node and Ring are read by int cells, Turns/Cos/Sin/ProjectionX/ProjectionY by fixed cells.");
         }
 
         if (!cycle.TryResolveGenerator(generator: out var generator, reason: out var wordReason)) {
@@ -266,7 +266,7 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
     }
-    /// <summary>Validates a row's authored <see cref="WorldStateDynamics"/> easing trait — the closed-form
+    /// <summary>Validates a row's authored <see cref="StateDynamics"/> easing trait — the closed-form
     /// counterpart to <see cref="ValidateAdvance"/>, so shares its scalar-row/exclusivity shape.</summary>
     private static void ValidateDynamicsTrait(WorldStateRow row, bool numeric, ISet<string> dynamicsNames, string path, List<string> errors) {
         if (row.Dynamics is not { } dynamics) {
@@ -282,7 +282,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (!numeric) {
-            errors.Add(item: $"{path} ('{row.Name}') declares dynamics on a {WorldRefusalSpelling.Kind(kind: row.Kind)} row — only int/fixed rows ease.");
+            errors.Add(item: $"{path} ('{row.Name}') declares dynamics on a {StateSpelling.Kind(kind: row.Kind)} row — only int/fixed rows ease.");
         }
 
         RequireDeclared(
@@ -308,16 +308,16 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} ('{row.Name}') declares dynamics on a keyed row — dynamics is legitimate only on a scalar (slot) row; a keyed row's own cells ease independently.");
         }
     }
-    /// <summary>Validates one cell's own <see cref="WorldStateDynamics"/> — the keyed counterpart of
+    /// <summary>Validates one cell's own <see cref="StateDynamics"/> — the keyed counterpart of
     /// <see cref="ValidateDynamicsTrait"/>, governing the opposite shape: a cell inside a table rather than a row's
     /// own slot.</summary>
-    private static void ValidateCellDynamics(WorldStateRow row, WorldStateCell cell, WorldStateDynamics dynamics, bool numeric, ISet<string> dynamicsNames, string cellPath, List<string> errors) {
+    private static void ValidateCellDynamics(WorldStateRow row, StateCell cell, StateDynamics dynamics, bool numeric, ISet<string> dynamicsNames, string cellPath, List<string> errors) {
         if (cell.Key == WorldStateRow.SlotKey) {
             errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares its own dynamics on the reserved slot key — a scalar row's easing trait is authored at the ROW level, never on the cell itself.");
         }
 
         if (!numeric) {
-            errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares dynamics on a {WorldRefusalSpelling.Kind(kind: row.Kind)} cell — only int/fixed cells ease.");
+            errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares dynamics on a {StateSpelling.Kind(kind: row.Kind)} cell — only int/fixed cells ease.");
         }
 
         RequireDeclared(
@@ -335,9 +335,9 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
     }
-    /// <summary>Validates a state row's authored <see cref="WorldDraw"/> site — its own shape rules, then the shared
+    /// <summary>Validates a state row's authored <see cref="Draw"/> site — its own shape rules, then the shared
     /// site rule with the row's own envelope as the admissible domain.</summary>
-    private static void ValidateDraw(WorldStateRow row, IReadOnlyList<WorldGeneratorRow>? generators, string path, List<string> errors) {
+    private static void ValidateDraw(WorldStateRow row, IReadOnlyList<GeneratorRow>? generators, string path, List<string> errors) {
         if (row.Draw is not { } draw) {
             // A lattice row painted by a draw fill carries the same cursor/masks bookkeeping for its whole-field
             // passes (see WorldLatticeFill.Draw), so only a row with neither facet is refused here.
@@ -360,8 +360,8 @@ public static partial class WorldDefinitionValidator {
 
         if (
             row.IsKeyed &&
-            WorldGeneratorEngine.TryResolveSource(generators: generators, draw: draw, generator: out var keyedSource, reason: out _) &&
-            WorldGeneratorEngine.WritesText(source: keyedSource.Source)
+            GeneratorEngine.TryResolveSource(generators: generators, draw: draw, generator: out var keyedSource, reason: out _) &&
+            GeneratorEngine.WritesText(source: keyedSource.Source)
         ) {
             errors.Add(item: $"{path} ('{row.Name}') is a keyed draw site over a text source — a keyed site fills one numeric sample per cell; a text emission has no per-cell shape.");
         }
@@ -410,7 +410,7 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
-        if (WorldGeneratorEngine.TryResolveSource(
+        if (GeneratorEngine.TryResolveSource(
             generators: generators,
             draw: draw,
             generator: out var drawnSource,
@@ -427,27 +427,27 @@ public static partial class WorldDefinitionValidator {
     /// <summary>Refuses persisted drawn masks that do not fit the site's source — a mask left behind by an earlier
     /// source shape would otherwise be read as units already drawn, silently skipping outcomes or declaring a set
     /// drawn out early. Stated once, for a draw site and for a lattice row's draw fill alike.</summary>
-    internal static void ValidateDrawnMasks(WorldGenerator generator, IReadOnlyList<ClosedBitset256>? masks, string path, List<string> errors) {
+    internal static void ValidateDrawnMasks(StateGenerator generator, IReadOnlyList<ClosedBitset256>? masks, string path, List<string> errors) {
         if (masks is not { Count: > 0 }) {
             return;
         }
 
-        if (!WorldGeneratorEngine.Exhausts(source: generator.Source) || (generator.Mode == WorldGeneratorMode.WithReplacement)) {
-            errors.Add(item: $"{path} carries {masks.Count} drawn mask(s) but the site's source never exhausts (source={WorldRefusalSpelling.GeneratorSource(source: generator.Source)}, mode={generator.Mode}) — clear drawnMasks when re-authoring a site to a non-exhausting source.");
+        if (!GeneratorEngine.Exhausts(source: generator.Source) || (generator.Mode == GeneratorMode.WithReplacement)) {
+            errors.Add(item: $"{path} carries {masks.Count} drawn mask(s) but the site's source never exhausts (source={StateSpelling.GeneratorSource(source: generator.Source)}, mode={generator.Mode}) — clear drawnMasks when re-authoring a site to a non-exhausting source.");
 
             return;
         }
 
-        if (generator.Source is WorldGeneratorSource.WeightedNumeric or WorldGeneratorSource.SymmetryOrbit) {
+        if (generator.Source is GeneratorSource.WeightedNumeric or GeneratorSource.SymmetryOrbit) {
             if (masks.Count != 1) {
-                errors.Add(item: $"{path} carries {masks.Count} drawn masks but a {WorldRefusalSpelling.GeneratorSource(source: generator.Source)} source exhausts through exactly one — clear drawnMasks when re-authoring a site from a Markov source.");
+                errors.Add(item: $"{path} carries {masks.Count} drawn masks but a {StateSpelling.GeneratorSource(source: generator.Source)} source exhausts through exactly one — clear drawnMasks when re-authoring a site from a Markov source.");
 
                 return;
             }
 
-            var units = ((generator.Source == WorldGeneratorSource.WeightedNumeric)
+            var units = ((generator.Source == GeneratorSource.WeightedNumeric)
                 ? CountEntries(counts: (generator.Weighted ?? []).Select(selector: static outcome => outcome.Multiplicity))
-                : (WorldGeneratorEngine.TryResolveOrbit(generator: generator, nodes: out var orbitNodes, reason: out _) ? orbitNodes.Length : WorldGeneratorCapacity.MaxEntriesPerSet));
+                : (GeneratorEngine.TryResolveOrbit(generator: generator, nodes: out var orbitNodes, reason: out _) ? orbitNodes.Length : GeneratorCapacity.MaxEntriesPerSet));
 
             RefuseMaskPastEntries(
                 entries: units,
@@ -488,7 +488,7 @@ public static partial class WorldDefinitionValidator {
     private static void RefuseMaskPastEntries(ClosedBitset256 mask, int entries, string path, List<string> errors) {
         var bits = mask;
 
-        if ((entries < WorldGeneratorCapacity.MaxEntriesPerSet) && !bits.Fits(entries)) {
+        if ((entries < GeneratorCapacity.MaxEntriesPerSet) && !bits.Fits(entries)) {
             errors.Add(item: $"{path} marks an entry past the {entries} the source holds (mask 0x{bits}) — a stale mask from an earlier source shape; clear drawnMasks.");
         }
     }
@@ -511,17 +511,17 @@ public static partial class WorldDefinitionValidator {
     /// <param name="domainHigh">The highest numeric value the site admits (ignored for a text site).</param>
     /// <param name="path">The document path this site reports under.</param>
     /// <param name="errors">The accumulating error list.</param>
-    private static void ValidateDrawSite(WorldDraw draw, IReadOnlyList<WorldGeneratorRow>? generators, CellKind targetKind, bool bootOnly, long domainLow, long domainHigh, string path, List<string> errors) {
+    private static void ValidateDrawSite(Draw draw, IReadOnlyList<GeneratorRow>? generators, CellKind targetKind, bool bootOnly, long domainLow, long domainHigh, string path, List<string> errors) {
         if (!Enum.IsDefined(value: draw.Timing)) {
-            errors.Add(item: $"{path}.timing '{draw.Timing}' is not a defined WorldDrawTiming.");
+            errors.Add(item: $"{path}.timing '{draw.Timing}' is not a defined DrawTiming.");
         } else if (
             bootOnly &&
-            (draw.Timing != WorldDrawTiming.Boot)
+            (draw.Timing != DrawTiming.Boot)
         ) {
             errors.Add(item: $"{path}.timing={draw.Timing.ToString().ToLowerInvariant()} — this is a BOOT-ONLY document field, read once at composition; nothing could observe a later redraw, so only timing=boot is admissible here.");
         }
 
-        if (!WorldGeneratorEngine.TryResolveSource(
+        if (!GeneratorEngine.TryResolveSource(
             draw: draw,
             generator: out var generator,
             generators: generators,
@@ -543,7 +543,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         // The ONE kind predicate, shared with every firing door.
-        if (!WorldGeneratorEngine.TryCheckTargetKind(
+        if (!GeneratorEngine.TryCheckTargetKind(
             source: generator.Source,
             targetKind: targetKind,
             reason: out var kindReason
@@ -557,12 +557,12 @@ public static partial class WorldDefinitionValidator {
         // have: it draws once and its facet is erased, so the drawn mask could not survive to be drawn from again.
         if (
             bootOnly &&
-            (generator.Mode != WorldGeneratorMode.WithReplacement)
+            (generator.Mode != GeneratorMode.WithReplacement)
         ) {
             errors.Add(item: $"{path} draws from a source declaring mode={generator.Mode.ToString().ToLowerInvariant()} — a boot-only site draws once and its facet is cleared, so a drawn mask has no second draw to accumulate into.");
         }
 
-        if (WorldGeneratorEngine.WritesText(source: generator.Source)) {
+        if (GeneratorEngine.WritesText(source: generator.Source)) {
             return;
         }
 
@@ -579,12 +579,12 @@ public static partial class WorldDefinitionValidator {
     /// by name. A source is a pure shape here; whether any particular site may draw from it (kind, timing) is the
     /// site's question, asked in <see cref="ValidateDrawSite"/>, because the same source is legitimately shared by
     /// sites that answer it differently.</summary>
-    private static void ValidateGenerators(IReadOnlyList<WorldGeneratorRow>? generators, List<string> errors) {
+    private static void ValidateGenerators(IReadOnlyList<GeneratorRow>? generators, List<string> errors) {
         var rows = (generators ?? []);
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-        if (rows.Count > WorldGeneratorCapacity.MaxDeclaredSources) {
-            errors.Add(item: $"generators count {rows.Count} exceeds the maximum of {WorldGeneratorCapacity.MaxDeclaredSources}.");
+        if (rows.Count > GeneratorCapacity.MaxDeclaredSources) {
+            errors.Add(item: $"generators count {rows.Count} exceeds the maximum of {GeneratorCapacity.MaxDeclaredSources}.");
         }
 
         for (var index = 0; (index < rows.Count); index++) {
@@ -621,22 +621,22 @@ public static partial class WorldDefinitionValidator {
             );
         }
     }
-    private static void ValidateMarkovSource(WorldGenerator generator, string path, List<string> errors) {
+    private static void ValidateMarkovSource(StateGenerator generator, string path, List<string> errors) {
         if (generator.Contexts is not { Count: > 0 } contexts) {
             errors.Add(item: $"{path}.contexts must declare at least one context for source=markov.");
 
             return;
         }
 
-        if (contexts.Count > WorldGeneratorCapacity.MaxContexts) {
-            errors.Add(item: $"{path}.contexts count {contexts.Count} exceeds the maximum of {WorldGeneratorCapacity.MaxContexts}.");
+        if (contexts.Count > GeneratorCapacity.MaxContexts) {
+            errors.Add(item: $"{path}.contexts count {contexts.Count} exceeds the maximum of {GeneratorCapacity.MaxContexts}.");
         }
 
         if (
             (generator.Bound < 1) ||
-            (generator.Bound > WorldGeneratorCapacity.MaxEmissionBound)
+            (generator.Bound > GeneratorCapacity.MaxEmissionBound)
         ) {
-            errors.Add(item: $"{path}.bound {generator.Bound} must be between 1 and {WorldGeneratorCapacity.MaxEmissionBound}.");
+            errors.Add(item: $"{path}.bound {generator.Bound} must be between 1 and {GeneratorCapacity.MaxEmissionBound}.");
         }
 
         var keys = new HashSet<string>(comparer: StringComparer.Ordinal);
@@ -664,8 +664,8 @@ public static partial class WorldDefinitionValidator {
 
             var alternatives = (context.Alternatives ?? []);
 
-            if (alternatives.Count > WorldGeneratorCapacity.MaxAlternativesPerContext) {
-                errors.Add(item: $"{contextPath}.alternatives count {alternatives.Count} exceeds the maximum of {WorldGeneratorCapacity.MaxAlternativesPerContext} (one drawn-mask bit per alternative).");
+            if (alternatives.Count > GeneratorCapacity.MaxAlternativesPerContext) {
+                errors.Add(item: $"{contextPath}.alternatives count {alternatives.Count} exceeds the maximum of {GeneratorCapacity.MaxAlternativesPerContext} (one drawn-mask bit per alternative).");
             }
 
             var anyWeight = false;
@@ -683,8 +683,8 @@ public static partial class WorldDefinitionValidator {
 
                 if (string.IsNullOrEmpty(value: entry.Token)) {
                     errors.Add(item: $"{entryPath}.token must be non-empty.");
-                } else if (entry.Token.Length > WorldGeneratorCapacity.MaxTokenLength) {
-                    errors.Add(item: $"{entryPath}.token length {entry.Token.Length} exceeds the maximum of {WorldGeneratorCapacity.MaxTokenLength}.");
+                } else if (entry.Token.Length > GeneratorCapacity.MaxTokenLength) {
+                    errors.Add(item: $"{entryPath}.token length {entry.Token.Length} exceeds the maximum of {GeneratorCapacity.MaxTokenLength}.");
                 }
 
                 if (entry.Multiplicity is { } multiplicity && (multiplicity < 1)) {
@@ -695,8 +695,8 @@ public static partial class WorldDefinitionValidator {
                 anyWeight |= (entry.Weight != 0UL);
             }
 
-            if (units > WorldGeneratorCapacity.MaxEntriesPerSet) {
-                errors.Add(item: $"{contextPath}.alternatives hold {units} units counting each alternative's multiplicity, exceeding the {WorldGeneratorCapacity.MaxEntriesPerSet} a drawn mask can hold.");
+            if (units > GeneratorCapacity.MaxEntriesPerSet) {
+                errors.Add(item: $"{contextPath}.alternatives hold {units} units counting each alternative's multiplicity, exceeding the {GeneratorCapacity.MaxEntriesPerSet} a drawn mask can hold.");
             }
 
             if (
@@ -725,19 +725,19 @@ public static partial class WorldDefinitionValidator {
             }
         }
     }
-    /// <summary>Validates one <see cref="WorldGenerator"/>'s own shape — dispatching on
-    /// <see cref="WorldGenerator.Source"/>, since each source owns a disjoint field set. Shared by a declared source
+    /// <summary>Validates one <see cref="StateGenerator"/>'s own shape — dispatching on
+    /// <see cref="StateGenerator.Source"/>, since each source owns a disjoint field set. Shared by a declared source
     /// row and a site's inline source, so the two spellings are held to the identical rules rather than to two
     /// readings of them.</summary>
-    private static void ValidateSource(WorldGenerator generator, string path, List<string> errors) {
+    private static void ValidateSource(StateGenerator generator, string path, List<string> errors) {
         if (!Enum.IsDefined(value: generator.Source)) {
-            errors.Add(item: $"{path}.source '{generator.Source}' is not a defined WorldGeneratorSource.");
+            errors.Add(item: $"{path}.source '{generator.Source}' is not a defined GeneratorSource.");
 
             return;
         }
 
         if (!Enum.IsDefined(value: generator.Mode)) {
-            errors.Add(item: $"{path}.mode '{generator.Mode}' is not a defined WorldGeneratorMode.");
+            errors.Add(item: $"{path}.mode '{generator.Mode}' is not a defined GeneratorMode.");
         }
 
         // Each source's fields are BOTH-OR-NEITHER against the fields the others own — a foreign field present is
@@ -748,8 +748,8 @@ public static partial class WorldDefinitionValidator {
         var declaresWeighted = (generator.Weighted is not null);
         var declaresOrbitFields = ((generator.Ring is not null) || (generator.Node is not null) || (generator.Word is not null));
 
-        if (declaresOrbitFields && (generator.Source != WorldGeneratorSource.SymmetryOrbit)) {
-            errors.Add(item: $"{path} declares source={WorldRefusalSpelling.GeneratorSource(source: generator.Source)} beside ring/node/word, which belong to source=symmetryOrbit.");
+        if (declaresOrbitFields && (generator.Source != GeneratorSource.SymmetryOrbit)) {
+            errors.Add(item: $"{path} declares source={StateSpelling.GeneratorSource(source: generator.Source)} beside ring/node/word, which belong to source=symmetryOrbit.");
         }
 
         // Bound is Markov-only and Mode belongs to the exhausting shapes, but both are NON-NULLABLE, so the
@@ -757,21 +757,21 @@ public static partial class WorldDefinitionValidator {
         // validate, and then be silently ignored at fire time. Refused against the DECLARED DEFAULT — the most a
         // non-nullable field can distinguish, and exactly the set of values that could mislead.
         if (
-            !WorldGeneratorEngine.Exhausts(source: generator.Source) &&
-            (generator.Mode != WorldGeneratorMode.WithReplacement)
+            !GeneratorEngine.Exhausts(source: generator.Source) &&
+            (generator.Mode != GeneratorMode.WithReplacement)
         ) {
-            errors.Add(item: $"{path}.source={WorldRefusalSpelling.GeneratorSource(source: generator.Source)} declares mode={generator.Mode.ToString().ToLowerInvariant()} — only markov, weightedNumeric and symmetryOrbit exhaust; uniformRange and streamDraw have no entry set to draw from.");
+            errors.Add(item: $"{path}.source={StateSpelling.GeneratorSource(source: generator.Source)} declares mode={generator.Mode.ToString().ToLowerInvariant()} — only markov, weightedNumeric and symmetryOrbit exhaust; uniformRange and streamDraw have no entry set to draw from.");
         }
 
-        if (generator.Source != WorldGeneratorSource.Markov) {
-            if (generator.Bound != WorldGenerator.DefaultBound) {
-                errors.Add(item: $"{path}.source={WorldRefusalSpelling.GeneratorSource(source: generator.Source)} declares bound {generator.Bound} — a numeric source is always exactly ONE draw, and 'bound' belongs to source=markov.");
+        if (generator.Source != GeneratorSource.Markov) {
+            if (generator.Bound != StateGenerator.DefaultBound) {
+                errors.Add(item: $"{path}.source={StateSpelling.GeneratorSource(source: generator.Source)} declares bound {generator.Bound} — a numeric source is always exactly ONE draw, and 'bound' belongs to source=markov.");
             }
 
         }
 
         switch (generator.Source) {
-            case WorldGeneratorSource.Markov:
+            case GeneratorSource.Markov:
                 if (declaresRangeFields) {
                     errors.Add(item: $"{path} declares source=markov beside rangeMin/rangeMax, which belong to source=uniformRange.");
                 }
@@ -787,7 +787,7 @@ public static partial class WorldDefinitionValidator {
                 );
 
                 return;
-            case WorldGeneratorSource.UniformRange:
+            case GeneratorSource.UniformRange:
                 if (declaresMarkovFields) {
                     errors.Add(item: $"{path} declares source=uniformRange beside start/contexts, which belong to source=markov.");
                 }
@@ -806,17 +806,17 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 if (
-                    (rangeMin < WorldGeneratorCapacity.MinRangeBound) ||
-                    (rangeMin > WorldGeneratorCapacity.MaxRangeBound)
+                    (rangeMin < GeneratorCapacity.MinRangeBound) ||
+                    (rangeMin > GeneratorCapacity.MaxRangeBound)
                 ) {
-                    errors.Add(item: $"{path}.rangeMin {rangeMin} must be between {WorldGeneratorCapacity.MinRangeBound} and {WorldGeneratorCapacity.MaxRangeBound}.");
+                    errors.Add(item: $"{path}.rangeMin {rangeMin} must be between {GeneratorCapacity.MinRangeBound} and {GeneratorCapacity.MaxRangeBound}.");
                 }
 
                 if (
-                    (rangeMax < WorldGeneratorCapacity.MinRangeBound) ||
-                    (rangeMax > WorldGeneratorCapacity.MaxRangeBound)
+                    (rangeMax < GeneratorCapacity.MinRangeBound) ||
+                    (rangeMax > GeneratorCapacity.MaxRangeBound)
                 ) {
-                    errors.Add(item: $"{path}.rangeMax {rangeMax} must be between {WorldGeneratorCapacity.MinRangeBound} and {WorldGeneratorCapacity.MaxRangeBound}.");
+                    errors.Add(item: $"{path}.rangeMax {rangeMax} must be between {GeneratorCapacity.MinRangeBound} and {GeneratorCapacity.MaxRangeBound}.");
                 }
 
                 if (rangeMin > rangeMax) {
@@ -824,7 +824,7 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 return;
-            case WorldGeneratorSource.WeightedNumeric:
+            case GeneratorSource.WeightedNumeric:
                 if (declaresMarkovFields) {
                     errors.Add(item: $"{path} declares source=weightedNumeric beside start/contexts, which belong to source=markov.");
                 }
@@ -839,8 +839,8 @@ public static partial class WorldDefinitionValidator {
                     return;
                 }
 
-                if (outcomes.Count > WorldGeneratorCapacity.MaxWeightedOutcomes) {
-                    errors.Add(item: $"{path}.weighted count {outcomes.Count} exceeds the maximum of {WorldGeneratorCapacity.MaxWeightedOutcomes}.");
+                if (outcomes.Count > GeneratorCapacity.MaxWeightedOutcomes) {
+                    errors.Add(item: $"{path}.weighted count {outcomes.Count} exceeds the maximum of {GeneratorCapacity.MaxWeightedOutcomes}.");
                 }
 
                 var anyOutcomeWeight = false;
@@ -861,8 +861,8 @@ public static partial class WorldDefinitionValidator {
                     anyOutcomeWeight |= (outcomes[index].Weight != 0UL);
                 }
 
-                if (outcomeUnits > WorldGeneratorCapacity.MaxEntriesPerSet) {
-                    errors.Add(item: $"{path}.weighted holds {outcomeUnits} units counting each outcome's multiplicity, exceeding the {WorldGeneratorCapacity.MaxEntriesPerSet} a drawn mask can hold.");
+                if (outcomeUnits > GeneratorCapacity.MaxEntriesPerSet) {
+                    errors.Add(item: $"{path}.weighted holds {outcomeUnits} units counting each outcome's multiplicity, exceeding the {GeneratorCapacity.MaxEntriesPerSet} a drawn mask can hold.");
                 }
 
                 if (!anyOutcomeWeight) {
@@ -870,7 +870,7 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 return;
-            case WorldGeneratorSource.StreamDraw:
+            case GeneratorSource.StreamDraw:
                 if (
                     declaresMarkovFields ||
                     declaresRangeFields ||
@@ -880,7 +880,7 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 return;
-            case WorldGeneratorSource.SymmetryOrbit:
+            case GeneratorSource.SymmetryOrbit:
                 if (
                     declaresMarkovFields ||
                     declaresRangeFields ||
@@ -889,7 +889,7 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path} declares source=symmetryOrbit beside start/contexts/rangeMin/rangeMax/weighted — an orbit source reads only ring, or node with an optional word.");
                 }
 
-                if (!WorldGeneratorEngine.TryResolveOrbit(
+                if (!GeneratorEngine.TryResolveOrbit(
                     generator: generator,
                     nodes: out _,
                     reason: out var orbitReason
@@ -905,9 +905,9 @@ public static partial class WorldDefinitionValidator {
     /// <summary>Narrows a numeric source's own declared band against the site's admissible domain — see
     /// <see cref="ValidateDrawSite"/>'s remarks for why this is an authoring refusal rather than a boot-time
     /// one.</summary>
-    private static void ValidateSourceDomain(WorldGenerator generator, CellKind targetKind, long domainLow, long domainHigh, string path, List<string> errors) {
+    private static void ValidateSourceDomain(StateGenerator generator, CellKind targetKind, long domainLow, long domainHigh, string path, List<string> errors) {
         switch (generator.Source) {
-            case WorldGeneratorSource.UniformRange:
+            case GeneratorSource.UniformRange:
                 if (
                     (generator.RangeMin is { } rangeMin) &&
                     (generator.RangeMax is { } rangeMax) &&
@@ -917,7 +917,7 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 break;
-            case WorldGeneratorSource.WeightedNumeric:
+            case GeneratorSource.WeightedNumeric:
                 foreach (var outcome in (generator.Weighted ?? [])) {
                     if (
                         (outcome is not null) &&
@@ -928,7 +928,7 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 break;
-            case WorldGeneratorSource.StreamDraw:
+            case GeneratorSource.StreamDraw:
                 // A raw draw's band is the generator's own and nothing narrows it, so a site that cannot hold the
                 // whole 32-bit band is refused HERE rather than by whatever it happened to roll.
                 if (
@@ -939,14 +939,14 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 break;
-            case WorldGeneratorSource.SymmetryOrbit:
-                if (WorldGeneratorEngine.TryResolveOrbit(
+            case GeneratorSource.SymmetryOrbit:
+                if (GeneratorEngine.TryResolveOrbit(
                     generator: generator,
                     nodes: out var orbitNodes,
                     reason: out _
                 )) {
                     foreach (var node in orbitNodes) {
-                        var encoded = WorldGeneratorEngine.EncodeNode(node: node, targetKind: targetKind);
+                        var encoded = GeneratorEngine.EncodeNode(node: node, targetKind: targetKind);
 
                         if ((encoded < domainLow) || (encoded > domainHigh)) {
                             errors.Add(item: $"{path} draws node {node}, which is outside the site's admissible domain {DescribeValue(kind: targetKind, raw: domainLow)}..{DescribeValue(kind: targetKind, raw: domainHigh)} — an orbit site holds node indices 0..{SymmetryLattice.NodeCount - 1} in its own unit.");
@@ -966,7 +966,7 @@ public static partial class WorldDefinitionValidator {
     // optionally narrowed by an authored Capacity). CellName already refuses an empty/unsafe/dotted row name at
     // JSON parse, so this pass checks only uniqueness. Returns the declared rows by name so ValidateHud can refuse
     // an unknown state.<row>/state.<row>.<key> binding.
-    private static Dictionary<string, WorldStateRow> ValidateState(IReadOnlyList<WorldStateRow> rows, IReadOnlyList<WorldGeneratorRow>? generators, ISet<string> dynamicsNames, List<string> errors) {
+    private static Dictionary<string, WorldStateRow> ValidateState(IReadOnlyList<WorldStateRow> rows, IReadOnlyList<GeneratorRow>? generators, ISet<string> dynamicsNames, List<string> errors) {
         var byName = new Dictionary<string, WorldStateRow>(comparer: StringComparer.Ordinal);
 
         if (rows is null) {
@@ -975,8 +975,8 @@ public static partial class WorldDefinitionValidator {
             return byName;
         }
 
-        if (rows.Count > WorldStateCapacity.MaxRows) {
-            errors.Add(item: $"state count {rows.Count} exceeds the maximum of {WorldStateCapacity.MaxRows}.");
+        if (rows.Count > StateCapacity.MaxRows) {
+            errors.Add(item: $"state count {rows.Count} exceeds the maximum of {StateCapacity.MaxRows}.");
         }
 
         for (var index = 0; (index < rows.Count); index++) {
@@ -1000,7 +1000,7 @@ public static partial class WorldDefinitionValidator {
             // snapshot-delivered), never as authored slot/keyed cells, and every keyed-row trait is refused at this
             // door so the shape cannot be held by convention.
             if (row.Field is not null) {
-                if (row.EffectiveDomain is not WorldStateDomain.CellsOf) {
+                if (row.EffectiveDomain is not StateDomain.CellsOf) {
                     errors.Add(item: $"{path} ('{row.Name}') declares a field trait without a cellsOf domain — a field row's domain names the topology it lies over.");
                 }
                 if (row.Kind != CellKind.Fixed) {
@@ -1051,7 +1051,7 @@ public static partial class WorldDefinitionValidator {
                 !numeric &&
                 ((row.Min is not null) || (row.Max is not null))
             ) {
-                errors.Add(item: $"{path} ('{row.Name}') declares min/max on a {WorldRefusalSpelling.Kind(kind: row.Kind)} row — only int/fixed rows carry a range.");
+                errors.Add(item: $"{path} ('{row.Name}') declares min/max on a {StateSpelling.Kind(kind: row.Kind)} row — only int/fixed rows carry a range.");
             } else if ((row.Min is null) != (row.Max is null)) {
                 errors.Add(item: $"{path} declares only one of min/max — a range is authored as a pair or not at all.");
             } else if (
@@ -1072,7 +1072,7 @@ public static partial class WorldDefinitionValidator {
                 !numeric &&
                 row.NonNegative
             ) {
-                errors.Add(item: $"{path} ('{row.Name}') declares nonNegative on a {WorldRefusalSpelling.Kind(kind: row.Kind)} row — only int/fixed rows carry a floor.");
+                errors.Add(item: $"{path} ('{row.Name}') declares nonNegative on a {StateSpelling.Kind(kind: row.Kind)} row — only int/fixed rows carry a floor.");
             }
 
             // GatesDrive is the composition-lane's drive-admission gate (WorldGrants.TryGetDriveGate) — a nonzero
@@ -1180,14 +1180,14 @@ public static partial class WorldDefinitionValidator {
                     (cell.Key == WorldStateRow.SlotKey)
                 ) {
                     errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' uses the reserved slot key '{WorldStateRow.SlotKey}' as an authored cell key.");
-                } else if (!WorldStateReservedCells.TryValidateReservedCell(
+                } else if (!StateReservedCells.TryValidateReservedCell(
                     row: row,
                     key: cell.Key,
                     reason: out var reservedReason
                 )) {
                     // Any reserved-prefix key but the slot key itself is refused: draw and generator bookkeeping
                     // (the cursor, the drawn masks) lives in the row's own typed fields, never a cell. The rule lives
-                    // in WorldStateReservedCells so UpsertStateCell's compose arm refuses the identical shape from
+                    // in StateReservedCells so UpsertStateCell's compose arm refuses the identical shape from
                     // the identical code.
                     errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' {reservedReason}.");
                 }
@@ -1239,16 +1239,16 @@ public static partial class WorldDefinitionValidator {
 
                 if (
                     (cell.Provenance is { } provenance) &&
-                    (provenance.Length > WorldStateCapacity.MaxProvenanceLength)
+                    (provenance.Length > StateCapacity.MaxProvenanceLength)
                 ) {
-                    errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' provenance length {provenance.Length} exceeds the maximum of {WorldStateCapacity.MaxProvenanceLength}.");
+                    errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' provenance length {provenance.Length} exceeds the maximum of {StateCapacity.MaxProvenanceLength}.");
                 }
 
                 if (row.Kind == CellKind.Text) {
                     if (cell.Text is null) {
                         errors.Add(item: $"{cellPath}.text is required.");
-                    } else if (cell.Text.Length > WorldStateCapacity.MaxTextValueLength) {
-                        errors.Add(item: $"{path} ('{row.Name}') text value length {cell.Text.Length} exceeds the maximum of {WorldStateCapacity.MaxTextValueLength}.");
+                    } else if (cell.Text.Length > StateCapacity.MaxTextValueLength) {
+                        errors.Add(item: $"{path} ('{row.Name}') text value length {cell.Text.Length} exceeds the maximum of {StateCapacity.MaxTextValueLength}.");
                     }
 
                     continue;

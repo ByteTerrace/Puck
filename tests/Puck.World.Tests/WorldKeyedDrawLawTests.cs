@@ -61,31 +61,31 @@ public sealed class WorldKeyedDrawLawTests {
     [Fact]
     public void ATextSourceRefusesAKeyedSiteWhileASlotSiteStillTakesIt() {
         var keyedText = Tray() with { StateRaw = new(World: [
-            new(Name("names"), CellKind.Text, Capacity: 3, Cells: [Cell("a"), Cell("b")], Draw: new WorldDraw(Generator: Markov(), Timing: WorldDrawTiming.Event)),
+            new(Name("names"), CellKind.Text, Capacity: 3, Cells: [Cell("a"), Cell("b")], Draw: new Draw(Generator: Markov(), Timing: DrawTiming.Event)),
         ]) };
         Assert.False(WorldDefinitionValidator.TryValidateLocally(keyedText, out var reason));
         Assert.Contains("text source", reason);
 
         var slotText = Tray() with { StateRaw = new(World: [
-            new(Name("name"), CellKind.Text, Draw: new WorldDraw(Generator: Markov(), Timing: WorldDrawTiming.Event)),
+            new(Name("name"), CellKind.Text, Draw: new Draw(Generator: Markov(), Timing: DrawTiming.Event)),
         ]) };
         Assert.True(WorldDefinitionValidator.TryValidateLocally(slotText, out var slotReason), slotReason);
         Assert.True(WorldDefinitionValidator.TryValidateLocally(Tray(), out var trayReason), trayReason);
     }
 
-    private static WorldGenerator Markov() => new(Source: WorldGeneratorSource.Markov, Start: Name("start"), Contexts: [
-        new WorldGeneratorContext(Name("start"), [new WorldGeneratorAlternative("hello", 1, Name("end"))]),
-        new WorldGeneratorContext(Name("end")),
+    private static StateGenerator Markov() => new(Source: GeneratorSource.Markov, Start: Name("start"), Contexts: [
+        new GeneratorContext(Name("start"), [new GeneratorAlternative("hello", 1, Name("end"))]),
+        new GeneratorContext(Name("end")),
     ]);
     private static WorldDefinition Tray() => Fixtures.BuildDocument() with {
         StateRaw = new(World: [
             new(Name("dice"), CellKind.Int, Capacity: 5, Min: 1, Max: 6,
                 Cells: Enumerable.Range(1, 5).Select(i => Cell($"d{i}", 1)).ToArray(),
-                Draw: new WorldDraw(Generator: new WorldGenerator(Source: WorldGeneratorSource.UniformRange, RangeMin: 1, RangeMax: 6), Timing: WorldDrawTiming.Event)),
+                Draw: new Draw(Generator: new StateGenerator(Source: GeneratorSource.UniformRange, RangeMin: 1, RangeMax: 6), Timing: DrawTiming.Event)),
         ]),
         Rules = [],
     };
     private static CellName Name(string value) => CellName.Parse(value);
-    private static WorldStateCell Cell(string key, long value = 0) => new(Name(key), value);
+    private static StateCell Cell(string key, long value = 0) => new(Name(key), value);
     private static WorldStateRow Find(WorldDefinition document, string row) => WorldDefinitionRows.FindStateRow(document.State, row)!;
 }

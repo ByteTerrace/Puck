@@ -7,9 +7,9 @@ namespace Puck.World.Tests;
 /// references) are pinned in <see cref="DynamicsAuthoringValidationLawTests"/>; this file is the consumer-side
 /// "which mechanism" gate.</summary>
 public sealed class MotionShapingValidationLawTests {
-    private static WorldDynamicsRow Chase => new(Damping: 1f, Frequency: 1f, Name: "chase", Response: 0f);
+    private static DynamicsRow Chase => new(Damping: 1f, Frequency: 1f, Name: "chase", Response: 0f);
 
-    private static WorldDefinition WithDynamics(IReadOnlyList<WorldDynamicsRow> rows) => Fixtures.BuildDocument() with {
+    private static WorldDefinition WithDynamics(IReadOnlyList<DynamicsRow> rows) => Fixtures.BuildDocument() with {
         DynamicsRaw = rows,
     };
     private static bool TryValidate(WorldDefinition definition, out string reason) => WorldDefinitionValidator.TryValidate(

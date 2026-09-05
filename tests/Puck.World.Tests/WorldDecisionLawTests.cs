@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using Puck.Hosting;
-using Puck.Physics.Motion;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
@@ -287,15 +286,15 @@ public sealed class WorldDecisionLawTests {
             2 => policy with { PeriodSeconds = 0.000001m }, 3 => policy with { IncumbentBonus = -1 },
             4 => policy with { Options = [Option("a", 1), Option("a", 2)] }, _ => policy with { ScoreKind = CellKind.Bool },
         };
-        Assert.Throws<WorldRuleException>(() => WorldRuleCompiler.CompileAll(Document(Rule(policy))));
+        Assert.Throws<RuleException>(() => WorldRuleCompiler.CompileAll(Document(Rule(policy))));
     }
 
     [Fact]
     public void DecisionCannotCombineAnEdgeLatchOrMismatchedScoreKinds() {
         var rule = Rule(Policy(Option("a", 1)));
-        Assert.Throws<WorldRuleException>(() => WorldRuleCompiler.CompileAll(Document(rule with { Mode = ActionTriggerMode.Edge })));
+        Assert.Throws<RuleException>(() => WorldRuleCompiler.CompileAll(Document(rule with { Mode = ActionTriggerMode.Edge })));
         var typed = Policy(new WorldDecisionOption(Name("a"), new([new ValueToken.State("score")]), [])) with { ScoreKind = CellKind.Fixed };
-        Assert.Throws<WorldRuleException>(() => WorldRuleCompiler.CompileAll(Document(Rule(typed), Slot("score", 1))));
+        Assert.Throws<RuleException>(() => WorldRuleCompiler.CompileAll(Document(Rule(typed), Slot("score", 1))));
     }
 
     [Fact]
@@ -315,7 +314,7 @@ public sealed class WorldDecisionLawTests {
     [InlineData(32)]
     public void DenseDecisionsAndHashesAddNoSteadyStateAllocation(int policyCount) {
         var carriers = new WorldStateRow(Name("carriers"), CellKind.Int, Capacity: 128,
-            Cells: Enumerable.Range(0, 128).Select(i => new WorldStateCell(Name(i.ToString()), 1)).ToArray());
+            Cells: Enumerable.Range(0, 128).Select(i => new StateCell(Name(i.ToString()), 1)).ToArray());
         var policy = Policy(Enumerable.Range(0, 32).Select(i => Option($"option-{i}", i + 1)).ToArray()) with { Mode = WorldDecisionMode.Weighted };
         var document = Document(Rule(policy, forEach: "carriers"), carriers) with {
             Rules = Enumerable.Range(0, policyCount).Select(i => Rule(policy, $"policy-{i}", "carriers")).ToArray(),

@@ -67,6 +67,44 @@ public sealed record ValueExpression(IReadOnlyList<ValueToken> Tokens) {
 [JsonDerivedType(typeof(ValueToken.BitInsert), typeDiscriminator: "bitInsert")]
 [JsonDerivedType(typeof(ValueToken.BoardShift), typeDiscriminator: "boardShift")]
 [JsonDerivedType(typeof(ValueToken.BoardImage), typeDiscriminator: "boardImage")]
+[JsonDerivedType(typeof(ValueToken.Pair), typeDiscriminator: "pair")]
+[JsonDerivedType(typeof(ValueToken.PairX), typeDiscriminator: "pairX")]
+[JsonDerivedType(typeof(ValueToken.PairY), typeDiscriminator: "pairY")]
+[JsonDerivedType(typeof(ValueToken.PairSwap), typeDiscriminator: "pairSwap")]
+[JsonDerivedType(typeof(ValueToken.PairMax), typeDiscriminator: "pairMax")]
+[JsonDerivedType(typeof(ValueToken.PairMin), typeDiscriminator: "pairMin")]
+[JsonDerivedType(typeof(ValueToken.PairSum), typeDiscriminator: "pairSum")]
+[JsonDerivedType(typeof(ValueToken.PairDifference), typeDiscriminator: "pairDifference")]
+[JsonDerivedType(typeof(ValueToken.PairTranslate), typeDiscriminator: "pairTranslate")]
+[JsonDerivedType(typeof(ValueToken.PairScale), typeDiscriminator: "pairScale")]
+[JsonDerivedType(typeof(ValueToken.Morton), typeDiscriminator: "morton")]
+[JsonDerivedType(typeof(ValueToken.MortonX), typeDiscriminator: "mortonX")]
+[JsonDerivedType(typeof(ValueToken.MortonY), typeDiscriminator: "mortonY")]
+[JsonDerivedType(typeof(ValueToken.Hilbert), typeDiscriminator: "hilbert")]
+[JsonDerivedType(typeof(ValueToken.HilbertX), typeDiscriminator: "hilbertX")]
+[JsonDerivedType(typeof(ValueToken.HilbertY), typeDiscriminator: "hilbertY")]
+[JsonDerivedType(typeof(ValueToken.HexIndex), typeDiscriminator: "hex")]
+[JsonDerivedType(typeof(ValueToken.HexQ), typeDiscriminator: "hexQ")]
+[JsonDerivedType(typeof(ValueToken.HexR), typeDiscriminator: "hexR")]
+[JsonDerivedType(typeof(ValueToken.HexRadius), typeDiscriminator: "hexRadius")]
+[JsonDerivedType(typeof(ValueToken.HexNorm), typeDiscriminator: "hexNorm")]
+[JsonDerivedType(typeof(ValueToken.HexDistance), typeDiscriminator: "hexDistance")]
+[JsonDerivedType(typeof(ValueToken.HexNeighbor), typeDiscriminator: "hexNeighbor")]
+[JsonDerivedType(typeof(ValueToken.HexRotate), typeDiscriminator: "hexRotate")]
+[JsonDerivedType(typeof(ValueToken.HexConjugate), typeDiscriminator: "hexConjugate")]
+[JsonDerivedType(typeof(ValueToken.HexSwap), typeDiscriminator: "hexSwap")]
+[JsonDerivedType(typeof(ValueToken.HexAdd), typeDiscriminator: "hexAdd")]
+[JsonDerivedType(typeof(ValueToken.HexSubtract), typeDiscriminator: "hexSubtract")]
+[JsonDerivedType(typeof(ValueToken.HexMultiply), typeDiscriminator: "hexMultiply")]
+[JsonDerivedType(typeof(ValueToken.HexScale), typeDiscriminator: "hexScale")]
+[JsonDerivedType(typeof(ValueToken.HexTranslate), typeDiscriminator: "hexTranslate")]
+[JsonDerivedType(typeof(ValueToken.Layer), typeDiscriminator: "layer")]
+[JsonDerivedType(typeof(ValueToken.LayerOffset), typeDiscriminator: "layerOffset")]
+[JsonDerivedType(typeof(ValueToken.LayerStart), typeDiscriminator: "layerStart")]
+[JsonDerivedType(typeof(ValueToken.LayerSize), typeDiscriminator: "layerSize")]
+[JsonDerivedType(typeof(ValueToken.SquareRoot), typeDiscriminator: "sqrt")]
+[JsonDerivedType(typeof(ValueToken.Sine), typeDiscriminator: "sin")]
+[JsonDerivedType(typeof(ValueToken.Cosine), typeDiscriminator: "cos")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record ValueToken {
     /// <summary>An exact authored decimal, converted to the destination row's numeric kind at compile time.</summary>
@@ -187,6 +225,82 @@ public abstract record ValueToken {
     /// <param name="Topology">A discrete topology of <c>state.lattices</c> with at most 64 cells.</param>
     /// <param name="Element">An element name <c>world.topology</c> lists for that topology.</param>
     public sealed record BoardImage(string Topology, string Element) : ValueToken;
+    /// <summary>Szudzik's pairing of two non-negative integers into one; <c>pairX</c>/<c>pairY</c> invert it.</summary>
+    public sealed record Pair : ValueToken;
+    /// <summary>The first component of a paired value.</summary>
+    public sealed record PairX : ValueToken;
+    /// <summary>The second component of a paired value.</summary>
+    public sealed record PairY : ValueToken;
+    /// <summary>The pair with its components exchanged, computed without unpairing.</summary>
+    public sealed record PairSwap : ValueToken;
+    /// <summary>The larger component of a paired value.</summary>
+    public sealed record PairMax : ValueToken;
+    /// <summary>The smaller component of a paired value.</summary>
+    public sealed record PairMin : ValueToken;
+    /// <summary>The sum of a paired value's components.</summary>
+    public sealed record PairSum : ValueToken;
+    /// <summary>The absolute difference of a paired value's components.</summary>
+    public sealed record PairDifference : ValueToken;
+    /// <summary>The pair with both components moved by the second argument.</summary>
+    public sealed record PairTranslate : ValueToken;
+    /// <summary>The pair with both components multiplied by the second argument.</summary>
+    public sealed record PairScale : ValueToken;
+    /// <summary>Bit-interleaves two non-negative integers below 2^31 (x on the even bits); <c>mortonX</c>/<c>mortonY</c> invert it.</summary>
+    public sealed record Morton : ValueToken;
+    /// <summary>The even-bit component of a Morton code.</summary>
+    public sealed record MortonX : ValueToken;
+    /// <summary>The odd-bit component of a Morton code.</summary>
+    public sealed record MortonY : ValueToken;
+    /// <summary>The distance along the Hilbert curve of the given order (1..31) to (x, y); <c>hilbertX</c>/<c>hilbertY</c> invert it.</summary>
+    public sealed record Hilbert : ValueToken;
+    /// <summary>The x of the point at a Hilbert distance for the given order.</summary>
+    public sealed record HilbertX : ValueToken;
+    /// <summary>The y of the point at a Hilbert distance for the given order.</summary>
+    public sealed record HilbertY : ValueToken;
+    /// <summary>The ring-ordered index of the hex cell at Eisenstein coordinates (q, r); <c>hexQ</c>/<c>hexR</c> invert it.</summary>
+    public sealed record HexIndex : ValueToken;
+    /// <summary>The q coordinate of a hex index.</summary>
+    public sealed record HexQ : ValueToken;
+    /// <summary>The r coordinate of a hex index.</summary>
+    public sealed record HexR : ValueToken;
+    /// <summary>The ring a hex index lies on.</summary>
+    public sealed record HexRadius : ValueToken;
+    /// <summary>The Eisenstein norm q² − q·r + r² of a hex index.</summary>
+    public sealed record HexNorm : ValueToken;
+    /// <summary>The step distance between two hex indices.</summary>
+    public sealed record HexDistance : ValueToken;
+    /// <summary>The hex index one step away in direction 0..5 (counterclockwise from +q; any integer, taken modulo 6).</summary>
+    public sealed record HexNeighbor : ValueToken;
+    /// <summary>The hex index rotated about the origin by sixth turns (any integer, taken modulo 6).</summary>
+    public sealed record HexRotate : ValueToken;
+    /// <summary>The hex index reflected across the q axis.</summary>
+    public sealed record HexConjugate : ValueToken;
+    /// <summary>The hex index with q and r exchanged.</summary>
+    public sealed record HexSwap : ValueToken;
+    /// <summary>The hex index of the coordinate sum.</summary>
+    public sealed record HexAdd : ValueToken;
+    /// <summary>The hex index of the coordinate difference.</summary>
+    public sealed record HexSubtract : ValueToken;
+    /// <summary>The hex index of the Eisenstein product.</summary>
+    public sealed record HexMultiply : ValueToken;
+    /// <summary>The hex index scaled by an integer.</summary>
+    public sealed record HexScale : ValueToken;
+    /// <summary>The hex index moved by (q, r).</summary>
+    public sealed record HexTranslate : ValueToken;
+    /// <summary>The layer holding an index in a layer sequence (index, start, step, seed): a core of seed indices wrapped by layers of start, start+step, … indices.</summary>
+    public sealed record Layer : ValueToken;
+    /// <summary>The position of an index within its layer, for the same (index, start, step, seed) sequence.</summary>
+    public sealed record LayerOffset : ValueToken;
+    /// <summary>The first index of a layer, for a (layer, start, step, seed) sequence.</summary>
+    public sealed record LayerStart : ValueToken;
+    /// <summary>The index count of a layer, for a (layer, start, step, seed) sequence.</summary>
+    public sealed record LayerSize : ValueToken;
+    /// <summary>The square root: the floor root of a non-negative int, or the fixed-point root of a non-negative fixed value.</summary>
+    public sealed record SquareRoot : ValueToken;
+    /// <summary>The sine of a fixed-point angle in radians; fixed expressions only.</summary>
+    public sealed record Sine : ValueToken;
+    /// <summary>The cosine of a fixed-point angle in radians; fixed expressions only.</summary>
+    public sealed record Cosine : ValueToken;
 }
 
 /// <summary>Converts an exact authored decimal literal into the Q48.16 fixed-point carrier a state cell holds — the one

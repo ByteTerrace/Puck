@@ -1,7 +1,6 @@
 using Xunit;
 
 using Puck.Maths;
-using Puck.Physics.Motion;
 using Puck.World.Protocol;
 
 namespace Puck.World.Tests;
@@ -74,7 +73,7 @@ public sealed class ChannelWorldRuleFactLawTests {
                     Name: beacon,
                     Kind: CellKind.Int,
                     NonNegative: true,
-                    Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0L)])
+                    Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 0L)])
             ]),
             Rules = [
                 new WorldRule(
