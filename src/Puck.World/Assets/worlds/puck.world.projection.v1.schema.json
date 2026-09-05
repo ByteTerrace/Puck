@@ -12477,7 +12477,8 @@
                                     "Key",
                                     "First",
                                     "Last",
-                                    "Random"
+                                    "Random",
+                                    "Slice"
                                   ],
                                   "default": "Key"
                                 },
@@ -12503,7 +12504,7 @@
                                   "default": null
                                 },
                                 "count": {
-                                  "description": "How many tokens move in this one transfer, 1..MaxTransferCount, each selected afresh from what remains (a five-card deal is one mutation); a key selection moves exactly one.",
+                                  "description": "How many tokens move in this one transfer, 1..MaxTransferCount, each selected afresh from what remains (a five-card deal is one mutation); a key selection moves exactly one, and a slice selection moves the keyed token\u0027s whole tail (its count is 1).",
                                   "type": "integer",
                                   "default": 1
                                 }
@@ -12666,6 +12667,75 @@
                               "required": [
                                 "row",
                                 "set"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "Rewrites a board from one or two boards over the same topology, cell by cell, in one journaled mutation: the set algebra $board:mask and the bit operators give a board of at most 64 cells, for a board of any size. A cell is a member when its value is not its board\u0027s empty; every member of the result is written as Value and every other cell as the board\u0027s empty.",
+                              "properties": {
+                                "$type": {
+                                  "const": "boardCombine"
+                                },
+                                "row": {
+                                  "description": "The board written.",
+                                  "type": "string"
+                                },
+                                "operation": {
+                                  "description": "What is written.",
+                                  "enum": [
+                                    "Copy",
+                                    "Fill",
+                                    "Clear",
+                                    "And",
+                                    "Or",
+                                    "Xor",
+                                    "AndNot",
+                                    "Not",
+                                    "Shift",
+                                    "Image"
+                                  ]
+                                },
+                                "left": {
+                                  "description": "The first source board, over the same topology; absent for Fill and Clear.",
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "default": null
+                                },
+                                "right": {
+                                  "description": "The second source board for the two-board operations.",
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "default": null
+                                },
+                                "direction": {
+                                  "description": "The direction a Shift steps along.",
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "default": null
+                                },
+                                "element": {
+                                  "description": "The point-group element an Image carries through.",
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "default": null
+                                },
+                                "value": {
+                                  "description": "The value written to every member; never the board\u0027s own empty.",
+                                  "type": "integer",
+                                  "default": 1
+                                }
+                              },
+                              "required": [
+                                "row",
+                                "operation"
                               ],
                               "additionalProperties": false
                             },
@@ -12858,7 +12928,8 @@
                                               "Key",
                                               "First",
                                               "Last",
-                                              "Random"
+                                              "Random",
+                                              "Slice"
                                             ],
                                             "default": "Key"
                                           },
@@ -12884,7 +12955,7 @@
                                             "default": null
                                           },
                                           "count": {
-                                            "description": "How many tokens move in this one transfer, 1..MaxTransferCount, each selected afresh from what remains (a five-card deal is one mutation); a key selection moves exactly one.",
+                                            "description": "How many tokens move in this one transfer, 1..MaxTransferCount, each selected afresh from what remains (a five-card deal is one mutation); a key selection moves exactly one, and a slice selection moves the keyed token\u0027s whole tail (its count is 1).",
                                             "type": "integer",
                                             "default": 1
                                           }
@@ -13024,6 +13095,75 @@
                                         "required": [
                                           "row",
                                           "set"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Rewrites a board from one or two boards over the same topology, cell by cell, in one journaled mutation: the set algebra $board:mask and the bit operators give a board of at most 64 cells, for a board of any size. A cell is a member when its value is not its board\u0027s empty; every member of the result is written as Value and every other cell as the board\u0027s empty.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "boardCombine"
+                                          },
+                                          "row": {
+                                            "description": "The board written.",
+                                            "type": "string"
+                                          },
+                                          "operation": {
+                                            "description": "What is written.",
+                                            "enum": [
+                                              "Copy",
+                                              "Fill",
+                                              "Clear",
+                                              "And",
+                                              "Or",
+                                              "Xor",
+                                              "AndNot",
+                                              "Not",
+                                              "Shift",
+                                              "Image"
+                                            ]
+                                          },
+                                          "left": {
+                                            "description": "The first source board, over the same topology; absent for Fill and Clear.",
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ],
+                                            "default": null
+                                          },
+                                          "right": {
+                                            "description": "The second source board for the two-board operations.",
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ],
+                                            "default": null
+                                          },
+                                          "direction": {
+                                            "description": "The direction a Shift steps along.",
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ],
+                                            "default": null
+                                          },
+                                          "element": {
+                                            "description": "The point-group element an Image carries through.",
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ],
+                                            "default": null
+                                          },
+                                          "value": {
+                                            "description": "The value written to every member; never the board\u0027s own empty.",
+                                            "type": "integer",
+                                            "default": 1
+                                          }
+                                        },
+                                        "required": [
+                                          "row",
+                                          "operation"
                                         ],
                                         "additionalProperties": false
                                       },

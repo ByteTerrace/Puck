@@ -282,8 +282,9 @@ arithmetic shift that drags the sign bit through a mask with bit 63 set, so a bi
 `pair(x, y)` admits components up to 3,037,000,498 (a hash or a Q48.16 raw does not pair); a Gödel multiset
 holds the first 15 primes at count one (their product is 6.1e17) and overflows at the 16th (`* 53`), and every
 count multiplies, so cap the row or the item set; `$board:mask`/`writeSet` stop at 64 cells while a topology
-admits 4,096 — a larger board addresses cells, not masks; a `transfer` of `count > 1` takes `first`/`last`/
-`random`, never an interior run. `$table:<name>[:<column>]:<key>` reads a static
+admits 4,096 — a wider board's set algebra is the `boardCombine` transform (and/or/xor/andNot/not/shift/image
+over whole board rows, one journaled mutation each); a `transfer` of `count > 1` takes `first`/`last`/`random`,
+and an interior run is `slice`: the keyed token and everything after it, in order. `$table:<name>[:<column>]:<key>` reads a static
 `tables` document (`puck.table.v1`, hash-pinned, outside simulation state) by an
 integer literal, a `$cell:` indirection, `$each`, or an int `$bind:`; a missing
 dynamic key is a `TableKeyMissing` refusal, never a value. Every top-level
@@ -2400,7 +2401,8 @@ rules read it through `$match:<pattern>:<row>[:<direction>|:any][:prefix|:mask|:
 ray, a zone's attribute word or per-token `value` expression (`$token` keys),
 a `history` ring (`push`/`pushState`, `$history:<row>:<age>`), or a keyed row;
 `$board:mask`, the `boardShift`/`boardImage` expression ops, and the
-`writeSet` transform carry the one cell-set vocabulary; `world.match` narrates
+`writeSet` transform carry the one cell-set vocabulary up to 64 cells, and the
+`boardCombine` transform carries it over boards of any size; `world.match` narrates
 one word.
 The `sort` transform supplies the canonical order. Read back with
 `world.patterns` and `world.match`.

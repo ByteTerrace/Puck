@@ -17,6 +17,7 @@ public static partial class WorldStateTransforms {
         StateTransform.SortZone sortZone => [sortZone.Row, .. sortZone.By.Select(key => key.Row)],
         StateTransform.SortKeyed sortKeyed => [sortKeyed.Row],
         StateTransform.WriteSet writeSet => [writeSet.Row],
+        StateTransform.BoardCombine combine => [combine.Row],
         StateTransform.Push push => [push.Row],
         _ => [],
     };
@@ -47,6 +48,7 @@ public static partial class WorldStateTransforms {
                 StateTransform.SortZone sortZone => TrySortZone(rows, sortZone, out reason),
                 StateTransform.SortKeyed sortKeyed => TrySortKeyed(rows, sortKeyed, out reason),
                 StateTransform.WriteSet writeSet => TryWriteSet(definition, rows, writeSet, out reason),
+                StateTransform.BoardCombine combine => TryBoardCombine(definition, rows, combine, out reason),
                 StateTransform.Push push => TryPush(rows, push, out reason),
                 _ => Refuse("unknown state transform", out reason),
             };
@@ -140,13 +142,16 @@ public static partial class WorldStateTransforms {
         if (source.EffectiveDomain is not StateDomain.KeysOf { Ordered: true } sourceZone || destination.EffectiveDomain is not StateDomain.KeysOf { Ordered: true } destinationZone || sourceZone.Row != destinationZone.Row || !Enum.IsDefined(transfer.Selector)) {
             return Refuse("transfer requires zones in one token domain and a defined selector", out reason);
         }
-        if ((transfer.Selector == ZoneSelector.Key) != (transfer.Key is not null) || (transfer.Selector == ZoneSelector.Random) != (transfer.Draw is not null)) {
-            return Refuse("key selection requires only key; random selection requires only draw", out reason);
+        if ((transfer.Selector is ZoneSelector.Key or ZoneSelector.Slice) != (transfer.Key is not null) || (transfer.Selector == ZoneSelector.Random) != (transfer.Draw is not null)) {
+            return Refuse("key and slice selection require only key; random selection requires only draw", out reason);
         }
-        if (transfer.Count < 1 || transfer.Count > StateTransferCapacity.MaxTransferCount || (transfer.Selector == ZoneSelector.Key && transfer.Count != 1)) {
-            return Refuse($"transfer count must be 1..{StateTransferCapacity.MaxTransferCount}, and exactly 1 for a key selection", out reason);
+        if (transfer.Count < 1 || transfer.Count > StateTransferCapacity.MaxTransferCount || (transfer.Selector is ZoneSelector.Key or ZoneSelector.Slice && transfer.Count != 1)) {
+            return Refuse($"transfer count must be 1..{StateTransferCapacity.MaxTransferCount}, and exactly 1 for a key or slice selection", out reason);
         }
         var cells = (source.Cells ?? []).ToList();
+        if (transfer.Selector == ZoneSelector.Slice) {
+            return TrySlice(rows, from, to, source, destination, cells, transfer, out reason);
+        }
         if (cells.Count < transfer.Count) {
             return Refuse((cells.Count == 0) ? "source zone is empty" : $"source zone holds {cells.Count} tokens, fewer than the {transfer.Count} to transfer", out reason);
         }
@@ -207,6 +212,34 @@ public static partial class WorldStateTransforms {
         return true;
     }
 
+    // The keyed token and every token after it move as one run, in order: the cascade a solitaire column hands over
+    // from a card to its top. Onto the same zone, the run rotates to the other end.
+    private static bool TrySlice(WorldStateRow[] rows, int from, int to, WorldStateRow source, WorldStateRow destination, List<StateCell> cells, StateTransform.Transfer transfer, out string reason) {
+        var start = cells.FindIndex(c => c.Key.Value == transfer.Key);
+        if (start < 0) {
+            return Refuse("source zone does not contain the selected token", out reason);
+        }
+        var run = cells.GetRange(start, cells.Count - start);
+        cells.RemoveRange(start, run.Count);
+        var target = from == to ? cells : (destination.Cells ?? []).ToList();
+        if (from != to && (target.Count + run.Count) > (destination.Capacity ?? destination.CellCeiling)) {
+            return Refuse("destination zone is full", out reason);
+        }
+        foreach (var token in run) {
+            if (target.Any(c => c.Key == token.Key)) {
+                return Refuse("destination already contains the token", out reason);
+            }
+        }
+        if (transfer.InsertFirst) {
+            target.InsertRange(0, run);
+        } else {
+            target.AddRange(run);
+        }
+        rows[from] = source with { Cells = cells };
+        rows[to] = destination with { Cells = target };
+        reason = string.Empty;
+        return true;
+    }
     private static bool TrySetRay(WorldDefinition definition, WorldStateRow[] rows, StateTransform.SetRay ray, CompiledPatterns patterns, out string reason) {
         if (!TryFind(rows, ray.Row, out var index, out reason)) {
             return false;

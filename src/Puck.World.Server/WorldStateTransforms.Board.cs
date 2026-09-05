@@ -40,6 +40,88 @@ public static partial class WorldStateTransforms {
         return true;
     }
 
+    // Membership is "not the board's empty value"; the result writes members as the transform's value and drops
+    // every other cell, which reads as empty. Every board shares the target's topology, so one values span per source
+    // and one member span for the result bound the work at three walks of the board.
+    private static bool TryBoardCombine(WorldDefinition definition, WorldStateRow[] rows, StateTransform.BoardCombine combine, out string reason) {
+        if (!TryFind(rows, combine.Row, out var index, out reason)) {
+            return false;
+        }
+        var row = rows[index];
+        if (row.EffectiveDomain is not StateDomain.CellsOf board || WorldTopologyCompilation.Find(definition, board.Topology) is not { } topology) {
+            return Refuse("boardCombine writes a board row", out reason);
+        }
+        var operation = combine.Operation;
+        var needsLeft = operation is not (BoardCombineOp.Fill or BoardCombineOp.Clear);
+        var needsRight = operation is BoardCombineOp.And or BoardCombineOp.Or or BoardCombineOp.Xor or BoardCombineOp.AndNot;
+        if (!Enum.IsDefined(operation) || needsLeft != (combine.Left is not null) || needsRight != (combine.Right is not null) ||
+            (operation == BoardCombineOp.Shift) != (combine.Direction is not null) || (operation == BoardCombineOp.Image) != (combine.Element is not null)) {
+            return Refuse("boardCombine takes left for every operation but fill and clear, right for and/or/xor/andNot, direction for shift alone, and element for image alone", out reason);
+        }
+        if (row.ClampToEnvelope(combine.Value) != combine.Value || (row.Kind == CellKind.Bool && combine.Value is not (0 or 1)) || combine.Value == board.Empty) {
+            return Refuse("boardCombine writes a member value the board admits and that is not the board's own empty value", out reason);
+        }
+        var direction = (combine.Direction is { } directionName) ? topology.Direction(directionName) : -1;
+        var element = (combine.Element is { } elementName) ? topology.Element(elementName) : -1;
+        if ((combine.Direction is not null && direction < 0) || (combine.Element is not null && element < 0)) {
+            return Refuse("boardCombine names a direction or point-group element its topology does not declare", out reason);
+        }
+        Span<long> left = stackalloc long[topology.CellCount];
+        Span<long> right = stackalloc long[topology.CellCount];
+        var leftEmpty = 0L;
+        var rightEmpty = 0L;
+        if (needsLeft && !TryReadBoard(definition, rows, combine.Left!, board.Topology, topology, left, out leftEmpty, out reason)) {
+            return false;
+        }
+        if (needsRight && !TryReadBoard(definition, rows, combine.Right!, board.Topology, topology, right, out rightEmpty, out reason)) {
+            return false;
+        }
+        Span<bool> member = stackalloc bool[topology.CellCount];
+        for (var cell = 0; cell < topology.CellCount; cell++) {
+            var inLeft = needsLeft && (left[cell] != leftEmpty);
+            var inRight = needsRight && (right[cell] != rightEmpty);
+            switch (operation) {
+                case BoardCombineOp.Fill: member[cell] = true; break;
+                case BoardCombineOp.And: member[cell] = (inLeft && inRight); break;
+                case BoardCombineOp.Or: member[cell] = (inLeft || inRight); break;
+                case BoardCombineOp.Xor: member[cell] = (inLeft ^ inRight); break;
+                case BoardCombineOp.AndNot: member[cell] = (inLeft && !inRight); break;
+                case BoardCombineOp.Not: member[cell] = !inLeft; break;
+                case BoardCombineOp.Shift:
+                    if (inLeft && topology.Neighbour(cell, direction) is >= 0 and var neighbour) { member[neighbour] = true; }
+                    break;
+                case BoardCombineOp.Image:
+                    if (inLeft) { member[topology.Image(element, cell)] = true; }
+                    break;
+                default: break;
+            }
+        }
+        var cells = new List<StateCell>();
+        for (var cell = 0; cell < topology.CellCount; cell++) {
+            if (operation == BoardCombineOp.Copy) {
+                if (left[cell] != board.Empty) { cells.Add(new(topology.NameOf(cell), left[cell])); }
+            } else if (member[cell]) {
+                cells.Add(new(topology.NameOf(cell), combine.Value));
+            }
+        }
+        rows[index] = row with { Cells = cells };
+        reason = string.Empty;
+        return true;
+    }
+    private static bool TryReadBoard(WorldDefinition definition, WorldStateRow[] rows, string name, string topologyName, CompiledTopology topology, Span<long> values, out long empty, out string reason) {
+        empty = 0L;
+        if (!TryFind(rows, name, out var index, out reason)) {
+            return false;
+        }
+        var source = rows[index];
+        if (source.EffectiveDomain is not StateDomain.CellsOf sourceBoard || sourceBoard.Topology != topologyName) {
+            return Refuse($"boardCombine source '{name}' must be a board over '{topologyName}'", out reason);
+        }
+        empty = sourceBoard.Empty;
+        BoardQueries.Read(source, topology, values);
+        return true;
+    }
+
     // A ring's cells are its slots 0..n-1 in slot order (the validator's invariant), so the slot at the cursor is
     // cells[slot] when it exists and the next append otherwise; nothing is parsed or searched.
     private static bool TryPush(WorldStateRow[] rows, StateTransform.Push push, out string reason) {

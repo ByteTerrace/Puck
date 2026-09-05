@@ -828,12 +828,14 @@ world or canary — the tabletop's 106 rules, the poker table, and dominoes ran
 on `$board:mask`/`neighbour`/`rayCell`/`offset`/`attacks` throughout, so the
 passive 300-tick garden hash is unchanged by this change, and the frozen
 world's own hash likewise. `writeSet` keeps `setMask`'s 64-cell ceiling —
-`WorldTopologyCompilation.MaxCells` is 4096, and a topology past 64 cells now
-has no board-writing transform of its own (a rule composes its algebra cell
-by cell instead); `combine`'s prior claim to serve that range was unexercised
-by any document, so the ceiling narrows rather than a multi-word cell-set
-type getting built to fill it — the next world that needs board algebra past
-64 cells is what should motivate that representation, not this pass.
+a mask is one expression value and an expression value is one word. Past 64
+cells the set algebra is the `boardCombine` transform: and/or/xor/andNot/not/
+shift/image over whole board rows of one topology, membership being "not the
+board's empty", one journaled mutation per operation at three walks of the
+board — a 19×19 attack map is three transforms where an 8×8's is one
+expression, and no multi-word cell-set type enters the expression language.
+A solitaire cascade is a `slice` transfer: the keyed token and every token
+after it, moved in order as one run.
 
 **The row-domain facet collapse has landed (owner decision).** `WorldStateRow`
 carries one `Domain` (`WorldStateDomain`: `Slot`, `Keys`, `KeysOf(row,

@@ -125,6 +125,63 @@ public sealed class DiscreteStateLawTests {
     }
 
     [Fact]
+    public void ASliceMovesTheKeyedTokenAndEverythingAfterItInOrder() {
+        var definition = Document(
+            new(Name("cards"), CellKind.Int, Cells: [Cell("a",1),Cell("b",2),Cell("c",3),Cell("d",4),Cell("e",5)]),
+            new(Name("column"), CellKind.Bool, Cells: [Cell("a"),Cell("b"),Cell("c"),Cell("d")], Domain: new StateDomain.KeysOf(CellName.Parse("cards"), Ordered: true)),
+            new(Name("other"), CellKind.Bool, Cells: [Cell("e")], Domain: new StateDomain.KeysOf(CellName.Parse("cards"), Ordered: true)),
+            new(Name("small"), CellKind.Bool, Capacity: 2, Cells: [], Domain: new StateDomain.KeysOf(CellName.Parse("cards"), Ordered: true)));
+        var slice = new StateTransform.Transfer("column", "other", ZoneSelector.Slice, Key: "b");
+        Assert.True(WorldStateTransforms.TryApply(definition, slice, WorldPrincipal.Console, 0, "test", out var changed, out var reason), reason);
+        Assert.Equal(new[] { "a" }, Find(changed, "column").Cells!.Select(c => c.Key.Value));
+        Assert.Equal(new[] { "e", "b", "c", "d" }, Find(changed, "other").Cells!.Select(c => c.Key.Value));
+        Assert.True(WorldStateTransforms.TryApply(definition, slice with { InsertFirst = true }, WorldPrincipal.Console, 0, "test", out var first, out reason), reason);
+        Assert.Equal(new[] { "b", "c", "d", "e" }, Find(first, "other").Cells!.Select(c => c.Key.Value));
+        Assert.False(WorldStateTransforms.TryApply(definition, slice with { To = "small" }, WorldPrincipal.Console, 0, "test", out _, out var full));
+        Assert.Contains("full", full);
+        Assert.False(WorldStateTransforms.TryApply(definition, slice with { Key = "zz" }, WorldPrincipal.Console, 0, "test", out _, out var missing));
+        Assert.Contains("does not contain", missing);
+        Assert.False(WorldStateTransforms.TryApply(definition, slice with { Count = 2 }, WorldPrincipal.Console, 0, "test", out _, out _));
+        Assert.True(WorldStateTransforms.TryApply(definition, new StateTransform.Transfer("column", "column", ZoneSelector.Slice, Key: "c", InsertFirst: true), WorldPrincipal.Console, 0, "test", out var rotated, out reason), reason);
+        Assert.Equal(new[] { "c", "d", "a", "b" }, Find(rotated, "column").Cells!.Select(c => c.Key.Value));
+    }
+
+    [Fact]
+    public void BoardCombineRunsTheSetAlgebraOverABoardWiderThanAWord() {
+        var wide = new LatticeTopology.Grid("wide", new DocumentVector3(0,0,0), 1, Width: 10, Depth: 10);
+        var definition = Fixtures.BuildDocument() with {
+            StateRaw = new(World: [
+                new(Name("white"), CellKind.Int, Cells: [Cell("0",1),Cell("1",1),Cell("11",1),Cell("99",1)], Domain: new StateDomain.CellsOf("wide")),
+                new(Name("black"), CellKind.Int, Cells: [Cell("1",1),Cell("2",1)], Domain: new StateDomain.CellsOf("wide")),
+                new(Name("out"), CellKind.Int, Domain: new StateDomain.CellsOf("wide")),
+            ], Lattices: [wide]),
+            Rules = [],
+        };
+        static long[] Members(WorldDefinition document, string row) => [.. Find(document, row).Cells!.Where(c => c.Value != 0).Select(c => long.Parse(c.Key.Value)).Order()];
+
+        Assert.True(WorldStateTransforms.TryApply(definition, new StateTransform.BoardCombine("out", BoardCombineOp.Shift, Left: "white", Direction: "E"), WorldPrincipal.Console, 0, "test", out var shifted, out var reason), reason);
+        Assert.Equal(new long[] { 1, 2, 12 }, Members(shifted, "out"));
+        Assert.True(WorldStateTransforms.TryApply(definition, new StateTransform.BoardCombine("out", BoardCombineOp.And, Left: "white", Right: "black"), WorldPrincipal.Console, 0, "test", out var both, out reason), reason);
+        Assert.Equal(new long[] { 1 }, Members(both, "out"));
+        Assert.True(WorldStateTransforms.TryApply(definition, new StateTransform.BoardCombine("out", BoardCombineOp.AndNot, Left: "white", Right: "black", Value: 7), WorldPrincipal.Console, 0, "test", out var only, out reason), reason);
+        Assert.Equal(new long[] { 0, 11, 99 }, Members(only, "out"));
+        Assert.All(Find(only, "out").Cells!, c => Assert.Equal(7, c.Value));
+        Assert.True(WorldStateTransforms.TryApply(definition, new StateTransform.BoardCombine("out", BoardCombineOp.Not, Left: "black"), WorldPrincipal.Console, 0, "test", out var complement, out reason), reason);
+        Assert.Equal(98, Members(complement, "out").Length);
+        Assert.True(WorldStateTransforms.TryApply(definition, new StateTransform.BoardCombine("out", BoardCombineOp.Image, Left: "white", Element: "identity"), WorldPrincipal.Console, 0, "test", out var image, out reason), reason);
+        Assert.Equal(new long[] { 0, 1, 11, 99 }, Members(image, "out"));
+        Assert.True(WorldStateTransforms.TryApply(definition, new StateTransform.BoardCombine("out", BoardCombineOp.Fill, Value: 3), WorldPrincipal.Console, 0, "test", out var filled, out reason), reason);
+        Assert.Equal(100, Members(filled, "out").Length);
+        Assert.True(WorldStateTransforms.TryApply(filled, new StateTransform.BoardCombine("out", BoardCombineOp.Clear), WorldPrincipal.Console, 0, "test", out var cleared, out reason), reason);
+        Assert.Empty(Members(cleared, "out"));
+        Assert.False(WorldStateTransforms.TryApply(definition, new StateTransform.BoardCombine("out", BoardCombineOp.Shift, Left: "white", Direction: "UP"), WorldPrincipal.Console, 0, "test", out _, out var badDirection));
+        Assert.Contains("does not declare", badDirection);
+        Assert.False(WorldStateTransforms.TryApply(definition, new StateTransform.BoardCombine("out", BoardCombineOp.Or, Left: "white"), WorldPrincipal.Console, 0, "test", out _, out _));
+        Assert.False(WorldStateTransforms.TryApply(definition, new StateTransform.BoardCombine("out", BoardCombineOp.Copy, Left: "white", Value: 0), WorldPrincipal.Console, 0, "test", out _, out var emptyValue));
+        Assert.Contains("empty", emptyValue);
+    }
+
+    [Fact]
     public void TransfersPreserveDuplicateValuedTokenIdentitiesAndPileOrder() {
         var definition = Document(
             new(Name("cards"), CellKind.Int, Cells: [Cell("a",7),Cell("b",7)]),

@@ -429,10 +429,10 @@ public static partial class RuleCompiler {
                 break;
             case StateTransform.Transfer transfer:
                 if (Row(transfer.From).EffectiveDomain is not StateDomain.KeysOf { Ordered: true } source || Row(transfer.To).EffectiveDomain is not StateDomain.KeysOf { Ordered: true } destination || source.Row != destination.Row ||
-                    !Enum.IsDefined(transfer.Selector) || (transfer.Selector == ZoneSelector.Key) != (transfer.Key is not null) ||
+                    !Enum.IsDefined(transfer.Selector) || (transfer.Selector is ZoneSelector.Key or ZoneSelector.Slice) != (transfer.Key is not null) ||
                     (transfer.Selector == ZoneSelector.Random) != (transfer.Draw is not null) ||
-                    transfer.Count < 1 || transfer.Count > StateTransferCapacity.MaxTransferCount || (transfer.Selector == ZoneSelector.Key && transfer.Count != 1)) {
-                    throw Invalid($"transfer requires compatible ordered token zones, selector arguments, and a count of 1..{StateTransferCapacity.MaxTransferCount} (exactly 1 by key)");
+                    transfer.Count < 1 || transfer.Count > StateTransferCapacity.MaxTransferCount || (transfer.Selector is ZoneSelector.Key or ZoneSelector.Slice && transfer.Count != 1)) {
+                    throw Invalid($"transfer requires compatible ordered token zones, selector arguments, and a count of 1..{StateTransferCapacity.MaxTransferCount} (exactly 1 by key or slice)");
                 }
                 if (transfer.Draw is { } drawName) {
                     var drawRow = Row(drawName);
@@ -483,6 +483,30 @@ public static partial class RuleCompiler {
                     throw Invalid($"writeSet requires a board of at most {BoardMask.MaxCells} cells, an integer set cell, and an admitted value");
                 }
                 break;
+            case StateTransform.BoardCombine combine: {
+                var target = Row(combine.Row);
+                if (target.EffectiveDomain is not StateDomain.CellsOf targetBoard || context.FindTopology(name: targetBoard.Topology) is not { } targetTopology) {
+                    throw Invalid("boardCombine writes a board row");
+                }
+                var needsLeft = combine.Operation is not (BoardCombineOp.Fill or BoardCombineOp.Clear);
+                var needsRight = combine.Operation is BoardCombineOp.And or BoardCombineOp.Or or BoardCombineOp.Xor or BoardCombineOp.AndNot;
+                if (!Enum.IsDefined(combine.Operation) || needsLeft != (combine.Left is not null) || needsRight != (combine.Right is not null) ||
+                    (combine.Operation == BoardCombineOp.Shift) != (combine.Direction is not null) || (combine.Operation == BoardCombineOp.Image) != (combine.Element is not null)) {
+                    throw Invalid("boardCombine takes left for every operation but fill and clear, right for and/or/xor/andNot, direction for shift alone, and element for image alone");
+                }
+                foreach (var sourceName in new[] { combine.Left, combine.Right }) {
+                    if (sourceName is not null && (Row(sourceName).EffectiveDomain is not StateDomain.CellsOf sourceBoard || sourceBoard.Topology != targetBoard.Topology)) {
+                        throw Invalid($"boardCombine source '{sourceName}' must be a board over '{targetBoard.Topology}'");
+                    }
+                }
+                if ((combine.Direction is { } direction && targetTopology.Direction(direction) < 0) || (combine.Element is { } element && targetTopology.Element(element) < 0)) {
+                    throw Invalid("boardCombine names a direction or point-group element its topology does not declare");
+                }
+                if (target.ClampToEnvelope(combine.Value) != combine.Value || (target.Kind == CellKind.Bool && combine.Value is not (0 or 1)) || combine.Value == targetBoard.Empty) {
+                    throw Invalid("boardCombine writes a member value the board admits and that is not the board's own empty value");
+                }
+                break;
+            }
             case StateTransform.Push push:
                 var ring = Row(push.Row);
                 if (ring.EffectiveDomain is not StateDomain.Ring || ring.ClampToEnvelope(push.Value) != push.Value) {

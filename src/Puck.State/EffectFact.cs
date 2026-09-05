@@ -304,7 +304,10 @@ public sealed class TransformStateEffect : EffectFact {
                 cost += (long)count * (count + 2);
                 break;
             case StateTransform.Transfer transfer:
-                cost += (long)transfer.Count * context.RowCapacity(name: transfer.From);
+                cost += ((transfer.Selector == ZoneSelector.Slice) ? 2L : (long)transfer.Count) * context.RowCapacity(name: transfer.From);
+                break;
+            case StateTransform.BoardCombine combine:
+                cost += 3L * BoardCells(context: context, row: combine.Row);
                 break;
             case StateTransform.SortZone sortZone:
                 cost += 2L * context.RowCapacity(name: sortZone.Row) * Math.Max(1, sortZone.By.Count);
@@ -330,6 +333,15 @@ public sealed class TransformStateEffect : EffectFact {
         return cost;
     }
     /// <inheritdoc/>
+    public override void CollectReads(List<RuleAccess> into) {
+        if (Transform is StateTransform.BoardCombine combine) {
+            foreach (var source in new[] { combine.Left, combine.Right }) {
+                if (source is not null) {
+                    into.Add(item: new RuleAccess(Row: source, Key: null, IsSet: false));
+                }
+            }
+        }
+    }
     public override void CollectWrites(List<RuleAccess> into) {
         foreach (var row in Rows(transform: Transform)) {
             into.Add(item: new RuleAccess(Row: row, Key: null, IsSet: true));
@@ -348,6 +360,7 @@ public sealed class TransformStateEffect : EffectFact {
         StateTransform.SortZone zone => [zone.Row],
         StateTransform.SortKeyed keyed => [keyed.Row],
         StateTransform.WriteSet set => [set.Row],
+        StateTransform.BoardCombine combine => [combine.Row],
         StateTransform.Push push => [push.Row],
         StateTransform.Observe observe => [observe.Row],
         _ => [],

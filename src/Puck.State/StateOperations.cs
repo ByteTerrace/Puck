@@ -14,6 +14,37 @@ public enum ZoneSelector : byte {
     Last,
     /// <summary>Select by one draw from an explicitly named stream-draw state row.</summary>
     Random,
+    /// <summary>Select the keyed token and every token after it in the zone — a cascade's tail, moved in order as one
+    /// run (a solitaire column's run from a card to its top).</summary>
+    Slice,
+}
+
+/// <summary>What <see cref="StateTransform.BoardCombine"/> writes into its board, cell by cell. A cell is a member of a
+/// board when its value is not the board's declared <c>empty</c>.</summary>
+[JsonConverter(typeof(StrictEnumConverter<BoardCombineOp>))]
+public enum BoardCombineOp : byte {
+    /// <summary>Every cell of <c>left</c>, value for value.</summary>
+    Copy,
+    /// <summary>Every cell a member.</summary>
+    Fill,
+    /// <summary>No cell a member.</summary>
+    Clear,
+    /// <summary>Members of both <c>left</c> and <c>right</c>.</summary>
+    And,
+    /// <summary>Members of either.</summary>
+    Or,
+    /// <summary>Members of exactly one.</summary>
+    Xor,
+    /// <summary>Members of <c>left</c> that are not members of <c>right</c>.</summary>
+    AndNot,
+    /// <summary>Every cell that is not a member of <c>left</c>.</summary>
+    Not,
+    /// <summary>Each member of <c>left</c> moved one step along <c>direction</c>; a member with no neighbour that way
+    /// drops — the same move <c>boardShift</c> makes on a 64-bit mask.</summary>
+    Shift,
+    /// <summary>Each member of <c>left</c> carried through the point-group <c>element</c> — the same move
+    /// <c>boardImage</c> makes.</summary>
+    Image,
 }
 
 /// <summary>The closed set of atomic state transforms. Each folds one candidate document and journals once.</summary>
@@ -24,6 +55,7 @@ public enum ZoneSelector : byte {
 [JsonDerivedType(typeof(StateTransform.SortZone), "sortZone")]
 [JsonDerivedType(typeof(StateTransform.SortKeyed), "sortKeyed")]
 [JsonDerivedType(typeof(StateTransform.WriteSet), "writeSet")]
+[JsonDerivedType(typeof(StateTransform.BoardCombine), "boardCombine")]
 [JsonDerivedType(typeof(StateTransform.Push), "push")]
 [JsonDerivedType(typeof(StateTransform.Observe), "observe")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -38,7 +70,8 @@ public abstract record StateTransform {
     /// <param name="InsertFirst">Insert at the first position rather than the last.</param>
     /// <param name="Draw">A streamDraw site for random selection; absent for other selectors.</param>
     /// <param name="Count">How many tokens move in this one transfer, 1..<c>MaxTransferCount</c>,
-    /// each selected afresh from what remains (a five-card deal is one mutation); a key selection moves exactly one.</param>
+    /// each selected afresh from what remains (a five-card deal is one mutation); a key selection moves exactly one,
+    /// and a slice selection moves the keyed token's whole tail (its count is 1).</param>
     public sealed record Transfer(string From, string To, ZoneSelector Selector = ZoneSelector.Key,
         string? Key = null, bool InsertFirst = false, string? Draw = null, int Count = 1) : StateTransform;
 
@@ -81,6 +114,20 @@ public abstract record StateTransform {
     /// <param name="Value">The value written to every masked cell.</param>
     public sealed record WriteSet(string Row, string Set, string? SetKey = null, long Value = 0) : StateTransform;
 
+    /// <summary>Rewrites a board from one or two boards over the same topology, cell by cell, in one journaled
+    /// mutation: the set algebra <c>$board:mask</c> and the bit operators give a board of at most 64 cells, for a board
+    /// of any size. A cell is a member when its value is not its board's <c>empty</c>; every member of the result is
+    /// written as <see cref="Value"/> and every other cell as the board's <c>empty</c>.</summary>
+    /// <param name="Row">The board written.</param>
+    /// <param name="Operation">What is written.</param>
+    /// <param name="Left">The first source board, over the same topology; absent for <see cref="BoardCombineOp.Fill"/>
+    /// and <see cref="BoardCombineOp.Clear"/>.</param>
+    /// <param name="Right">The second source board for the two-board operations.</param>
+    /// <param name="Direction">The direction a <see cref="BoardCombineOp.Shift"/> steps along.</param>
+    /// <param name="Element">The point-group element an <see cref="BoardCombineOp.Image"/> carries through.</param>
+    /// <param name="Value">The value written to every member; never the board's own <c>empty</c>.</param>
+    public sealed record BoardCombine(string Row, BoardCombineOp Operation, string? Left = null, string? Right = null,
+        string? Direction = null, string? Element = null, long Value = 1) : StateTransform;
     /// <summary>Appends one value to a history row's ring, overwriting the oldest slot once the ring is full, and
     /// advances its cursor by one.</summary>
     /// <param name="Row">The history row.</param>

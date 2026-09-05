@@ -163,21 +163,29 @@ serialized as exactly 64 hexadecimal digits, and supports 256 drawn entries.
 
 The closed `transformState` effect and transaction step carry one of `transfer`,
 `setRay`, `shuffle`, `sortZone`, `sortKeyed`,
-`writeSet`, `push`, or `observe`. `writeSet` (`row`, `set`, `setKey`,
+`writeSet`, `boardCombine`, `push`, or `observe`. `writeSet` (`row`, `set`, `setKey`,
 `value`) writes one value into every cell of a board (at most 64 cells) whose
 bit is set in a cell-set mask read from an integer cell — the one board-writing
 form for a set built from `$board:mask`, `boardShift`/`boardImage`, and the
 plain bit operators (`bitAnd`/`bitOr`/`bitXor`/`bitNot` compose two boards'
 masks the way a dedicated set-algebra transform once did): populate a scratch
 integer row with the composed expression, then `writeSet` it onto the board.
-A topology past 64 cells has no board-writing transform of its own; a rule
-composes its board algebra cell by cell instead. The same operation travels
-as the `TransformState` document mutation.
+`boardCombine` (`row`, `operation`, `left`, `right`, `direction`, `element`,
+`value`) is the same set algebra over boards of any size, one journaled
+mutation per operation: `copy`, `fill`, `clear`, `and`, `or`, `xor`, `andNot`,
+`not`, `shift` (along a direction, the move `boardShift` makes), and `image`
+(through a point-group element, the move `boardImage` makes), every board over
+one topology; a cell is a member when its value is not its board's `empty`,
+members are written as `value`, and the rest read as empty. A 19×19 board's
+attack map is three `boardCombine`s where an 8×8's is one expression. The same
+operation travels as the `TransformState` document mutation.
 Transfers preserve keys and accept
-`Key`, `First`, `Last`, or `Random` selectors; random selection names a
+`Key`, `First`, `Last`, `Random`, or `Slice` selectors; random selection names a
 redrawable integer `streamDraw` site, and `count` (1..256) moves that many
 tokens in one mutation, each selected afresh from what remains, so a deal is
-one journal entry. A cursor advances only with the committed transfer. `setRay` (`row`, `from`, `direction`, `pattern`, `value`) walks a ray from
+one journal entry; `Slice` moves the keyed token and every token after it as
+one run, in order (a solitaire column from a card to its top), and onto the
+same zone rotates that run to the other end. A cursor advances only with the committed transfer. `setRay` (`row`, `from`, `direction`, `pattern`, `value`) walks a ray from
 its origin and writes the longest run its named `patterns` row accepts — the
 same compiled machine and prefix semantics `$match` reads, landed back on the
 board instead of read as a fact; a bracket capture is authored as
