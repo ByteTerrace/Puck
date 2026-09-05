@@ -1352,6 +1352,9 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
         if (errors.Count == 0) {
+            foreach (var (rule, cell) in WorldRuleWorkBudget.ContradictoryGates(definition: definition)) {
+                errors.Add(item: $"rule '{rule}' gate can never hold: its comparisons pin {cell} to an empty range.");
+            }
             var ruleBudget = WorldRuleWorkBudget.Measure(definition: definition);
             if (ruleBudget.WorkUnitsPerTick > WorldRuleCapacity.MaxWorkUnitsPerTick) {
                 var costliest = string.Join(

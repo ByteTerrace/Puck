@@ -471,7 +471,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.budget.rules",
-            description: "Lists every rule's and interaction's worst-case work per tick, costliest first (Immediate): world.budget.rules [top]. Each line carries the evaluation multiplier (a forEach row's capacity, an interaction's carrier or pair count), the cost of one evaluation, the line's total, and — when the gate pins literal cells to constants — the cells and values it prices exclusively under, so the total world.budget reports can be traced to the lines that make it up.",
+            description: "Lists every rule's and interaction's worst-case work per tick, costliest first (Immediate): world.budget.rules [top]. Each line carries the evaluation multiplier (a forEach row's capacity, an interaction's carrier or pair count), the cost of one evaluation, the line's total, and — when the gate pins literal cells to ranges — the cells and ranges it prices exclusively under, so the total world.budget reports can be traced to the lines that make it up.",
             handler: (context, args) => {
                 if (!authority.TryResolveServer(context: context, error: out var error, server: out var server, verb: "world.budget.rules")) {
                     return error;
@@ -485,7 +485,30 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                 var output = new List<string>(capacity: shown + 1) { $"[world.budget.rules: {lines.Count} line(s), showing {shown}]" };
                 for (var index = 0; index < shown; index++) {
                     var line = lines[index];
-                    output.Add(item: $"[world.budget.rules {line.Name}{(line.IsInteraction ? " interaction" : string.Empty)} x{line.Multiplier} unit={line.UnitCost} work={line.WorkUnits}{((line.Discriminators.Count > 0) ? $" exclusive {string.Join(separator: ",", values: line.Discriminators)}" : string.Empty)}]");
+                    output.Add(item: $"[world.budget.rules {line.Name}{(line.IsInteraction ? " interaction" : string.Empty)} x{line.Multiplier} unit={line.UnitCost} work={line.WorkUnits}{((line.Discriminators.Count > 0) ? $" exclusive {string.Join(separator: ",", values: line.Discriminators.Select(selector: static pinned => pinned.Describe()))}" : string.Empty)}]");
+                }
+                return new CommandResult(Output: string.Join(separator: Environment.NewLine, values: output));
+            },
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.rule.hazards",
+            description: "Lists what the rules' document order decides silently (Immediate): world.rule.hazards [top]. A write-after-read hazard is an earlier rule reading a cell a later rule writes, so the reader sees the previous tick's value; a write-after-write hazard is two rules writing one cell in a tick with at least one setting it, so the later wins (or a set discards an earlier add). A pair whose gates pin one literal cell to disjoint ranges never fires on one tick and is not listed. Rules run once per tick in document order with effects applying immediately, so reorder the rules to change the answer.",
+            handler: (context, args) => {
+                if (!authority.TryResolveServer(context: context, error: out var error, server: out var server, verb: "world.rule.hazards")) {
+                    return error;
+                }
+                var top = int.MaxValue;
+                if ((args.Count > 1) || ((args.Count == 1) && (!args.TryInt(index: 0, value: out top) || (top < 1)))) {
+                    return CommandResult.Usage(form: "[top]", verb: "world.rule.hazards");
+                }
+                var hazards = WorldRuleHazards.Analyze(definition: server.Definition);
+                var shown = Math.Min(top, hazards.Count);
+                var output = new List<string>(capacity: shown + 1) { $"[world.rule.hazards: {hazards.Count} hazard(s), showing {shown}]" };
+                for (var index = 0; index < shown; index++) {
+                    var hazard = hazards[index];
+                    output.Add(item: $"[world.rule.hazards {((hazard.Kind == WorldRuleHazardKind.WriteAfterRead) ? "write-after-read" : "write-after-write")} first='{hazard.First}' second='{hazard.Second}' cell={hazard.Cell}: {hazard.Detail}]");
                 }
                 return new CommandResult(Output: string.Join(separator: Environment.NewLine, values: output));
             },

@@ -24,7 +24,8 @@ namespace Puck.World;
 /// other name — one carrying a hyphen or a space — is spelled between backquotes: <c>`seat-1`</c>. A key is a bare
 /// name, a number, or a backquoted name.</item>
 /// <item>A table read indexes with the same brackets: <c>$table:moves:power[$bind:move]</c> is the
-/// <c>$table:moves:power:$bind:move</c> channel, and prints that way.</item>
+/// <c>$table:moves:power:$bind:move</c> channel, and prints that way. A key indexed once more —
+/// <c>buffs[minion[$each]]</c> — is the <c>$cell:minion:$each</c> indirection: the key read live from that cell.</item>
 /// <item>A literal is a decimal (<c>12</c>, <c>0.25</c>) or a hexadecimal mask (<c>0xFF00</c>); a leading minus folds
 /// into the literal, so <c>-1</c> is one constant token.</item>
 /// </list>
@@ -277,8 +278,24 @@ public static class WorldExpressionSyntax {
                 : (Name, Key);
             into.Append(value: QuoteName(name: name));
             if (key is { } spelled) {
-                into.Append(value: '[').Append(value: (IsBareName(name: spelled) || IsNumberLexeme(spelled)) ? spelled : $"`{spelled}`").Append(value: ']');
+                into.Append(value: '[');
+                AppendKey(into: into, key: spelled);
+                into.Append(value: ']');
             }
+        }
+        // A "$cell:row:key" key prints as row[key], nesting as deep as the indirection goes.
+        private static void AppendKey(StringBuilder into, string key) {
+            if (key.StartsWith(value: WorldRuleFacts.CellKeyPrefix, comparisonType: StringComparison.Ordinal)) {
+                var rest = key[WorldRuleFacts.CellKeyPrefix.Length..];
+                var colon = rest.IndexOf(value: ':');
+                if (colon > 0 && colon < rest.Length - 1) {
+                    into.Append(value: QuoteName(name: rest[..colon])).Append(value: '[');
+                    AppendKey(into: into, key: rest[(colon + 1)..]);
+                    into.Append(value: ']');
+                    return;
+                }
+            }
+            into.Append(value: (IsBareName(name: key) || IsNumberLexeme(key)) ? key : $"`{key}`");
         }
     }
     private sealed record Unary(string Operator, Node Operand) : Node {
@@ -571,12 +588,7 @@ public static class WorldExpressionSyntax {
                         }
                         string? key = null;
                         if (Accept(punctuation: "[")) {
-                            Prime();
-                            if (m_kind is not (Lexeme.Name or Lexeme.Number)) {
-                                throw Fail(message: $"expected a key inside [ ]{Found()}");
-                            }
-                            key = m_value;
-                            Advance();
+                            key = ParseKey();
                             Expect(punctuation: "]");
                         }
                         if ((key is not null) && !quoted && name.StartsWith(value: WorldRuleFacts.TablePrefix, comparisonType: StringComparison.Ordinal)) {
@@ -595,6 +607,23 @@ public static class WorldExpressionSyntax {
                 default:
                     throw Fail(message: $"expected a value but found '{m_value}'");
             }
+        }
+        // A key: a bare or backquoted name, a number, or a name indexed once more — row[key] — which is the
+        // "$cell:row:key" indirection, the key read live from another cell.
+        private string ParseKey() {
+            Prime();
+            if (m_kind is not (Lexeme.Name or Lexeme.Number)) {
+                throw Fail(message: $"expected a key inside [ ]{Found()}");
+            }
+            var key = m_value;
+            var indexable = ((m_kind == Lexeme.Name) && !m_quoted);
+            Advance();
+            if (indexable && Accept(punctuation: "[")) {
+                var inner = ParseKey();
+                Expect(punctuation: "]");
+                return $"{WorldRuleFacts.CellKeyPrefix}{key}:{inner}";
+            }
+            return key;
         }
         private Node ParseCall(string name, int arity, int names) {
             Expect(punctuation: "(");

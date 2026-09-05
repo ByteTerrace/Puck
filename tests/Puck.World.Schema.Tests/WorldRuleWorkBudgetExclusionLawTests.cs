@@ -28,6 +28,29 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
     );
 
     private static long Work(params WorldRule[] rules) => WorldRuleWorkBudget.Measure(Document(rules)).WorkUnitsPerTick;
+    private static ActionPredicate Hp(ActionStateComparison comparison, long value) =>
+        new ActionPredicate.CompareState(State: "sub", Comparison: comparison, Value: value);
+
+    [Fact]
+    public void DisjointRangesOnOneCellAreExclusiveAndOverlappingOnesSum() {
+        var one = Work(Rule("a", Hp(ActionStateComparison.LessOrEqual, 0)));
+        Assert.Equal(one, Work(Rule("a", Hp(ActionStateComparison.LessOrEqual, 0)), Rule("b", Hp(ActionStateComparison.Greater, 0))));
+        Assert.Equal(one, Work(Rule("a", Hp(ActionStateComparison.Less, 0)), Rule("b", Hp(ActionStateComparison.Equal, 0)), Rule("c", Hp(ActionStateComparison.Greater, 0))));
+        Assert.Equal(2 * one, Work(Rule("a", Hp(ActionStateComparison.LessOrEqual, 5)), Rule("b", Hp(ActionStateComparison.GreaterOrEqual, 3))));
+        // A range and a point inside it fire together; a point outside it does not.
+        Assert.Equal(2 * one, Work(Rule("a", Hp(ActionStateComparison.GreaterOrEqual, 1)), Rule("b", Hp(ActionStateComparison.Equal, 7))));
+        Assert.Equal(one, Work(Rule("a", Hp(ActionStateComparison.GreaterOrEqual, 1)), Rule("b", Hp(ActionStateComparison.Equal, 0))));
+        Assert.Equal($"sub.{WorldStateRow.SlotKey}<=0", WorldRuleWorkBudget.Contributors(Document(Rule("a", Hp(ActionStateComparison.LessOrEqual, 0)))).Single().Discriminators.Single().Describe());
+    }
+
+    [Fact]
+    public void AGateThatCanNeverHoldIsRefusedByName() {
+        var never = Document(Rule("stuck", new ActionPredicate.All([Hp(ActionStateComparison.Less, 0), Hp(ActionStateComparison.Greater, 0)])));
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(definition: never, reason: out var reason));
+        Assert.Contains($"rule 'stuck' gate can never hold: its comparisons pin sub.{WorldStateRow.SlotKey} to an empty range", reason, StringComparison.Ordinal);
+        Assert.Equal([("stuck", $"sub.{WorldStateRow.SlotKey}")], WorldRuleWorkBudget.ContradictoryGates(never));
+        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition: Document(Rule("fine", new ActionPredicate.All([Hp(ActionStateComparison.GreaterOrEqual, 0), Hp(ActionStateComparison.LessOrEqual, 0)]))), reason: out _));
+    }
 
     [Fact]
     public void AFurtherPinnedCellNestsUnderTheFirstSoSubphasesAreExclusiveToo() {
