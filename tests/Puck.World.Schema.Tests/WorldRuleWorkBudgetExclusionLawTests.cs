@@ -15,11 +15,48 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
     private static ActionPredicate PhaseIs(long value) =>
         new ActionPredicate.CompareState(State: "phase", Comparison: ActionStateComparison.Equal, Value: value);
 
+    private static ActionPredicate SubIs(long value) =>
+        new ActionPredicate.CompareState(State: "sub", Comparison: ActionStateComparison.Equal, Value: value);
+    private static ActionPredicate Both(long phase, long sub) => new ActionPredicate.All([PhaseIs(phase), SubIs(sub)]);
+    private static WorldRule Advance(string name, ActionPredicate? gate) =>
+        new(WorldCellName.Parse(name), [new ActionEffect.SetState(State: "phase", Value: 2m)], Gate: gate);
+
     private static WorldDefinition Document(params WorldRule[] rules) => new(
         Simulation: new WorldSimulationDefaults(RateHz: 240),
-        StateRaw: new WorldStateSection(World: [Slot("phase"), Slot("count"), Keyed("many", 64)]),
+        StateRaw: new WorldStateSection(World: [Slot("phase"), Slot("sub"), Slot("count"), Keyed("many", 64)]),
         Rules: rules
     );
+
+    private static long Work(params WorldRule[] rules) => WorldRuleWorkBudget.Measure(Document(rules)).WorkUnitsPerTick;
+
+    [Fact]
+    public void AFurtherPinnedCellNestsUnderTheFirstSoSubphasesAreExclusiveToo() {
+        var one = Work(Rule("a", Both(1, 0)));
+        var phaseOnly = Work(Rule("a", PhaseIs(1)));
+        // Same phase, distinct subphases: the trie takes the costliest subphase, not both.
+        Assert.Equal(one, Work(Rule("a", Both(1, 0)), Rule("b", Both(1, 1))));
+        // Spelling order does not matter: "sub then phase" shares the node.
+        Assert.Equal(one, Work(Rule("a", Both(1, 0)), Rule("b", new ActionPredicate.All([SubIs(1), PhaseIs(1)]))));
+        // A rule pinning only the phase sums with the deeper ones under it.
+        Assert.Equal(phaseOnly + one, Work(Rule("a", PhaseIs(1)), Rule("b", Both(1, 0)), Rule("c", Both(1, 1))));
+        // Distinct phases stay exclusive across their whole subtrees.
+        Assert.Equal(phaseOnly + one, Work(Rule("a", PhaseIs(1)), Rule("b", Both(1, 0)), Rule("c", Both(2, 0)), Rule("d", Both(2, 1))));
+        // Different cells are not exclusive of each other.
+        Assert.Equal(2 * phaseOnly, Work(Rule("a", PhaseIs(1)), Rule("b", SubIs(0))));
+    }
+
+    [Fact]
+    public void ARuleThatWritesTheDiscriminatorAdmitsOneMoreValuePerWrite() {
+        var one = Work(Rule("a", PhaseIs(0)));
+        var advance = WorldRuleWorkBudget.Contributors(Document(Advance("go", null))).Single().WorkUnits;
+        // Effects apply immediately: a rule advancing the phase lets the next phase's rules fire in the same tick, so
+        // the group prices its two costliest values, never one.
+        Assert.Equal(advance + 2 * one, Work(Advance("go", null), Rule("b", PhaseIs(1)), Rule("c", PhaseIs(2)), Rule("d", PhaseIs(3))));
+        // With fewer values than admitted, everything sums.
+        Assert.Equal(advance + one, Work(Advance("go", null), Rule("b", PhaseIs(1))));
+        // A writer inside the group is one of its values: the two costliest are kept, and the cheap advance is not.
+        Assert.Equal(2 * one, Work(Advance("go", PhaseIs(0)), Rule("b", PhaseIs(1)), Rule("c", PhaseIs(2))));
+    }
 
     [Fact]
     public void DistinctEqualityGatesOnOneCellChargeTheirMaximumNotTheirSum() {

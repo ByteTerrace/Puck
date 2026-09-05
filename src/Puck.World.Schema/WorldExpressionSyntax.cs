@@ -23,6 +23,8 @@ namespace Puck.World;
 /// with <c>$</c>) may also carry <c>:</c> between name characters, so <c>$table:armor:$each</c> is one name. Any
 /// other name — one carrying a hyphen or a space — is spelled between backquotes: <c>`seat-1`</c>. A key is a bare
 /// name, a number, or a backquoted name.</item>
+/// <item>A table read indexes with the same brackets: <c>$table:moves:power[$bind:move]</c> is the
+/// <c>$table:moves:power:$bind:move</c> channel, and prints that way.</item>
 /// <item>A literal is a decimal (<c>12</c>, <c>0.25</c>) or a hexadecimal mask (<c>0xFF00</c>); a leading minus folds
 /// into the literal, so <c>-1</c> is one constant token.</item>
 /// </list>
@@ -270,9 +272,12 @@ public static class WorldExpressionSyntax {
         public override int Level => PrimaryLevel;
         public override void Emit(List<WorldValueToken> into) => into.Add(item: new WorldValueToken.State(Name: Name, Key: Key));
         public override void PrintBare(StringBuilder into) {
-            into.Append(value: QuoteName(name: Name));
-            if (Key is { } key) {
-                into.Append(value: '[').Append(value: (IsBareName(name: key) || IsNumberLexeme(key)) ? key : $"`{key}`").Append(value: ']');
+            var (name, key) = ((Key is null) && TrySplitTableKey(Name, out var table, out var tableKey))
+                ? (table, tableKey)
+                : (Name, Key);
+            into.Append(value: QuoteName(name: name));
+            if (key is { } spelled) {
+                into.Append(value: '[').Append(value: (IsBareName(name: spelled) || IsNumberLexeme(spelled)) ? spelled : $"`{spelled}`").Append(value: ']');
             }
         }
     }
@@ -343,6 +348,26 @@ public static class WorldExpressionSyntax {
             }
             into.Append(value: ')');
         }
+    }
+
+    // "$table:t[:column]:<key>" splits before its key: a "$"-spelled key ("$bind:x", "$cell:r:k", "$each") at the
+    // last ":$", else the last colon.
+    private static bool TrySplitTableKey(string name, out string table, out string key) {
+        table = name;
+        key = string.Empty;
+        if (!name.StartsWith(value: WorldRuleFacts.TablePrefix, comparisonType: StringComparison.Ordinal)) {
+            return false;
+        }
+        var split = name.LastIndexOf(value: ":$", comparisonType: StringComparison.Ordinal);
+        if (split < WorldRuleFacts.TablePrefix.Length) {
+            split = name.LastIndexOf(value: ':');
+        }
+        if (split < WorldRuleFacts.TablePrefix.Length || split == name.Length - 1) {
+            return false;
+        }
+        table = name[..split];
+        key = name[(split + 1)..];
+        return true;
     }
 
     private static bool IsNumberLexeme(string text) {
@@ -553,6 +578,9 @@ public static class WorldExpressionSyntax {
                             key = m_value;
                             Advance();
                             Expect(punctuation: "]");
+                        }
+                        if ((key is not null) && !quoted && name.StartsWith(value: WorldRuleFacts.TablePrefix, comparisonType: StringComparison.Ordinal)) {
+                            return new StateRead(Name: $"{name}:{key}", Key: null);
                         }
                         return new StateRead(Name: name, Key: key);
                     }

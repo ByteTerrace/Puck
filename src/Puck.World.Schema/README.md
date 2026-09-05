@@ -1425,10 +1425,15 @@ from in the same rule. At most 16 per rule; each expression prices into
 for that evaluation and reports an `Arithmetic` refusal. `world.rules` lists
 each rule's bindings by name and kind. The rule count itself has no ceiling of
 its own: the per-tick work budget is the bound. That budget is worst-case but
-not blind: rules whose gates each require the same literal cell to equal a
-distinct constant (a phase id, a mode) can never fire on one tick, so the sheet
-charges such a group its most expensive value rather than their sum; rules
-sharing a value, or gated on anything else, still sum.
+not blind: rules whose gates pin the same literal cells to distinct constants (a
+phase id, a mode, a phase and a subphase) cannot all fire on one tick, so the
+sheet prices them as a trie of the cells they pin — at each cell the costliest
+values, one value plus one more per rule that can write that cell during the
+tick (effects apply immediately, so a rule advancing the phase lets the next
+phase's rules fire in the same tick), and lines pinning a further cell nest
+under the lines pinning fewer. Rules sharing every pinned value, pinning
+different cells, or gated on anything else still sum. `world.budget.rules`
+shows each line's pinned cells.
 
 An option may expand into nearby individuals through `neighbors`. The enclosing
 rule must name a numeric keyed `forEach` row whose keys identify observers.
@@ -1695,7 +1700,8 @@ C precedence over `+ - * / %`, `& | ^ ~`, `<< >> >>>`, `== != < <= > >=`, and
 `popCount(m)`, `bitField(v, offset, width)`, `boardShift(m, topology,
 direction)`, ...), a state read as its row name keyed `row[key]` (backquoted,
 `` `seat-1` ``, when the name is not a bare identifier; a `$`-channel carries
-its colons), decimal or `0x` literals — or as the postfix `{ "tokens": [...] }`
+its colons), a table read indexed the same way (`$table:moves:power[$bind:move]`
+is `$table:moves:power:$bind:move`), decimal or `0x` literals — or as the postfix `{ "tokens": [...] }`
 object. The string is syntax only: it parses to exactly the tokens an author
 could have written by hand (`WorldExpressionSyntax`), the compiler proves and
 prices the tokens the same way, and the document writes back whichever

@@ -1271,9 +1271,11 @@ classifier's sibling writes. The rule-count ceiling is deleted — the per-tick
 work budget is the bound — and a row's cell bound is the one cell bound every
 domain shares (4096), with an unauthored capacity getting 128 of room; a
 registry-sized row authors its capacity. The work sheet also stops charging
-mutually exclusive rules together: rules whose gates require one literal cell
-to equal distinct constants are priced at their most expensive value, not
-their sum, which tightens the bound without loosening the guarantee. Refused on
+mutually exclusive rules together: rules whose gates pin literal cells to
+distinct constants are priced as a trie of the cells they pin — the costliest
+values at each cell, one more value per rule that can write the cell in a tick
+since effects apply immediately — which tightens the bound without loosening
+the guarantee. Refused on
 the same review: a fixed
 C# "recipe executor" (game nouns in the engine), a `copyCells` transform
 (derivable from `forEach`), and a per-effect `isolate` flag (a second
