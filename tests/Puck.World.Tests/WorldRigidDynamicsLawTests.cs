@@ -172,6 +172,57 @@ public sealed class WorldRigidDynamicsLawTests {
         Assert.Equal(expected: expected, actual: WorldRuntimeStateHash.HashAuthoritative(server: fixture.Server, tick: 0UL));
     }
 
+    [Fact]
+    public void RestingRigidCheckpointCarriesTheLiveFreezeLatchAndContactEdge() {
+        using var fixture = Fixtures.FreshServer(definition: BoxOnFloorDocument());
+        var seat = WorldPrincipal.Seat(slot: 0);
+
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(seat, seat.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+
+        var box = fixture.Server.Body(index: 0)!;
+        box.Pose(
+            x: 0f,
+            y: (FloorTopY + BoxHalfExtents.Y),
+            z: 0f,
+            yawRadians: 0f,
+            pitchRadians: 0f,
+            rollRadians: 0f
+        );
+
+        for (var tick = 0; ((tick < 2_400) && !box.Resting); tick++) {
+            fixture.Step();
+        }
+
+        Assert.True(condition: box.Resting, userMessage: $"the box never reached the exact rest freeze (v={box.RigidVelocity}, holdTicks={box.RigidRestingHoldTicks})");
+        var frozenPosition = box.FixedPosition;
+
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(
+            hostRow: EmptyHostRow(),
+            checkpoint: out var captured,
+            reason: out var captureReason
+        ), userMessage: captureReason);
+        var bytes = WorldAuthorityCheckpointCodec.Encode(checkpoint: captured!);
+        Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(bytes: bytes, checkpoint: out var decoded, reason: out var decodeReason), userMessage: decodeReason);
+
+        fixture.Server.RestoreCheckpoint(checkpoint: decoded!);
+        box = fixture.Server.Body(index: 0)!;
+        var restored = box.CaptureIntegrationResidue();
+
+        Assert.True(condition: restored.RigidResting);
+        Assert.True(condition: (restored.RigidRestingHoldTicks > 0UL));
+        Assert.True(condition: restored.RigidGroundContacting);
+        Assert.Equal(expected: FixedVector3.Zero, actual: restored.RigidVelocity);
+        Assert.Equal(expected: FixedVector3.Zero, actual: restored.RigidAngularVelocity);
+        Assert.Equal(expected: frozenPosition, actual: box.FixedPosition);
+
+        for (var tick = 0; (tick < 120); tick++) {
+            fixture.Step();
+        }
+
+        Assert.True(condition: box.Resting);
+        Assert.Equal(expected: frozenPosition, actual: box.FixedPosition);
+    }
+
     private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
         AnnouncedCrossingHolds: [], AppliedTransferHighWater: null, AppliedTransferIds: [], ElapsedEngineTicks: 0,
         ForwardedBodies: [], FreshCounter: 0, InDoubtTransfers: [], IsPaused: false, NextTransferId: 1,

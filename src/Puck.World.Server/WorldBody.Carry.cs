@@ -222,7 +222,11 @@ public sealed partial class WorldBody {
                     blockCorrection = ((blockCorrection / correctionLength) * correctionCeiling);
                 }
 
-                carrier.ApplyDynamicContact(correction: blockCorrection);
+                if (carrier.IsRigid) {
+                    carrier.ApplyRigidPositionalCorrection(correction: blockCorrection);
+                } else {
+                    carrier.ApplyDynamicContact(correction: blockCorrection);
+                }
             }
         }
 

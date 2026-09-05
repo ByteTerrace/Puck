@@ -22,7 +22,7 @@ public sealed class WorldCarryTangibilityLawTests {
     // a solid field requirement and a wall placement the ball's own witness-sweep can actually collide with. The
     // carrier starts at the origin; its own carry offset (0, 1, -0.6) is what the ball rides at with no wall in the
     // way, so a wall placed further along -Z is what the sweep is exercised against.
-    private static WorldDefinition WallCarryDocument(bool includeWall) {
+    private static WorldDefinition WallCarryDocument(bool includeWall, bool rigidCarrier = false, bool includeOtherBody = false) {
         var source = Fixtures.BuildDocument();
         var carrierKit = source.Kits[0] with {
             Carry = new WorldCarry(
@@ -31,6 +31,11 @@ public sealed class WorldCarryTangibilityLawTests {
                 MaxCarryFraction: 1f,
                 MaxReach: 1.5f
             ),
+            Collider = (rigidCarrier ? new WorldCollider.Sphere(Radius: 0.3f) : source.Kits[0].Collider),
+            BodyContact = (rigidCarrier ? WorldBodyContactMode.Solid : source.Kits[0].BodyContact),
+            Rigid = (rigidCarrier
+                ? new WorldRigid(Mass: 1f, Restitution: 0f, Friction: 0f, RollingFriction: 0f, LinearDamping: 0f, AngularDamping: 0f)
+                : source.Kits[0].Rigid),
         };
         var ballKit = source.Kits[0] with {
             Name = "ball",
@@ -74,7 +79,7 @@ public sealed class WorldCarryTangibilityLawTests {
         return source with {
             KitRowsRaw = [carrierKit, ballKit],
             DefaultSeatKitRaw = carrierKit.Name,
-            PopulationRaw = source.Population with { CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 1) },
+            PopulationRaw = source.Population with { CapacityRaw = (WorldBodiesLimits.LocalSeatCount + (includeOtherBody ? 2 : 1)) },
             CollisionRaw = source.Collision with { Requirements = [WorldContactRequirement.SmoothUnionContact] },
             CreationsRaw = (includeWall ? [ballCreation, wallCreation] : [ballCreation]),
             PlacementRowsRaw = [
@@ -86,6 +91,18 @@ public sealed class WorldCarryTangibilityLawTests {
                     Scale: 1f,
                     Inhabit: new WorldPlacementInhabit(Kit: "ball", Look: null, Source: IntentSource.Idle, Distribution: WorldDistribution.Default)
                 ),
+                .. (includeOtherBody
+                    ? new[] {
+                        new WorldPlacement(
+                            Id: "other-ball-placement",
+                            PrototypeId: ballCreation.Id,
+                            Position: new DocumentVector3(value: new Vector3(x: 0f, y: 1f, z: -0.6f)),
+                            YawDegrees: 0f,
+                            Scale: 1f,
+                            Inhabit: new WorldPlacementInhabit(Kit: "ball", Look: null, Source: IntentSource.Idle, Distribution: WorldDistribution.Default)
+                        ),
+                    }
+                    : []),
                 .. (includeWall
                     ? new[] {
                         new WorldPlacement(
@@ -175,5 +192,47 @@ public sealed class WorldCarryTangibilityLawTests {
         Assert.True(condition: fixture.Server.Population.TryEndCarry(carrierIndex: CarrierIndex, reason: out var openReason), userMessage: openReason);
         Assert.Null(@object: fixture.Server.Body(index: CarrierIndex)!.Carrying);
         Assert.Null(@object: ball.CarriedBy);
+    }
+
+    [Fact]
+    public void CarryWallCorrectionWakesARestingRigidCarrier() {
+        using var fixture = JoinedCarrier(definition: WallCarryDocument(includeWall: true, rigidCarrier: true));
+        var carrier = fixture.Server.Body(index: CarrierIndex)!;
+
+        carrier.Pose(x: 0f, y: 0f, z: -1f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        var residue = carrier.CaptureIntegrationResidue();
+        carrier.ApplyIntegrationResidue(residue with {
+            RigidResting = true,
+            RigidRestingHoldTicks = 1UL,
+            RigidVelocity = FixedVector3.Zero,
+            RigidAngularVelocity = FixedVector3.Zero,
+        });
+
+        Assert.True(condition: carrier.Resting);
+        Assert.True(condition: fixture.Server.Population.TryBeginCarry(carrierIndex: CarrierIndex, targetIndex: BallIndex, reason: out var beginReason), userMessage: beginReason);
+
+        fixture.Step();
+
+        Assert.False(condition: carrier.Resting, userMessage: "the carried body's wall correction moved the rigid carrier without opening its exact-rest latch");
+    }
+
+    [Fact]
+    public void CarriedBodyPairCorrectionWakesARestingRigidCarrier() {
+        using var fixture = JoinedCarrier(definition: WallCarryDocument(includeWall: false, rigidCarrier: true, includeOtherBody: true));
+        var carrier = fixture.Server.Body(index: CarrierIndex)!;
+        var residue = carrier.CaptureIntegrationResidue();
+        carrier.ApplyIntegrationResidue(residue with {
+            RigidResting = true,
+            RigidRestingHoldTicks = 1UL,
+            RigidVelocity = FixedVector3.Zero,
+            RigidAngularVelocity = FixedVector3.Zero,
+        });
+
+        Assert.True(condition: carrier.Resting);
+        Assert.True(condition: fixture.Server.Population.TryBeginCarry(carrierIndex: CarrierIndex, targetIndex: BallIndex, reason: out var beginReason), userMessage: beginReason);
+
+        fixture.Step();
+
+        Assert.False(condition: carrier.Resting, userMessage: "the carried body's dynamic-pair correction moved the rigid carrier without opening its exact-rest latch");
     }
 }

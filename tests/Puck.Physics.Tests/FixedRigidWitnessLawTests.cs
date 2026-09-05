@@ -3,7 +3,8 @@ using Puck.Maths;
 namespace Puck.Physics.Tests;
 
 /// <summary>Laws for <see cref="FixedRigidWitness"/>: an off-centre witness anchor carries a lever arm a normal
-/// impulse can turn into torque, and a box's own support manifold always spans its centre of mass.</summary>
+/// impulse can turn into torque, and a box's support manifold reports whether its centre of mass lies over the
+/// contact-anchor span.</summary>
 public sealed class FixedRigidWitnessLawTests {
     private static readonly FixedRigidScales Scales = new(
         EffectiveMass: 32,
