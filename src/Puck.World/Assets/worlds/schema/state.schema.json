@@ -344,6 +344,46 @@
             "description": "For a Box, the world-space height of one layer, so a position\u0027s Y above the origin resolves to a layer the way X and Z resolve to a column; positive, and only on a box.",
             "type": "number",
             "default": 0
+          },
+          "directions": {
+            "description": "The topology\u0027s own direction vocabulary \u2014 its neighbour steps and the compass/element names a rule, $board:/$match: token, or leaper reach spells them with. null (the unauthored default) compiles to exactly the fixed set every WorldTopologyKind carried before this field existed \u2014 Grid\u0027s eight compass points, Hex\u0027s six, Box\u0027s 26, Ring\u0027s forward/backward \u2014 so no shipped world\u0027s behavior moves. An authored list replaces that default WHOLESALE: it becomes the topology\u0027s only directions, its only compass names, and the only vocabulary Direction resolves \u2014 the seam a 4-connected grid (orthogonal steps only) or a custom leaper reach declares without inventing a parallel mechanism.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "description": "One authored direction of a discrete WorldStateLatticeTopology: the (X, Y, Z) cell step a neighbour walk, ray, or leaper offset takes, and the case-sensitive token a rule or $board:/$match: channel names it by. X/Y are the topology\u0027s own planar axes (a Grid\u0027s column/row, a Hex\u0027s q/r); Z is a Box\u0027s layer step and must be zero on every other kind.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "name": {
+                  "description": "The direction\u0027s token \u2014 dot-free, distinct within the topology, matched case-sensitively.",
+                  "type": "string"
+                },
+                "x": {
+                  "description": "The signed planar column step.",
+                  "type": "integer"
+                },
+                "y": {
+                  "description": "The signed planar row step.",
+                  "type": "integer"
+                },
+                "z": {
+                  "description": "The signed layer step; zero except on a Box.",
+                  "type": "integer",
+                  "default": 0
+                }
+              },
+              "required": [
+                "name",
+                "x",
+                "y"
+              ],
+              "additionalProperties": false
+            },
+            "default": null
           }
         },
         "required": [

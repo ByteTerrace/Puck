@@ -1,0 +1,85 @@
+using Puck.Assets.Documents;
+using Xunit;
+
+namespace Puck.World.Tests;
+
+/// <summary>Pins directions as content: an unauthored topology compiles exactly the fixed set every kind carried
+/// before <see cref="WorldStateLatticeTopology.Directions"/> existed, while an authored list replaces it wholesale —
+/// a 4-connected grid orthogonal-only, or a renamed box vocabulary — and the validator refuses a list that would
+/// leave <see cref="CompiledWorldTopology.Opposite"/> unable to close.</summary>
+public sealed class WorldTopologyDirectionLawTests {
+    [Fact]
+    public void AnUnauthoredGridStillCompilesTheEightCompassNames() {
+        var topology = WorldTopologyCompilation.Find(new WorldStateSection(Lattices: [Grid()]), "grid")!;
+        Assert.Equal(8, topology.DirectionCount);
+        Assert.Equal(0, topology.Direction("N"));
+        Assert.Equal(7, topology.Direction("NW"));
+        Assert.Equal(-1, topology.Direction("orthoNorth"));
+    }
+
+    [Fact]
+    public void AFourConnectedGridReplacesTheDefaultCompassVocabularyWholesale() {
+        var orthogonal = new WorldTopologyDirection[] {
+            new("north", 0, -1), new("south", 0, 1), new("east", 1, 0), new("west", -1, 0),
+        };
+        var topology = WorldTopologyCompilation.Find(new WorldStateSection(Lattices: [Grid() with { Directions = orthogonal }]), "grid")!;
+        Assert.Equal(4, topology.DirectionCount);
+        // The default compass names are gone entirely — an authored list is the topology's ONLY vocabulary.
+        Assert.Equal(-1, topology.Direction("N"));
+        Assert.Equal(-1, topology.Direction("NE"));
+        var north = topology.Direction("north");
+        Assert.True(north >= 0);
+        Assert.Equal(topology.Direction("south"), topology.Opposite(north));
+        // Origin cell (0,0) has no north neighbour but does have an east one.
+        Assert.Equal(-1, topology.Neighbour(0, north));
+        Assert.Equal(1, topology.Neighbour(0, topology.Direction("east")));
+    }
+
+    [Fact]
+    public void ARenamedBoxVocabularyStillDerivesACorrectClosedOppositeTable() {
+        var renamed = new WorldTopologyDirection[] { new("up", 0, 0, 1), new("down", 0, 0, -1) };
+        var topology = WorldTopologyCompilation.Find(new WorldStateSection(Lattices: [Box() with { Directions = renamed }]), "box")!;
+        Assert.Equal(2, topology.DirectionCount);
+        Assert.Equal(topology.Direction("down"), topology.Opposite(topology.Direction("up")));
+        Assert.Equal(4, topology.Neighbour(0, topology.Direction("up"))); // one layer up: 2x2 footprint.
+    }
+
+    [Fact]
+    public void AnUnclosedOrDuplicateOrMisplacedDirectionListRefuses() {
+        var missingOpposite = new WorldTopologyDirection[] { new("east", 1, 0) };
+        Assert.False(WorldTopologyCompilation.TryValidate(Grid() with { Directions = missingOpposite }, out var noOppositeReason));
+        Assert.Contains("opposite", noOppositeReason);
+
+        var duplicateName = new WorldTopologyDirection[] { new("east", 1, 0), new("east", -1, 0) };
+        Assert.False(WorldTopologyCompilation.TryValidate(Grid() with { Directions = duplicateName }, out var duplicateReason));
+        Assert.Contains("distinct", duplicateReason);
+
+        var zeroStep = new WorldTopologyDirection[] { new("east", 1, 0), new("nowhere", 0, 0) };
+        Assert.False(WorldTopologyCompilation.TryValidate(Grid() with { Directions = zeroStep }, out var zeroReason));
+        Assert.Contains("zero step", zeroReason);
+
+        var layerOnAGrid = new WorldTopologyDirection[] { new("up", 0, 0, 1), new("down", 0, 0, -1) };
+        Assert.False(WorldTopologyCompilation.TryValidate(Grid() with { Directions = layerOnAGrid }, out var layerReason));
+        Assert.Contains("layer step outside a box", layerReason);
+
+        // Control: the same four-direction list validates and compiles when it IS closed under negation.
+        var closed = new WorldTopologyDirection[] { new("east", 1, 0), new("west", -1, 0) };
+        Assert.True(WorldTopologyCompilation.TryValidate(Grid() with { Directions = closed }, out _));
+    }
+
+    [Fact]
+    public void AnAuthoredDirectionListRoundTripsThroughJson() {
+        var orthogonal = new WorldTopologyDirection[] { new("east", 1, 0), new("west", -1, 0) };
+        var definition = Fixtures.BuildDocument() with { StateRaw = new(Lattices: [Grid() with { Directions = orthogonal }]) };
+        var restored = WorldDefinitionSerialization.Deserialize(WorldDefinitionSerialization.Serialize(definition: definition));
+        var topology = WorldTopologyCompilation.Find(restored.StateRaw, "grid")!;
+        Assert.Equal(2, topology.DirectionCount);
+        Assert.Equal(-1, topology.Direction("N"));
+        Assert.True(topology.Direction("east") >= 0);
+    }
+
+    private static WorldStateLatticeTopology Grid() =>
+        new("grid", new DocumentVector3(0, 0, 0), 1, 4, 4, Kind: WorldTopologyKind.Grid);
+    private static WorldStateLatticeTopology Box() =>
+        new("box", new DocumentVector3(0, 0, 0), 0.5f, 2, 2, Layers: 2, Kind: WorldTopologyKind.Box, LayerHeight: 0.5f);
+}

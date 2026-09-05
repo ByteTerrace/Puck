@@ -36,6 +36,19 @@ All shapes still carry the registry's required `origin` and `cellSize` fields.
 Missing board entries read as the declared `empty` value. Wrapped scans stop
 before revisiting their origin.
 
+The compass/space-direction names above are each kind's DEFAULT — the
+vocabulary it compiles when the topology authors no `directions` — never a
+fixed table. A topology's own `directions` (an array of `{"name", "x", "y",
+"z"}` steps) replaces that default WHOLESALE: `$board:neighbour`/`rayCell`/
+`rayDistance`/`attacks`/`$match:...:<direction>` and every other direction
+token resolve against ONLY the authored list once one is declared. Grid/Hex/
+Ring name planar steps as `x`/`y`; only `Box` may declare a nonzero `z`
+(a layer step). Every step's own negation must appear as another entry (so
+the opposite-direction table above always closes), names and steps must be
+distinct, and the zero step is refused; 1..32 entries are admitted. A
+4-connected grid (orthogonal moves only) or a leaper's own named reach are
+authored this way rather than composed from raw `$board:offset` deltas.
+
 Rule operands accept these bounded channels:
 
 | Channel | Result |

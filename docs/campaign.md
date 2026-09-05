@@ -625,6 +625,102 @@ negating each direction's own step vector and looking up the match, refusing
 compilation if a direction has none; `$board:line:…:exact` reads it instead
 of the ordinal trick.
 
+**A topology's directions are authored content, not a fixed per-kind table
+(owner decision).** The compass names above were still a closed C# switch
+per `WorldTopologyKind` — a document could reach every direction a kind
+carried but could never declare a narrower or differently-named vocabulary
+(a 4-connected grid, orthogonal steps only; a leaper's own reach spelled by
+name instead of raw `$board:offset` deltas) without a second mechanism.
+`WorldStateLatticeTopology.Directions` is now an optional list of
+`(name, x, y, z)` steps; unauthored, a topology compiles exactly the fixed
+set it always had (Grid's eight compass points, Hex's six, Box's 26, Ring's
+forward/backward — the migration is behavior-preserving by construction, so
+no shipped world needed re-authoring), and an authored list replaces that
+default WHOLESALE — the topology's only directions and the only names
+`CompiledWorldTopology.Direction` resolves. Validation requires 1..32
+entries, distinct names, distinct nonzero steps, a Z step only on a `Box`,
+and — the same closure `Opposite` already needed — every step's negation
+present as another entry, refused at validation rather than left to throw
+mid-compile. The garden's 300-tick passive hash is unchanged
+(`0xCC2D4742992B05CC`); `tests/Puck.World.Tests/WorldTopologyDirectionLawTests.cs`
+proves both the preserved default and an authored 4-connected/renamed
+vocabulary, each with a refusal control.
+
+**Owner ruling owed: is a topology's point-group naming one function, or
+several (decision to make, not made here).** `CompiledWorldTopology`'s
+adjacency (directions, above) and its point group (`BuildSymmetry`/
+`BuildBoxSymmetry`, `WorldTopologySymmetry.cs`) are already two independent
+mechanisms — the box's own signed-axis spelling (`"+x-y+z"`) names an
+element by where each source axis lands and with what sign, while
+Grid/Hex name theirs by hand (`mirrorMain`, `mirror3`, …). One naming
+function over the same signed-axis-permutation representation would
+subsume both without changing which elements exist; authored aliases
+(`"rot90"` for whatever axis-permutation a square grid's quarter turn
+actually is) would carry the friendlier names forward. Separately, and
+undecided independent of the naming question: whether the fixed 240-node
+symmetry lattice behind `$symmetry:` is an engine primitive or content a
+world could reshape. Neither call is made here; a session picking this up
+starts from `WorldTopologySymmetry.cs`'s `AxisMap`/`Name` and the
+`$symmetry:` reserved-channel doc in
+[`references/documents.md`](../.claude/skills/puck-world/references/documents.md).
+
+**Owner ruling owed: `$board:line`/`rayCell`/`rayDistance` collapse into
+`$match` over a ray (decision to make, not made here).**
+`WorldRuleCompiler.Pattern.cs`'s board-source `$match` already walks the
+identical ray `$board:rayCell`/`rayDistance` do (`WorldServer.Patterns.cs`'s
+`ReadRay`) and reads the WHOLE ray's raw values into a pattern instead of
+stopping at the first occupied cell — strictly more general: a pattern of
+"zero or more empty cells then one occupied cell" read with the `prefix`
+facet already reproduces `rayDistance`'s distance-to-first-blocker exactly.
+`$board:line` (n-in-a-row) has no caller in any shipped world today — only
+`tests/Puck.World.Tests/WorldBoxTopologyLawTests.cs` exercises it — so
+retiring it costs a test rewrite, not a garden re-author. `rayCell`/
+`rayDistance` are different: the garden's chess rules call them 44 times
+(`tabletop-shape-rook`/`-bishop`/`-queen`, the check/castle-transit-attack
+probes) to compare a CELL address (the first blocker equals a specific
+square), not a length — `$match`'s `prefix` facet answers a distance, so
+translating these call sites needs each one re-derived as "does the
+authored-length empty-prefix land exactly on the known square", using the
+postfix expression vocabulary's existing `modulo`/`divide`/`subtract` to
+recover row/column from a cell ordinal, checked per direction per slider
+shape. That is real, error-prone rule surgery over exactly the chess
+legality two prior adversarial review rounds already hardened
+(`349a95ce`, `6b7a67bb`, `ff37ce70`), with no automated exhaustive-position
+battery to catch a silent regression — `puck landing`'s canaries and this
+document's own boot-hash check prove the rules still COMPILE and the
+passive boot still matches, never that check/castle/en-passant legality
+stays correct across the positions an earlier adversarial review already
+found and closed. Retire
+`RayCell`/`RayDistance`/`Line` from `WorldBoardQueryKind` and re-author the
+44 call sites on `$match` only as its own focused, adversarially-reviewed
+landing — never folded silently into an unrelated change.
+
+**Owner ruling owed: `ActionEffect.Judge`/the judge asset family collapse
+into a `$clock:<music>:phaseError` operand (decision to make, not made
+here).** `ActionEffect.Judge`, `WorldJudgeRow`/`JudgeDocument`
+(`puck.judge.v1`), and the rhythm mechanism they carry
+(`Puck.Audio.Simulation.RhythmJudge`/`MusicSenseEdge`, wired through
+`MusicDirectorFactory.cs`) are a hit-window judge — the mechanism
+underneath is signed phase error between a firing tick and a named
+`MusicClock`, which an operand (`$clock:<music>:phaseError`) exposes
+directly so a hit window becomes an authored `compareState` range like any
+other gate, with no dedicated effect or section. Unlike the ray queries
+above, this family has ZERO callers in every shipped world
+(`src/Puck.World/Assets/worlds/*.json`) — the only asset that exists is
+`src/Puck.World/Assets/worlds/judges/nexus-drum-easy.judge.json`, referenced
+by no world — so deleting `ActionEffect.Judge`/the `WorldJudgeRow` section/
+`JudgeDocument` touches no shipped rule, only the schema, validator,
+`MusicDirectorFactory.cs`, `SessionRequest.cs`'s wire shape, and
+`tests/Puck.World.Tests/ActionEffectJudgeLawTests.cs`/
+`tests/Puck.World.Schema.Tests/MusicJudgeDocumentLawTests.cs` (replaced by
+law tests for the new operand). Left undone here because it is a real
+rhythm-system reshape in its own right — sized similarly to the topology
+direction work above — not because it is risky to the garden; a session
+picking it up can move directly to deleting the effect/section and adding
+the operand without touching chess legality at all. Rename whichever of the
+state `patterns` section or `Puck.Audio.Simulation`'s musical-pattern
+vocabulary keeps the collision once both use the word.
+
 **Carry, as attachment (owner decision).** Picking up a rigid body is not a
 second attachment primitive beside the surface-hold system — it is a
 carrier-declared kit facet (`carry`: a body-local frame offset, a

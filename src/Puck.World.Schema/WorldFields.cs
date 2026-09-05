@@ -317,6 +317,14 @@ public sealed record WorldFieldsSection(
 /// <param name="LayerHeight">For a <see cref="WorldTopologyKind.Box"/>, the world-space height of one layer, so a
 /// position's Y above the origin resolves to a layer the way X and Z resolve to a column; positive, and only on a
 /// box.</param>
+/// <param name="Directions">The topology's own direction vocabulary — its neighbour steps and the compass/element
+/// names a rule, <c>$board:</c>/<c>$match:</c> token, or leaper reach spells them with. <see langword="null"/> (the
+/// unauthored default) compiles to exactly the fixed set every <see cref="WorldTopologyKind"/> carried before this
+/// field existed — Grid's eight compass points, Hex's six, Box's 26, Ring's forward/backward — so no shipped world's
+/// behavior moves. An authored list replaces that default WHOLESALE: it becomes the topology's only directions, its
+/// only compass names, and the only vocabulary <see cref="CompiledWorldTopology.Direction"/> resolves — the seam a
+/// 4-connected grid (orthogonal steps only) or a custom leaper reach declares without inventing a parallel
+/// mechanism.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldStateLatticeTopology(
     string Name,
@@ -331,8 +339,19 @@ public sealed record WorldStateLatticeTopology(
     WorldTopologyWrap Wrap = WorldTopologyWrap.None,
     int Radius = 0,
     float Band = 0f,
-    float LayerHeight = 0f
+    float LayerHeight = 0f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldTopologyDirection>? Directions = null
 );
+/// <summary>One authored direction of a discrete <see cref="WorldStateLatticeTopology"/>: the (X, Y, Z) cell step a
+/// neighbour walk, ray, or leaper offset takes, and the case-sensitive token a rule or <c>$board:</c>/<c>$match:</c>
+/// channel names it by. <paramref name="X"/>/<paramref name="Y"/> are the topology's own planar axes (a Grid's
+/// column/row, a Hex's q/r); <paramref name="Z"/> is a Box's layer step and must be zero on every other kind.</summary>
+/// <param name="Name">The direction's token — dot-free, distinct within the topology, matched case-sensitively.</param>
+/// <param name="X">The signed planar column step.</param>
+/// <param name="Y">The signed planar row step.</param>
+/// <param name="Z">The signed layer step; zero except on a <see cref="WorldTopologyKind.Box"/>.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldTopologyDirection(string Name, int X, int Y, int Z = 0);
 /// <summary>A state row's <c>lattice</c> trait -- the row holds one <see cref="CellKind.Fixed"/> scalar per cell of
 /// the named topology instead of slot/keyed cells. Values are authored DECIMAL (like every lattice quantity), not
 /// raw Q48.16 bits; a lattice row refuses slot/keyed members (<c>cells</c>, <c>capacity</c>, <c>advance</c>,

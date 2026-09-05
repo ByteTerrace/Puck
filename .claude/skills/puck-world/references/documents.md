@@ -690,7 +690,10 @@ alone (`Ring`/`Hex` refuse it), and a `Grid`'s `cellSize` must quantize to a
 positive Q48.16 value — it is the divisor `$board:cellOf` resolves world
 positions against (the garden's `chessBoard` alongside its own `pondBasin`
 water field — see `Puck.World.Schema/README.md`'s tabletop-primitive
-section). Lattice-shaped
+section). A discrete topology's own `directions` (optional; each kind's
+compass/space names are the unauthored default) replaces its whole direction
+vocabulary — see the schema README's discrete-boards section for the
+authoring shape and validation. Lattice-shaped
 state rows: `{"name": …, "kind": "fixed", "lattice":
 {"topology": …, "initial"/"min"/"max", optional "heightScale"/"color",
 "paint": […]}}`. `WorldFieldsSection.Compile` assembles the runtime composite
