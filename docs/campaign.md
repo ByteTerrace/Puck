@@ -1154,17 +1154,50 @@ monolithic file whose own authoring order interleaved substrate and game
 content as each was built over time (the original document's placements ran
 dominoes, most of the substrate, billiards, bowling, a substrate/chess/substrate
 interleave, then the rest of chess) cannot reproduce that exact array order; no
-composition built from one contiguous run per source can. This was proven, not
-assumed: composing the pre-split file and the post-split tree (with the new
-sixth game's own rows/rules/lattice subtracted back out) and canonicalizing
-every keyed list by sorting it on its identity key — the same vocabulary the
-merge itself keys by — made them `JsonNode.DeepEquals`; nothing but tic-tac-toe's
-own addition differs. Reordering a hashed row changes what the hash folds even
-though no value moves, so the passive garden replay's own hash moves with the
-split — expected, and the doctrine that already covers a deliberate correction
-("determinism pins the mapping, not the values") covers a deliberate
-reorganization the same way: the replay stays self-consistent (rule-failure-free,
-MATCH) before and after, which is the guarantee, not a frozen number.
+composition built from one contiguous run per source can. This is proven, not
+assumed, by a permanent law
+(`tests/Puck.World.Tests/GardenSplitLawTests.cs`, over a frozen
+`pre-split-garden.world.json` fixture): canonicalizing every keyed list by
+sorting it on its identity key — the same vocabulary the merge itself keys
+by — makes the pre-split and post-split composed trees `JsonNode.DeepEquals`,
+with a corrupted-row control proving the canonicalization does not also hide
+a real value change.
+
+Placement reordering has a sharp edge beyond row order: `WorldPopulation`
+seats each inhabited placement at the highest still-free body index, walking
+placements in composed document order, so moving a game's placements to a
+different point in the fold moves every one of its bodies to a different
+index range. Chess's 32 `piece` placements sat last among inhabited placements
+pre-split (bodies 12..43); with chess first among `imports`, they are first
+instead (bodies 74..105). `games/chess.world.json`'s `pieceCell`/`pieceCode`
+row keys and its 32 `tabletop-write-board-NN` rules are per-body-indexed
+authoring — re-derived against the new range in the same change, not left
+pointing at bodies that no longer hold the pieces they used to; the check
+that keeps them right is `GardenSplitLawTests.ChessPieceBodies_MatchAuthoredPieceCellAndPieceCodeKeys`,
+which cross-checks the authored keys against where `WorldPopulation` actually
+seats the placements rather than trusting the literals. No other fragment
+authors a per-body-indexed row or rule (billiards/bowling/dominoes carry no
+rules at all; poker's keyed rows are card codes, not body indices), so chess
+is the only place this re-derivation was needed.
+
+Reordering a hashed row changes what the hash folds even though no value
+moves; re-deriving chess's per-body literals against their new index range is
+the same relabeling, not a behavior change — the piece at each body still
+starts on the same board square with the same legal moves. Both together are
+why the passive garden replay's own hash moves with the split: the doctrine
+that already covers a deliberate correction ("determinism pins the mapping,
+not the values") covers a deliberate reorganization the same way — the replay
+stays self-consistent (rule-failure-free, MATCH) before and after, which is
+the guarantee, not a frozen number. The eight substrate rules (`claim-tick`
+through `physics-settled`) also move, from first in rule order to last —
+every import's rules compose before the importing file's own new rules, the
+same basis-first/overlay-appended rule that reorders placements. Checked and
+currently inert: no substrate rule's effect names a state any game rule reads
+or writes, and no game rule names a state a substrate rule writes: the two
+rule sets share no data flow through anything but the engine's own
+`$physics:quiescent` source. A future rule that reaches across that boundary
+must account for the new order rather than assume the substrate still runs
+first.
 
 ## After this arc
 

@@ -289,7 +289,7 @@ bridge from rigid bodies to this row is authored, not built
 in: a world rule reads each piece's `$board:cellOf:<occupancy row>:body:<n>`
 on `$physics:quiescent`'s rising edge (a settle, never every tick) and writes
 its code into the occupancy row at that resolved cell — see the garden's own
-`puck.world.json` tabletop rules for the worked pattern (snapshot the prior
+`games/chess.world.json` tabletop rules for the worked pattern (snapshot the prior
 board before clearing, derive fresh occupancy, detect which single piece
 moved between two occupied board cells — a piece whose cell resolves to no
 cell, before or after (captured, lifted off, knocked clear), never itself
@@ -352,7 +352,7 @@ direction list from a fixed cell and answer whether the first occupied cell
 on any of them falls in an authored value range, the same
 first-blocker-stops-the-walk contract as `$match:…:cell`, unioned over several
 directions and filtered to a range in one call rather than one rule per
-direction. The garden's `puck.world.json`
+direction. The garden's `games/chess.world.json`
 chess rules are the worked example for both techniques; its bridge rules
 still hold to the one-rule-per-piece discipline this section already states —
 a captured or knocked-over piece's own board write refuses (a stale key, or
