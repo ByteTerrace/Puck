@@ -184,6 +184,6 @@ public static partial class WorldRuleCompiler {
             }
             query = query with { Direction = direction };
         }
-        return new(new CompiledWorldOperand(WorldRuleFactKind.Board, row.Name, key, KeyFrom: keyFrom, ValueKind: CellKind.Int, Board: query, BodyA: bodyRef), CellKind.Int, name);
+        return new(new CompiledWorldOperand(WorldRuleFactKind.Board, row.Name, key, KeyFrom: keyFrom, ValueKind: CellKind.Int, Board: query, BodyA: bodyRef, StateHandle: ResolveWorldStateHandle(definition: definition, name: row.Name)), CellKind.Int, name);
     }
 }
