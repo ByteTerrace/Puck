@@ -34,6 +34,7 @@ internal static class AudioProbe {
             model: ledgerCase.Model,
             rom: rom
         );
+        using var liveness = LivenessGate.Attach(cpu: machine.GetRequiredService<Sm83>());
 
         var sink = machine.GetRequiredService<IAudioSink>();
         var priorFrames = (ledgerCase.FrameCap - 1);
@@ -52,6 +53,13 @@ internal static class AudioProbe {
             frames: 1,
             instance: machine
         );
+
+        if (!liveness.IsAlive) {
+            return new ProbeOutcome(
+                Detail: liveness.Reason,
+                Verdict: ProbeVerdict.Inconclusive
+            );
+        }
 
         var samples = new short[sink.AvailableSampleCount];
 

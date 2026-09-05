@@ -38,9 +38,9 @@ public static class FixedFourierTransform {
     // The inverse butterfly's narrow lane forms (u << 16) ± (two twiddle products) in a signed long: with the data
     // below 2^45 each addend is below 2^62 and their sum below 2^63.
     private const ulong InverseNarrowLimit = (1UL << 45);
-    private const int HalvingShift = (FixedQ4816.FractionBitCount + 1);
-    private const long HalvingMask = ((1L << HalvingShift) - 1L);
     private const long HalvingHalf = (1L << (HalvingShift - 1));
+    private const long HalvingMask = ((1L << HalvingShift) - 1L);
+    private const int HalvingShift = (FixedQ4816.FractionBitCount + 1);
 
     private static void ForwardButterfly(ReadOnlySpan<FixedComplex> twiddles, Span<FixedComplex> values) {
         var n = values.Length;
@@ -115,8 +115,8 @@ public static class FixedFourierTransform {
     // Returns ((u + w·v) / 2, (u − w·v) / 2) with one rounding per component: w·v at exact Q32, u lifted to Q32, the
     // sum rounded once at a seventeen-bit shift (ties to even, sign-magnitude, matching RoundProductSum's discipline).
     private static (FixedComplex Sum, FixedComplex Difference) HalvedButterfly(FixedComplex u, FixedComplex v, FixedComplex twiddle) {
-        var magnitude = (FusedArithmetic.RawMagnitude(value: u.Real.Value) | FusedArithmetic.RawMagnitude(value: u.Imaginary.Value) |
-                         FusedArithmetic.RawMagnitude(value: v.Real.Value) | FusedArithmetic.RawMagnitude(value: v.Imaginary.Value));
+        var magnitude = FusedArithmetic.RawMagnitude(value: u.Real.Value) | FusedArithmetic.RawMagnitude(value: u.Imaginary.Value) |
+                         FusedArithmetic.RawMagnitude(value: v.Real.Value) | FusedArithmetic.RawMagnitude(value: v.Imaginary.Value);
 
         if (magnitude < InverseNarrowLimit) {
             var productReal = unchecked(((twiddle.Real.Value * v.Real.Value) - (twiddle.Imaginary.Value * v.Imaginary.Value)));
@@ -156,7 +156,7 @@ public static class FixedFourierTransform {
         var sign = (productSum >> 63);
         var magnitude = unchecked((ulong)((productSum ^ sign) - sign));
         var truncated = (magnitude >> HalvingShift);
-        var remainder = (magnitude & ((ulong)HalvingMask));
+        var remainder = magnitude & ((ulong)HalvingMask);
 
         if (
             (remainder > ((ulong)HalvingHalf)) ||

@@ -317,7 +317,7 @@ public static class FusedArithmetic {
 #pragma warning restore SYSLIB5004
         }
 
-        var dividend = ((((UInt128)upper) << 64) | lower);
+        var dividend = (((UInt128)upper) << 64) | lower;
         var quotient = (dividend / denominator);
 
         return (
@@ -339,6 +339,7 @@ public static class FusedArithmetic {
         if (denominatorMagnitude <= ulong.MaxValue) {
             var denominator = ((ulong)denominatorMagnitude);
             var narrowRemainder = ((ulong)remainder);
+
             var (fractionQuotient, fractionRemainder) = DivideShifted(
                 denominator: denominator,
                 fractionBitCount: FixedQ4816.FractionBitCount,

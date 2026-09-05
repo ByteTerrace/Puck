@@ -244,35 +244,35 @@ internal static class BinaryFieldKernels {
         }
 
         if (typeof(T) == typeof(UInt128)) {
-                    var leftBits = UInt128.CreateTruncating(value: left);
-                    var rightBits = UInt128.CreateTruncating(value: right);
-                    var a0 = ((ulong)leftBits);
-                    var a1 = ((ulong)(leftBits >>> 64));
-                    var b0 = ((ulong)rightBits);
-                    var b1 = ((ulong)(rightBits >>> 64));
-                    var lower = CarrylessMultiply64(
-                        left: a0,
-                        right: b0
-                    );
-                    var upper = CarrylessMultiply64(
-                        left: a1,
-                        right: b1
-                    );
-                    var firstCross = CarrylessMultiply64(
-                        left: a0,
-                        right: b1
-                    );
-                    var secondCross = CarrylessMultiply64(
-                        left: a1,
-                        right: b0
-                    );
-                    var middleLow = firstCross.Low ^ secondCross.Low;
-                    var middleHigh = firstCross.High ^ secondCross.High;
+            var leftBits = UInt128.CreateTruncating(value: left);
+            var rightBits = UInt128.CreateTruncating(value: right);
+            var a0 = ((ulong)leftBits);
+            var a1 = ((ulong)(leftBits >>> 64));
+            var b0 = ((ulong)rightBits);
+            var b1 = ((ulong)(rightBits >>> 64));
+            var lower = CarrylessMultiply64(
+                left: a0,
+                right: b0
+            );
+            var upper = CarrylessMultiply64(
+                left: a1,
+                right: b1
+            );
+            var firstCross = CarrylessMultiply64(
+                left: a0,
+                right: b1
+            );
+            var secondCross = CarrylessMultiply64(
+                left: a1,
+                right: b0
+            );
+            var middleLow = firstCross.Low ^ secondCross.Low;
+            var middleHigh = firstCross.High ^ secondCross.High;
 
-                    return (
-                        Low: T.CreateTruncating(value: (((UInt128)(lower.High ^ middleLow)) << 64) | lower.Low),
-                        High: T.CreateTruncating(value: (((UInt128)upper.High) << 64) | (upper.Low ^ middleHigh))
-                    );
+            return (
+                Low: T.CreateTruncating(value: (((UInt128)(lower.High ^ middleLow)) << 64) | lower.Low),
+                High: T.CreateTruncating(value: (((UInt128)upper.High) << 64) | (upper.Low ^ middleHigh))
+            );
         }
 
         return ThrowUnsupportedCarrier<T>();

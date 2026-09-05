@@ -460,14 +460,14 @@ public readonly struct RealQuadratic : IComparable<RealQuadratic>, IEquatable<Re
         // rational and radical terms nearly cancel the value is far smaller than either, and a scale read off the
         // terms would floor it to nothing. An irrational value is never zero, so the refinement terminates.
         var magnitudeBits = Math.Max(
-            val1: (long)BigInteger.Abs(value: RationalNumerator).GetBitLength(),
-            val2: ((long)BigInteger.Abs(value: SurdNumerator).GetBitLength() + ((long)((Radicand.GetBitLength() + 1) / 2)))
+            val1: ((long)BigInteger.Abs(value: RationalNumerator).GetBitLength()),
+            val2: (((long)BigInteger.Abs(value: SurdNumerator).GetBitLength()) + ((long)((Radicand.GetBitLength() + 1) / 2)))
         );
-        var scale = Puck.Maths.Rational.DoubleScale(magnitudeBitLength: ((magnitudeBits + 1L) - (long)Denominator.GetBitLength()));
+        var scale = Puck.Maths.Rational.DoubleScale(magnitudeBitLength: ((magnitudeBits + 1L) - ((long)Denominator.GetBitLength())));
         var scaled = FloorScaled(scale: scale);
 
         while (true) {
-            var scaledBits = (long)scaled.GetBitLength();
+            var scaledBits = ((long)scaled.GetBitLength());
 
             if (scaledBits >= 60L) { break; }
 
@@ -482,6 +482,7 @@ public readonly struct RealQuadratic : IComparable<RealQuadratic>, IEquatable<Re
             truncatedMagnitude: scaled
         );
     }
+
     // ⌊value · 2^scale⌋, exactly: the root term is bounded below by the floor root for a positive coefficient and by
     // the negated ceiling root for a negative one, so the floor of the sum is the floor of the value.
     private BigInteger FloorScaled(int scale) {
@@ -493,6 +494,7 @@ public readonly struct RealQuadratic : IComparable<RealQuadratic>, IEquatable<Re
 
         return ((RationalNumerator << scale) + rootTerm).FloorDivide(divisor: Denominator);
     }
+
     /// <inheritdoc />
     /// <remarks>Every component is formatted against <see cref="CultureInfo.InvariantCulture"/>, so the text is the
     /// same on every host and can reach a log, a snapshot or a golden file.</remarks>

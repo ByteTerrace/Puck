@@ -39,7 +39,6 @@ public sealed class SymmetryWord {
     /// <summary>Gets the lattice's own cycle as a word: the eight seed mirrors read in descending order, whose
     /// permutation is <see cref="SymmetryLattice.Cycle(int)"/> and whose order is <see cref="CyclicRotation.Period"/>.</summary>
     public static SymmetryWord Coxeter { get; } = Create(mirrors: [7, 6, 5, 4, 3, 2, 1, 0]);
-
     /// <summary>Gets a value indicating whether the word moves no node, so its order is one and it loops nothing.</summary>
     public bool IsIdentity => (Order == 1);
     /// <summary>Gets the number of letters.</summary>
@@ -123,11 +122,12 @@ public sealed class SymmetryWord {
             position: position
         );
     }
+
     private static int Image(ReadOnlySpan<int> letters, int node) {
         foreach (var letter in letters) {
             node = SymmetryLattice.Reflect(
-                node: node,
-                mirror: letter
+                mirror: letter,
+                node: node
             );
         }
 

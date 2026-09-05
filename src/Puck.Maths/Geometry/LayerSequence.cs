@@ -20,9 +20,9 @@ public readonly record struct LayerProjection(long Layer, long Overflow, long De
 /// <para>
 /// Layer <c>n</c> (for <c>n ≥ 1</c>) holds <c>Start + (n − 1)·Step</c> indices, so the total through layer <c>n</c>
 /// is the quadratic <c>Count(n) = Seed + Start·n + Step·n·(n − 1)/2</c> — the generalized figurate numbers.
-/// <see cref="LayerOf(long)"/> inverts that closed form with pure integer arithmetic (an <see cref="Int128"/>
-/// discriminant, an exact integer square root, and a floor division), so the result is deterministic on every
-/// platform and never approximated through floating point.
+/// <see cref="LayerOf(long)"/> inverts that closed form with an <see cref="Int128"/> discriminant, an exact
+/// integer square root, and a floor division. The square root may use a hardware floating-point seed followed
+/// by exact integer correction; the final result is deterministic on every platform.
 /// </para>
 /// <para>
 /// A negative <see cref="Step"/> yields a BOUNDED sequence: layer sizes shrink to zero and the total index count

@@ -183,13 +183,14 @@ internal static class SignedFixedPointArithmetic {
             shift: -fractionBitCount
         );
     }
+
     // Rounds an exact signed product that fits a long to the supplied split, to nearest with ties to even, on the
     // magnitude; the sign is reapplied afterwards, so the discipline matches ScaleProductSum's sign-magnitude form.
     private static long RoundProductNarrow(long product, int fractionBitCount) {
         var sign = (product >> 63);
         var magnitude = unchecked((ulong)((product ^ sign) - sign));
         var truncated = (magnitude >> fractionBitCount);
-        var remainder = (magnitude & ((1UL << fractionBitCount) - 1UL));
+        var remainder = magnitude & ((1UL << fractionBitCount) - 1UL);
         var half = (1UL << (fractionBitCount - 1));
 
         if (
@@ -203,6 +204,7 @@ internal static class SignedFixedPointArithmetic {
 
         return unchecked(((result ^ sign) - sign));
     }
+
     /// <summary>Multiplies two signed raws at the supplied fixed-point split, rounding to nearest with ties to even
     /// and throwing when the rounded product leaves the signed carrier.</summary>
     internal static long MultiplyChecked(long x, long y, int fractionBitCount) {

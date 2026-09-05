@@ -1,8 +1,8 @@
 # Geometry
 
-Grids, curves, layered index spaces, and the modular group. Everything here is
-**exact integer arithmetic on an index or a lattice point** — no floating point,
-no accumulated drift, bit-identical on every platform. These are the
+Grids, curves, layered index spaces, and the modular group. Everything here has
+**exact results on an index or a lattice point** — no accumulated drift,
+bit-identical on every platform. These are the
 deterministic value types that are not fixed-point numbers: a hex cell is an
 Eisenstein integer, a Hilbert distance is a bijection, a layer index is the
 inverse of a quadratic prefix sum, and a modular transform is a 2×2 integer
@@ -19,6 +19,7 @@ the contract for the folder.
 | Type | Kind | What it's for |
 |------|------|---------------|
 | [`HexagonalCoordinate`](#hexagonalcoordinate) | `readonly record struct` | An exact hex-grid cell — the Eisenstein integer `Q + R·ω`. 60° rotations are integer multiplies. |
+| [`HexagonalIndex`](#hexagonalindex) | `readonly record struct` | A dense, continuous hex-grid walk in complete rings. Radius, rotation, and reflection act directly on the index. |
 | [`HilbertCurve`](#hilbertcurve) | `static` | The locality-preserving 1D ↔ 2D bijection. Cache-coherent tile and chunk ordering. |
 | [`LayerSequence`](#layersequence) | `readonly record struct` | Layered index spaces (the generalized figurate numbers), with constant-time index → layer lookup. |
 | [`ModularTransform`](#modulartransform) | `readonly record struct` | An exact element of the modular group, acting on the hyperbolic plane. The one object beneath the other three motions. |
@@ -37,6 +38,81 @@ deterministic hex-grid games. Coordinates and scalar query results retain their
 `int` API: operations evaluate in a wide exact lane and throw
 `OverflowException` when the mathematical coordinate, norm, or distance cannot
 be represented by that API. They never wrap to another cell or scalar.
+`ToString()` prints only Q and R, so formatting remains defined even when a
+derived norm or distance would overflow.
+
+## `HexagonalIndex`
+
+`HexagonalIndex` stores a hex cell as one nonnegative `long`. Index zero is the
+origin. Ring `r` contains `6r` cells, starting at index `1 + 3r(r − 1)` at
+coordinate `(1, 1-r)`. It runs counterclockwise through the six directions of
+`HexagonalCoordinate`, whose axes meet at 120°. The first ring is therefore
+`(1,0), (1,1), (0,1), (-1,0), (-1,-1), (0,-1)`, at indices 1 through 6.
+Each ring ends at `(0, -r)`, and the next starts at `(1, -r)`: one neighbouring
+step connects them. Every consecutive pair of admitted indices therefore
+visits neighbouring cells, including across ring boundaries. The disk through
+radius `r` occupies exactly indices `0` through `3r(r + 1)`, without holes or
+repeated cells. Growing the disk appends cells without renumbering its interior.
+Consecutive indices are always neighbours; other neighbouring cells can still
+be far apart in the index order.
+
+The representation makes some geometry particularly simple. `Radius` locates
+the cell's ring without decoding its coordinate. For positive index `h`, set
+`a = floor((h - 1)/3)`; the radius is `floor((1 + isqrt(1 + 4a))/2)`.
+This reduced discriminant fits `ulong` over the entire admitted disk, so the
+lookup uses the exact 64-bit integer square root rather than the general
+`LayerSequence` inversion. `Rotate(turns)` adds `turns * r` to the perimeter offset modulo
+`6r`; a positive turn is 60° counterclockwise. If `t` measures the perimeter
+from `(r, 0)`, the stored ring offset is `j = (t + r - 1) mod 6r`.
+`Conjugate()` sends it to `(2(r - 1) - j) mod 6r`, reflecting the cell across
+the real axis. `Swap()` exchanges Q and R using `(4r - 2 - j) mod 6r`.
+These operations fix the origin. Their cost does not grow with
+the number of requested turns.
+
+`Scale(k)` multiplies both coordinates directly. For positive `k`, its new
+radius is `kr` and its offset is `k(j + 1) - 1`; equivalently its index is
+`k * Value + 3k(k - 1)r²`. Negative factors additionally apply a half-turn,
+and zero produces the origin. `Norm` also avoids decoding: with
+`s = (j + 1) mod r`, it is `r² - s(r - s)` (zero at the origin).
+
+```csharp
+using Puck.Maths;
+
+var cell = HexagonalIndex.FromCoordinate(new HexagonalCoordinate(Q: 2, R: 1));
+var index = cell.Value;                     // 9
+var radius = cell.Radius;                   // 2 hex steps from the origin
+var rotated = cell.Rotate(turns: 1);        // index 11, coordinate (1, 2)
+var adjacent = cell.Neighbor(direction: 1);  // index 23, coordinate (3, 2)
+var distance = HexagonalIndex.Distance(cell, adjacent); // 1
+```
+
+The arithmetic operators act on the **represented coordinates**: `+` and `-`
+translate, unary `-` makes a half-turn, and `*` is the Eisenstein product,
+combining rotation and scaling. `Translate` also accepts a coordinate
+displacement. For nonnegative Q, R and a displacement `(k, k)` with `k >= 0`,
+translation adds `k(6r + 3k - 1)` to the index. Other translations and general
+multiplication decode and reuse the coordinate algebra. Arithmetic
+on the raw `Value` has a different meaning and does not substitute for these
+operators. `Norm` returns the field norm `Q² − QR + R²`; `Distance` returns
+hex steps between two cells. Both return `long`, so distances between opposite
+outer cells remain representable even when they exceed `int.MaxValue`.
+
+The admitted disk ends at `MaxRadius = 1,753,413,055`, the largest complete
+ring that fits in a nonnegative `long` index. Its final index is
+`MaxValue = 9,223,372,029,593,538,240`. The small remaining tail of `long` is
+rejected: admitting only part of a ring would make some rotations leave the
+domain. Every admitted index decodes to a signed `int` coordinate, and every
+coordinate in that disk has exactly one index. Rotation, conjugation, and
+negation and swapping preserve the disk. Translation, scaling or multiplication can leave it, in
+which case they throw `OverflowException`; an invalid index constructor argument
+throws `ArgumentOutOfRangeException`. Nothing wraps or saturates to another cell.
+
+The `integer.hexagonal-index-*` laws check an independent perimeter walk,
+BigInteger geometry and arithmetic, symmetries, continuity within and between
+rings, and overflow refusals. Boundary cases reach the largest admitted ring.
+The Deep geometry mirror adds a larger deterministic sample.
+The `integer.encoded-operations*` laws additionally compare direct transforms
+with independent coordinate arithmetic and exercise signed scale extremes.
 
 ## `HilbertCurve`
 
@@ -52,10 +128,11 @@ in `[1, 31]`.
 Layered index spaces (the generalized figurate numbers): a `Seed`-sized core
 wrapped by layers that start at `Start` and grow by `Step`, with
 **constant-time** index→layer lookup by inverting the quadratic prefix sum
-`Count(n) = Seed + Start·n + Step·n·(n − 1)/2` in pure integer arithmetic (an
-`Int128` discriminant, the exact floor square root, a floor division) — no
-walking, no floating point, bit-identical on every platform over the whole
-`long` index range.
+`Count(n) = Seed + Start·n + Step·n·(n − 1)/2` (an `Int128` discriminant, the
+exact floor square root, a floor division) — no walking, bit-identical on every
+platform over the whole `long` index range. The square-root kernel may use a
+hardware floating-point seed followed by exact integer correction; its final
+result is always the integer floor root.
 
 A negative `Step` bounds the space: layer sizes shrink to zero and the total
 tops out at `Capacity`. `LayerOf`/`Locate` treat indices past capacity as

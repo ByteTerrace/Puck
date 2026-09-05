@@ -11,12 +11,15 @@ internal enum GbMicrotestResult {
 }
 /// <summary>
 /// Reads a GBMicrotest ROM's verdict from its own convention: the actual result at <c>$FF80</c>, the expected result
-/// at <c>$FF81</c>, and the pass/fail flag at <c>$FF82</c> (<c>0x01</c> pass, <c>0xFF</c> fail) — the suite's howto is
-/// explicit that only <c>$FF82</c> is a reliable pass/fail indicator, since some tests set <c>$FF80 == $FF81</c> on
-/// failure. Read through <see cref="SystemBus.DebugReadByte"/> so the poll itself has no bus side effects.
+/// at <c>$FF81</c>, and the pass/fail flag at <c>$FF82</c> (<c>0x01</c> pass, <c>0xFF</c> fail). <c>$FF80</c>/<c>$FF81</c>
+/// are read only to annotate the detail string — the suite's own howto is explicit that <c>$FF82</c> is the sole
+/// reliable indicator and that the other two bytes are not always set consistently even on a genuine pass (several of
+/// the <c>poweron_*</c>/<c>hblank_*</c> cases record unrelated bytes there), so this probe never gates on them
+/// agreeing. Read through <see cref="SystemBus.DebugReadByte"/> so the poll itself has no bus side effects.
 /// </summary>
 internal static class GbMicrotestProbe {
     private const ushort ActualAddress = 0xFF80;
+    private const ushort ExpectedAddress = 0xFF81;
     private const byte FailFlag = 0xFF;
     private const ushort FlagAddress = 0xFF82;
     private const byte PassFlag = 0x01;
@@ -48,7 +51,7 @@ internal static class GbMicrotestProbe {
 
             if (flag == FailFlag) {
                 var actual = bus.DebugReadByte(address: ActualAddress);
-                var expected = bus.DebugReadByte(address: 0xFF81);
+                var expected = bus.DebugReadByte(address: ExpectedAddress);
 
                 return (GbMicrotestResult.Fail, $"$FF82=0xFF after {(frame + 1)} frames (actual=0x{actual:X2}, expected=0x{expected:X2})");
             }

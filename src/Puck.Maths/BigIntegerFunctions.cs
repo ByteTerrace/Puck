@@ -427,7 +427,7 @@ public static class BigIntegerFunctions {
     // round bit, and every bit under it plus any reported remainder forms the sticky bit. An exactly representable
     // magnitude is scaled without rounding.
     private static double RoundToDouble(BigInteger magnitude, int binaryExponent, bool hasRemainder) {
-        var bits = (long)magnitude.GetBitLength();
+        var bits = ((long)magnitude.GetBitLength());
         var top = (bits + binaryExponent);
 
         if (top > 1024L) { return double.PositiveInfinity; }
@@ -457,6 +457,7 @@ public static class BigIntegerFunctions {
             x: ((double)kept)
         );
     }
+
     /// <summary>Attempts to compute a square root of a value modulo an odd prime.</summary>
     /// <param name="value">The value to take the root of. It is reduced modulo <paramref name="oddPrime"/> on entry, so any sign and magnitude are admitted.</param>
     /// <param name="oddPrime">The modulus. It must be an odd prime of at least three: the oddness and the lower bound are enforced, primality is not — see the remarks.</param>

@@ -1321,13 +1321,23 @@ and `puck schema --check` byte-identical to before:
    world-only reserved channels (bodies, distance, line of sight, screens,
    links, regions, the population) stay in the document project as
    `WorldRuleFacts` beside the state-neutral `RuleFacts`.
-2. The extension seams. The operand and effect unions become registries the
-   world project fills with its own arms (distance, line of sight, channels,
-   bodies; pose, cue, HUD, placement, field, save), each arm carrying its own
-   cost so the work sheet stays derived; the compiler compiles state effects
-   itself and dispatches the rest; the budget, dataflow, hazards, and trace move
-   with the compiler. Interactions stay world-side until a pair domain over rows
-   is designed rather than assumed.
+2. The extension seams. `Puck.State` owns the state vocabulary (rows, cells,
+   domains, draws, topologies), the predicate, effect, and operand base types
+   with their state-neutral arms, the rule compiler, the work budget, the
+   dataflow and hazard analyses, and the read side of every operand — a fact
+   reads itself through an `IRuleReader` the host implements, a virtual call
+   where a closed-union switch stood. The world extends the library through a
+   `RuleVocabulary` of registered families — an operand family owns its
+   spelling and compiles it, an effect or predicate family owns its JSON
+   discriminator and compiles its arm — each compiled fact pricing itself so
+   the work sheet stays derived, and the world's arms join the JSON union at
+   runtime through a type-info modifier rather than an attribute list the
+   library would have to know. Effect firing, the trace, interactions, and
+   decisions stay in the world until the evaluator moves; interactions stay
+   world-side until a pair domain over rows is designed rather than assumed.
+   The two enums the physics kits share with rules (`ActionStateComparison`,
+   `ActionTriggerMode`) move down into `Puck.State`, which references
+   nothing of `Puck.Physics`.
 3. The evaluator moves behind a state-host interface — the mutation door, the
    journal, checkpoints, and the world-fact reader the operands answer through
    — that `WorldServer` implements.

@@ -18,8 +18,10 @@ Optional battery arguments:
 | `--roms <directory>` | Override the GB reference-ROM root. |
 | `--sst <directory>` | Override the SingleStepTests/sm83 corpus root. |
 | `--artifacts <directory>` | Override `artifacts/gb-post`. |
-| `--record` | Regenerate `Expectations.json` from measured outcomes instead of gating against it. |
-| `--require-assets` | A ledger-recorded ROM absent from the resolved corpus fails infra (exit 2) instead of skipping. |
+| `--record` | Regenerate `Expectations.json` from measured outcomes instead of gating against it; see [Recording](#recording). |
+| `--require-assets` | A suite's own ledger rows not matched by a discovered case fail infra (exit 2) instead of skipping — catches a corpus missing entirely, not just one absent ROM. |
+| `--record-accept-regressions` | With `--record`, acknowledge that at least one case regressed from a recorded `pass` — otherwise the write is refused. |
+| `--record-allow-shrink` | With `--record`, acknowledge that at least one recorded case is no longer discovered — otherwise the write is refused. |
 
 Exit code 0 means every selected stage passed or skipped. Exit code 1 means a
 check failed. Exit code 2 means infrastructure prevented a stage from running.
@@ -53,9 +55,14 @@ that fails when it disagrees with its own source, the same shape as
 `FileLengths.json`/`VerifiedCode.json`.
 
 A row records the suite, the ROM's path relative to that suite's on-disk root,
-the model (`Dmg`/`Cgb`/`Agb`), the probe kind, the ROM bytes' FNV-1a hash, and
-the outcome (`pass`/`fail`/`unrunnable`), with a `reason` for `unrunnable` and
-a `diffPixels` count for a screenshot `fail`.
+the model (the exact `ConsoleModel` the case ran on — `DmgC`, `CgbE`, `Agb`,
+`Mgb`, `Sgb2`, and so on, not a coarse family tag), the probe kind, the ROM
+bytes' FNV-1a hash, and the outcome (`pass`/`fail`/`unrunnable`/`inconclusive`),
+with a `Reason` for anything but `pass`, a `DiffPixels` count for a screenshot
+`fail`, and — for a `screenshot` case — an `ExpectedImageHash`: the winning
+expected-image candidate's FNV-1a hash, pinned the same way the ROM's is, so a
+swapped or corrupted fixture is a recorded mismatch rather than a silently
+different comparison.
 
 Probe kinds:
 
@@ -67,12 +74,18 @@ Probe kinds:
 - `register-signature` — the same Fibonacci-or-`0x42` signature read straight
   from the register file after every frame instead of over serial
   (`RegisterSignatureProbe`), for suites that never transmit it: the
-  wilbertpol fork and SameSuite. `Sm83StateCodec.ReadTail`'s `lockedUp` output
-  ends the run early once the CPU wedges on the wilbertpol fork's `0xED` exit
-  trap, rather than burning the rest of the frame budget on a machine that can
-  no longer move.
+  wilbertpol fork and SameSuite. A register match is trusted only once the
+  exit itself is corroborated — either the CPU has locked up
+  (`Sm83StateCodec.ReadTail`'s `lockedUp` output, read through the CPU's
+  existing `SaveState` seam) or an `0x40 LD B,B` opcode trap has been fetched
+  at an instruction boundary (`ICpuTraceSink`) — since the register file can
+  otherwise transiently match mid-computation. The run ends early once
+  corroborated rather than burning the rest of the frame budget.
 - `gb-microtest` — GBMicrotest's `$FF80`-`$FF82` result block, read through
-  `SystemBus.DebugReadByte` (`GbMicrotestProbe`).
+  `SystemBus.DebugReadByte` (`GbMicrotestProbe`). The suite's own howto is
+  explicit that `$FF82` is the sole reliable indicator and that `$FF80`/`$FF81`
+  are not always set consistently even on a genuine pass, so this probe never
+  gates on them agreeing — they are read only to annotate a failure's detail.
 - `screenshot` — a fixed-frame-budget framebuffer capture packed through
   `FramebufferRgba`, compared pixel-exact against the first expected PNG (of a
   suite's device-tag fallback list) that exists on disk, decoded through
@@ -85,38 +98,82 @@ Probe kinds:
   which are rendered under gambatte's own weighted RGB mix — a case's
   `LedgerCase.Palette` selects that conversion (`GambatteCgbPalette`) before
   the comparison runs. A `ScreenshotProbe` case whose expected image still
-  cannot be decoded reports `Inconclusive` (folded into the ledger's `fail`
-  bucket) instead of throwing, so one bad image never takes its whole suite's
-  stage down as an infrastructure failure.
+  cannot be decoded reports `Inconclusive` instead of throwing, so one bad
+  image never takes its whole suite's stage down as an infrastructure
+  failure. Before comparing pixels, a shared `LivenessGate` requires the
+  machine's program counter to have left a small window around its entry
+  point and retired a minimum instruction count — a machine that never ran
+  anything (a `jr $-2` reset trap, say) can otherwise leave the framebuffer at
+  its power-on color, which coincidentally satisfies a "blank screen"
+  expectation without the ROM under test having done anything; that case is
+  also `Inconclusive`.
 - `hex-pattern` — gambatte's `_out<hex>` convention: the expected hex digits
   are drawn as 8x8 monochrome tiles at the top of the screen, compared against
   a ported copy of `test/testrunner.cpp`'s own glyph table (`HexPatternProbe`).
+  A pattern character with no glyph is `Inconclusive` rather than an early
+  pass. The cell right after the last digit is deliberately not required to
+  be clear — several real cases tile further hex-shaped content immediately
+  past their own result digits as part of the screen they draw.
 - `audio` — gambatte's `_outaudio0`/`_outaudio1` convention: whether the final
   rendered frame's audio output is constant (silence) or varies (sound),
-  drained through `IAudioSink` at half the CPU clock (`AudioProbe`).
+  drained through `IAudioSink` at half the CPU clock (`AudioProbe`), gated by
+  the same `LivenessGate` a `screenshot` case uses — a dead machine's silent
+  audio ring would otherwise trivially satisfy `_outaudio0`.
 
-Stage semantics, per case:
+Stage semantics, per case: the gate requires the recorded and actual outcome
+to be **equal** — `pass`, `fail`, and `inconclusive` are three distinct
+recorded verdicts, none folded into another, so a regression into
+inconclusiveness (a liveness-gate catch, an undecodable glyph, a vanished
+expected image) is caught exactly like a regression into `fail`.
 
-- Actual matches the recorded outcome → counted (`N pass`, `M recorded-fail`,
-  `K unrunnable`).
+- Actual equals the recorded outcome → counted (`N pass`, `M recorded-fail`,
+  `L recorded-inconclusive`, `K unrunnable`).
 - A recorded `fail` that now passes → the stage **fails**
-  (`ratchet: <rom> now passes; re-record`) — a fix is a deliberate, recorded
-  act, never a silently-loosened gate.
-- A recorded `pass` that now fails → **fails** as a regression.
-- A recorded screenshot `fail` whose `diffPixels` changed → **fails**, naming
-  both counts.
+  (`ratchet: recorded fail, now Pass`) — a fix is a deliberate, recorded act,
+  never a silently-loosened gate.
+- Any other change of outcome (most importantly a recorded `pass` that now
+  fails or turns inconclusive) → **fails** as a regression.
+- A recorded `fail` whose actual outcome is still `fail` but whose
+  screenshot `DiffPixels` changed → **fails**, naming both counts.
 - A ROM present on disk with no ledger row → **fails** as `unrecorded`.
-- A ROM whose bytes no longer match its recorded hash → **fails** as a hash
-  mismatch.
-- A ledger row whose ROM is absent from disk → skipped, or (`--require-assets`)
-  an infra failure.
+- A ROM, or a screenshot case's expected image, whose bytes no longer match
+  its recorded hash → **fails** as a hash mismatch (checked before the probe
+  runs, so a swapped fixture is never silently absorbed into a pixel diff).
+- A ledger row for a suite this run's own discovery does not produce a
+  matching case → skipped, or (`--require-assets`) an infra failure. This is
+  computed against the ledger's own rows for the suite, so it also catches a
+  corpus root that resolves to nothing at all (a typo'd `--roms`, say) —
+  discovery finding zero cases is not by itself proof there was nothing to
+  find.
 
-`--record` regenerates `Expectations.json` from every ledger stage's measured
-outcomes in one pass — sorted by (suite, path, model), LF line endings, a
-trailing newline — instead of comparing against the existing file. Run it
-after a deliberate emulator correction changes a recorded outcome, exactly
-like re-recording a Post baseline; never to paper over an unexplained
-regression.
+## Recording
+
+`--record` measures every ledger stage's cases fresh and diffs the result
+against the existing `Expectations.json` before writing anything — a suite
+this run did not measure (an unselected `--tier`/`--filter`, or a suite this
+corpus checkout simply does not carry) is carried over unchanged, so only a
+suite this run actually touched can appear in the diff. Every case whose
+outcome changed is printed (`ratchet: ...` for a recorded `fail` resolving to
+`Pass`, `regression: ...` for anything moving away from a recorded `Pass`,
+`dropped: ...` for a recorded case no longer discovered), and the write is
+refused (exit 2, nothing written) when any of the following holds:
+
+- Any stage in this run ended in infrastructure failure — a ledger built from
+  an incomplete run is worse than no ledger at all.
+- Two measured cases share a (suite, path, model) key — the file is sorted and
+  keyed by exactly that triple, so a collision can only mean two stages are
+  tagging the same case.
+- At least one case regressed from a recorded `Pass`, unless
+  `--record-accept-regressions` is passed.
+- At least one recorded case is no longer discovered, unless
+  `--record-allow-shrink` is passed.
+
+Both flags are acknowledgments, not defaults — running `--record` against a
+partial or misconfigured corpus is expected to refuse rather than quietly
+erode the ledger. Run `--record` after a deliberate emulator correction
+changes a recorded outcome, exactly like re-recording a Post baseline; never
+to paper over an unexplained regression, and never routinely against a
+corpus checkout that does not carry everything the ledger already records.
 
 ## The authored boot ROM
 

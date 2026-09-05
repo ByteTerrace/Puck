@@ -49,7 +49,7 @@ public static class BinaryIntegerFunctions {
         var blockWidth = (1 << value);
 
         if ((typeof(T) == typeof(UInt128)) || (typeof(T) == typeof(Int128))) {
-            return RepeatWordInto128<T>(value: (ulong.MaxValue >>> (64 - blockWidth)), blockWidth: (blockWidth << 1));
+            return RepeatWordInto128<T>(blockWidth: (blockWidth << 1), value: (ulong.MaxValue >>> (64 - blockWidth)));
         }
 
         // A legal block occupies at most half the word. Up through 128-bit carriers its ones therefore fit in a
@@ -60,6 +60,7 @@ public static class BinaryIntegerFunctions {
 
         return pattern.RepeatBits(blockWidth: (blockWidth << 1));
     }
+
     /// <summary>Builds a word with one set bit at the bottom of every block of <paramref name="blockWidth"/> bits.</summary>
     /// <typeparam name="T">The fixed-width binary integer type, signed or unsigned.</typeparam>
     /// <param name="blockWidth">A positive divisor of the bit width of <typeparamref name="T"/>, including the whole word width.</param>
@@ -74,6 +75,7 @@ public static class BinaryIntegerFunctions {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static T ReplicationMask<T>(this int blockWidth) where T : IBinaryInteger<T> {
         var bitWidth = ValidateReplicationBlockWidth<T>(blockWidth: blockWidth);
+
         if (blockWidth == bitWidth) { return T.One; }
 
         if ((typeof(T) == typeof(UInt128)) || (typeof(T) == typeof(Int128))) {
@@ -81,7 +83,7 @@ public static class BinaryIntegerFunctions {
             // the JIT folds ulong division by constants, whereas Int128/UInt128 division remains a runtime call.
             var half = blockWidth.ReplicationMask<ulong>();
 
-            return T.CreateTruncating(value: new UInt128(upper: half, lower: half));
+            return T.CreateTruncating(value: new UInt128(lower: half, upper: half));
         }
 
         var allBits = T.AllBitsSet;
@@ -123,8 +125,9 @@ public static class BinaryIntegerFunctions {
 
         if ((value & ~blockMask) != T.Zero) { ThrowReplicationPattern(); }
 
-        return unchecked(value * blockWidth.ReplicationMask<T>());
+        return unchecked((value * blockWidth.ReplicationMask<T>()));
     }
+
     // The source pattern fits in a ulong. A whole 128-bit block is an identity; every smaller legal block repeats
     // identically in each half. Shared by the wide public path and Fermat masks, whose pattern is known to fit.
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -133,7 +136,7 @@ public static class BinaryIntegerFunctions {
 
         var half = value.RepeatBits(blockWidth: blockWidth);
 
-        return T.CreateTruncating(value: new UInt128(upper: half, lower: half));
+        return T.CreateTruncating(value: new UInt128(lower: half, upper: half));
     }
     /// <summary>Validates the shared block contract and returns the carrier's fixed bit width.</summary>
     /// <typeparam name="T">The binary integer carrier.</typeparam>
@@ -157,10 +160,11 @@ public static class BinaryIntegerFunctions {
     // when the width and pattern are known; invalid calls retain the same exception type, parameter and message.
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void ThrowReplicationBlockWidth() =>
-        throw new ArgumentOutOfRangeException(paramName: "blockWidth", message: "The block width must be a positive divisor of the word width.");
+        throw new ArgumentOutOfRangeException(message: "The block width must be a positive divisor of the word width.", paramName: "blockWidth");
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void ThrowReplicationPattern() =>
-        throw new ArgumentOutOfRangeException(paramName: "value", message: "The pattern must fit entirely within one block.");
+        throw new ArgumentOutOfRangeException(message: "The pattern must fit entirely within one block.", paramName: "value");
+
     /// <summary>Computes two raised to the power <paramref name="value"/> (that is, <c>1 &lt;&lt; <paramref name="value"/></c>).</summary>
     /// <typeparam name="T">The binary integer type the result is produced in.</typeparam>
     /// <param name="value">The exponent.</param>
@@ -769,9 +773,9 @@ public static class BinaryIntegerFunctions {
         // representable; whether |value| also reaches 10^(estimate + 1) is read off the truncating quotient by
         // 10^estimate, which keeps both the SIGNED value (T.MinValue has no T.Abs) and the carrier's own ceiling
         // (10^(estimate + 1) may not fit) out of the decision.
-        var bitLength = int.CreateChecked(value: (value < T.Zero)
+        var bitLength = int.CreateChecked(value: ((value < T.Zero)
             ? (~value).MostSignificantBit()
-            : value.MostSignificantBit());
+            : value.MostSignificantBit()));
         var estimate = T.CreateChecked(value: (((bitLength - 1) * 1233) >> 12));
         // The quotient's magnitude is below one hundred, so negating it is always representable — unlike a negated ten
         // on an unsigned carrier, which would wrap to the carrier's top and admit every quotient.

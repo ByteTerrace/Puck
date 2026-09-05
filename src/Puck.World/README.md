@@ -410,8 +410,8 @@ placements are the garden's proof fixture — see the
 for the mechanics and the [schema reference](../Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs)
 for the authored facet.
 
-Each garden game — chess, poker, dominoes, billiards, bowling, tic-tac-toe —
-lives in its own file under `Assets/worlds/games/`, imported by the garden's
+Each garden game — chess, poker, dominoes, billiards, bowling, tic-tac-toe,
+hex lines — lives in its own file under `Assets/worlds/games/`, imported by the garden's
 `puck.world.json` (`WorldDefinition.Imports`; see the
 [`puck-world` skill's documents reference](../../.claude/skills/puck-world/references/documents.md#document-composition-basis-and-imports)).
 The shared substrate — channels, kits, population capacity, the tabletop
@@ -422,7 +422,15 @@ absolute coordinates: chess's squares and pieces carry `parent: tabletop`, its
 board topology anchors to that placement, its piece rows are keyed by
 placement id and read through `placement:$each`, and dominoes, billiards, and
 bowling anchor to marker placements of their own — so a module composes into
-any host that declares the placement it names.
+any host that declares the placement it names. Hex lines (`hexlines.world.json`)
+is a radius-4 hexagonal disk of 61 pointy-top tiles on `hexTable` with two stone
+trays, its `hexLinesBoard` topology unanchored today (a `board` facet admits only
+a Grid topology, so a host restating `hexTable` restates the topology's origin
+beside it) and no rules yet; its cells follow one convention: cell `(Q, R)` is a
+`HexagonalCoordinate` in the Eisenstein basis, its centre on the board's XZ plane
+at the origin plus `cellSize · (Q − R/2, 0, R·√3/2)` (so +X is the direction-0
+neighbour and `cellSize` is the centre-to-centre spacing), and cell index `i` is
+`HexagonalIndex`'s ring order.
 
 A kit carrying a `carry` facet may pick up another kit's rigid body:
 `body.carry <carrier> <target>` begins it (within an authored reach and mass

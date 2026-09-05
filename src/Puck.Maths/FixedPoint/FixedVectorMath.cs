@@ -218,8 +218,8 @@ internal static class FixedVectorMath {
 
         return (
             Separation: (targetIsGreater
-                ? unchecked((ulong)targetRaw - (ulong)currentRaw)
-                : unchecked((ulong)currentRaw - (ulong)targetRaw)),
+                ? unchecked((((ulong)targetRaw) - ((ulong)currentRaw)))
+                : unchecked((((ulong)currentRaw) - ((ulong)targetRaw)))),
             TargetIsGreater: targetIsGreater
         );
     }

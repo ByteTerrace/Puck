@@ -1198,7 +1198,7 @@ likewise-frozen `puck.basis.frozen.json`. The loader is
 its own directory) is a DELTA over that document — templates/prefabs for similar worlds. `WorldDefinition.Imports`
 is the fan-in half beside it: an ORDERED list of fragment paths (each resolved against the importing file's own
 directory, exactly like `basis`), letting several documents each own one disjoint slice of a world — the garden's
-own `src/Puck.World/Assets/worlds/games/{chess,poker,dominoes,billiards,bowling,tictactoe}.world.json`, each
+own `src/Puck.World/Assets/worlds/games/{chess,poker,dominoes,billiards,bowling,tictactoe,hexlines}.world.json`, each
 imported by `puck.world.json` — rather than forcing every slice through the single-parent basis chain. A keyed
 list assembled this way (every import's rows concatenated in import order, then the importing file's own new
 rows appended last) never reproduces a monolithic predecessor's own interleaved authoring order — order is not

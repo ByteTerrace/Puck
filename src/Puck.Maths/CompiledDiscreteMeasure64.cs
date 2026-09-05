@@ -849,7 +849,7 @@ public readonly record struct CompiledDiscreteMeasure64 {
             const double TwoToTheSixtyFour = 18446744073709551616.0;
             var high = High.SquareRoot();
             var lower = (high << 64);
-            var rootEstimate = Math.Sqrt(d: ((((double)High) * TwoToTheSixtyFour * TwoToTheSixtyFour) + ((double)Low)));
+            var rootEstimate = Math.Sqrt(d: (((((double)High) * TwoToTheSixtyFour) * TwoToTheSixtyFour) + ((double)Low)));
             var offsetEstimate = (rootEstimate - (((double)high) * TwoToTheSixtyFour));
             var center = ((offsetEstimate >= 18446744073709551615.0)
                 ? ulong.MaxValue

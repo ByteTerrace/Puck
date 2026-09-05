@@ -338,6 +338,7 @@ public readonly record struct QuadraticExtensionField64 : IBatchInvertible<Quadr
             B: ring.Decode(value: resultB)
         );
     }
+
     // The Karatsuba product of Multiply, over Montgomery-form coordinates: the representation is linear, so Add and
     // Subtract apply unchanged, and each REDC product of two encoded operands is again encoded.
     private static (ulong A, ulong B) MultiplyEncoded(in ScaledResidueRing64 ring, ulong nonSquare, ulong leftA, ulong leftB, ulong rightA, ulong rightB) {
@@ -377,6 +378,7 @@ public readonly record struct QuadraticExtensionField64 : IBatchInvertible<Quadr
             B: cross
         );
     }
+
     /// <summary>Selects the smallest quadratic non-square of a base field.</summary>
     /// <param name="baseField">The base field to search.</param>
     /// <returns>The least value in <c>2, 3, 5, ...</c> whose quadratic character is <c>-1</c>. Perfect squares along the way are skipped by the character itself.</returns>

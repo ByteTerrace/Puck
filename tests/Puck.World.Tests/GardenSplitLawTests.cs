@@ -306,11 +306,80 @@ public sealed class GardenSplitLawTests {
         }
     }
 
+    // Every game module added AFTER the split, by file name under games/. Each contributes only NEW keyed rows, so
+    // subtracting exactly what its own file declares — by key, section by section — leaves the pre-split content;
+    // a module that ALTERED a pre-existing row is still caught, since its key is removed here and the pre-split
+    // side then carries a row the post-split side lacks.
+    private static readonly string[] LaterGameModules = ["hexlines"];
+    private static readonly (string SectionPath, string Key)[] ModuleKeyedSections = [
+        ("kits.rows", "name"), ("looks.rows", "name"), ("placements.rows", "id"), ("prototypes", "id"),
+        ("patterns", "name"), ("rules", "name"), ("state.lattices", "name"), ("state.world", "name"),
+    ];
+
+    private static JsonNode? Section(JsonObject document, string sectionPath) {
+        JsonNode? cursor = document;
+
+        foreach (var segment in sectionPath.Split('.')) {
+            cursor = (cursor as JsonObject)?[segment];
+        }
+
+        return cursor;
+    }
+
+    // Returns how many bodies the module's inhabited placements seat.
+    private static int RemoveModuleContent(JsonObject tree, string module) {
+        var path = Path.Combine(RepoRoot(), "src", "Puck.World", "Assets", "worlds", "games", $"{module}.world.json");
+        var fragment = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+        var bodies = 0;
+
+        foreach (var (sectionPath, key) in ModuleKeyedSections) {
+            if (Section(fragment, sectionPath) is not JsonArray rows) {
+                continue;
+            }
+
+            var keys = rows.OfType<JsonObject>().Select(row => row[key]!.GetValue<string>()).ToHashSet();
+
+            Assert.NotEmpty(keys);
+
+            if (key == "id") {
+                RemoveById(tree, sectionPath, keys);
+            } else {
+                RemoveNamed(tree, sectionPath, keys);
+            }
+
+            if (sectionPath == "placements.rows") {
+                bodies += rows.OfType<JsonObject>().Sum(row => ((row["inhabit"] is JsonObject inhabit) ? (inhabit["count"]?.GetValue<int>() ?? 1) : 0));
+            }
+        }
+
+        return bodies;
+    }
+
+    // A later module's bodies consume the garden's population capacity: the host's `bodies.capacity` grows by the
+    // module's inhabited count, but never past the detailed render band — inhabited placements seat from the
+    // HIGHEST free slot in document order, so any slot at or above the band would hand the first-listed game's
+    // bodies the coarse crowd capsule. Asserted, then restored to the pre-split value so the rest compares.
+    private static void NormalizeGrownCapacity(JsonObject tree, int moduleBodies) {
+        var preCapacity = PreSplitComposedTree()["bodies"]!["capacity"]!.GetValue<int>();
+        var bodies = tree["bodies"]!.AsObject();
+
+        Assert.Equal(Math.Min(preCapacity + moduleBodies, WorldBodiesLimits.DetailedRenderBand), bodies["capacity"]!.GetValue<int>());
+
+        bodies["capacity"] = preCapacity;
+    }
+
     // Subtracts tic-tac-toe's own new rows/rules/lattice — the one genuinely new game the split added beside moving
-    // the five pre-existing ones — so what remains describes exactly the pre-split fixture's own content.
+    // the five pre-existing ones — and every later module's whole content, so what remains describes exactly the
+    // pre-split fixture's own content.
     private static JsonObject PostSplitMinusTicTacToe() {
         var tree = (JsonObject)PostSplitComposedTree().DeepClone();
+        var laterBodies = 0;
 
+        foreach (var module in LaterGameModules) {
+            laterBodies += RemoveModuleContent(tree, module);
+        }
+
+        NormalizeGrownCapacity(tree, laterBodies);
         RemoveNamed(tree, "rules", TicTacToeRuleNames);
         RemoveNamed(tree, "state.world", TicTacToeStateRowNames);
         RemoveNamed(tree, "state.lattices", TicTacToeLatticeNames);

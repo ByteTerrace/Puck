@@ -97,7 +97,7 @@
     }
   ],
   "bodies": {
-    "capacity": 106,
+    "capacity": 128,
     "localSeats": 2,
     "scaleRow": "scale"
   },
@@ -465,7 +465,8 @@
     "games/dominoes.world.json",
     "games/billiards.world.json",
     "games/bowling.world.json",
-    "games/tictactoe.world.json"
+    "games/tictactoe.world.json",
+    "games/hexlines.world.json"
   ],
   "interactions": {
     "interactions": [

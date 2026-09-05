@@ -66,7 +66,8 @@ internal static class PostStages {
             root: context.TestRomRoot,
             subPath: "cpu_instrs/individual"
         ),
-        name: "conformance-cpu-instrs"
+        name: "conformance-cpu-instrs",
+        suites: ["cpu-instrs"]
     ),
             new LedgerRomStage(
         discover: context => SuiteCatalog.ConformanceLedgerCases(
@@ -75,7 +76,8 @@ internal static class PostStages {
             root: context.TestRomRoot,
             subPath: "instr_timing"
         ),
-        name: "conformance-instr-timing"
+        name: "conformance-instr-timing",
+        suites: ["instr-timing"]
     ),
             new LedgerRomStage(
         discover: context => SuiteCatalog.ConformanceLedgerCases(
@@ -84,7 +86,8 @@ internal static class PostStages {
             root: context.TestRomRoot,
             subPath: "mem_timing/individual"
         ),
-        name: "conformance-mem-timing"
+        name: "conformance-mem-timing",
+        suites: ["mem-timing"]
     ),
             new LedgerRomStage(
         discover: context => SuiteCatalog.ConformanceLedgerCases(
@@ -93,7 +96,8 @@ internal static class PostStages {
             root: context.TestRomRoot,
             subPath: "dmg_sound/rom_singles"
         ),
-        name: "conformance-dmg-sound"
+        name: "conformance-dmg-sound",
+        suites: ["dmg-sound"]
     ),
             new LedgerRomStage(
         discover: context => SuiteCatalog.ConformanceLedgerCases(
@@ -102,17 +106,20 @@ internal static class PostStages {
             root: context.TestRomRoot,
             subPath: "cgb_sound/rom_singles"
         ),
-        name: "conformance-cgb-sound"
+        name: "conformance-cgb-sound",
+        suites: ["cgb-sound"]
     ),
             // Tier B — the un-gated blargg corpus: oam_bug/mem_timing-2 singles via the same $A000 block, and the
             // top-level ROMs (halt_bug, interrupt_time, oam_bug, mem_timing-2) that report by screen content instead.
             new LedgerRomStage(
         discover: context => SuiteCatalog.BlarggOamBugSinglesRoms(root: context.TestRomRoot),
-        name: "conformance-oam-bug-singles"
+        name: "conformance-oam-bug-singles",
+        suites: ["oam-bug-singles"]
     ),
             new LedgerRomStage(
         discover: context => SuiteCatalog.BlarggMemTiming2SinglesRoms(root: context.TestRomRoot),
-        name: "conformance-mem-timing-2-singles"
+        name: "conformance-mem-timing-2-singles",
+        suites: ["mem-timing-2-singles"]
     ),
             new LedgerRomStage(
         discover: context => SuiteCatalog.BlarggVisualRoms(root: context.TestRomRoot),
@@ -129,7 +136,8 @@ internal static class PostStages {
             relativeDirectory: "timer",
             root: context.TestRomRoot
         ),
-        name: "acceptance-timer"
+        name: "acceptance-timer",
+        suites: ["timer"]
     ),
             new LedgerRomStage(
         discover: context => SuiteCatalog.AcceptanceLedgerCases(
@@ -138,7 +146,8 @@ internal static class PostStages {
             relativeDirectory: "ppu",
             root: context.TestRomRoot
         ),
-        name: "acceptance-ppu"
+        name: "acceptance-ppu",
+        suites: ["ppu"]
     ),
             new LedgerRomStage(
         discover: context => SuiteCatalog.AcceptanceLedgerCases(
@@ -147,7 +156,8 @@ internal static class PostStages {
             relativeDirectory: "interrupts",
             root: context.TestRomRoot
         ),
-        name: "acceptance-interrupts"
+        name: "acceptance-interrupts",
+        suites: ["interrupts"]
     ),
             new LedgerRomStage(
         discover: context => SuiteCatalog.AcceptanceLedgerCases(
@@ -156,7 +166,8 @@ internal static class PostStages {
             relativeDirectory: "serial",
             root: context.TestRomRoot
         ),
-        name: "acceptance-serial"
+        name: "acceptance-serial",
+        suites: ["serial"]
     ),
             new LedgerRomStage(
         discover: context => SuiteCatalog.AcceptanceLedgerCases(
@@ -165,7 +176,8 @@ internal static class PostStages {
             relativeDirectory: "oam_dma",
             root: context.TestRomRoot
         ),
-        name: "acceptance-oam-dma"
+        name: "acceptance-oam-dma",
+        suites: ["oam-dma"]
     ),
             new LedgerRomStage(
         discover: context => SuiteCatalog.AcceptanceLedgerCases(
@@ -174,7 +186,8 @@ internal static class PostStages {
             relativeDirectory: "bits",
             root: context.TestRomRoot
         ),
-        name: "acceptance-bits"
+        name: "acceptance-bits",
+        suites: ["bits"]
     ),
             new LedgerRomStage(
         discover: context => SuiteCatalog.AcceptanceLedgerCases(
@@ -183,7 +196,8 @@ internal static class PostStages {
             relativeDirectory: "instr",
             root: context.TestRomRoot
         ),
-        name: "acceptance-instr"
+        name: "acceptance-instr",
+        suites: ["instr"]
     ),
             new LedgerRomStage(
         discover: context => SuiteCatalog.AcceptanceLedgerCases(
@@ -192,7 +206,8 @@ internal static class PostStages {
             relativeDirectory: "",
             root: context.TestRomRoot
         ),
-        name: "acceptance-misc"
+        name: "acceptance-misc",
+        suites: ["misc"]
     ),
             // Tier B — the rest of the mooneye-test-suite tree: emulator-only (mbc1/mbc2/mbc5), misc (boot state and
             // I/O), and the one manual screenshot case.

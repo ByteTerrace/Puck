@@ -1,0 +1,147 @@
+{
+  "basis": "../../../src/Puck.World/Assets/worlds/standard.basis.json",
+  "bodies": {
+    "capacity": 40,
+    "localSeats": 1
+  },
+  "bodyMotionPrograms": [
+    {
+      "kind": "Motion",
+      "name": "walk",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ResolveHold",
+        "ComputePlanarTargetVelocity",
+        "ShapeVelocity",
+        "SnapYawToPlanarIntent",
+        "RunActionTriggers",
+        "ApplyHold",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ],
+      "version": "puck.body-motion.v1"
+    }
+  ],
+  "channels": [
+    {
+      "frame": "Heading",
+      "name": "forward",
+      "role": "MoveAdvance",
+      "shape": "Bipolar"
+    },
+    {
+      "frame": "Heading",
+      "name": "strafe",
+      "role": "MoveStrafe",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "turn",
+      "role": "Turn",
+      "shape": "Bipolar"
+    }
+  ],
+  "collision": {
+    "contactSkin": 0.02,
+    "gradientProbe": 0.0,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60.0,
+    "requirements": [
+      "SmoothUnionContact"
+    ]
+  },
+  "gravity": {
+    "attractors": [],
+    "gravitationalConstant": 0.0,
+    "softeningLength": 0.5,
+    "solver": "Pairwise",
+    "uniform": [
+      0,
+      -46,
+      0
+    ]
+  },
+  "imports": [
+    "../../../src/Puck.World/Assets/worlds/games/hexlines.world.json"
+  ],
+  "placements": {
+    "rows": [
+      {
+        "id": "hexTable",
+        "position": [
+          20,
+          -0.5,
+          -12
+        ]
+      }
+    ]
+  },
+  "schema": "puck.world.def.v1",
+  "simulation": {
+    "rateHz": 30
+  },
+  "state": {
+    "lattices": [
+      {
+        "name": "hexLinesBoard",
+        "origin": [
+          20,
+          0.8,
+          -12
+        ]
+      }
+    ]
+  },
+  "views": {
+    "layouts": [
+      {
+        "name": "action",
+        "seatCount": 0,
+        "slots": [
+          {
+            "camera": null,
+            "height": 1,
+            "width": 1,
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "transitionRenderScale": 0.5,
+        "transitionSeconds": 0.4
+      }
+    ],
+    "seatControl": {
+      "maxPitch": 1.2,
+      "minPitch": -0.35,
+      "yawReference": "World"
+    },
+    "seatRig": {
+      "name": "seatChase",
+      "operations": [
+        {
+          "$type": "orbit",
+          "distance": 5.4626001,
+          "pitch": 0.4145069,
+          "yaw": 0.0
+        },
+        {
+          "$type": "lookAt",
+          "subject": {
+            "$type": "reference"
+          },
+          "targetOffset": [
+            0,
+            1,
+            0
+          ],
+          "worldAxes": false
+        },
+        {
+          "$type": "fov",
+          "fieldOfViewRadians": 0.9599311
+        }
+      ],
+      "version": "puck.camera.v1"
+    }
+  }
+}
