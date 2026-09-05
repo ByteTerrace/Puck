@@ -418,7 +418,7 @@ ghost records**.
 geometric scale is a document-declared multiplier (`bodies.scaleRow`, a keyed `state.world` row whose
 own `min`/`max` is the world's declared scale envelope), read and written like any other state cell —
 never a bespoke "shrink" mechanic. Collider volumes, resolved move speed and turn rate, hold
-probe/standoff/reach, a hold's own gravity fall/rise and its vertical-channel envelope, a wall hold's travel speed, and a pull's own
+probe/standoff/reach, a hold's own gravity fall/rise and its vertical-channel envelope (including a medium's idle/settle target), a wall hold's travel speed, and a pull's own
 rate all scale with it on the server — a shrunk body's fall and depenetration stay proportionally
 gentle rather than free-falling one tick of full-scale gravity into a collider whose own contact skin
 margin it can no longer absorb; the client reads the same live cell into the rendered rig and the seat

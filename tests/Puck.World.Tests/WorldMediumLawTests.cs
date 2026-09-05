@@ -225,7 +225,7 @@ public sealed class WorldMediumLawTests {
                 BodyMotionOp.CommitPose,
             ]
         );
-        var wander = new BodyMotionProgram(Name: "wander", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
+        var roam = new BodyMotionProgram(Name: "roam", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
         var kit = new WorldKit(
             Name: "diver-test",
             BodyMotionProgram: "medium",
@@ -265,14 +265,14 @@ public sealed class WorldMediumLawTests {
                 ]
             ),
             ProducersRaw: new Dictionary<string, BodyProgramParameters> {
-                ["wander"] = Fixtures.TravelerWanderParameters,
+                ["roam"] = Fixtures.TravelerRoamParameters,
             },
             Collider: null
         );
 
         return Fixtures.BuildDocument() with {
             ChannelsRaw = channels,
-            BodyMotionProgramsRaw = [hold, wander],
+            BodyMotionProgramsRaw = [hold, roam],
             KitRowsRaw = [kit],
             DefaultSeatKitRaw = "diver-test",
             StateRaw = new WorldStateSection(
@@ -573,6 +573,36 @@ public sealed class WorldMediumLawTests {
             ],
         };
     }
+
+    [Fact]
+    public void MediumPositiveFixedFields_RefuseValuesThatQuantizeToZero() {
+        var document = BuildMediumEnvelopeDocument(
+            topology: Topology(),
+            spawnY: 4.5f,
+            idleDrift: 0.5f,
+            settleRate: 6f,
+            riseSpeed: 2.4f,
+            sinkSpeed: 3f
+        );
+
+        foreach (var (mutate, token) in new (Func<WorldHold, WorldHold> Mutate, string Token)[] {
+            (hold => hold with { Medium = hold.Medium! with { EquilibriumOffset = float.Epsilon } }, "medium.equilibriumOffset"),
+            (hold => hold with { Medium = hold.Medium! with { SettleRate = float.Epsilon } }, "medium.settleRate"),
+            (hold => hold with { Envelope = hold.Envelope! with { RiseSpeed = float.Epsilon } }, "envelope.riseSpeed"),
+            (hold => hold with { Envelope = hold.Envelope! with { SinkSpeed = float.Epsilon } }, "envelope.sinkSpeed"),
+        }) {
+            var motion = document.Kits[0].Motion!;
+            var kits = document.Kits.ToList();
+
+            kits[0] = kits[0] with { Motion = motion with { Holds = [mutate(motion.Holds![0])] } };
+
+            Assert.False(
+                condition: WorldDefinitionValidator.TryValidateLocally(definition: document with { KitRowsRaw = kits }, reason: out var reason),
+                userMessage: $"a medium field failing {token} was expected to refuse"
+            );
+            Assert.Contains(actualString: reason, expectedSubstring: token);
+        }
+    }
     // The vertical speed the FIRST tick's own position delta implies (u/s), for a document whose shaping row is
     // instant (BuildMediumHoldDocument's), so m_verticalVelocity snaps to ApplyMedium's own target with no ramp and
     // that tick's position delta is exactly target * (1 / SimulationRateHz).
@@ -647,5 +677,58 @@ public sealed class WorldMediumLawTests {
         Assert.True(condition: (Math.Abs(value: (fast - -3.0)) < 0.05), userMessage: $"expected error(-0.5) * SettleRate(6) = -3, read {fast:0.####}");
         Assert.True(condition: (Math.Abs(value: (slow - -1.0)) < 0.05), userMessage: $"expected error(-0.5) * SettleRate(2) = -1, read {slow:0.####}");
         Assert.True(condition: (Math.Abs(value: (fast - slow)) > 1f), userMessage: $"a SettleRate of 6 ({fast:0.####}) must answer differently from a SettleRate of 2 ({slow:0.####}), or the in-band branch is not actually reading it");
+    }
+    // Declares bodies.scaleRow over the fixture's own seat-1 cell (index "0"), matching BodyScaleLawTests' own
+    // pattern, so seat-1's live Scale reads the cell's value while every other seat stays at the unauthored default.
+    private static WorldDefinition WithScaleRow(WorldDefinition document, FixedQ4816 cellValue) {
+        var scaleRow = new WorldStateRow(
+            Name: WorldCellName.Parse(candidate: "scale"),
+            Kind: CellKind.Fixed,
+            Min: FixedQ4816.FromDouble(value: 0.05).Value,
+            Max: FixedQ4816.One.Value,
+            Capacity: 8,
+            Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: cellValue.Value)]
+        );
+
+        return document with {
+            PopulationRaw = (document.Population with { ScaleRow = "scale" }),
+            StateRaw = ((document.StateRaw ?? new WorldStateSection()) with {
+                World = [.. (document.StateRaw?.World ?? []), scaleRow],
+            }),
+        };
+    }
+    /// <summary>The medium's whole vertical-channel envelope scales with the body's own live <c>Scale</c>, the same
+    /// way <c>ApplyHoldGravity</c>'s acceleration and terminal both do: a scaled body's idle drift and its in-band
+    /// settle target (<c>error * SettleRate</c>) answer proportionally, and a scale of exactly 1 reproduces the
+    /// unscaled document's own first-tick answer bit for bit through the scaleRow path.</summary>
+    [Fact]
+    public void TheMediumsIdleDriftAndSettleTargetScaleWithTheBodysOwnScale_WhereScaleOneReproducesTheUnscaledAnswer() {
+        var topology = Topology();
+        var scale = FixedQ4816.FromDouble(value: 0.4);
+        // Wide enough at both scale 1 and scale 0.4 (40) that neither answer clamps to the envelope — isolates each
+        // branch's target scaling, not the envelope bounds the two clamp laws above already cover.
+        var settle = BuildMediumEnvelopeDocument(topology: topology, spawnY: 4.5f, idleDrift: 0.5f, settleRate: 6f, riseSpeed: 100f, sinkSpeed: 100f);
+        var idle = BuildMediumEnvelopeDocument(topology: topology, spawnY: 0f, idleDrift: 5f, settleRate: 6f, riseSpeed: 100f, sinkSpeed: 100f);
+
+        AssertScales(document: settle, branch: "in-band settle target");
+        AssertScales(document: idle, branch: "free-fall idle drift");
+
+        void AssertScales(WorldDefinition document, string branch) {
+            var unscaledSpeed = FirstTickImpliedVerticalSpeed(definition: document);
+            var scaleOneSpeed = FirstTickImpliedVerticalSpeed(definition: WithScaleRow(document: document, cellValue: FixedQ4816.One));
+            var scaledSpeed = FirstTickImpliedVerticalSpeed(definition: WithScaleRow(document: document, cellValue: scale));
+
+            Assert.True(
+                condition: (Math.Abs(value: (scaleOneSpeed - unscaledSpeed)) < 0.01),
+                userMessage: $"a scaleRow cell of exactly 1 must reproduce the {branch}'s unscaled answer ({unscaledSpeed:0.####}), read {scaleOneSpeed:0.####}"
+            );
+
+            var expectedScaledSpeed = (unscaledSpeed * (double)scale);
+
+            Assert.True(
+                condition: (Math.Abs(value: (scaledSpeed - expectedScaledSpeed)) < 0.05),
+                userMessage: $"expected the {branch} to scale by {(double)scale} to {expectedScaledSpeed:0.####}, read {scaledSpeed:0.####}"
+            );
+        }
     }
 }

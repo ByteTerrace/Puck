@@ -1737,7 +1737,8 @@ just minted fresh — never inherits a previous occupant's value nor sits at the
 unscaled default the row itself disagrees with. `Scale` multiplies the body's
 collider volumes (about its own root — contact resolution and hold probes/
 standoff/reach alike), its resolved move speed and turn rate, a hold's own
-gravity fall/rise magnitudes and its own vertical-channel envelope, a wall
+gravity fall/rise magnitudes and its own vertical-channel envelope (including
+a medium's idle/settle target), a wall
 hold's travel speed, and a pull's own rate (`WorldBody.Hold.cs`) — so a shrunk body settles onto and
 depenetrates from the ground at a proportionally gentler rate too, rather than
 free-falling one tick of full-scale gravity into a collider whose own skin

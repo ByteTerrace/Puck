@@ -1149,20 +1149,25 @@ public sealed partial class WorldBody {
         var error = (displacement - medium.EquilibriumOffset);
         FixedQ4816 drift;
 
+        // The whole vertical-channel envelope scales by m_scale, matching ApplyHoldGravity: IdleDrift and the
+        // error*SettleRate target are body-relative velocities, exactly like RiseSpeed/SinkSpeed above, so a
+        // shrunk/grown body drifts and settles proportionally slower/faster rather than at its unscaled baseline.
+        var idleDrift = (medium.IdleDrift * m_scale);
+
         if (error > medium.EquilibriumOffset) {
             drift = FixedQ4816.Clamp(
-                value: medium.IdleDrift,
+                value: idleDrift,
                 minimum: -sinkSpeed,
                 maximum: riseSpeed
             );
         } else {
-            var upwardCap = ((medium.IdleDrift > FixedQ4816.Zero)
-                ? medium.IdleDrift
+            var upwardCap = ((idleDrift > FixedQ4816.Zero)
+                ? idleDrift
                 : FixedQ4816.Zero
             );
 
             drift = FixedQ4816.Clamp(
-                value: (error * medium.SettleRate),
+                value: ((error * medium.SettleRate) * m_scale),
                 minimum: -sinkSpeed,
                 maximum: upwardCap
             );
