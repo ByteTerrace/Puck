@@ -1219,6 +1219,11 @@ neighbour authority's own entities) still reads an unscaled collider, since no d
 carries a remote entity's live Scale.
 
 The tabletop's `chessBoard` Grid topology (8x8, 0.2 m cells) carries 32 `piece`-kit rigid bodies and is
+classified by a nested `pair` of the two sides' vacated/occupied counts (`pairSwap` exchanges sides).
+Its four board rows declare capacity 64; `boardCombine` copies/clears sparse rows, so fixed home-square
+reads go through `self` identity keys rather than requiring stored empty cells. Legal-move bookkeeping
+is one transaction. Castling rights compare home pieces across both boards even without a mover;
+transit attacks combine slider queries with pawn/knight/king source-square masks. The board is
 rendered as 64 `boardSquareLight`/`boardSquareDark` placements, one per cell, colors from the
 `boardColors` text row (the SAME `state.<row>.<key>` palette binding the piece prototypes use for
 `pieceSetColors`) — the tabletop otherwise renders as a bare top with no board pattern. A body's walker

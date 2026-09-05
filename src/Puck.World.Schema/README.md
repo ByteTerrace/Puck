@@ -354,10 +354,8 @@ a `$match:…:cell`/`$board:offset` movement-geometry check — may set to 0
 without touching the mover; a legal verdict alone advances turn and adopts the
 new position into `lastLegal`). Illegal moves are recorded, never undone —
 the world never rejects or repositions a physical piece. Every top-level
-`setState`/`addState`/etc. effect preflights and applies on its own — one
-piece's body leaving the frame (captured, knocked
-clear) refuses only its own write when it owns its own rule, but rejects
-every sibling piece's write too when they share one. A `body.pose` reposition
+`setState`/`addState`/etc. effect preflights and applies on its own; only an
+explicit `transaction` groups writes atomically. A `body.pose` reposition
 is a kinematic write: one that leaves the piece resting on its support (its
 authored resting height) does not itself disturb the rigid census and leaves
 the board unrevised, while one that drops the piece onto or above its
@@ -405,12 +403,12 @@ direction list from a fixed cell and answer whether the first occupied cell
 on any of them falls in an authored value range, the same
 first-blocker-stops-the-walk contract as `$match:…:cell`, unioned over several
 directions and filtered to a range in one call rather than one rule per
-direction. The garden's `games/chess.world.json`
-chess rules are the worked example for both techniques; its bridge rules
-still hold to the one-rule-per-piece discipline this section already states —
-a captured or knocked-over piece's own board write refuses (a stale key, or
-`$upright:<bodyRef>` failing an authored angle threshold), and bundling that
-write into a shared rule wipes every sibling's write in the same settle.
+direction. The garden's `games/chess.world.json` combines these slider queries
+with piece-mask intersections for pawn, knight, and king attacks at each
+transit square. Its `forEach` bridge gates each piece's write separately;
+its successful-move bookkeeping uses an explicit transaction. The
+[chess authoring notes](../Puck.World/README.md#the-world-as-data)
+describe the paired delta signature and sparse board snapshots.
 
 The [tabletop state fixture](../../tests/Puck.World.Canaries/tabletop-state/fixture.world.json)
 and its [positive script](../../tests/Puck.World.Canaries/tabletop-state/positive.script.txt)

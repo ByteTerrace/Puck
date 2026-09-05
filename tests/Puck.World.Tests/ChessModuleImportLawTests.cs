@@ -60,7 +60,8 @@ public sealed class ChessModuleImportLawTests {
 
     private static WorldStateRow Row(WorldFixture fixture, string name) =>
         WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: name)!;
-    private static long Cell(WorldStateRow row, string key) => row.Cells!.Single(predicate: c => (c.Key.Value == key)).Value;
+    private static long Cell(WorldStateRow row, string key) => row.Cells?.SingleOrDefault(predicate: c => (c.Key.Value == key))?.Value
+        ?? (row.EffectiveDomain is StateDomain.CellsOf board ? board.Empty : throw new InvalidOperationException($"missing {row.Name}[{key}]"));
     private static long Slot(WorldFixture fixture, string name) => Cell(Row(fixture, name), WorldStateRow.SlotKey);
 
     // Restated tabletop world origin: [20, -0.5, -12] (composed position) + the fragment's own LOCAL chessBoard
@@ -311,5 +312,35 @@ public sealed class ChessModuleImportLawTests {
         Assert.Equal(4, Cell(Row(fixture, "board"), "5")); // f1 holds rook
         Assert.Equal(0, Cell(Row(fixture, "board"), "4")); // e1 vacated
         Assert.Equal(0, Cell(Row(fixture, "board"), "7")); // h1 vacated
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void APhysicalCastleCannotCrossAKnightAttack(bool attacked) {
+        var source = LoadMinimalHost();
+        string[] pieces = ["piece4", "piece7", "piece28", "piece30"];
+        var definition = source with {
+            PlacementRowsRaw = [.. source.Placements.Where(p => p.Inhabit?.Kit != "piece" || pieces.Contains(p.Id)).Select(p =>
+                p.Id == "piece30" ? p with { Position = new Puck.Assets.Documents.DocumentVector3(attacked ? 0.5f : -0.5f, 1.8f, -0.3f) } : p)],
+            StateRaw = source.StateRaw! with { World = [.. source.State.Select(r =>
+                r.Name.Value is "pieceCode" or "pieceCell" ? r with { Cells = [.. r.Cells!.Where(c => pieces.Contains(c.Key.Value))] } : r)] },
+        };
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        SettleFromSpawn(fixture);
+        Assert.Equal(0, Cell(Row(fixture, "inCheck"), "0"));
+        Assert.Equal(0, Slot(fixture, "castleRights"));
+        // g3 attacks f1 alone among the king's three squares; b3 is the otherwise identical safe control.
+        var king = Piece(fixture, "piece4");
+        var rook = Piece(fixture, "piece7");
+        king.Pose(x: OriginX + 6.5f * CellSize, y: SpawnHeight, z: OriginZ + 0.5f * CellSize, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        MoveTo(fixture, rook, file: 5, rank: 0);
+        Assert.Equal(4, Cell(Row(fixture, "move"), "kind"));
+        Assert.Equal(0, Cell(Row(fixture, "inCheck"), "0"));
+        Assert.Equal(attacked ? 1 : 0, Cell(Row(fixture, "castleTransitAttacked"), "wk"));
+        Assert.Equal(attacked ? 0 : 1, Slot(fixture, "verdict"));
+        Assert.Equal(attacked ? 0 : 1, Slot(fixture, "turn"));
+        Assert.Equal(attacked ? 6 : 0, Cell(Row(fixture, "lastLegal"), "4"));
+        Assert.Equal(5, Slot(fixture, "castleRights")); // both departing home pieces stay remembered, even on refusal.
     }
 }

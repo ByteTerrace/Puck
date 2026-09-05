@@ -483,7 +483,18 @@ two settles, and the shape of that delta (one square vacated and occupied, a
 second side's square vacated too, two-and-two on one side) sorts it into a
 quiet move, a capture, an en passant, a castle, or a perturbation — recorded
 into `move` (`from`, `to`, `mover`, `captured`, `kind`) once per settle. A
-capture whose defending vacate lands anywhere but the destination reads as
+paired signature stores the four counts as
+`pair(pair(ownVacated, ownOccupied), pair(otherVacated, otherOccupied))`;
+`pairSwap` gives the other side's view of the same delta. This replaces
+separate count and per-shape flag rows without losing either side's counts.
+The four chess boards declare a 64-cell capacity. `boardCombine` copies or
+clears each whole board in one mutation, and empty squares may be absent
+from storage. Home-square reads use the `self` identity row for indirect
+keys, so they remain valid when a board copy omits those cells. The startup
+snapshot and flag form one transaction; a legal move's turn change,
+`lastLegal` copy, and en passant target form another.
+
+A capture whose defending vacate lands anywhere but the destination reads as
 en passant only when that square is also adjacent to the destination behind
 the mover's approach and the landed piece carries the pawn code; either test
 failing reads as a perturbation, not a forged capture — an unrelated
@@ -506,8 +517,9 @@ alone, never the single-step king check beside it — the classifier's own
 `from` is always the king's own home cell, read directly off the pre-move
 board's king mask rather than sorted from the two vacated cells, so it can
 never coincide with a single king step on either side of the board. Castling
-rights are a one-way bitfield set the instant a king or rook home cell is
-vacated by any settle, legal or not — a capacity-bounded history ring
+rights are a one-way bitfield set whenever a home square loses its king or
+rook between settled boards, including a capture or removal with no classified
+mover, legal or not — a capacity-bounded history ring
 answering "has this piece ever moved" can forget a departure once it scrolls
 out, reviving a right a long game never regains; a castle event vacates the
 king's own home cell, so it burns that king's bit on both sides at once. The
@@ -522,9 +534,10 @@ square the king crosses must not be attacked either, via a
 `$board:attacks:<row>:<min>:<max>:<directions>` query that walks a short
 authored ray list from a fixed cell and reports whether the first occupied
 cell on any of them falls in an authored value range (a slider's reach at
-one square, one query call instead of one rule per direction); king and
-knight adjacency stay the cheap `$board:neighbour`/`$board:offset`
-composition, since neither depends on which color is attacking. A piece that resolves to no cell,
+one square, one query call instead of one rule per direction). Pawn, knight,
+and king attacks intersect the enemy piece masks with the fixed source-square
+sets for f1, d1, f8, and d8. These sets contain square ordinals; attack tests
+read the pieces occupying them. A piece that resolves to no cell,
 before or after (captured, lifted off, knocked clear), never itself
 qualifies as the mover, so its disappearance never registers a verdict, a
 turn change, or a `lastLegal` write under its own color. Illegal moves are
@@ -535,7 +548,7 @@ value changes stays out of both sides' vacated/occupied masks): reaching the
 last rank on an ordinary settle marks `promotionPending`, and it stays
 pending across the pawn being lifted off — an empty cell settles nothing,
 since it is not a promoted piece either — until a later settle where that
-cell holds an actual piece of the mover's own color other than a pawn,
+cell holds a knight, bishop, rook, or queen of the mover's own color,
 which clears it directly. A hand promotion is ordinarily two settles (lift,
 then place); neither one needs to itself be a legal move for the clearing to
 land correctly.

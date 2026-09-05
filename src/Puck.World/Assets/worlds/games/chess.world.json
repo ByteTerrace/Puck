@@ -2469,452 +2469,13 @@
     {
       "effects": [
         {
-          "$type": "setState",
-          "fromKey": "0",
-          "fromState": "board",
-          "key": "0",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "1",
-          "fromState": "board",
-          "key": "1",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "2",
-          "fromState": "board",
-          "key": "2",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "3",
-          "fromState": "board",
-          "key": "3",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "4",
-          "fromState": "board",
-          "key": "4",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "5",
-          "fromState": "board",
-          "key": "5",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "6",
-          "fromState": "board",
-          "key": "6",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "7",
-          "fromState": "board",
-          "key": "7",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "8",
-          "fromState": "board",
-          "key": "8",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "9",
-          "fromState": "board",
-          "key": "9",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "10",
-          "fromState": "board",
-          "key": "10",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "11",
-          "fromState": "board",
-          "key": "11",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "12",
-          "fromState": "board",
-          "key": "12",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "13",
-          "fromState": "board",
-          "key": "13",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "14",
-          "fromState": "board",
-          "key": "14",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "15",
-          "fromState": "board",
-          "key": "15",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "16",
-          "fromState": "board",
-          "key": "16",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "17",
-          "fromState": "board",
-          "key": "17",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "18",
-          "fromState": "board",
-          "key": "18",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "19",
-          "fromState": "board",
-          "key": "19",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "20",
-          "fromState": "board",
-          "key": "20",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "21",
-          "fromState": "board",
-          "key": "21",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "22",
-          "fromState": "board",
-          "key": "22",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "23",
-          "fromState": "board",
-          "key": "23",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "24",
-          "fromState": "board",
-          "key": "24",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "25",
-          "fromState": "board",
-          "key": "25",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "26",
-          "fromState": "board",
-          "key": "26",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "27",
-          "fromState": "board",
-          "key": "27",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "28",
-          "fromState": "board",
-          "key": "28",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "29",
-          "fromState": "board",
-          "key": "29",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "30",
-          "fromState": "board",
-          "key": "30",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "31",
-          "fromState": "board",
-          "key": "31",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "32",
-          "fromState": "board",
-          "key": "32",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "33",
-          "fromState": "board",
-          "key": "33",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "34",
-          "fromState": "board",
-          "key": "34",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "35",
-          "fromState": "board",
-          "key": "35",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "36",
-          "fromState": "board",
-          "key": "36",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "37",
-          "fromState": "board",
-          "key": "37",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "38",
-          "fromState": "board",
-          "key": "38",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "39",
-          "fromState": "board",
-          "key": "39",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "40",
-          "fromState": "board",
-          "key": "40",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "41",
-          "fromState": "board",
-          "key": "41",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "42",
-          "fromState": "board",
-          "key": "42",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "43",
-          "fromState": "board",
-          "key": "43",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "44",
-          "fromState": "board",
-          "key": "44",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "45",
-          "fromState": "board",
-          "key": "45",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "46",
-          "fromState": "board",
-          "key": "46",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "47",
-          "fromState": "board",
-          "key": "47",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "48",
-          "fromState": "board",
-          "key": "48",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "49",
-          "fromState": "board",
-          "key": "49",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "50",
-          "fromState": "board",
-          "key": "50",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "51",
-          "fromState": "board",
-          "key": "51",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "52",
-          "fromState": "board",
-          "key": "52",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "53",
-          "fromState": "board",
-          "key": "53",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "54",
-          "fromState": "board",
-          "key": "54",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "55",
-          "fromState": "board",
-          "key": "55",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "56",
-          "fromState": "board",
-          "key": "56",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "57",
-          "fromState": "board",
-          "key": "57",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "58",
-          "fromState": "board",
-          "key": "58",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "59",
-          "fromState": "board",
-          "key": "59",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "60",
-          "fromState": "board",
-          "key": "60",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "61",
-          "fromState": "board",
-          "key": "61",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "62",
-          "fromState": "board",
-          "key": "62",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "63",
-          "fromState": "board",
-          "key": "63",
-          "state": "previousBoard"
+          "$type": "transformState",
+          "transform": {
+            "$type": "boardCombine",
+            "row": "previousBoard",
+            "operation": "copy",
+            "left": "board"
+          }
         }
       ],
       "gate": {
@@ -2955,388 +2516,12 @@
     {
       "effects": [
         {
-          "$type": "setState",
-          "key": "0",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "1",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "2",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "3",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "4",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "5",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "6",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "7",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "8",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "9",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "10",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "11",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "12",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "13",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "14",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "15",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "16",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "17",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "18",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "19",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "20",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "21",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "22",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "23",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "24",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "25",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "26",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "27",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "28",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "29",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "30",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "31",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "32",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "33",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "34",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "35",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "36",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "37",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "38",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "39",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "40",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "41",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "42",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "43",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "44",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "45",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "46",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "47",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "48",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "49",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "50",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "51",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "52",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "53",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "54",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "55",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "56",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "57",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "58",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "59",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "60",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "61",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "62",
-          "state": "board",
-          "value": 0
-        },
-        {
-          "$type": "setState",
-          "key": "63",
-          "state": "board",
-          "value": 0
+          "$type": "transformState",
+          "transform": {
+            "$type": "boardCombine",
+            "row": "board",
+            "operation": "clear"
+          }
         }
       ],
       "gate": {
@@ -3446,452 +2631,23 @@
     {
       "effects": [
         {
-          "$type": "setState",
-          "fromKey": "0",
-          "fromState": "board",
-          "key": "0",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "1",
-          "fromState": "board",
-          "key": "1",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "2",
-          "fromState": "board",
-          "key": "2",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "3",
-          "fromState": "board",
-          "key": "3",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "4",
-          "fromState": "board",
-          "key": "4",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "5",
-          "fromState": "board",
-          "key": "5",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "6",
-          "fromState": "board",
-          "key": "6",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "7",
-          "fromState": "board",
-          "key": "7",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "8",
-          "fromState": "board",
-          "key": "8",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "9",
-          "fromState": "board",
-          "key": "9",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "10",
-          "fromState": "board",
-          "key": "10",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "11",
-          "fromState": "board",
-          "key": "11",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "12",
-          "fromState": "board",
-          "key": "12",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "13",
-          "fromState": "board",
-          "key": "13",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "14",
-          "fromState": "board",
-          "key": "14",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "15",
-          "fromState": "board",
-          "key": "15",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "16",
-          "fromState": "board",
-          "key": "16",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "17",
-          "fromState": "board",
-          "key": "17",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "18",
-          "fromState": "board",
-          "key": "18",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "19",
-          "fromState": "board",
-          "key": "19",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "20",
-          "fromState": "board",
-          "key": "20",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "21",
-          "fromState": "board",
-          "key": "21",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "22",
-          "fromState": "board",
-          "key": "22",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "23",
-          "fromState": "board",
-          "key": "23",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "24",
-          "fromState": "board",
-          "key": "24",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "25",
-          "fromState": "board",
-          "key": "25",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "26",
-          "fromState": "board",
-          "key": "26",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "27",
-          "fromState": "board",
-          "key": "27",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "28",
-          "fromState": "board",
-          "key": "28",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "29",
-          "fromState": "board",
-          "key": "29",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "30",
-          "fromState": "board",
-          "key": "30",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "31",
-          "fromState": "board",
-          "key": "31",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "32",
-          "fromState": "board",
-          "key": "32",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "33",
-          "fromState": "board",
-          "key": "33",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "34",
-          "fromState": "board",
-          "key": "34",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "35",
-          "fromState": "board",
-          "key": "35",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "36",
-          "fromState": "board",
-          "key": "36",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "37",
-          "fromState": "board",
-          "key": "37",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "38",
-          "fromState": "board",
-          "key": "38",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "39",
-          "fromState": "board",
-          "key": "39",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "40",
-          "fromState": "board",
-          "key": "40",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "41",
-          "fromState": "board",
-          "key": "41",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "42",
-          "fromState": "board",
-          "key": "42",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "43",
-          "fromState": "board",
-          "key": "43",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "44",
-          "fromState": "board",
-          "key": "44",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "45",
-          "fromState": "board",
-          "key": "45",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "46",
-          "fromState": "board",
-          "key": "46",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "47",
-          "fromState": "board",
-          "key": "47",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "48",
-          "fromState": "board",
-          "key": "48",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "49",
-          "fromState": "board",
-          "key": "49",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "50",
-          "fromState": "board",
-          "key": "50",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "51",
-          "fromState": "board",
-          "key": "51",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "52",
-          "fromState": "board",
-          "key": "52",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "53",
-          "fromState": "board",
-          "key": "53",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "54",
-          "fromState": "board",
-          "key": "54",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "55",
-          "fromState": "board",
-          "key": "55",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "56",
-          "fromState": "board",
-          "key": "56",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "57",
-          "fromState": "board",
-          "key": "57",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "58",
-          "fromState": "board",
-          "key": "58",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "59",
-          "fromState": "board",
-          "key": "59",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "60",
-          "fromState": "board",
-          "key": "60",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "61",
-          "fromState": "board",
-          "key": "61",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "62",
-          "fromState": "board",
-          "key": "62",
-          "state": "previousBoard"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "63",
-          "fromState": "board",
-          "key": "63",
-          "state": "previousBoard"
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "transformState",
+              "transform": {
+                "$type": "boardCombine",
+                "row": "previousBoard",
+                "operation": "copy",
+                "left": "board"
+              }
+            },
+            {
+              "$type": "setState",
+              "state": "gameStarted",
+              "value": 1
+            }
+          ]
         }
       ],
       "gate": {
@@ -3913,34 +2669,6 @@
       },
       "mode": "Edge",
       "name": "tabletop-game-start-snapshot"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "state": "gameStarted",
-          "value": 1
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "settleHold",
-            "value": 60
-          },
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "gameStarted",
-            "value": 0
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-game-start-flag"
     },
     {
       "effects": [
@@ -4019,23 +2747,8 @@
       "effects": [
         {
           "$type": "setState",
-          "expression": "popCount(cWhiteVacMask)",
-          "state": "cWhiteVacPop"
-        },
-        {
-          "$type": "setState",
-          "expression": "popCount(cWhiteOccMask)",
-          "state": "cWhiteOccPop"
-        },
-        {
-          "$type": "setState",
-          "expression": "popCount(cWhiteOtherVacMask)",
-          "state": "cWhiteOtherVacPop"
-        },
-        {
-          "$type": "setState",
-          "expression": "popCount(cWhiteOtherOccMask)",
-          "state": "cWhiteOtherOccPop"
+          "expression": "pair(pair(popCount(cWhiteVacMask), popCount(cWhiteOccMask)), pair(popCount(cWhiteOtherVacMask), popCount(cWhiteOtherOccMask)))",
+          "state": "cWhiteShape"
         },
         {
           "$type": "setState",
@@ -4060,55 +2773,23 @@
         "value": 60
       },
       "mode": "Edge",
-      "name": "tabletop-classify-white-counts"
+      "name": "tabletop-classify-white-shape"
     },
     {
       "effects": [
         {
           "$type": "setState",
-          "expression": "(cWhiteVacPop == 1) * (cWhiteOccPop == 1) * ((cWhiteOtherVacPop == 0) * (cWhiteOtherOccPop == 0))",
-          "state": "cWhiteQuietSig"
-        },
-        {
-          "$type": "setState",
-          "expression": "(cWhiteVacPop == 1) * (cWhiteOccPop == 1) * ((cWhiteOtherVacPop == 1) * (cWhiteOtherOccPop == 0))",
-          "state": "cWhiteCaptureSig"
-        },
-        {
-          "$type": "setState",
-          "expression": "(cWhiteVacPop == 2) * (cWhiteOccPop == 2) * ((cWhiteOtherVacPop == 0) * (cWhiteOtherOccPop == 0))",
-          "state": "cWhiteCastleSig"
-        },
-        {
-          "$type": "setState",
-          "expression": "(cWhiteVacPop == 0) * (cWhiteOccPop == 0) * ((cWhiteOtherVacPop == 0) * (cWhiteOtherOccPop == 0))",
-          "state": "cWhiteNoChange"
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "settleHold",
-        "value": 60
-      },
-      "mode": "Edge",
-      "name": "tabletop-classify-white-signatures"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "expression": "cWhiteCastleSig ? (popCount($board:mask:previousBoard:6:6) == 0 ? -1 : trailingZeroCount($board:mask:previousBoard:6:6)) : cWhiteFromCell",
+          "expression": "(cWhiteShape == pair(pair(2, 2), pair(0, 0))) ? (popCount($board:mask:previousBoard:6:6) == 0 ? -1 : trailingZeroCount($board:mask:previousBoard:6:6)) : cWhiteFromCell",
           "state": "cFromWhite"
         },
         {
           "$type": "setState",
-          "expression": "cWhiteCastleSig ? kingCell[0] : cWhiteToCell",
+          "expression": "(cWhiteShape == pair(pair(2, 2), pair(0, 0))) ? kingCell[0] : cWhiteToCell",
           "state": "cToWhite"
         },
         {
           "$type": "setState",
-          "expression": "cWhiteQuietSig ? 1 : cWhiteCaptureSig ? (cWhiteCapturedCell == cWhiteToCell ? 2 : (cWhiteCapturedCell == $board:neighbour:board:N[cWhiteToCell[$value]]) * (board[cWhiteToCell[$value]] == 1) ? 3 : 7) : cWhiteCastleSig ? 4 : cWhiteNoChange ? 0 : 7",
+          "expression": "(cWhiteShape == pair(pair(1, 1), pair(0, 0))) ? 1 : (cWhiteShape == pair(pair(1, 1), pair(1, 0))) ? (cWhiteCapturedCell == cWhiteToCell ? 2 : (cWhiteCapturedCell == $board:neighbour:board:N[cWhiteToCell[$value]]) * (board[cWhiteToCell[$value]] == 1) ? 3 : 7) : (cWhiteShape == pair(pair(2, 2), pair(0, 0))) ? 4 : (cWhiteShape == 0) ? 0 : 7",
           "state": "cKindWhite"
         }
       ],
@@ -4125,69 +2806,22 @@
       "effects": [
         {
           "$type": "setState",
-          "expression": "cWhiteOtherVacMask",
-          "state": "cBlackVacMask"
+          "expression": "pairSwap(cWhiteShape)",
+          "state": "cBlackShape"
         },
         {
           "$type": "setState",
-          "expression": "cWhiteOtherOccMask",
-          "state": "cBlackOccMask"
-        },
-        {
-          "$type": "setState",
-          "expression": "cWhiteVacMask",
-          "state": "cBlackOtherVacMask"
-        },
-        {
-          "$type": "setState",
-          "expression": "cWhiteOccMask",
-          "state": "cBlackOtherOccMask"
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "settleHold",
-        "value": 60
-      },
-      "mode": "Edge",
-      "name": "tabletop-classify-black-masks"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "expression": "popCount(cBlackVacMask)",
-          "state": "cBlackVacPop"
-        },
-        {
-          "$type": "setState",
-          "expression": "popCount(cBlackOccMask)",
-          "state": "cBlackOccPop"
-        },
-        {
-          "$type": "setState",
-          "expression": "popCount(cBlackOtherVacMask)",
-          "state": "cBlackOtherVacPop"
-        },
-        {
-          "$type": "setState",
-          "expression": "popCount(cBlackOtherOccMask)",
-          "state": "cBlackOtherOccPop"
-        },
-        {
-          "$type": "setState",
-          "expression": "popCount(cBlackVacMask) == 0 ? -1 : trailingZeroCount(cBlackVacMask)",
+          "expression": "popCount(cWhiteOtherVacMask) == 0 ? -1 : trailingZeroCount(cWhiteOtherVacMask)",
           "state": "cBlackFromCell"
         },
         {
           "$type": "setState",
-          "expression": "popCount(cBlackOccMask) == 0 ? -1 : trailingZeroCount(cBlackOccMask)",
+          "expression": "popCount(cWhiteOtherOccMask) == 0 ? -1 : trailingZeroCount(cWhiteOtherOccMask)",
           "state": "cBlackToCell"
         },
         {
           "$type": "setState",
-          "expression": "popCount(cBlackOtherVacMask) == 0 ? -1 : trailingZeroCount(cBlackOtherVacMask)",
+          "expression": "popCount(cWhiteVacMask) == 0 ? -1 : trailingZeroCount(cWhiteVacMask)",
           "state": "cBlackCapturedCell"
         }
       ],
@@ -4198,55 +2832,23 @@
         "value": 60
       },
       "mode": "Edge",
-      "name": "tabletop-classify-black-counts"
+      "name": "tabletop-classify-black-shape"
     },
     {
       "effects": [
         {
           "$type": "setState",
-          "expression": "(cBlackVacPop == 1) * (cBlackOccPop == 1) * ((cBlackOtherVacPop == 0) * (cBlackOtherOccPop == 0))",
-          "state": "cBlackQuietSig"
-        },
-        {
-          "$type": "setState",
-          "expression": "(cBlackVacPop == 1) * (cBlackOccPop == 1) * ((cBlackOtherVacPop == 1) * (cBlackOtherOccPop == 0))",
-          "state": "cBlackCaptureSig"
-        },
-        {
-          "$type": "setState",
-          "expression": "(cBlackVacPop == 2) * (cBlackOccPop == 2) * ((cBlackOtherVacPop == 0) * (cBlackOtherOccPop == 0))",
-          "state": "cBlackCastleSig"
-        },
-        {
-          "$type": "setState",
-          "expression": "(cBlackVacPop == 0) * (cBlackOccPop == 0) * ((cBlackOtherVacPop == 0) * (cBlackOtherOccPop == 0))",
-          "state": "cBlackNoChange"
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "settleHold",
-        "value": 60
-      },
-      "mode": "Edge",
-      "name": "tabletop-classify-black-signatures"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "expression": "cBlackCastleSig ? (popCount($board:mask:previousBoard:-6:-6) == 0 ? -1 : trailingZeroCount($board:mask:previousBoard:-6:-6)) : cBlackFromCell",
+          "expression": "(cBlackShape == pair(pair(2, 2), pair(0, 0))) ? (popCount($board:mask:previousBoard:-6:-6) == 0 ? -1 : trailingZeroCount($board:mask:previousBoard:-6:-6)) : cBlackFromCell",
           "state": "cFromBlack"
         },
         {
           "$type": "setState",
-          "expression": "cBlackCastleSig ? kingCell[1] : cBlackToCell",
+          "expression": "(cBlackShape == pair(pair(2, 2), pair(0, 0))) ? kingCell[1] : cBlackToCell",
           "state": "cToBlack"
         },
         {
           "$type": "setState",
-          "expression": "cBlackQuietSig ? 1 : cBlackCaptureSig ? (cBlackCapturedCell == cBlackToCell ? 2 : (cBlackCapturedCell == $board:neighbour:board:S[cBlackToCell[$value]]) * (board[cBlackToCell[$value]] == -1) ? 3 : 7) : cBlackCastleSig ? 4 : cBlackNoChange ? 0 : 7",
+          "expression": "(cBlackShape == pair(pair(1, 1), pair(0, 0))) ? 1 : (cBlackShape == pair(pair(1, 1), pair(1, 0))) ? (cBlackCapturedCell == cBlackToCell ? 2 : (cBlackCapturedCell == $board:neighbour:board:S[cBlackToCell[$value]]) * (board[cBlackToCell[$value]] == -1) ? 3 : 7) : (cBlackShape == pair(pair(2, 2), pair(0, 0))) ? 4 : (cBlackShape == 0) ? 0 : 7",
           "state": "cKindBlack"
         }
       ],
@@ -4557,25 +3159,25 @@
       "effects": [
         {
           "$type": "setState",
-          "expression": "max(max(max(max(max(max(max(max(max(max(max($board:offset:previousBoard:1:2[5] == -2, $board:offset:previousBoard:2:1[5] == -2), $board:offset:previousBoard:2:-1[5] == -2), $board:offset:previousBoard:1:-2[5] == -2), $board:offset:previousBoard:-1:-2[5] == -2), $board:offset:previousBoard:-2:-1[5] == -2), $board:offset:previousBoard:-2:1[5] == -2), $board:offset:previousBoard:-1:2[5] == -2), max($board:offset:previousBoard:-1:1[5] == -1, $board:offset:previousBoard:1:1[5] == -1)), `$board:attacks:previousBoard:-5:-4:N,S,E,W`[5]), `$board:attacks:previousBoard:-3:-3:NE,SE,SW,NW`[5]), `$board:attacks:previousBoard:-5:-5:NE,SE,SW,NW`[5])",
+          "expression": "(($board:mask:previousBoard:-1:-1 & 20480) != 0) | (($board:mask:previousBoard:-2:-2 & 5277696) != 0) | (($board:mask:previousBoard:-6:-6 & 28752) != 0) | `$board:attacks:previousBoard:-5:-4:N,S,E,W`[5] | `$board:attacks:previousBoard:-3:-3:NE,SE,SW,NW`[5] | `$board:attacks:previousBoard:-5:-5:NE,SE,SW,NW`[5]",
           "key": "wk",
           "state": "castleTransitAttacked"
         },
         {
           "$type": "setState",
-          "expression": "max(max(max(max(max(max(max(max(max(max(max($board:offset:previousBoard:1:2[3] == -2, $board:offset:previousBoard:2:1[3] == -2), $board:offset:previousBoard:2:-1[3] == -2), $board:offset:previousBoard:1:-2[3] == -2), $board:offset:previousBoard:-1:-2[3] == -2), $board:offset:previousBoard:-2:-1[3] == -2), $board:offset:previousBoard:-2:1[3] == -2), $board:offset:previousBoard:-1:2[3] == -2), max($board:offset:previousBoard:-1:1[3] == -1, $board:offset:previousBoard:1:1[3] == -1)), `$board:attacks:previousBoard:-5:-4:N,S,E,W`[3]), `$board:attacks:previousBoard:-3:-3:NE,SE,SW,NW`[3]), `$board:attacks:previousBoard:-5:-5:NE,SE,SW,NW`[3])",
+          "expression": "(($board:mask:previousBoard:-1:-1 & 5120) != 0) | (($board:mask:previousBoard:-2:-2 & 1319424) != 0) | (($board:mask:previousBoard:-6:-6 & 7188) != 0) | `$board:attacks:previousBoard:-5:-4:N,S,E,W`[3] | `$board:attacks:previousBoard:-3:-3:NE,SE,SW,NW`[3] | `$board:attacks:previousBoard:-5:-5:NE,SE,SW,NW`[3]",
           "key": "wq",
           "state": "castleTransitAttacked"
         },
         {
           "$type": "setState",
-          "expression": "max(max(max(max(max(max(max(max(max(max(max($board:offset:previousBoard:1:2[61] == 2, $board:offset:previousBoard:2:1[61] == 2), $board:offset:previousBoard:2:-1[61] == 2), $board:offset:previousBoard:1:-2[61] == 2), $board:offset:previousBoard:-1:-2[61] == 2), $board:offset:previousBoard:-2:-1[61] == 2), $board:offset:previousBoard:-2:1[61] == 2), $board:offset:previousBoard:-1:2[61] == 2), max($board:offset:previousBoard:-1:-1[61] == 1, $board:offset:previousBoard:1:-1[61] == 1)), `$board:attacks:previousBoard:4:5:N,S,E,W`[61]), `$board:attacks:previousBoard:3:3:NE,SE,SW,NW`[61]), `$board:attacks:previousBoard:5:5:NE,SE,SW,NW`[61])",
+          "expression": "(($board:mask:previousBoard:1:1 & 22517998136852480) != 0) | (($board:mask:previousBoard:2:2 & 38368557762871296) != 0) | (($board:mask:previousBoard:6:6 & 5796132720425828352) != 0) | `$board:attacks:previousBoard:4:5:N,S,E,W`[61] | `$board:attacks:previousBoard:3:3:NE,SE,SW,NW`[61] | `$board:attacks:previousBoard:5:5:NE,SE,SW,NW`[61]",
           "key": "bk",
           "state": "castleTransitAttacked"
         },
         {
           "$type": "setState",
-          "expression": "max(max(max(max(max(max(max(max(max(max(max($board:offset:previousBoard:1:2[59] == 2, $board:offset:previousBoard:2:1[59] == 2), $board:offset:previousBoard:2:-1[59] == 2), $board:offset:previousBoard:1:-2[59] == 2), $board:offset:previousBoard:-1:-2[59] == 2), $board:offset:previousBoard:-2:-1[59] == 2), $board:offset:previousBoard:-2:1[59] == 2), $board:offset:previousBoard:-1:2[59] == 2), max($board:offset:previousBoard:-1:-1[59] == 1, $board:offset:previousBoard:1:-1[59] == 1)), `$board:attacks:previousBoard:4:5:N,S,E,W`[59]), `$board:attacks:previousBoard:3:3:NE,SE,SW,NW`[59]), `$board:attacks:previousBoard:5:5:NE,SE,SW,NW`[59])",
+          "expression": "(($board:mask:previousBoard:1:1 & 5629499534213120) != 0) | (($board:mask:previousBoard:2:2 & 9592139440717824) != 0) | (($board:mask:previousBoard:6:6 & 1449033180106457088) != 0) | `$board:attacks:previousBoard:4:5:N,S,E,W`[59] | `$board:attacks:previousBoard:3:3:NE,SE,SW,NW`[59] | `$board:attacks:previousBoard:5:5:NE,SE,SW,NW`[59]",
           "key": "bq",
           "state": "castleTransitAttacked"
         }
@@ -4605,22 +3207,22 @@
       "effects": [
         {
           "$type": "setState",
-          "expression": "((castleRights & 1) == 0) * ((castleRights & 4) == 0) * (move[to] == 6) * ((previousBoard[5] == 0) * (previousBoard[6] == 0)) * ((previousBoard[4] == 6) * (previousBoard[7] == 4)) * ((board[4] == 0) * (board[7] == 0)) * (board[5] == 4) * ((previousInCheck[0] == 0) * (castleTransitAttacked[wk] == 0))",
+          "expression": "((castleRights & 1) == 0) * ((castleRights & 4) == 0) * (move[to] == 6) * ((previousBoard[self[5]] == 0) * (previousBoard[self[6]] == 0)) * ((previousBoard[self[4]] == 6) * (previousBoard[self[7]] == 4)) * ((board[self[4]] == 0) * (board[self[7]] == 0)) * (board[self[5]] == 4) * ((previousInCheck[0] == 0) * (castleTransitAttacked[wk] == 0))",
           "state": "castleWK"
         },
         {
           "$type": "setState",
-          "expression": "((castleRights & 1) == 0) * ((castleRights & 2) == 0) * (move[to] == 2) * ((previousBoard[1] == 0) * (previousBoard[2] == 0) * (previousBoard[3] == 0)) * ((previousBoard[4] == 6) * (previousBoard[0] == 4)) * ((board[4] == 0) * (board[0] == 0)) * (board[3] == 4) * ((previousInCheck[0] == 0) * (castleTransitAttacked[wq] == 0))",
+          "expression": "((castleRights & 1) == 0) * ((castleRights & 2) == 0) * (move[to] == 2) * ((previousBoard[self[1]] == 0) * (previousBoard[self[2]] == 0) * (previousBoard[self[3]] == 0)) * ((previousBoard[self[4]] == 6) * (previousBoard[self[0]] == 4)) * ((board[self[4]] == 0) * (board[self[0]] == 0)) * (board[self[3]] == 4) * ((previousInCheck[0] == 0) * (castleTransitAttacked[wq] == 0))",
           "state": "castleWQ"
         },
         {
           "$type": "setState",
-          "expression": "((castleRights & 8) == 0) * ((castleRights & 32) == 0) * (move[to] == 62) * ((previousBoard[61] == 0) * (previousBoard[62] == 0)) * ((previousBoard[60] == -6) * (previousBoard[63] == -4)) * ((board[60] == 0) * (board[63] == 0)) * (board[61] == -4) * ((previousInCheck[1] == 0) * (castleTransitAttacked[bk] == 0))",
+          "expression": "((castleRights & 8) == 0) * ((castleRights & 32) == 0) * (move[to] == 62) * ((previousBoard[self[61]] == 0) * (previousBoard[self[62]] == 0)) * ((previousBoard[self[60]] == -6) * (previousBoard[self[63]] == -4)) * ((board[self[60]] == 0) * (board[self[63]] == 0)) * (board[self[61]] == -4) * ((previousInCheck[1] == 0) * (castleTransitAttacked[bk] == 0))",
           "state": "castleBK"
         },
         {
           "$type": "setState",
-          "expression": "((castleRights & 8) == 0) * ((castleRights & 16) == 0) * (move[to] == 58) * ((previousBoard[57] == 0) * (previousBoard[58] == 0) * (previousBoard[59] == 0)) * ((previousBoard[60] == -6) * (previousBoard[56] == -4)) * ((board[60] == 0) * (board[56] == 0)) * (board[59] == -4) * ((previousInCheck[1] == 0) * (castleTransitAttacked[bq] == 0))",
+          "expression": "((castleRights & 8) == 0) * ((castleRights & 16) == 0) * (move[to] == 58) * ((previousBoard[self[57]] == 0) * (previousBoard[self[58]] == 0) * (previousBoard[self[59]] == 0)) * ((previousBoard[self[60]] == -6) * (previousBoard[self[56]] == -4)) * ((board[self[60]] == 0) * (board[self[56]] == 0)) * (board[self[59]] == -4) * ((previousInCheck[1] == 0) * (castleTransitAttacked[bq] == 0))",
           "state": "castleBQ"
         }
       ],
@@ -4970,9 +3572,28 @@
     {
       "effects": [
         {
-          "$type": "setState",
-          "expression": "1 - turn",
-          "state": "turn"
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "setState",
+              "expression": "1 - turn",
+              "state": "turn"
+            },
+            {
+              "$type": "transformState",
+              "transform": {
+                "$type": "boardCombine",
+                "row": "lastLegal",
+                "operation": "copy",
+                "left": "board"
+              }
+            },
+            {
+              "$type": "setState",
+              "expression": "(abs(move[mover]) == 1) * (abs(move[to] - move[from]) == 16) ? move[from] + (moverColor == 0 ? 8 : -8) : -1",
+              "state": "enPassantTarget"
+            }
+          ]
         }
       ],
       "gate": {
@@ -5043,489 +3664,6 @@
     {
       "effects": [
         {
-          "$type": "setState",
-          "fromKey": "0",
-          "fromState": "board",
-          "key": "0",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "1",
-          "fromState": "board",
-          "key": "1",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "2",
-          "fromState": "board",
-          "key": "2",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "3",
-          "fromState": "board",
-          "key": "3",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "4",
-          "fromState": "board",
-          "key": "4",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "5",
-          "fromState": "board",
-          "key": "5",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "6",
-          "fromState": "board",
-          "key": "6",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "7",
-          "fromState": "board",
-          "key": "7",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "8",
-          "fromState": "board",
-          "key": "8",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "9",
-          "fromState": "board",
-          "key": "9",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "10",
-          "fromState": "board",
-          "key": "10",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "11",
-          "fromState": "board",
-          "key": "11",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "12",
-          "fromState": "board",
-          "key": "12",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "13",
-          "fromState": "board",
-          "key": "13",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "14",
-          "fromState": "board",
-          "key": "14",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "15",
-          "fromState": "board",
-          "key": "15",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "16",
-          "fromState": "board",
-          "key": "16",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "17",
-          "fromState": "board",
-          "key": "17",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "18",
-          "fromState": "board",
-          "key": "18",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "19",
-          "fromState": "board",
-          "key": "19",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "20",
-          "fromState": "board",
-          "key": "20",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "21",
-          "fromState": "board",
-          "key": "21",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "22",
-          "fromState": "board",
-          "key": "22",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "23",
-          "fromState": "board",
-          "key": "23",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "24",
-          "fromState": "board",
-          "key": "24",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "25",
-          "fromState": "board",
-          "key": "25",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "26",
-          "fromState": "board",
-          "key": "26",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "27",
-          "fromState": "board",
-          "key": "27",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "28",
-          "fromState": "board",
-          "key": "28",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "29",
-          "fromState": "board",
-          "key": "29",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "30",
-          "fromState": "board",
-          "key": "30",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "31",
-          "fromState": "board",
-          "key": "31",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "32",
-          "fromState": "board",
-          "key": "32",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "33",
-          "fromState": "board",
-          "key": "33",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "34",
-          "fromState": "board",
-          "key": "34",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "35",
-          "fromState": "board",
-          "key": "35",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "36",
-          "fromState": "board",
-          "key": "36",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "37",
-          "fromState": "board",
-          "key": "37",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "38",
-          "fromState": "board",
-          "key": "38",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "39",
-          "fromState": "board",
-          "key": "39",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "40",
-          "fromState": "board",
-          "key": "40",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "41",
-          "fromState": "board",
-          "key": "41",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "42",
-          "fromState": "board",
-          "key": "42",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "43",
-          "fromState": "board",
-          "key": "43",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "44",
-          "fromState": "board",
-          "key": "44",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "45",
-          "fromState": "board",
-          "key": "45",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "46",
-          "fromState": "board",
-          "key": "46",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "47",
-          "fromState": "board",
-          "key": "47",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "48",
-          "fromState": "board",
-          "key": "48",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "49",
-          "fromState": "board",
-          "key": "49",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "50",
-          "fromState": "board",
-          "key": "50",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "51",
-          "fromState": "board",
-          "key": "51",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "52",
-          "fromState": "board",
-          "key": "52",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "53",
-          "fromState": "board",
-          "key": "53",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "54",
-          "fromState": "board",
-          "key": "54",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "55",
-          "fromState": "board",
-          "key": "55",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "56",
-          "fromState": "board",
-          "key": "56",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "57",
-          "fromState": "board",
-          "key": "57",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "58",
-          "fromState": "board",
-          "key": "58",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "59",
-          "fromState": "board",
-          "key": "59",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "60",
-          "fromState": "board",
-          "key": "60",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "61",
-          "fromState": "board",
-          "key": "61",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "62",
-          "fromState": "board",
-          "key": "62",
-          "state": "lastLegal"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "63",
-          "fromState": "board",
-          "key": "63",
-          "state": "lastLegal"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "all",
-            "predicates": [
-              {
-                "$type": "compareState",
-                "comparison": "Equal",
-                "state": "settleHold",
-                "value": 60
-              },
-              {
-                "$type": "compareState",
-                "comparison": "NotEqual",
-                "key": "kind",
-                "state": "move",
-                "value": 0
-              }
-            ]
-          },
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "verdict",
-            "value": 1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-sync-last-legal"
-    },
-    {
-      "effects": [
-        {
           "$type": "addState",
           "state": "illegalCount",
           "value": 1
@@ -5562,79 +3700,6 @@
       },
       "mode": "Edge",
       "name": "tabletop-apply-illegal"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "expression": "(abs(move[mover]) == 1) * (abs(move[to] - move[from]) == 16) ? move[from] + (moverColor == 0 ? 8 : -8) : -1",
-          "state": "enPassantTarget"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "all",
-            "predicates": [
-              {
-                "$type": "compareState",
-                "comparison": "Equal",
-                "state": "settleHold",
-                "value": 60
-              },
-              {
-                "$type": "compareState",
-                "comparison": "NotEqual",
-                "key": "kind",
-                "state": "move",
-                "value": 0
-              }
-            ]
-          },
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "verdict",
-            "value": 1
-          },
-          {
-            "$type": "any",
-            "predicates": [
-              {
-                "$type": "compareState",
-                "comparison": "Equal",
-                "key": "kind",
-                "state": "move",
-                "value": 1
-              },
-              {
-                "$type": "compareState",
-                "comparison": "Equal",
-                "key": "kind",
-                "state": "move",
-                "value": 2
-              },
-              {
-                "$type": "compareState",
-                "comparison": "Equal",
-                "key": "kind",
-                "state": "move",
-                "value": 3
-              },
-              {
-                "$type": "compareState",
-                "comparison": "Equal",
-                "key": "kind",
-                "state": "move",
-                "value": 4
-              }
-            ]
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-update-en-passant"
     },
     {
       "effects": [
@@ -5780,27 +3845,20 @@
       "effects": [
         {
           "$type": "setState",
-          "expression": "castleRights | (move[from] == 4 ? 1 : move[from] == 0 ? 2 : move[from] == 7 ? 4 : move[from] == 60 ? 8 : move[from] == 56 ? 16 : move[from] == 63 ? 32 : 0)",
+          "expression": "castleRights | ((previousBoard[self[4]] == 6) * (board[self[4]] != 6) * 1) | ((previousBoard[self[0]] == 4) * (board[self[0]] != 4) * 2) | ((previousBoard[self[7]] == 4) * (board[self[7]] != 4) * 4)",
+          "state": "castleRights"
+        },
+        {
+          "$type": "setState",
+          "expression": "castleRights | ((previousBoard[self[60]] == -6) * (board[self[60]] != -6) * 8) | ((previousBoard[self[56]] == -4) * (board[self[56]] != -4) * 16) | ((previousBoard[self[63]] == -4) * (board[self[63]] != -4) * 32)",
           "state": "castleRights"
         }
       ],
       "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "settleHold",
-            "value": 60
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "kind",
-            "state": "move",
-            "value": 0
-          }
-        ]
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
       "name": "tabletop-track-castle-rights"
@@ -5842,7 +3900,7 @@
             "comparison": "LessOrEqual",
             "key": "$cell:promotionPending:0",
             "state": "board",
-            "value": 6
+            "value": 5
           }
         ]
       },
@@ -5879,7 +3937,7 @@
             "comparison": "GreaterOrEqual",
             "key": "$cell:promotionPending:1",
             "state": "board",
-            "value": -6
+            "value": -5
           },
           {
             "$type": "compareState",
@@ -6665,7 +4723,8 @@
           "topology": "chessBoard"
         },
         "kind": "int",
-        "name": "board"
+        "name": "board",
+        "capacity": 64
       },
       {
         "cells": [
@@ -6931,7 +4990,8 @@
           "topology": "chessBoard"
         },
         "kind": "int",
-        "name": "previousBoard"
+        "name": "previousBoard",
+        "capacity": 64
       },
       {
         "cells": [
@@ -7197,7 +5257,8 @@
           "topology": "chessBoard"
         },
         "kind": "int",
-        "name": "lastLegal"
+        "name": "lastLegal",
+        "capacity": 64
       },
       {
         "domain": {
@@ -7205,7 +5266,8 @@
           "topology": "chessBoard"
         },
         "kind": "int",
-        "name": "plan"
+        "name": "plan",
+        "capacity": 64
       },
       {
         "kind": "int",
@@ -7704,94 +5766,6 @@
           }
         ],
         "kind": "int",
-        "name": "cBlackVacMask"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "name": "cBlackOccMask"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "name": "cBlackOtherVacMask"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "name": "cBlackOtherOccMask"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 64,
-        "min": -6,
-        "name": "cWhiteVacPop"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 64,
-        "min": -6,
-        "name": "cWhiteOccPop"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 64,
-        "min": -6,
-        "name": "cWhiteOtherVacPop"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 64,
-        "min": -6,
-        "name": "cWhiteOtherOccPop"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
         "max": 64,
         "min": -6,
         "name": "cWhiteFromCell"
@@ -7830,102 +5804,6 @@
         "kind": "int",
         "max": 64,
         "min": -6,
-        "name": "cWhiteQuietSig"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 64,
-        "min": -6,
-        "name": "cWhiteCaptureSig"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 64,
-        "min": -6,
-        "name": "cWhiteCastleSig"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 64,
-        "min": -6,
-        "name": "cWhiteNoChange"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 64,
-        "min": -6,
-        "name": "cBlackVacPop"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 64,
-        "min": -6,
-        "name": "cBlackOccPop"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 64,
-        "min": -6,
-        "name": "cBlackOtherVacPop"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 64,
-        "min": -6,
-        "name": "cBlackOtherOccPop"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 64,
-        "min": -6,
         "name": "cBlackFromCell"
       },
       {
@@ -7951,54 +5829,6 @@
         "max": 64,
         "min": -6,
         "name": "cBlackCapturedCell"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 64,
-        "min": -6,
-        "name": "cBlackQuietSig"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 64,
-        "min": -6,
-        "name": "cBlackCaptureSig"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 64,
-        "min": -6,
-        "name": "cBlackCastleSig"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 64,
-        "min": -6,
-        "name": "cBlackNoChange"
       },
       {
         "cells": [
@@ -8383,6 +6213,20 @@
         "max": 1,
         "min": 0,
         "name": "inCheckCombineBlack",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 9223372036854775807,
+        "min": 0,
+        "name": "cWhiteShape",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 9223372036854775807,
+        "min": 0,
+        "name": "cBlackShape",
         "value": 0
       }
     ]

@@ -120,12 +120,9 @@ public sealed class WorldTabletopClassifierLawTests {
         "tabletop-king-cell",
         "tabletop-mover-color",
         "tabletop-classify-white-masks",
-        "tabletop-classify-white-counts",
-        "tabletop-classify-white-signatures",
+        "tabletop-classify-white-shape",
         "tabletop-classify-white-pick",
-        "tabletop-classify-black-masks",
-        "tabletop-classify-black-counts",
-        "tabletop-classify-black-signatures",
+        "tabletop-classify-black-shape",
         "tabletop-classify-black-pick",
         "tabletop-classify-pick",
         "tabletop-classify-mover",
@@ -253,14 +250,25 @@ public sealed class WorldTabletopClassifierLawTests {
         Assert.Equal(7L, Kind(Start, chaos));
     }
 
-    [Fact]
-    public void ShippedGardenRulesClassifyQuietCaptureAndCastleInDeclarationOrder() {
+    [Theory]
+    [InlineData(1)]
+    [InlineData(-1)]
+    public void ShippedGardenRulesClassifyQuietCaptureAndCastleInDeclarationOrder(int sign) {
+        (long Kind, long From, long To, long Mover, long Captured) Move(long[] before, long[] after) {
+            long[] Mirror(long[] board) {
+                var mirrored = new long[64];
+                for (var cell = 0; cell < 64; cell++) { mirrored[cell ^ (sign < 0 ? 56 : 0)] = sign * board[cell]; }
+                return mirrored;
+            }
+            var move = ShippedMove(Mirror(before), Mirror(after));
+            return (move.Kind, move.From ^ (sign < 0 ? 56L : 0L), move.To ^ (sign < 0 ? 56L : 0L), sign * move.Mover, sign * move.Captured);
+        }
         var quietBefore = new long[64];
         quietBefore[8] = 1;
         var quietAfter = (long[])quietBefore.Clone();
         quietAfter[8] = 0;
         quietAfter[16] = 1;
-        Assert.Equal(expected: (1L, 8L, 16L, 1L, 0L), actual: ShippedMove(quietBefore, quietAfter));
+        Assert.Equal(expected: (1L, 8L, 16L, 1L, 0L), actual: Move(quietBefore, quietAfter));
 
         var captureBefore = new long[64];
         captureBefore[8] = 1;
@@ -268,7 +276,7 @@ public sealed class WorldTabletopClassifierLawTests {
         var captureAfter = (long[])captureBefore.Clone();
         captureAfter[8] = 0;
         captureAfter[17] = 1;
-        Assert.Equal(expected: (2L, 8L, 17L, 1L, -1L), actual: ShippedMove(captureBefore, captureAfter));
+        Assert.Equal(expected: (2L, 8L, 17L, 1L, -1L), actual: Move(captureBefore, captureAfter));
 
         var castleBefore = new long[64];
         castleBefore[4] = 6;
@@ -278,7 +286,7 @@ public sealed class WorldTabletopClassifierLawTests {
         castleAfter[7] = 0;
         castleAfter[5] = 4;
         castleAfter[6] = 6;
-        Assert.Equal(expected: (4L, 4L, 6L, 6L, 0L), actual: ShippedMove(castleBefore, castleAfter));
+        Assert.Equal(expected: (4L, 4L, 6L, 6L, 0L), actual: Move(castleBefore, castleAfter));
     }
 
     [Fact]
