@@ -257,6 +257,19 @@ public static class TopologyCompilation {
             _ => throw new InvalidOperationException($"'{topology?.Kind}' is not a discrete TopologyKind"),
         };
 
+    /// <summary>The six hex directions in the order <c>hexNeighbor</c> counts them: counterclockwise from +q in
+    /// the Eisenstein basis, which on the board (r toward +Z) reads E, SE, SW, W, NW, NE.</summary>
+    public static readonly string[] HexDirectionNames = ["E", "SE", "SW", "W", "NW", "NE"];
+
+    private static (int X, int Y, int Z)[] HexDirections() {
+        var directions = new (int X, int Y, int Z)[HexagonalCoordinate.NeighborCount];
+        for (var direction = 0; direction < directions.Length; direction++) {
+            var unit = HexagonalCoordinate.Direction(direction: direction);
+            directions[direction] = (unit.Q, unit.R, 0);
+        }
+        return directions;
+    }
+
     /// <summary>Compiles a validated discrete topology into its adjacency table, translating the authored origin by
     /// <paramref name="anchorOffset"/> — the frame a host composes over another row's transform, or zero for the
     /// authored frame. Translation only: the grid's own axes stay world-axis-aligned whatever the anchor's heading.</summary>
@@ -271,10 +284,12 @@ public static class TopologyCompilation {
         var (width, depth, layers, wrap, band, layerHeight, radius, authoredDirections, elementAliases) = Normalize(topology);
         var coordinates = new List<(int X, int Y, int Z)>();
         if (topology.Kind == TopologyKind.Hex) {
-            for (var r = -radius; r <= radius; r++) {
-                for (var q = Math.Max(-radius, -r - radius); q <= Math.Min(radius, -r + radius); q++) {
-                    coordinates.Add((q, r, 0));
-                }
+            // Cell i is HexagonalIndex i: rings outward from the origin, each ring walked so consecutive indices
+            // are neighbours; (X, Y) holds its Eisenstein (q, r).
+            var count = (1 + (3 * radius * (radius + 1)));
+            for (var index = 0; index < count; index++) {
+                var cell = new HexagonalIndex(value: index).ToCoordinate();
+                coordinates.Add((cell.Q, cell.R, 0));
             }
         } else {
             for (var layer = 0; layer < layers; layer++) {
@@ -298,7 +313,7 @@ public static class TopologyCompilation {
             var planar = new (int X, int Y, int Z)[] { (0, -1, 0), (1, -1, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0), (-1, 1, 0), (-1, 0, 0), (-1, -1, 0) };
             (directions, directionNames) = topology.Kind switch {
                 TopologyKind.Grid => (planar, new[] { "N", "NE", "E", "SE", "S", "SW", "W", "NW" }),
-                TopologyKind.Hex => ([(1, 0, 0), (1, -1, 0), (0, -1, 0), (-1, 0, 0), (-1, 1, 0), (0, 1, 0)], new[] { "E", "NE", "NW", "W", "SW", "SE" }),
+                TopologyKind.Hex => (HexDirections(), HexDirectionNames),
                 TopologyKind.Box => ([.. planar, (0, 0, 1), .. planar.Select(p => (p.X, p.Y, 1)), (0, 0, -1), .. planar.Select(p => (p.X, p.Y, -1))], CompiledTopology.BoxDirectionNames),
                 _ => ([(1, 0, 0), (-1, 0, 0)], new[] { "forward", "backward" }),
             };
@@ -332,7 +347,7 @@ public static class TopologyCompilation {
             opposite[direction] = found;
         }
         var (images, elementNames) = CompiledTopology.BuildSymmetry(topology.Kind, width, depth, layers, coordinates, indices);
-        var compiled = new CompiledTopology(topology.Kind, coordinates.Count, directions.Length, neighbours, opposite, width, depth, wrap,
+        var compiled = new CompiledTopology(topology.Kind, coordinates.Count, directions.Length, neighbours, opposite, width, depth, radius, wrap,
             new FixedVector3(
                 X: FixedQ4816.FromDouble(topology.Origin.X + anchorOffset.X),
                 Y: FixedQ4816.FromDouble(topology.Origin.Y + anchorOffset.Y),

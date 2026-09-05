@@ -72,7 +72,14 @@
           20,
           -0.5,
           -12
-        ]
+        ],
+        "board": {
+          "topology": "hexLinesBoard",
+          "occupancy": "hexBoard",
+          "turn": "hexTurn",
+          "verdict": "hexVerdict",
+          "move": "hexMove"
+        }
       }
     ]
   },
@@ -80,18 +87,7 @@
   "simulation": {
     "rateHz": 30
   },
-  "state": {
-    "lattices": [
-      {
-        "name": "hexLinesBoard",
-        "origin": [
-          20,
-          0.8,
-          -12
-        ]
-      }
-    ]
-  },
+  "state": {},
   "views": {
     "layouts": [
       {

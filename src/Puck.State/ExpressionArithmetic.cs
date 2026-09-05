@@ -6,7 +6,7 @@ using Puck.Maths;
 namespace Puck.State;
 
 /// <summary>Allocation-free arithmetic refusal for the shared rule, decision, and flock expression evaluator.</summary>
-public static class ExpressionArithmetic {
+public static partial class ExpressionArithmetic {
     /// <summary>Evaluates one binary operation. Integer division truncates toward zero; Fixed multiplication and
     /// division round once to nearest, ties to even, through Puck.Maths. Overflow is tested after rounding.</summary>
     /// <param name="operation">A binary arithmetic expression operation.</param>

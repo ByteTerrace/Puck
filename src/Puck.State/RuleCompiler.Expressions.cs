@@ -75,6 +75,44 @@ public static partial class RuleCompiler {
                 ValueToken.ParallelBitDeposit => IntBinary(ExpressionOp.ParallelBitDeposit),
                 ValueToken.BitField => IntArity(ExpressionOp.BitField, 3),
                 ValueToken.BitInsert => IntArity(ExpressionOp.BitInsert, 4),
+                ValueToken.Pair => IntBinary(ExpressionOp.Pair),
+                ValueToken.PairX => IntUnary(ExpressionOp.PairX),
+                ValueToken.PairY => IntUnary(ExpressionOp.PairY),
+                ValueToken.PairSwap => IntUnary(ExpressionOp.PairSwap),
+                ValueToken.PairMax => IntUnary(ExpressionOp.PairMax),
+                ValueToken.PairMin => IntUnary(ExpressionOp.PairMin),
+                ValueToken.PairSum => IntUnary(ExpressionOp.PairSum),
+                ValueToken.PairDifference => IntUnary(ExpressionOp.PairDifference),
+                ValueToken.PairTranslate => IntBinary(ExpressionOp.PairTranslate),
+                ValueToken.PairScale => IntBinary(ExpressionOp.PairScale),
+                ValueToken.Morton => IntBinary(ExpressionOp.Morton),
+                ValueToken.MortonX => IntUnary(ExpressionOp.MortonX),
+                ValueToken.MortonY => IntUnary(ExpressionOp.MortonY),
+                ValueToken.Hilbert => IntArity(ExpressionOp.Hilbert, 3),
+                ValueToken.HilbertX => IntBinary(ExpressionOp.HilbertX),
+                ValueToken.HilbertY => IntBinary(ExpressionOp.HilbertY),
+                ValueToken.HexIndex => IntBinary(ExpressionOp.HexIndex),
+                ValueToken.HexQ => IntUnary(ExpressionOp.HexQ),
+                ValueToken.HexR => IntUnary(ExpressionOp.HexR),
+                ValueToken.HexRadius => IntUnary(ExpressionOp.HexRadius),
+                ValueToken.HexNorm => IntUnary(ExpressionOp.HexNorm),
+                ValueToken.HexDistance => IntBinary(ExpressionOp.HexDistance),
+                ValueToken.HexNeighbor => IntBinary(ExpressionOp.HexNeighbor),
+                ValueToken.HexRotate => IntBinary(ExpressionOp.HexRotate),
+                ValueToken.HexConjugate => IntUnary(ExpressionOp.HexConjugate),
+                ValueToken.HexSwap => IntUnary(ExpressionOp.HexSwap),
+                ValueToken.HexAdd => IntBinary(ExpressionOp.HexAdd),
+                ValueToken.HexSubtract => IntBinary(ExpressionOp.HexSubtract),
+                ValueToken.HexMultiply => IntBinary(ExpressionOp.HexMultiply),
+                ValueToken.HexScale => IntBinary(ExpressionOp.HexScale),
+                ValueToken.HexTranslate => IntArity(ExpressionOp.HexTranslate, 3),
+                ValueToken.Layer => IntArity(ExpressionOp.Layer, 4),
+                ValueToken.LayerOffset => IntArity(ExpressionOp.LayerOffset, 4),
+                ValueToken.LayerStart => IntArity(ExpressionOp.LayerStart, 4),
+                ValueToken.LayerSize => IntArity(ExpressionOp.LayerSize, 4),
+                ValueToken.SquareRoot => Unary(ExpressionOp.SquareRoot),
+                ValueToken.Sine => FixedUnary(ExpressionOp.Sine),
+                ValueToken.Cosine => FixedUnary(ExpressionOp.Cosine),
                 ValueToken.BoardShift shift => ResolveBoardShift(shift),
                 ValueToken.BoardImage image => ResolveBoardImage(image),
                 null => throw Malformed("contains a null token"),
@@ -167,6 +205,12 @@ public static partial class RuleCompiler {
             Require(operation, arity);
             for (var slot = depth - arity; slot < depth; slot++) { RequireKind(operation, slot, CellKind.Int); }
             depth -= (arity - 1);
+            return new CompiledExpressionToken(Operation: operation);
+        }
+        CompiledExpressionToken FixedUnary(ExpressionOp operation) {
+            if (kind != CellKind.Fixed) { throw Malformed($"token '{operation}' is admitted in kind=fixed expressions only"); }
+            Require(operation, 1);
+            RequireKind(operation, depth - 1, CellKind.Fixed);
             return new CompiledExpressionToken(Operation: operation);
         }
         CompiledExpressionToken Unary(ExpressionOp operation) {

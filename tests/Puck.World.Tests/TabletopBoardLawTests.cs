@@ -60,11 +60,14 @@ public sealed class TabletopBoardLawTests {
         Assert.False(topology.TryOffset(cell: 0, dx: -1, dz: 0, result: out _)); // off the west edge, no wrap declared
         Assert.False(topology.TryOffset(cell: 3, dx: 1, dz: 0, result: out _)); // off the east edge
 
-        // A CONTROL: neither spatial query means anything off a Grid topology — a hex frame answers false rather
-        // than silently reusing rectangular coordinates that were never declared for it.
+        // A hex frame answers the same two queries in its own coordinates: the origin is cell 0, and an axial step
+        // of (+1, 0) from it is ring 1's first cell.
         var hexTopology = TopologyCompilation.Find(state, "hex")!;
-        Assert.False(hexTopology.TryCellOf(position: new FixedVector3(FixedQ4816.Zero, FixedQ4816.Zero, FixedQ4816.Zero), cell: out _));
-        Assert.False(hexTopology.TryOffset(cell: 0, dx: 1, dz: 0, result: out _));
+        Assert.True(hexTopology.TryCellOf(position: new FixedVector3(FixedQ4816.Zero, FixedQ4816.Zero, FixedQ4816.Zero), cell: out var hexOrigin));
+        Assert.Equal(0, hexOrigin);
+        Assert.True(hexTopology.TryOffset(cell: 0, dx: 1, dz: 0, result: out var hexEast));
+        Assert.Equal(1, hexEast);
+        Assert.False(hexTopology.TryOffset(cell: 1, dx: 1, dz: 0, result: out _)); // off the radius-1 disk
     }
 
     // cellSize is the divisor TryCellOf resolves world positions against (localX / cellSize): zero divides by zero,

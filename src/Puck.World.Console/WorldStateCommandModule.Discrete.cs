@@ -54,7 +54,7 @@ public sealed partial class WorldStateCommandModule {
                     var origin = (compiled is null)
                         ? "none"
                         : $"({(double)compiled.Origin.X:0.####},{(double)compiled.Origin.Y:0.####},{(double)compiled.Origin.Z:0.####})";
-                    lines.Add($"[world.topology '{topology.Name}' kind={topology.Kind} cells={compiled?.CellCount ?? normalized.Width * normalized.Depth * normalized.Layers} directions={directionCount} names={names} wrap={normalized.Wrap} origin={origin}]");
+                    lines.Add($"[world.topology '{topology.Name}' kind={topology.Kind} cells={compiled?.CellCount ?? ((topology.Kind == TopologyKind.Hex) ? (1 + (3 * normalized.Radius * (normalized.Radius + 1))) : (normalized.Width * normalized.Depth * normalized.Layers))} directions={directionCount} names={names} wrap={normalized.Wrap} origin={origin}]");
                 }
                 return new CommandResult(Output: string.Join(Environment.NewLine, lines));
             });

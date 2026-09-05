@@ -15,6 +15,7 @@ public sealed partial class CompiledTopology {
     private readonly string[] m_directionNames;
     private readonly int m_width;
     private readonly int m_depth;
+    private readonly int m_radius;
     private readonly int m_layers;
     private readonly FixedQ4816 m_layerHeight;
     private readonly TopologyWrap m_wrap;
@@ -23,7 +24,7 @@ public sealed partial class CompiledTopology {
     private readonly FixedQ4816 m_band;
 
     internal CompiledTopology(TopologyKind kind, int count, int directions, int[] neighbours, int[] opposite,
-        int width, int depth, TopologyWrap wrap, FixedVector3 origin, FixedQ4816 cellSize, FixedQ4816 band,
+        int width, int depth, int radius, TopologyWrap wrap, FixedVector3 origin, FixedQ4816 cellSize, FixedQ4816 band,
         int[][] images, string[] elementNames, int layers, FixedQ4816 layerHeight, string[] directionNames) {
         m_band = band;
         m_layers = layers;
@@ -38,6 +39,7 @@ public sealed partial class CompiledTopology {
         m_directionNames = directionNames;
         m_width = width;
         m_depth = depth;
+        m_radius = radius;
         m_wrap = wrap;
         m_origin = origin;
         m_cellSize = cellSize;
@@ -68,6 +70,37 @@ public sealed partial class CompiledTopology {
     public int Width => m_width;
     /// <summary>Gets the cell count along +Z.</summary>
     public int Depth => m_depth;
+    /// <summary>Gets the ring count around the origin cell of a hex topology; 0 for every other kind.</summary>
+    public int Radius => m_radius;
+
+    // Row spacing of a pointy-top hex lattice in cell units: √3/2. Cell (q, r) sits at origin + cellSize · (q − r/2, 0, r·√3/2),
+    // so +q is +X and +r leans toward +Z. KEEP IN SYNC with TryCellOf's inverse.
+    private static readonly FixedQ4816 s_hexRowSpacing = FixedQ4816.FromDouble(value: 0.8660254037844386);
+    private static readonly FixedQ4816 s_half = FixedQ4816.FromDouble(value: 0.5);
+
+    /// <summary>Returns the centre of a cell: a grid or box cell's square (or cube) centre, a hex cell's lattice
+    /// point, in the topology's anchored frame.</summary>
+    /// <param name="cell">The cell ordinal.</param>
+    public FixedVector3 CellCentre(int cell) {
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: ((uint)cell), other: ((uint)CellCount));
+        if (Kind == TopologyKind.Hex) {
+            var coordinate = new HexagonalIndex(value: cell).ToCoordinate();
+            var q = FixedQ4816.FromInteger(value: coordinate.Q);
+            var r = FixedQ4816.FromInteger(value: coordinate.R);
+            return new FixedVector3(
+                X: (m_origin.X + (m_cellSize * (q - (r * s_half)))),
+                Y: m_origin.Y,
+                Z: (m_origin.Z + (m_cellSize * (r * s_hexRowSpacing)))
+            );
+        }
+        var planar = (cell % (m_width * m_depth));
+        var layer = (cell / (m_width * m_depth));
+        return new FixedVector3(
+            X: (m_origin.X + (m_cellSize * (FixedQ4816.FromInteger(value: (planar % m_width)) + s_half))),
+            Y: (m_origin.Y + (m_layerHeight * FixedQ4816.FromInteger(value: layer))),
+            Z: (m_origin.Z + (m_cellSize * (FixedQ4816.FromInteger(value: (planar / m_width)) + s_half)))
+        );
+    }
 
     /// <summary>Resolves the grid cell a world position falls in, X/Z only — a board carries one layer, so no
     /// height test applies. Only <see cref="TopologyKind.Grid"/> carries a rectangular X/Z frame; every other
@@ -77,6 +110,9 @@ public sealed partial class CompiledTopology {
     /// <returns>Whether the position lies over a declared cell.</returns>
     public bool TryCellOf(in FixedVector3 position, out int cell) {
         cell = -1;
+        if (Kind == TopologyKind.Hex) {
+            return TryHexCellOf(position: in position, cell: out cell);
+        }
         if (Kind is not (TopologyKind.Grid or TopologyKind.Box)) {
             return false;
         }
@@ -120,19 +156,46 @@ public sealed partial class CompiledTopology {
         "D", "DN", "DNE", "DE", "DSE", "DS", "DSW", "DW", "DNW",
     ];
 
-    /// <summary>Resolves the cell reached by moving <paramref name="dx"/>/<paramref name="dz"/> grid steps from
-    /// <paramref name="cell"/>, wrapping the axes this topology declares — the arbitrary-offset sibling of
-    /// <see cref="Neighbour"/>'s fixed eight directions, what a leaper (a knight, or a chess-variant piece with no
-    /// ray shape) authors its reach against. Only <see cref="TopologyKind.Grid"/> carries rectangular
-    /// coordinates; every other kind answers <see langword="false"/>.</summary>
+    private bool TryHexCellOf(in FixedVector3 position, out int cell) {
+        cell = -1;
+        if (m_band > FixedQ4816.Zero) {
+            var localY = (((Int128)position.Y.Value) - m_origin.Y.Value);
+            if ((localY > m_band.Value) || (localY < -(Int128)m_band.Value)) {
+                return false;
+            }
+        }
+        var localX = ((position.X - m_origin.X) / m_cellSize);
+        var localZ = ((position.Z - m_origin.Z) / m_cellSize);
+        var r = (localZ / s_hexRowSpacing);
+        var q = (localX + (r * s_half));
+        var coordinate = HexagonalCoordinate.Round(q: q, r: r);
+        if (coordinate.Length > m_radius) {
+            return false;
+        }
+        cell = ((int)HexagonalIndex.FromCoordinate(coordinate: coordinate).Value);
+        return true;
+    }
+
+    /// <summary>Returns the cell an axial step away — (dx, dz) on a grid, (dq, dr) on a hex — or <see langword="false"/>
+    /// off the board.</summary>
     /// <param name="cell">The source cell ordinal.</param>
-    /// <param name="dx">The signed step along +X.</param>
-    /// <param name="dz">The signed step along +Z.</param>
+    /// <param name="dx">The signed step along +X, or +q.</param>
+    /// <param name="dz">The signed step along +Z, or +r.</param>
     /// <param name="result">The resolved cell ordinal.</param>
-    /// <returns>Whether the offset lands on a declared cell.</returns>
     public bool TryOffset(int cell, int dx, int dz, out int result) {
         result = -1;
-        if (Kind != TopologyKind.Grid || (uint)cell >= (uint)CellCount) {
+        if ((uint)cell >= (uint)CellCount) {
+            return false;
+        }
+        if (Kind == TopologyKind.Hex) {
+            var moved = new HexagonalIndex(value: cell).Translate(displacement: new HexagonalCoordinate(Q: dx, R: dz));
+            if (moved.Radius > m_radius) {
+                return false;
+            }
+            result = ((int)moved.Value);
+            return true;
+        }
+        if (Kind != TopologyKind.Grid) {
             return false;
         }
         var x = (cell % m_width) + dx;
@@ -374,14 +437,17 @@ public sealed partial class CompiledTopology {
             names[element] = map.Name(3, "qrs");
             var image = new int[coordinates.Count];
             for (var cell = 0; cell < coordinates.Count; cell++) {
-                var (q, r, _) = coordinates[cell];
+                // The symmetry walk is spelled over cube coordinates of the 60° axial basis; a cell's Eisenstein
+                // (Q, R) maps to axial (Q, −R). KEEP IN SYNC with the inverse on the image lookup below.
+                var (q, negatedR, _) = coordinates[cell];
+                var r = -negatedR;
                 var s = -q - r;
                 int[] cube = [q, r, s];
                 var target = new int[3];
                 for (var axis = 0; axis < 3; axis++) {
                     target[axis] = map.Sign(axis) * cube[map[axis]];
                 }
-                image[cell] = indices[(target[0], target[1], 0)];
+                image[cell] = indices[(target[0], -target[1], 0)];
             }
             images[element] = image;
         }

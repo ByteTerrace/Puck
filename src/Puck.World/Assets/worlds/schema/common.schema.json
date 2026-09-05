@@ -3082,6 +3082,348 @@
       ],
       "additionalProperties": false
     },
+    "ValueTokenPair": {
+      "description": "Szudzik\u0027s pairing of two non-negative integers into one; pairX/pairY invert it.",
+      "properties": {
+        "$type": {
+          "const": "pair"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenPairX": {
+      "description": "The first component of a paired value.",
+      "properties": {
+        "$type": {
+          "const": "pairX"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenPairY": {
+      "description": "The second component of a paired value.",
+      "properties": {
+        "$type": {
+          "const": "pairY"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenPairSwap": {
+      "description": "The pair with its components exchanged, computed without unpairing.",
+      "properties": {
+        "$type": {
+          "const": "pairSwap"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenPairMax": {
+      "description": "The larger component of a paired value.",
+      "properties": {
+        "$type": {
+          "const": "pairMax"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenPairMin": {
+      "description": "The smaller component of a paired value.",
+      "properties": {
+        "$type": {
+          "const": "pairMin"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenPairSum": {
+      "description": "The sum of a paired value\u0027s components.",
+      "properties": {
+        "$type": {
+          "const": "pairSum"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenPairDifference": {
+      "description": "The absolute difference of a paired value\u0027s components.",
+      "properties": {
+        "$type": {
+          "const": "pairDifference"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenPairTranslate": {
+      "description": "The pair with both components moved by the second argument.",
+      "properties": {
+        "$type": {
+          "const": "pairTranslate"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenPairScale": {
+      "description": "The pair with both components multiplied by the second argument.",
+      "properties": {
+        "$type": {
+          "const": "pairScale"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenMorton": {
+      "description": "Bit-interleaves two non-negative integers below 2^31 (x on the even bits); mortonX/mortonY invert it.",
+      "properties": {
+        "$type": {
+          "const": "morton"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenMortonX": {
+      "description": "The even-bit component of a Morton code.",
+      "properties": {
+        "$type": {
+          "const": "mortonX"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenMortonY": {
+      "description": "The odd-bit component of a Morton code.",
+      "properties": {
+        "$type": {
+          "const": "mortonY"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHilbert": {
+      "description": "The distance along the Hilbert curve of the given order (1..31) to (x, y); hilbertX/hilbertY invert it.",
+      "properties": {
+        "$type": {
+          "const": "hilbert"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHilbertX": {
+      "description": "The x of the point at a Hilbert distance for the given order.",
+      "properties": {
+        "$type": {
+          "const": "hilbertX"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHilbertY": {
+      "description": "The y of the point at a Hilbert distance for the given order.",
+      "properties": {
+        "$type": {
+          "const": "hilbertY"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexIndex": {
+      "description": "The ring-ordered index of the hex cell at Eisenstein coordinates (q, r); hexQ/hexR invert it.",
+      "properties": {
+        "$type": {
+          "const": "hex"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexQ": {
+      "description": "The q coordinate of a hex index.",
+      "properties": {
+        "$type": {
+          "const": "hexQ"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexR": {
+      "description": "The r coordinate of a hex index.",
+      "properties": {
+        "$type": {
+          "const": "hexR"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexRadius": {
+      "description": "The ring a hex index lies on.",
+      "properties": {
+        "$type": {
+          "const": "hexRadius"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexNorm": {
+      "description": "The Eisenstein norm q\u00B2 \u2212 q\u00B7r \u002B r\u00B2 of a hex index.",
+      "properties": {
+        "$type": {
+          "const": "hexNorm"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexDistance": {
+      "description": "The step distance between two hex indices.",
+      "properties": {
+        "$type": {
+          "const": "hexDistance"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexNeighbor": {
+      "description": "The hex index one step away in direction 0..5 (counterclockwise from \u002Bq; any integer, taken modulo 6).",
+      "properties": {
+        "$type": {
+          "const": "hexNeighbor"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexRotate": {
+      "description": "The hex index rotated about the origin by sixth turns (any integer, taken modulo 6).",
+      "properties": {
+        "$type": {
+          "const": "hexRotate"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexConjugate": {
+      "description": "The hex index reflected across the q axis.",
+      "properties": {
+        "$type": {
+          "const": "hexConjugate"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexSwap": {
+      "description": "The hex index with q and r exchanged.",
+      "properties": {
+        "$type": {
+          "const": "hexSwap"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexAdd": {
+      "description": "The hex index of the coordinate sum.",
+      "properties": {
+        "$type": {
+          "const": "hexAdd"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexSubtract": {
+      "description": "The hex index of the coordinate difference.",
+      "properties": {
+        "$type": {
+          "const": "hexSubtract"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexMultiply": {
+      "description": "The hex index of the Eisenstein product.",
+      "properties": {
+        "$type": {
+          "const": "hexMultiply"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexScale": {
+      "description": "The hex index scaled by an integer.",
+      "properties": {
+        "$type": {
+          "const": "hexScale"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenHexTranslate": {
+      "description": "The hex index moved by (q, r).",
+      "properties": {
+        "$type": {
+          "const": "hexTranslate"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenLayer": {
+      "description": "The layer holding an index in a layer sequence (index, start, step, seed): a core of seed indices wrapped by layers of start, start\u002Bstep, \u2026 indices.",
+      "properties": {
+        "$type": {
+          "const": "layer"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenLayerOffset": {
+      "description": "The position of an index within its layer, for the same (index, start, step, seed) sequence.",
+      "properties": {
+        "$type": {
+          "const": "layerOffset"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenLayerStart": {
+      "description": "The first index of a layer, for a (layer, start, step, seed) sequence.",
+      "properties": {
+        "$type": {
+          "const": "layerStart"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenLayerSize": {
+      "description": "The index count of a layer, for a (layer, start, step, seed) sequence.",
+      "properties": {
+        "$type": {
+          "const": "layerSize"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenSquareRoot": {
+      "description": "The square root: the floor root of a non-negative int, or the fixed-point root of a non-negative fixed value.",
+      "properties": {
+        "$type": {
+          "const": "sqrt"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenSine": {
+      "description": "The sine of a fixed-point angle in radians; fixed expressions only.",
+      "properties": {
+        "$type": {
+          "const": "sin"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenCosine": {
+      "description": "The cosine of a fixed-point angle in radians; fixed expressions only.",
+      "properties": {
+        "$type": {
+          "const": "cos"
+        }
+      },
+      "additionalProperties": false
+    },
     "ValueToken": {
       "description": "One authored token in a ValueExpression.",
       "type": "object",
@@ -3214,6 +3556,120 @@
         },
         {
           "$ref": "#/$defs/ValueTokenBoardImage"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenPair"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenPairX"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenPairY"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenPairSwap"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenPairMax"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenPairMin"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenPairSum"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenPairDifference"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenPairTranslate"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenPairScale"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenMorton"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenMortonX"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenMortonY"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHilbert"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHilbertX"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHilbertY"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexIndex"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexQ"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexR"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexRadius"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexNorm"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexDistance"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexNeighbor"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexRotate"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexConjugate"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexSwap"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexAdd"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexSubtract"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexMultiply"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexScale"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenHexTranslate"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenLayer"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenLayerOffset"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenLayerStart"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenLayerSize"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenSquareRoot"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenSine"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenCosine"
         }
       ]
     },

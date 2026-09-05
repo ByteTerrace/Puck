@@ -87,4 +87,80 @@ public enum ExpressionOp : byte {
     BoardImage,
     /// <summary>Sign as Int -1, 0, 1 (unary, either kind).</summary>
     Sign,
+    /// <summary>Szudzik's pairing of two non-negative integers into one; <c>pairX</c>/<c>pairY</c> invert it.</summary>
+    Pair,
+    /// <summary>The first component of a paired value.</summary>
+    PairX,
+    /// <summary>The second component of a paired value.</summary>
+    PairY,
+    /// <summary>The pair with its components exchanged, computed without unpairing.</summary>
+    PairSwap,
+    /// <summary>The larger component of a paired value.</summary>
+    PairMax,
+    /// <summary>The smaller component of a paired value.</summary>
+    PairMin,
+    /// <summary>The sum of a paired value's components.</summary>
+    PairSum,
+    /// <summary>The absolute difference of a paired value's components.</summary>
+    PairDifference,
+    /// <summary>The pair with both components moved by the second argument.</summary>
+    PairTranslate,
+    /// <summary>The pair with both components multiplied by the second argument.</summary>
+    PairScale,
+    /// <summary>Bit-interleaves two non-negative integers below 2^31 (x on the even bits); <c>mortonX</c>/<c>mortonY</c> invert it.</summary>
+    Morton,
+    /// <summary>The even-bit component of a Morton code.</summary>
+    MortonX,
+    /// <summary>The odd-bit component of a Morton code.</summary>
+    MortonY,
+    /// <summary>The distance along the Hilbert curve of the given order (1..31) to (x, y); <c>hilbertX</c>/<c>hilbertY</c> invert it.</summary>
+    Hilbert,
+    /// <summary>The x of the point at a Hilbert distance for the given order.</summary>
+    HilbertX,
+    /// <summary>The y of the point at a Hilbert distance for the given order.</summary>
+    HilbertY,
+    /// <summary>The ring-ordered index of the hex cell at Eisenstein coordinates (q, r); <c>hexQ</c>/<c>hexR</c> invert it.</summary>
+    HexIndex,
+    /// <summary>The q coordinate of a hex index.</summary>
+    HexQ,
+    /// <summary>The r coordinate of a hex index.</summary>
+    HexR,
+    /// <summary>The ring a hex index lies on.</summary>
+    HexRadius,
+    /// <summary>The Eisenstein norm q² − q·r + r² of a hex index.</summary>
+    HexNorm,
+    /// <summary>The step distance between two hex indices.</summary>
+    HexDistance,
+    /// <summary>The hex index one step away in direction 0..5 (counterclockwise from +q; any integer, taken modulo 6).</summary>
+    HexNeighbor,
+    /// <summary>The hex index rotated about the origin by sixth turns (any integer, taken modulo 6).</summary>
+    HexRotate,
+    /// <summary>The hex index reflected across the q axis.</summary>
+    HexConjugate,
+    /// <summary>The hex index with q and r exchanged.</summary>
+    HexSwap,
+    /// <summary>The hex index of the coordinate sum.</summary>
+    HexAdd,
+    /// <summary>The hex index of the coordinate difference.</summary>
+    HexSubtract,
+    /// <summary>The hex index of the Eisenstein product.</summary>
+    HexMultiply,
+    /// <summary>The hex index scaled by an integer.</summary>
+    HexScale,
+    /// <summary>The hex index moved by (q, r).</summary>
+    HexTranslate,
+    /// <summary>The layer holding an index in a layer sequence (index, start, step, seed): a core of seed indices wrapped by layers of start, start+step, … indices.</summary>
+    Layer,
+    /// <summary>The position of an index within its layer, for the same (index, start, step, seed) sequence.</summary>
+    LayerOffset,
+    /// <summary>The first index of a layer, for a (layer, start, step, seed) sequence.</summary>
+    LayerStart,
+    /// <summary>The index count of a layer, for a (layer, start, step, seed) sequence.</summary>
+    LayerSize,
+    /// <summary>The square root: the floor root of a non-negative int, or the fixed-point root of a non-negative fixed value.</summary>
+    SquareRoot,
+    /// <summary>The sine of a fixed-point angle in radians; fixed expressions only.</summary>
+    Sine,
+    /// <summary>The cosine of a fixed-point angle in radians; fixed expressions only.</summary>
+    Cosine,
 }

@@ -157,6 +157,15 @@ public static class RuleEvaluation {
                     stack[top++] = inserted;
                     continue;
                 }
+                if (ExpressionArithmetic.FunctionArity(operation: token.Operation) is > 0 and var arity) {
+                    top -= arity;
+                    if (!ExpressionArithmetic.TryFunction(operation: token.Operation, kind: kind, arguments: stack.Slice(start: top, length: arity), value: out var applied)) {
+                        value = 0L;
+                        return false;
+                    }
+                    stack[top++] = applied;
+                    continue;
+                }
                 if (ExpressionArithmetic.IsUnary(token.Operation)) {
                     if (!ExpressionArithmetic.TryUnary(token.Operation, kind, stack[top - 1], out var unary)) {
                         value = 0L;
