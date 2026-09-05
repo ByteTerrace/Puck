@@ -1011,7 +1011,12 @@ finds which piece moved works over the WHOLE board rather than per piece —
 vacated/occupied deltas, and the shape of those deltas (one square vacated
 and occupied, a second side's square vacated too, two-and-two for castling)
 sorts a settle into a quiet move, a capture, an en passant, a castle, or a
-perturbation — the world program's own record, not a per-piece rule. A
+perturbation — the world program's own record, not a per-piece rule. The four
+counts share one nested `pair`, with `pairSwap` exchanging the two sides;
+there is no need to persist a separate row for every count and shape flag.
+Board snapshots and clearing use `boardCombine` over explicitly bounded
+64-cell boards. The successful move's turn, saved legal board, and en passant
+target commit together, so one journal entry owns that bookkeeping. A
 capture whose vacated defending square sits anywhere but the destination is
 en passant ONLY when that square is also adjacent to the destination behind
 the mover's own approach AND the piece that landed carries the pawn code;
@@ -1032,7 +1037,9 @@ cell (read directly off the pre-move board's king mask, never the lower of
 the two vacated cells), so it never coincides with a single king step by
 construction, on either side of the board. Castling rights are a
 one-way bitfield (`castleRights`, one bit per king/rook home square) a rule
-sets the instant that square's own piece departs — legally or not, since
+sets when the previous board held that square's king or rook and the current
+board no longer does, even on capture or a removal with no classified mover —
+legally or not, since
 "has this piece ever left home" cannot un-happen and a capacity-bounded
 history ring answering the same question can forget it once the departure
 scrolls out, reviving rights a long game never truly regains; a castle event
@@ -1050,9 +1057,9 @@ attacked either, read via a `$board:attacks:<row>:<min>:<max>:<directions>`
 query that walks a short authored ray list from a fixed cell and answers
 whether the first occupied cell on any of them falls in an authored value
 range — a slider's reach at one square in one call, instead of one rule per
-direction; king- and knight-adjacency stay the cheap `$board:neighbour`/
-`$board:offset` composition already used elsewhere, since those never
-depend on which color is attacking. A piece that leaves the board entirely
+direction. Pawn, knight, and king attacks use the enemy piece masks
+intersected with the source-square sets for the four fixed transit squares.
+A piece that leaves the board entirely
 (captured, knocked clear, tilted) never itself registers as a mover, since
 it has no destination cell to rule on. A settle that only occupies (nothing
 of that side's own vacates) or only vacates clamps its empty half to -1
@@ -1075,8 +1082,8 @@ occupied never enters either side's vacated or occupied mask), so it is not
 a move kind: reaching the last rank on an ordinary quiet or capture settle
 marks `promotionPending`, and it stays pending across the pawn being lifted
 off (an empty cell is not a promoted piece either) until a later settle
-where that cell holds an actual piece of the mover's own color other than a
-pawn, which clears it directly, independent of whatever move kind (if any)
+where that cell holds a knight, bishop, rook, or queen of the mover's own
+color, which clears it directly, independent of whatever move kind (if any)
 that settle classifies as. `plan` is
 the addon seam for candidate-highlight rendering: an ordinary board-typed row
 nothing in the engine writes, proved from the console
@@ -1383,42 +1390,57 @@ doubles whose vertex merge quantizes to a fine grid, so the graph is the same
 on every machine. The two snub tilings wait on a vertex-configuration grower.
 
 **A rule can ask what a board would be; the `search` section is that question,
-chartered.** The one gap the four-brick-walls
-critique found that a rule cannot close is the hypothetical: checkmate,
-stalemate, and a CPU opponent all need a board that is not the document's.
-The design is a value-typed *board frame* — one bit plane per element over
-the topology's cells packed into words, a copy is a fixed memcpy and an undo
-restores the plane words a move touched — and a second `IRuleHost` over such
-a frame, so the document's own interactions, gates, and effects run unchanged
-on the hypothetical board and no second rule language exists for the bot.
-Legality is written once, as the gate: *enforcement* is the author's choice
-per table — the diegetic tabletop records an illegal move and lets the
-players fix the board, a teaching world refuses it or
-highlights the legal squares — and every world's search reads the same total
-gate. A move is a turn, derived: search enumerates interaction sequences from
-the side to move until the document's turn key changes, so castling,
-promotion, and a jump chain are one ply with no new authoring surface. The
-search is a *job* across ticks, never a query that must answer in its tick:
-the section names the algorithm and the turn key, the job spends a fixed node
-quota per tick from the work sheet, runs its recursion on an explicit stack
-the checkpoint hashes, and lands its verdict as a state fact when it
-completes; a bot body then issues the same command a human would through the
-player command path, and a dog may knock the table while it thinks. Two
-algorithms, on the general-game precedent (Ludii ships both and picks per
-game): iterative-deepening alpha-beta with a transposition table for games
-with an authored score expression, and UCT for games with only a terminal
-outcome, its playouts drawn from a hash of tick and node — never an RNG in
-sim state. Checkmate detection is the same job at depth one with no legal
-move. Every limit derives: plane words from the topology's cell count,
-planes from the row's element count, stack memory from depth times frame
-size, the node quota from the budget the work sheet has left; an authored
-`depth` or `nodes` exists only for a world that has something specific in
-mind. Tokens-on-a-cell is the same frame seen from the other side: a token
-row (keys are identities, the value is a cell) and a cell row (keys are the
-topology's cells through `keysOf`, the value is an element) are one mapping
-the engine keeps consistent on every write, and a count is already a value.
-Refused: a mate detector unrolled into per-piece rules, a privileged bot
-mutation, a search that blocks a tick.
+chartered.** The one gap the four-brick-walls critique found that a rule
+cannot close is the hypothetical: checkmate, stalemate, a legal-square plan,
+and a CPU opponent all need a board that is not the document's. The shipped
+chess world fixes the shape: it has no move interactions — bodies move, and
+the rules snapshot the settled pieces into `board`, diff it against
+`previousBoard`, classify the change into `move`, judge it into `verdict`,
+and flip `turn`. A game is a *judge*, and a ply is a candidate state the
+judge accepts and that changes the turn key; an interaction-shaped world fits
+the same definition with its gates as the judge. The design is a value-typed
+*frame* — every integer cell of the section laid out once from the catalog,
+so a copy is one memcpy and a judge's fifty scratch scalars cost nothing;
+the bit planes the board queries derive stay read scratch — and a second
+`IRuleHost` over such a frame, so the document's own rules run unchanged on
+the hypothetical board and no second rule language exists for the bot. Which
+rules a frame can run derives from the dataflow: a rule reading a world
+operand (a body's cell, its uprightness, quiescence) is host-only, and the
+candidate is applied where those rules sit, which is where the physical move
+enters the sequence; a world with something specific in mind names the rule
+the candidate follows. Candidates derive as one own piece relocating to any
+other cell; the castle, the en-passant clearing, and the promotion are
+authored candidate shapes, and an authored per-element reach mask prunes
+before the judge where strength matters. Legality is written once, as the
+judge: *enforcement* is the author's choice per table — the diegetic
+tabletop records an illegal move and lets the players fix the board, a
+teaching world refuses it or paints the `plan` row — and the plan row is
+the search's first consumer: the legal squares of one picked piece are a
+depth-one search over one `from`. The search is a *job* across ticks, never
+a query that must answer in its tick: the job spends a node quota derived
+from what the work sheet leaves of the tick budget divided by the judge's
+own cost, runs its recursion on an explicit stack the checkpoint captures
+and the state hash folds (the shared navigation trees are the precedent),
+and lands its verdict as a state fact; a bot body then issues the same
+command a human would through the player command path, and a dog may knock
+the table while it thinks. Two algorithms, on the general-game precedent
+(Ludii ships both and picks per game): iterative-deepening alpha-beta with a
+transposition table for a world with an authored score expression, and UCT
+for one with only a terminal outcome, its playouts drawn from a hash of tick
+and node — never an RNG in sim state. Checkmate is the job at depth one with
+no accepted candidate and the check row set. The judge-per-node cost is the
+strength ceiling of this design — depth one in ticks, depth two or three
+over seconds — and a plane-native make/unmake for strength beyond that is a
+later decision, not this one. The prerequisite is the read path: operands
+read cells through row objects today, and a frame host cannot present those
+without allocating, so every read goes through one value indirection first
+— the operand-union refactor's "handles first", brought forward. Tokens on
+a cell is the frame seen from the other side, and chess already carries
+both mappings — `pieceCell` (token to cell) and `board` (cell to code) —
+kept consistent by two rules; a row trait declaring one the inverse of the
+other lets the engine keep them, and a count is already a value. Refused: a
+mate detector unrolled into per-piece rules, a privileged bot mutation, a
+search that blocks a tick, a frame that materializes row objects.
 
 **Placements compose, and a game addresses its bodies by placement.** A
 placement may name a `parent`: its position and yaw become a local offset and
