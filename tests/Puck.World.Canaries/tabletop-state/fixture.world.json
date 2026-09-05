@@ -1,9 +1,20 @@
 {
-  "schema": "puck.world.def.v1",
-  "documentId": "tabletop-state-canary",
-  "simulation": {
-    "rateHz": 60
+  "bodies": {
+    "capacity": 1,
+    "localSeats": 0,
+    "networkPlayers": 1
   },
+  "bodyMotionPrograms": [
+    {
+      "kind": "Motion",
+      "name": "still",
+      "operations": [
+        "CommitPose"
+      ],
+      "version": "puck.body-motion.v1"
+    }
+  ],
+  "channels": [],
   "collision": {
     "contactSkin": 0.02,
     "gradientProbe": 0,
@@ -11,80 +22,12 @@
     "maxSlopeDegrees": 60,
     "requirements": []
   },
-  "bodies": {
-    "localSeats": 0,
-    "networkPlayers": 1,
-    "capacity": 1
-  },
-  "channels": [],
-  "views": {
-    "seatControl": {
-      "minPitch": -0.35,
-      "maxPitch": 1.2,
-      "yawReference": "World"
-    },
-    "seatRig": {
-      "name": "table-view",
-      "version": "puck.camera.v1",
-      "operations": [
-        {
-          "$type": "orbit",
-          "distance": 16,
-          "pitch": 0.6,
-          "yaw": 0,
-          "pivotOffset": [
-            0,
-            0,
-            0
-          ]
-        },
-        {
-          "$type": "lookAt",
-          "subject": {
-            "$type": "reference"
-          },
-          "targetOffset": [
-            0,
-            0,
-            0
-          ],
-          "worldAxes": true
-        },
-        {
-          "$type": "fov",
-          "fieldOfViewRadians": 0.96
-        }
-      ]
-    },
-    "layouts": []
-  },
-  "bodyMotionPrograms": [
-    {
-      "name": "still",
-      "version": "puck.body-motion.v1",
-      "kind": "Motion",
-      "operations": [
-        "CommitPose"
-      ]
-    }
-  ],
+  "documentId": "tabletop-state-canary",
   "kits": {
     "rows": [
       {
-        "name": "defaultKit",
         "bodyMotionProgram": "still",
         "motion": {
-          "speed": {
-            "value": 1
-          },
-          "turn": {
-            "rate": 1
-          },
-          "shaping": [
-            {
-              "along": {}
-            }
-          ],
           "holds": [
             {
               "bond": "Free",
@@ -98,33 +41,168 @@
               "hold": "Gravity",
               "name": "air"
             }
-          ]
-        }
+          ],
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "speed": {
+            "value": 1
+          },
+          "turn": {
+            "rate": 1
+          }
+        },
+        "name": "defaultKit"
       }
     ]
+  },
+  "patterns": [
+    {
+      "kind": "int",
+      "name": "capture",
+      "pattern": {
+        "$type": "sequence",
+        "items": [
+          {
+            "$type": "plus",
+            "item": {
+              "$type": "symbol",
+              "name": "through"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "until"
+          }
+        ]
+      },
+      "symbols": [
+        {
+          "max": 2,
+          "min": 2,
+          "name": "through"
+        },
+        {
+          "max": 1,
+          "min": 1,
+          "name": "until"
+        }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "effects": [
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "addState",
+              "expression": {
+                "tokens": [
+                  {
+                    "$type": "state",
+                    "key": "$cell:positions:scout",
+                    "name": "$board:pathCost:terrain:cell:destination:scout:100:16"
+                  },
+                  {
+                    "$type": "negate"
+                  }
+                ]
+              },
+              "key": "scout",
+              "state": "moves"
+            },
+            {
+              "$type": "setState",
+              "key": "$cell:positions:scout",
+              "state": "occupancy",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "$cell:positions:scout",
+              "state": "terrain",
+              "value": 1
+            },
+            {
+              "$type": "setState",
+              "fromKey": "scout",
+              "fromState": "destination",
+              "key": "scout",
+              "state": "positions"
+            },
+            {
+              "$type": "setState",
+              "key": "$cell:positions:scout",
+              "state": "occupancy",
+              "value": 1
+            },
+            {
+              "$type": "setState",
+              "key": "$cell:positions:scout",
+              "state": "terrain",
+              "value": -1
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparandKey": "scout",
+            "comparandState": "destination",
+            "comparison": "NotEqual",
+            "key": "scout",
+            "state": "positions"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "key": "$cell:positions:scout",
+            "state": "$board:pathCost:terrain:cell:destination:scout:100:16",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "scout",
+            "comparandState": "moves",
+            "comparison": "LessOrEqual",
+            "key": "$cell:positions:scout",
+            "state": "$board:pathCost:terrain:cell:destination:scout:100:16"
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "move-scout"
+    }
+  ],
+  "schema": "puck.world.def.v1",
+  "simulation": {
+    "rateHz": 60
   },
   "state": {
     "lattices": [
       {
+        "$type": "grid",
+        "cellSize": 1,
+        "depth": 4,
         "name": "map",
-        "kind": "Grid",
         "origin": [
           0,
           0,
           0
         ],
-        "cellSize": 1,
-        "width": 4,
-        "depth": 4
+        "width": 4
       }
     ],
     "world": [
       {
-        "name": "units",
-        "kind": "int",
-        "tokens": {
-          "capacity": 2
-        },
+        "capacity": 2,
         "cells": [
           {
             "key": "scout",
@@ -134,15 +212,11 @@
             "key": "guard",
             "value": 2
           }
-        ]
+        ],
+        "kind": "int",
+        "name": "units"
       },
       {
-        "name": "positions",
-        "kind": "int",
-        "keysFrom": "units",
-        "valuesFrom": "map",
-        "phaseOf": "turns",
-        "visibility": {},
         "cells": [
           {
             "key": "scout",
@@ -152,13 +226,18 @@
             "key": "guard",
             "value": 15
           }
-        ]
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "units"
+        },
+        "kind": "int",
+        "name": "positions",
+        "phaseOf": "turns",
+        "valuesFrom": "map",
+        "visibility": {}
       },
       {
-        "name": "moves",
-        "kind": "int",
-        "keysFrom": "units",
-        "phaseOf": "turns",
         "cells": [
           {
             "key": "scout",
@@ -168,23 +247,72 @@
             "key": "guard",
             "value": 3
           }
-        ]
-      },
-      {
-        "name": "terrain",
-        "kind": "int",
-        "board": {
-          "topology": "map",
-          "empty": 1
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "units"
         },
-        "cells": []
+        "kind": "int",
+        "name": "moves",
+        "phaseOf": "turns"
       },
       {
-        "name": "discs",
+        "cells": [
+          {
+            "key": "scout",
+            "value": 0
+          },
+          {
+            "key": "guard",
+            "value": 15
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "units"
+        },
         "kind": "int",
-        "board": {
+        "name": "destination"
+      },
+      {
+        "cells": [
+          {
+            "key": "0",
+            "value": -1
+          },
+          {
+            "key": "15",
+            "value": -1
+          }
+        ],
+        "domain": {
+          "$type": "cellsOf",
+          "empty": 1,
           "topology": "map"
         },
+        "kind": "int",
+        "name": "terrain"
+      },
+      {
+        "cells": [
+          {
+            "key": "0",
+            "value": 1
+          },
+          {
+            "key": "15",
+            "value": 1
+          }
+        ],
+        "domain": {
+          "$type": "cellsOf",
+          "empty": 0,
+          "topology": "map"
+        },
+        "kind": "int",
+        "name": "occupancy"
+      },
+      {
         "cells": [
           {
             "key": "0",
@@ -202,14 +330,16 @@
             "key": "3",
             "value": 1
           }
-        ]
-      },
-      {
-        "name": "cards",
+        ],
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "map"
+        },
         "kind": "int",
-        "tokens": {
-          "capacity": 2
-        },
+        "name": "discs"
+      },
+      {
+        "capacity": 2,
         "cells": [
           {
             "key": "copyA",
@@ -219,14 +349,11 @@
             "key": "copyB",
             "value": 7
           }
-        ]
+        ],
+        "kind": "int",
+        "name": "cards"
       },
       {
-        "name": "deck",
-        "kind": "bool",
-        "zone": {
-          "tokens": "cards"
-        },
         "cells": [
           {
             "key": "copyA",
@@ -236,56 +363,72 @@
             "key": "copyB",
             "value": true
           }
-        ]
-      },
-      {
-        "name": "hand",
-        "kind": "bool",
-        "zone": {
-          "tokens": "cards"
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "ordered": true,
+          "row": "cards"
         },
-        "cells": []
+        "kind": "bool",
+        "name": "deck"
       },
       {
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "ordered": true,
+          "row": "cards"
+        },
+        "kind": "bool",
+        "name": "hand"
+      },
+      {
+        "cells": [],
+        "kind": "int",
         "name": "turns",
-        "kind": "int",
-        "phase": {},
-        "cells": []
+        "phase": {}
       }
     ]
   },
-  "patterns": [
-    {
-      "name": "capture",
-      "kind": "int",
-      "symbols": [
+  "views": {
+    "layouts": [],
+    "seatControl": {
+      "maxPitch": 1.2,
+      "minPitch": -0.35,
+      "yawReference": "World"
+    },
+    "seatRig": {
+      "name": "table-view",
+      "operations": [
         {
-          "name": "through",
-          "min": 2,
-          "max": 2
+          "$type": "orbit",
+          "distance": 16,
+          "pitch": 0.6,
+          "pivotOffset": [
+            0,
+            0,
+            0
+          ],
+          "yaw": 0
         },
         {
-          "name": "until",
-          "min": 1,
-          "max": 1
+          "$type": "lookAt",
+          "subject": {
+            "$type": "reference"
+          },
+          "targetOffset": [
+            0,
+            0,
+            0
+          ],
+          "worldAxes": true
+        },
+        {
+          "$type": "fov",
+          "fieldOfViewRadians": 0.96
         }
       ],
-      "pattern": {
-        "$type": "sequence",
-        "items": [
-          {
-            "$type": "plus",
-            "item": {
-              "$type": "symbol",
-              "name": "through"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "until"
-          }
-        ]
-      }
+      "version": "puck.camera.v1"
     }
-  ]
+  }
 }

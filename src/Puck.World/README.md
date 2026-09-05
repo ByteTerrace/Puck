@@ -410,6 +410,15 @@ placements are the garden's proof fixture — see the
 for the mechanics and the [schema reference](../Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs)
 for the authored facet.
 
+Each garden game — chess, poker, dominoes, billiards, bowling, tic-tac-toe —
+lives in its own file under `Assets/worlds/games/`, imported by the garden's
+`puck.world.json` (`WorldDefinition.Imports`; see the
+[`puck-world` skill's documents reference](../../.claude/skills/puck-world/references/documents.md#document-composition-basis-and-imports)).
+The shared substrate — channels, kits, population capacity, the tabletop
+placement, spawn points, the island, hud/views, and everything no game's own
+content touches — stays in `puck.world.json` itself; `world.imports` reads the
+resolved stack back.
+
 A kit carrying a `carry` facet may pick up another kit's rigid body:
 `body.carry <carrier> <target>` begins it (within an authored reach and mass
 ceiling, both scaling with the carrier's own live `Scale`), `body.release
@@ -531,8 +540,8 @@ own code winning the write, not the capturing piece's.
 
 The garden also carries a hidden-hand poker table, state only — no card
 bodies — beside the chess set: a `cards` token domain (52 identities, `rank`
-and `suit` attribute rows, each keeping `keysFrom: cards` so a hidden card's
-value inherits its owning zone's own visibility — see below) with a
+and `suit` attribute rows, each declaring a `keysOf: cards` domain so a hidden
+card's value inherits its owning zone's own visibility — see below) with a
 `deck`/`hand1`/`hand2`/`community` zone family, a `cardStream` streamDraw
 site, a plain int `pokerTurn` (0 = deal, 1 = bet — not the `phase` trait; a
 guarded row costs the same per-tick budget as any other transform-touched
@@ -561,7 +570,8 @@ correct against a sorted or order-independent word respectively, reachable via
 `WorldRuleWorkBudget.TransformCost` prices every `transformState`
 effect — a `sortKeyed`, a `transfer`, a `setRay` alike — against the WHOLE
 document's declared cell storage (`suit` and `rank`'s privacy-required
-`keysFrom` each add a full topology-sized share to that storage on their own),
+`keysOf` domain declares no capacity of its own, so each still adds a full
+4096-cell share to that storage),
 so the deal's three transfers plus the two sorts are a real, non-trivial cost
 alongside chess's and the rigid facets' own rules — consult `world.budget`
 for the live per-tick tally rather than a fraction quoted here. Trip/quad/
@@ -575,7 +585,7 @@ other seat on success — a real turn order, not a free-for-all. Hidden cards
 are placeholders through `rank`/`suit`'s own public, `Hidden: Placeholder`
 visibility: each cell resolves through its OWNING zone's own visibility
 (`WorldStateDisclosure.Observer.CanRead`'s nested zones-by-domain lookup,
-which is *why* `keysFrom` cannot be dropped to save budget on either row) —
+which is *why* the `keysOf` domain cannot be dropped to save budget on either row) —
 `deck` is authority-only and `hand1`/`hand2` are each their own seat until a
 rule (`poker-showdown-reveal`) writes the other seat's token into
 `audience1`/`audience2`, the same `readersFrom` widening the tabletop's own
@@ -588,6 +598,27 @@ which is why a hand never authors its own `Placeholder` policy. `world.observe
 reference](../../.claude/skills/puck-world/references/console.md)) is the
 read-back that lets one session inspect both seats' disclosures without
 submitting as either.
+
+The garden also carries a 4x4x4 tic-tac-toe cube (Qubic), state only — the
+`Box`-topology worked example the schema's own discrete-boards section names.
+`tttCube` is a `Box` `state.lattices` topology (width/depth/layers all 4,
+64 cells); `tttBoard` is a plain `cellsOf: tttCube` int row (0 empty, 1/2 the
+two marks). A move is two console writes plus a request bump —
+`world.state.cell.set tttMoveCell $value <0..63>` then
+`world.state.cell.set tttMoveRequest $value 1 add` — resolved by
+`ttt-place-mark` (gated on the cell naming an empty board cell and no winner
+yet; `$cell:tttMoveCell:$value` is the dynamic-key indirection that turns the
+authored cell index into `tttBoard`'s own write address), which places the
+mark, advances `tttMoveCount`/`tttBoardVersion`, and toggles `tttActive`.
+`ttt-reject-out-of-range`/`ttt-reject-illegal` resync `tttMoveApplied` without
+touching the board when the request names an out-of-bounds or already-occupied
+cell, so a bad request never sticks. `ttt-check-win` (gated on
+`tttBoardVersion` having advanced) folds all 76 four-in-a-row lines — each a
+literal 64-bit cell mask, `(occupancyMask & lineMask) == lineMask` — through
+eight-line chunks (the 64-token expression ceiling bounds how many lines one
+expression ORs together) into `tttWinner` (0 none, 1 X, 2 O, 3 draw at 64
+moves). `world.state tttBoard`/`tttWinner` is the read-back; there is no
+dedicated verb, since the generic one already answers it.
 
 World-space creation text uses the document's optional `text` catalog. Every
 font row has a stable name, a path relative to the world document, a

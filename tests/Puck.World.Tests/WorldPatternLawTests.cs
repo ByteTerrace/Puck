@@ -10,7 +10,7 @@ namespace Puck.World.Tests;
 public sealed class WorldPatternLawTests {
     [Fact]
     public void ABoardRayIsAWordAndAFlankIsARegularPattern() {
-        var board = new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0", 1), Cell("1", 2), Cell("2", 2), Cell("3", 1)], Board: new("map"));
+        var board = new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0", 1), Cell("1", 2), Cell("2", 2), Cell("3", 1)], Domain: new WorldStateDomain.CellsOf("map"));
         var definition = Document([board, Slot("flank"), Slot("south"), Slot("narrow")],
             [Bracket("bracket"), Bracket("tight", true)],
             [
@@ -37,10 +37,10 @@ public sealed class WorldPatternLawTests {
     public void PrefixAndEveryDirectionFacetsAnswerFlipCountsAndFlankMasks() {
         // Row 0 of the 4x4 grid reads 1 2 2 1 eastward from cell 0, so the flank pattern accepts the 3-cell
         // prefix and no other ray from cell 0 has a them+ run closed by me.
-        var board = new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0", 1), Cell("1", 2), Cell("2", 2), Cell("3", 1)], Board: new("map"));
+        var board = new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0", 1), Cell("1", 2), Cell("2", 2), Cell("3", 1)], Domain: new WorldStateDomain.CellsOf("map"));
         var definition = Document([board, Slot("flips"), Slot("mask"), Slot("count"), Slot("handPrefix"),
-                new(Name("hand"), CellKind.Int, KeysFrom: "cards", Cells: [Cell("c1", 2), Cell("c2", 2), Cell("c3", 1), Cell("c4", 2)]),
-                new(Name("cards"), CellKind.Int, Capacity: 4, Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4")], Tokens: new())],
+                new(Name("hand"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards")), Cells: [Cell("c1", 2), Cell("c2", 2), Cell("c3", 1), Cell("c4", 2)]),
+                new(Name("cards"), CellKind.Int, Capacity: 4, Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4")])],
             [Bracket("bracket")],
             [
                 Mirror("flips", "$match:bracket:board:E:prefix", "0"),
@@ -71,7 +71,7 @@ public sealed class WorldPatternLawTests {
         // same value a fixed "first cell not equal to 2" ray query would answer, generalized to any authored run
         // shape (here "them", not merely "not the board's empty sentinel"). Westward off the edge, the ray is empty
         // and the whole (empty) word is still accepted, so there is no blocker: both facets read -1.
-        var board = new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0", 1), Cell("1", 2), Cell("2", 2), Cell("3", 1)], Board: new("map"));
+        var board = new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0", 1), Cell("1", 2), Cell("2", 2), Cell("3", 1)], Domain: new WorldStateDomain.CellsOf("map"));
         var runOfThem = new WorldPatternRow(Name("runOfThem"), CellKind.Int, Symbols: [new(Name("them"), 2, 2)], Pattern: new WorldPatternNode.Star(new WorldPatternNode.Symbol("them")));
         var definition = Document([board, Slot("blockerCell"), Slot("blockerDistance"), Slot("edgeCell"), Slot("edgeDistance")], [runOfThem], [
             Mirror("blockerCell", "$match:runOfThem:board:E:cell", "0"),
@@ -171,8 +171,8 @@ public sealed class WorldPatternLawTests {
         Assert.Contains("attribute keys", flagReason);
         // An attribute keyed over another token domain never sorts silently as zeroes.
         var foreign = unsorted with { StateRaw = unsorted.StateRaw! with { World = [.. unsorted.State,
-            new(Name("seats"), CellKind.Int, Capacity: 2, Cells: [Cell("s1"), Cell("s2")], Tokens: new()),
-            new(Name("score"), CellKind.Int, KeysFrom: "seats", Cells: [Cell("s1", 3), Cell("s2", 1)])] } };
+            new(Name("seats"), CellKind.Int, Capacity: 2, Cells: [Cell("s1"), Cell("s2")]),
+            new(Name("score"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("seats")), Cells: [Cell("s1", 3), Cell("s2", 1)])] } };
         Assert.False(WorldStateTransforms.TryApply(foreign, new WorldStateTransform.SortZone("hand", By: [new("score")]), WorldPrincipal.World, 0, "test", out _, out var domainReason));
         Assert.Contains("token domain 'cards'", domainReason);
         Assert.False(WorldDefinitionValidator.TryValidateLocally(foreign with { Rules = [new WorldRule(Name("bad"), [new ActionEffect.TransformState(new WorldStateTransform.SortZone("hand", By: [new("score")]))])] }, out var compileReason));
@@ -285,16 +285,16 @@ public sealed class WorldPatternLawTests {
             Symbols: Enumerable.Range(5, 5).Select(i => new WorldPatternSymbol(Name($"r{i}"), i, i)).ToArray(),
             Pattern: new WorldPatternNode.Sequence([.. Enumerable.Range(5, 5).Select(i => (WorldPatternNode)new WorldPatternNode.Symbol($"r{i}"))]));
         return Document([
-            new(Name("cards"), CellKind.Int, Capacity: 5, Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4"), Cell("c5")], Tokens: new()),
-            new(Name("rank"), CellKind.Int, KeysFrom: "cards", Cells: [Cell("c1", 9), Cell("c2", 5), Cell("c3", 7), Cell("c4", 6), Cell("c5", 8)]),
-            new(Name("suit"), CellKind.Int, KeysFrom: "cards", Cells: [Cell("c1", 1), Cell("c2", 2), Cell("c3", 1), Cell("c4", 2), Cell("c5", 1)]),
-            new(Name("hand"), CellKind.Bool, Capacity: 5, Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4"), Cell("c5")], Zone: new("cards", Ordered: true)),
+            new(Name("cards"), CellKind.Int, Capacity: 5, Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4"), Cell("c5")]),
+            new(Name("rank"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards")), Cells: [Cell("c1", 9), Cell("c2", 5), Cell("c3", 7), Cell("c4", 6), Cell("c5", 8)]),
+            new(Name("suit"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards")), Cells: [Cell("c1", 1), Cell("c2", 2), Cell("c3", 1), Cell("c4", 2), Cell("c5", 1)]),
+            new(Name("hand"), CellKind.Bool, Capacity: 5, Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4"), Cell("c5")], Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true)),
             Slot("straight"),
         ], [straight], [Mirror("straight", "$match:straight:hand")]);
     }
     private static WorldRule Mirror(string target, string operand, string? key = null) => new(Name(target + "-mirror"), [new ActionEffect.SetState(State: target, FromState: operand, FromKey: key)]);
     private static WorldDefinition Document(WorldStateRow[] rows, WorldPatternRow[] patterns, WorldRule[] rules) => Fixtures.BuildDocument() with {
-        StateRaw = new(World: rows, Lattices: [new WorldStateLatticeTopology("map", new DocumentVector3(0, 0, 0), 1, 4, 4, Kind: WorldTopologyKind.Grid)]),
+        StateRaw = new(World: rows, Lattices: [new WorldStateLatticeTopology.Grid("map", new DocumentVector3(0, 0, 0), 1, 4, 4)]),
         PatternsRaw = patterns,
         Rules = rules,
     };

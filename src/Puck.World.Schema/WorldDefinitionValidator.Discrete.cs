@@ -14,19 +14,18 @@ public static partial class WorldDefinitionValidator {
                 errors.Add("state.lattices requires unique valid topology names.");
                 continue;
             }
+            // A physical field's case type structurally has no wrap/radius/directions/elementAliases property to
+            // author in the first place, so there is nothing left to check for it here.
             if (topology.Kind != WorldTopologyKind.Field && !WorldTopologyCompilation.TryValidate(topology, out var reason)) {
                 errors.Add($"state.lattices '{topology.Name}': {reason}.");
-            }
-            if (topology.Kind == WorldTopologyKind.Field && (topology.Wrap != WorldTopologyWrap.None || topology.Radius != 0 || topology.Directions is not null || topology.ElementAliases is not null)) {
-                errors.Add($"state.lattices '{topology.Name}': physical fields do not admit discrete wrapping, radius, a direction vocabulary, or element aliases.");
             }
         }
         var totalCells = 0L;
         foreach (var row in definition.State ?? []) {
-            if (row?.Board is not { } board) {
+            if (row is null || row.EffectiveDomain is not WorldStateDomain.CellsOf board || row.Field is not null) {
                 continue;
             }
-            if (row.Kind is not (CellKind.Int or CellKind.Bool) || row.Lattice is not null || row.Draw is not null ||
+            if (row.Kind is not (CellKind.Int or CellKind.Bool) || row.Draw is not null ||
                 row.Advance is not null || row.Cycle is not null || row.Dynamics is not null || row.Evicts || row.GatesDrive) {
                 errors.Add($"state row '{row.Name}': board requires plain integer or boolean cells without other storage or time traits.");
             }
@@ -36,7 +35,7 @@ public static partial class WorldDefinitionValidator {
             }
             var compiled = WorldTopologyCompilation.Find(definition.StateRaw, board.Topology);
             if (compiled is null) {
-                errors.Add($"state row '{row.Name}': board.topology '{board.Topology}' names no valid discrete topology.");
+                errors.Add($"state row '{row.Name}': domain.topology '{board.Topology}' names no valid discrete topology.");
                 continue;
             }
             totalCells += compiled.CellCount;
@@ -59,24 +58,25 @@ public static partial class WorldDefinitionValidator {
             if (row is null) {
                 continue;
             }
-            var traits = (row.Board is null ? 0 : 1) + (row.Tokens is null ? 0 : 1) + (row.Zone is null ? 0 : 1) + (row.Phase is null ? 0 : 1) + (row.KeysFrom is null ? 0 : 1);
-            if (traits > 1 || (traits > 0 && (row.Lattice is not null || row.Draw is not null || row.Advance is not null || row.Dynamics is not null || row.Cycle is not null || row.Evicts || row.GatesDrive))) {
+            // A physical-field row (CellsOf domain + a Field trait) legitimately carries a draw fill inside its own
+            // paint (validated separately in WorldDefinitionValidator.State.cs); every OTHER discrete domain (KeysOf,
+            // or CellsOf with no Field trait — a plain board) admits none of these continuous or draw traits.
+            var domainTraits = (row.Domain is WorldStateDomain.CellsOf or WorldStateDomain.KeysOf ? 1 : 0) + (row.Phase is null ? 0 : 1);
+            var isPhysicalField = ((row.Domain is WorldStateDomain.CellsOf) && (row.Field is not null));
+            if (domainTraits > 1 || (domainTraits > 0 && !isPhysicalField && (row.Field is not null || row.Draw is not null || row.Advance is not null || row.Dynamics is not null || row.Cycle is not null || row.Evicts || row.GatesDrive))) {
                 errors.Add($"state row '{row.Name}': discrete storage traits are mutually exclusive and cannot carry continuous or draw traits.");
             }
-            if (row.Tokens is { } tokens && (tokens.Capacity < 1 || tokens.Capacity > WorldTopologyCompilation.MaxCells)) {
-                errors.Add($"state row '{row.Name}': tokens.capacity must be 1..{WorldTopologyCompilation.MaxCells}.");
-            }
-            var domainName = row.KeysFrom ?? row.Zone?.Tokens;
+            var domainName = (row.EffectiveDomain is WorldStateDomain.KeysOf keysOf ? keysOf.Row.Value : null);
             if (row.ValuesFrom is { } topologyName) {
                 var topology = WorldTopologyCompilation.Find(definition.StateRaw, topologyName);
-                if (row.KeysFrom is null || row.Kind != CellKind.Int || topology is null ||
+                if (domainName is null || row.Kind != CellKind.Int || topology is null ||
                     (row.Cells ?? []).Any(c => c is not null && (ulong)c.Value >= (ulong)topology.CellCount)) {
                     errors.Add($"state row '{row.Name}': valuesFrom requires token-keyed integer positions inside a discrete topology.");
                 }
             }
             if (domainName is not null) {
                 var domain = WorldDefinitionRows.FindStateRow(definition.State, domainName);
-                if (domain?.Tokens is null) {
+                if (domain is null || domain.EffectiveDomain is not WorldStateDomain.Keys) {
                     errors.Add($"state row '{row.Name}': '{domainName}' names no token domain.");
                 } else {
                     var keys = new HashSet<WorldCellName>((domain.Cells ?? []).Where(c => c is not null).Select(c => c.Key));
@@ -87,36 +87,17 @@ public static partial class WorldDefinitionValidator {
                     }
                 }
             }
-            if (row.Zone is not null && (row.Kind != CellKind.Bool || (row.Cells ?? []).Any(c => c is not null && c.Value != 1))) {
-                errors.Add($"state row '{row.Name}': zones contain boolean membership cells whose value is true.");
+            if (row.EffectiveDomain is WorldStateDomain.KeysOf { Ordered: true } && (row.Kind != CellKind.Bool || (row.Cells ?? []).Any(c => c is not null && c.Value != 1))) {
+                errors.Add($"state row '{row.Name}': an ordered keysOf (pile/zone) row contains boolean membership cells whose value is true.");
             }
             if (row.Phase is { } phase) {
                 ValidatePhase(row, phase, errors);
             }
         }
-        foreach (var domain in (definition.State ?? []).Where(r => r?.Tokens is not null)) {
-            var zones = (definition.State ?? []).Where(r => r?.Zone?.Tokens == domain.Name.Value).ToArray();
-            if (zones.Length == 0) {
-                continue;
-            }
-            var members = new HashSet<WorldCellName>();
-            foreach (var zone in zones) {
-                foreach (var cell in zone.Cells ?? []) {
-                    if (cell is not null && !members.Add(cell.Key)) {
-                        errors.Add($"token '{domain.Name}.{cell.Key}' belongs to more than one zone.");
-                    }
-                }
-            }
-            foreach (var token in domain.Cells ?? []) {
-                if (token is not null && !members.Contains(token.Key)) {
-                    errors.Add($"token '{domain.Name}.{token.Key}' belongs to no zone.");
-                }
-            }
-        }
     }
 
     private static void ValidatePhase(WorldStateRow row, WorldStatePhase phase, List<string> errors) {
-        if (row.Kind != CellKind.Int || row.Cells is { Count: > 0 } || row.Capacity is not null || phase.Sequence < 0) {
+        if (row.Kind != CellKind.Int || row.EffectiveDomain is WorldStateDomain.Slot || row.Cells is { Count: > 0 } || row.Capacity is not null || phase.Sequence < 0) {
             errors.Add($"state row '{row.Name}': phase requires an integer row without cells/capacity and a nonnegative sequence.");
         }
     }

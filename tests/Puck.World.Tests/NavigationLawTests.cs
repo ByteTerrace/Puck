@@ -79,7 +79,7 @@ public sealed partial class NavigationLawTests {
         MaxPathNodes: 16
     );
 
-    private static WorldStateLatticeTopology MediumTopology() => new(
+    private static WorldStateLatticeTopology.Field MediumTopology() => new(
         Name: "water-space",
         Origin: new DocumentVector3(x: -0.5f, y: -0.5f, z: -0.5f),
         CellSize: 1f,

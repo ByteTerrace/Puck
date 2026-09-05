@@ -3798,7 +3798,7 @@
       "additionalProperties": false
     },
     "ActionEffectPushState": {
-      "description": "World scope only: pushes one numeric value into a history row\u0027s ring (see WorldStateHistory), the same source spellings as SetState minus text: exactly one of Value, FromState, or Expression.",
+      "description": "World scope only: pushes one numeric value into a history row\u0027s ring (see Ring), the same source spellings as SetState minus text: exactly one of Value, FromState, or Expression.",
       "properties": {
         "$type": {
           "const": "pushState"
@@ -4081,47 +4081,6 @@
       ],
       "additionalProperties": false
     },
-    "WorldStateTransformMoveToken": {
-      "description": "Moves a token along an affordable route, debiting movement points in the same candidate.",
-      "properties": {
-        "$type": {
-          "const": "moveToken"
-        },
-        "positions": {
-          "description": "The token-keyed position row; valuesFrom names the terrain topology.",
-          "type": "string"
-        },
-        "token": {
-          "description": "The stable token key.",
-          "type": "string"
-        },
-        "destination": {
-          "description": "The destination cell ordinal.",
-          "type": "integer"
-        },
-        "terrain": {
-          "description": "The board row containing nonnegative entry costs; negative values are impassable.",
-          "type": "string"
-        },
-        "allowance": {
-          "description": "The token-keyed movement-points row.",
-          "type": "string"
-        },
-        "maxVisits": {
-          "description": "The route search\u0027s settled-node bound.",
-          "type": "integer"
-        }
-      },
-      "required": [
-        "positions",
-        "token",
-        "destination",
-        "terrain",
-        "allowance",
-        "maxVisits"
-      ],
-      "additionalProperties": false
-    },
     "WorldStateTransformObserve": {
       "description": "Refreshes a knowledge board from its declared source and visibility mask; authority only.",
       "properties": {
@@ -4164,9 +4123,6 @@
         },
         {
           "$ref": "#/$defs/WorldStateTransformPush"
-        },
-        {
-          "$ref": "#/$defs/WorldStateTransformMoveToken"
         },
         {
           "$ref": "#/$defs/WorldStateTransformObserve"
@@ -6536,6 +6492,60 @@
       "required": [
         "name",
         "kind"
+      ],
+      "additionalProperties": false
+    },
+    "WorldTopologyDirection": {
+      "description": "One authored direction of a discrete WorldStateLatticeTopology: the (X, Y, Z) cell step a neighbour walk, ray, or leaper offset takes, and the case-sensitive token a rule or $board:/$match: channel names it by. X/Y are the topology\u0027s own planar axes (a Grid\u0027s column/row, a Hex\u0027s q/r); Z is a Box\u0027s layer step and must be zero on every other kind.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "name": {
+          "description": "The direction\u0027s token \u2014 dot-free, distinct within the topology, matched case-sensitively.",
+          "type": "string"
+        },
+        "x": {
+          "description": "The signed planar column step.",
+          "type": "integer"
+        },
+        "y": {
+          "description": "The signed planar row step.",
+          "type": "integer"
+        },
+        "z": {
+          "description": "The signed layer step; zero except on a Box.",
+          "type": "integer",
+          "default": 0
+        }
+      },
+      "required": [
+        "name",
+        "x",
+        "y"
+      ],
+      "additionalProperties": false
+    },
+    "WorldTopologyElementAlias": {
+      "description": "A friendlier name for one point-group element, resolved by Element alongside its canonical signed-axis spelling (ElementName always answers the canonical form).",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "name": {
+          "description": "The alias token a rule or console verb may use instead of Element.",
+          "type": "string"
+        },
+        "element": {
+          "description": "The canonical element name (a ElementName value) this alias resolves to.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "element"
       ],
       "additionalProperties": false
     },

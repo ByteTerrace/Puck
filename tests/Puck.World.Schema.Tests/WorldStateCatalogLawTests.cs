@@ -184,7 +184,8 @@ public sealed class WorldStateCatalogLawTests {
             new WorldStateRow(
                 Name: WorldCellName.Parse(candidate: "heat"),
                 Kind: CellKind.Fixed,
-                Lattice: new WorldStateLatticeTrait(Topology: "ground")
+                Domain: new WorldStateDomain.CellsOf(Topology: "ground"),
+                Field: new WorldStateFieldTrait()
             ),
             new WorldStateRow(Name: WorldCellName.Parse(candidate: "open"), Kind: CellKind.Bool),
         ],

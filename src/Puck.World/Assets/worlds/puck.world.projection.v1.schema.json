@@ -11757,7 +11757,7 @@
                       "additionalProperties": false
                     },
                     {
-                      "description": "World scope only: pushes one numeric value into a history row\u0027s ring (see WorldStateHistory), the same source spellings as SetState minus text: exactly one of Value, FromState, or Expression.",
+                      "description": "World scope only: pushes one numeric value into a history row\u0027s ring (see Ring), the same source spellings as SetState minus text: exactly one of Value, FromState, or Expression.",
                       "properties": {
                         "$type": {
                           "const": "pushState"
@@ -12056,47 +12056,6 @@
                               "required": [
                                 "row",
                                 "value"
-                              ],
-                              "additionalProperties": false
-                            },
-                            {
-                              "description": "Moves a token along an affordable route, debiting movement points in the same candidate.",
-                              "properties": {
-                                "$type": {
-                                  "const": "moveToken"
-                                },
-                                "positions": {
-                                  "description": "The token-keyed position row; valuesFrom names the terrain topology.",
-                                  "type": "string"
-                                },
-                                "token": {
-                                  "description": "The stable token key.",
-                                  "type": "string"
-                                },
-                                "destination": {
-                                  "description": "The destination cell ordinal.",
-                                  "type": "integer"
-                                },
-                                "terrain": {
-                                  "description": "The board row containing nonnegative entry costs; negative values are impassable.",
-                                  "type": "string"
-                                },
-                                "allowance": {
-                                  "description": "The token-keyed movement-points row.",
-                                  "type": "string"
-                                },
-                                "maxVisits": {
-                                  "description": "The route search\u0027s settled-node bound.",
-                                  "type": "integer"
-                                }
-                              },
-                              "required": [
-                                "positions",
-                                "token",
-                                "destination",
-                                "terrain",
-                                "allowance",
-                                "maxVisits"
                               ],
                               "additionalProperties": false
                             },
@@ -12740,47 +12699,6 @@
                                         "required": [
                                           "row",
                                           "value"
-                                        ],
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Moves a token along an affordable route, debiting movement points in the same candidate.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "moveToken"
-                                          },
-                                          "positions": {
-                                            "description": "The token-keyed position row; valuesFrom names the terrain topology.",
-                                            "type": "string"
-                                          },
-                                          "token": {
-                                            "description": "The stable token key.",
-                                            "type": "string"
-                                          },
-                                          "destination": {
-                                            "description": "The destination cell ordinal.",
-                                            "type": "integer"
-                                          },
-                                          "terrain": {
-                                            "description": "The board row containing nonnegative entry costs; negative values are impassable.",
-                                            "type": "string"
-                                          },
-                                          "allowance": {
-                                            "description": "The token-keyed movement-points row.",
-                                            "type": "string"
-                                          },
-                                          "maxVisits": {
-                                            "description": "The route search\u0027s settled-node bound.",
-                                            "type": "integer"
-                                          }
-                                        },
-                                        "required": [
-                                          "positions",
-                                          "token",
-                                          "destination",
-                                          "terrain",
-                                          "allowance",
-                                          "maxVisits"
                                         ],
                                         "additionalProperties": false
                                       },

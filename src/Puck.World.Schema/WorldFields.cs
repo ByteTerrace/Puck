@@ -51,7 +51,7 @@ public sealed record WorldFieldsSection(
                 return false;
             }
 
-            if (row.Lattice is not { } trait) {
+            if (row.Field is not { } trait) {
                 continue;
             }
 
@@ -128,7 +128,7 @@ public sealed record WorldFieldsSection(
         var paint = new List<WorldLatticeFill>();
 
         foreach (var row in (state?.World ?? [])) {
-            if (row.Lattice is not { } trait) {
+            if (row.Field is not { } trait) {
                 continue;
             }
 
@@ -185,22 +185,22 @@ public sealed record WorldFieldsSection(
         foreach (var row in composite.Fields) {
             rows.Add(item: new WorldStateRow(
                 Kind: CellKind.Fixed,
-                Lattice: new WorldStateLatticeTrait(
+                Domain: new WorldStateDomain.CellsOf(Topology: DefaultTopologyName),
+                Field: new WorldStateFieldTrait(
                     Color: row.Color,
                     HeightScale: row.HeightScale,
                     Initial: row.Initial,
                     Max: row.Max,
                     Medium: (row.Medium ? new WorldLatticeMedium() : null),
                     Min: row.Min,
-                    Paint: null,
-                    Topology: DefaultTopologyName
+                    Paint: null
                 ),
                 Name: WorldCellName.Parse(candidate: row.Name)
             ));
         }
 
         return new WorldStateSection(
-            Lattices: [new WorldStateLatticeTopology(
+            Lattices: [new WorldStateLatticeTopology.Field(
                 CellSize: composite.Lattice.CellSize,
                 Depth: composite.Lattice.Depth,
                 Layers: composite.Lattice.Layers,
@@ -298,55 +298,147 @@ public sealed record WorldFieldsSection(
         return true;
     }
 }
-/// <summary>One <c>state.lattices</c> topology -- the footprint, cadence, and reactions every lattice-shaped state
-/// row referencing it shares. At most one physical field topology and bounded discrete topologies may coexist.</summary>
+/// <summary>Shared shape for the four discrete (non-<see cref="WorldStateLatticeTopology.Field"/>) topology cases —
+/// their own neighbour/element vocabulary, so a validator or reader that must accept any of them (
+/// <c>WorldTopologyCompilation.TryValidateDirections</c>/<c>TryValidateElementAliases</c>) needs no type-pattern
+/// switch enumerating every discrete kind.</summary>
+public interface IDiscreteLatticeTopology {
+    /// <summary>The topology's own direction vocabulary — its neighbour steps and the compass/element names a rule,
+    /// <c>$board:</c>/<c>$match:</c> token, or leaper reach spells them with. <see langword="null"/> (the unauthored
+    /// default) compiles to exactly the fixed set every <see cref="WorldTopologyKind"/> carried before this field
+    /// existed — Grid's eight compass points, Hex's six, Box's 26, Ring's forward/backward. An authored list replaces
+    /// that default WHOLESALE: it becomes the topology's only directions, its only compass names, and the only
+    /// vocabulary <see cref="CompiledWorldTopology.Direction"/> resolves — the seam a 4-connected grid (orthogonal
+    /// steps only) or a custom leaper reach declares without inventing a parallel mechanism.</summary>
+    IReadOnlyList<WorldTopologyDirection>? Directions { get; }
+    /// <summary>Friendlier names for this topology's point-group elements (<c>"rot90"</c> for whatever signed-axis
+    /// permutation a square grid's quarter turn spells) — <see cref="CompiledWorldTopology.Element"/> resolves an
+    /// alias alongside the canonical name; <see cref="CompiledWorldTopology.ElementName"/> always answers the
+    /// canonical spelling.</summary>
+    IReadOnlyList<WorldTopologyElementAlias>? ElementAliases { get; }
+}
+
+/// <summary>One <c>state.lattices</c> topology -- the footprint every lattice-shaped state row referencing it
+/// shares. At most one physical field topology and bounded discrete topologies may coexist. A closed union over
+/// <see cref="WorldTopologyKind"/>, one case per kind, each carrying only its own parameters — <see cref="Hex.Radius"/>,
+/// <see cref="Grid.Band"/>, and <see cref="Box.LayerHeight"/> exist nowhere else, and only <see cref="Field"/> carries
+/// <see cref="Field.Reactions"/>. <see cref="Kind"/> is never authored directly; it is the discriminant every case's
+/// own JSON <c>$type</c> already carries, exposed as a property because so much of the compiler still branches on it.</summary>
 /// <param name="Name">The topology's name -- what a row's <c>lattice.topology</c> references.</param>
 /// <param name="Origin">The minimum corner, world units.</param>
 /// <param name="CellSize">The cubic cell edge, world units.</param>
-/// <param name="Width">Cells along +X.</param>
-/// <param name="Depth">Cells along +Z.</param>
-/// <param name="Layers">Cells along +Y -- 1 is a ground lattice.</param>
-/// <param name="StepEveryTicks">Simulation ticks between reaction steps.</param>
-/// <param name="Reactions">The per-step reactions over a physical field topology, applied in document order.</param>
-/// <param name="Kind">Physical fields or a discrete grid, ring, or axial hexagon.</param>
-/// <param name="Wrap">Wrapped axes for a discrete grid; rings always wrap.</param>
-/// <param name="Radius">The axial hexagon radius; zero for other kinds.</param>
-/// <param name="Band">For a <see cref="WorldTopologyKind.Grid"/>, the vertical half-extent about the origin's Y a
-/// position must lie within to resolve to a cell (<c>cellOf</c>); 0 resolves any height, so a piece on the floor
-/// beneath a table still reads as on its square.</param>
-/// <param name="LayerHeight">For a <see cref="WorldTopologyKind.Box"/>, the world-space height of one layer, so a
-/// position's Y above the origin resolves to a layer the way X and Z resolve to a column; positive, and only on a
-/// box.</param>
-/// <param name="Directions">The topology's own direction vocabulary — its neighbour steps and the compass/element
-/// names a rule, <c>$board:</c>/<c>$match:</c> token, or leaper reach spells them with. <see langword="null"/> (the
-/// unauthored default) compiles to exactly the fixed set every <see cref="WorldTopologyKind"/> carried before this
-/// field existed — Grid's eight compass points, Hex's six, Box's 26, Ring's forward/backward — so no shipped world's
-/// behavior moves. An authored list replaces that default WHOLESALE: it becomes the topology's only directions, its
-/// only compass names, and the only vocabulary <see cref="CompiledWorldTopology.Direction"/> resolves — the seam a
-/// 4-connected grid (orthogonal steps only) or a custom leaper reach declares without inventing a parallel
-/// mechanism.</param>
-/// <param name="ElementAliases">Friendlier names for this topology's point-group elements (<c>"rot90"</c> for
-/// whatever signed-axis permutation a square grid's quarter turn spells) — <see cref="CompiledWorldTopology.Element"/>
-/// resolves an alias alongside the canonical name; <see cref="CompiledWorldTopology.ElementName"/> always answers
-/// the canonical spelling.</param>
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+[JsonDerivedType(typeof(Field), typeDiscriminator: "field")]
+[JsonDerivedType(typeof(Grid), typeDiscriminator: "grid")]
+[JsonDerivedType(typeof(Ring), typeDiscriminator: "ring")]
+[JsonDerivedType(typeof(Hex), typeDiscriminator: "hex")]
+[JsonDerivedType(typeof(Box), typeDiscriminator: "box")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldStateLatticeTopology(
-    string Name,
-    DocumentVector3 Origin,
-    float CellSize,
-    int Width,
-    int Depth,
-    int Layers = 1,
-    int StepEveryTicks = 8,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldReaction>? Reactions = null,
-    WorldTopologyKind Kind = WorldTopologyKind.Field,
-    WorldTopologyWrap Wrap = WorldTopologyWrap.None,
-    int Radius = 0,
-    float Band = 0f,
-    float LayerHeight = 0f,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldTopologyDirection>? Directions = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldTopologyElementAlias>? ElementAliases = null
-);
+public abstract record WorldStateLatticeTopology(string Name, DocumentVector3 Origin, float CellSize) {
+    /// <summary>Physical fields or a discrete grid, ring, hex, or box — the case's own kind, never authored.</summary>
+    [JsonIgnore]
+    public abstract WorldTopologyKind Kind { get; }
+
+    /// <summary>A physical scalar field over the lattice's footprint, evolved by reactions each
+    /// <paramref name="StepEveryTicks"/>.</summary>
+    /// <param name="Name">The topology's name.</param>
+    /// <param name="Origin">The minimum corner, world units.</param>
+    /// <param name="CellSize">The cubic cell edge, world units.</param>
+    /// <param name="Width">Cells along +X.</param>
+    /// <param name="Depth">Cells along +Z.</param>
+    /// <param name="Layers">Cells along +Y -- 1 is a ground lattice.</param>
+    /// <param name="StepEveryTicks">Simulation ticks between reaction steps.</param>
+    /// <param name="Reactions">The per-step reactions, applied in document order.</param>
+    public sealed record Field(
+        string Name, DocumentVector3 Origin, float CellSize,
+        int Width, int Depth, int Layers = 1, int StepEveryTicks = 8,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldReaction>? Reactions = null
+    ) : WorldStateLatticeTopology(Name, Origin, CellSize) {
+        /// <inheritdoc/>
+        [JsonIgnore]
+        public override WorldTopologyKind Kind => WorldTopologyKind.Field;
+    }
+
+    /// <summary>A rectangular board, indexed by y times width plus x.</summary>
+    /// <param name="Name">The topology's name.</param>
+    /// <param name="Origin">The minimum corner, world units.</param>
+    /// <param name="CellSize">The cubic cell edge, world units.</param>
+    /// <param name="Width">Cells along +X.</param>
+    /// <param name="Depth">Cells along +Z.</param>
+    /// <param name="Wrap">Wrapped axes.</param>
+    /// <param name="Band">The vertical half-extent about the origin's Y a position must lie within to resolve to a
+    /// cell (<c>cellOf</c>); 0 resolves any height, so a piece on the floor beneath a table still reads as on its
+    /// square.</param>
+    /// <param name="Directions">See <see cref="IDiscreteLatticeTopology.Directions"/>.</param>
+    /// <param name="ElementAliases">See <see cref="IDiscreteLatticeTopology.ElementAliases"/>.</param>
+    public sealed record Grid(
+        string Name, DocumentVector3 Origin, float CellSize,
+        int Width, int Depth, WorldTopologyWrap Wrap = WorldTopologyWrap.None, float Band = 0f,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldTopologyDirection>? Directions = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldTopologyElementAlias>? ElementAliases = null
+    ) : WorldStateLatticeTopology(Name, Origin, CellSize), IDiscreteLatticeTopology {
+        /// <inheritdoc/>
+        [JsonIgnore]
+        public override WorldTopologyKind Kind => WorldTopologyKind.Grid;
+    }
+
+    /// <summary>A cyclic sequence, indexed from zero — always wraps.</summary>
+    /// <param name="Name">The topology's name.</param>
+    /// <param name="Origin">The minimum corner, world units.</param>
+    /// <param name="CellSize">The cubic cell edge, world units.</param>
+    /// <param name="Width">The cycle length.</param>
+    /// <param name="Directions">See <see cref="IDiscreteLatticeTopology.Directions"/>.</param>
+    /// <param name="ElementAliases">See <see cref="IDiscreteLatticeTopology.ElementAliases"/>.</param>
+    public sealed record Ring(
+        string Name, DocumentVector3 Origin, float CellSize, int Width,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldTopologyDirection>? Directions = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldTopologyElementAlias>? ElementAliases = null
+    ) : WorldStateLatticeTopology(Name, Origin, CellSize), IDiscreteLatticeTopology {
+        /// <inheritdoc/>
+        [JsonIgnore]
+        public override WorldTopologyKind Kind => WorldTopologyKind.Ring;
+    }
+
+    /// <summary>An axial hexagon, indexed in ascending r then q order.</summary>
+    /// <param name="Name">The topology's name.</param>
+    /// <param name="Origin">The minimum corner, world units.</param>
+    /// <param name="CellSize">The cubic cell edge, world units.</param>
+    /// <param name="Radius">The axial hexagon radius.</param>
+    /// <param name="Directions">See <see cref="IDiscreteLatticeTopology.Directions"/>.</param>
+    /// <param name="ElementAliases">See <see cref="IDiscreteLatticeTopology.ElementAliases"/>.</param>
+    public sealed record Hex(
+        string Name, DocumentVector3 Origin, float CellSize, int Radius,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldTopologyDirection>? Directions = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldTopologyElementAlias>? ElementAliases = null
+    ) : WorldStateLatticeTopology(Name, Origin, CellSize), IDiscreteLatticeTopology {
+        /// <inheritdoc/>
+        [JsonIgnore]
+        public override WorldTopologyKind Kind => WorldTopologyKind.Hex;
+    }
+
+    /// <summary>A box of width by layers by depth cells with the 26 space directions, indexed by (layer times depth
+    /// plus z) times width plus x.</summary>
+    /// <param name="Name">The topology's name.</param>
+    /// <param name="Origin">The minimum corner, world units.</param>
+    /// <param name="CellSize">The cubic cell edge, world units.</param>
+    /// <param name="Width">Cells along +X.</param>
+    /// <param name="Depth">Cells along +Z.</param>
+    /// <param name="Layers">Cells along +Y.</param>
+    /// <param name="LayerHeight">The world-space height of one layer, so a position's Y above the origin resolves to
+    /// a layer the way X and Z resolve to a column; positive.</param>
+    /// <param name="Directions">See <see cref="IDiscreteLatticeTopology.Directions"/>.</param>
+    /// <param name="ElementAliases">See <see cref="IDiscreteLatticeTopology.ElementAliases"/>.</param>
+    public sealed record Box(
+        string Name, DocumentVector3 Origin, float CellSize,
+        int Width, int Depth, int Layers, float LayerHeight,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldTopologyDirection>? Directions = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldTopologyElementAlias>? ElementAliases = null
+    ) : WorldStateLatticeTopology(Name, Origin, CellSize), IDiscreteLatticeTopology {
+        /// <inheritdoc/>
+        [JsonIgnore]
+        public override WorldTopologyKind Kind => WorldTopologyKind.Box;
+    }
+}
 /// <summary>One authored direction of a discrete <see cref="WorldStateLatticeTopology"/>: the (X, Y, Z) cell step a
 /// neighbour walk, ray, or leaper offset takes, and the case-sensitive token a rule or <c>$board:</c>/<c>$match:</c>
 /// channel names it by. <paramref name="X"/>/<paramref name="Y"/> are the topology's own planar axes (a Grid's
@@ -365,11 +457,12 @@ public sealed record WorldTopologyDirection(string Name, int X, int Y, int Z = 0
 /// alias resolves to.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldTopologyElementAlias(string Name, string Element);
-/// <summary>A state row's <c>lattice</c> trait -- the row holds one <see cref="CellKind.Fixed"/> scalar per cell of
-/// the named topology instead of slot/keyed cells. Values are authored DECIMAL (like every lattice quantity), not
-/// raw Q48.16 bits; a lattice row refuses slot/keyed members (<c>cells</c>, <c>capacity</c>, <c>advance</c>,
-/// <c>dynamics</c>, <c>draw</c> -- per-cell draws are the spatial-draw seam, refused until it lands).</summary>
-/// <param name="Topology">The <c>state.lattices</c> topology this row lies over.</param>
+/// <summary>A state row's <c>field</c> trait — carried only by a row whose <see cref="WorldStateRow.Domain"/> is
+/// <see cref="WorldStateDomain.CellsOf"/> over a <c>Field</c>-kind topology: the row holds one
+/// <see cref="CellKind.Fixed"/> scalar per cell of that topology instead of sparse board cells. Values are authored
+/// DECIMAL (like every lattice quantity), not raw Q48.16 bits; a field row refuses slot/keyed members (<c>cells</c>,
+/// <c>capacity</c>, <c>advance</c>, <c>dynamics</c>, <c>draw</c> -- per-cell draws are the spatial-draw seam, refused
+/// until it lands).</summary>
 /// <param name="Initial">The value every cell starts at before paint.</param>
 /// <param name="Min">The least value a cell holds.</param>
 /// <param name="Max">The greatest value a cell holds.</param>
@@ -385,8 +478,7 @@ public sealed record WorldTopologyElementAlias(string Name, string Element);
 /// <see cref="WorldReaction.Expose"/> resolve against — refused unless <paramref name="HeightScale"/> is greater
 /// than zero (a surface-less medium is meaningless).</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldStateLatticeTrait(
-    string Topology,
+public sealed record WorldStateFieldTrait(
     float Initial = 0f,
     float Min = 0f,
     float Max = 1f,
@@ -395,7 +487,7 @@ public sealed record WorldStateLatticeTrait(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldLatticeFill>? Paint = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldLatticeMedium? Medium = null
 );
-/// <summary>Marks a lattice-shaped field as a fluid medium (see <see cref="WorldStateLatticeTrait.Medium"/>). No
+/// <summary>Marks a lattice-shaped field as a fluid medium (see <see cref="WorldStateFieldTrait.Medium"/>). No
 /// required members today — the growth seam a future medium trait (density, drag) widens without moving what
 /// already exists, the same trailing-member shape as every other optional-facet record in this document.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -428,7 +520,7 @@ public sealed record WorldFieldLatticeDefinition(
 /// <param name="Color">The color the field's surface shades with — a <c>#RRGGBB</c> literal or a
 /// <c>state.&lt;row&gt;[.&lt;key&gt;]</c> Text-cell binding; required when <paramref name="HeightScale"/>
 /// is nonzero.</param>
-/// <param name="Medium">Whether this field is a fluid medium (see <see cref="WorldStateLatticeTrait.Medium"/>).</param>
+/// <param name="Medium">Whether this field is a fluid medium (see <see cref="WorldStateFieldTrait.Medium"/>).</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldFieldRow(
     string Name,
@@ -493,9 +585,9 @@ public abstract record WorldLatticeFill {
     /// <param name="Generator">An inline numeric source, or <see langword="null"/> when <paramref name="Source"/> is named.</param>
     public sealed record Draw([property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCellName? Source = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldGenerator? Generator = null) : WorldLatticeFill;
 
-    /// <summary>Returns the one <see cref="Draw"/> fill a lattice trait's paint carries, or <see langword="null"/>.</summary>
-    /// <param name="trait">The trait, or <see langword="null"/> for a row that is not a lattice.</param>
-    public static Draw? FindDraw(WorldStateLatticeTrait? trait) {
+    /// <summary>Returns the one <see cref="Draw"/> fill a field trait's paint carries, or <see langword="null"/>.</summary>
+    /// <param name="trait">The trait, or <see langword="null"/> for a row that is not a field.</param>
+    public static Draw? FindDraw(WorldStateFieldTrait? trait) {
         foreach (var fill in (trait?.Paint ?? [])) {
             if (fill is Draw draw) {
                 return draw;

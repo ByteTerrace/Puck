@@ -1,0 +1,4175 @@
+{
+  "patterns": [
+    {
+      "kind": "int",
+      "name": "pairAtRank2",
+      "pattern": {
+        "$type": "sequence",
+        "items": [
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "r"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "r"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          }
+        ]
+      },
+      "symbols": [
+        {
+          "max": 2,
+          "min": 2,
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "kind": "int",
+      "name": "pairAtRank3",
+      "pattern": {
+        "$type": "sequence",
+        "items": [
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "r"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "r"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          }
+        ]
+      },
+      "symbols": [
+        {
+          "max": 3,
+          "min": 3,
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "kind": "int",
+      "name": "pairAtRank4",
+      "pattern": {
+        "$type": "sequence",
+        "items": [
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "r"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "r"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          }
+        ]
+      },
+      "symbols": [
+        {
+          "max": 4,
+          "min": 4,
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "kind": "int",
+      "name": "pairAtRank5",
+      "pattern": {
+        "$type": "sequence",
+        "items": [
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "r"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "r"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          }
+        ]
+      },
+      "symbols": [
+        {
+          "max": 5,
+          "min": 5,
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "kind": "int",
+      "name": "pairAtRank6",
+      "pattern": {
+        "$type": "sequence",
+        "items": [
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "r"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "r"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          }
+        ]
+      },
+      "symbols": [
+        {
+          "max": 6,
+          "min": 6,
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "kind": "int",
+      "name": "pairAtRank7",
+      "pattern": {
+        "$type": "sequence",
+        "items": [
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "r"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "r"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          }
+        ]
+      },
+      "symbols": [
+        {
+          "max": 7,
+          "min": 7,
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "kind": "int",
+      "name": "pairAtRank8",
+      "pattern": {
+        "$type": "sequence",
+        "items": [
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "r"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "r"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          }
+        ]
+      },
+      "symbols": [
+        {
+          "max": 8,
+          "min": 8,
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "kind": "int",
+      "name": "pairAtRank9",
+      "pattern": {
+        "$type": "sequence",
+        "items": [
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "r"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "r"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          }
+        ]
+      },
+      "symbols": [
+        {
+          "max": 9,
+          "min": 9,
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "kind": "int",
+      "name": "pairAtRank10",
+      "pattern": {
+        "$type": "sequence",
+        "items": [
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "r"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "r"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          }
+        ]
+      },
+      "symbols": [
+        {
+          "max": 10,
+          "min": 10,
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "kind": "int",
+      "name": "pairAtRank11",
+      "pattern": {
+        "$type": "sequence",
+        "items": [
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "r"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "r"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          }
+        ]
+      },
+      "symbols": [
+        {
+          "max": 11,
+          "min": 11,
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "kind": "int",
+      "name": "pairAtRank12",
+      "pattern": {
+        "$type": "sequence",
+        "items": [
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "r"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "r"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          }
+        ]
+      },
+      "symbols": [
+        {
+          "max": 12,
+          "min": 12,
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "kind": "int",
+      "name": "pairAtRank13",
+      "pattern": {
+        "$type": "sequence",
+        "items": [
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "r"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "r"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          }
+        ]
+      },
+      "symbols": [
+        {
+          "max": 13,
+          "min": 13,
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "kind": "int",
+      "name": "pairAtRank14",
+      "pattern": {
+        "$type": "sequence",
+        "items": [
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "r"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "r"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          }
+        ]
+      },
+      "symbols": [
+        {
+          "max": 14,
+          "min": 14,
+          "name": "r"
+        }
+      ]
+    },
+    {
+      "kind": "int",
+      "maxStates": 256,
+      "name": "hasTripAny",
+      "pattern": {
+        "$type": "choice",
+        "items": [
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r2"
+                },
+                "max": 3,
+                "min": 3
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r3"
+                },
+                "max": 3,
+                "min": 3
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r4"
+                },
+                "max": 3,
+                "min": 3
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r5"
+                },
+                "max": 3,
+                "min": 3
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r6"
+                },
+                "max": 3,
+                "min": 3
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r7"
+                },
+                "max": 3,
+                "min": 3
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r8"
+                },
+                "max": 3,
+                "min": 3
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r9"
+                },
+                "max": 3,
+                "min": 3
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r10"
+                },
+                "max": 3,
+                "min": 3
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r11"
+                },
+                "max": 3,
+                "min": 3
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r12"
+                },
+                "max": 3,
+                "min": 3
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r13"
+                },
+                "max": 3,
+                "min": 3
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r14"
+                },
+                "max": 3,
+                "min": 3
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "symbols": [
+        {
+          "max": 2,
+          "min": 2,
+          "name": "r2"
+        },
+        {
+          "max": 3,
+          "min": 3,
+          "name": "r3"
+        },
+        {
+          "max": 4,
+          "min": 4,
+          "name": "r4"
+        },
+        {
+          "max": 5,
+          "min": 5,
+          "name": "r5"
+        },
+        {
+          "max": 6,
+          "min": 6,
+          "name": "r6"
+        },
+        {
+          "max": 7,
+          "min": 7,
+          "name": "r7"
+        },
+        {
+          "max": 8,
+          "min": 8,
+          "name": "r8"
+        },
+        {
+          "max": 9,
+          "min": 9,
+          "name": "r9"
+        },
+        {
+          "max": 10,
+          "min": 10,
+          "name": "r10"
+        },
+        {
+          "max": 11,
+          "min": 11,
+          "name": "r11"
+        },
+        {
+          "max": 12,
+          "min": 12,
+          "name": "r12"
+        },
+        {
+          "max": 13,
+          "min": 13,
+          "name": "r13"
+        },
+        {
+          "max": 14,
+          "min": 14,
+          "name": "r14"
+        }
+      ]
+    },
+    {
+      "kind": "int",
+      "maxStates": 256,
+      "name": "hasQuadAny",
+      "pattern": {
+        "$type": "choice",
+        "items": [
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r2"
+                },
+                "max": 4,
+                "min": 4
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r3"
+                },
+                "max": 4,
+                "min": 4
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r4"
+                },
+                "max": 4,
+                "min": 4
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r5"
+                },
+                "max": 4,
+                "min": 4
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r6"
+                },
+                "max": 4,
+                "min": 4
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r7"
+                },
+                "max": 4,
+                "min": 4
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r8"
+                },
+                "max": 4,
+                "min": 4
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r9"
+                },
+                "max": 4,
+                "min": 4
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r10"
+                },
+                "max": 4,
+                "min": 4
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r11"
+                },
+                "max": 4,
+                "min": 4
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r12"
+                },
+                "max": 4,
+                "min": 4
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r13"
+                },
+                "max": 4,
+                "min": 4
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r14"
+                },
+                "max": 4,
+                "min": 4
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "symbols": [
+        {
+          "max": 2,
+          "min": 2,
+          "name": "r2"
+        },
+        {
+          "max": 3,
+          "min": 3,
+          "name": "r3"
+        },
+        {
+          "max": 4,
+          "min": 4,
+          "name": "r4"
+        },
+        {
+          "max": 5,
+          "min": 5,
+          "name": "r5"
+        },
+        {
+          "max": 6,
+          "min": 6,
+          "name": "r6"
+        },
+        {
+          "max": 7,
+          "min": 7,
+          "name": "r7"
+        },
+        {
+          "max": 8,
+          "min": 8,
+          "name": "r8"
+        },
+        {
+          "max": 9,
+          "min": 9,
+          "name": "r9"
+        },
+        {
+          "max": 10,
+          "min": 10,
+          "name": "r10"
+        },
+        {
+          "max": 11,
+          "min": 11,
+          "name": "r11"
+        },
+        {
+          "max": 12,
+          "min": 12,
+          "name": "r12"
+        },
+        {
+          "max": 13,
+          "min": 13,
+          "name": "r13"
+        },
+        {
+          "max": 14,
+          "min": 14,
+          "name": "r14"
+        }
+      ]
+    },
+    {
+      "kind": "int",
+      "maxStates": 256,
+      "name": "straightAny",
+      "pattern": {
+        "$type": "choice",
+        "items": [
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r2"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r3"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r4"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r5"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r6"
+                }
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r3"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r4"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r5"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r6"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r7"
+                }
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r4"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r5"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r6"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r7"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r8"
+                }
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r5"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r6"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r7"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r8"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r9"
+                }
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r6"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r7"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r8"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r9"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r10"
+                }
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r7"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r8"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r9"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r10"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r11"
+                }
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r8"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r9"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r10"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r11"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r12"
+                }
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r9"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r10"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r11"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r12"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r13"
+                }
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r10"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r11"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r12"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r13"
+                }
+              },
+              {
+                "$type": "plus",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r14"
+                }
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "symbols": [
+        {
+          "max": 2,
+          "min": 2,
+          "name": "r2"
+        },
+        {
+          "max": 3,
+          "min": 3,
+          "name": "r3"
+        },
+        {
+          "max": 4,
+          "min": 4,
+          "name": "r4"
+        },
+        {
+          "max": 5,
+          "min": 5,
+          "name": "r5"
+        },
+        {
+          "max": 6,
+          "min": 6,
+          "name": "r6"
+        },
+        {
+          "max": 7,
+          "min": 7,
+          "name": "r7"
+        },
+        {
+          "max": 8,
+          "min": 8,
+          "name": "r8"
+        },
+        {
+          "max": 9,
+          "min": 9,
+          "name": "r9"
+        },
+        {
+          "max": 10,
+          "min": 10,
+          "name": "r10"
+        },
+        {
+          "max": 11,
+          "min": 11,
+          "name": "r11"
+        },
+        {
+          "max": 12,
+          "min": 12,
+          "name": "r12"
+        },
+        {
+          "max": 13,
+          "min": 13,
+          "name": "r13"
+        },
+        {
+          "max": 14,
+          "min": 14,
+          "name": "r14"
+        }
+      ]
+    },
+    {
+      "kind": "int",
+      "name": "suitAtLeast5_0",
+      "pattern": {
+        "$type": "sequence",
+        "items": [
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "s"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "s"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "s"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "s"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "s"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          }
+        ]
+      },
+      "symbols": [
+        {
+          "max": 1,
+          "min": 1,
+          "name": "s"
+        }
+      ]
+    },
+    {
+      "kind": "int",
+      "name": "suitAtLeast5_1",
+      "pattern": {
+        "$type": "sequence",
+        "items": [
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "s"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "s"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "s"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "s"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "s"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          }
+        ]
+      },
+      "symbols": [
+        {
+          "max": 2,
+          "min": 2,
+          "name": "s"
+        }
+      ]
+    },
+    {
+      "kind": "int",
+      "name": "suitAtLeast5_2",
+      "pattern": {
+        "$type": "sequence",
+        "items": [
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "s"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "s"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "s"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "s"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "s"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          }
+        ]
+      },
+      "symbols": [
+        {
+          "max": 3,
+          "min": 3,
+          "name": "s"
+        }
+      ]
+    },
+    {
+      "kind": "int",
+      "name": "suitAtLeast5_3",
+      "pattern": {
+        "$type": "sequence",
+        "items": [
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "s"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "s"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "s"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "s"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "s"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          }
+        ]
+      },
+      "symbols": [
+        {
+          "max": 4,
+          "min": 4,
+          "name": "s"
+        }
+      ]
+    },
+    {
+      "kind": "int",
+      "name": "raiseAfterTwoChecks",
+      "pattern": {
+        "$type": "sequence",
+        "items": [
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "check"
+          },
+          {
+            "$type": "symbol",
+            "name": "check"
+          },
+          {
+            "$type": "symbol",
+            "name": "raise"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          }
+        ]
+      },
+      "symbols": [
+        {
+          "max": 0,
+          "min": 0,
+          "name": "check"
+        },
+        {
+          "max": 1,
+          "min": 1,
+          "name": "raise"
+        }
+      ]
+    },
+    {
+      "kind": "int",
+      "maxStates": 256,
+      "name": "pairAny",
+      "pattern": {
+        "$type": "choice",
+        "items": [
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r2"
+                },
+                "max": 7,
+                "min": 2
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r3"
+                },
+                "max": 7,
+                "min": 2
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r4"
+                },
+                "max": 7,
+                "min": 2
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r5"
+                },
+                "max": 7,
+                "min": 2
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r6"
+                },
+                "max": 7,
+                "min": 2
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r7"
+                },
+                "max": 7,
+                "min": 2
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r8"
+                },
+                "max": 7,
+                "min": 2
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r9"
+                },
+                "max": 7,
+                "min": 2
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r10"
+                },
+                "max": 7,
+                "min": 2
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r11"
+                },
+                "max": 7,
+                "min": 2
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r12"
+                },
+                "max": 7,
+                "min": 2
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r13"
+                },
+                "max": 7,
+                "min": 2
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          },
+          {
+            "$type": "sequence",
+            "items": [
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              },
+              {
+                "$type": "repeat",
+                "item": {
+                  "$type": "symbol",
+                  "name": "r14"
+                },
+                "max": 7,
+                "min": 2
+              },
+              {
+                "$type": "star",
+                "item": {
+                  "$type": "any"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "symbols": [
+        {
+          "max": 2,
+          "min": 2,
+          "name": "r2"
+        },
+        {
+          "max": 3,
+          "min": 3,
+          "name": "r3"
+        },
+        {
+          "max": 4,
+          "min": 4,
+          "name": "r4"
+        },
+        {
+          "max": 5,
+          "min": 5,
+          "name": "r5"
+        },
+        {
+          "max": 6,
+          "min": 6,
+          "name": "r6"
+        },
+        {
+          "max": 7,
+          "min": 7,
+          "name": "r7"
+        },
+        {
+          "max": 8,
+          "min": 8,
+          "name": "r8"
+        },
+        {
+          "max": 9,
+          "min": 9,
+          "name": "r9"
+        },
+        {
+          "max": 10,
+          "min": 10,
+          "name": "r10"
+        },
+        {
+          "max": 11,
+          "min": 11,
+          "name": "r11"
+        },
+        {
+          "max": 12,
+          "min": 12,
+          "name": "r12"
+        },
+        {
+          "max": 13,
+          "min": 13,
+          "name": "r13"
+        },
+        {
+          "max": 14,
+          "min": 14,
+          "name": "r14"
+        }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "effects": [
+        {
+          "$type": "transformState",
+          "transform": {
+            "$type": "transfer",
+            "count": 2,
+            "draw": "cardStream",
+            "from": "deck",
+            "selector": "Random",
+            "to": "hand1"
+          }
+        },
+        {
+          "$type": "transformState",
+          "transform": {
+            "$type": "transfer",
+            "count": 2,
+            "draw": "cardStream",
+            "from": "deck",
+            "selector": "Random",
+            "to": "hand2"
+          }
+        },
+        {
+          "$type": "transformState",
+          "transform": {
+            "$type": "transfer",
+            "count": 5,
+            "draw": "cardStream",
+            "from": "deck",
+            "selector": "Random",
+            "to": "community"
+          }
+        },
+        {
+          "$type": "setState",
+          "state": "dealRequest",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "state": "derivePending",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "state": "pokerTurn",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "dealRequest",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "pokerTurn",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "poker-deal"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "$each",
+          "fromState": "rank",
+          "key": "$each",
+          "state": "combinedByRank1"
+        }
+      ],
+      "forEach": "hand1",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "derivePending",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "poker-derive-from-hand1"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "$each",
+          "fromState": "rank",
+          "key": "$each",
+          "state": "combinedByRank2"
+        }
+      ],
+      "forEach": "hand2",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "derivePending",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "poker-derive-from-hand2"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "$each",
+          "fromState": "rank",
+          "key": "$each",
+          "state": "combinedByRank1"
+        },
+        {
+          "$type": "setState",
+          "fromKey": "$each",
+          "fromState": "rank",
+          "key": "$each",
+          "state": "combinedByRank2"
+        }
+      ],
+      "forEach": "community",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "derivePending",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "poker-derive-from-community"
+    },
+    {
+      "effects": [
+        {
+          "$type": "transformState",
+          "transform": {
+            "$type": "sortKeyed",
+            "descending": false,
+            "row": "combinedByRank1"
+          }
+        },
+        {
+          "$type": "transformState",
+          "transform": {
+            "$type": "sortKeyed",
+            "descending": false,
+            "row": "combinedByRank2"
+          }
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "derivePending",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "poker-sort"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "$match:pairAny:combinedByRank1"
+              },
+              {
+                "$type": "constant",
+                "value": 1
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "select"
+              }
+            ]
+          },
+          "state": "strength1"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "derivePending",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "poker-strength1"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "$match:pairAny:combinedByRank2"
+              },
+              {
+                "$type": "constant",
+                "value": 1
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "select"
+              }
+            ]
+          },
+          "state": "strength2"
+        },
+        {
+          "$type": "setState",
+          "state": "derivePending",
+          "value": 0
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "derivePending",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "poker-strength2"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "audience1",
+          "text": "seat2"
+        },
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "audience2",
+          "text": "seat1"
+        },
+        {
+          "$type": "setState",
+          "state": "revealed",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "showdownRequest",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "revealed",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "pokerTurn",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "poker-showdown-reveal"
+    },
+    {
+      "effects": [
+        {
+          "$type": "pushState",
+          "fromState": "betAction1",
+          "state": "bets"
+        },
+        {
+          "$type": "addState",
+          "fromState": "betAction1",
+          "state": "pot"
+        },
+        {
+          "$type": "setState",
+          "state": "betAction1",
+          "value": -1
+        },
+        {
+          "$type": "setState",
+          "state": "bettor",
+          "value": 2
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "state": "betAction1",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "pokerTurn",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "bettor",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "poker-bet-action-seat1"
+    },
+    {
+      "effects": [
+        {
+          "$type": "pushState",
+          "fromState": "betAction2",
+          "state": "bets"
+        },
+        {
+          "$type": "addState",
+          "fromState": "betAction2",
+          "state": "pot"
+        },
+        {
+          "$type": "setState",
+          "state": "betAction2",
+          "value": -1
+        },
+        {
+          "$type": "setState",
+          "state": "bettor",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "state": "betAction2",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "pokerTurn",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "bettor",
+            "value": 2
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "poker-bet-action-seat2"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "$reduce:count:deck"
+              },
+              {
+                "$type": "state",
+                "name": "$reduce:count:hand1"
+              },
+              {
+                "$type": "add"
+              },
+              {
+                "$type": "state",
+                "name": "$reduce:count:hand2"
+              },
+              {
+                "$type": "add"
+              },
+              {
+                "$type": "state",
+                "name": "$reduce:count:community"
+              },
+              {
+                "$type": "add"
+              }
+            ]
+          },
+          "state": "cardsZoneTotal"
+        }
+      ],
+      "name": "cardsZoneAccounting"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "cardsZoneInvariantViolated",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparandState": "$reduce:count:cards",
+        "comparison": "NotEqual",
+        "state": "cardsZoneTotal"
+      },
+      "mode": "Edge",
+      "name": "cardsZoneInvariant"
+    }
+  ],
+  "state": {
+    "world": [
+      {
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "2C",
+            "value": 0
+          },
+          {
+            "key": "2D",
+            "value": 0
+          },
+          {
+            "key": "2H",
+            "value": 0
+          },
+          {
+            "key": "2S",
+            "value": 0
+          },
+          {
+            "key": "3C",
+            "value": 0
+          },
+          {
+            "key": "3D",
+            "value": 0
+          },
+          {
+            "key": "3H",
+            "value": 0
+          },
+          {
+            "key": "3S",
+            "value": 0
+          },
+          {
+            "key": "4C",
+            "value": 0
+          },
+          {
+            "key": "4D",
+            "value": 0
+          },
+          {
+            "key": "4H",
+            "value": 0
+          },
+          {
+            "key": "4S",
+            "value": 0
+          },
+          {
+            "key": "5C",
+            "value": 0
+          },
+          {
+            "key": "5D",
+            "value": 0
+          },
+          {
+            "key": "5H",
+            "value": 0
+          },
+          {
+            "key": "5S",
+            "value": 0
+          },
+          {
+            "key": "6C",
+            "value": 0
+          },
+          {
+            "key": "6D",
+            "value": 0
+          },
+          {
+            "key": "6H",
+            "value": 0
+          },
+          {
+            "key": "6S",
+            "value": 0
+          },
+          {
+            "key": "7C",
+            "value": 0
+          },
+          {
+            "key": "7D",
+            "value": 0
+          },
+          {
+            "key": "7H",
+            "value": 0
+          },
+          {
+            "key": "7S",
+            "value": 0
+          },
+          {
+            "key": "8C",
+            "value": 0
+          },
+          {
+            "key": "8D",
+            "value": 0
+          },
+          {
+            "key": "8H",
+            "value": 0
+          },
+          {
+            "key": "8S",
+            "value": 0
+          },
+          {
+            "key": "9C",
+            "value": 0
+          },
+          {
+            "key": "9D",
+            "value": 0
+          },
+          {
+            "key": "9H",
+            "value": 0
+          },
+          {
+            "key": "9S",
+            "value": 0
+          },
+          {
+            "key": "TC",
+            "value": 0
+          },
+          {
+            "key": "TD",
+            "value": 0
+          },
+          {
+            "key": "TH",
+            "value": 0
+          },
+          {
+            "key": "TS",
+            "value": 0
+          },
+          {
+            "key": "JC",
+            "value": 0
+          },
+          {
+            "key": "JD",
+            "value": 0
+          },
+          {
+            "key": "JH",
+            "value": 0
+          },
+          {
+            "key": "JS",
+            "value": 0
+          },
+          {
+            "key": "QC",
+            "value": 0
+          },
+          {
+            "key": "QD",
+            "value": 0
+          },
+          {
+            "key": "QH",
+            "value": 0
+          },
+          {
+            "key": "QS",
+            "value": 0
+          },
+          {
+            "key": "KC",
+            "value": 0
+          },
+          {
+            "key": "KD",
+            "value": 0
+          },
+          {
+            "key": "KH",
+            "value": 0
+          },
+          {
+            "key": "KS",
+            "value": 0
+          },
+          {
+            "key": "AC",
+            "value": 0
+          },
+          {
+            "key": "AD",
+            "value": 0
+          },
+          {
+            "key": "AH",
+            "value": 0
+          },
+          {
+            "key": "AS",
+            "value": 0
+          }
+        ],
+        "kind": "int",
+        "name": "cards"
+      },
+      {
+        "cells": [
+          {
+            "key": "2C",
+            "value": 2
+          },
+          {
+            "key": "2D",
+            "value": 2
+          },
+          {
+            "key": "2H",
+            "value": 2
+          },
+          {
+            "key": "2S",
+            "value": 2
+          },
+          {
+            "key": "3C",
+            "value": 3
+          },
+          {
+            "key": "3D",
+            "value": 3
+          },
+          {
+            "key": "3H",
+            "value": 3
+          },
+          {
+            "key": "3S",
+            "value": 3
+          },
+          {
+            "key": "4C",
+            "value": 4
+          },
+          {
+            "key": "4D",
+            "value": 4
+          },
+          {
+            "key": "4H",
+            "value": 4
+          },
+          {
+            "key": "4S",
+            "value": 4
+          },
+          {
+            "key": "5C",
+            "value": 5
+          },
+          {
+            "key": "5D",
+            "value": 5
+          },
+          {
+            "key": "5H",
+            "value": 5
+          },
+          {
+            "key": "5S",
+            "value": 5
+          },
+          {
+            "key": "6C",
+            "value": 6
+          },
+          {
+            "key": "6D",
+            "value": 6
+          },
+          {
+            "key": "6H",
+            "value": 6
+          },
+          {
+            "key": "6S",
+            "value": 6
+          },
+          {
+            "key": "7C",
+            "value": 7
+          },
+          {
+            "key": "7D",
+            "value": 7
+          },
+          {
+            "key": "7H",
+            "value": 7
+          },
+          {
+            "key": "7S",
+            "value": 7
+          },
+          {
+            "key": "8C",
+            "value": 8
+          },
+          {
+            "key": "8D",
+            "value": 8
+          },
+          {
+            "key": "8H",
+            "value": 8
+          },
+          {
+            "key": "8S",
+            "value": 8
+          },
+          {
+            "key": "9C",
+            "value": 9
+          },
+          {
+            "key": "9D",
+            "value": 9
+          },
+          {
+            "key": "9H",
+            "value": 9
+          },
+          {
+            "key": "9S",
+            "value": 9
+          },
+          {
+            "key": "TC",
+            "value": 10
+          },
+          {
+            "key": "TD",
+            "value": 10
+          },
+          {
+            "key": "TH",
+            "value": 10
+          },
+          {
+            "key": "TS",
+            "value": 10
+          },
+          {
+            "key": "JC",
+            "value": 11
+          },
+          {
+            "key": "JD",
+            "value": 11
+          },
+          {
+            "key": "JH",
+            "value": 11
+          },
+          {
+            "key": "JS",
+            "value": 11
+          },
+          {
+            "key": "QC",
+            "value": 12
+          },
+          {
+            "key": "QD",
+            "value": 12
+          },
+          {
+            "key": "QH",
+            "value": 12
+          },
+          {
+            "key": "QS",
+            "value": 12
+          },
+          {
+            "key": "KC",
+            "value": 13
+          },
+          {
+            "key": "KD",
+            "value": 13
+          },
+          {
+            "key": "KH",
+            "value": 13
+          },
+          {
+            "key": "KS",
+            "value": 13
+          },
+          {
+            "key": "AC",
+            "value": 14
+          },
+          {
+            "key": "AD",
+            "value": 14
+          },
+          {
+            "key": "AH",
+            "value": 14
+          },
+          {
+            "key": "AS",
+            "value": 14
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "cards"
+        },
+        "kind": "int",
+        "name": "rank",
+        "visibility": {
+          "hidden": "Placeholder"
+        }
+      },
+      {
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "2C",
+            "value": true
+          },
+          {
+            "key": "2D",
+            "value": true
+          },
+          {
+            "key": "2H",
+            "value": true
+          },
+          {
+            "key": "2S",
+            "value": true
+          },
+          {
+            "key": "3C",
+            "value": true
+          },
+          {
+            "key": "3D",
+            "value": true
+          },
+          {
+            "key": "3H",
+            "value": true
+          },
+          {
+            "key": "3S",
+            "value": true
+          },
+          {
+            "key": "4C",
+            "value": true
+          },
+          {
+            "key": "4D",
+            "value": true
+          },
+          {
+            "key": "4H",
+            "value": true
+          },
+          {
+            "key": "4S",
+            "value": true
+          },
+          {
+            "key": "5C",
+            "value": true
+          },
+          {
+            "key": "5D",
+            "value": true
+          },
+          {
+            "key": "5H",
+            "value": true
+          },
+          {
+            "key": "5S",
+            "value": true
+          },
+          {
+            "key": "6C",
+            "value": true
+          },
+          {
+            "key": "6D",
+            "value": true
+          },
+          {
+            "key": "6H",
+            "value": true
+          },
+          {
+            "key": "6S",
+            "value": true
+          },
+          {
+            "key": "7C",
+            "value": true
+          },
+          {
+            "key": "7D",
+            "value": true
+          },
+          {
+            "key": "7H",
+            "value": true
+          },
+          {
+            "key": "7S",
+            "value": true
+          },
+          {
+            "key": "8C",
+            "value": true
+          },
+          {
+            "key": "8D",
+            "value": true
+          },
+          {
+            "key": "8H",
+            "value": true
+          },
+          {
+            "key": "8S",
+            "value": true
+          },
+          {
+            "key": "9C",
+            "value": true
+          },
+          {
+            "key": "9D",
+            "value": true
+          },
+          {
+            "key": "9H",
+            "value": true
+          },
+          {
+            "key": "9S",
+            "value": true
+          },
+          {
+            "key": "TC",
+            "value": true
+          },
+          {
+            "key": "TD",
+            "value": true
+          },
+          {
+            "key": "TH",
+            "value": true
+          },
+          {
+            "key": "TS",
+            "value": true
+          },
+          {
+            "key": "JC",
+            "value": true
+          },
+          {
+            "key": "JD",
+            "value": true
+          },
+          {
+            "key": "JH",
+            "value": true
+          },
+          {
+            "key": "JS",
+            "value": true
+          },
+          {
+            "key": "QC",
+            "value": true
+          },
+          {
+            "key": "QD",
+            "value": true
+          },
+          {
+            "key": "QH",
+            "value": true
+          },
+          {
+            "key": "QS",
+            "value": true
+          },
+          {
+            "key": "KC",
+            "value": true
+          },
+          {
+            "key": "KD",
+            "value": true
+          },
+          {
+            "key": "KH",
+            "value": true
+          },
+          {
+            "key": "KS",
+            "value": true
+          },
+          {
+            "key": "AC",
+            "value": true
+          },
+          {
+            "key": "AD",
+            "value": true
+          },
+          {
+            "key": "AH",
+            "value": true
+          },
+          {
+            "key": "AS",
+            "value": true
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "ordered": true,
+          "row": "cards"
+        },
+        "kind": "bool",
+        "name": "deck",
+        "visibility": {
+          "readers": []
+        }
+      },
+      {
+        "capacity": 2,
+        "domain": {
+          "$type": "keysOf",
+          "ordered": true,
+          "row": "cards"
+        },
+        "kind": "bool",
+        "name": "hand1",
+        "visibility": {
+          "readers": [
+            "seat1"
+          ],
+          "readersFrom": "audience1"
+        }
+      },
+      {
+        "capacity": 2,
+        "domain": {
+          "$type": "keysOf",
+          "ordered": true,
+          "row": "cards"
+        },
+        "kind": "bool",
+        "name": "hand2",
+        "visibility": {
+          "readers": [
+            "seat2"
+          ],
+          "readersFrom": "audience2"
+        }
+      },
+      {
+        "capacity": 5,
+        "domain": {
+          "$type": "keysOf",
+          "ordered": true,
+          "row": "cards"
+        },
+        "kind": "bool",
+        "name": "community",
+        "visibility": {}
+      },
+      {
+        "draw": {
+          "generator": {
+            "source": "streamDraw"
+          },
+          "timing": "event"
+        },
+        "kind": "int",
+        "name": "cardStream"
+      },
+      {
+        "capacity": 7,
+        "kind": "int",
+        "name": "combinedByRank1"
+      },
+      {
+        "capacity": 7,
+        "kind": "int",
+        "name": "combinedByRank2"
+      },
+      {
+        "kind": "int",
+        "max": 9,
+        "min": 0,
+        "name": "strength1",
+        "value": 0,
+        "visibility": {
+          "readers": [
+            "seat1"
+          ],
+          "readersFrom": "audience1"
+        }
+      },
+      {
+        "kind": "int",
+        "max": 9,
+        "min": 0,
+        "name": "strength2",
+        "value": 0,
+        "visibility": {
+          "readers": [
+            "seat2"
+          ],
+          "readersFrom": "audience2"
+        }
+      },
+      {
+        "kind": "bool",
+        "name": "dealRequest",
+        "value": false
+      },
+      {
+        "kind": "bool",
+        "name": "derivePending",
+        "value": false
+      },
+      {
+        "kind": "bool",
+        "name": "showdownRequest",
+        "value": false
+      },
+      {
+        "kind": "bool",
+        "name": "revealed",
+        "value": false
+      },
+      {
+        "domain": {
+          "$type": "ring",
+          "capacity": 8,
+          "empty": -1
+        },
+        "kind": "int",
+        "name": "bets",
+        "visibility": {}
+      },
+      {
+        "kind": "int",
+        "name": "pot",
+        "nonNegative": true,
+        "value": 0,
+        "visibility": {}
+      },
+      {
+        "capacity": 2,
+        "cells": [],
+        "kind": "text",
+        "name": "audience1"
+      },
+      {
+        "capacity": 2,
+        "cells": [],
+        "kind": "text",
+        "name": "audience2"
+      },
+      {
+        "kind": "int",
+        "name": "pokerTurn",
+        "value": 0,
+        "visibility": {}
+      },
+      {
+        "cells": [
+          {
+            "key": "2C",
+            "value": 1
+          },
+          {
+            "key": "2D",
+            "value": 2
+          },
+          {
+            "key": "2H",
+            "value": 3
+          },
+          {
+            "key": "2S",
+            "value": 4
+          },
+          {
+            "key": "3C",
+            "value": 1
+          },
+          {
+            "key": "3D",
+            "value": 2
+          },
+          {
+            "key": "3H",
+            "value": 3
+          },
+          {
+            "key": "3S",
+            "value": 4
+          },
+          {
+            "key": "4C",
+            "value": 1
+          },
+          {
+            "key": "4D",
+            "value": 2
+          },
+          {
+            "key": "4H",
+            "value": 3
+          },
+          {
+            "key": "4S",
+            "value": 4
+          },
+          {
+            "key": "5C",
+            "value": 1
+          },
+          {
+            "key": "5D",
+            "value": 2
+          },
+          {
+            "key": "5H",
+            "value": 3
+          },
+          {
+            "key": "5S",
+            "value": 4
+          },
+          {
+            "key": "6C",
+            "value": 1
+          },
+          {
+            "key": "6D",
+            "value": 2
+          },
+          {
+            "key": "6H",
+            "value": 3
+          },
+          {
+            "key": "6S",
+            "value": 4
+          },
+          {
+            "key": "7C",
+            "value": 1
+          },
+          {
+            "key": "7D",
+            "value": 2
+          },
+          {
+            "key": "7H",
+            "value": 3
+          },
+          {
+            "key": "7S",
+            "value": 4
+          },
+          {
+            "key": "8C",
+            "value": 1
+          },
+          {
+            "key": "8D",
+            "value": 2
+          },
+          {
+            "key": "8H",
+            "value": 3
+          },
+          {
+            "key": "8S",
+            "value": 4
+          },
+          {
+            "key": "9C",
+            "value": 1
+          },
+          {
+            "key": "9D",
+            "value": 2
+          },
+          {
+            "key": "9H",
+            "value": 3
+          },
+          {
+            "key": "9S",
+            "value": 4
+          },
+          {
+            "key": "TC",
+            "value": 1
+          },
+          {
+            "key": "TD",
+            "value": 2
+          },
+          {
+            "key": "TH",
+            "value": 3
+          },
+          {
+            "key": "TS",
+            "value": 4
+          },
+          {
+            "key": "JC",
+            "value": 1
+          },
+          {
+            "key": "JD",
+            "value": 2
+          },
+          {
+            "key": "JH",
+            "value": 3
+          },
+          {
+            "key": "JS",
+            "value": 4
+          },
+          {
+            "key": "QC",
+            "value": 1
+          },
+          {
+            "key": "QD",
+            "value": 2
+          },
+          {
+            "key": "QH",
+            "value": 3
+          },
+          {
+            "key": "QS",
+            "value": 4
+          },
+          {
+            "key": "KC",
+            "value": 1
+          },
+          {
+            "key": "KD",
+            "value": 2
+          },
+          {
+            "key": "KH",
+            "value": 3
+          },
+          {
+            "key": "KS",
+            "value": 4
+          },
+          {
+            "key": "AC",
+            "value": 1
+          },
+          {
+            "key": "AD",
+            "value": 2
+          },
+          {
+            "key": "AH",
+            "value": 3
+          },
+          {
+            "key": "AS",
+            "value": 4
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "cards"
+        },
+        "kind": "int",
+        "name": "suit",
+        "visibility": {
+          "hidden": "Placeholder"
+        }
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": -1,
+        "name": "betAction1",
+        "value": -1,
+        "visibility": {}
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": -1,
+        "name": "betAction2",
+        "value": -1,
+        "visibility": {}
+      },
+      {
+        "kind": "int",
+        "name": "bettor",
+        "value": 1,
+        "visibility": {}
+      },
+      {
+        "kind": "int",
+        "name": "cardsZoneTotal",
+        "value": 0
+      },
+      {
+        "kind": "bool",
+        "name": "cardsZoneInvariantViolated",
+        "value": false
+      }
+    ]
+  }
+}

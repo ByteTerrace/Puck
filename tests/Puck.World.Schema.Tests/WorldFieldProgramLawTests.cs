@@ -248,7 +248,8 @@ public sealed class WorldFieldProgramLawTests {
                 new WorldStateRow(
                     Name: WorldCellName.Parse(candidate: "cold"),
                     Kind: CellKind.Fixed,
-                    Lattice: new WorldStateLatticeTrait(Topology: "ground")
+                    Domain: new WorldStateDomain.CellsOf(Topology: "ground"),
+                    Field: new WorldStateFieldTrait()
                 ),
             ],
         };
@@ -284,7 +285,7 @@ public sealed class WorldFieldProgramLawTests {
         var cosmeticRows = original.StateRaw!.World!.Select(selector: row => (
             string.Equals(a: row.Name, b: "heat", comparisonType: StringComparison.Ordinal)
                 ? row with {
-                    Lattice = row.Lattice! with {
+                    Field = row.Field! with {
                         Color = "#336699",
                         Paint = [new WorldLatticeFill.Rect(MaxX: 1f, MaxZ: 1f, MinX: 0f, MinZ: 0f, Value: 1f)],
                     },
@@ -299,7 +300,7 @@ public sealed class WorldFieldProgramLawTests {
 
         var envelopeRows = cosmetic.StateRaw!.World!.Select(selector: row => (
             string.Equals(a: row.Name, b: "heat", comparisonType: StringComparison.Ordinal)
-                ? row with { Lattice = row.Lattice! with { Initial = 2f } }
+                ? row with { Field = row.Field! with { Initial = 2f } }
                 : row
         )).ToArray();
         var envelope = cosmetic.WithWorldState(rows: envelopeRows);
@@ -381,7 +382,7 @@ public sealed class WorldFieldProgramLawTests {
         IReadOnlyList<WorldReaction>? reactions = null,
         string fieldName = "heat"
     ) => new(
-        Lattices: [new WorldStateLatticeTopology(
+        Lattices: [new WorldStateLatticeTopology.Field(
             Name: "ground",
             Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f),
             CellSize: 1f,
@@ -404,8 +405,8 @@ public sealed class WorldFieldProgramLawTests {
             new WorldStateRow(
                 Name: WorldCellName.Parse(candidate: fieldName),
                 Kind: CellKind.Fixed,
-                Lattice: new WorldStateLatticeTrait(
-                    Topology: "ground",
+                Domain: new WorldStateDomain.CellsOf(Topology: "ground"),
+                Field: new WorldStateFieldTrait(
                     Initial: 0f,
                     Min: 0f,
                     Max: 10f

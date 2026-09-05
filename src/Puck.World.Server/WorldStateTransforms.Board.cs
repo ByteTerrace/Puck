@@ -7,7 +7,7 @@ public static partial class WorldStateTransforms {
         }
         var row = rows[index];
         var setRow = rows[setIndex];
-        if (row.Board is not { } board || WorldTopologyCompilation.Find(definition.StateRaw, board.Topology) is not { } topology || topology.CellCount > WorldBoardMask.MaxCells) {
+        if (row.EffectiveDomain is not WorldStateDomain.CellsOf board || WorldTopologyCompilation.Find(definition.StateRaw, board.Topology) is not { } topology || topology.CellCount > WorldBoardMask.MaxCells) {
             return Refuse($"writeSet requires a board row over a topology of at most {WorldBoardMask.MaxCells} cells", out reason);
         }
         if (setRow.Kind != CellKind.Int || WorldDefinitionRows.FindCell(setRow.Cells, WorldCellName.Parse(writeSet.SetKey ?? WorldStateRow.SlotKey)) is not { } setCell) {
@@ -47,7 +47,7 @@ public static partial class WorldStateTransforms {
             return false;
         }
         var row = rows[index];
-        if (row.History is not { } history) {
+        if (row.EffectiveDomain is not WorldStateDomain.Ring history) {
             return Refuse("push requires a history row", out reason);
         }
         if (row.ClampToEnvelope(push.Value) != push.Value) {

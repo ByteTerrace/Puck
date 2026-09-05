@@ -47,8 +47,15 @@ public sealed class WorldBoxTopologyLawTests {
 
         Assert.False(WorldTopologyCompilation.TryValidate(Box(4, 4, 4) with { LayerHeight = 0f }, out var heightReason));
         Assert.Contains("layerHeight", heightReason);
-        Assert.False(WorldTopologyCompilation.TryValidate(new WorldStateLatticeTopology("g", new DocumentVector3(0, 0, 0), 1, 4, 4, Kind: WorldTopologyKind.Grid, LayerHeight: 1f), out var gridReason));
-        Assert.Contains("belongs to a box", gridReason);
+
+        // A grid's case type carries no 'layerHeight' property to author in the first place; the invariant a
+        // runtime check once named ("layerHeight belongs to a box") is now enforced by the document's own
+        // strict-parsed JSON shape instead.
+        var definition = Fixtures.BuildDocument() with { StateRaw = new(Lattices: [new WorldStateLatticeTopology.Grid("g", new DocumentVector3(0, 0, 0), 1, 4, 4)]) };
+        var node = System.Text.Json.Nodes.JsonNode.Parse(System.Text.Encoding.UTF8.GetString(WorldDefinitionSerialization.Serialize(definition)))!.AsObject();
+        node["state"]!["lattices"]!.AsArray()[0]!["layerHeight"] = 1f;
+        var exception = Assert.Throws<InvalidDataException>(() => WorldDefinitionSerialization.Deserialize(System.Text.Encoding.UTF8.GetBytes(node.ToJsonString())));
+        Assert.IsType<System.Text.Json.JsonException>(exception.InnerException);
     }
 
     [Fact]
@@ -58,7 +65,7 @@ public sealed class WorldBoxTopologyLawTests {
         // the run continues past the origin cell exactly as a dedicated line query would, generalized to any
         // authored run shape rather than only exact-length equality.
         static WorldStateCell Mark(int x, int y, int z) => new(WorldCellName.Parse((((z * 4) + y) * 4 + x).ToString()), 1L);
-        var board = new WorldStateRow(WorldCellName.Parse("cube"), CellKind.Int, Cells: [Mark(0, 0, 0), Mark(1, 1, 1), Mark(2, 2, 2), Mark(3, 3, 3)], Board: new("box"));
+        var board = new WorldStateRow(WorldCellName.Parse("cube"), CellKind.Int, Cells: [Mark(0, 0, 0), Mark(1, 1, 1), Mark(2, 2, 2), Mark(3, 3, 3)], Domain: new WorldStateDomain.CellsOf("box"));
         var runOfOnes = new WorldPatternRow(WorldCellName.Parse("runOfOnes"), CellKind.Int, Symbols: [new(WorldCellName.Parse("one"), 1, 1)], Pattern: new WorldPatternNode.Star(new WorldPatternNode.Symbol("one")));
         var run = new WorldStateRow(WorldCellName.Parse("run"), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)]);
         var definition = Fixtures.BuildDocument() with {
@@ -88,7 +95,7 @@ public sealed class WorldBoxTopologyLawTests {
         static WorldStateRow Row(string name, params int[] indices) => new(
             WorldCellName.Parse(name), CellKind.Int,
             Cells: [.. indices.Select(i => new WorldStateCell(WorldCellName.Parse(i.ToString(System.Globalization.CultureInfo.InvariantCulture)), 7L))],
-            Board: new("box")
+            Domain: new WorldStateDomain.CellsOf("box")
         );
         static WorldStateRow Winner(string name) => new(WorldCellName.Parse(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)]);
         var runTerminated = new WorldPatternRow(WorldCellName.Parse("runTerminated"), CellKind.Int, Symbols: [new(WorldCellName.Parse("seven"), 7, 7)],
@@ -125,8 +132,8 @@ public sealed class WorldBoxTopologyLawTests {
         }
     }
 
-    private static WorldStateLatticeTopology Box(int width, int depth, int layers) =>
-        new("box", new DocumentVector3(0, 0, 0), 0.5f, width, depth, Layers: layers, Kind: WorldTopologyKind.Box, LayerHeight: 0.5f);
+    private static WorldStateLatticeTopology.Box Box(int width, int depth, int layers) =>
+        new("box", new DocumentVector3(0, 0, 0), 0.5f, width, depth, layers, LayerHeight: 0.5f);
     private static long Value(WorldFixture fixture, string row) =>
         WorldDefinitionRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
 }

@@ -1,0 +1,525 @@
+{
+  "kits": {
+    "rows": [
+      {
+        "bodyContact": "Solid",
+        "bodyMotionProgram": "walk",
+        "collider": {
+          "$type": "sphere",
+          "radius": 0.15
+        },
+        "motion": {
+          "facingSnap": true,
+          "holds": [
+            {
+              "bond": "Free",
+              "envelope": {
+                "sinkSpeed": 40
+              },
+              "gravity": {
+                "fall": 46,
+                "rise": 28
+              },
+              "hold": "Gravity",
+              "name": "air"
+            }
+          ],
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "speed": {
+            "value": 0.001
+          },
+          "turn": {
+            "rate": 0.001
+          }
+        },
+        "name": "billiardBall",
+        "rigid": {
+          "angularDamping": 0.8,
+          "friction": 0.25,
+          "linearDamping": 0.5,
+          "mass": 0.3,
+          "restitution": 0.55,
+          "rollingFriction": 1.2
+        }
+      }
+    ]
+  },
+  "placements": {
+    "rows": [
+      {
+        "id": "billiardsTray",
+        "position": [
+          10.0,
+          0,
+          -10.0
+        ],
+        "prototypeId": "billiardsTray",
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0
+      },
+      {
+        "id": "cueBall",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          10.0,
+          -0.35000000000000003,
+          -10.9
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "rackBall0",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          10.0,
+          -0.35000000000000003,
+          -10.0
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "rackBall1",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          9.845,
+          -0.35000000000000003,
+          -9.7303
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "rackBall2",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          10.155,
+          -0.35000000000000003,
+          -9.7303
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "rackBall3",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          9.69,
+          -0.35000000000000003,
+          -9.4606
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "rackBall4",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          10.0,
+          -0.35000000000000003,
+          -9.4606
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "rackBall5",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          10.31,
+          -0.35000000000000003,
+          -9.4606
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "rackBall6",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          9.535,
+          -0.35000000000000003,
+          -9.1909
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "rackBall7",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          9.845,
+          -0.35000000000000003,
+          -9.1909
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "rackBall8",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          10.155,
+          -0.35000000000000003,
+          -9.1909
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "rackBall9",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "billiardBall",
+          "look": "billiardBall",
+          "source": "Idle"
+        },
+        "position": [
+          10.465,
+          -0.35000000000000003,
+          -9.1909
+        ],
+        "prototypeId": "billiardBall",
+        "scale": 1,
+        "yawDegrees": 0
+      }
+    ]
+  },
+  "prototypes": [
+    {
+      "document": {
+        "name": "billiardBall",
+        "palette": [
+          {
+            "color": "state.billiardsColors.ball",
+            "shininess": 60,
+            "specular": 0.4
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "sphere",
+            "position": [
+              0,
+              0.15,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          }
+        ]
+      },
+      "id": "billiardBall"
+    },
+    {
+      "document": {
+        "name": "billiardsTray",
+        "palette": [
+          {
+            "color": "state.billiardsColors.tray",
+            "shininess": 5,
+            "specular": 0.05
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "floor",
+            "position": [
+              0,
+              -0.45,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              1.4,
+              0.05,
+              1.4
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 0,
+            "name": "wallNorth",
+            "position": [
+              0,
+              -0.31,
+              1.35
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              1.4,
+              0.14,
+              0.05
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 2,
+            "material": 0,
+            "name": "wallSouth",
+            "position": [
+              0,
+              -0.31,
+              -1.35
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              1.4,
+              0.14,
+              0.05
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 3,
+            "material": 0,
+            "name": "wallEast",
+            "position": [
+              1.35,
+              -0.31,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.05,
+              0.14,
+              1.4
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 4,
+            "material": 0,
+            "name": "wallWest",
+            "position": [
+              -1.35,
+              -0.31,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.05,
+              0.14,
+              1.4
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "billiardsTray"
+    }
+  ]
+}

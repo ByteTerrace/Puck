@@ -190,7 +190,7 @@ public static partial class WorldDefinitionValidator {
             } else if (
                 (tokenRow.Kind != CellKind.Text) ||
                 tokenRow.IsKeyed ||
-                (tokenRow.Lattice is not null)
+                (tokenRow.Field is not null)
             ) {
                 errors.Add(item: $"host.backendRow names state row '{backendRow}', which must be a scalar kind=text row.");
             }
@@ -513,12 +513,16 @@ public static partial class WorldDefinitionValidator {
             errors.Add("state.lattices admits at most one physical field topology.");
         }
         foreach (var row in definition.StateRaw?.World ?? []) {
-            if (row?.Lattice is { } trait && (physical is null || trait.Topology != physical.Name)) {
-                errors.Add($"state row '{row.Name}' lattice.topology '{trait.Topology}' names no physical topology.");
+            if (row?.Field is not null) {
+                var topologyName = (row.EffectiveDomain is WorldStateDomain.CellsOf cellsOf ? cellsOf.Topology : null);
+
+                if (physical is null || topologyName != physical.Name) {
+                    errors.Add($"state row '{row.Name}' field domain.topology '{topologyName}' names no physical topology.");
+                }
             }
         }
         if (physical is not null && definition.Fields is { Fields.Count: 0 }) {
-            errors.Add($"state.lattices '{physical.Name}' is declared but no state row carries a lattice trait.");
+            errors.Add($"state.lattices '{physical.Name}' is declared but no state row carries a field trait.");
         }
         if (definition.Fields is not { } fields) {
             return;
@@ -720,7 +724,7 @@ public static partial class WorldDefinitionValidator {
             } else if (
                 (declared.Kind != CellKind.Fixed) ||
                 declared.IsKeyed ||
-                (declared.Lattice is not null)
+                (declared.Field is not null)
             ) {
                 errors.Add(item: $"{path} references state row '{row}', which must be a scalar kind=fixed row (a reaction scalar reads one slot cell per step).");
             }

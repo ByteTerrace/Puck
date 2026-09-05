@@ -3,29 +3,12 @@ using Puck.Abstractions.Documents;
 
 namespace Puck.World;
 
-/// <summary>Declares the stable token identities shared by attribute and zone rows.</summary>
-/// <param name="Capacity">The greatest token count, 1 through 4096.</param>
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldStateTokens(int Capacity = 256) {
-    /// <summary>The most tokens one transfer moves in a single mutation — no transfer can move more than could ever
-    /// exist in a domain, so this is <see cref="WorldTopologyCompilation.MaxCells"/>, the domain capacity
-    /// ceiling <see cref="Capacity"/> is itself validated against.</summary>
+/// <summary>The transfer-count ceiling every <see cref="WorldStateTransform.Transfer"/> is validated against.</summary>
+public static class WorldStateTransferCapacity {
+    /// <summary>The most tokens one transfer moves in a single mutation — <see cref="WorldTopologyCompilation.MaxCells"/>,
+    /// the ceiling an uncapacitied <see cref="WorldStateDomain.KeysOf"/> pile row's own cell count is bounded by.</summary>
     public const int MaxTransferCount = WorldTopologyCompilation.MaxCells;
 }
-
-/// <summary>A ring of the last <paramref name="Capacity"/> values pushed into the row, oldest overwritten first:
-/// the temporal twin of a board ray, read by <c>$history:</c> facts and matched by <c>$match:</c> in push order.
-/// Cell keys are the ring slots <c>0..Capacity-1</c>; the row's <c>historyCursor</c> counts every push.</summary>
-/// <param name="Capacity">How many pushes the ring keeps, 1..128.</param>
-/// <param name="Empty">The value read for an age older than the ring holds.</param>
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldStateHistory(int Capacity, long Empty = 0);
-
-/// <summary>A bounded zone whose cell keys identify tokens. Cell order is pile order; values are membership bits.</summary>
-/// <param name="Tokens">The token-domain row. Every token belongs to exactly one zone of its domain.</param>
-/// <param name="Ordered">Whether first/last selection and insertion order have gameplay meaning.</param>
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldStateZone(string Tokens, bool Ordered = true);
 
 /// <summary>Marks a plain integer row as a guarded submission stamp: the row's own generation
 /// <see cref="Sequence"/>, the sole state a <see cref="WorldPhaseGuard"/> checks and the mutation pipeline advances.
@@ -72,20 +55,11 @@ public enum WorldZoneSelector : byte {
 [JsonDerivedType(typeof(WorldStateTransform.SortKeyed), "sortKeyed")]
 [JsonDerivedType(typeof(WorldStateTransform.WriteSet), "writeSet")]
 [JsonDerivedType(typeof(WorldStateTransform.Push), "push")]
-[JsonDerivedType(typeof(WorldStateTransform.MoveToken), "moveToken")]
 [JsonDerivedType(typeof(WorldStateTransform.Observe), "observe")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public abstract record WorldStateTransform {
     /// <summary>Refreshes a knowledge board from its declared source and visibility mask; authority only.</summary>
     public sealed record Observe(string Row) : WorldStateTransform;
-    /// <summary>Moves a token along an affordable route, debiting movement points in the same candidate.</summary>
-    /// <param name="Positions">The token-keyed position row; valuesFrom names the terrain topology.</param>
-    /// <param name="Token">The stable token key.</param>
-    /// <param name="Destination">The destination cell ordinal.</param>
-    /// <param name="Terrain">The board row containing nonnegative entry costs; negative values are impassable.</param>
-    /// <param name="Allowance">The token-keyed movement-points row.</param>
-    /// <param name="MaxVisits">The route search's settled-node bound.</param>
-    public sealed record MoveToken(string Positions, string Token, int Destination, string Terrain, string Allowance, int MaxVisits) : WorldStateTransform;
     /// <summary>Moves one token, preserving identity. A random draw advances only when the whole transfer commits.</summary>
     /// <param name="From">The source zone.</param>
     /// <param name="To">The destination zone.</param>
@@ -93,7 +67,7 @@ public abstract record WorldStateTransform {
     /// <param name="Key">The token key for key selection.</param>
     /// <param name="InsertFirst">Insert at the first position rather than the last.</param>
     /// <param name="Draw">A streamDraw site for random selection; absent for other selectors.</param>
-    /// <param name="Count">How many tokens move in this one transfer, 1..<see cref="WorldStateTokens.MaxTransferCount"/>,
+    /// <param name="Count">How many tokens move in this one transfer, 1..<see cref="WorldStateTransferCapacity.MaxTransferCount"/>,
     /// each selected afresh from what remains (a five-card deal is one mutation); a key selection moves exactly one.</param>
     public sealed record Transfer(string From, string To, WorldZoneSelector Selector = WorldZoneSelector.Key,
         string? Key = null, bool InsertFirst = false, string? Draw = null, int Count = 1) : WorldStateTransform;

@@ -4,7 +4,7 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>Pins directions as content: an unauthored topology compiles exactly the fixed set every kind carried
-/// before <see cref="WorldStateLatticeTopology.Directions"/> existed, while an authored list replaces it wholesale —
+/// before <see cref="IDiscreteLatticeTopology.Directions"/> existed, while an authored list replaces it wholesale —
 /// a 4-connected grid orthogonal-only, or a renamed box vocabulary — and the validator refuses a list that would
 /// leave <see cref="CompiledWorldTopology.Opposite"/> unable to close.</summary>
 public sealed class WorldTopologyDirectionLawTests {
@@ -72,7 +72,7 @@ public sealed class WorldTopologyDirectionLawTests {
         var orthogonal = new WorldTopologyDirection[] {
             new("north", 0, -1), new("south", 0, 1), new("east", 1, 0), new("west", -1, 0),
         };
-        var board = new WorldStateRow(WorldCellName.Parse("board"), CellKind.Int, Board: new("grid"));
+        var board = new WorldStateRow(WorldCellName.Parse("board"), CellKind.Int, Domain: new WorldStateDomain.CellsOf("grid"));
         var slot = new WorldStateRow(WorldCellName.Parse("neighbour"), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)]);
         WorldDefinition Document(string direction) => Fixtures.BuildDocument() with {
             StateRaw = new(World: [board, slot], Lattices: [Grid() with { Directions = orthogonal }]),
@@ -86,7 +86,7 @@ public sealed class WorldTopologyDirectionLawTests {
 
     [Fact]
     public void ARingRefusesAYStepAndAWrappedAxisRefusesAStepAtOrPastItsExtent() {
-        var ring = new WorldStateLatticeTopology("ring", new DocumentVector3(0, 0, 0), 1, 5, 1, Kind: WorldTopologyKind.Ring);
+        var ring = new WorldStateLatticeTopology.Ring("ring", new DocumentVector3(0, 0, 0), 1, 5);
         Assert.False(WorldTopologyCompilation.TryValidate(ring with { Directions = [new("skew", 1, 1)] }, out var ringReason));
         Assert.Contains("no second axis", ringReason);
         Assert.False(WorldTopologyCompilation.TryValidate(ring with { Directions = [new("around", 5, 0), new("back", -5, 0)] }, out var wideReason));
@@ -99,12 +99,18 @@ public sealed class WorldTopologyDirectionLawTests {
         Assert.Contains("magnitude must be under the depth", deepReason);
     }
 
+    // A physical field's case type carries no 'directions' property to author in the first place; the invariant
+    // the old runtime-validator check named is now enforced by the document's own strict-parsed JSON shape instead.
     [Fact]
     public void APhysicalFieldRefusesAnAuthoredDirectionVocabulary() {
-        var field = new WorldStateLatticeTopology("field", new DocumentVector3(0, 0, 0), 1, 4, 4, Kind: WorldTopologyKind.Field, Directions: [new("east", 1, 0), new("west", -1, 0)]);
+        var field = new WorldStateLatticeTopology.Field("field", new DocumentVector3(0, 0, 0), 1, 4, 4);
         var definition = Fixtures.BuildDocument() with { StateRaw = new(Lattices: [field]) };
-        Assert.False(WorldDefinitionValidator.TryValidateLocally(definition, out var reason));
-        Assert.Contains("direction vocabulary", reason);
+        var node = System.Text.Json.Nodes.JsonNode.Parse(System.Text.Encoding.UTF8.GetString(WorldDefinitionSerialization.Serialize(definition)))!.AsObject();
+        var lattice = node["state"]!["lattices"]!.AsArray()[0]!.AsObject();
+        lattice["directions"] = new System.Text.Json.Nodes.JsonArray(new System.Text.Json.Nodes.JsonObject { ["name"] = "east", ["x"] = 1, ["y"] = 0 });
+
+        var exception = Assert.Throws<InvalidDataException>(() => WorldDefinitionSerialization.Deserialize(System.Text.Encoding.UTF8.GetBytes(node.ToJsonString())));
+        Assert.IsType<System.Text.Json.JsonException>(exception.InnerException);
     }
 
     [Fact]
@@ -118,8 +124,8 @@ public sealed class WorldTopologyDirectionLawTests {
         Assert.True(topology.Direction("east") >= 0);
     }
 
-    private static WorldStateLatticeTopology Grid() =>
-        new("grid", new DocumentVector3(0, 0, 0), 1, 4, 4, Kind: WorldTopologyKind.Grid);
-    private static WorldStateLatticeTopology Box() =>
-        new("box", new DocumentVector3(0, 0, 0), 0.5f, 2, 2, Layers: 2, Kind: WorldTopologyKind.Box, LayerHeight: 0.5f);
+    private static WorldStateLatticeTopology.Grid Grid() =>
+        new("grid", new DocumentVector3(0, 0, 0), 1, 4, 4);
+    private static WorldStateLatticeTopology.Box Box() =>
+        new("box", new DocumentVector3(0, 0, 0), 0.5f, 2, 2, Layers: 2, LayerHeight: 0.5f);
 }

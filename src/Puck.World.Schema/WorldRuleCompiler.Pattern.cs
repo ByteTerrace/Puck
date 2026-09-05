@@ -22,7 +22,7 @@ public static partial class WorldRuleCompiler {
         string? attribute = null;
         CompiledWorldExpressionToken[]? tokenExpression = null;
         CellKind kind;
-        if (row.Board is { } declaredBoard) {
+        if (row.EffectiveDomain is WorldStateDomain.CellsOf declaredBoard) {
             if (tokens.Length < 4) {
                 throw Invalid("a board source requires a direction or any");
             }
@@ -49,7 +49,7 @@ public static partial class WorldRuleCompiler {
             }
             // A pattern's board source is read entirely through ReadRay/the pattern machine below; Neighbour is an
             // arbitrary placeholder — no reader inspects CompiledWorldBoardQuery.Kind on this path.
-            board = new CompiledWorldBoardQuery(topology, WorldBoardQueryKind.Neighbour, Direction: direction);
+            board = new BoardNeighbourQuery(topology, direction);
             kind = CellKind.Int;
         } else {
             if (tokens.Length > 4 || key is not null) {
@@ -58,26 +58,33 @@ public static partial class WorldRuleCompiler {
             if (tokens.Length == 4) {
                 facet = (tokens[3] == "prefix") ? WorldMatchFacet.Prefix : throw Invalid($"'{tokens[3]}' is not a facet for a word source; prefix is");
             }
-            if (row.Zone is { } zone) {
-                if (!zone.Ordered) {
-                    throw Invalid($"zone '{row.Name}' must be ordered to read as a word");
-                }
+            if (row.EffectiveDomain is WorldStateDomain.KeysOf { Ordered: true } zone) {
                 if (pattern.Value is not null) {
-                    if (!TryCompilePatternValue(definition: definition, pattern: pattern, tokenDomain: zone.Tokens, ruleName: ruleName, tokens: out tokenExpression, reason: out var valueReason)) {
+                    if (!TryCompilePatternValue(definition: definition, pattern: pattern, tokenDomain: zone.Row.Value, ruleName: ruleName, tokens: out tokenExpression, reason: out var valueReason)) {
                         throw Invalid(valueReason);
                     }
                     kind = pattern.Kind;
-                    return new(new CompiledWorldOperand(WorldRuleFactKind.Pattern, tokens[2], key, Board: null, Pattern: tokens[1], ValueKind: CellKind.Int, MatchFacet: facet,
-                        StateHandle: ResolveWorldStateHandle(definition: definition, name: tokens[2]), TokenExpression: tokenExpression), CellKind.Int, name);
+                    return new(new CompiledWorldOperand(new PatternOperand(
+                        row: tokens[2],
+                        key: key,
+                        keyFrom: null,
+                        stateHandle: ResolveWorldStateHandle(definition: definition, name: tokens[2]),
+                        pattern: tokens[1],
+                        board: null,
+                        filterRow: null,
+                        filterHandle: default,
+                        matchFacet: facet,
+                        tokenExpression: tokenExpression
+                    )), CellKind.Int, name);
                 }
                 attribute = pattern.Attribute ?? throw Invalid($"pattern '{pattern.Name}' reads a zone and so needs an attribute row or a value expression");
                 var attributeRow = WorldDefinitionRows.FindStateRow(definition.State, attribute) ?? throw Invalid($"attribute '{attribute}' names no state row");
-                if (!attributeRow.IsKeyed || attributeRow.Kind is not (CellKind.Int or CellKind.Fixed) || attributeRow.KeysFrom != zone.Tokens) {
-                    throw Invalid($"attribute '{attribute}' must be a numeric row keyed over token domain '{zone.Tokens}'");
+                if (attributeRow.Kind is not (CellKind.Int or CellKind.Fixed) || attributeRow.EffectiveDomain is not WorldStateDomain.KeysOf attributeKeysOf || attributeKeysOf.Row.Value != zone.Row.Value) {
+                    throw Invalid($"attribute '{attribute}' must be a numeric row keyed over token domain '{zone.Row}'");
                 }
                 kind = attributeRow.Kind;
             } else {
-                if ((!row.IsKeyed && row.History is null) || pattern.Attribute is not null) {
+                if ((!row.IsKeyed && row.EffectiveDomain is not WorldStateDomain.Ring) || pattern.Attribute is not null) {
                     throw Invalid($"'{row.Name}' must be a keyed or history row read without an attribute");
                 }
                 kind = row.Kind == CellKind.Bool ? CellKind.Int : row.Kind;
@@ -86,9 +93,18 @@ public static partial class WorldRuleCompiler {
         if (kind != pattern.Kind) {
             throw Invalid($"pattern '{pattern.Name}' reads kind={pattern.Kind} but the source word is kind={kind}");
         }
-        return new(new CompiledWorldOperand(WorldRuleFactKind.Pattern, tokens[2], key, KeyFrom: keyFrom, Board: board, FilterRow: attribute, Pattern: tokens[1], ValueKind: CellKind.Int, MatchFacet: facet,
-            StateHandle: ResolveWorldStateHandle(definition: definition, name: tokens[2]),
-            FilterHandle: (attribute is null) ? default : ResolveWorldStateHandle(definition: definition, name: attribute)), CellKind.Int, name);
+        return new(new CompiledWorldOperand(new PatternOperand(
+            row: tokens[2],
+            key: key,
+            keyFrom: keyFrom,
+            stateHandle: ResolveWorldStateHandle(definition: definition, name: tokens[2]),
+            pattern: tokens[1],
+            board: board,
+            filterRow: attribute,
+            filterHandle: (attribute is null) ? default : ResolveWorldStateHandle(definition: definition, name: attribute),
+            matchFacet: facet,
+            tokenExpression: null
+        )), CellKind.Int, name);
     }
 
     /// <summary>Compiles a pattern row's value expression for one zone: inside it, a state token keyed
@@ -108,8 +124,8 @@ public static partial class WorldRuleCompiler {
         try {
             tokens = CompileExpression(expression: pattern.Value, kind: pattern.Kind, ruleName: ruleName, verb: $"pattern '{pattern.Name}' value", definition: definition);
             foreach (var token in tokens) {
-                if (token.Operand is { KeyFrom: { Binding: RuleBinding.Token } } operand &&
-                    (WorldDefinitionRows.FindStateRow(definition.State, operand.Row ?? string.Empty) is not { } row || row.KeysFrom != tokenDomain)) {
+                if (token.Operand?.Value is IStateAddressedOperand { KeyFrom: { Binding: RuleBinding.Token } } operand &&
+                    (WorldDefinitionRows.FindStateRow(definition.State, operand.Row) is not { } row || row.EffectiveDomain is not WorldStateDomain.KeysOf tokenKeysOf || tokenKeysOf.Row.Value != tokenDomain)) {
                     tokens = null;
                     reason = $"pattern '{pattern.Name}' value reads '{operand.Row}' by $token, which must be a row keyed over token domain '{tokenDomain}'";
                     return false;

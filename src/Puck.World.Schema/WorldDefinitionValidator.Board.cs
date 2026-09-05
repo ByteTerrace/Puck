@@ -17,7 +17,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         var occupancy = WorldDefinitionRows.FindStateRow(definition.State, board.Occupancy);
-        if (occupancy?.Board is not { } occupancyBoard || occupancyBoard.Topology != board.Topology) {
+        if (occupancy?.EffectiveDomain is not WorldStateDomain.CellsOf occupancyDomain || occupancyDomain.Topology != board.Topology) {
             errors.Add(item: $"{path}.board.occupancy '{board.Occupancy}' must name a board row over topology '{board.Topology}'.");
         }
 
@@ -35,7 +35,7 @@ public static partial class WorldDefinitionValidator {
 
         if (board.Plan is { } plan) {
             var planRow = WorldDefinitionRows.FindStateRow(definition.State, plan);
-            if (planRow?.Board is not { } planBoard || planBoard.Topology != board.Topology) {
+            if (planRow?.EffectiveDomain is not WorldStateDomain.CellsOf planDomain || planDomain.Topology != board.Topology) {
                 errors.Add(item: $"{path}.board.plan '{plan}' must name a board row over topology '{board.Topology}'.");
             }
         }

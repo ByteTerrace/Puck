@@ -11,9 +11,9 @@ public sealed class WorldDealAndRevealLawTests {
     [Fact]
     public void ACountedTransferDealsInOneMutationAndRefusesPastThePile() {
         var definition = Document([
-            new(Name("cards"), CellKind.Int, Capacity: 6, Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4"), Cell("c5"), Cell("c6")], Tokens: new()),
-            new(Name("deck"), CellKind.Bool, Capacity: 6, Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4"), Cell("c5"), Cell("c6")], Zone: new("cards", Ordered: true)),
-            new(Name("hand"), CellKind.Bool, Capacity: 6, Zone: new("cards", Ordered: true)),
+            new(Name("cards"), CellKind.Int, Capacity: 6, Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4"), Cell("c5"), Cell("c6")]),
+            new(Name("deck"), CellKind.Bool, Capacity: 6, Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4"), Cell("c5"), Cell("c6")], Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true)),
+            new(Name("hand"), CellKind.Bool, Capacity: 6, Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true)),
         ], []);
 
         var dealt = Apply(definition, new WorldStateTransform.Transfer("deck", "hand", WorldZoneSelector.First, Count: 5));
@@ -31,9 +31,9 @@ public sealed class WorldDealAndRevealLawTests {
     [Fact]
     public void ARuleQuantifiedOverTokenKeysBindsEachToTheKey() {
         var definition = Document([
-            new(Name("cards"), CellKind.Int, Capacity: 3, Cells: [Cell("c1"), Cell("c2"), Cell("c3")], Tokens: new()),
-            new(Name("rank"), CellKind.Int, KeysFrom: "cards", Capacity: 3, Cells: [Cell("c1", 5), Cell("c2", 9), Cell("c3", 2)]),
-            new(Name("doubled"), CellKind.Int, KeysFrom: "cards", Capacity: 3, Cells: [Cell("c1", 0), Cell("c2", 0), Cell("c3", 0)]),
+            new(Name("cards"), CellKind.Int, Capacity: 3, Cells: [Cell("c1"), Cell("c2"), Cell("c3")]),
+            new(Name("rank"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards")), Capacity: 3, Cells: [Cell("c1", 5), Cell("c2", 9), Cell("c3", 2)]),
+            new(Name("doubled"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards")), Capacity: 3, Cells: [Cell("c1", 0), Cell("c2", 0), Cell("c3", 0)]),
         ], [
             new WorldRule(Name("double"), Mode: ActionTriggerMode.Edge, ForEach: "rank", Effects: [new ActionEffect.SetState(State: "doubled", Key: "$each", Expression: new WorldValueExpression(Tokens: [
                 new WorldValueToken.State(Name: "rank", Key: "$each"), new WorldValueToken.Constant(Value: 2m), new WorldValueToken.Multiply(),

@@ -1,8 +1,9 @@
 replay.record tabletop-state
-world.state.act turns 0 {"$type":"moveToken","positions":"positions","token":"scout","destination":2,"terrain":"terrain","allowance":"moves","maxVisits":16}
+world.state.cell.set destination scout 2
+world.wait 1
 world.state positions scout
 world.state moves scout
-world.state.transform {"$type":"setRay","row":"discs","from":"0","direction":"E","pattern":"capture","value":1}
+world.state.act turns 0 {"$type":"setRay","row":"discs","from":"0","direction":"E","pattern":"capture","value":1}
 world.state discs 1
 world.state.transform {"$type":"transfer","from":"deck","to":"hand","selector":"First"}
 world.state hand

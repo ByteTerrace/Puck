@@ -988,7 +988,7 @@ public static partial class WorldDefinitionValidator {
             } else if (
                 (censusRow.Kind != CellKind.Int) ||
                 censusRow.IsKeyed ||
-                (censusRow.Lattice is not null)
+                (censusRow.Field is not null)
             ) {
                 errors.Add(item: $"bodies.capacityRow names state row '{capacityRow}', which must be a scalar kind=int row.");
             }
@@ -1003,7 +1003,7 @@ public static partial class WorldDefinitionValidator {
             } else if (
                 (scaleStateRow.Kind != CellKind.Fixed) ||
                 !scaleStateRow.IsKeyed ||
-                (scaleStateRow.Lattice is not null) ||
+                (scaleStateRow.Field is not null) ||
                 (scaleStateRow.Min is null) ||
                 (scaleStateRow.Max is null)
             ) {

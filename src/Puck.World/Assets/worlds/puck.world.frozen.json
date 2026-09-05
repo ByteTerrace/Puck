@@ -5626,6 +5626,7 @@
   "state": {
     "lattices": [
       {
+        "$type": "field",
         "cellSize": 0.5,
         "depth": 104,
         "layers": 1,
@@ -6112,8 +6113,11 @@
         "name": "colors"
       },
       {
-        "kind": "fixed",
-        "lattice": {
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "island"
+        },
+        "field": {
           "color": "#6B4A34",
           "heightScale": 0.6,
           "initial": 0.35,
@@ -6184,14 +6188,17 @@
               "minZ": -26,
               "value": 0.15
             }
-          ],
-          "topology": "island"
+          ]
         },
+        "kind": "fixed",
         "name": "dirt"
       },
       {
-        "kind": "fixed",
-        "lattice": {
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "island"
+        },
+        "field": {
           "color": "#3E8FD0",
           "heightScale": 1,
           "initial": 0,
@@ -6207,14 +6214,17 @@
               "minZ": -7,
               "value": 3.0
             }
-          ],
-          "topology": "island"
+          ]
         },
+        "kind": "fixed",
         "name": "water"
       },
       {
-        "kind": "fixed",
-        "lattice": {
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "island"
+        },
+        "field": {
           "color": "#5FA04A",
           "heightScale": 0.35,
           "initial": 0,
@@ -6237,48 +6247,60 @@
               "minZ": -12,
               "value": 0.8
             }
-          ],
-          "topology": "island"
+          ]
         },
+        "kind": "fixed",
         "name": "grass"
       },
       {
-        "kind": "fixed",
-        "lattice": {
-          "initial": 0,
-          "max": 15,
-          "min": -5,
+        "domain": {
+          "$type": "cellsOf",
           "topology": "island"
         },
+        "field": {
+          "initial": 0,
+          "max": 15,
+          "min": -5
+        },
+        "kind": "fixed",
         "name": "heat"
       },
       {
-        "kind": "fixed",
-        "lattice": {
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "island"
+        },
+        "field": {
           "color": "#FF5A1F",
           "heightScale": 0.22,
           "initial": 0,
           "max": 1,
-          "min": 0,
-          "topology": "island"
+          "min": 0
         },
+        "kind": "fixed",
         "name": "fire"
       },
       {
-        "kind": "fixed",
-        "lattice": {
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "island"
+        },
+        "field": {
           "color": "#2A2320",
           "heightScale": 0.15,
           "initial": 0,
           "max": 1,
-          "min": 0,
-          "topology": "island"
+          "min": 0
         },
+        "kind": "fixed",
         "name": "char"
       },
       {
-        "kind": "fixed",
-        "lattice": {
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "island"
+        },
+        "field": {
           "color": "#D8F1FF",
           "heightScale": 1.5,
           "initial": 0,
@@ -6293,9 +6315,9 @@
               "minZ": 5,
               "value": 1
             }
-          ],
-          "topology": "island"
+          ]
         },
+        "kind": "fixed",
         "name": "ice"
       },
       {

@@ -11,7 +11,7 @@ namespace Puck.World.Tests;
 public sealed class WorldBoardMaskLawTests {
     [Fact]
     public void OccupancyReadsAsAMaskAndABoardShiftFollowsTheTopologyWithoutWrapping() {
-        var board = new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0", 1), Cell("1", 2), Cell("2", 2), Cell("3", 1)], Board: new("map"));
+        var board = new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0", 1), Cell("1", 2), Cell("2", 2), Cell("3", 1)], Domain: new WorldStateDomain.CellsOf("map"));
         var definition = Document([board, Slot("mask"), Slot("east"), Slot("north")], [
             new WorldRule(Name("mask"), [new ActionEffect.SetState(State: "mask", FromState: "$board:mask:board:2:2")]),
             new WorldRule(Name("east"), [new ActionEffect.SetState(State: "east", Expression: new WorldValueExpression(Tokens: [
@@ -39,9 +39,9 @@ public sealed class WorldBoardMaskLawTests {
 
     [Fact]
     public void ASetLandsBackOnTheBoardThroughWriteSetAndBitAlgebraComposesTwoBoardsIntoOne() {
-        var board = new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0", 1), Cell("1", 7), Cell("3", 7)], Board: new("map"));
-        var other = new WorldStateRow(Name("other"), CellKind.Int, Cells: [Cell("0", 1), Cell("5", 1)], Board: new("map"));
-        var target = new WorldStateRow(Name("target"), CellKind.Bool, Board: new("map"));
+        var board = new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0", 1), Cell("1", 7), Cell("3", 7)], Domain: new WorldStateDomain.CellsOf("map"));
+        var other = new WorldStateRow(Name("other"), CellKind.Int, Cells: [Cell("0", 1), Cell("5", 1)], Domain: new WorldStateDomain.CellsOf("map"));
+        var target = new WorldStateRow(Name("target"), CellKind.Bool, Domain: new WorldStateDomain.CellsOf("map"));
         var definition = Document([board, other, target, Slot("mask", 0b1010L), Slot("both"), Slot("either"), Slot("onlyLeft"), Slot("complement")], [
             new WorldRule(Name("both"), [new ActionEffect.SetState(State: "both", Expression: new WorldValueExpression(Tokens: [
                 new WorldValueToken.State(Name: "$board:mask:board:1:100"), new WorldValueToken.State(Name: "$board:mask:other:1:100"), new WorldValueToken.BitAnd(),
@@ -82,8 +82,8 @@ public sealed class WorldBoardMaskLawTests {
 
     [Fact]
     public void MasksRefuseTopologiesPastSixtyFourCells() {
-        var wide = new WorldStateRow(Name("wide"), CellKind.Int, Board: new("big"));
-        var small = new WorldStateRow(Name("small"), CellKind.Int, Board: new("map"));
+        var wide = new WorldStateRow(Name("wide"), CellKind.Int, Domain: new WorldStateDomain.CellsOf("big"));
+        var small = new WorldStateRow(Name("small"), CellKind.Int, Domain: new WorldStateDomain.CellsOf("map"));
         var definition = Document([wide, small, Slot("mask")], [new WorldRule(Name("mask"), [new ActionEffect.SetState(State: "mask", FromState: "$board:mask:wide:1:1")])], [],
             lattices: [Grid("map", 4), Grid("big", 9)]);
         Assert.False(WorldDefinitionValidator.TryValidateLocally(definition, out var maskReason));
@@ -111,8 +111,8 @@ public sealed class WorldBoardMaskLawTests {
     }
     private static string[] Members(WorldDefinition document, string row) =>
         (Find(document, row).Cells ?? []).Where(c => c.Value != 0L).Select(c => c.Key.Value).ToArray();
-    private static WorldStateLatticeTopology Grid(string name, int side) =>
-        new(name, new DocumentVector3(0, 0, 0), 1, side, side, Kind: WorldTopologyKind.Grid);
+    private static WorldStateLatticeTopology.Grid Grid(string name, int side) =>
+        new(name, new DocumentVector3(0, 0, 0), 1, side, side);
     private static WorldDefinition Document(WorldStateRow[] rows, WorldRule[] rules, WorldPatternRow[]? patterns = null, WorldStateLatticeTopology[]? lattices = null) => Fixtures.BuildDocument() with {
         StateRaw = new(World: rows, Lattices: lattices ?? [Grid("map", 4)]),
         PatternsRaw = patterns ?? [],

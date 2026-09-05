@@ -15,7 +15,7 @@ public sealed partial class CompiledWorldTopology {
 
     /// <summary>Finds an element by its canonical name or an authored alias.</summary>
     /// <param name="name">A name <see cref="ElementName"/> answers, or an authored
-    /// <see cref="WorldStateLatticeTopology.ElementAliases"/> entry.</param>
+    /// <see cref="IDiscreteLatticeTopology.ElementAliases"/> entry.</param>
     /// <returns>The element ordinal, or -1.</returns>
     public int Element(string name) {
         var canonical = Array.IndexOf(m_elementNames, name);
@@ -49,7 +49,7 @@ public sealed partial class CompiledWorldTopology {
     }
 
     /// <summary>Names every element of a topology's point group without materializing per-cell images — the
-    /// bare-group enumeration a validator uses to check an authored <see cref="WorldStateLatticeTopology.ElementAliases"/>
+    /// bare-group enumeration a validator uses to check an authored <see cref="IDiscreteLatticeTopology.ElementAliases"/>
     /// entry names a real element before any topology cell exists to carry.</summary>
     /// <param name="kind">The topology kind.</param>
     /// <param name="width">Cells along +X.</param>

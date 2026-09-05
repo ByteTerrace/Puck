@@ -1,6 +1,5 @@
 using System.Text.Json.Serialization;
 using Puck.Maths;
-using Puck.World.Protocol;
 using Puck.Physics.Motion;
 
 namespace Puck.World;
@@ -179,6 +178,19 @@ public static class WorldRuleFacts {
     /// on a <c>compareState</c> <c>key</c>/<c>comparandKey</c> and on a world-scope effect's <c>key</c>/<c>fromKey</c>;
     /// a body-reference token spells the same indirection as <c>cell:&lt;row&gt;:&lt;key&gt;</c>.</summary>
     public const string CellKeyPrefix = "$cell:";
+    /// <summary>The prefix a cell KEY may carry to address a row by a genuine (observer, subject) pair rather than
+    /// one body: <c>$pair:&lt;bodyRefA&gt;:&lt;bodyRefB&gt;</c> resolves, at every read and every firing, to the
+    /// composite key <c>"&lt;a&gt;_&lt;b&gt;"</c> (underscore, since <see cref="WorldCellName"/> reserves <c>:</c>)
+    /// the two live body references (the same grammar <see cref="DistancePrefix"/>/<see cref="LineOfSightPrefix"/>
+    /// spend both halves on — a literal <c>body:&lt;n&gt;</c>, an <c>argmax:&lt;row&gt;</c>/<c>argmin:&lt;row&gt;</c>
+    /// reduction, a <c>cell:&lt;row&gt;:&lt;key&gt;</c> indirection, or a bound <c>each</c>/<c>left</c>/<c>right</c>)
+    /// resolve to — so a keyed row can hold one cell PER PAIR (an observer's own impression of one particular
+    /// subject) instead of one cell per body. <c>(a, b)</c> and <c>(b, a)</c> name different cells: the pair is
+    /// directed, exactly as "how much A trusts B" and "how much B trusts A" are two different numbers. Admitted
+    /// everywhere <see cref="CellKeyPrefix"/> is — a <c>compareState</c> <c>key</c>/<c>comparandKey</c>, a
+    /// world-scope effect's <c>key</c>/<c>fromKey</c>, a flock affinity's own key — because both resolve through the
+    /// same <see cref="CompiledCellRef"/> indirection carrier.</summary>
+    public const string PairKeyPrefix = "$pair:";
 
     /// <summary>The binding vocabulary, one row per <see cref="RuleBinding"/> other than <see cref="RuleBinding.None"/>:
     /// the key token (<c>$each</c>, <c>$left</c>, <c>$right</c>), the body-reference token derived from it by
@@ -402,16 +414,23 @@ public enum CompiledBodyRefKind : byte {
 /// row-name scan; <see langword="default"/> (invalid) otherwise.</param>
 public readonly record struct CompiledBodyRef(CompiledBodyRefKind Kind, int Index, string? Row, string? Key = null, WorldStateHandle Handle = default);
 /// <summary>A state cell address whose integer value is read as a cell KEY at evaluation time
-/// (<see cref="WorldRuleFacts.CellKeyPrefix"/>).</summary>
-/// <param name="Row">The row holding the indirection cell.</param>
-/// <param name="Key">The indirection cell's key.</param>
+/// (<see cref="WorldRuleFacts.CellKeyPrefix"/>), OR a live composite (observer, subject) pair key
+/// (<see cref="WorldRuleFacts.PairKeyPrefix"/>) — a keyed row can therefore be keyed by one body index, or by two,
+/// through the very same indirection carrier every dynamic key already resolves through.</summary>
+/// <param name="Row">The row holding the indirection cell, for a <c>$cell:</c> indirection; empty otherwise.</param>
+/// <param name="Key">The indirection cell's key, for a <c>$cell:</c> indirection; empty otherwise.</param>
 /// <param name="Binding">The bound body read as the key instead, when not <see cref="RuleBinding.None"/>; then
 /// <paramref name="Row"/>/<paramref name="Key"/> are empty.</param>
 /// <param name="Handle">The compiled handle for <paramref name="Row"/> when <paramref name="Binding"/> is
 /// <see cref="RuleBinding.None"/> — resolved once at compile time (see <see cref="WorldStateReader.TryReadHandle"/>)
 /// so the per-tick indirection read never repeats a row-name scan; <see langword="default"/> (invalid) for a
 /// binding-carried reference, which names no row.</param>
-public readonly record struct CompiledCellRef(string Row, string Key, RuleBinding Binding = RuleBinding.None, WorldStateHandle Handle = default);
+/// <param name="PairBodyA">The first body of a <c>$pair:</c> composite key, or <see langword="null"/> for a
+/// <c>$cell:</c>/binding indirection.</param>
+/// <param name="PairBodyB">The second body of a <c>$pair:</c> composite key; set exactly when
+/// <paramref name="PairBodyA"/> is.</param>
+public readonly record struct CompiledCellRef(string Row, string Key, RuleBinding Binding = RuleBinding.None, WorldStateHandle Handle = default,
+    CompiledBodyRef? PairBodyA = null, CompiledBodyRef? PairBodyB = null);
 /// <summary>A name bound during one evaluation of a rule or interaction — the body index a key token
 /// <c>$each</c>/<c>$left</c>/<c>$right</c> or a body-reference token <c>each</c>/<c>left</c>/<c>right</c> reads.</summary>
 public enum RuleBinding : byte {
@@ -511,78 +530,8 @@ public enum WorldRuleFactKind : byte {
     /// (<see cref="WorldRuleFacts.ClockPrefix"/>).</summary>
     Clock,
 }
-/// <summary>One resolved operand of a world-rule comparison — the (<see cref="Kind"/>, <see cref="Row"/>,
-/// <see cref="Key"/>) address plus the <see cref="Screen"/>/<see cref="Address"/> machine coordinates, the live
-/// quantity <c>WorldServer.RuleGateOpen</c> reads to a <see cref="FixedQ4816"/>. Both sides of a
-/// <see cref="ActionPredicate.CompareState"/> conjunct — the primary and, when spelled, the comparand — are the same
-/// operand type, read by the same <c>ReadWorldFact</c> helper, so the two sides can never drift into two readings of
-/// one name.</summary>
-/// <param name="Kind">Which live quantity this operand reads.</param>
-/// <param name="Row">The state row name for <see cref="WorldRuleFactKind.StateCell"/>, the placement id for
-/// <see cref="WorldRuleFactKind.RegionOccupancy"/>, the adjacency row name for
-/// <see cref="WorldRuleFactKind.LinkStaleness"/>, or the facet name for
-/// <see cref="WorldRuleFactKind.Navigation"/>; <see langword="null"/> otherwise.</param>
-/// <param name="Key">The cell key inside <paramref name="Row"/> for <see cref="WorldRuleFactKind.StateCell"/>,
-/// <see langword="null"/> otherwise.</param>
-/// <param name="Screen">The declared screen index for <see cref="WorldRuleFactKind.MachineMemory"/>; unused otherwise.</param>
-/// <param name="Address">The machine-defined memory address for <see cref="WorldRuleFactKind.MachineMemory"/>; unused
-/// otherwise.</param>
-/// <param name="Reduce">The aggregate/extremum for <see cref="WorldRuleFactKind.Reduction"/> (any op) or
-/// <see cref="WorldRuleFactKind.ArgBody"/> (<see cref="WorldStateReduceOp.Max"/>/<see cref="WorldStateReduceOp.Min"/>
-/// only); <see cref="WorldStateReduceOp.None"/> otherwise.</param>
-/// <param name="BodyA">The first named body for <see cref="WorldRuleFactKind.BodyDistance"/>/
-/// <see cref="WorldRuleFactKind.LineOfSight"/>, or the one named body for <see cref="WorldRuleFactKind.Parked"/>,
-/// <see cref="WorldRuleFactKind.Upright"/>, and <see cref="WorldRuleFactKind.Navigation"/> (which read no second
-/// body); <see langword="null"/> otherwise.</param>
-/// <param name="BodyB">The second named body for <see cref="WorldRuleFactKind.BodyDistance"/>/
-/// <see cref="WorldRuleFactKind.LineOfSight"/>; <see langword="null"/> otherwise (including
-/// <see cref="WorldRuleFactKind.Parked"/>, which is single-body).</param>
-/// <param name="Seat">The 0-based local-seat body index for <see cref="WorldRuleFactKind.Channel"/>; unused
-/// otherwise.</param>
-/// <param name="ChannelOrdinal">The declared channel's document-order ordinal (the same ordinal
-/// <c>WorldChannelTable.Compile</c> assigns) for <see cref="WorldRuleFactKind.Channel"/>; unused otherwise.</param>
-/// <param name="KeyFrom">For <see cref="WorldRuleFactKind.StateCell"/>, the cell key read by indirection
-/// (<see cref="WorldRuleFacts.CellKeyPrefix"/>) in place of <paramref name="Key"/>; <see langword="null"/> otherwise.</param>
-/// <param name="Symmetry">The lattice map a <see cref="WorldRuleFactKind.Symmetry"/> operand applies to its source node.</param>
-/// <param name="SymmetryArgument">The literal argument of that map — the step count of <see cref="WorldSymmetryFunction.Cycle"/>,
-/// or the other node of <see cref="WorldSymmetryFunction.Reflect"/>/<see cref="WorldSymmetryFunction.Orthogonal"/>
-/// when <paramref name="SymmetryOtherCell"/> is <see langword="null"/>.</param>
-/// <param name="SymmetryOtherCell">The cell the other node is read from live, or <see langword="null"/> for the literal
-/// <paramref name="SymmetryArgument"/>; an empty key addresses a slot row's own cell.</param>
-/// <param name="ValueKind">The raw encoding returned by this operand. Carrying it beside the address lets the
-/// runtime compare integer cells without narrowing them through binary32.</param>
-/// <param name="StateHandle">The compiled world-lane row handle for state-backed operands; invalid for channels
-/// that do not read a state row.</param>
-/// <param name="FilterRow">The optional keyed row whose nonzero cells admit reduction candidates.</param>
-/// <param name="FilterHandle">The compiled handle for <paramref name="FilterRow"/>.</param>
-/// <param name="Board">The compiled discrete query, when present.</param>
-/// <param name="Pattern">The pattern a <see cref="WorldRuleFactKind.Pattern"/> operand runs; the word source is <paramref name="Row"/> and, for a zone, <paramref name="FilterRow"/> is its attribute row.</param>
-/// <param name="MatchFacet">What the pattern operand answers; a board query whose <c>Direction</c> is -1 walks every direction.</param>
-/// <param name="TokenExpression">For a zone source whose pattern carries a value expression, that expression compiled with <c>$token</c> keys bound per token.</param>
-public readonly record struct CompiledWorldOperand(
-    WorldRuleFactKind Kind,
-    string? Row,
-    string? Key,
-    int Screen = 0,
-    int Address = 0,
-    WorldStateReduceOp Reduce = WorldStateReduceOp.None,
-    CompiledBodyRef? BodyA = null,
-    CompiledBodyRef? BodyB = null,
-    int Seat = 0,
-    int ChannelOrdinal = 0,
-    CompiledCellRef? KeyFrom = null,
-    WorldSymmetryFunction Symmetry = WorldSymmetryFunction.Ring,
-    long SymmetryArgument = 0L,
-    CompiledCellRef? SymmetryOtherCell = null,
-    CellKind ValueKind = CellKind.Fixed,
-    WorldStateHandle StateHandle = default,
-    string? FilterRow = null,
-    WorldStateHandle FilterHandle = default,
-    CompiledWorldBoardQuery? Board = null,
-    string? Pattern = null,
-    WorldMatchFacet MatchFacet = WorldMatchFacet.Accept,
-    CompiledWorldExpressionToken[]? TokenExpression = null
-);
+// CompiledWorldOperand is now the closed-union carrier declared in WorldOperandUnion.cs, with its case types in
+// WorldOperandKinds.cs (one sealed class per WorldRuleFactKind below).
 /// <summary>What a <c>$match:</c> operand answers about its word.</summary>
 public enum WorldMatchFacet : byte {
     /// <summary>1 when the whole word is in the language, else 0.</summary>
@@ -613,7 +562,12 @@ public enum CompiledWorldPredicateKind : byte {
 /// <summary>One token in a compiled postfix world-rule gate. The representation preserves arbitrary nested
 /// <see cref="ActionPredicate.All"/>/<see cref="ActionPredicate.Any"/>/<see cref="ActionPredicate.Not"/> trees while
 /// evaluation remains a single bounded, allocation-free pass.</summary>
-/// <param name="Left">The primary operand — the <c>(State, Key)</c> side of the authored <c>compareState</c>.</param>
+/// <param name="Left">The primary operand — the <c>(State, Key)</c> side of the authored <c>compareState</c>. Set
+/// only for a <see cref="CompiledWorldPredicateKind.Compare"/> token spelled as an ordinary comparison;
+/// <see langword="null"/> for an <see cref="CompiledWorldPredicateKind.All"/>/<see cref="CompiledWorldPredicateKind.Any"/>/
+/// <see cref="CompiledWorldPredicateKind.Not"/> logical token (which reads no operand) and for a
+/// <c>compareValue</c> token (which reads <paramref name="LeftExpression"/>/<paramref name="RightExpression"/>
+/// instead) — never a default-initialized carrier standing in for "absent".</param>
 /// <param name="Comparison">The comparison to apply.</param>
 /// <param name="Value">The authored constant comparand, converted directly from its exact decimal token to the
 /// left operand's raw cell encoding at compile time — read only when
@@ -630,7 +584,7 @@ public enum CompiledWorldPredicateKind : byte {
 /// <param name="LeftExpression">Left postfix expression for compareValue; null for an ordinary comparison.</param>
 /// <param name="RightExpression">Right postfix expression for compareValue.</param>
 public readonly record struct CompiledWorldPredicate(
-    CompiledWorldOperand Left,
+    CompiledWorldOperand? Left,
     ActionStateComparison Comparison,
     long Value,
     CellKind ValueKind,
@@ -817,63 +771,10 @@ public enum WorldRuleEffectKind : byte {
     /// <summary>Push one evaluated value into a history row's ring.</summary>
     PushState,
 }
-/// <summary>One compiled world-rule effect. Document and state effects submit ordinary mutations under
-/// <see cref="WorldPrincipal.World"/>, so journal and undo cover them like other writes. Save, pose, cue, body, and
-/// lattice effects instead use their dedicated deterministic runtime paths.</summary>
-/// <param name="Kind">The effect's execution path.</param>
-/// <param name="Row">The destination state row name for <see cref="WorldRuleEffectKind.Write"/>/
-/// <see cref="WorldRuleEffectKind.Generate"/>, the panel/placement id for
-/// <see cref="WorldRuleEffectKind.RemoveHudPanel"/>/<see cref="WorldRuleEffectKind.RemovePlacement"/>, or the
-/// spawn-point id (empty when <paramref name="Pose"/> carries a literal) for <see cref="WorldRuleEffectKind.Pose"/>.</param>
-/// <param name="Key">The destination cell key, body index, or authored body-key indirection.</param>
-/// <param name="Write">Set or add, for <see cref="WorldRuleEffectKind.Write"/>.</param>
-/// <param name="RawValue">The authored constant, pre-converted to the destination row's raw encoding at compile
-/// time — read only when <paramref name="From"/> is <see langword="null"/> (the literal spelling).</param>
-/// <param name="Generator">The generator row name, for <see cref="WorldRuleEffectKind.Generate"/>.</param>
-/// <param name="Describe">The authored spelling, for the <c>world.rules</c> read-back.</param>
-/// <param name="HudPanel">The whole panel row, for <see cref="WorldRuleEffectKind.UpsertHudPanel"/>.</param>
-/// <param name="Placement">The whole placement row, for <see cref="WorldRuleEffectKind.UpsertPlacement"/>.</param>
-/// <param name="From">The live copy-source operand — another row/reserved channel read fresh on every firing (the
-/// same <see cref="CompiledWorldOperand"/> and <c>ReadWorldFact</c> path a <see cref="CompiledWorldPredicate"/>'s
-/// comparand reads through) — or <see langword="null"/> when the effect writes the authored constant
-/// <paramref name="RawValue"/> instead. Applies only to <see cref="WorldRuleEffectKind.Write"/>.</param>
-/// <param name="KeyFrom">The destination cell's key indirection (<see cref="WorldRuleFacts.CellKeyPrefix"/>), or
-/// <see langword="null"/> when <paramref name="Key"/> is literal.</param>
-/// <param name="Pose">The literal pose, for a <see cref="WorldRuleEffectKind.Pose"/> effect authored with a
-/// position; <see langword="null"/> when <paramref name="Row"/> names a spawn point instead.</param>
-/// <param name="Text">The text literal a <see cref="WorldRuleEffectKind.Write"/> into a <c>kind=text</c> row
-/// carries; <see langword="null"/> for a numeric write.</param>
-/// <param name="Expression">The compiled numeric expression, or <see langword="null"/> for another source spelling.</param>
-/// <param name="Effects">The atomic transaction's main branch.</param>
-/// <param name="OnFailure">The transaction's refusal branch.</param>
-/// <param name="Cue">The gameplay cue identifier, or <see langword="null"/> for another effect kind.</param>
-/// <param name="Payload">The optional cue payload.</param>
-/// <param name="Body">The compiled body operation.</param>
-/// <param name="Paint">The compiled lattice paint.</param>
-/// <param name="Transform">The discrete state transform.</param>
-public readonly record struct CompiledWorldEffect(
-    WorldRuleEffectKind Kind,
-    string Row,
-    string Key,
-    WorldDocumentWriteKind Write,
-    long RawValue,
-    string? Generator,
-    string Describe,
-    WorldHudPanel? HudPanel = null,
-    WorldPlacement? Placement = null,
-    CompiledWorldOperand? From = null,
-    CompiledWorldPose? Pose = null,
-    string? Text = null,
-    CompiledCellRef? KeyFrom = null,
-    CompiledWorldExpressionToken[]? Expression = null,
-    CompiledWorldEffect[]? Effects = null,
-    CompiledWorldEffect[]? OnFailure = null,
-    string? Cue = null,
-    string? Payload = null,
-    CompiledWorldBodyEffect? Body = null,
-    CompiledWorldFieldPaint? Paint = null,
-    WorldStateTransform? Transform = null
-);
+// CompiledWorldEffect is now the closed-union carrier declared in WorldEffectUnion.cs, with its case types in
+// WorldEffectKinds.cs (one sealed class per WorldRuleEffectKind below). Document and state effects submit ordinary
+// mutations under WorldPrincipal.World, so journal and undo cover them like other writes; save, pose, cue, body, and
+// lattice effects instead use their dedicated deterministic runtime paths.
 /// <summary>A literal body pose compiled to deterministic numerics — angles in radians.</summary>
 /// <param name="Position">The world position.</param>
 /// <param name="YawRadians">The yaw about +Y.</param>
@@ -1056,6 +957,10 @@ public enum WorldRuleRefusal : byte {
     /// <c>argmax:&lt;row&gt;</c>/<c>argmin:&lt;row&gt;</c>).</summary>
     [Refusal(door: "world.rule.compile", condition: "a '$parked:' channel does not spell exactly one body-reference token ('body:<n>' or 'argmax:<row>'/'argmin:<row>')", kind: RefusalKind.Verdict)]
     ParkedChannelMalformed,
+
+    /// <summary>A <c>$pair:</c> key does not spell exactly two body-reference tokens each.</summary>
+    [Refusal(door: "world.rule.compile", condition: "a '$pair:' key does not spell exactly two body-reference tokens ('body:<n>', 'argmax:<row>'/'argmin:<row>', 'cell:<row>:<key>', or a bound each/left/right) each", kind: RefusalKind.Verdict)]
+    PairKeyMalformed,
 
     /// <summary>A <c>$link:</c> channel does not spell exactly one adjacency row name, or names a row the
     /// <c>adjacencies</c> section does not declare.</summary>

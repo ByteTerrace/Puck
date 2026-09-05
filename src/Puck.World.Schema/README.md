@@ -19,10 +19,11 @@ process that composes everything is [`Puck.World`](../Puck.World/README.md).
 
 ## Discrete boards, cards, and turns
 
-The discrete substrate shares `state.lattices` with physical fields. Declare
-`kind: "Grid"`, `"Ring"`, or `"Hex"` and bind an integer/boolean row through
-`board: { "topology": "map", "empty": 0 }`. Only `Field` declarations create
-physical field storage. A world may declare at most 16 topologies, including
+The discrete substrate shares `state.lattices` with physical fields. Declare a
+`state.lattices` entry `$type: "grid"`, `"ring"`, or `"hex"` (`WorldStateLatticeTopology`'s own
+closed union — a `"box"` case exists too, for a 3-layer discrete board) and bind an
+integer/boolean row through `domain: { "$type": "cellsOf", "topology": "map", "empty": 0 }`. Only
+a `"field"` lattice creates physical field storage. A world may declare at most 16 topologies, including
 at most one physical field topology. Each discrete topology admits 4096 cells;
 boards together admit 65536 cells, and all declared state storage admits
 262144 cells. Ordinary keyed rows retain their 128-cell limit.
@@ -62,7 +63,7 @@ Rule operands accept these bounded channels:
 | Channel | Result |
 |---|---|
 | `$board:neighbour:<row>:<direction>` | Neighbour ordinal, or -1 at the edge |
-| `$board:pathCost:<row>:<target>:<maxCost>:<maxVisits>` | Minimum terrain entry cost, -1 when unreachable/unaffordable, -2 when the visit budget is exhausted |
+| `$board:pathCost:<row>:<target>:<maxCost>:<maxVisits>` or `$board:pathCost:<row>:cell:<targetRow>:<targetKey>:<maxCost>:<maxVisits>` | Minimum terrain entry cost to the literal `<target>` cell, or to whichever cell `<targetRow>`.`<targetKey>` holds at evaluation time; -1 when unreachable/unaffordable, -2 when the visit budget is exhausted |
 | `$board:mask:<row>:<min>:<max>` | The 64-bit cell-set mask of cells whose value lies in min..max (bit c is cell ordinal c); the topology holds at most 64 cells |
 | `$board:canonical:<row>` | The least 64-bit fingerprint of the whole board's values over every element, for boards of any size: pushed into a history ring, repetition up to symmetry is a pattern |
 | `$board:cellOf:<row>:<bodyRef>` | The Grid cell a body's resolved world position falls in, or -1 |
@@ -130,17 +131,22 @@ destination cell's entry cost. Negative terrain is impassable. Equal-cost
 nodes settle by ordinal; the visit bound counts settled nodes. A path budget
 refusal is distinct from proof that no route exists.
 
-`tokens: { "capacity": 256 }` declares stable token identities. `keysFrom`
-restricts an attribute row to those identities; `valuesFrom` additionally
-restricts integer positions to a named topology. A `zone: { "tokens": "cards",
-"ordered": true }` row contains boolean membership cells. For any domain
-with zones, every token belongs to exactly one zone. Cell order is pile order;
-two cards with equal ranks still have different keys. Drawn-generator masks
+A plain keyed row with a declared `capacity` IS the stable token-identity
+domain — no dedicated facet, just `WorldStateDomain.Keys` (`Domain` omitted or
+`{"$type": "keys"}`). Another row's `domain: {"$type": "keysOf", "row":
+"cards"}` restricts its keys to that domain's; `valuesFrom` additionally
+restricts integer positions to a named topology. A `domain: {"$type": "keysOf",
+"row": "cards", "ordered": true}` row contains boolean membership cells. The
+"every token belongs to exactly one zone" invariant is not engine law — it is
+an authored rule (the garden's `cardsZoneAccounting`/`cardsZoneInvariant`
+sums `$reduce:count:` over every zone against the domain's own capacity).
+Cell order is pile order; two cards with equal ranks still have different
+keys. Drawn-generator masks
 are separate from these piles: each `drawnMasks` mask is four 64-bit words,
 serialized as exactly 64 hexadecimal digits, and supports 256 drawn entries.
 
 The closed `transformState` effect and transaction step carry one of `transfer`,
-`setRay`, `moveToken`, `shuffle`, `sortZone`, `sortKeyed`,
+`setRay`, `shuffle`, `sortZone`, `sortKeyed`,
 `writeSet`, `push`, or `observe`. `writeSet` (`row`, `set`, `setKey`,
 `value`) writes one value into every cell of a board (at most 64 cells) whose
 bit is set in a cell-set mask read from an integer cell — the one board-writing
@@ -161,8 +167,14 @@ same compiled machine and prefix semantics `$match` reads, landed back on the
 board instead of read as a fact; a bracket capture is authored as
 `plus(opponent) . symbol(own)`, and it excludes the origin and refuses an
 empty accepted prefix.
-`moveToken` checks all position rows over the topology for occupancy, searches
-within `maxVisits`, and debits the token's allowance atomically with its move.
+Moving a token along an affordable route is ordinary authoring, not a dedicated
+transform: a gate compares a live `$board:pathCost` (its target read from
+another row's cell, so the destination itself can move between evaluations)
+against a live allowance, and a `transaction` debits the allowance by that
+same expression while clearing the token's old occupancy/terrain cells and
+setting its new position, occupancy, and terrain cells — the transaction's own
+all-or-nothing commit is what makes the pathfind, the debit, and the occupancy
+move atomic, with no board-writing transform of its own required.
 `shuffle` reorders an ordered zone, or any other keyed row, in place by one
 Fisher-Yates pass over a redrawable integer `streamDraw` site, consuming one
 sample per position after the first (a 52-card deck advances the cursor by
@@ -239,7 +251,7 @@ cells; acceptance is always 1 or
 name `any` in place of a direction, answering the mask of accepting
 directions (bit d for direction ordinal d) or, with a trailing `count`, how
 many. `world.match` walks one word at the console and narrates every step:
-value, letter, state, verdict. A `history` row (`capacity` 1..128, `empty`)
+value, letter, state, verdict. A row declaring `domain: { "$type": "ring", "capacity": 1..128, "empty": ... }`
 is a ring of the last pushed values, the temporal twin of a ray: `push`
 (`row`, `value`) and the `pushState` effect (`value`/`fromState`/
 `expression`, world scope) append to it and advance its `historyCursor`;
@@ -284,7 +296,7 @@ bridge from rigid bodies to this row is authored, not built
 in: a world rule reads each piece's `$board:cellOf:<occupancy row>:body:<n>`
 on `$physics:quiescent`'s rising edge (a settle, never every tick) and writes
 its code into the occupancy row at that resolved cell — see the garden's own
-`puck.world.json` tabletop rules for the worked pattern (snapshot the prior
+`games/chess.world.json` tabletop rules for the worked pattern (snapshot the prior
 board before clearing, derive fresh occupancy, detect which single piece
 moved between two occupied board cells — a piece whose cell resolves to no
 cell, before or after (captured, lifted off, knocked clear), never itself
@@ -347,7 +359,7 @@ direction list from a fixed cell and answer whether the first occupied cell
 on any of them falls in an authored value range, the same
 first-blocker-stops-the-walk contract as `$match:…:cell`, unioned over several
 directions and filtered to a range in one call rather than one rule per
-direction. The garden's `puck.world.json`
+direction. The garden's `games/chess.world.json`
 chess rules are the worked example for both techniques; its bridge rules
 still hold to the one-rule-per-piece discipline this section already states —
 a captured or knocked-over piece's own board write refuses (a stale key, or
@@ -687,7 +699,7 @@ number.
 
 ## Medium fields — a fluid free surface, as lattice content
 
-A `state.world` row's `lattice` trait may carry a `medium` facet
+A `state.world` row's `field` trait may carry a `medium` facet
 (`WorldLatticeMedium`, `WorldFields.cs`): the row's value times its
 `heightScale`, over the lattice origin, is a fluid free surface every active
 body samples at its coupled cell each tick (the same coupling
@@ -874,9 +886,11 @@ consolidation.
 
 A lattice is not a separate section: `state.lattices` (`WorldStateLatticeTopology`
 — name, origin, `cellSize`, `width`×`depth`×`layers`, `stepEveryTicks`,
-`reactions`) plus a `lattice` trait on ordinary `fixed`-kind `state.world` rows
-(`WorldStateLatticeTrait` — `topology`, `initial`/`min`/`max`, optional
-`heightScale`/`color`, `paint`) is the whole spelling.
+`reactions`) plus a `domain: {"$type": "cellsOf", "topology": …}` and a
+`field` trait on ordinary `fixed`-kind `state.world` rows
+(`WorldStateFieldTrait` — `initial`/`min`/`max`, optional
+`heightScale`/`color`, `paint`; the topology itself lives on `domain`, shared
+with a discrete board's own `cellsOf` case) is the whole spelling.
 `WorldFieldsSection.Compile(state)` assembles the runtime composite
 (`WorldDefinition.Fields`, cached, never an authored member); `ToStateSection`
 is its inverse, for the projection reconstruction that must hand a client-side
@@ -1497,6 +1511,21 @@ A rule blends new evidence toward the bound with an authored expression —
 }
 ```
 
+A key that is only ever one body conflates every subject an observer's
+impression has ever concerned into one cell — `boneHolderTrust[$each]` reads
+"this individual's trust" with no way to say trust IN WHOM, so the subject
+changing repoints the same accumulated trust at whoever holds it now instead
+of keeping the two separate. `$pair:<bodyRefA>:<bodyRefB>` (a `key`,
+`comparandKey`, or `fromKey` prefix, resolving through the same
+`WorldRuleFacts.PairKeyPrefix` door every other dynamic key does) keys a row
+by a genuine (observer, subject) pair instead: each half is the same
+`body:<n>`/`argmax:<row>`/`argmin:<row>`/`cell:<row>:<key>`/bound-token
+grammar `$distance:`/`$los:` already spend their own halves on, composed into
+a directed `"<a>_<b>"` cell key — `(a, b)` and `(b, a)` name different cells.
+`$pair:each:cell:boneHolder:0` reads or writes each observer's own trust in
+whichever specific body it has most recently seen holding `boneHolder`'s cell
+`0`, rather than one shared value per observer.
+
 `compareValue` compares `left` and `right` expressions using a `comparison`
 and one explicit `kind` (`Int` or `Fixed`, default Fixed); kind mismatches
 refuse compilation and failed arithmetic closes the predicate. The one thing
@@ -1752,13 +1781,15 @@ A flock profile can prefer particular neighbors without assigning one universal
 friendship score. `cohesionAffinity` weights neighbors in the attraction centroid;
 `alignmentAffinity` independently weights their headings. For example, add this
 optional field to a kit producer's `flock` profile to follow whichever neighbor
-the observer itself has come to trust (see "Keyed belief rows and evidence
-dedup" above — the belief is keyed by observer alone, not by the specific pair):
+the observer itself has come to trust in specifically (see "Keyed belief rows
+and evidence dedup" above — `$pair:left:<bodyRefB>` reads the `left` observer's
+own trust in the neighbor `<bodyRefB>` names, not one shared value per
+observer):
 
 ```json
 {
   "alignmentAffinity": {
-    "tokens": [{ "$type": "state", "name": "boneHolderTrust", "key": "$left" }]
+    "tokens": [{ "$type": "state", "name": "boneHolderTrust", "key": "$pair:left:cell:boneHolder:0" }]
   }
 }
 ```

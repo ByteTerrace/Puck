@@ -89,14 +89,14 @@ public sealed class WorldTabletopClassifierLawTests {
 
     private static WorldDefinition Document(long[] previous, long[] current) {
         var document = Fixtures.BuildDocument();
-        var topology = new WorldStateLatticeTopology("board", new DocumentVector3(0, 0, 0), 1, 4, 4, Kind: WorldTopologyKind.Grid);
+        var topology = new WorldStateLatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, 4, 4);
         WorldStateCell[] Cells(long[] values) => [.. Enumerable.Range(0, 16).Select(i => new WorldStateCell(WorldCellName.Parse(i.ToString()), values[i]))];
         WorldStateRow Slot(string name, long min, long max) => new(WorldCellName.Parse(name), CellKind.Int, Min: min, Max: max, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0)]);
 
         return document with {
             StateRaw = new WorldStateSection(World: [
-                new WorldStateRow(WorldCellName.Parse(Board), CellKind.Int, Min: -6, Max: 6, Cells: Cells(current), Board: new WorldStateBoard("board")),
-                new WorldStateRow(WorldCellName.Parse(Prev), CellKind.Int, Min: -6, Max: 6, Cells: Cells(previous), Board: new WorldStateBoard("board")),
+                new WorldStateRow(WorldCellName.Parse(Board), CellKind.Int, Min: -6, Max: 6, Cells: Cells(current), Domain: new WorldStateDomain.CellsOf("board")),
+                new WorldStateRow(WorldCellName.Parse(Prev), CellKind.Int, Min: -6, Max: 6, Cells: Cells(previous), Domain: new WorldStateDomain.CellsOf("board")),
                 Slot("ownVac", 0, 65535), Slot("ownOcc", 0, 65535), Slot("otherVac", 0, 65535), Slot("otherOcc", 0, 65535),
                 Slot("quiet", 0, 1), Slot("capture", 0, 1), Slot("castle", 0, 1), Slot("noChange", 0, 1),
                 Slot("fromCell", -6, 16), Slot("toCell", -6, 16), Slot("capturedCell", -6, 16),

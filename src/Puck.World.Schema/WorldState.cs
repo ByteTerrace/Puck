@@ -162,26 +162,26 @@ public sealed record WorldStateCell(WorldCellName Key, long Value = 0, string? T
 /// Legitimate only for <see cref="CellKind.Int"/>/<see cref="CellKind.Fixed"/>, only on a scalar (slot-eligible)
 /// row, and never together with <see cref="Advance"/> or <see cref="Draw"/>. A keyed row's own cells ease
 /// independently through <see cref="WorldStateCell.Dynamics"/> instead.</param>
-/// <param name="Lattice">The lattice trait — the row holds one scalar per cell of a named topology (see
-/// <see cref="WorldStateLatticeTrait"/>); <see langword="null"/> for a slot/keyed row.</param>
+/// <param name="Field">The physical-field trait — carried only by a <see cref="WorldStateDomain.CellsOf"/> row over a
+/// <c>Field</c>-kind topology (see <see cref="WorldStateFieldTrait"/>); <see langword="null"/> for every other row,
+/// including a discrete (board) <see cref="WorldStateDomain.CellsOf"/> row.</param>
 /// <param name="Cycle">The row's own (slot-cell) tick-indexed rotation trait, or <see langword="null"/> for an
 /// ordinary row. See <see cref="WorldStateCycle"/>. Legitimate only for <see cref="CellKind.Int"/>/
 /// <see cref="CellKind.Fixed"/>, only on a scalar (slot-eligible) row, and never together with
-/// <see cref="Advance"/>, <see cref="Dynamics"/>, <see cref="Draw"/> or <see cref="Lattice"/>. A keyed row's own
+/// <see cref="Advance"/>, <see cref="Dynamics"/>, <see cref="Draw"/> or <see cref="Field"/>. A keyed row's own
 /// cells turn independently through <see cref="WorldStateCell.Cycle"/> instead.</param>
-/// <param name="Board">Discrete topology addressing for this keyed row; absent for ordinary rows.</param>
-/// <param name="Tokens">A stable token identity domain.</param>
-/// <param name="Zone">Membership and pile order over a token domain.</param>
-/// <param name="KeysFrom">The token domain whose keys this attribute row may address.</param>
-/// <param name="ValuesFrom">The discrete topology whose cell ordinals this integer attribute row stores.</param>
+/// <param name="Domain">The row's declared cell domain (see <see cref="WorldStateDomain"/>) —
+/// <see langword="null"/> when unauthored, in which case <see cref="InferDomain"/> derives one from
+/// <see cref="Cells"/>/<see cref="Capacity"/> exactly as an unauthored row always has.</param>
+/// <param name="ValuesFrom">The discrete topology whose cell ordinals this row's integer values name — a
+/// value-typing trait, independent of <see cref="Domain"/> (legitimate only alongside a
+/// <see cref="WorldStateDomain.KeysOf"/> domain over <see cref="CellKind.Int"/> cells).</param>
 /// <param name="Phase">A finite participant phase protocol and its persisted progression.</param>
 /// <param name="Visibility">An opt-in observation policy; empty readers retains the row at the authority.</param>
 /// <param name="Knowledge">The source and visibility mask of a remembered board layer.</param>
 /// <param name="PhaseOf">The phase row required on external gameplay transforms that write this row.</param>
-/// <param name="History">The ring trait: the row keeps the last <see cref="WorldStateHistory.Capacity"/> pushed
-/// values in slots keyed <c>0..Capacity-1</c>; absent for ordinary rows.</param>
-/// <param name="HistoryCursor">How many values have ever been pushed into a <see cref="History"/> row — engine
-/// bookkeeping that names the next slot (<c>cursor mod capacity</c>) and how much of the ring is filled. Zero
+/// <param name="HistoryCursor">How many values have ever been pushed into a <see cref="WorldStateDomain.Ring"/> row —
+/// engine bookkeeping that names the next slot (<c>cursor mod capacity</c>) and how much of the ring is filled. Zero
 /// without the trait; refused negative.</param>
 public sealed record WorldStateRow(
     WorldCellName Name,
@@ -198,15 +198,11 @@ public sealed record WorldStateRow(
     long DrawCursor = 0,
     IReadOnlyList<ClosedBitset256>? DrawnMasks = null,
     WorldStateDynamics? Dynamics = null,
-    WorldStateLatticeTrait? Lattice = null,
+    WorldStateFieldTrait? Field = null,
     WorldStateCycle? Cycle = null,
-    WorldStateBoard? Board = null,
-    WorldStateTokens? Tokens = null,
-    WorldStateZone? Zone = null,
-    string? KeysFrom = null,
+    WorldStateDomain? Domain = null,
     string? ValuesFrom = null,
     WorldStatePhase? Phase = null, WorldStateVisibility? Visibility = null, WorldStateKnowledge? Knowledge = null, string? PhaseOf = null,
-    WorldStateHistory? History = null,
     long HistoryCursor = 0
 ) {
     /// <summary>The prefix every engine-minted row or cell name carries, and the one an author may never spell. A
@@ -221,8 +217,27 @@ public sealed record WorldStateRow(
     /// <see cref="WorldCellName"/> like any other.</summary>
     public static readonly WorldCellName SlotKey = WorldCellName.Parse(candidate: "$value");
 
+    /// <summary>Gets the effective domain: the authored <see cref="Domain"/>, or <see cref="InferDomain"/>'s answer
+    /// when unauthored.</summary>
+    [JsonIgnore]
+    public WorldStateDomain EffectiveDomain => (Domain ?? InferDomain());
+    /// <summary>Infers the domain an unauthored row carries from its <see cref="Cells"/>/<see cref="Capacity"/>/
+    /// <see cref="Phase"/> alone — the same shape a plain row (no <see cref="Domain"/> member at all) has always had,
+    /// restated as a case rather than a pair of booleans: a declared <see cref="Capacity"/>, more than one cell, a
+    /// single cell under an author-chosen key, or a declared <see cref="Phase"/> trait is <see cref="WorldStateDomain.Keys"/>
+    /// — a phase row has no single value to read even before its first participant is admitted; anything else (no
+    /// cells yet, or exactly one cell keyed <see cref="SlotKey"/>) is <see cref="WorldStateDomain.Slot"/>. A plain row
+    /// therefore authors nothing new by omitting <see cref="Domain"/>.</summary>
+    public WorldStateDomain InferDomain() =>
+        ((Phase is not null) || (Capacity is not null) || (Cells is { Count: > 1 }) || ((Cells is { Count: 1 } cells) && (cells[0].Key != SlotKey))
+            ? WorldStateDomain.Keys.Instance
+            : WorldStateDomain.Slot.Instance);
     /// <summary>Gets the storage ceiling admitted by the row's shape. Ordinary rows retain the 128-cell ceiling.</summary>
-    public int CellCeiling => (Tokens is { } tokens ? Math.Clamp(tokens.Capacity, 1, WorldTopologyCompilation.MaxCells) : (int?)null) ?? ((Board is not null || Zone is not null || KeysFrom is not null) ? WorldTopologyCompilation.MaxCells : WorldStateCapacity.MaxCellsPerRow);
+    public int CellCeiling => EffectiveDomain switch {
+        WorldStateDomain.Ring ring => Math.Clamp(ring.Capacity, 1, WorldStateCapacity.MaxCellsPerRow),
+        WorldStateDomain.KeysOf or WorldStateDomain.CellsOf => (Capacity is { } linked ? Math.Clamp(linked, 1, WorldTopologyCompilation.MaxCells) : WorldTopologyCompilation.MaxCells),
+        _ => (Capacity is { } capacity ? Math.Clamp(capacity, 1, WorldStateCapacity.MaxCellsPerRow) : WorldStateCapacity.MaxCellsPerRow),
+    };
     /// <summary>Gets whether the row accumulates continuously.</summary>
     public bool IsAdvancing => (Advance is not null);
     /// <summary>Gets a value indicating whether this row declares a <see cref="WorldStateDynamics"/> easing trait.</summary>
@@ -231,24 +246,23 @@ public sealed record WorldStateRow(
     public bool IsCycling => (Cycle is not null);
     /// <summary>Gets a value indicating whether this row declares a <see cref="WorldDraw"/> — whether it is a draw site.</summary>
     public bool IsDraw => (Draw is not null);
-    /// <summary>Gets a value indicating whether this row is keyed — it declares a <see cref="Capacity"/>, carries
-    /// more than one cell, or carries its single cell under an author-chosen key. Such a row has no single cell, so
-    /// an omitted key beside it addresses nothing: a world rule's <c>compareState</c>/<c>setState</c>/
-    /// <c>addState</c>, a <c>generate</c> effect's destination at either scope, and the <c>Generate</c> mutation's
-    /// own target all refuse by name here rather than reading the row's first cell.</summary>
-    /// <remarks>Not the negation of <see cref="IsSlot"/>: a row carrying no cells at all is not a slot yet is still
-    /// slot-addressable, since the first write mints its slot cell exactly as <c>world.state.cell.set</c> does.
-    /// <see cref="IsSlot"/> asks whether a single value exists to read; this asks whether an omitted key can address
-    /// one.</remarks>
-    public bool IsKeyed => ((Board is not null || Tokens is not null || Zone is not null || KeysFrom is not null || Phase is not null || History is not null) || (Capacity is not null) || (Cells is { Count: > 1 }) || ((Cells is { Count: 1 } cells) && (cells[0].Key != SlotKey)));
-    /// <summary>Gets a value indicating whether this row is shaped as a scalar slot — no declared
-    /// <see cref="Capacity"/> and exactly one cell keyed <see cref="SlotKey"/>. Drives whether
+    /// <summary>Gets a value indicating whether this row is keyed — its domain is anything but
+    /// <see cref="WorldStateDomain.Slot"/>. Such a row has no single cell, so an omitted key beside it addresses
+    /// nothing: a world rule's <c>compareState</c>/<c>setState</c>/<c>addState</c>, a <c>generate</c> effect's
+    /// destination at either scope, and the <c>Generate</c> mutation's own target all refuse by name here rather
+    /// than reading the row's first cell.</summary>
+    /// <remarks>Not the negation of <see cref="IsSlot"/> in general, but the domain switch makes the two exhaustive
+    /// and complementary by construction: every case that is not <see cref="WorldStateDomain.Slot"/> addresses no
+    /// omitted key, and slot addresses exactly one — including a row carrying no cells at all yet, since the first
+    /// write mints its slot cell exactly as <c>world.state.cell.set</c> does.</remarks>
+    public bool IsKeyed => (EffectiveDomain is not WorldStateDomain.Slot);
+    /// <summary>Gets a value indicating whether this row is shaped as a scalar slot. Drives whether
     /// <c>Puck.World.WorldStateRowJsonConverter</c> writes the row's one cell back as the bare <c>value</c> sugar or
     /// as a <c>cells</c> array, and which read-backs (HUD <c>state.&lt;name&gt;</c> binding, <c>world.state</c>'s
     /// value column) resolve a live value for — a keyed row has no single value to show. A draw site is an ordinary
     /// slot: its one cell holds the drawn value, and its own bookkeeping (<see cref="DrawCursor"/>/
     /// <see cref="DrawnMasks"/>) lives in row fields rather than in cells.</summary>
-    public bool IsSlot => ((Board is null && Tokens is null && Zone is null && KeysFrom is null && Phase is null && History is null) && (Capacity is null) && (Cells is { Count: 1 } cells) && (cells[0].Key == SlotKey));
+    public bool IsSlot => (EffectiveDomain is WorldStateDomain.Slot);
 
     /// <summary>Clamps <paramref name="value"/> into this row's declared numeric envelope: the
     /// <see cref="NonNegative"/> floor first, then an authored <see cref="Min"/>/<see cref="Max"/> pair.</summary>

@@ -137,14 +137,15 @@ public sealed class ReviewFixLawTests {
         var lattice = new WorldStateRow(
             Name: WorldCellName.Parse(candidate: "tiles"),
             Kind: CellKind.Fixed,
-            Lattice: new WorldStateLatticeTrait(Topology: "grid", Max: 4f, Paint: [new WorldLatticeFill.Draw(Generator: new WorldGenerator(Source: WorldGeneratorSource.UniformRange, RangeMin: 0, RangeMax: 65536))])
+            Domain: new WorldStateDomain.CellsOf(Topology: "grid"),
+            Field: new WorldStateFieldTrait(Max: 4f, Paint: [new WorldLatticeFill.Draw(Generator: new WorldGenerator(Source: WorldGeneratorSource.UniformRange, RangeMin: 0, RangeMax: 65536))])
         );
         var definition = new WorldDefinition(
             Rules: [new WorldRule(Name: WorldCellName.Parse(candidate: "redraw"), Effects: [new ActionEffect.Generate(Row: "tiles")], Mode: ActionTriggerMode.Edge)],
             Simulation: new WorldSimulationDefaults(RateHz: 240),
             StateRaw: new WorldStateSection(
                 World: [lattice],
-                Lattices: [new WorldStateLatticeTopology(Name: "grid", Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f), CellSize: 1f, Width: 4, Depth: 1, Layers: 1, StepEveryTicks: 1)]
+                Lattices: [new WorldStateLatticeTopology.Field(Name: "grid", Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f), CellSize: 1f, Width: 4, Depth: 1, Layers: 1, StepEveryTicks: 1)]
             )
         );
 

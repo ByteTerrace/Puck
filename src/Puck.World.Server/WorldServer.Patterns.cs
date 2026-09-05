@@ -49,8 +49,8 @@ public sealed partial class WorldServer {
         return m_boardScratch.AsSpan(0, count);
     }
 
-    private long ReadPatternFact(CompiledWorldOperand operand, ulong tick) {
-        if (!m_patterns.TryGet(name: operand.Pattern!, pattern: out var pattern)) {
+    private long ReadPatternFact(PatternOperand operand, ulong tick) {
+        if (!m_patterns.TryGet(name: operand.Pattern, pattern: out var pattern)) {
             throw new InvalidOperationException($"pattern operand '{operand.Pattern}' outlived the compiled rules");
         }
         if (!WorldStateReader.TryReadHandle(definition: m_definition, catalog: m_definition.StateCatalog, handle: operand.StateHandle, key: null, tick: tick, row: out var row, rawValue: out _, text: out _)) {
@@ -59,8 +59,10 @@ public sealed partial class WorldServer {
 
         Span<long> word = m_patternWord;
 
-        if (operand.Board is { } query) {
-            if (row.Board is null) {
+        // A pattern's board source is compiled only as BoardNeighbourQuery (see WorldRuleCompiler.Pattern.cs) — the
+        // Kind it carries is an arbitrary placeholder; only Direction (-1 meaning "every direction") is ever read.
+        if (operand.Board is BoardNeighbourQuery query) {
+            if (row.EffectiveDomain is not WorldStateDomain.CellsOf) {
                 return 0L;
             }
 
@@ -117,7 +119,7 @@ public sealed partial class WorldServer {
         if (operand.TokenExpression is { } tokenExpression) {
             wordLength = ReadTupleWord(row, tokenExpression, pattern.Source.Kind, tick, word);
         } else {
-            if (row.Zone is not null && !WorldStateReader.TryReadHandle(definition: m_definition, catalog: m_definition.StateCatalog, handle: operand.FilterHandle, key: null, tick: tick, row: out source, rawValue: out _, text: out _)) {
+            if (row.EffectiveDomain is WorldStateDomain.KeysOf { Ordered: true } && !WorldStateReader.TryReadHandle(definition: m_definition, catalog: m_definition.StateCatalog, handle: operand.FilterHandle, key: null, tick: tick, row: out source, rawValue: out _, text: out _)) {
                 throw new InvalidOperationException($"pattern attribute '{operand.FilterRow}' outlived its compiled row handle");
             }
 
@@ -158,7 +160,7 @@ public sealed partial class WorldServer {
     private static int ReadWord(WorldStateRow row, WorldStateRow source, ulong tick, Span<long> word) {
         var length = 0;
 
-        if (row.History is { } history) {
+        if (row.EffectiveDomain is WorldStateDomain.Ring history) {
             var count = (int)Math.Min(row.HistoryCursor, history.Capacity);
 
             for (var age = count - 1; age >= 0; age--) {
@@ -195,7 +197,7 @@ public sealed partial class WorldServer {
 
     // The slot pushed `age` pushes ago is (cursor - 1 - age) mod capacity, and the ring's cells ARE its slots in
     // order (the validator's invariant), so the value is one index away; a slot never written reads the empty value.
-    private static long ReadHistorySlot(WorldStateRow row, WorldStateHistory history, long age, ulong tick) {
+    private static long ReadHistorySlot(WorldStateRow row, WorldStateDomain.Ring history, long age, ulong tick) {
         if (age >= Math.Min(row.HistoryCursor, history.Capacity)) {
             return history.Empty;
         }
@@ -208,33 +210,34 @@ public sealed partial class WorldServer {
     }
 
     // $history:<row>:<age> through the compiled row handle.
-    private long ReadHistoryFact(CompiledWorldOperand operand, ulong tick) {
+    private long ReadHistoryFact(HistoryOperand operand, ulong tick) {
         if (!WorldStateReader.TryReadHandle(definition: m_definition, catalog: m_definition.StateCatalog, handle: operand.StateHandle, key: null, tick: tick, row: out var row, rawValue: out _, text: out _) ||
-            row.History is not { } history) {
+            row.EffectiveDomain is not WorldStateDomain.Ring history) {
             throw new InvalidOperationException($"history operand over '{operand.Row}' outlived its compiled row handle");
         }
 
-        return ReadHistorySlot(row, history, operand.SymmetryArgument, tick);
+        return ReadHistorySlot(row, history, operand.Age, tick);
     }
 
     // pushState: the value is resolved the way a write's is, then lands as a Push transform so the ring's cursor and
     // slot move in one journaled mutation.
-    private bool FirePushState(in CompiledWorldEffect effect, string ruleName, ulong tick, bool preflight) {
-        if (WorldDefinitionRows.FindStateRow(rows: m_definition.State, name: effect.Row) is not { History: not null } row) {
+    private bool FirePushState(CompiledWorldEffect effect, string ruleName, ulong tick, bool preflight) {
+        var push = (PushStateEffect)effect.Value!;
+        if (WorldDefinitionRows.FindStateRow(rows: m_definition.State, name: push.Row) is not { } row || row.EffectiveDomain is not WorldStateDomain.Ring) {
             return false;
         }
 
         long raw;
 
-        if (effect.Expression is { } expression) {
+        if (push.Expression is { } expression) {
             if (!TryEvaluateExpression(program: expression, kind: row.Kind, tick: tick, value: out raw)) {
                 if (preflight) {
                     m_ruleStatePreflightRejected = true;
                 }
-                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.Arithmetic, ruleName: ruleName, effect: in effect, tick: tick, detail: "the pushed expression overflowed, divided by zero, or shifted out of range");
+                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.Arithmetic, ruleName: ruleName, effect: effect, tick: tick, detail: "the pushed expression overflowed, divided by zero, or shifted out of range");
                 return false;
             }
-        } else if (effect.From is { } from) {
+        } else if (push.From is { } from) {
             var fact = ReadWorldFact(operand: from, tick: tick);
 
             if (fact.IsForever) {
@@ -243,10 +246,10 @@ public sealed partial class WorldServer {
 
             raw = ConvertWorldFactToRaw(value: fact, kind: row.Kind);
         } else {
-            raw = effect.RawValue;
+            raw = push.RawValue;
         }
 
-        return ApplyWorldRuleMutation(effect: in effect, ruleName: ruleName, mutation: new WorldMutation.TransformState(WorldPrincipal.World, new WorldStateTransform.Push(row.Name.Value, raw)), tick: tick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false, preflight: preflight);
+        return ApplyWorldRuleMutation(effect: effect, ruleName: ruleName, mutation: new WorldMutation.TransformState(WorldPrincipal.World, new WorldStateTransform.Push(row.Name.Value, raw)), tick: tick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false, preflight: preflight);
     }
 
     /// <summary>Walks one word through a pattern at the console and narrates every step: the raw values, the letter
@@ -270,7 +273,7 @@ public sealed partial class WorldServer {
             var word = new long[WorldPatternCapacity.MaxWord];
             var lines = new List<string>();
 
-            if (row.Board is { } board) {
+            if (row.EffectiveDomain is WorldStateDomain.CellsOf board) {
                 if (WorldTopologyCompilation.Find(m_definition.StateRaw, board.Topology) is not { } topology) {
                     return $"[world.match: '{rowName}' names no compiled topology]";
                 }
@@ -297,13 +300,13 @@ public sealed partial class WorldServer {
                 var source = row;
                 int length;
 
-                if (row.Zone is { } zone && pattern.Source.Value is not null) {
-                    if (!WorldRuleCompiler.TryCompilePatternValue(definition: m_definition, pattern: pattern.Source, tokenDomain: zone.Tokens, ruleName: "world.match", tokens: out var expression, reason: out var valueReason)) {
+                if (row.EffectiveDomain is WorldStateDomain.KeysOf { Ordered: true } zone && pattern.Source.Value is not null) {
+                    if (!WorldRuleCompiler.TryCompilePatternValue(definition: m_definition, pattern: pattern.Source, tokenDomain: zone.Row.Value, ruleName: "world.match", tokens: out var expression, reason: out var valueReason)) {
                         return $"[world.match: {valueReason}]";
                     }
                     length = ReadTupleWord(row, expression!, pattern.Source.Kind, tick, word);
                 } else {
-                    if (row.Zone is not null) {
+                    if (row.EffectiveDomain is WorldStateDomain.KeysOf { Ordered: true }) {
                         if (attribute is null || WorldDefinitionRows.FindStateRow(rows: m_definition.State, name: attribute) is not { } attributeRow) {
                             return "[world.match: a zone source needs its attribute row]";
                         }

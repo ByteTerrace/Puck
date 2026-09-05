@@ -47,16 +47,12 @@ public static partial class WorldRuleCompiler {
             key = ResolveKey(key: effect.Key, keyFieldLabel: "key", row: row, ruleName: ruleName, verb: "removeStateCell");
         }
 
-        return new CompiledWorldEffect(
-            Kind: WorldRuleEffectKind.RemoveStateCell,
-            Row: effect.State,
-            Key: key,
-            Write: default,
-            RawValue: 0L,
-            Generator: null,
-            Describe: $"removeStateCell {effect.State}.{key}",
-            KeyFrom: keyFrom
-        );
+        return new CompiledWorldEffect(new RemoveStateCellEffect(
+            row: effect.State,
+            key: key,
+            keyFrom: keyFrom,
+            describe: $"removeStateCell {effect.State}.{key}"
+        ));
     }
     private static CompiledWorldEffect ResolveScheduleState(ActionEffect.ScheduleState effect, string ruleName, WorldDefinition definition) {
         var row = (WorldDefinitionRows.FindStateRow(rows: definition.State, name: effect.State)
@@ -85,16 +81,13 @@ public static partial class WorldRuleCompiler {
             key = ResolveKey(key: effect.Key, keyFieldLabel: "key", row: row, ruleName: ruleName, verb: "scheduleState");
         }
 
-        return new CompiledWorldEffect(
-            Kind: WorldRuleEffectKind.ScheduleState,
-            Row: effect.State,
-            Key: key,
-            Write: WorldDocumentWriteKind.Set,
-            RawValue: checked((long)ticks),
-            Generator: null,
-            Describe: $"scheduleState {effect.State}.{key} after {effect.DelaySeconds.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}s",
-            KeyFrom: keyFrom
-        );
+        return new CompiledWorldEffect(new ScheduleStateEffect(
+            row: effect.State,
+            key: key,
+            keyFrom: keyFrom,
+            delayTicks: checked((long)ticks),
+            describe: $"scheduleState {effect.State}.{key} after {effect.DelaySeconds.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}s"
+        ));
     }
     private static long DurationSimulationTicks(decimal seconds, int ratePerSecond, string ruleName, string verb) {
         if ((seconds < decimal.Zero) || (ratePerSecond <= 0)) {
@@ -145,17 +138,11 @@ public static partial class WorldRuleCompiler {
             : []
         );
 
-        return new CompiledWorldEffect(
-            Kind: WorldRuleEffectKind.Transaction,
-            Row: string.Empty,
-            Key: string.Empty,
-            Write: default,
-            RawValue: 0L,
-            Generator: null,
-            Describe: $"transaction {effects.Length} effect(s), failure {failure.Length}",
-            Effects: effects,
-            OnFailure: failure
-        );
+        return new CompiledWorldEffect(new TransactionEffect(
+            effects: effects,
+            onFailure: failure,
+            describe: $"transaction {effects.Length} effect(s), failure {failure.Length}"
+        ));
     }
     private static CompiledWorldEffect[] CompileTransactionSteps(IReadOnlyList<WorldTransactionStep> steps, string ruleName, WorldDefinition definition) {
         var compiled = new CompiledWorldEffect[steps.Count];
@@ -212,34 +199,24 @@ public static partial class WorldRuleCompiler {
             (key, keyFrom) = ResolveBodyAddress(key: bodyKey, verb: "emitCue", ruleName: ruleName, definition: definition);
         }
 
-        return new CompiledWorldEffect(
-            Kind: WorldRuleEffectKind.EmitCue,
-            Row: string.Empty,
-            Key: key,
-            Write: default,
-            RawValue: 0L,
-            Generator: null,
-            Describe: $"emitCue {effect.Name}",
-            KeyFrom: keyFrom,
-            Cue: effect.Name,
-            Payload: effect.Payload
-        );
+        return new CompiledWorldEffect(new EmitCueEffect(
+            cue: effect.Name,
+            payload: effect.Payload,
+            key: key,
+            keyFrom: keyFrom,
+            describe: $"emitCue {effect.Name}"
+        ));
     }
     private static CompiledWorldEffect ResolveBodyVerticalVelocity(string key, decimal value, BodyMotionOp operation, string verb, string ruleName, WorldDefinition definition) {
         var address = ResolveBodyAddress(key: key, verb: verb, ruleName: ruleName, definition: definition);
         var fixedValue = ResolveFixedLiteral(value: value, field: "value", verb: verb, ruleName: ruleName);
 
-        return new CompiledWorldEffect(
-            Kind: WorldRuleEffectKind.Body,
-            Row: string.Empty,
-            Key: address.Key,
-            Write: default,
-            RawValue: 0L,
-            Generator: null,
-            Describe: $"{verb} body:{key} {value.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}",
-            KeyFrom: address.KeyFrom,
-            Body: new CompiledWorldBodyEffect(Operation: operation, Value: fixedValue, Direction: default, DurationTicks: 0UL)
-        );
+        return new CompiledWorldEffect(new BodyEffect(
+            key: address.Key,
+            keyFrom: address.KeyFrom,
+            body: new CompiledWorldBodyEffect(Operation: operation, Value: fixedValue, Direction: default, DurationTicks: 0UL),
+            describe: $"{verb} body:{key} {value.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}"
+        ));
     }
     private static CompiledWorldEffect ResolveBodyImpulse(ActionEffect.ApplyBodyImpulse effect, string ruleName, WorldDefinition definition) {
         var address = ResolveBodyAddress(key: effect.Key, verb: "applyBodyImpulse", ruleName: ruleName, definition: definition);
@@ -260,22 +237,17 @@ public static partial class WorldRuleCompiler {
         );
         var duration = DurationTicksExact(seconds: effect.DurationSeconds, ruleName: ruleName, verb: "applyBodyImpulse");
 
-        return new CompiledWorldEffect(
-            Kind: WorldRuleEffectKind.Body,
-            Row: string.Empty,
-            Key: address.Key,
-            Write: default,
-            RawValue: 0L,
-            Generator: null,
-            Describe: $"applyBodyImpulse body:{effect.Key}",
-            KeyFrom: address.KeyFrom,
-            Body: new CompiledWorldBodyEffect(
+        return new CompiledWorldEffect(new BodyEffect(
+            key: address.Key,
+            keyFrom: address.KeyFrom,
+            body: new CompiledWorldBodyEffect(
                 Operation: BodyMotionOp.PlanarImpulse,
                 Value: ResolveFixedLiteral(value: effect.Speed, field: "speed", verb: "applyBodyImpulse", ruleName: ruleName),
                 Direction: direction,
                 DurationTicks: duration
-            )
-        );
+            ),
+            describe: $"applyBodyImpulse body:{effect.Key}"
+        ));
     }
     private static CompiledWorldEffect ResolveBodyDesignation(ActionEffect.DesignateBody effect, string ruleName, WorldDefinition definition) {
         if (!Enum.IsDefined(value: effect.Kind)) {
@@ -297,16 +269,10 @@ public static partial class WorldRuleCompiler {
             throw new WorldRuleException(refusal: WorldRuleRefusal.EffectKindInadmissible, ruleName: ruleName, detail: "'designateBody' kind=clear does not admit targetKey");
         }
 
-        return new CompiledWorldEffect(
-            Kind: WorldRuleEffectKind.Body,
-            Row: string.Empty,
-            Key: address.Key,
-            Write: default,
-            RawValue: 0L,
-            Generator: null,
-            Describe: $"designateBody body:{effect.Key} {effect.Register} {effect.Kind}",
-            KeyFrom: address.KeyFrom,
-            Body: new CompiledWorldBodyEffect(
+        return new CompiledWorldEffect(new BodyEffect(
+            key: address.Key,
+            keyFrom: address.KeyFrom,
+            body: new CompiledWorldBodyEffect(
                 Operation: BodyMotionOp.Designate,
                 Value: default,
                 Direction: default,
@@ -315,8 +281,9 @@ public static partial class WorldRuleCompiler {
                 TargetKey: targetKey,
                 TargetKeyFrom: targetKeyFrom,
                 Designation: effect.Kind
-            )
-        );
+            ),
+            describe: $"designateBody body:{effect.Key} {effect.Register} {effect.Kind}"
+        ));
     }
     private static CompiledWorldEffect ResolveFieldPaint(ActionEffect.PaintField effect, string ruleName, WorldDefinition definition) {
         if (!Enum.IsDefined(value: effect.Operation)) {
@@ -337,15 +304,8 @@ public static partial class WorldRuleCompiler {
             throw new WorldRuleException(refusal: WorldRuleRefusal.EffectKindInadmissible, ruleName: ruleName, detail: $"'paintField' radius must be in 0..{WorldRuleCapacity.MaxFieldPaintRadius}");
         }
 
-        return new CompiledWorldEffect(
-            Kind: WorldRuleEffectKind.PaintField,
-            Row: effect.Field,
-            Key: string.Empty,
-            Write: default,
-            RawValue: 0L,
-            Generator: null,
-            Describe: $"paintField {effect.Field} ({effect.X},{effect.Y},{effect.Z}) radius={effect.Radius}",
-            Paint: new CompiledWorldFieldPaint(
+        return new CompiledWorldEffect(new PaintFieldEffect(
+            paint: new CompiledWorldFieldPaint(
                 Field: effect.Field,
                 X: effect.X,
                 Y: effect.Y,
@@ -353,8 +313,9 @@ public static partial class WorldRuleCompiler {
                 Value: ResolveFixedLiteral(value: effect.Value, field: "value", verb: "paintField", ruleName: ruleName),
                 Operation: effect.Operation,
                 Radius: effect.Radius
-            )
-        );
+            ),
+            describe: $"paintField {effect.Field} ({effect.X},{effect.Y},{effect.Z}) radius={effect.Radius}"
+        ));
     }
     private static FixedQ4816 ResolveFixedLiteral(decimal value, string field, string verb, string ruleName) {
         if (WorldStateNumericLiteral.TryToFixed(value: value, result: out var result)) {
@@ -456,17 +417,17 @@ public static partial class WorldRuleCompiler {
                 );
             }
 
-            return new CompiledWorldEffect(
-                Kind: WorldRuleEffectKind.Write,
-                Row: rowName,
-                Key: resolvedKey,
-                Write: write,
-                RawValue: 0L,
-                Generator: null,
-                Describe: $"{verb} {rowName}.{resolvedKey} = \"{text}\"",
-                Text: text,
-                KeyFrom: destinationKeyFrom
-            );
+            return new CompiledWorldEffect(new WriteEffect(
+                row: rowName,
+                key: resolvedKey,
+                keyFrom: destinationKeyFrom,
+                write: write,
+                rawValue: 0L,
+                from: null,
+                text: text,
+                expression: null,
+                describe: $"{verb} {rowName}.{resolvedKey} = \"{text}\""
+            ));
         }
 
         if (
@@ -533,16 +494,17 @@ public static partial class WorldRuleCompiler {
                 );
             }
 
-            return new CompiledWorldEffect(
-                Kind: WorldRuleEffectKind.Write,
-                Row: rowName,
-                Key: resolvedKey,
-                Write: write,
-                RawValue: checked((long)ticks),
-                Generator: null,
-                Describe: $"{verb} {rowName}.{resolvedKey} = {literalSeconds.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}s ({ticks} engine ticks)",
-                KeyFrom: destinationKeyFrom
-            );
+            return new CompiledWorldEffect(new WriteEffect(
+                row: rowName,
+                key: resolvedKey,
+                keyFrom: destinationKeyFrom,
+                write: write,
+                rawValue: checked((long)ticks),
+                from: null,
+                text: null,
+                expression: null,
+                describe: $"{verb} {rowName}.{resolvedKey} = {literalSeconds.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}s ({ticks} engine ticks)"
+            ));
         }
 
         if (hasValue) {
@@ -554,16 +516,17 @@ public static partial class WorldRuleCompiler {
                 verb: verb
             );
 
-            return new CompiledWorldEffect(
-                Kind: WorldRuleEffectKind.Write,
-                Row: rowName,
-                Key: resolvedKey,
-                Write: write,
-                RawValue: raw,
-                Generator: null,
-                Describe: $"{verb} {rowName}.{resolvedKey} = {literal.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}",
-                KeyFrom: destinationKeyFrom
-            );
+            return new CompiledWorldEffect(new WriteEffect(
+                row: rowName,
+                key: resolvedKey,
+                keyFrom: destinationKeyFrom,
+                write: write,
+                rawValue: raw,
+                from: null,
+                text: null,
+                expression: null,
+                describe: $"{verb} {rowName}.{resolvedKey} = {literal.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}"
+            ));
         }
 
         if (hasExpression) {
@@ -583,17 +546,17 @@ public static partial class WorldRuleCompiler {
                 verb: verb
             );
 
-            return new CompiledWorldEffect(
-                Kind: WorldRuleEffectKind.Write,
-                Row: rowName,
-                Key: resolvedKey,
-                Write: write,
-                RawValue: 0L,
-                Generator: null,
-                Describe: $"{verb} {rowName}.{resolvedKey} := expression[{program.Length}]",
-                KeyFrom: destinationKeyFrom,
-                Expression: program
-            );
+            return new CompiledWorldEffect(new WriteEffect(
+                row: rowName,
+                key: resolvedKey,
+                keyFrom: destinationKeyFrom,
+                write: write,
+                rawValue: 0L,
+                from: null,
+                text: null,
+                expression: program,
+                describe: $"{verb} {rowName}.{resolvedKey} := expression[{program.Length}]"
+            ));
         }
 
         var source = ResolveOperand(
@@ -615,17 +578,17 @@ public static partial class WorldRuleCompiler {
             );
         }
 
-        return new CompiledWorldEffect(
-            Kind: WorldRuleEffectKind.Write,
-            Row: rowName,
-            Key: resolvedKey,
-            Write: write,
-            RawValue: 0L,
-            Generator: null,
-            Describe: $"{verb} {rowName}.{resolvedKey} := {source.Describe}",
-            From: source.Operand,
-            KeyFrom: destinationKeyFrom
-        );
+        return new CompiledWorldEffect(new WriteEffect(
+            row: rowName,
+            key: resolvedKey,
+            keyFrom: destinationKeyFrom,
+            write: write,
+            rawValue: 0L,
+            from: source.Operand,
+            text: null,
+            expression: null,
+            describe: $"{verb} {rowName}.{resolvedKey} := {source.Describe}"
+        ));
     }
     private static CompiledWorldExpressionToken[] CompileExpression(WorldValueExpression? expression, CellKind kind, string ruleName, string verb, WorldDefinition definition) {
         if (expression is null) {
@@ -778,7 +741,7 @@ public static partial class WorldRuleCompiler {
             if (direction < 0) { throw Malformed($"token 'BoardShift' names no direction '{shift.Direction}' of '{shift.Topology}'"); }
             Require(WorldExpressionOp.BoardShift, 1);
             RequireKind(WorldExpressionOp.BoardShift, depth - 1, CellKind.Int);
-            return new CompiledWorldExpressionToken(Operation: WorldExpressionOp.BoardShift, Board: new CompiledWorldBoardQuery(topology, WorldBoardQueryKind.Neighbour, Direction: direction));
+            return new CompiledWorldExpressionToken(Operation: WorldExpressionOp.BoardShift, Board: new BoardNeighbourQuery(topology, direction));
         }
         CompiledWorldExpressionToken ResolveBoardImage(WorldValueToken.BoardImage image) {
             if (kind != CellKind.Int) { throw Malformed("token 'BoardImage' is admitted in kind=int expressions only"); }
@@ -792,7 +755,7 @@ public static partial class WorldRuleCompiler {
             if (element < 0) { throw Malformed($"token 'BoardImage' names no symmetry element '{image.Element}' of '{image.Topology}'"); }
             Require(WorldExpressionOp.BoardImage, 1);
             RequireKind(WorldExpressionOp.BoardImage, depth - 1, CellKind.Int);
-            return new CompiledWorldExpressionToken(Operation: WorldExpressionOp.BoardImage, Board: new CompiledWorldBoardQuery(topology, WorldBoardQueryKind.Neighbour, Direction: element));
+            return new CompiledWorldExpressionToken(Operation: WorldExpressionOp.BoardImage, Board: new BoardNeighbourQuery(topology, element));
         }
         CompiledWorldExpressionToken IntArity(WorldExpressionOp operation, int arity) {
             if (kind != CellKind.Int) { throw Malformed($"token '{operation}' is admitted in kind=int expressions only"); }

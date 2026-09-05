@@ -9,7 +9,7 @@ public sealed partial class WorldServer {
     // row's pass. Reactions then evolve the drawn cells like any other paint.
     private void PaintLatticeDraws(WorldDefinition definition) {
         foreach (var row in (definition.State ?? [])) {
-            if (WorldLatticeFill.FindDraw(trait: row.Lattice) is not null) {
+            if (WorldLatticeFill.FindDraw(trait: row.Field) is not null) {
                 PaintLatticeDraw(
                     definition: definition,
                     row: row
@@ -20,7 +20,7 @@ public sealed partial class WorldServer {
     private void PaintLatticeDraw(WorldDefinition definition, WorldStateRow row) {
         if (
             (m_population.Fields is not { } lattice) ||
-            (WorldLatticeFill.FindDraw(trait: row.Lattice) is not { } fill) ||
+            (WorldLatticeFill.FindDraw(trait: row.Field) is not { } fill) ||
             !lattice.TryFieldIndex(
                 field: out var field,
                 name: row.Name.Value
@@ -81,12 +81,12 @@ public sealed partial class WorldServer {
 
         foreach (var row in (current.State ?? [])) {
             if (
-                (WorldLatticeFill.FindDraw(trait: row.Lattice) is { } fill) &&
+                (WorldLatticeFill.FindDraw(trait: row.Field) is { } fill) &&
                 (WorldDefinitionRows.FindStateRow(rows: previous.State, name: row.Name.Value) is { } oldRow) &&
                 (
                     (oldRow.DrawCursor != row.DrawCursor) ||
                     !SameMasks(left: oldRow.DrawnMasks, right: row.DrawnMasks) ||
-                    !Equals(objA: WorldLatticeFill.FindDraw(trait: oldRow.Lattice), objB: fill)
+                    !Equals(objA: WorldLatticeFill.FindDraw(trait: oldRow.Field), objB: fill)
                 )
             ) {
                 PaintLatticeDraw(

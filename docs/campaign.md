@@ -78,7 +78,7 @@ in `tests/Puck.Maths.Tests`.
 home is `WorldStateRow.Draw`; `bodies.capacityRow`/`host.backendRow` are boot-time reads of an
 already-resolved row rather than sites of their own, and nothing settles-and-clears any more — a
 boot-drawn row is the persisted evidence, re-read on every fresh load, never a value that becomes
-indistinguishable from an authored literal. A `state.lattices` topology plus a `lattice` trait on
+indistinguishable from an authored literal. A `state.lattices` topology plus a `field` trait on
 ordinary `fixed` rows is the field/terrain primitive, not a sibling section: `rect`/`noise`/`scatter`/`draw`
 paint seeds a row deterministically (integer-hash + Q48.16, seeded from `generation.worldSeed`), and
 `diffuse`/`decay`/`transform`/`emit`/`expose`/`flow` reactions evolve it each `stepEveryTicks`, every
@@ -184,10 +184,10 @@ shape's bound — `ShapeDomainOps.Reach` now charges it). `placements.policy` we
 same arc: unauthored derives to no-live-authoring and a scale envelope spanning the rows' own
 authored scales, so static worlds author no policy block. The world document itself authors
 everything else it runs: its census, its grants, simulation, host, collision, gravity, channels,
-the `walker` kit, bindings, the chase rig, and the pip look. A lattice trait's `color` speaks the same
+the `walker` kit, bindings, the chase rig, and the pip look. A field trait's `color` speaks the same
 grammar (resolved live at emit — a state cell write recolors a height field on the next frame with no
 re-bake, since bricks hold only distances; `world.fields` echoes each height field's authored color
-token; the check: author a lattice row's color as a state reference and boot).
+token; the check: author a field row's color as a state reference and boot).
 Everything else returns as deliberate evolution steps on this foundation. The first (2026-09-02): the
 platform at origin is a DEBUG AREA — one fixture per contact contract, each with a `spawnPoints` row
 and `body.pose spawn:<id>` to stand in front of it (`ramps`, `stairs`, `wall`, `pit`, `ladder`,
@@ -778,20 +778,34 @@ neutral value it should never need to. This is a pure representation change: the
 300-tick garden replay and the frozen world's 720-tick replay both hash identically before and
 after. The case-type/union rewrite below is unstarted; this only clears its stated first step.
 
-**Compiled rule operands are a closed union, built to the union pattern before the compiler
-has it (owner decision).** `CompiledWorldOperand` and `CompiledWorldEffect` are flattened
-structs carrying every fact kind's parameters at once, copied by value into every predicate,
-expression token, and reader; the shape is wrong, not merely large. The replacement is one
-sealed record per fact kind as the case types and an eight-byte carrier written to the C# 15
-basic union pattern by hand — a `[Union]` struct holding one `object?`, a constructor per
-case, `Value`, `HasValue`, and a `TryGetValue` per case — with the two attribute and
-interface types polyfilled internally until .NET 11 supplies them. Dispatch is a type-pattern
-switch over the cases; a law enumerates every fact kind against it until the compiler's
-exhaustiveness takes over. The day the toolchain moves, the flip is deleting the polyfills and
-switching on the carrier instead of its `Value`; nothing else moves. Case types stay classes,
-never structs, because a union boxes value cases on store. Row and key names leave the hot
-object for compiled handles, kept only in the refusal text. Sequenced after `garden/w3`
-merges, since it rewrites the compiler arms the lanes are producing operands in.
+**Compiled rule operands and effects are closed unions, built to the union pattern before the
+compiler has it (owner decision). Both halves have landed.**
+`CompiledWorldOperand` and `CompiledWorldEffect` were flattened structs carrying every fact
+kind's parameters at once, copied by value into every predicate, expression token, and
+reader — the shape was wrong, not merely large. `CompiledWorldOperand` is now a carrier
+struct (`WorldOperandUnion.cs`) over one sealed CLASS per `WorldRuleFactKind`
+(`WorldOperandKinds.cs`, 22 cases — never records or structs, since a union boxes a value
+case on store and nothing at runtime compares two operands for equality or identity), written
+to the C# 15 basic union pattern by hand: a `[Union]` struct holding one `object?`, a
+constructor per case, `Value`, `HasValue`, and a generic `TryGetValue<T>` — with the two
+attribute and interface types (`UnionAttribute`/`IUnion`) polyfilled internally until .NET 11
+supplies them. Dispatch is a type-pattern switch over the cases at `WorldServer.ReadWorldFact`
+and `WorldRuleWorkBudget.OperandCost`; `WorldOperandUnionLawTests` enumerates every fact kind
+against the case-type table until the compiler's exhaustiveness takes over. The day the
+toolchain moves, the flip is deleting the polyfills and switching on the carrier instead of its
+`Value`; nothing else moves. `Kind`/`ValueKind` are the only members every case carries
+(`WorldOperandFact`'s base, set once by each case's own constructor); everything else lives on
+the concrete case, reached by the type-pattern switch or, for the four cases that share a
+(row, key-indirection) address (`StateCellOperand`/`BoardOperand`/`PatternOperand`/
+`SymmetryOperand`), through the narrow `IStateAddressedOperand` interface. Row and key names
+still leave the hot object for compiled handles, kept only in the refusal text. This is a pure
+representation change — the passive 300-tick garden replay hashes identically before and after
+(`0x397968B8F541A2C4`). `CompiledWorldEffect` followed the identical shape: a carrier struct
+(`WorldEffectUnion.cs`) over one sealed class per `WorldRuleEffectKind` (`WorldEffectKinds.cs`),
+firing/preflight/transaction switched on the case types via `effect.Value`, factories replacing
+the compiler's `with` clones. Both carriers share one `UnionPolyfill.cs` (`UnionAttribute`/
+`IUnion`, attributed for either a struct carrier or a class/record hierarchy) rather than each
+declaring its own copy.
 
 **Cellset-domain unification, the 64-cell half (landed).** The forked
 vocabulary was never a type-system problem: `$board:mask` already reads a
@@ -821,13 +835,37 @@ by any document, so the ceiling narrows rather than a multi-word cell-set
 type getting built to fill it — the next world that needs board algebra past
 64 cells is what should motivate that representation, not this pass.
 
-**The row-domain facet collapse remains fully blocked.** `keysOf`, `cellsOf`,
-and `ring` name nothing anywhere in the tree; only handle completion, the
-union rewrite's stated first step above, has landed of that precursor work.
-Deleting the `Tokens`/`Zone`/`KeysFrom`/`Board`/`Lattice`/`History` facets
-today deletes the tabletop primitive, the poker zones, and the island's
-fire/ice/water lattice with no replacement standing in, so it stays
-unstarted until the row-domain union itself ships.
+**The row-domain facet collapse has landed (owner decision).** `WorldStateRow`
+carries one `Domain` (`WorldStateDomain`: `Slot`, `Keys`, `KeysOf(row,
+ordered)`, `CellsOf(topology, empty)`, `Ring(capacity, empty)`), built to the
+same sealed-case-class-plus-`[Union]`-marker pattern the compiled-operand
+rewrite above is landing (shared `UnionPolyfill.cs`). `IsKeyed`/`IsSlot`/
+`CellCeiling` are one switch over it; an unauthored row still infers `Slot`
+or `Keys` from `cells`/`capacity` alone, so a plain row spells nothing new.
+`Tokens`/`Zone`/`KeysFrom`/`Board`/`History` are deleted outright; `Lattice`
+survives only as `WorldStateFieldTrait` (the physical-field row's leftover
+parameters — `initial`/`min`/`max`/`heightScale`/`color`/`paint`/`medium`),
+its own `topology` member folded into `Domain.CellsOf` since a `Field`-kind
+`CellsOf` row and a discrete board are now one case, split by `Kind` alone.
+The document's own token-domain declaration is simply a `Keys` row whose
+`capacity` is the domain size — no second facet — and other rows address its
+keys through `KeysOf`; `ordered: true` is what a pile/zone needs, `ordered:
+false` (the default) is a plain keyed attribute row. The "every token belongs
+to exactly one zone" invariant is no longer engine law: it is an authored
+rule in the garden (`cardsZoneAccounting`/`cardsZoneInvariant`, summing
+`$reduce:count:` over `deck`/`hand1`/`hand2`/`community` against the `cards`
+domain's capacity) — a card leaving the tracked total moves a flag, never a
+validator refusal. Every shipped and canary world is migrated to the `domain`
+member once; the `capture`-scope `world.state.hash` (what `world.state.hash`
+reports by default, and the actual simulated trajectory) is unchanged for
+both the garden and the frozen island. The `authoritative`/replay-tape scope
+— what `replay.verify` checks — moves, unavoidably: it used to hash a
+now-collapsed `Tokens.Capacity` slot distinct from a row's own generic
+`Capacity`, and real documents already carry ordinary capacity-bounded rows
+(`hound`/`spider`/`pieceCell`/…) representation-identical to the old token
+declaration post-collapse, so the old byte, which one distinction ended up
+in, cannot be reconstructed from the new shape without keeping the very
+facet this change deletes.
 
 **The generator's card nouns are renamed to its actual primitive: multiset sampling
 (owner decision, Lane 2c).** `WorldGenerator` draws from a weighted entry set with
@@ -878,10 +916,24 @@ carrying two authoring surfaces that refused each other's fields only at validat
 two `$type`s let the shape refuse at the type level instead. The garden's two `sort`
 rules move to `sortKeyed` (pure rename: the passive 300-tick replay hash is unchanged);
 no shipped world or canary declared `completePhase`, `turnOrder`, `setRay`, `moveToken`,
-or `shuffle`, so no other document migrates. `moveToken` is left as its own transform:
-composing it from `$board:pathCost` plus a transaction needs that fact's target cell to
-read a just-written value rather than the compile-time literal it takes today, which is
-new expressive power the fact does not carry yet, not a rewrite of what it already has.
+or `shuffle`, so no other document migrates.
+
+**`moveToken` is retired; `$board:pathCost` gains a dynamic target (owner decision, closed
+union follow-on).** The opaque transform (pathfind, allowance debit, and occupancy baked
+into one C# compose arm) is deleted; `$board:pathCost:<terrain>:cell:<row>:<key>:<maxCost>:<maxVisits>`
+reads its destination ordinal live from another declared row's cell — the same `cell:<row>:<key>`
+indirection `$distance:`/`$los:` already spend their own body-reference grammar on — instead of
+only the compile-time literal ordinal it took before. A world now authors "move a token" as
+ordinary rules: an affordability gate comparing the live path cost against a live allowance row,
+and a `transaction` that debits the allowance by that same live expression, clears the token's old
+occupancy and terrain cells, writes the new position, and sets the new occupancy and terrain
+cells — nothing atomic left for the engine to own on the token's behalf.
+`tests/Puck.World.Tests/DiscreteStateLawTests.cs`'s
+`APathCostTransactionMovesATokenUnderAnAllowanceAndRefusesWhenCostExceedsIt` proves the gate reads
+the cost live rather than baking a stale one at compile time (the control: raising the allowance
+alone flips an unaffordable request to affordable). `tests/Puck.World.Canaries/tabletop-state`
+re-authors its guarded move the same way; the passive 300-tick garden replay hash and the frozen
+720-tick replay hash are both unaffected (`moveToken` was never shipped in either world).
 
 **The local auction house dissolved into an escrowed conditional transfer over ordinary keyed
 rows, authored entirely as rules — no bespoke market mutation kinds, no market-only C# compose
@@ -915,9 +967,16 @@ gate and keeps re-blending every tick, by
 in a bespoke parallel store, it never had a federation-transfer story to dissolve either: an
 ordinary keyed row is local to its world, exactly like every other `state` row, so an individual's
 beliefs simply do not travel with it across a transfer — a real behavior change from the old
-system's frozen-observer export/import, and a deliberate one (nothing shipped exercised it). The
-garden re-authors `witness-claim`/`rumor`/`choose-companion` and the pack kit's `alignmentAffinity`
-onto a `boneHolderTrust` row keyed by observer, moving its hash. `hounds-meet` and its `affection`
+system's frozen-observer export/import, and a deliberate one (nothing shipped exercised it). An
+impression keyed by observer alone conflates every subject it has ever concerned — a hound's trust
+in whoever holds the bone right now silently becomes its trust in whoever holds it next the moment
+the bone changes hands. `$pair:<bodyRefA>:<bodyRefB>` (`WorldRuleFacts.PairKeyPrefix`) is the
+composite-key indirection that fixes it: on the same terms as `$cell:`, it resolves to a directed
+`"<a>_<b>"` cell key (`(a, b)` and `(b, a)` name different cells), so a keyed row holds one cell per
+(observer, subject) pair instead of one per observer. The garden re-authors `witness-claim`/`rumor`/
+`choose-companion` and the pack kit's `alignmentAffinity` onto `boneHolderTrust` keyed by
+`$pair:<observer>:cell:boneHolder:0` — each hound's own trust in whichever specific body it has
+witnessed holding the bone — moving its hash. `hounds-meet` and its `affection`
 dimension are retired rather than re-keyed: it was a Distance interaction (`O(population²)`
 worst-case reach) whose only effect was a delivery an ordinary `AddState` now prices at the
 engine's real conservative per-write cost — at this population size that product alone exceeds the
@@ -1048,9 +1107,9 @@ before ever walking cells), so a zone can show every one of its member
 tokens to an admitted reader or none — never a placeholder for the rest —
 while an attribute row keyed over that zone's domain resolves each cell
 through its owning zone's OWN visibility (`Observer.CanRead`'s nested
-zones-by-domain lookup, which requires `keysFrom` on the attribute row: drop
-it to save budget and `rank`/`suit` both go fully public, an opponent's hole
-cards included — a near-miss this landing corrected). `hand1`/`hand2` keep
+zones-by-domain lookup, which requires the attribute row's own `keysOf`
+domain: drop it to save budget and `rank`/`suit` both go fully public, an
+opponent's hole cards included — a near-miss this landing corrected). `hand1`/`hand2` keep
 their own `readers`/`readersFrom` for each seat's direct, full read of its
 own two cards, and `poker-showdown-reveal` widens that same `readersFrom` row
 at showdown — one more use of the tabletop primitive's own reveal seam, not a
@@ -1063,8 +1122,8 @@ Live hand-strength is priced against `world.budget`'s per-tick ceiling
 here): every `transformState` effect (dealing's `transfer`, a `sort`) is
 priced against the WHOLE document's declared cell storage
 (`WorldRuleWorkBudget.TransformCost`), and `rank`/`suit`'s privacy-required
-`keysFrom` each add a full topology-sized share to that storage on their own
-— so the deal's three transfers plus one sort PER SEAT (needed because the
+`keysOf` domain declares no capacity of its own, so each still adds a full
+topology-sized share to that storage — so the deal's three transfers plus one sort PER SEAT (needed because the
 shipped `hasTripAny`/`hasQuadAny`/`straightAny` patterns are adjacency-based
 and read wrong off an unsorted deal) are a real, non-trivial cost alongside
 chess's and the rigid facets' own rules. `poker-strength1`/`poker-strength2`
@@ -1096,28 +1155,106 @@ and static per-tick work, never a fixed-size buffer or a per-world tunable),
 so the fix is to widen them rather than cut a lane: `MaxRows` 128 → 256,
 `MaxWorkUnitsPerTick` 1,000,000 → 2,000,000.
 
-**Games are imported fragments of one composed world (owner decision).** Each
-game in the garden — chess, poker, dominoes, billiards, bowling — lives in its
-own world file that `puck.world.json` imports, rather than all five sharing one
-ever-growing document. `WorldDefinition.Imports` is the fan-in half of
-composition beside `basis`'s single-parent chain: an ordered list of fragment
-paths, each fully resolved (its own `basis`/`imports` included) and folded left
-to right, then layered under the importing file's own body. The reasoning
-this decision rests on: a single-parent basis chain cannot express "five
-independent slices of one document" without artificial ordering between
-unrelated games; imports can, because siblings are checked for collision
-rather than silently overridden — a same-key row, object member, or list two
-games both declare refuses by name unless `puck.world.json` itself restates
-the key, so an accidental collision between two games' content is caught at
-load rather than silently resolved by import order. `key` joined the
-row-identity vocabulary (`id`/`name`/`key`/`index`) alongside this, so a state
-row's `cells` — the vocabulary a game's own counters and tables lean on —
-refines by cell rather than replacing wholesale under a basis delta. Every
-shipped world and canary was composed under the old and new vocabulary and
-proved `JsonNode.DeepEquals`; none needed migration. `world.imports` reads the
-resolved stack back. The garden's own `puck.world.json` is not yet split by
-this primitive — that split is its own follow-on change, sequenced after the
-motion-row wave this document's own `garden/w3` section describes.
+**Games are imported fragments of one composed world (landed).** Each game in
+the garden — chess, poker, dominoes, billiards, bowling, and a 4x4x4 tic-tac-toe
+cube (`Box`-topology Qubic, the schema's own discrete-boards worked example) —
+lives in its own file under `src/Puck.World/Assets/worlds/games/`, imported by
+`puck.world.json` in that order, rather than all six sharing one ever-growing
+document. `WorldDefinition.Imports` is the fan-in half of composition beside
+`basis`'s single-parent chain: an ordered list of fragment paths, each fully
+resolved (its own `basis`/`imports` included) and folded left to right, then
+layered under the importing file's own body. The reasoning this decision rests
+on: a single-parent basis chain cannot express "six independent slices of one
+document" without artificial ordering between unrelated games; imports can,
+because siblings are checked for collision rather than silently overridden —
+a same-key row, object member, or list two games both declare refuses by name
+unless `puck.world.json` itself restates the key, so an accidental collision
+between two games' content is caught at load rather than silently resolved by
+import order. `key` joined the row-identity vocabulary (`id`/`name`/`key`/
+`index`) alongside this, so a state row's `cells` — the vocabulary a game's own
+counters and tables lean on — refines by cell rather than replacing wholesale
+under a basis delta. The shared substrate — channels, kits, bodies capacity,
+the tabletop placement and its plan seam, spawn points, the island, the
+population, hud/views, and everything no game's own content touches — stays in
+`puck.world.json` itself; `chessBoard` (the `state.lattices` topology the
+tabletop anchors) moved with chess, `pondBasin` stayed. `billiardsColors`
+(ball/tray AND pin/pinBand cells) is genuinely shared between billiards and
+bowling and stays substrate rather than forcing an arbitrary owner. `world.imports`
+reads the resolved stack back.
+
+The import fold concatenates each source's contribution as one contiguous run
+(the basis chain, then each import fully resolved in list order, then the
+importing file's own new keys, appended last) — so a keyed list drawn from a
+monolithic file whose own authoring order interleaved substrate and game
+content as each was built over time (the original document's placements ran
+dominoes, most of the substrate, billiards, bowling, a substrate/chess/substrate
+interleave, then the rest of chess) cannot reproduce that exact array order; no
+composition built from one contiguous run per source can. This is proven, not
+assumed, by a permanent law
+(`tests/Puck.World.Tests/GardenSplitLawTests.cs`, over a frozen
+`pre-split-garden.world.json` fixture): canonicalizing every keyed list by
+sorting it on its identity key — the same vocabulary the merge itself keys
+by — makes the pre-split and post-split composed trees `JsonNode.DeepEquals`,
+with a corrupted-row control proving the canonicalization does not also hide
+a real value change.
+
+Placement reordering has a sharp edge beyond row order: `WorldPopulation`
+seats each inhabited placement at the highest still-free body index, walking
+placements in composed document order, so moving a game's placements to a
+different point in the fold moves every one of its bodies to a different
+index range. Chess's 32 `piece` placements sat last among inhabited placements
+pre-split (bodies 12..43); with chess first among `imports`, they are first
+instead (bodies 74..105). `games/chess.world.json`'s `pieceCell`/`pieceCode`
+row keys and its 32 `tabletop-write-board-NN` rules are per-body-indexed
+authoring — re-derived against the new range in the same change, not left
+pointing at bodies that no longer hold the pieces they used to; the check
+that keeps them right is `GardenSplitLawTests.ChessPieceBodies_MatchAuthoredPieceCellAndPieceCodeKeys`,
+which cross-checks the authored keys against where `WorldPopulation` actually
+seats the placements rather than trusting the literals. No other fragment
+authors a per-body-indexed row or rule (billiards/bowling/dominoes carry no
+rules at all; poker's keyed rows are card codes, not body indices), so chess
+is the only place this re-derivation was needed.
+
+Reordering a hashed row changes what the hash folds even though no value
+moves; re-deriving chess's per-body literals against their new index range is
+the same relabeling, not a behavior change — the piece at each body still
+starts on the same board square with the same legal moves. Both together are
+why the passive garden replay's own hash moves with the split: the doctrine
+that already covers a deliberate correction ("determinism pins the mapping,
+not the values") covers a deliberate reorganization the same way — the replay
+stays self-consistent (rule-failure-free, MATCH) before and after, which is
+the guarantee, not a frozen number. The eight substrate rules (`claim-tick`
+through `physics-settled`) also move, from first in rule order to last —
+every import's rules compose before the importing file's own new rules, the
+same basis-first/overlay-appended rule that reorders placements. Checked and
+currently inert: no substrate rule's effect names a state any game rule reads
+or writes, and no game rule names a state a substrate rule writes: the two
+rule sets share no data flow through anything but the engine's own
+`$physics:quiescent` source. A future rule that reaches across that boundary
+must account for the new order rather than assume the substrate still runs
+first.
+
+**The operand/effect unions, the row-domain union, and the garden split land together
+(`tower/unions`, integrator ruling).** Three lanes built independently against the same
+`ca29ca5e` base — compiled operands and effects becoming closed unions, `WorldStateRow`'s five
+facets collapsing into one `Domain` union, and the garden splitting into imported game
+fragments — then a fourth (the `$pair` composite key indirection, `moveToken`'s retirement into
+a live `$board:pathCost` target plus a transaction) landed inside the operand/effect lane after
+the split lane had already forked. Combining all four moves the passive 300-tick garden replay
+hash to `0xE65582BEA0A09549` (from `0x397968B8F541A2C4` at `ca29ca5e`) and the frozen world's
+720-tick replay to `0xFD0790057330914F` (from `0x1B21350FE4B50E0B`): every one of the four
+changes is independently a pure representation or a deliberate, already-recorded content change,
+and their sum is not separately re-provable against the pre-integration number — the doctrine's
+guarantee is that the replay stays self-consistent (rule-failure-free, MATCH) at the new mapping,
+never that combining independently-correct changes leaves a historical hash standing. Two
+integration-only fixes rode along: `games/chess.world.json` and `games/tictactoe.world.json`
+authored their `state.lattices` entries against the pre-union `WorldStateLatticeTopology` shape
+(a `kind` discriminator field) since the split fork predates the lattice-topology union landing
+in the other lane — migrated to the union's own `$type` discriminator, the one shape the type
+now parses; and the two lanes' independently-declared `UnionPolyfill.cs` (one `[AttributeUsage(Struct)]`
+for the operand/effect carriers, one `[AttributeUsage(Class)]` for the row-domain union) collapsed
+into the one file `docs/campaign.md`'s row-domain paragraph already named as the shared destination,
+attributed for both shapes.
 
 ## After this arc
 

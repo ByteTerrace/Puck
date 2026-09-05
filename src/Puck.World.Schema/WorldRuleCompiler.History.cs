@@ -13,14 +13,18 @@ public static partial class WorldRuleCompiler {
             throw Invalid("history read requires $history:<row>:<age> and no key");
         }
         var row = WorldDefinitionRows.FindStateRow(definition.State, tokens[1]) ?? throw Invalid($"'{tokens[1]}' names no state row");
-        if (row.History is not { } history) {
+        if (row.EffectiveDomain is not WorldStateDomain.Ring history) {
             throw Invalid($"'{tokens[1]}' is not a history row");
         }
         if (!int.TryParse(tokens[2], NumberStyles.None, CultureInfo.InvariantCulture, out var age) || age >= history.Capacity) {
             throw Invalid($"age must be 0..{history.Capacity - 1} on '{tokens[1]}'");
         }
-        return new(new CompiledWorldOperand(WorldRuleFactKind.History, tokens[1], null, ValueKind: row.Kind, SymmetryArgument: age,
-            StateHandle: ResolveWorldStateHandle(definition: definition, name: tokens[1])), row.Kind, name);
+        return new(new CompiledWorldOperand(new HistoryOperand(
+            row: tokens[1],
+            stateHandle: ResolveWorldStateHandle(definition: definition, name: tokens[1]),
+            age: age,
+            valueKind: row.Kind
+        )), row.Kind, name);
     }
 
     // pushState is a write whose destination is the ring's next slot rather than a named cell: it borrows the
@@ -28,7 +32,7 @@ public static partial class WorldRuleCompiler {
     private static CompiledWorldEffect ResolvePush(ActionEffect.PushState push, string ruleName, WorldDefinition definition) {
         var row = WorldDefinitionRows.FindStateRow(definition.State, push.State)
             ?? throw new WorldRuleException(WorldRuleRefusal.StateRowUnknown, ruleName, $"'pushState' names no state row '{push.State}'");
-        if (row.History is null) {
+        if (row.EffectiveDomain is not WorldStateDomain.Ring) {
             throw new WorldRuleException(WorldRuleRefusal.StateCellUnaddressable, ruleName, $"'pushState' requires a history row; '{push.State}' has no history trait");
         }
         var write = ResolveWrite(
@@ -46,6 +50,6 @@ public static partial class WorldRuleCompiler {
             definition: definition,
             verb: "pushState"
         );
-        return write with { Kind = WorldRuleEffectKind.PushState, Key = string.Empty, Describe = $"pushState {push.State}" };
+        return new CompiledWorldEffect(PushStateEffect.FromWrite((WriteEffect)write.Value!, $"pushState {push.State}"));
     }
 }

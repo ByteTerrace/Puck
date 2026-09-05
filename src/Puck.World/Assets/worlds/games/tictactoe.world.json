@@ -1,0 +1,3846 @@
+{
+  "rules": [
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromState": "tttActive",
+          "key": "$cell:tttMoveCell:$value",
+          "state": "tttBoard"
+        },
+        {
+          "$type": "addState",
+          "state": "tttMoveCount",
+          "value": 1
+        },
+        {
+          "$type": "addState",
+          "state": "tttBoardVersion",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "fromState": "tttMoveRequest",
+          "state": "tttMoveApplied"
+        },
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "constant",
+                "value": 3
+              },
+              {
+                "$type": "state",
+                "name": "tttActive"
+              },
+              {
+                "$type": "subtract"
+              }
+            ]
+          },
+          "state": "tttActive"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparandState": "tttMoveApplied",
+            "comparison": "NotEqual",
+            "state": "tttMoveRequest"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "tttWinner",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "state": "tttMoveCell",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "state": "tttMoveCell",
+            "value": 63
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "$cell:tttMoveCell:$value",
+            "state": "tttBoard",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "ttt-place-mark"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromState": "tttMoveRequest",
+          "state": "tttMoveApplied"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparandState": "tttMoveApplied",
+            "comparison": "NotEqual",
+            "state": "tttMoveRequest"
+          },
+          {
+            "$type": "any",
+            "predicates": [
+              {
+                "$type": "compareState",
+                "comparison": "Less",
+                "state": "tttMoveCell",
+                "value": 0
+              },
+              {
+                "$type": "compareState",
+                "comparison": "Greater",
+                "state": "tttMoveCell",
+                "value": 63
+              }
+            ]
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "ttt-reject-out-of-range"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromState": "tttMoveRequest",
+          "state": "tttMoveApplied"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparandState": "tttMoveApplied",
+            "comparison": "NotEqual",
+            "state": "tttMoveRequest"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "state": "tttMoveCell",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "state": "tttMoveCell",
+            "value": 63
+          },
+          {
+            "$type": "any",
+            "predicates": [
+              {
+                "$type": "compareState",
+                "comparison": "NotEqual",
+                "state": "tttWinner",
+                "value": 0
+              },
+              {
+                "$type": "compareState",
+                "comparison": "NotEqual",
+                "key": "$cell:tttMoveCell:$value",
+                "state": "tttBoard",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "ttt-reject-illegal"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 15
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 15
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 240
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 240
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 3840
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 3840
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 61440
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 61440
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 4369
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 4369
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 8738
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 8738
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 17476
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 17476
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 34952
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 34952
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 33825
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 33825
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 4680
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 4680
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              }
+            ]
+          },
+          "state": "tttChunkX0"
+        },
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 983040
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 983040
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 15728640
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 15728640
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 251658240
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 251658240
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 4026531840
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 4026531840
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 286326784
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 286326784
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 572653568
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 572653568
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 1145307136
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 1145307136
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 2290614272
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 2290614272
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 2216755200
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 2216755200
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 306708480
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 306708480
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              }
+            ]
+          },
+          "state": "tttChunkX1"
+        },
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 64424509440
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 64424509440
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 1030792151040
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 1030792151040
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 16492674416640
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 16492674416640
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 263882790666240
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 263882790666240
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 18764712116224
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 18764712116224
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 37529424232448
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 37529424232448
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 75058848464896
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 75058848464896
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 150117696929792
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 150117696929792
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 145277268787200
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 145277268787200
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 20100446945280
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 20100446945280
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              }
+            ]
+          },
+          "state": "tttChunkX2"
+        },
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 4222124650659840
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 4222124650659840
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 67553994410557440
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 67553994410557440
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 1080863910568919040
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 1080863910568919040
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": -1152921504606846976
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": -1152921504606846976
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 1229764173248856064
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 1229764173248856064
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 2459528346497712128
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 2459528346497712128
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 4919056692995424256
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 4919056692995424256
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": -8608630687718703104
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": -8608630687718703104
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": -8925852986471612416
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": -8925852986471612416
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 1317302891005870080
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 1317302891005870080
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              }
+            ]
+          },
+          "state": "tttChunkX3"
+        },
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 281479271743489
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 281479271743489
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 4503668347895824
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 4503668347895824
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 72058693566333184
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 72058693566333184
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 1152939097061330944
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 1152939097061330944
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 562958543486978
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 562958543486978
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 9007336695791648
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 9007336695791648
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 144117387132666368
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 144117387132666368
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 2305878194122661888
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 2305878194122661888
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 1125917086973956
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 1125917086973956
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 18014673391583296
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 18014673391583296
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              }
+            ]
+          },
+          "state": "tttChunkX4"
+        },
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 288234774265332736
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 288234774265332736
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 4611756388245323776
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 4611756388245323776
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 2251834173947912
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 2251834173947912
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 36029346783166592
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 36029346783166592
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 576469548530665472
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 576469548530665472
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": -9223231297218904064
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": -9223231297218904064
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 2251816993685505
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 2251816993685505
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 281483566907400
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 281483566907400
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 36029071898968080
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 36029071898968080
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 4503737070518400
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 4503737070518400
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              }
+            ]
+          },
+          "state": "tttChunkX5"
+        },
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 576465150383489280
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 576465150383489280
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 72059793128294400
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 72059793128294400
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": -9223301667573723136
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": -9223301667573723136
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 1152956690052710400
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 1152956690052710400
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 1152922604119523329
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 1152922604119523329
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 281543712968704
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 281543712968704
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 2305845208239046658
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 2305845208239046658
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 563087425937408
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 563087425937408
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 4611690416478093316
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 4611690416478093316
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 1126174851874816
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 1126174851874816
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              }
+            ]
+          },
+          "state": "tttChunkX6"
+        },
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": -9223363240753364984
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": -9223363240753364984
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 2252349703749632
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 2252349703749632
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": -9223367638806167551
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": -9223367638806167551
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 281612482805760
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 281612482805760
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 2252074725150720
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 2252074725150720
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:1:1"
+              },
+              {
+                "$type": "constant",
+                "value": 1152923703634296840
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 1152923703634296840
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              }
+            ]
+          },
+          "state": "tttChunkX7"
+        },
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 15
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 15
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 240
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 240
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 3840
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 3840
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 61440
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 61440
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 4369
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 4369
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 8738
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 8738
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 17476
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 17476
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 34952
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 34952
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 33825
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 33825
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 4680
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 4680
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              }
+            ]
+          },
+          "state": "tttChunkO0"
+        },
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 983040
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 983040
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 15728640
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 15728640
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 251658240
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 251658240
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 4026531840
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 4026531840
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 286326784
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 286326784
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 572653568
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 572653568
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 1145307136
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 1145307136
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 2290614272
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 2290614272
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 2216755200
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 2216755200
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 306708480
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 306708480
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              }
+            ]
+          },
+          "state": "tttChunkO1"
+        },
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 64424509440
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 64424509440
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 1030792151040
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 1030792151040
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 16492674416640
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 16492674416640
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 263882790666240
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 263882790666240
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 18764712116224
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 18764712116224
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 37529424232448
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 37529424232448
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 75058848464896
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 75058848464896
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 150117696929792
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 150117696929792
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 145277268787200
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 145277268787200
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 20100446945280
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 20100446945280
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              }
+            ]
+          },
+          "state": "tttChunkO2"
+        },
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 4222124650659840
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 4222124650659840
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 67553994410557440
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 67553994410557440
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 1080863910568919040
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 1080863910568919040
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": -1152921504606846976
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": -1152921504606846976
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 1229764173248856064
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 1229764173248856064
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 2459528346497712128
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 2459528346497712128
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 4919056692995424256
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 4919056692995424256
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": -8608630687718703104
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": -8608630687718703104
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": -8925852986471612416
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": -8925852986471612416
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 1317302891005870080
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 1317302891005870080
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              }
+            ]
+          },
+          "state": "tttChunkO3"
+        },
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 281479271743489
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 281479271743489
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 4503668347895824
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 4503668347895824
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 72058693566333184
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 72058693566333184
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 1152939097061330944
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 1152939097061330944
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 562958543486978
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 562958543486978
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 9007336695791648
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 9007336695791648
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 144117387132666368
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 144117387132666368
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 2305878194122661888
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 2305878194122661888
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 1125917086973956
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 1125917086973956
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 18014673391583296
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 18014673391583296
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              }
+            ]
+          },
+          "state": "tttChunkO4"
+        },
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 288234774265332736
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 288234774265332736
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 4611756388245323776
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 4611756388245323776
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 2251834173947912
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 2251834173947912
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 36029346783166592
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 36029346783166592
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 576469548530665472
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 576469548530665472
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": -9223231297218904064
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": -9223231297218904064
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 2251816993685505
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 2251816993685505
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 281483566907400
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 281483566907400
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 36029071898968080
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 36029071898968080
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 4503737070518400
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 4503737070518400
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              }
+            ]
+          },
+          "state": "tttChunkO5"
+        },
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 576465150383489280
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 576465150383489280
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 72059793128294400
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 72059793128294400
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": -9223301667573723136
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": -9223301667573723136
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 1152956690052710400
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 1152956690052710400
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 1152922604119523329
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 1152922604119523329
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 281543712968704
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 281543712968704
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 2305845208239046658
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 2305845208239046658
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 563087425937408
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 563087425937408
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 4611690416478093316
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 4611690416478093316
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 1126174851874816
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 1126174851874816
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              }
+            ]
+          },
+          "state": "tttChunkO6"
+        },
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": -9223363240753364984
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": -9223363240753364984
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 2252349703749632
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 2252349703749632
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": -9223367638806167551
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": -9223367638806167551
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 281612482805760
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 281612482805760
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 2252074725150720
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 2252074725150720
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:tttBoard:2:2"
+              },
+              {
+                "$type": "constant",
+                "value": 1152923703634296840
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 1152923703634296840
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "bitOr"
+              }
+            ]
+          },
+          "state": "tttChunkO7"
+        },
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "tttChunkX0"
+              },
+              {
+                "$type": "state",
+                "name": "tttChunkX1"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "tttChunkX2"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "tttChunkX3"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "tttChunkX4"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "tttChunkX5"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "tttChunkX6"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "tttChunkX7"
+              },
+              {
+                "$type": "bitOr"
+              }
+            ]
+          },
+          "state": "tttXWin"
+        },
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "tttChunkO0"
+              },
+              {
+                "$type": "state",
+                "name": "tttChunkO1"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "tttChunkO2"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "tttChunkO3"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "tttChunkO4"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "tttChunkO5"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "tttChunkO6"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "state",
+                "name": "tttChunkO7"
+              },
+              {
+                "$type": "bitOr"
+              }
+            ]
+          },
+          "state": "tttOWin"
+        },
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "tttXWin"
+              },
+              {
+                "$type": "constant",
+                "value": 1
+              },
+              {
+                "$type": "state",
+                "name": "tttOWin"
+              },
+              {
+                "$type": "constant",
+                "value": 2
+              },
+              {
+                "$type": "state",
+                "name": "tttMoveCount"
+              },
+              {
+                "$type": "constant",
+                "value": 64
+              },
+              {
+                "$type": "greaterOrEqual"
+              },
+              {
+                "$type": "constant",
+                "value": 3
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "select"
+              },
+              {
+                "$type": "select"
+              },
+              {
+                "$type": "select"
+              }
+            ]
+          },
+          "state": "tttWinner"
+        },
+        {
+          "$type": "setState",
+          "fromState": "tttBoardVersion",
+          "state": "tttWinCheckVersion"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparandState": "tttWinCheckVersion",
+        "comparison": "NotEqual",
+        "state": "tttBoardVersion"
+      },
+      "mode": "Edge",
+      "name": "ttt-check-win"
+    }
+  ],
+  "state": {
+    "lattices": [
+      {
+        "$type": "box",
+        "cellSize": 1,
+        "depth": 4,
+        "layerHeight": 1,
+        "layers": 4,
+        "name": "tttCube",
+        "origin": [
+          0,
+          -32,
+          0
+        ],
+        "width": 4
+      }
+    ],
+    "world": [
+      {
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "tttCube"
+        },
+        "kind": "int",
+        "name": "tttBoard"
+      },
+      {
+        "kind": "int",
+        "max": 2,
+        "min": 1,
+        "name": "tttActive",
+        "value": 1
+      },
+      {
+        "kind": "int",
+        "max": 63,
+        "min": -1,
+        "name": "tttMoveCell",
+        "value": -1
+      },
+      {
+        "kind": "int",
+        "name": "tttMoveRequest",
+        "nonNegative": true,
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "name": "tttMoveApplied",
+        "nonNegative": true,
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "name": "tttBoardVersion",
+        "nonNegative": true,
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "name": "tttWinCheckVersion",
+        "nonNegative": true,
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 3,
+        "min": 0,
+        "name": "tttWinner",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 64,
+        "min": 0,
+        "name": "tttMoveCount",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "tttChunkX0",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "tttChunkX1",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "tttChunkX2",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "tttChunkX3",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "tttChunkX4",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "tttChunkX5",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "tttChunkX6",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "tttChunkX7",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "tttChunkO0",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "tttChunkO1",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "tttChunkO2",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "tttChunkO3",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "tttChunkO4",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "tttChunkO5",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "tttChunkO6",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "tttChunkO7",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "tttXWin",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "tttOWin",
+        "value": 0
+      }
+    ]
+  }
+}

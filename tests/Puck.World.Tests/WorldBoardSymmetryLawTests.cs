@@ -31,7 +31,7 @@ public sealed class WorldBoardSymmetryLawTests {
 
     [Fact]
     public void TheCanonicalFingerprintIsInvariantUnderEveryElementAndTheImageOpAgreesWithItsMask() {
-        var board = new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0", 1), Cell("1", 2)], Board: new("map"));
+        var board = new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0", 1), Cell("1", 2)], Domain: new WorldStateDomain.CellsOf("map"));
         var definition = Document([board, Slot("print"), Slot("imageMask")], [
             new WorldRule(Name("print"), [new ActionEffect.SetState(State: "print", FromState: "$board:canonical:board")]),
             // The image op composes with the one board-set read ($board:mask) instead of a dedicated read+image
@@ -50,7 +50,7 @@ public sealed class WorldBoardSymmetryLawTests {
             var rot = topology.Element(element);
             // The mirror board is built directly from the topology's own image map — the law under test is that
             // Canonical folds every element to the same fingerprint, not any one way of constructing a mirror.
-            var mirror = new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell(topology.Key(topology.Image(rot, 0)), 1), Cell(topology.Key(topology.Image(rot, 1)), 2)], Board: new("map"));
+            var mirror = new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell(topology.Key(topology.Image(rot, 0)), 1), Cell(topology.Key(topology.Image(rot, 1)), 2)], Domain: new WorldStateDomain.CellsOf("map"));
             var mappedDefinition = definition with { StateRaw = definition.StateRaw! with { World = [.. definition.State.Select(r => r.Name.Value == "board" ? mirror : r)] } };
             using var fixture = Fixtures.FreshServer(definition: mappedDefinition);
             fixture.Step();
@@ -74,7 +74,7 @@ public sealed class WorldBoardSymmetryLawTests {
 
     [Fact]
     public void AnAuthoredAliasResolvesAlongsideTheCanonicalSpellingButElementNameAlwaysAnswersTheCanonicalOne() {
-        var square = new WorldStateLatticeTopology("t", new DocumentVector3(0, 0, 0), 1, 4, 4, Kind: WorldTopologyKind.Grid,
+        var square = new WorldStateLatticeTopology.Grid("t", new DocumentVector3(0, 0, 0), 1, 4, 4,
             ElementAliases: [new("rot90", "-z+x")]);
         var topology = WorldTopologyCompilation.Find(new WorldStateSection(Lattices: [square]), "t")!;
         var aliased = topology.Element("rot90");
@@ -95,10 +95,10 @@ public sealed class WorldBoardSymmetryLawTests {
     }
 
     private static WorldStateLatticeTopology Topology(WorldTopologyKind kind, int width, int depth) => kind == WorldTopologyKind.Hex
-        ? new("t", new DocumentVector3(0, 0, 0), 1, 1, 1, Kind: WorldTopologyKind.Hex, Radius: 2)
-        : new("t", new DocumentVector3(0, 0, 0), 1, width, depth, Kind: WorldTopologyKind.Grid);
+        ? new WorldStateLatticeTopology.Hex("t", new DocumentVector3(0, 0, 0), 1, Radius: 2)
+        : new WorldStateLatticeTopology.Grid("t", new DocumentVector3(0, 0, 0), 1, width, depth);
     private static WorldDefinition Document(WorldStateRow[] rows, WorldRule[] rules) => Fixtures.BuildDocument() with {
-        StateRaw = new(World: rows, Lattices: [new WorldStateLatticeTopology("map", new DocumentVector3(0, 0, 0), 1, 4, 4, Kind: WorldTopologyKind.Grid)]),
+        StateRaw = new(World: rows, Lattices: [new WorldStateLatticeTopology.Grid("map", new DocumentVector3(0, 0, 0), 1, 4, 4)]),
         Rules = rules,
     };
     private static WorldCellName Name(string value) => WorldCellName.Parse(value);

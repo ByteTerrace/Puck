@@ -103,7 +103,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                     ExpressionCost(expression, definition), ExpressionCost(token.RightExpression!, definition))));
                 continue;
             }
-            cost = SaturatingAdd(cost, OperandCost(token.Left, definition));
+            if (token.Left is { } left) { cost = SaturatingAdd(cost, OperandCost(left, definition)); }
             if (token.Comparand is { } comparand) { cost = SaturatingAdd(cost, OperandCost(comparand, definition)); }
         }
         return cost;
@@ -142,16 +142,16 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
             WorldRuleEffectKind.Write or WorldRuleEffectKind.Countdown or WorldRuleEffectKind.RemoveStateCell or WorldRuleEffectKind.ScheduleState => 512L,
             WorldRuleEffectKind.PushState => 1_024L,
             WorldRuleEffectKind.Generate => 4_096L,
-            WorldRuleEffectKind.TransformState => TransformCost(effect.Transform!, definition),
+            WorldRuleEffectKind.TransformState => TransformCost(((TransformStateEffect)effect.Value!).Transform, definition),
             WorldRuleEffectKind.UpsertHudPanel or WorldRuleEffectKind.RemoveHudPanel => 4_096L,
             WorldRuleEffectKind.UpsertPlacement or WorldRuleEffectKind.RemovePlacement => 32_768L,
             _ => 1L,
         };
 
-        if (effect.From is { } source) {
+        if (effect.Value is IValueSourcedEffect { From: { } source }) {
             cost = SaturatingAdd(left: cost, right: OperandCost(operand: source, definition: definition));
         }
-        if (effect.Expression is { } expression) {
+        if (effect.Value is IValueSourcedEffect { Expression: { } expression }) {
             foreach (var token in expression) {
                 cost = SaturatingAdd(
                     left: cost,
@@ -161,13 +161,13 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 );
             }
         }
-        if (effect.Paint is { } paint) {
+        if (effect.Value is PaintFieldEffect { Paint: var paint }) {
             var diameter = ((2L * paint.Radius) + 1L);
             cost = SaturatingAdd(left: cost, right: SaturatingMultiply(left: diameter, right: SaturatingMultiply(left: diameter, right: diameter)));
         }
-        if (effect.Effects is { } main) {
+        if (effect.Value is TransactionEffect { Effects: { } main } transaction) {
             var mainCost = EffectsCost(effects: main, definition: definition);
-            var failureCost = EffectsCost(effects: (effect.OnFailure ?? []), definition: definition);
+            var failureCost = EffectsCost(effects: transaction.OnFailure, definition: definition);
             // Success preflights and applies main. Refusal may inspect all of main, then preflight and apply failure.
             var success = SaturatingMultiply(left: 2L, right: mainCost);
             var refusal = SaturatingAdd(
@@ -184,14 +184,9 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         var storage = definition.State.Sum(static row => (long)row.CellCeiling);
         var cost = 4096L + storage;
         switch (transform) {
-            case WorldStateTransform.MoveToken move:
-                var terrain = WorldDefinitionRows.FindStateRow(definition.State, move.Terrain)!;
-                var map = WorldTopologyCompilation.Find(definition.StateRaw, terrain.Board!.Topology)!;
-                cost += (long)(move.MaxVisits + 1) * (map.CellCount + map.DirectionCount) + storage;
-                break;
             case WorldStateTransform.SetRay ray:
                 var board = WorldDefinitionRows.FindStateRow(definition.State, ray.Row)!;
-                var count = WorldTopologyCompilation.Find(definition.StateRaw, board.Board!.Topology)!.CellCount;
+                var count = WorldTopologyCompilation.Find(definition.StateRaw, ((WorldStateDomain.CellsOf)board.EffectiveDomain).Topology)!.CellCount;
                 cost += (long)count * (count + 2);
                 break;
             case WorldStateTransform.Transfer transfer:
@@ -212,16 +207,16 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 break;
             case WorldStateTransform.WriteSet writeSet:
                 var written = WorldDefinitionRows.FindStateRow(definition.State, writeSet.Row)!;
-                var writtenCells = WorldTopologyCompilation.Find(definition.StateRaw, written.Board!.Topology)!.CellCount;
+                var writtenCells = WorldTopologyCompilation.Find(definition.StateRaw, ((WorldStateDomain.CellsOf)written.EffectiveDomain).Topology)!.CellCount;
                 cost += (long)writtenCells * (writtenCells + 1);
                 break;
             case WorldStateTransform.Push push:
                 var ring = WorldDefinitionRows.FindStateRow(definition.State, push.Row)!;
-                cost += 2L * (ring.History?.Capacity ?? 1);
+                cost += 2L * ((ring.EffectiveDomain as WorldStateDomain.Ring)?.Capacity ?? 1);
                 break;
             case WorldStateTransform.Observe observe:
                 var row = WorldDefinitionRows.FindStateRow(definition.State, observe.Row)!;
-                var cells = WorldTopologyCompilation.Find(definition.StateRaw, row.Board!.Topology)!.CellCount;
+                var cells = WorldTopologyCompilation.Find(definition.StateRaw, ((WorldStateDomain.CellsOf)row.EffectiveDomain).Topology)!.CellCount;
                 cost += (long)cells * (cells + 3);
                 break;
         }
@@ -236,29 +231,39 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
     }
 
     private static long OperandCost(CompiledWorldOperand operand, WorldDefinition definition) {
-        if (operand.Board is { } board) {
-            var visits = board.Kind switch {
-                WorldBoardQueryKind.PathCost => (long)(board.MaxVisits + 1) * (board.Topology.CellCount + board.Topology.DirectionCount),
-                WorldBoardQueryKind.Canonical => (long)board.Topology.CellCount * board.Topology.ElementCount,
-                WorldBoardQueryKind.Attacks => (long)board.Topology.CellCount * (board.Directions?.Length ?? 1),
-                _ => board.Topology.CellCount,
+        // A board query prices as itself regardless of which case carries it — a Board operand always, a Pattern
+        // operand only when its word source is a board ray (see PatternOperand.Board's own remarks).
+        var board = operand.Value switch {
+            BoardOperand b => b.Board,
+            PatternOperand { Board: { } patternBoard } => patternBoard,
+            _ => null,
+        };
+        if (board is { } query) {
+            var visits = query switch {
+                BoardPathCostQuery pathCost => (long)(pathCost.MaxVisits + 1) * (query.Topology.CellCount + query.Topology.DirectionCount),
+                BoardCanonicalQuery => (long)query.Topology.CellCount * query.Topology.ElementCount,
+                BoardAttacksQuery attacks => (long)query.Topology.CellCount * attacks.Directions.Length,
+                _ => query.Topology.CellCount,
             };
-            return board.Topology.CellCount + visits;
+            return query.Topology.CellCount + visits;
         }
-        if (operand.Kind is WorldRuleFactKind.Reduction or WorldRuleFactKind.ArgBody) {
-            return (RowCapacity(definition, operand.Row ?? string.Empty)
-            );
+        if (operand.Value is ReductionOperand or ArgBodyOperand) {
+            var row = operand.Value switch {
+                ReductionOperand reduction => reduction.Row,
+                ArgBodyOperand argBody => argBody.Row,
+                _ => string.Empty,
+            };
+            return RowCapacity(definition, row);
         }
         // PhysicsQuiescent scans every population slot for an active rigid body not yet at rest
         // (WorldPopulation.RigidBodiesQuiescent) — the same per-tick cost as Nearest/RegionOccupancy's own
         // capacity-wide scan, so it is priced on the same terms rather than read as a free operand.
-        if (operand.Kind is WorldRuleFactKind.Nearest or WorldRuleFactKind.RegionOccupancy or WorldRuleFactKind.PhysicsQuiescent) {
+        if (operand.Value is NearestOperand or RegionOccupancyOperand or PhysicsQuiescentOperand) {
             return definition.Population.Capacity;
         }
-        if (operand.Kind == WorldRuleFactKind.Pattern) {
-            var pattern = definition.Patterns.FirstOrDefault(candidate => candidate.Name.Value == operand.Pattern);
-            var rays = ((operand.Board is { Direction: < 0 } every) ? every.Topology.DirectionCount : 1);
-            return WorldPatternCapacity.MaxWord * (1L + (operand.TokenExpression?.Length ?? 0)) + ((operand.Board?.Topology.CellCount ?? 0) * rays);
+        if (operand.Value is PatternOperand pattern) {
+            // Reached only when pattern.Board is null (a board-sourced pattern already returned above).
+            return WorldPatternCapacity.MaxWord * (1L + (pattern.TokenExpression?.Length ?? 0));
         }
 
         return 1L;

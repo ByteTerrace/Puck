@@ -1,4 +1,5 @@
 using Puck.Assets.Documents;
+using Puck.Physics.Motion;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
@@ -8,8 +9,8 @@ namespace Puck.World.Tests;
 public sealed class DiscreteStateLawTests {
     [Fact]
     public void HexAndRingAddressingAreBoundedAndReciprocal() {
-        var hex = new WorldStateLatticeTopology("hex", new DocumentVector3(0,0,0), 1, 1, 1, Kind: WorldTopologyKind.Hex, Radius: 2);
-        var ring = new WorldStateLatticeTopology("ring", new DocumentVector3(0,0,0), 1, 5, 1, Kind: WorldTopologyKind.Ring);
+        var hex = new WorldStateLatticeTopology.Hex("hex", new DocumentVector3(0,0,0), 1, Radius: 2);
+        var ring = new WorldStateLatticeTopology.Ring("ring", new DocumentVector3(0,0,0), 1, Width: 5);
         var state = new WorldStateSection(Lattices: [hex, ring]);
         var topology = WorldTopologyCompilation.Find(state, "hex")!;
         Assert.Equal(19, topology.CellCount);
@@ -31,8 +32,8 @@ public sealed class DiscreteStateLawTests {
     public void WarmBoardReadsAndPathQueriesAllocateNothing() {
         var state = new WorldStateSection(Lattices: [Grid()]);
         var topology = WorldTopologyCompilation.Find(state, "map")!;
-        var row = new WorldStateRow(Name("terrain"), CellKind.Int, Cells: [Cell("1",2)], Board: new("map",1));
-        var query = new CompiledWorldBoardQuery(topology, WorldBoardQueryKind.PathCost, Target: 15, MaxCost: 100, MaxVisits: 16);
+        var row = new WorldStateRow(Name("terrain"), CellKind.Int, Cells: [Cell("1",2)], Domain: new WorldStateDomain.CellsOf("map",1));
+        var query = new BoardPathCostQuery(topology, target: 15, maxCost: 100, maxVisits: 16);
         Span<long> values = stackalloc long[16];
         WorldBoardQueries.Read(row, topology, values);
         _ = WorldBoardQueries.Evaluate(query, values, 1, 0);
@@ -49,9 +50,9 @@ public sealed class DiscreteStateLawTests {
     public void APhaseOfTaggedRowRefusesAnUnguardedTransformAndAMatchingGuardAdvancesTheGenerationOnSuccess() {
         var definition = Document(
             new(Name("turn"), CellKind.Int, Phase: new()),
-            new(Name("cards"), CellKind.Int, Cells: [Cell("a")], Tokens: new()),
-            new(Name("deck"), CellKind.Bool, Cells: [Cell("a")], Zone: new("cards"), PhaseOf: "turn"),
-            new(Name("hand"), CellKind.Bool, Zone: new("cards"), PhaseOf: "turn"));
+            new(Name("cards"), CellKind.Int, Cells: [Cell("a")]),
+            new(Name("deck"), CellKind.Bool, Cells: [Cell("a")], Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true), PhaseOf: "turn"),
+            new(Name("hand"), CellKind.Bool, Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true), PhaseOf: "turn"));
         Assert.True(WorldStateTransforms.CanAct(definition, new("turn", 0), WorldPrincipal.Console));
         Assert.False(WorldStateTransforms.CanAct(definition, new("turn", 1), WorldPrincipal.Console));
         using var fixture = Fixtures.FreshServer(definition: definition);
@@ -71,13 +72,13 @@ public sealed class DiscreteStateLawTests {
     private static WorldCellName Name(string value) => WorldCellName.Parse(value);
     private static WorldStateCell Cell(string key, long value = 1) => new(Name(key), value);
     private static WorldStateRow Row(string name, params WorldStateCell[] cells) => new(Name(name), CellKind.Int, Cells: cells);
-    private static WorldStateLatticeTopology Grid(int width = 4, int depth = 4, WorldTopologyWrap wrap = WorldTopologyWrap.None) => new("map", new DocumentVector3(0, 0, 0), 1, width, depth, Kind: WorldTopologyKind.Grid, Wrap: wrap);
+    private static WorldStateLatticeTopology.Grid Grid(int width = 4, int depth = 4, WorldTopologyWrap wrap = WorldTopologyWrap.None) => new("map", new DocumentVector3(0, 0, 0), 1, width, depth, Wrap: wrap);
     private static WorldDefinition Document(params WorldStateRow[] rows) => Fixtures.BuildDocument() with { StateRaw = new(World: rows, Lattices: [Grid()]), Rules = [] };
     private static WorldStateRow Find(WorldDefinition document, string row) => WorldDefinitionRows.FindStateRow(document.State, row)!;
 
     [Fact]
     public void DiscreteTopologiesDoNotAllocatePhysicalFieldsAndWrappedRaysTerminate() {
-        var definition = Document(new WorldStateRow(Name("board"), CellKind.Int, Board: new("map")));
+        var definition = Document(new WorldStateRow(Name("board"), CellKind.Int, Domain: new WorldStateDomain.CellsOf("map")));
         Assert.Null(definition.Fields);
         var topology = WorldTopologyCompilation.Find(definition.StateRaw, "map")!;
         Assert.Equal(-1, topology.Neighbour(0, topology.Direction("N")));
@@ -91,7 +92,7 @@ public sealed class DiscreteStateLawTests {
         // the wrap-termination guarantee a $match-over-a-ray read now leans on where a dedicated ray query once did.
         var runOfOnes = new WorldPatternRow(Name("runOfOnes"), CellKind.Int, Symbols: [new(Name("one"), 1, 1)], Pattern: new WorldPatternNode.Star(new WorldPatternNode.Symbol("one")));
         var wrappedDefinition = Fixtures.BuildDocument() with {
-            StateRaw = new(World: [new WorldStateRow(Name("board"), CellKind.Int, Board: new("map", Empty: 1)), new WorldStateRow(Name("blocker"), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)])], Lattices: [Grid(wrap: WorldTopologyWrap.Both)]),
+            StateRaw = new(World: [new WorldStateRow(Name("board"), CellKind.Int, Domain: new WorldStateDomain.CellsOf("map", Empty: 1)), new WorldStateRow(Name("blocker"), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)])], Lattices: [Grid(wrap: WorldTopologyWrap.Both)]),
             PatternsRaw = [runOfOnes],
             Rules = [new WorldRule(Name("read"), [new ActionEffect.SetState(State: "blocker", FromState: "$match:runOfOnes:board:E:cell", FromKey: "0")])],
         };
@@ -106,7 +107,7 @@ public sealed class DiscreteStateLawTests {
 
     [Fact]
     public void BracketedRayCommitsTheAcceptedPrefixOrRefusesOnAnEmptyOne() {
-        var definition = Document(new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0",1),Cell("1",2),Cell("2",2),Cell("3",1)], Board: new("map"))) with {
+        var definition = Document(new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0",1),Cell("1",2),Cell("2",2),Cell("3",1)], Domain: new WorldStateDomain.CellsOf("map"))) with {
             PatternsRaw = [CapturePattern()],
         };
         Assert.True(CompiledWorldPatterns.TryCompileAll(definition, out var patterns, []));
@@ -116,7 +117,7 @@ public sealed class DiscreteStateLawTests {
         Assert.Equal(2, Find(definition, "board").Cells![1].Value);
         // Control: a board holding only "through" values never reaches the required "until" terminator, so the
         // longest accepted prefix is empty and the whole write is refused.
-        var open = Document(new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0",1),Cell("1",2),Cell("2",2),Cell("3",2)], Board: new("map"))) with {
+        var open = Document(new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0",1),Cell("1",2),Cell("2",2),Cell("3",2)], Domain: new WorldStateDomain.CellsOf("map"))) with {
             PatternsRaw = [CapturePattern()],
         };
         Assert.True(CompiledWorldPatterns.TryCompileAll(open, out var openPatterns, []));
@@ -127,9 +128,9 @@ public sealed class DiscreteStateLawTests {
     [Fact]
     public void TransfersPreserveDuplicateValuedTokenIdentitiesAndPileOrder() {
         var definition = Document(
-            new(Name("cards"), CellKind.Int, Cells: [Cell("a",7),Cell("b",7)], Tokens: new()),
-            new(Name("deck"), CellKind.Bool, Cells: [Cell("a"),Cell("b")], Zone: new("cards")),
-            new(Name("hand"), CellKind.Bool, Capacity: 1, Cells: [], Zone: new("cards")));
+            new(Name("cards"), CellKind.Int, Cells: [Cell("a",7),Cell("b",7)]),
+            new(Name("deck"), CellKind.Bool, Cells: [Cell("a"),Cell("b")], Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true)),
+            new(Name("hand"), CellKind.Bool, Capacity: 1, Cells: [], Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true)));
         var operation = new WorldStateTransform.Transfer("deck", "hand", WorldZoneSelector.First);
         Assert.True(WorldStateTransforms.TryApply(definition, operation, WorldPrincipal.Console, 0, "test", out var changed, out var reason), reason);
         Assert.Equal("a", Assert.Single(Find(changed, "hand").Cells!).Key.Value);
@@ -140,29 +141,66 @@ public sealed class DiscreteStateLawTests {
         Assert.Equal(new[] { "b", "a" }, Find(reordered, "deck").Cells!.Select(c => c.Key.Value));
     }
 
+    // moveToken (pathfind + allowance debit + baked occupancy, one opaque WorldStateTransform) is retired: the same
+    // shape is now ordinary authoring over three already-general primitives — $board:pathCost's own live target (a
+    // '$cell:<row>:<key>' indirection, not a compile-time literal), an authored occupancy board a rule maintains
+    // itself, and a Transaction bundling the affordability gate's own cost expression, the position write, and the
+    // occupancy/terrain updates atomically. THE LAW: the transaction fires (position advances, allowance debits by
+    // the exact path cost, occupancy and terrain both move with the token) only while the live pathCost stays within
+    // the live allowance; an unaffordable request leaves every row exactly as it was — the control that raising the
+    // allowance is the only thing that flips the outcome is what proves the gate reads the cost live rather than
+    // baking a stale one at compile time.
     [Fact]
-    public void MovementSpendsPointsAtomicallyAndOccupancyBlocksEntry() {
-        var definition = Document(
-            new(Name("units"), CellKind.Int, Cells: [Cell("a"),Cell("b")], Tokens: new()),
-            new(Name("terrain"), CellKind.Int, Board: new("map", Empty: 1)),
-            new(Name("positions"), CellKind.Int, Cells: [Cell("a",0),Cell("b",1)], KeysFrom: "units", ValuesFrom: "map"),
-            new(Name("points"), CellKind.Int, Cells: [Cell("a",2),Cell("b",2)], KeysFrom: "units"));
-        var move = new WorldStateTransform.MoveToken("positions", "a", 4, "terrain", "points", 16);
-        Assert.True(WorldStateTransforms.TryApply(definition, move, WorldPrincipal.Console, 1, "test", out var changed, out var reason), reason);
-        Assert.Equal(4, Find(changed, "positions").Cells![0].Value);
-        Assert.Equal(1, Find(changed, "points").Cells![0].Value);
-        Assert.False(WorldStateTransforms.TryApply(definition, move with { Destination = 1 }, WorldPrincipal.Console, 1, "test", out var refused, out _));
-        Assert.Same(definition, refused);
-        Assert.False(WorldStateTransforms.TryApply(definition, move with { MaxVisits = 1 }, WorldPrincipal.Console, 1, "test", out _, out reason));
-        Assert.Contains("budget exhausted", reason);
+    public void APathCostTransactionMovesATokenUnderAnAllowanceAndRefusesWhenCostExceedsIt() {
+        WorldDefinition Scenario(long allowance) => Document(
+            new(Name("position"), CellKind.Int, Capacity: 1, Cells: [Cell("0", 0)]),
+            new(Name("destination"), CellKind.Int, Capacity: 1, Cells: [Cell("0", 2)]),
+            new(Name("allowance"), CellKind.Int, Capacity: 1, Cells: [Cell("0", allowance)]),
+            new(Name("terrain"), CellKind.Int, Domain: new WorldStateDomain.CellsOf("map", Empty: 1)),
+            new(Name("occupancy"), CellKind.Int, Domain: new WorldStateDomain.CellsOf("map", Empty: 0), Cells: [Cell("0", 1)])
+        ) with {
+            Rules = [new(Name("move"), Effects: [new ActionEffect.Transaction([
+                new WorldTransactionStep.AddCell("allowance", Key: "0", Expression: new([
+                    new WorldValueToken.State("$board:pathCost:terrain:cell:destination:0:100:16", Key: "$cell:position:0"),
+                    new WorldValueToken.Negate(),
+                ])),
+                new WorldTransactionStep.SetCell("occupancy", Key: "$cell:position:0", Value: 0),
+                new WorldTransactionStep.SetCell("terrain", Key: "$cell:position:0", Value: 1),
+                new WorldTransactionStep.SetCell("position", Key: "0", FromState: "destination", FromKey: "0"),
+                new WorldTransactionStep.SetCell("occupancy", Key: "$cell:position:0", Value: 1),
+                new WorldTransactionStep.SetCell("terrain", Key: "$cell:position:0", Value: -1),
+            ])], Mode: ActionTriggerMode.Edge, Gate: new ActionPredicate.All([
+                new ActionPredicate.CompareState("position", ActionStateComparison.NotEqual, Key: "0", ComparandState: "destination", ComparandKey: "0"),
+                new ActionPredicate.CompareState("$board:pathCost:terrain:cell:destination:0:100:16", ActionStateComparison.LessOrEqual, Key: "$cell:position:0", ComparandState: "allowance", ComparandKey: "0"),
+            ]))],
+        };
+
+        // Cell 0 to cell 2 on the 4-wide grid is two due-east steps at the uniform cost-1 terrain: affordable at
+        // exactly 2, not at 1.
+        using (var fixture = Fixtures.FreshServer(definition: Scenario(allowance: 1))) {
+            fixture.Step();
+            Assert.Equal(0, Find(fixture.Server.Definition, "position").Cells![0].Value);
+            Assert.Equal(1, Find(fixture.Server.Definition, "allowance").Cells![0].Value);
+            Assert.Equal(1, Find(fixture.Server.Definition, "occupancy").Cells!.Single(c => c.Key.Value == "0").Value);
+        }
+
+        // Control: the identical request succeeds once the allowance covers the live cost — the gate tracks the
+        // cost, not a value frozen at compile time.
+        using (var fixture = Fixtures.FreshServer(definition: Scenario(allowance: 2))) {
+            fixture.Step();
+            Assert.Equal(2, Find(fixture.Server.Definition, "position").Cells![0].Value);
+            Assert.Equal(0, Find(fixture.Server.Definition, "allowance").Cells![0].Value);
+            Assert.Equal(0, Find(fixture.Server.Definition, "occupancy").Cells!.Single(c => c.Key.Value == "0").Value);
+            Assert.Equal(1, Find(fixture.Server.Definition, "occupancy").Cells!.Single(c => c.Key.Value == "2").Value);
+        }
     }
 
     [Fact]
     public void RuleTransactionRollsBackTransferAndPhaseWhenLaterEffectRefuses() {
         var definition = Document(
-            new(Name("cards"), CellKind.Int, Cells: [Cell("a",7)], Tokens: new()),
-            new(Name("deck"), CellKind.Bool, Cells: [Cell("a")], Zone: new("cards")),
-            new(Name("hand"), CellKind.Bool, Cells: [], Zone: new("cards")),
+            new(Name("cards"), CellKind.Int, Cells: [Cell("a",7)]),
+            new(Name("deck"), CellKind.Bool, Cells: [Cell("a")], Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true)),
+            new(Name("hand"), CellKind.Bool, Cells: [], Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true)),
             Row("failed", new WorldStateCell(WorldStateRow.SlotKey, 0))) with {
             Rules = [new(Name("atomic"), Effects: [new ActionEffect.Transaction([
                 new WorldTransactionStep.TransformStateStep(new WorldStateTransform.Transfer("deck", "hand", WorldZoneSelector.First)),
@@ -178,7 +216,7 @@ public sealed class DiscreteStateLawTests {
 
     [Fact]
     public void AttacksQueryStopsAtTheFirstBlockerAndOnlyMatchesItsOwnValue() {
-        var definition = Document(new WorldStateRow(Name("board"), CellKind.Int, Board: new("map")));
+        var definition = Document(new WorldStateRow(Name("board"), CellKind.Int, Domain: new WorldStateDomain.CellsOf("map")));
         var topology = WorldTopologyCompilation.Find(definition.StateRaw, "map")!;
         var east = topology.Direction("E");
         var south = topology.Direction("S");
@@ -186,18 +224,18 @@ public sealed class DiscreteStateLawTests {
         const int rookCell = 6; // two steps east of the origin
         var values = new long[topology.CellCount];
         values[rookCell] = 4;
-        var attacksEast = new CompiledWorldBoardQuery(topology, WorldBoardQueryKind.Attacks, Value: 4, Upper: 4, Directions: [east]);
+        var attacksEast = new BoardAttacksQuery(topology, lower: 4, upper: 4, directions: [east]);
         Assert.Equal(1, WorldBoardQueries.Evaluate(attacksEast, values, 0, origin));
         // Control: the same ray with no qualifying piece at all must read a miss, not a stale hit.
         Assert.Equal(0, WorldBoardQueries.Evaluate(attacksEast, new long[topology.CellCount], 0, origin));
         // Control: the rook's cell holds a code outside the authored range -- geometry alone must not be enough.
-        var attacksWrongValue = attacksEast with { Value = 5, Upper = 5 };
+        var attacksWrongValue = new BoardAttacksQuery(topology, lower: 5, upper: 5, directions: [east]);
         Assert.Equal(0, WorldBoardQueries.Evaluate(attacksWrongValue, values, 0, origin));
         // Control: the piece sits east, not south -- an authored direction that never reaches it must read a miss.
-        var attacksSouthOnly = new CompiledWorldBoardQuery(topology, WorldBoardQueryKind.Attacks, Value: 4, Upper: 4, Directions: [south]);
+        var attacksSouthOnly = new BoardAttacksQuery(topology, lower: 4, upper: 4, directions: [south]);
         Assert.Equal(0, WorldBoardQueries.Evaluate(attacksSouthOnly, values, 0, origin));
         // Several authored directions OR together: south alone misses, but south-or-east finds the rook via east.
-        var attacksEitherWay = new CompiledWorldBoardQuery(topology, WorldBoardQueryKind.Attacks, Value: 4, Upper: 4, Directions: [south, east]);
+        var attacksEitherWay = new BoardAttacksQuery(topology, lower: 4, upper: 4, directions: [south, east]);
         Assert.Equal(1, WorldBoardQueries.Evaluate(attacksEitherWay, values, 0, origin));
         // Control: a non-qualifying piece one step closer blocks the ray -- if the walk did not stop at the first
         // occupied cell, this would wrongly still see the rook past it.
