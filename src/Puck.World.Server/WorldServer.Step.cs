@@ -6,7 +6,6 @@ using Puck.Physics.Motion;
 namespace Puck.World.Server;
 
 public sealed partial class WorldServer {
-    private bool m_ruleStatePreflightRejected;
     /// <summary>Observes a music segment transition the instant it commits (the same tick <c>MusicDirector</c>
     /// records it, from the music-step call site in <see cref="StepCore"/>) — mirroring
     /// <see cref="SaveEffectTap"/>/<see cref="WorldMachineHost.MachineLifecycleTap"/>'s "the server calls out, the
@@ -173,157 +172,6 @@ public sealed partial class WorldServer {
             DrainOrdered();
         }
     }
-    // The rule/interaction ARRAY is snapshotted first (the caller's own m_rules/m_interactions read), which is a
-    // different thing from the state the gates read: a rule's own effect installs a new definition, which reassigns
-    // m_rules/m_interactions — and iterating a field an inner call reassigns is how a rule would silently stop seeing
-    // its siblings mid-tick. Every row declared at the top of the tick evaluates during this tick; a row ADDED by
-    // this tick's effects starts on the next one, the same next-tick boundary every other mutation already lands on.
-    private bool EvaluateCompiledRules(CompiledWorldRule[] rules, RuleLatch latch, ulong tick, ulong stepTicks) {
-        var applied = false;
-
-        if (rules.Length == 0) {
-            return applied;
-        }
-
-        foreach (var rule in rules) {
-            if (rule.Decision is not null) {
-                applied |= EvaluateDecisionRule(rule, tick, stepTicks);
-                continue;
-            }
-            var bindings = latch.Bindings(name: rule.Name);
-
-            if (rule.Interaction is { } interaction) {
-                applied |= EvaluateInteraction(
-                    bindings: bindings,
-                    interaction: interaction,
-                    latch: latch,
-                    rule: rule,
-                    stepTicks: stepTicks,
-                    tick: tick
-                );
-
-                continue;
-            }
-
-            if (rule.ForEach is { } forEach) {
-                // The keys are snapshotted before the first evaluation, so an effect minting a cell (a status
-                // applied to a new carrier) starts ticking next tick, never mid-iteration.
-                EachKeys(
-                    into: m_eachKeyScratch,
-                    row: forEach
-                );
-                latch.BeginSweep();
-
-                for (var position = 0; position < m_eachKeyScratch.Count; position++) {
-                    var key = m_eachKeyScratch[position];
-                    var numeric = StateReader.TryParseCandidateIndex(index: out var index, key: key);
-                    m_boundEach = numeric ? index : -1;
-                    m_boundEachKey = key.Value;
-                    m_boundEachPosition = position;
-                    applied |= EvaluateOnce(
-                        latch: latch,
-                        binding: new LatchKey(
-                            Left: numeric ? index : (PositionalLatchBase | position),
-                            Right: -1
-                        ),
-                        bindings: bindings,
-                        rule: rule,
-                        stepTicks: stepTicks,
-                        tick: tick
-                    );
-                }
-
-                m_boundEach = -1;
-                m_boundEachKey = null;
-                m_boundEachPosition = -1;
-                latch.EndSweep(bindings: bindings);
-
-                continue;
-            }
-
-            applied |= EvaluateOnce(
-                binding: LatchKey.None,
-                bindings: bindings,
-                latch: latch,
-                rule: rule,
-                stepTicks: stepTicks,
-                tick: tick
-            );
-        }
-
-        return applied;
-    }
-    // One gate-and-fire under the bindings already in place. EDGE fires on the CROSSING alone and re-arms only when
-    // the gate closes again; LEVEL fires every tick the gate holds — one vocabulary, the same ActionTriggerMode a
-    // per-body fact trigger reads. The latch is per evaluation binding (a bound body or pair), never per rule alone;
-    // a bound entry that is not evaluated this tick (the pair left range, the carrier lost its tag or despawned) is
-    // closed by the enclosing sweep, which is what re-arms an Edge interaction whose synthesized gate is always open.
-    private bool EvaluateOnce(CompiledWorldRule rule, RuleLatch latch, Dictionary<LatchKey, bool> bindings, LatchKey binding, ulong tick, ulong stepTicks) {
-        m_tableKeyMissingRule = rule.Name;
-        var trace = BeginRuleTrace(rule: rule, tick: tick);
-        // Bound values first, in declared order, each visible to the ones after it and to the gate and effects. A
-        // binding that cannot evaluate (overflow, a divide by zero) closes the gate for this evaluation and is
-        // reported once per category like any effect's arithmetic refusal.
-        var bound = (rule.Bindings ?? []);
-        for (var ordinal = 0; ordinal < bound.Length; ordinal++) {
-            var declared = bound[ordinal];
-            if (!TryEvaluateExpression(program: declared.Expression, kind: declared.Kind, tick: tick, value: out var value)) {
-                trace?.Bindings.Add(item: $"{declared.Name}=refused");
-                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.Arithmetic, ruleName: rule.Name, effect: $"binding '{declared.Name}'", tick: tick, detail: "the binding's expression overflowed, divided by zero, or produced an invalid stack result");
-                EndRuleTrace(entry: trace);
-                return false;
-            }
-            m_ruleBindingValues[ordinal] = value;
-            trace?.Bindings.Add(item: $"{declared.Name}={DescribeTracedFact(value: value, kind: declared.Kind, isForever: false)}");
-        }
-        m_gateTrace = trace?.Conjuncts;
-        var open = RuleGateOpen(
-            gate: rule.Gate,
-            tick: tick
-        );
-        m_gateTrace = null;
-        ref var slot = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(
-            dictionary: bindings,
-            exists: out _,
-            key: binding
-        );
-        var wasOpen = slot;
-
-        slot = open;
-        latch.Touch(binding: binding);
-
-        var fires = (open && ((rule.Mode != ActionTriggerMode.Edge) || !wasOpen));
-        if (trace is not null) {
-            trace.GateOpen = open;
-            trace.EdgeHeld = (open && !fires);
-        }
-        if (!fires) {
-            EndRuleTrace(entry: trace);
-            return false;
-        }
-
-        var applied = FireWorldRuleEffects(effects: rule.Effects, ruleName: rule.Name, tick: tick, stepTicks: stepTicks);
-        EndRuleTrace(entry: trace);
-        return applied;
-    }
-    // Every top-level effect is its own boundary: each performs its own refusal-suppressing preflight and either
-    // installs or refuses alone, so a later effect's refusal never rolls back an earlier sibling's write. The one
-    // atomic group is the explicit `transaction` effect (FireWorldRuleTransaction), which preflights its whole branch
-    // as one candidate before any of it installs.
-    private bool FireWorldRuleEffects(EffectFact[] effects, string ruleName, ulong tick, ulong stepTicks) {
-        var applied = false;
-        var trace = m_traceEntry;
-
-        for (var index = 0; index < effects.Length; index++) {
-            var effect = effects[index];
-            var serial = m_ruleRefusalSerial;
-            var fired = FireWorldRuleEffect(effect: effect, ruleName: ruleName, stepTicks: stepTicks, tick: tick);
-            applied |= fired;
-            trace?.Effects.Add(item: DescribeTracedEffect(effect: effect, applied: fired, refused: (m_ruleRefusalSerial != serial)));
-        }
-
-        return applied;
-    }
     // Every (left carrier, right carrier) pair within range, or every left carrier inside the region, fires the
     // interaction once with left/right bound — the chemistry is evaluated over all carriers, never one argmax pair.
     private bool EvaluateInteraction(CompiledWorldRule rule, CompiledInteraction interaction, RuleLatch latch, Dictionary<LatchKey, bool> bindings, ulong tick, ulong stepTicks) {
@@ -346,19 +194,9 @@ public sealed partial class WorldServer {
                     continue;
                 }
 
-                m_boundLeft = left;
-                m_boundRight = -1;
-                applied |= EvaluateOnce(
-                    latch: latch,
-                    binding: new LatchKey(
-                        Left: left,
-                        Right: -1
-                    ),
-                    bindings: bindings,
-                    rule: rule,
-                    stepTicks: stepTicks,
-                    tick: tick
-                );
+                m_evaluator.BoundLeft = left;
+                m_evaluator.BoundRight = -1;
+                applied |= m_evaluator.EvaluateOnce(rule: rule, latch: latch, bindings: bindings, binding: new LatchKey(Left: left, Right: -1), tick: tick, stepTicks: stepTicks);
             }
         } else {
             var rights = m_carrierScratchRight;
@@ -391,54 +229,21 @@ public sealed partial class WorldServer {
                         continue;
                     }
 
-                    m_boundLeft = left;
-                    m_boundRight = right;
-                    applied |= EvaluateOnce(
-                        latch: latch,
-                        binding: new LatchKey(
-                            Left: left,
-                            Right: right
-                        ),
-                        bindings: bindings,
-                        rule: rule,
-                        stepTicks: stepTicks,
-                        tick: tick
-                    );
+                    m_evaluator.BoundLeft = left;
+                    m_evaluator.BoundRight = right;
+                    applied |= m_evaluator.EvaluateOnce(rule: rule, latch: latch, bindings: bindings, binding: new LatchKey(Left: left, Right: right), tick: tick, stepTicks: stepTicks);
                 }
             }
         }
 
-        m_boundLeft = -1;
-        m_boundRight = -1;
+        m_evaluator.BoundLeft = -1;
+        m_evaluator.BoundRight = -1;
         latch.EndSweep(bindings: bindings);
 
         return applied;
     }
-    // The integer keys a keyed row holds at this moment, ascending — the iteration set of a forEach rule. Fills the
-    // caller's scratch list; the cells themselves are not retained.
-    // A latch key for a non-integer forEach cell: its position in the row, flagged above any body index.
-    private const int PositionalLatchBase = 0x4000_0000;
-    private readonly List<CellName> m_eachKeyScratch = [];
-    private string? m_boundEachKey;
-    // The forEach loop's own 0-based position — what 'placement:$each' resolves against
-    // (CompiledBodyRef.PlacementOrdinals is position-indexed, in the SAME order EachKeys walks), -1 outside a forEach
-    // evaluation.
-    private int m_boundEachPosition = -1;
-
-    // Every cell key of the iterated row in cell order; an integer key also binds the body of that index.
-    private void EachKeys(string row, List<CellName> into) {
-        into.Clear();
-
-        if (WorldDefinitionRows.FindStateRow(
-            rows: m_definition.State,
-            name: row
-        ) is { Cells: { } cells }) {
-            for (var index = 0; index < cells.Count; index++) {
-                into.Add(item: cells[index].Key);
-            }
-        }
-    }
-
+    // The integer keys a keyed row holds at this moment, ascending — the iteration set of a decision rule. Fills
+    // the caller's scratch list; the cells themselves are not retained.
     private void CarrierKeys(string row, List<int> into) {
         into.Clear();
 
@@ -505,8 +310,13 @@ public sealed partial class WorldServer {
     // gate reads THIS tick, and two interactions cascade in their own declared order (interaction A tags a carrier
     // interaction B's gate then reads) on the identical terms a rule chain already does.
     //
-    // Effects apply IMMEDIATELY, not at a boundary: FireWorldRuleEffect calls TryApplyMutation, which installs the
-    // composed definition on the spot. So a later rule's gate DOES read an earlier rule's same-tick write — and so
+    // The rule/interaction ARRAY is snapshotted by the evaluator's loop (the m_rules/m_interactions read below), which
+    // is a different thing from the state the gates read: a rule's own effect installs a new definition, which
+    // reassigns m_rules/m_interactions. Every row declared at the top of the tick evaluates during this tick; a row
+    // ADDED by this tick's effects starts on the next one, the same next-tick boundary every other mutation lands on.
+    //
+    // Effects apply IMMEDIATELY, not at a boundary: the evaluator's state effects land in TryApplyRuleMutation, which
+    // calls TryApplyMutation and installs the composed definition on the spot. So a later rule's gate DOES read an earlier rule's same-tick write — and so
     // does a later effect's live 'from' operand, which reads through the same ReadWorldFact walk. The rules in one
     // tick are a sequence, not a simultaneous snapshot, and a chain (rule A sets a flag, rule B gates on it, rule C
     // copies it) fires end to end within one tick. That is deterministic because document order is: the same
@@ -518,415 +328,74 @@ public sealed partial class WorldServer {
     private void EvaluateWorldRules(ulong tick, ulong stepTicks) {
         m_decisionWork = default;
         FreezeDecisionPerception(m_rules);
-        var applied = EvaluateCompiledRules(
-            latch: m_ruleGateHeld,
-            rules: m_rules,
-            stepTicks: stepTicks,
-            tick: tick
-        );
+        var applied = m_evaluator.Evaluate(rules: m_rules, latch: m_ruleGateHeld, tick: tick, stepTicks: stepTicks);
 
-        applied |= EvaluateCompiledRules(
-            latch: m_interactionGateHeld,
-            rules: m_interactions,
-            stepTicks: stepTicks,
-            tick: tick
-        );
+        applied |= m_evaluator.Evaluate(rules: m_interactions, latch: m_interactionGateHeld, tick: tick, stepTicks: stepTicks);
 
         if (applied) {
             m_output.DeliverDefinition(definition: m_definition);
         }
     }
-    // Submits the effect's own ORDINARY mutation through the ordinary pipeline (admission → compose → whole-document
-    // validate → install → journal → echo), stamped WorldPrincipal.World — the SAME door UpsertHudPanel/RemoveHudPanel
-    // /UpsertPlacement/RemovePlacement already have from the console or an addon; nothing here is a new admission
-    // path. A WRITE THAT CANNOT MOVE THE DESTINATION is skipped before submission — either the resolved value already
-    // matches the cell, or the row's declared envelope pins the cell where it is (see the Write arm): a
-    // level-triggered gate re-fires every tick it holds, and without this a standing rule would append an identical
-    // journal entry forever, or draw an identical refusal forever. A GENERATE is never a no-op — it advances the
-    // generator's cursor by construction — and neither is a HUD/placement upsert or remove, so both are submitted
-    // (the one exception being a removePlacement on a possessed carrier, which the CarrierPossessed guard below skips
-    // outright rather than submitting). SAVE is the one exception to all of this: it submits no WorldMutation at all (see
-    // WorldEffect.Save's remarks) and is handled before the mutation switch below ever runs.
-    private bool FireWorldRuleEffect(EffectFact effect, string ruleName, ulong tick, ulong stepTicks, bool preflight = false, bool strict = false) {
+    // The effect arms only the world can fire, on the evaluator's terms. A non-mutating arm (cue, body, field, save,
+    // pose) acts, or refuses by name. A document-row arm (HUD panel, placement) submits its own ORDINARY mutation
+    // through the ordinary pipeline (admission → compose → whole-document validate → install → journal → echo),
+    // stamped WorldPrincipal.World — the SAME door UpsertHudPanel/RemoveHudPanel/UpsertPlacement/RemovePlacement
+    // already have from the console or an addon; nothing here is a new admission path. A HUD/placement upsert or
+    // remove is never a no-op, so both are submitted — the one exception being a removePlacement on a possessed
+    // carrier, which the CarrierPossessed guard refuses outright rather than submitting. SAVE submits no
+    // WorldMutation at all (see WorldEffect.Save's remarks).
+    EffectOutcome IRuleHost.FireEffect(EffectFact effect, string ruleName, ulong tick, ulong stepTicks, bool preflight) {
         switch (effect) {
-            case TransformStateEffect transformState:
-                return ApplyWorldRuleMutation(effect: effect, ruleName: ruleName, mutation: new WorldMutation.TransformState(WorldPrincipal.World, transformState.Transform), tick: tick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false, preflight: preflight);
-            case TransactionEffect transaction:
-                return FireWorldRuleTransaction(transaction: transaction, ruleName: ruleName, tick: tick, stepTicks: stepTicks);
-            case PushStateEffect push:
-                return FirePushState(effect: push, ruleName: ruleName, tick: tick, preflight: preflight);
             case EmitCueEffect cue:
                 if (!preflight) {
                     FireGameplayCue(effect: cue, tick: tick);
                 }
-                return false;
+                return EffectOutcome.Skipped;
             case BodyEffect body:
-                FireBodyEffect(effect: body, ruleName: ruleName, tick: tick, preflight: preflight);
-                return false;
+                return (FireBodyEffect(effect: body, ruleName: ruleName, tick: tick, preflight: preflight) ? EffectOutcome.Refused : EffectOutcome.Skipped);
             case PaintFieldEffect paint:
-                FireFieldPaint(effect: paint, ruleName: ruleName, tick: tick, preflight: preflight);
-                return false;
+                return (FireFieldPaint(effect: paint, ruleName: ruleName, tick: tick, preflight: preflight) ? EffectOutcome.Refused : EffectOutcome.Skipped);
             case SaveEffect:
                 if (preflight) {
-                    m_ruleStatePreflightRejected = true;
-                    ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.SaveUnavailable, ruleName: ruleName, effect: effect, tick: tick, detail: "save effects are not atomic transaction steps");
-                    return false;
+                    m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.SaveUnavailable, ruleName: ruleName, effect: effect, tick: tick, detail: "save effects are not atomic transaction steps");
+                    return EffectOutcome.Refused;
                 }
                 if (SaveEffectTap is { } save) {
                     save(tick);
                 } else {
-                    ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.SaveUnavailable, ruleName: ruleName, effect: effect, tick: tick, detail: "no save-effect host is attached");
+                    m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.SaveUnavailable, ruleName: ruleName, effect: effect, tick: tick, detail: "no save-effect host is attached");
                 }
-                return false;
+                return EffectOutcome.Skipped;
             case PoseEffect pose:
-                FirePoseEffect(effect: pose, ruleName: ruleName, tick: tick, preflight: preflight);
-                return false;
-        }
-        if (!preflight && !strict) {
-            var installed = m_definition;
-            m_ruleStatePreflightRejected = false;
-            try {
-                _ = FireWorldRuleEffect(effect: effect, ruleName: ruleName, tick: tick, stepTicks: stepTicks, preflight: true, strict: true);
-            } finally {
-                m_definition = installed;
-            }
-            if (m_ruleStatePreflightRejected) {
-                m_ruleStatePreflightRejected = false;
-                return false;
-            }
-        }
-
-        // A '$cell:' destination resolves its key fresh every firing, exactly as a gate operand's does — reached only
-        // for the case types that address a state cell (or a whole-row upsert/remove's id) before their own
-        // kind-specific work runs (see IStateAddressedEffect's own remarks).
-        var addressed = (IStateAddressedEffect)effect;
-        var destinationKey = ResolveOperandKey(
-            key: addressed.Key,
-            keyFrom: addressed.KeyFrom,
-            tick: tick
-        );
-
-        if (effect is RemoveStateCellEffect removeStateCell) {
-            if (WorldStateReader.TryRead(
-                definition: m_definition,
-                rowName: removeStateCell.Row,
-                key: destinationKey,
-                tick: tick,
-                row: out _,
-                rawValue: out var existing,
-                text: out var existingText
-            ) && (existing is null) && (existingText is null)) {
-                if (!strict) {
-                    return false;
-                }
-            }
-
-            return ApplyWorldRuleMutation(
-                effect: effect,
-                ruleName: ruleName,
-                mutation: new WorldMutation.RemoveStateCell(Principal: WorldPrincipal.World, Row: removeStateCell.Row, Key: destinationKey),
-                tick: tick,
-                connectionId: SubmissionEnvelope.LocalConnectionId,
-                correlationId: 0,
-                preMetered: false,
-                preflight: preflight
-            );
-        }
-
-        if (effect is IStateWriteEffect write) {
-            // The destination's CURRENT value through the same shared resolver the gate read: an absent cell reads as
-            // zero (an Add mints it), an absent ROW is nothing to write. On an ADVANCING row that is the LIVE value,
-            // not the stored base, which is what the could-this-move skip below needs: a base is a fixed point of
-            // its own accumulation, so comparing against it would call a write "no-op" whenever the base already
-            // happened to match — silently skipping the write, and with it the rebase that is the only way a rule
-            // can reset an advancing row at all.
-            if (!WorldStateReader.TryRead(
-                definition: m_definition,
-                rowName: write.Row,
-                key: destinationKey,
-                tick: tick,
-                row: out var row,
-                rawValue: out var destination,
-                text: out var currentText
-            )) {
-                return false;
-            }
-
-            if (row.Kind == CellKind.Text) {
-                // A ScheduleState/Countdown row is refused at compile time unless kind=int, so a kind=text row here
-                // can only be a Write.
-                var textWrite = (WriteEffect)write;
-                var nextText = textWrite.Text;
-
-                if (
-                    (nextText is null) &&
-                    (textWrite.From is StateCellOperand source)
-                ) {
-                    if (!WorldStateReader.TryRead(
-                        definition: m_definition,
-                        rowName: source.Row,
-                        key: ResolveOperandKey(
-                            key: source.Key,
-                            keyFrom: source.KeyFrom,
-                            tick: tick
-                        ),
-                        tick: tick,
-                        row: out _,
-                        rawValue: out _,
-                        text: out nextText
-                    )) {
-                        return false;
-                    }
-                }
-
-                if (
-                    (nextText is null) ||
-                    string.Equals(
-                    a: currentText,
-                    b: nextText,
-                    comparisonType: StringComparison.Ordinal
-                )
-                ) {
-                    return false;
-                }
-
-                return ApplyWorldRuleMutation(
-                    effect: effect,
-                    ruleName: ruleName,
-                    mutation: new WorldMutation.UpsertStateCell(
-                        Principal: WorldPrincipal.World,
-                        Row: write.Row,
-                        Key: destinationKey,
-                        Value: 0L,
-                        Kind: WorldDocumentWriteKind.Set,
-                        Text: nextText
-                    ),
-                    tick: tick,
-                    connectionId: SubmissionEnvelope.LocalConnectionId,
-                    correlationId: 0,
-                    preMetered: false,
-                    preflight: preflight
-                );
-            }
-
-            var current = (destination ?? 0L);
-
-            // A cycling cell stores its PHASE and reads its rotation; a write moves the phase, so the value an add
-            // turns from and the value the could-this-move test compares against is the stored phase, not the live
-            // rotation the trait carried it to this tick.
-            if (
-                CellName.TryParse(candidate: destinationKey, name: out var destinationCell, reason: out _) &&
-                (StateRows.FindCell(cells: row.Cells, key: destinationCell) is { } storedCell) &&
-                ((storedCell.Cycle is not null) || ((storedCell.Key == WorldStateRow.SlotKey) && (row.Cycle is not null)))
-            ) {
-                current = storedCell.Value;
-            }
-
-            // A live 'from' operand is read fresh EVERY firing (Install swaps m_definition on every apply, so this
-            // reads the same settled state a compareState comparand would this tick) and converted to the
-            // destination row's own encoding; a literal effect keeps the value the compiler already converted once.
-            // A FOREVER fact ($parked: on a forever-parked body) has no number to store — the copy silently does not
-            // fire, the same no-narration shape a level gate's own not-holding takes (see ReadParkedRemaining).
-            // Countdown/ScheduleState never carry a live 'from' operand, so this test naturally excludes them.
-            if (
-                (write is WriteEffect { From: { } foreverProbe }) &&
-                ReadWorldFact(
-                operand: foreverProbe,
-                tick: tick
-            ).IsForever
-            ) {
-                return false;
-            }
-
-            var expressionFailed = false;
-            long raw;
-
-            if (write is CountdownEffect) {
-                raw = -Math.Min(
-                    val1: current,
-                    val2: checked((long)stepTicks)
-                );
-            } else if (write is ScheduleStateEffect schedule) {
-                raw = ScheduleDueTick(tick: tick, delayTicks: schedule.DelayTicks, failed: out expressionFailed);
-            } else if (((WriteEffect)write).Expression is { } expression) {
-                raw = (TryEvaluateExpression(program: expression, kind: row.Kind, tick: tick, value: out var evaluated)
-                    ? evaluated
-                    : FailedExpression(out expressionFailed)
-                );
-            } else if (((WriteEffect)write).From is { } from) {
-                raw = ReadWorldFact(operand: from, tick: tick).ToRaw(kind: row.Kind);
-            } else {
-                raw = ((WriteEffect)write).RawValue;
-            }
-
-            if (expressionFailed) {
-                if (preflight) {
-                    m_ruleStatePreflightRejected = true;
-                }
-                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.Arithmetic, ruleName: ruleName, effect: effect, tick: tick, detail: "the expression overflowed, divided by zero, or produced an invalid stack result");
-                return false;
-            }
-            if ((m_traceEntry is not null) && !strict) {
-                m_traceEffectValue = DescribeTracedFact(value: raw, kind: row.Kind, isForever: false);
-            }
-            var next = ((write.Write == StateWriteKind.Add)
-                ? unchecked((current + raw))
-                : raw
-            );
-
-            // SUBMIT ONLY WHAT COULD MOVE THE DESTINATION. Arithmetic identity is not the whole of that test: a cell
-            // already sitting ON a bound its own row declares (NonNegative/Min/Max) cannot be pushed further past it,
-            // so a Level gate pointed at a floored row would go on composing a candidate the whole-document validator
-            // refuses, once per tick, for the life of the session — the same standing-rule failure the arithmetic
-            // check was added for, reached through the row's envelope instead of through its arithmetic.
-            //
-            // The projection decides WHETHER to submit and never WHAT is submitted: the mutation still carries the
-            // rule's own unclamped operand, so a write that genuinely tries to cross a bound (a cell at 3 taking -5)
-            // is still submitted and still refused BY NAME. That is the settled envelope duality — a computed value
-            // clamps, an explicit write refuses — with the inert case removed from the write side, not softened.
-            if (row.ClampToEnvelope(value: next) == current) {
-                return false;
-            }
-
-            return ApplyWorldRuleMutation(
-                effect: effect,
-                ruleName: ruleName,
-                mutation: new WorldMutation.UpsertStateCell(
-                    Principal: WorldPrincipal.World,
-                    Row: write.Row,
-                    Key: destinationKey,
-                    Value: raw,
-                    Kind: ((write.Write == StateWriteKind.Add) ? WorldDocumentWriteKind.Add : WorldDocumentWriteKind.Set)
-                ),
-                tick: tick,
-                connectionId: SubmissionEnvelope.LocalConnectionId,
-                correlationId: 0,
-                preMetered: false,
-                preflight: preflight
-            );
+                return (FirePoseEffect(effect: pose, ruleName: ruleName, tick: tick, preflight: preflight) ? EffectOutcome.Refused : EffectOutcome.Skipped);
         }
 
         // DESPAWN-OF-OWNED-CARRIER GUARD (WorldRuleEffectRefusal.CarrierPossessed): a removePlacement targeting a
         // placement whose Inhabit facet is currently bound to a POSSESSED body (a concrete drive grant — see
-        // WorldGrants.IsBodyPossessed's own remarks) is skipped rather than fired. This is the widening
-        // UpsertPlacement/RemovePlacement's admission into the rule-effect vocabulary was missing: a placement's
-        // Inhabit/Region facets already make an ordinary whole-row upsert/remove a BODY/REGION carrier spawn/despawn
-        // (WorldPopulation.ReconcileInhabitants reconciles from ANY accepted mutation, principal-agnostic) — this is
-        // the one case that must NOT go through silently, because it would destroy an explicit possession grant's
-        // binding out from under it (the slot a later, unrelated inhabitant can then claim). OWNER DECISION: REFUSE,
-        // never orphan-to-escrow (see the refusal's own remarks for why).
+        // WorldGrants.IsBodyPossessed's own remarks) is refused rather than fired. A placement's Inhabit/Region facets
+        // make an ordinary whole-row upsert/remove a BODY/REGION carrier spawn/despawn (WorldPopulation
+        // .ReconcileInhabitants reconciles from ANY accepted mutation, principal-agnostic) — this is the one case
+        // that must NOT go through silently, because it would destroy an explicit possession grant's binding out
+        // from under it (the slot a later, unrelated inhabitant can then claim). REFUSE, never orphan-to-escrow (see
+        // the refusal's own remarks for why).
         if (
             (effect is RemovePlacementEffect removePlacement) &&
-            TryFindPossessedInhabitant(
-            placementId: removePlacement.Row,
-            bodyIndex: out var possessedBody,
-            holder: out var possessor
-        )
+            TryFindPossessedInhabitant(placementId: removePlacement.Row, bodyIndex: out var possessedBody, holder: out var possessor)
         ) {
-            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.CarrierPossessed, ruleName: ruleName, effect: effect, tick: tick, detail: $"placement '{removePlacement.Row}' carries inhabitant body:{possessedBody}, possessed by {possessor.Describe()}");
-            if (preflight) {
-                m_ruleStatePreflightRejected = true;
-            }
+            m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.CarrierPossessed, ruleName: ruleName, effect: effect, tick: tick, detail: $"placement '{removePlacement.Row}' carries inhabitant body:{possessedBody}, possessed by {possessor.Describe()}");
 
-            return false;
+            return EffectOutcome.Refused;
         }
 
         WorldMutation mutation = effect switch {
-            GenerateEffect generate => new WorldMutation.Generate(
-            Principal: WorldPrincipal.World,
-            Row: generate.Row
-        ),
-            UpsertHudPanelEffect upsertHudPanel => new WorldMutation.UpsertHudPanel(
-            Principal: WorldPrincipal.World,
-            Panel: upsertHudPanel.HudPanel
-        ),
-            RemoveHudPanelEffect removeHudPanel => new WorldMutation.RemoveHudPanel(
-            Principal: WorldPrincipal.World,
-            Id: removeHudPanel.Row
-        ),
-            UpsertPlacementEffect upsertPlacement => new WorldMutation.UpsertPlacement(
-            Principal: WorldPrincipal.World,
-            Placement: upsertPlacement.Placement
-        ),
-            RemovePlacementEffect removePlacementFire => new WorldMutation.RemovePlacement(
-            Principal: WorldPrincipal.World,
-            Id: removePlacementFire.Row
-        ),
+            UpsertHudPanelEffect upsertHudPanel => new WorldMutation.UpsertHudPanel(Principal: WorldPrincipal.World, Panel: upsertHudPanel.HudPanel),
+            RemoveHudPanelEffect removeHudPanel => new WorldMutation.RemoveHudPanel(Principal: WorldPrincipal.World, Id: removeHudPanel.Row),
+            UpsertPlacementEffect upsertPlacement => new WorldMutation.UpsertPlacement(Principal: WorldPrincipal.World, Placement: upsertPlacement.Placement),
+            RemovePlacementEffect removePlacementFire => new WorldMutation.RemovePlacement(Principal: WorldPrincipal.World, Id: removePlacementFire.Row),
             _ => throw new InvalidOperationException(message: $"world rule effect '{effect.Describe}' has no fire mapping."),
         };
 
-        return ApplyWorldRuleMutation(
-            effect: effect,
-            ruleName: ruleName,
-            connectionId: SubmissionEnvelope.LocalConnectionId,
-            correlationId: 0,
-            mutation: mutation,
-            preMetered: false,
-            tick: tick,
-            preflight: preflight
-        );
-    }
-    private static long FailedExpression(out bool failed) {
-        failed = true;
-        return 0L;
-    }
-    private static long ScheduleDueTick(ulong tick, long delayTicks, out bool failed) {
-        failed = (delayTicks < 0L) || (tick > ((ulong)(long.MaxValue - Math.Max(0L, delayTicks))));
-        return failed ? 0L : checked(((long)tick) + delayTicks);
-    }
-    private bool FireWorldRuleTransaction(TransactionEffect transaction, string ruleName, ulong tick, ulong stepTicks) {
-        var compiled = transaction;
-        var effects = compiled.Effects;
-        var installed = m_definition;
-        m_ruleStatePreflightRejected = false;
-
-        try {
-            for (var index = 0; index < effects.Length; index++) {
-                var effect = effects[index];
-                _ = FireWorldRuleEffect(effect: effect, ruleName: ruleName, tick: tick, stepTicks: stepTicks, preflight: true, strict: true);
-                if (m_ruleStatePreflightRejected) {
-                    break;
-                }
-            }
-        } finally {
-            m_definition = installed;
-        }
-
-        if (m_ruleStatePreflightRejected) {
-            m_ruleStatePreflightRejected = false;
-            var failure = compiled.OnFailure;
-            if (failure.Length == 0) {
-                return false;
-            }
-
-            installed = m_definition;
-            try {
-                for (var index = 0; index < failure.Length; index++) {
-                    var effect = failure[index];
-                    _ = FireWorldRuleEffect(effect: effect, ruleName: ruleName, tick: tick, stepTicks: stepTicks, preflight: true, strict: true);
-                    if (m_ruleStatePreflightRejected) {
-                        return false;
-                    }
-                }
-            } finally {
-                m_definition = installed;
-                m_ruleStatePreflightRejected = false;
-            }
-
-            var failureApplied = false;
-            for (var index = 0; index < failure.Length; index++) {
-                var effect = failure[index];
-                failureApplied |= FireWorldRuleEffect(effect: effect, ruleName: ruleName, tick: tick, stepTicks: stepTicks, strict: true);
-            }
-            return failureApplied;
-        }
-
-        var applied = false;
-        for (var index = 0; index < effects.Length; index++) {
-            var effect = effects[index];
-            applied |= FireWorldRuleEffect(effect: effect, ruleName: ruleName, tick: tick, stepTicks: stepTicks, strict: true);
-        }
-        return applied;
+        return (TryApplyRuleMutation(effect: effect, ruleName: ruleName, mutation: mutation, tick: tick, preflight: preflight) ? EffectOutcome.Applied : EffectOutcome.Refused);
     }
     private void FireGameplayCue(EmitCueEffect effect, ulong tick) {
         var cueEffect = effect;
@@ -942,54 +411,42 @@ public sealed partial class WorldServer {
         GameplayCueTap?.Invoke(obj: cue);
         Console.Error.WriteLine(value: $"[world.cue: {cue.Name} tick={tick}{(body is { } index ? $" body:{index}" : string.Empty)}]");
     }
-    private void FireBodyEffect(BodyEffect effect, string ruleName, ulong tick, bool preflight) {
+    private bool FireBodyEffect(BodyEffect effect, string ruleName, ulong tick, bool preflight) {
         var bodyEffect = effect;
         var key = ResolveOperandKey(key: bodyEffect.Key, keyFrom: bodyEffect.KeyFrom, tick: tick);
         if (!int.TryParse(s: key, style: System.Globalization.NumberStyles.Integer, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var bodyIndex) || (Body(index: bodyIndex) is not { } body)) {
-            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.BodyInactive, ruleName: ruleName, effect: effect, tick: tick, detail: $"body '{key}' is inactive");
-            if (preflight) {
-                m_ruleStatePreflightRejected = true;
-            }
-            return;
+            m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.BodyInactive, ruleName: ruleName, effect: effect, tick: tick, detail: $"body '{key}' is inactive");
+            return true;
         }
 
         var operation = bodyEffect.Body;
         if (operation.Operation == BodyMotionOp.Designate) {
             if (!m_population.TryResolveTargetRegister(name: operation.Register!, index: out var registerIndex)) {
-                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.BodyTargetInvalid, ruleName: ruleName, effect: effect, tick: tick, detail: $"target register '{operation.Register}' is unavailable");
-                if (preflight) {
-                    m_ruleStatePreflightRejected = true;
-                }
-                return;
+                m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.BodyTargetInvalid, ruleName: ruleName, effect: effect, tick: tick, detail: $"target register '{operation.Register}' is unavailable");
+                return true;
             }
             if (operation.Designation == WorldBodyDesignationKind.Clear) {
                 if (!preflight) {
                     m_population.SetDesignation(bodyIndex: bodyIndex, registerIndex: registerIndex, target: WorldTargetDesignation.None);
                 }
-                return;
+                return false;
             }
 
             var targetKey = ResolveOperandKey(key: operation.TargetKey, keyFrom: operation.TargetKeyFrom, tick: tick);
             if (!int.TryParse(s: targetKey, style: System.Globalization.NumberStyles.Integer, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var targetIndex)) {
-                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.BodyTargetInvalid, ruleName: ruleName, effect: effect, tick: tick, detail: $"target body key '{targetKey}' is invalid");
-                if (preflight) {
-                    m_ruleStatePreflightRejected = true;
-                }
-                return;
+                m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.BodyTargetInvalid, ruleName: ruleName, effect: effect, tick: tick, detail: $"target body key '{targetKey}' is invalid");
+                return true;
             }
             if ((targetIndex == bodyIndex) || (Body(index: targetIndex) is null)) {
                 var detail = ((targetIndex == bodyIndex)
                     ? $"body:{bodyIndex} cannot designate itself"
                     : $"target body:{targetIndex} is inactive"
                 );
-                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.BodyTargetInvalid, ruleName: ruleName, effect: effect, tick: tick, detail: detail);
-                if (preflight) {
-                    m_ruleStatePreflightRejected = true;
-                }
-                return;
+                m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.BodyTargetInvalid, ruleName: ruleName, effect: effect, tick: tick, detail: detail);
+                return true;
             }
             if (preflight) {
-                return;
+                return false;
             }
             _ = ApplyDesignationCore(
                 designation: new WorldDesignation(EntityIndex: bodyIndex, Register: operation.Register!, Subject: GrantSubject.Body(index: targetIndex)),
@@ -998,11 +455,11 @@ public sealed partial class WorldServer {
                 connectionId: SubmissionEnvelope.LocalConnectionId,
                 correlationId: 0
             );
-            return;
+            return false;
         }
 
         if (preflight) {
-            return;
+            return false;
         }
         _ = body.ApplyTargetedEffect(
             // A world-authored kinematic effect has no affecting body. Passing the recipient here would mint a
@@ -1016,26 +473,22 @@ public sealed partial class WorldServer {
                 StateSlot: -1
             )
         );
+
+        return false;
     }
-    private void FireFieldPaint(PaintFieldEffect effect, string ruleName, ulong tick, bool preflight) {
+    private bool FireFieldPaint(PaintFieldEffect effect, string ruleName, ulong tick, bool preflight) {
         if (m_population.Fields is not { } lattice) {
-            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.FieldUnavailable, ruleName: ruleName, effect: effect, tick: tick, detail: "no live field lattice is installed");
-            if (preflight) {
-                m_ruleStatePreflightRejected = true;
-            }
-            return;
+            m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.FieldUnavailable, ruleName: ruleName, effect: effect, tick: tick, detail: "no live field lattice is installed");
+            return true;
         }
 
         var paint = effect.Paint;
         if (!lattice.TryFieldIndex(name: paint.Field, field: out _)) {
-            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.FieldUnavailable, ruleName: ruleName, effect: effect, tick: tick, detail: $"live field '{paint.Field}' is unavailable");
-            if (preflight) {
-                m_ruleStatePreflightRejected = true;
-            }
-            return;
+            m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.FieldUnavailable, ruleName: ruleName, effect: effect, tick: tick, detail: $"live field '{paint.Field}' is unavailable");
+            return true;
         }
         if (preflight) {
-            return;
+            return false;
         }
         _ = lattice.PaintSphere(
             fieldName: paint.Field,
@@ -1046,78 +499,72 @@ public sealed partial class WorldServer {
             operation: paint.Operation,
             value: paint.Value
         );
+
+        return false;
     }
-    private bool ApplyWorldRuleMutation(EffectFact effect, string ruleName, WorldMutation mutation, ulong tick, int connectionId, long correlationId, bool preMetered, bool preflight) {
+    // The world's mutation door as the evaluator sees it. Outside preflight the ordinary pipeline installs, or
+    // refuses by name through its own mutation rejection. Under preflight the candidate composes and validates
+    // privately and becomes m_definition, so the next preflighted step reads it; the enclosing EndPreflight restores
+    // the installed document. Transaction steps cannot add or remove state rows, so their compiled row ordinals
+    // remain valid while cell values and keys move.
+    private bool TryApplyRuleMutation(WorldMutation mutation, ulong tick, bool preflight, out string reason) {
+        reason = string.Empty;
+
         if (!preflight) {
-            var applied = TryApplyMutation(
-                mutation: mutation,
-                tick: tick,
-                connectionId: connectionId,
-                correlationId: correlationId,
-                preMetered: preMetered
-            );
-            if (!applied) {
-                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.MutationRejected, ruleName: ruleName, effect: effect, tick: tick, detail: "the ordinary mutation door refused the effect; its mutation rejection names the concrete reason");
+            if (TryApplyMutation(mutation: mutation, tick: tick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false)) {
+                return true;
             }
-            return applied;
+
+            reason = "the ordinary mutation door refused the effect; its mutation rejection names the concrete reason";
+
+            return false;
         }
 
         var current = m_definition;
 
-        if (!TryCompose(
-            current: current,
-            mutation: mutation,
-            tick: tick,
-            instanceIdentity: InstanceIdentity,
-            candidate: out var candidate,
-            reason: out var composeReason,
-            evictedKey: out _,
-            patterns: m_patterns
-        )) {
-            m_ruleStatePreflightRejected = true;
-            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.MutationRejected, ruleName: ruleName, effect: effect, tick: tick, detail: composeReason);
+        if (!TryCompose(current: current, mutation: mutation, tick: tick, instanceIdentity: InstanceIdentity, candidate: out var candidate, reason: out reason, evictedKey: out _, patterns: m_patterns)) {
             return false;
         }
 
         candidate = RebaseCellTraits(candidate: candidate, mutation: mutation, original: current, tick: tick);
 
-        if (!TryValidateMutationCandidate(candidate: candidate, mutation: mutation, reason: out var validationReason)) {
-            m_ruleStatePreflightRejected = true;
-            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.MutationRejected, ruleName: ruleName, effect: effect, tick: tick, detail: validationReason);
+        if (!TryValidateMutationCandidate(candidate: candidate, mutation: mutation, reason: out reason)) {
             return false;
         }
 
-        string? refusal = null;
-        if (
-            (candidate.Adjacencies is { Count: > 0 }) &&
-            AdjacencyProofInputsChanged(candidate: candidate, current: current, mutation: mutation)
-        ) {
-            refusal = "the mutation changes an adjacency overlap input and requires world.load/world.reload";
+        if ((candidate.Adjacencies is { Count: > 0 }) && AdjacencyProofInputsChanged(candidate: candidate, current: current, mutation: mutation)) {
+            reason = "the mutation changes an adjacency overlap input and requires world.load/world.reload";
         } else if (ExceedsBootDerivedFaceReservation(candidate: candidate, reason: out var reservationReason)) {
-            refusal = reservationReason;
+            reason = reservationReason;
         } else if (AffectsRenderEnvelope(mutation: mutation) && !m_envelope.TryFit(candidate: candidate, reason: out var capacityReason)) {
-            refusal = capacityReason;
+            reason = capacityReason;
         } else if (!m_population.CanInstallFields(definition: candidate, reason: out var fieldReason)) {
-            refusal = fieldReason;
+            reason = fieldReason!;
         } else if (AffectsSolidField(mutation: mutation) && !TryBuildSolids(definition: candidate, reason: out var solidReason, solids: out _)) {
-            refusal = solidReason;
+            reason = solidReason!;
         }
-        if (refusal is not null) {
-            m_ruleStatePreflightRejected = true;
-            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.MutationRejected, ruleName: ruleName, effect: effect, tick: tick, detail: refusal);
+
+        if (reason.Length > 0) {
             return false;
         }
 
-        // Make the private candidate visible to the next preflighted effect. Transaction steps cannot add or remove
-        // state rows, so their compiled row ordinals remain valid while cell values and keys move.
         m_definition = candidate;
 
         return true;
     }
+    private bool TryApplyRuleMutation(EffectFact effect, string ruleName, WorldMutation mutation, ulong tick, bool preflight) {
+        if (TryApplyRuleMutation(mutation: mutation, tick: tick, preflight: preflight, reason: out var reason)) {
+            return true;
+        }
+
+        m_evaluator.ReportRefusal(refusal: RuleEffectRefusal.MutationRejected, ruleName: ruleName, effect: effect, tick: tick, detail: reason);
+
+        return false;
+    }
     // Body state, not document state: the same WorldBody.Pose door ApplyCommand's SnapPose arm (body.pose) uses,
     // but as the world's own act — no drive-gate or grant check, since a gated body is one a rule still needs to
     // move.
-    private void FirePoseEffect(PoseEffect effect, string ruleName, ulong tick, bool preflight) {
+    private bool FirePoseEffect(PoseEffect effect, string ruleName, ulong tick, bool preflight) {
         var poseEffect = effect;
         // A '$cell:' indirection yields the cell's integer, which may exceed int — a body index it can never name.
         var spelled = ResolveOperandKey(
@@ -1136,23 +583,17 @@ public sealed partial class WorldServer {
             (resolved < 0L) ||
             (resolved > int.MaxValue)
         ) {
-            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.BodyInactive, ruleName: ruleName, effect: effect, tick: tick, detail: $"key '{spelled}' is not a body index");
-            if (preflight) {
-                m_ruleStatePreflightRejected = true;
-            }
+            m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.BodyInactive, ruleName: ruleName, effect: effect, tick: tick, detail: $"key '{spelled}' is not a body index");
 
-            return;
+            return true;
         }
 
         var bodyIndex = ((int)resolved);
 
         if (Body(index: bodyIndex) is not { } body) {
-            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.BodyInactive, ruleName: ruleName, effect: effect, tick: tick, detail: $"body:{bodyIndex} is inactive");
-            if (preflight) {
-                m_ruleStatePreflightRejected = true;
-            }
+            m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.BodyInactive, ruleName: ruleName, effect: effect, tick: tick, detail: $"body:{bodyIndex} is inactive");
 
-            return;
+            return true;
         }
 
         CompiledWorldPose pose;
@@ -1174,11 +615,11 @@ public sealed partial class WorldServer {
         } else {
             Console.Error.WriteLine(value: $"[world.rule: pose skipped — spawnPoint '{poseEffect.SpawnPoint}' is no longer declared]");
 
-            return;
+            return false;
         }
 
         if (preflight) {
-            return;
+            return false;
         }
         body.Pose(
             position: pose.Position,
@@ -1187,6 +628,8 @@ public sealed partial class WorldServer {
             rollRadians: pose.RollRadians
         );
         Console.Error.WriteLine(value: $"[world.rule: pose body:{bodyIndex} -> ({pose.Position.X}, {pose.Position.Y}, {pose.Position.Z})]");
+
+        return false;
     }
     // Recompiles the rules section and prunes the edge latch to the surviving names. The compiler is called here
     // UNWRAPPED because WorldDefinitionValidator already compiled this exact candidate and refused it if it could
@@ -1785,222 +1228,6 @@ public sealed partial class WorldServer {
         public sealed record Mutate(WorldMutation Mutation, int ConnectionId, long CorrelationId, long SourceAddonInstanceId = -1L, ushort ActOrdinal = 0, Action<bool>? OutcomeObserved = null) : PendingOp;
         public sealed record Rebuild(WorldRebuildRequest Request, WorldPrincipal Principal, int ConnectionId, long CorrelationId, string? ExpectedContentHash = null, string? PreparationFailure = null) : PendingOp;
         public sealed record Undo(int Count, WorldPrincipal Principal, int ConnectionId, long CorrelationId) : PendingOp;
-    }
-    // The evaluation binding a latch entry belongs to: a forEach key or a region-interaction carrier in Left with
-    // Right -1, a distance-interaction pair in both, and None for a rule evaluated once.
-    private readonly record struct LatchKey(int Left, int Right) {
-        public static readonly LatchKey None = new(
-            Left: -1,
-            Right: -1
-        );
-
-        // Checkpoint spelling: "" for None, else ":left" or ":left:right" — ':' is reserved out of CellName, so
-        // the rule name it trails can never contain it. KEEP IN SYNC with TryParse.
-        public string Format() => ((Left < 0)
-            ? string.Empty
-            : ((Right < 0)
-                ? string.Create(
-                    provider: System.Globalization.CultureInfo.InvariantCulture,
-                    handler: $":{Left}"
-                )
-                : string.Create(
-                    provider: System.Globalization.CultureInfo.InvariantCulture,
-                    handler: $":{Left}:{Right}"
-                )
-            )
-        );
-        public static bool TryParse(ReadOnlySpan<char> text, out LatchKey binding) {
-            binding = None;
-
-            if (text.IsEmpty) {
-                return true;
-            }
-
-            if (text[0] != ':') {
-                return false;
-            }
-
-            text = text[1..];
-
-            var split = text.IndexOf(value: ':');
-            var leftText = ((split < 0)
-                ? text
-                : text[..split]
-            );
-            var rightText = ((split < 0)
-                ? ReadOnlySpan<char>.Empty
-                : text[(split + 1)..]
-            );
-
-            if (!int.TryParse(
-                s: leftText,
-                style: System.Globalization.NumberStyles.None,
-                provider: System.Globalization.CultureInfo.InvariantCulture,
-                result: out var left
-            )) {
-                return false;
-            }
-
-            var right = -1;
-
-            if (
-                (split >= 0) &&
-                !int.TryParse(
-                s: rightText,
-                style: System.Globalization.NumberStyles.None,
-                provider: System.Globalization.CultureInfo.InvariantCulture,
-                result: out right
-            )
-            ) {
-                return false;
-            }
-
-            binding = new LatchKey(
-                Left: left,
-                Right: right
-            );
-
-            return true;
-        }
-    }
-    // One family's edge latch (rules or interactions), per rule name and per binding, kept outside the compiled
-    // array because a rule's own effect recompiles it. A bound entry not touched between BeginSweep and EndSweep is
-    // closed: that is how a pair that left range, or a carrier that despawned, re-arms and is forgotten.
-    private sealed class RuleLatch {
-        private readonly Dictionary<string, Dictionary<LatchKey, bool>> m_byRule = new(comparer: StringComparer.Ordinal);
-        private readonly HashSet<LatchKey> m_touched = [];
-        private readonly List<KeyValuePair<LatchKey, bool>> m_hashScratch = [];
-
-        public int Count {
-            get {
-                var count = 0;
-
-                foreach (var bindings in m_byRule.Values) {
-                    count += bindings.Count;
-                }
-
-                return count;
-            }
-        }
-
-        public void BeginSweep() => m_touched.Clear();
-        public void AppendStateHash(ref Fnv1aHash hash, CompiledWorldRule[] compiled) {
-            hash.Add(value: ((uint)compiled.Length));
-
-            foreach (var rule in compiled) {
-                hash.Add(value: Fnv1aHash.Compute(values: rule.Name.AsSpan()));
-
-                if (!m_byRule.TryGetValue(
-                    key: rule.Name,
-                    value: out var bindings
-                )) {
-                    hash.Add(value: 0U);
-                    continue;
-                }
-
-                m_hashScratch.Clear();
-                foreach (var pair in bindings) { m_hashScratch.Add(pair); }
-                var ordered = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(m_hashScratch);
-                ordered.Sort(
-                    comparison: static (left, right) => {
-                        var result = left.Key.Left.CompareTo(value: right.Key.Left);
-
-                        return ((result != 0)
-                            ? result
-                            : left.Key.Right.CompareTo(value: right.Key.Right)
-                        );
-                    }
-                );
-                hash.Add(value: ((uint)ordered.Length));
-
-                foreach (var (binding, held) in ordered) {
-                    hash.Add(value: ((uint)binding.Left));
-                    hash.Add(value: ((uint)binding.Right));
-                    hash.Add(value: ((byte)(held ? 1 : 0)));
-                }
-            }
-        }
-        public Dictionary<LatchKey, bool> Bindings(string name) {
-            ref var bindings = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(
-                dictionary: m_byRule,
-                exists: out _,
-                key: name
-            );
-
-            return (bindings ??= []);
-        }
-        public void Clear() => m_byRule.Clear();
-        public void EndSweep(Dictionary<LatchKey, bool> bindings) {
-            // Dictionary.Remove does not invalidate an in-flight enumerator.
-            foreach (var pair in bindings) {
-                if (!m_touched.Contains(item: pair.Key)) {
-                    _ = bindings.Remove(key: pair.Key);
-                }
-            }
-        }
-        public void Flatten(List<(string, bool)> into) {
-            foreach (var (name, bindings) in m_byRule) {
-                foreach (var (binding, held) in bindings) {
-                    into.Add(item: (string.Concat(
-                        str0: name,
-                        str1: binding.Format()
-                    ), held));
-                }
-            }
-        }
-        // Held when the gate held at the last evaluation of any binding of the rule.
-        public bool Held(string name) {
-            if (!m_byRule.TryGetValue(
-                key: name,
-                value: out var bindings
-            )) {
-                return false;
-            }
-
-            foreach (var held in bindings.Values) {
-                if (held) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-        // Every surviving name keeps its entries; a name no longer compiled loses them.
-        public void Prune(CompiledWorldRule[] compiled) {
-            if (m_byRule.Count == 0) {
-                return;
-            }
-
-            var live = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-            foreach (var rule in compiled) {
-                if (rule.Decision is null) { _ = live.Add(item: rule.Name); }
-            }
-
-            foreach (var name in m_byRule.Keys) {
-                if (!live.Contains(item: name)) {
-                    _ = m_byRule.Remove(key: name);
-                }
-            }
-        }
-        // The inverse of Flatten; a checkpoint entry that does not parse is dropped rather than mis-keyed.
-        public void Restore(string key, bool held) {
-            var split = key.IndexOf(value: ':');
-            var name = ((split < 0)
-                ? key
-                : key[..split]
-            );
-
-            if (LatchKey.TryParse(
-                binding: out var binding,
-                text: ((split < 0)
-                    ? ReadOnlySpan<char>.Empty
-                    : key.AsSpan(start: split))
-            )) {
-                Bindings(name: name)[binding] = held;
-            }
-        }
-        public void Touch(LatchKey binding) => m_touched.Add(item: binding);
     }
     // One entry in the ordered domain (see m_ordered's own remarks): the envelope plus the completion its submitter
     // supplied (null when the caller does not need one).

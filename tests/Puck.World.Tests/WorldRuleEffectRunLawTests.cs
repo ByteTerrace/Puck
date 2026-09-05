@@ -48,7 +48,7 @@ public sealed class WorldRuleEffectRunLawTests {
         Assert.Equal(2L, Value(fixture, "toCell"));
         Assert.Equal(0L, Value(fixture, "capturedCell"));
         var diagnostic = Assert.Single(fixture.Server.RuleRuntimeDiagnostics());
-        Assert.Equal(WorldRuleEffectRefusal.MutationRejected, diagnostic.Refusal);
+        Assert.Equal<Enum>(RuleEffectRefusal.MutationRejected, diagnostic.Refusal);
         Assert.Equal("cells", diagnostic.Rule);
         Assert.Contains("capturedCell", diagnostic.Effect, StringComparison.Ordinal);
     }

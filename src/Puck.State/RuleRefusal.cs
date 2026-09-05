@@ -167,3 +167,20 @@ public sealed class RuleException : ArgumentException {
     /// <summary>Gets the refusal category.</summary>
     public Enum Refusal { get; }
 }
+
+/// <summary>The runtime refusals the evaluator itself draws while firing; a document project's own effect arms
+/// declare their own tagged enum and report through the same ledger.</summary>
+public enum RuleEffectRefusal : byte {
+    /// <summary>A binding, gate conjunct, or effect expression overflowed, divided by zero, left a function's
+    /// domain, or read a fact with no number.</summary>
+    [Refusal(door: "world.rule.effect", condition: "a rule expression overflows, divides by zero, leaves a function's domain, or produces an invalid stack result", kind: RefusalKind.Verdict)]
+    Arithmetic,
+
+    /// <summary>The host's mutation door refused the effect's composition, validation, or admission.</summary>
+    [Refusal(door: "world.rule.effect", condition: "a rule-produced mutation refuses composition, validation, or admission", kind: RefusalKind.Verdict)]
+    MutationRejected,
+
+    /// <summary>A dynamic table key named an entry its table does not carry.</summary>
+    [Refusal(door: "world.rule.effect", condition: "a '$table:' read names a key its table does not carry", kind: RefusalKind.Verdict)]
+    TableKeyMissing,
+}

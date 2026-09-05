@@ -88,7 +88,7 @@ public sealed class WorldRuleTraceLawTests {
     public void TracingIsAnObserverThatLeavesTheStateHashAlone() {
         using var traced = Fixtures.FreshServer(definition: Document());
         using var control = Fixtures.FreshServer(definition: Document());
-        Assert.True(traced.Server.TryArmRuleTrace(rule: "strike", evaluations: WorldServer.MaxRuleTraceEvaluations, refusal: out _));
+        Assert.True(traced.Server.TryArmRuleTrace(rule: "strike", evaluations: RuleEvaluator.MaxTraceEvaluations, refusal: out _));
         for (var step = 0; step < 4; step++) {
             traced.Step();
             control.Step();
@@ -104,8 +104,8 @@ public sealed class WorldRuleTraceLawTests {
         using var fixture = Fixtures.FreshServer(definition: Document());
         Assert.False(fixture.Server.TryArmRuleTrace(rule: "nothing", evaluations: 1, refusal: out var unknown));
         Assert.Contains("no rule or interaction named 'nothing'", unknown, StringComparison.Ordinal);
-        Assert.False(fixture.Server.TryArmRuleTrace(rule: "strike", evaluations: WorldServer.MaxRuleTraceEvaluations + 1, refusal: out var tooMany));
-        Assert.Contains($"1..{WorldServer.MaxRuleTraceEvaluations}", tooMany, StringComparison.Ordinal);
+        Assert.False(fixture.Server.TryArmRuleTrace(rule: "strike", evaluations: RuleEvaluator.MaxTraceEvaluations + 1, refusal: out var tooMany));
+        Assert.Contains($"1..{RuleEvaluator.MaxTraceEvaluations}", tooMany, StringComparison.Ordinal);
         Assert.False(fixture.Server.DisarmRuleTrace());
 
         Assert.True(fixture.Server.TryArmRuleTrace(rule: "strike", evaluations: 4, refusal: out _));

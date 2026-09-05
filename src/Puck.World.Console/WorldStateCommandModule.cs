@@ -446,7 +446,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.rule.trace",
-            description: $"Captures one rule's or interaction's next evaluations and reads them back (Immediate): world.rule.trace <rule> [evaluations 1..{WorldServer.MaxRuleTraceEvaluations}] arms a capture (default {DefaultRuleTraceEvaluations}; replaces any earlier one); world.rule.trace alone prints what was captured so far — per evaluation its tick, the forEach key, every binding's value, every gate conjunct with the two values it compared and its verdict, whether the gate held (and whether an edge rule was already held), and each effect's spelling, computed value, and outcome: applied, refused with the reason, emitted, or skipped because the write could not move its destination; world.rule.trace off disarms. Arm, world.wait the ticks the rule should run over, then read. An observer only — a traced run hashes identically to an untraced one. A decision rule is refused here; world.decisions echoes it.",
+            description: $"Captures one rule's or interaction's next evaluations and reads them back (Immediate): world.rule.trace <rule> [evaluations 1..{RuleEvaluator.MaxTraceEvaluations}] arms a capture (default {DefaultRuleTraceEvaluations}; replaces any earlier one); world.rule.trace alone prints what was captured so far — per evaluation its tick, the forEach key, every binding's value, every gate conjunct with the two values it compared and its verdict, whether the gate held (and whether an edge rule was already held), and each effect's spelling, computed value, and outcome: applied, refused with the reason, emitted, or skipped because the write could not move its destination; world.rule.trace off disarms. Arm, world.wait the ticks the rule should run over, then read. An observer only — a traced run hashes identically to an untraced one. A decision rule is refused here; world.decisions echoes it.",
             handler: (context, args) => {
                 if (!authority.TryResolveServer(context: context, error: out var error, server: out var server, verb: "world.rule.trace")) {
                     return error;
@@ -459,7 +459,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                 }
                 var evaluations = DefaultRuleTraceEvaluations;
                 if ((args.Count > 2) || ((args.Count == 2) && !args.TryInt(index: 1, value: out evaluations))) {
-                    return CommandResult.Usage(form: $"[<rule> [evaluations 1..{WorldServer.MaxRuleTraceEvaluations}] | off]", verb: "world.rule.trace");
+                    return CommandResult.Usage(form: $"[<rule> [evaluations 1..{RuleEvaluator.MaxTraceEvaluations}] | off]", verb: "world.rule.trace");
                 }
                 var rule = args[0].ToString();
                 return (server.TryArmRuleTrace(rule: rule, evaluations: evaluations, refusal: out var refusal)

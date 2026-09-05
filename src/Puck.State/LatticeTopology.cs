@@ -14,7 +14,7 @@ public enum TopologyKind : byte {
     Grid,
     /// <summary>A cyclic sequence, indexed from zero.</summary>
     Ring,
-    /// <summary>An axial hexagon, indexed in ascending r then q order.</summary>
+    /// <summary>A hexagonal disk of the given radius, cell <c>i</c> being <c>HexagonalIndex</c> <c>i</c> (rings outward from the origin, consecutive indices adjacent).</summary>
     Hex,
     /// <summary>A box of width by layers by depth cells with the 26 space directions, indexed by (layer times depth
     /// plus z) times width plus x.</summary>
@@ -112,7 +112,7 @@ public abstract record LatticeTopology(string Name, DocumentVector3 Origin, floa
         public override TopologyKind Kind => TopologyKind.Ring;
     }
 
-    /// <summary>An axial hexagon, indexed in ascending r then q order.</summary>
+    /// <summary>A hexagonal disk of the given radius, cell <c>i</c> being <c>HexagonalIndex</c> <c>i</c> (rings outward from the origin, consecutive indices adjacent).</summary>
     /// <param name="Name">The topology's name.</param>
     /// <param name="Origin">The minimum corner, world units.</param>
     /// <param name="CellSize">The cubic cell edge, world units.</param>

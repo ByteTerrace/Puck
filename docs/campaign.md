@@ -1325,13 +1325,22 @@ and the world's arms join the JSON union at serializer resolution through a
 type-info modifier rather than an attribute list the library would have to
 know. Nothing in the library carries a `World` name. The two enums the physics
 kits share with rules (`ActionStateComparison`, `ActionTriggerMode`) live in
-`Puck.State`, which references nothing of `Puck.Physics`. Effect firing, the
-rule trace, interactions, and decisions stay in the world until the evaluator
-moves behind a state-host interface — the mutation door, the journal,
-checkpoints — that `WorldServer` implements; interactions stay world-side until
-a pair domain over rows is designed rather than assumed. Refused: a
-compatibility shim between old and new spellings at any phase, and moving the
-evaluator before the seams exist.
+`Puck.State`, which references nothing of `Puck.Physics`. The evaluator is the
+library's, behind one state-host interface `WorldServer` implements: a
+`StateMutation` through the host's own mutation door, a preflight scope the
+host opens and closes around a transaction's candidate, the effect arms only
+the host can fire, and the rule kinds only the host can evaluate — which run
+each evaluation back through the library's gate-and-fire, so the edge latch,
+the trace, and the refusal ledger are one mechanism whether a rule, a decision,
+or an interaction fired. The latch is simulation state the library hashes and
+checkpoints. A domain fault is never silent: a binding, an effect, or a
+`compareValue` conjunct whose expression overflows or leaves a function's
+domain is a counted `Arithmetic` refusal the trace shows as `refused`, so a
+rule that stopped firing is looked up in `world.rule.failures`, not guessed
+at. Interactions and decisions stay host-evaluated until a pair domain over
+rows is designed rather than assumed; composing a mutation against a row
+(eviction, rebase, envelope) stays each host's door. Refused: a compatibility
+shim between old and new spellings at any phase.
 
 **The exotic Maths functions are expression calls, one family per prefix.**
 An author reaches `Puck.Maths` from an expression by the name of the thing —
