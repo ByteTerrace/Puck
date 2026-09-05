@@ -65,6 +65,36 @@ public sealed class WorldPatternLawTests {
     }
 
     [Fact]
+    public void CellAndDistanceFacetsAnswerTheFirstRejectedRayCellExactlyLikeAFixedRayQueryWouldAndGeneralizeIt() {
+        // Eastward from cell 0 the board reads 2, 2, 1: a run of two "them" (2) is the longest accepted prefix of
+        // "them*", so the first rejected cell is cell 3 (2 steps out from cell 0, then blocked at step 3) — the
+        // same value a fixed "first cell not equal to 2" ray query would answer, generalized to any authored run
+        // shape (here "them", not merely "not the board's empty sentinel"). Westward off the edge, the ray is empty
+        // and the whole (empty) word is still accepted, so there is no blocker: both facets read -1.
+        var board = new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0", 1), Cell("1", 2), Cell("2", 2), Cell("3", 1)], Board: new("map"));
+        var runOfThem = new WorldPatternRow(Name("runOfThem"), CellKind.Int, Symbols: [new(Name("them"), 2, 2)], Pattern: new WorldPatternNode.Star(new WorldPatternNode.Symbol("them")));
+        var definition = Document([board, Slot("blockerCell"), Slot("blockerDistance"), Slot("edgeCell"), Slot("edgeDistance")], [runOfThem], [
+            Mirror("blockerCell", "$match:runOfThem:board:E:cell", "0"),
+            Mirror("blockerDistance", "$match:runOfThem:board:E:distance", "0"),
+            Mirror("edgeCell", "$match:runOfThem:board:W:cell", "0"),
+            Mirror("edgeDistance", "$match:runOfThem:board:W:distance", "0"),
+        ]);
+
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        fixture.Step();
+
+        Assert.Equal(3L, Value(fixture, "blockerCell"));
+        Assert.Equal(3L, Value(fixture, "blockerDistance"));
+        Assert.Equal(-1L, Value(fixture, "edgeCell"));
+        Assert.Equal(-1L, Value(fixture, "edgeDistance"));
+
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(Document([board, Slot("x")], [runOfThem], [Mirror("x", "$match:runOfThem:board:any:cell", "0")]), out var cellAnyReason));
+        Assert.Contains("not a facet", cellAnyReason);
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(Document([board, Slot("x")], [runOfThem], [Mirror("x", "$match:runOfThem:board:any:distance", "0")]), out var distanceAnyReason));
+        Assert.Contains("not a facet", distanceAnyReason);
+    }
+
+    [Fact]
     public void AValueExpressionReadsATupleOfAttributesPerTokenAndTokenBindsOnlyThere() {
         // suit * 16 + rank: hearts are suit 1, so a heart of any rank lies in 16..31 and a heart flush is h{5}.
         WorldValueExpression Tuple() => new(Tokens: [

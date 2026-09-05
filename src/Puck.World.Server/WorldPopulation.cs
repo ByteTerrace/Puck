@@ -105,10 +105,6 @@ public sealed partial class WorldPopulation {
     /// enqueued through the ordinary mutation pipeline by <c>WorldServer.Step</c>, mirroring
     /// <see cref="DesignationOutputs"/>'s own shape.</summary>
     public IReadOnlyList<WorldGeneratorInvocation> GeneratorInvocationOutputs => m_generatorInvocations;
-    /// <summary>The <c>judge</c> effect firings staged by the most recently completed tick's advance — drained and
-    /// graded by <c>WorldServer.Step</c> immediately after the whole population advance, mirroring
-    /// <see cref="GeneratorInvocationOutputs"/>'s own shape.</summary>
-    public IReadOnlyList<WorldJudgeInvocation> JudgeInvocationOutputs => m_judgeInvocations;
     /// <summary>The live look rows (the authored rows, or the implicit single catalog look) the census resolves against.</summary>
     public IReadOnlyList<WorldLook> LookRows => m_lookRows;
     /// <summary>The number of entity-table slots currently eligible for destination-authored census bodies. Inhabitants,
@@ -256,7 +252,6 @@ public sealed partial class WorldPopulation {
     private readonly List<BodyEffectOutput> m_effectOutputs = [];
     private readonly List<WorldDesignation> m_designationOutputs = [];
     private readonly List<WorldGeneratorInvocation> m_generatorInvocations = [];
-    private readonly List<WorldJudgeInvocation> m_judgeInvocations = [];
     private readonly List<DurableStateOutput> m_durableStateOutputs = [];
     private static readonly FixedQ4816 TwoPi = FixedQ4816.FromDouble(value: (2.0 * Math.PI));
     private static readonly FixedVector3 LocalForward = new(

@@ -8,7 +8,7 @@ public static partial class WorldDefinitionValidator {
         ActionPredicate.TimerElapsed => "timerElapsed",
         _ => "?",
     };
-    private static void ValidateActionSpec(ActionSpec? spec, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, ISet<string> targetRegisterNames, ISet<string> judgeRowNames, IReadOnlyDictionary<string, WorldStateRow> stateRows, string path, List<string> errors) {
+    private static void ValidateActionSpec(ActionSpec? spec, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, ISet<string> targetRegisterNames, IReadOnlyDictionary<string, WorldStateRow> stateRows, string path, List<string> errors) {
         if (spec is null) {
             return;
         }
@@ -17,7 +17,6 @@ public static partial class WorldDefinitionValidator {
             trigger: spec.OnPress,
             stateSlots: stateSlots,
             targetRegisterNames: targetRegisterNames,
-            judgeRowNames: judgeRowNames,
             stateRows: stateRows,
             latchLegitimate: true,
             path: $"{path}.onPress",
@@ -27,7 +26,6 @@ public static partial class WorldDefinitionValidator {
             trigger: spec.OnRelease,
             stateSlots: stateSlots,
             targetRegisterNames: targetRegisterNames,
-            judgeRowNames: judgeRowNames,
             stateRows: stateRows,
             latchLegitimate: false,
             path: $"{path}.onRelease",
@@ -64,7 +62,6 @@ public static partial class WorldDefinitionValidator {
                         effect: rule.Effects[effect],
                         stateSlots: stateSlots,
                         targetRegisterNames: targetRegisterNames,
-                        judgeRowNames: judgeRowNames,
                         stateRows: stateRows,
                         path: $"{path}.onFact[{index}].effects[{effect}]",
                         errors: errors
@@ -212,7 +209,7 @@ public static partial class WorldDefinitionValidator {
         );
         return stateSlots;
     }
-    private static void ValidateEffect(ActionEffect effect, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, ISet<string> targetRegisterNames, ISet<string> judgeRowNames, IReadOnlyDictionary<string, WorldStateRow> stateRows, string path, List<string> errors) {
+    private static void ValidateEffect(ActionEffect effect, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, ISet<string> targetRegisterNames, IReadOnlyDictionary<string, WorldStateRow> stateRows, string path, List<string> errors) {
         if (
             (effect is not null) &&
             !Enum.IsDefined(value: TargetOf(value: effect))
@@ -360,16 +357,6 @@ public static partial class WorldDefinitionValidator {
                     row: generate.Row,
                     stateRows: stateRows,
                     path: path,
-                    errors: errors
-                );
-                break;
-            case ActionEffect.Judge judge:
-                RequireDeclared(
-                    value: judge.JudgeRef,
-                    declaredSet: judgeRowNames,
-                    path: path,
-                    field: "judgeRef",
-                    rowNoun: "declared judge",
                     errors: errors
                 );
                 break;
@@ -689,7 +676,7 @@ public static partial class WorldDefinitionValidator {
                 break;
         }
     }
-    private static void ValidateTrigger(ActionTrigger? trigger, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, ISet<string> targetRegisterNames, ISet<string> judgeRowNames, IReadOnlyDictionary<string, WorldStateRow> stateRows, bool latchLegitimate, string path, List<string> errors) {
+    private static void ValidateTrigger(ActionTrigger? trigger, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, ISet<string> targetRegisterNames, IReadOnlyDictionary<string, WorldStateRow> stateRows, bool latchLegitimate, string path, List<string> errors) {
         if (trigger is null) {
             return;
         }
@@ -728,7 +715,6 @@ public static partial class WorldDefinitionValidator {
                 effect: effects[index],
                 stateSlots: stateSlots,
                 targetRegisterNames: targetRegisterNames,
-                judgeRowNames: judgeRowNames,
                 stateRows: stateRows,
                 path: $"{path}.effects[{index}]",
                 errors: errors

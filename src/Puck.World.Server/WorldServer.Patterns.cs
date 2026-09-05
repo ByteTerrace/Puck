@@ -72,6 +72,25 @@ public sealed partial class WorldServer {
             if (query.Direction >= 0) {
                 var length = ReadRay(query.Topology, values, origin, query.Direction, word);
 
+                if (operand.MatchFacet is WorldMatchFacet.Cell or WorldMatchFacet.Distance) {
+                    var prefixLength = pattern.LongestAcceptedPrefix(values: word[..length]);
+
+                    if (prefixLength == length) {
+                        return -1L;
+                    }
+                    if (operand.MatchFacet == WorldMatchFacet.Distance) {
+                        return prefixLength + 1;
+                    }
+
+                    var blocker = origin;
+
+                    for (var step = 0; step <= prefixLength; step++) {
+                        blocker = query.Topology.Neighbour(blocker, query.Direction);
+                    }
+
+                    return blocker;
+                }
+
                 return (operand.MatchFacet == WorldMatchFacet.Prefix)
                     ? pattern.LongestAcceptedPrefix(values: word[..length])
                     : pattern.Match(values: word[..length]);
@@ -370,7 +389,9 @@ public sealed partial class WorldServer {
                 parts.Add((cell < 0) ? topology.ElementName(element) : $"{topology.ElementName(element)}→{topology.Key(topology.Image(element, cell))}");
             }
 
-            return $"[world.topology: {topologyName} kind={topology.Kind} elements={topology.ElementCount} | {string.Join(' ', parts)}]";
+            var aliases = string.Join(',', topology.ElementAliases().Select(pair => $"{pair.Alias}={pair.Canonical}"));
+
+            return $"[world.topology: {topologyName} kind={topology.Kind} elements={topology.ElementCount} aliases={((aliases.Length == 0) ? "none" : aliases)} | {string.Join(' ', parts)}]";
         }
     }
 }

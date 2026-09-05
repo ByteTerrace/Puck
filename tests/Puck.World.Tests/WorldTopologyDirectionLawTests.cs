@@ -68,6 +68,46 @@ public sealed class WorldTopologyDirectionLawTests {
     }
 
     [Fact]
+    public void ARuleCompilesAgainstAnAuthoredDirectionAndRefusesTheRetiredDefaultName() {
+        var orthogonal = new WorldTopologyDirection[] {
+            new("north", 0, -1), new("south", 0, 1), new("east", 1, 0), new("west", -1, 0),
+        };
+        var board = new WorldStateRow(WorldCellName.Parse("board"), CellKind.Int, Board: new("grid"));
+        var slot = new WorldStateRow(WorldCellName.Parse("neighbour"), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)]);
+        WorldDefinition Document(string direction) => Fixtures.BuildDocument() with {
+            StateRaw = new(World: [board, slot], Lattices: [Grid() with { Directions = orthogonal }]),
+            Rules = [new WorldRule(WorldCellName.Parse("read"), [new ActionEffect.SetState(State: "neighbour", FromState: $"$board:neighbour:board:{direction}", FromKey: "0")])],
+        };
+
+        Assert.True(WorldDefinitionValidator.TryValidateLocally(Document("north"), out var authoredReason), authoredReason);
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(Document("N"), out var retiredReason));
+        Assert.Contains("is not a direction of 'grid'", retiredReason);
+    }
+
+    [Fact]
+    public void ARingRefusesAYStepAndAWrappedAxisRefusesAStepAtOrPastItsExtent() {
+        var ring = new WorldStateLatticeTopology("ring", new DocumentVector3(0, 0, 0), 1, 5, 1, Kind: WorldTopologyKind.Ring);
+        Assert.False(WorldTopologyCompilation.TryValidate(ring with { Directions = [new("skew", 1, 1)] }, out var ringReason));
+        Assert.Contains("no second axis", ringReason);
+        Assert.False(WorldTopologyCompilation.TryValidate(ring with { Directions = [new("around", 5, 0), new("back", -5, 0)] }, out var wideReason));
+        Assert.Contains("magnitude must be under the width", wideReason);
+        // Control: a step under the ring's own width is admitted.
+        Assert.True(WorldTopologyCompilation.TryValidate(ring with { Directions = [new("step", 4, 0), new("back", -4, 0)] }, out _));
+
+        var wrappedGrid = Grid() with { Wrap = WorldTopologyWrap.Both };
+        Assert.False(WorldTopologyCompilation.TryValidate(wrappedGrid with { Directions = [new("far", 0, 4), new("near", 0, -4)] }, out var deepReason));
+        Assert.Contains("magnitude must be under the depth", deepReason);
+    }
+
+    [Fact]
+    public void APhysicalFieldRefusesAnAuthoredDirectionVocabulary() {
+        var field = new WorldStateLatticeTopology("field", new DocumentVector3(0, 0, 0), 1, 4, 4, Kind: WorldTopologyKind.Field, Directions: [new("east", 1, 0), new("west", -1, 0)]);
+        var definition = Fixtures.BuildDocument() with { StateRaw = new(Lattices: [field]) };
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(definition, out var reason));
+        Assert.Contains("direction vocabulary", reason);
+    }
+
+    [Fact]
     public void AnAuthoredDirectionListRoundTripsThroughJson() {
         var orthogonal = new WorldTopologyDirection[] { new("east", 1, 0), new("west", -1, 0) };
         var definition = Fixtures.BuildDocument() with { StateRaw = new(Lattices: [Grid() with { Directions = orthogonal }]) };

@@ -348,7 +348,6 @@ public sealed partial class WorldServer {
         string? MusicDirectorLastTransitionToSegmentId,
         string? MusicDirectorLastEmbellishmentPatchId,
         ulong? MusicDirectorLastEmbellishmentTick,
-        IReadOnlyList<(int EntityIndex, string JudgeRef, string? Grade, ulong Tick)> JudgeGrades,
         IReadOnlyList<WorldDecisionCheckpoint> Decisions,
         WorldSocialMemoryCheckpoint? Social,
         int LastSocialResult
@@ -469,8 +468,7 @@ public sealed partial class WorldServer {
                 MusicDirectorLastTransitionFromSegmentId: m_musicDirector?.LastTransitionFromSegmentId,
                 MusicDirectorLastTransitionToSegmentId: m_musicDirector?.LastTransitionToSegmentId,
                 MusicDirectorLastEmbellishmentPatchId: m_musicDirector?.LastEmbellishmentPatchId,
-                MusicDirectorLastEmbellishmentTick: m_musicDirector?.LastEmbellishmentTick,
-                JudgeGrades: [.. m_judgeGrades.Select(selector: pair => (pair.Key.EntityIndex, pair.Key.JudgeRef, pair.Value.Grade, pair.Value.Tick))]
+                MusicDirectorLastEmbellishmentTick: m_musicDirector?.LastEmbellishmentTick
             );
 
             checkpoint = new WorldAuthorityCheckpoint(
@@ -567,11 +565,6 @@ public sealed partial class WorldServer {
                 lastTransitionToSegmentId: server.MusicDirectorLastTransitionToSegmentId,
                 transitionCount: server.MusicDirectorTransitionCount
             );
-        }
-
-        m_judgeGrades.Clear();
-        foreach (var (entityIndex, judgeRef, grade, tick) in server.JudgeGrades) {
-            m_judgeGrades[(entityIndex, judgeRef)] = (grade, tick);
         }
 
         if (m_population.Fields is { } lattice) {

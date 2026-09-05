@@ -77,7 +77,6 @@ public sealed record WorldDefinition(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldMetadataSection? Metadata = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldUpdateDefaults? Update = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldMusicRow>? Music = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldJudgeRow>? Judges = null,
     [property: JsonPropertyName("seatModes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldSeatModeFamily>? SeatModesRaw = null,
     [property: JsonPropertyName("probes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldProbe>? ProbesRaw = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCapturesSection? Captures = null,

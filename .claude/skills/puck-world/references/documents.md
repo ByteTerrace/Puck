@@ -1713,7 +1713,7 @@ reserved derived-face band (`WorldPlacementPolicy.DerivedFaceBase` +
   carries exactly the vocabulary its canonicalizer hashes. Tunes/patches are
   never embedded — `WorldTune`/`WorldPatch` are name/source/hash reference
   rows resolved off disk by `WorldAssetRowLoader`, the same shape
-  `WorldMusicRow`/`WorldJudgeRow` already use.
+  `WorldMusicRow` already uses.
 
 **Adding a schema field — the sweep direction.** Adding a top-level SECTION
 refuses at boot until every shipped world carries it (through its own

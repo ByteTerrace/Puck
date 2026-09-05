@@ -472,10 +472,10 @@ nothing was actually removed) and is refused. A settle whose own side only
 occupies or only vacates clamps its empty half to `-1` rather than writing
 the mask's own bit width into a row that refuses it. Movement legality and
 check read outward from the move's own squares: a slider's reach is "walking
-`$board:rayCell` from the destination back toward the origin lands on the
+`$match:<emptyRun>:…:cell` from the destination back toward the origin lands on the
 origin" (no coordinate arithmetic), a leaper's is `$board:offset` matching
 the destination over its fixed jumps, and a king's square is attacked
-exactly the same way, probed for an enemy pawn/knight/king/slider. A
+exactly the same way, probed for an enemy piece. A
 king-shaped (two-and-two) settle is judged by the castle legality check
 alone, never the single-step king check beside it — the classifier's own
 `from` is always the king's own home cell, read directly off the pre-move

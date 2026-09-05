@@ -40,9 +40,9 @@ public sealed class WorldBoardSymmetryLawTests {
             new WorldRule(Name("least"), [new ActionEffect.SetState(State: "least", FromState: "$board:canonicalMask:board:1:2")]),
             new WorldRule(Name("printMirror"), [new ActionEffect.SetState(State: "printMirror", FromState: "$board:canonical:mirror")]),
             new WorldRule(Name("leastMirror"), [new ActionEffect.SetState(State: "leastMirror", FromState: "$board:canonicalMask:mirror:1:2")]),
-            new WorldRule(Name("imageMask"), [new ActionEffect.SetState(State: "imageMask", FromState: "$board:image:board:rot90:1:2")]),
+            new WorldRule(Name("imageMask"), [new ActionEffect.SetState(State: "imageMask", FromState: "$board:image:board:-z+x:1:2")]),
             new WorldRule(Name("tokenMask"), [new ActionEffect.SetState(State: "tokenMask", Expression: new WorldValueExpression(Tokens: [
-                new WorldValueToken.State(Name: "$board:mask:board:1:2"), new WorldValueToken.BoardImage(Topology: "map", Element: "rot90"),
+                new WorldValueToken.State(Name: "$board:mask:board:1:2"), new WorldValueToken.BoardImage(Topology: "map", Element: "-z+x"),
             ]))]),
         ]);
         var topology = WorldTopologyCompilation.Find(definition.StateRaw, "map")!;
@@ -60,7 +60,7 @@ public sealed class WorldBoardSymmetryLawTests {
             Assert.Equal(Value(fixture, "print"), Value(fixture, "printMirror"));
             Assert.Equal(Value(fixture, "least"), Value(fixture, "leastMirror"));
             Assert.Equal(Value(fixture, "imageMask"), Value(fixture, "tokenMask"));
-            Assert.Equal((1L << topology.Image(topology.Element("rot90"), 0)) | (1L << topology.Image(topology.Element("rot90"), 1)), Value(fixture, "imageMask"));
+            Assert.Equal((1L << topology.Image(topology.Element("-z+x"), 0)) | (1L << topology.Image(topology.Element("-z+x"), 1)), Value(fixture, "imageMask"));
         }
 
         var different = definition with { StateRaw = definition.StateRaw! with { World = [.. definition.State.Select(r => r.Name.Value == "board" ? r with { Cells = [Cell("0", 1), Cell("5", 2)] } : r)] } };
@@ -71,9 +71,31 @@ public sealed class WorldBoardSymmetryLawTests {
         Assert.NotEqual(Value(baseline, "print"), Value(other, "print"));
 
         Assert.Contains("elements=8", baseline.Server.DescribeSymmetry("map", null));
-        Assert.Contains("rot180→3", baseline.Server.DescribeSymmetry("map", "12"));
+        Assert.Contains("-x-z→3", baseline.Server.DescribeSymmetry("map", "12"));
         Assert.False(WorldStateTransforms.TryApply(definition, new WorldStateTransform.MapBoard("mirror", "board", "rot45"), WorldPrincipal.World, 0, "test", out _, out var reason));
         Assert.Contains("not a symmetry element", reason);
+    }
+
+    [Fact]
+    public void AnAuthoredAliasResolvesAlongsideTheCanonicalSpellingButElementNameAlwaysAnswersTheCanonicalOne() {
+        var square = new WorldStateLatticeTopology("t", new DocumentVector3(0, 0, 0), 1, 4, 4, Kind: WorldTopologyKind.Grid,
+            ElementAliases: [new("rot90", "-z+x")]);
+        var topology = WorldTopologyCompilation.Find(new WorldStateSection(Lattices: [square]), "t")!;
+        var aliased = topology.Element("rot90");
+        Assert.True(aliased >= 0);
+        Assert.Equal(topology.Element("-z+x"), aliased);
+        Assert.Equal("-z+x", topology.ElementName(aliased));
+
+        Assert.False(WorldTopologyCompilation.TryValidate(square with { ElementAliases = [new("rot90", "not-an-element")] }, out var missingReason));
+        Assert.Contains("names no element", missingReason);
+        Assert.False(WorldTopologyCompilation.TryValidate(square with { ElementAliases = [new("identity", "-z+x")] }, out var shadowReason));
+        Assert.Contains("already a canonical element name", shadowReason);
+        Assert.False(WorldTopologyCompilation.TryValidate(square with { ElementAliases = [new("rot90", "-z+x"), new("rot90", "+x-z")] }, out var duplicateReason));
+        Assert.Contains("distinct name", duplicateReason);
+
+        var definition = Fixtures.BuildDocument() with { StateRaw = new(Lattices: [square]) };
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        Assert.Contains("aliases=rot90=-z+x", fixture.Server.DescribeSymmetry("t", null));
     }
 
     private static WorldStateLatticeTopology Topology(WorldTopologyKind kind, int width, int depth) => kind == WorldTopologyKind.Hex

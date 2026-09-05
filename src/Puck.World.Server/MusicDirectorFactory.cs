@@ -2,7 +2,7 @@ using Puck.Audio.Simulation;
 
 namespace Puck.World.Server;
 
-/// <summary>Compiles authored music/judge documents into the sim-side <c>Puck.Audio.Simulation</c> shapes, and
+/// <summary>Compiles an authored music document into the sim-side <c>Puck.Audio.Simulation</c> shapes, and
 /// projects one tick's <see cref="WorldEventEdge"/> list into <see cref="MusicSenseEdge"/>s — the two document-
 /// and-vocabulary-aware conversions <c>Puck.Audio</c> itself cannot perform (it parses no document and cannot
 /// reference the project that declares <see cref="WorldEventEdge"/>).</summary>
@@ -53,21 +53,6 @@ public static class MusicDirectorFactory {
         }
 
         return new MusicSegmentGraph(Segments: segments);
-    }
-    /// <summary>Compiles an authored judge document into a sim-side window list.</summary>
-    /// <param name="document">The validated, normalized judge document.</param>
-    /// <returns>The compiled windows, in authored order.</returns>
-    public static IReadOnlyList<JudgeWindow> CompileWindows(Puck.World.Authoring.JudgeDocument document) {
-        var windows = new List<JudgeWindow>(capacity: document.Windows.Count);
-
-        foreach (var window in document.Windows) {
-            windows.Add(item: new JudgeWindow(
-                Grade: window.Grade,
-                ToleranceTicks: window.ToleranceTicks
-            ));
-        }
-
-        return windows;
     }
     /// <summary>Projects one tick's world-scoped event edges into the audio-owned sense-edge shape, dropping the
     /// grant-gating fields (music state is never addon-observation-filtered).</summary>

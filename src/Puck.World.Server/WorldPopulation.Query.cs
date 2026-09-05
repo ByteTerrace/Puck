@@ -207,8 +207,6 @@ public sealed partial class WorldPopulation {
     public void ClearDesignationOutputs() => m_designationOutputs.Clear();
     /// <summary>Clears staged generator invocations after the world authority has enqueued them.</summary>
     public void ClearGeneratorInvocationOutputs() => m_generatorInvocations.Clear();
-    /// <summary>Clears staged judge invocations after the world authority has graded them.</summary>
-    public void ClearJudgeInvocationOutputs() => m_judgeInvocations.Clear();
     /// <summary>Collects every currently-inhabited body slot bound to <paramref name="placementId"/> into
     /// <paramref name="into"/> (cleared first) — the despawn-ownership guard's read: which live bodies a
     /// <c>removePlacement</c> rule effect targeting this placement would strip their Inhabit binding from. Rule

@@ -4,7 +4,31 @@
     "null"
   ],
   "items": {
-    "$ref": "./common.schema.json#/$defs/WorldMusicRow"
+    "description": "One music-score asset reference row \u2014 a puck.music.v1 document\u0027s stable name, its file path (relative to BaseDirectory, the same convention WorldAddonRow.ModulePath already establishes for a machine-local asset shipped beside the executable), and the SHA-256 hex64 pin of the referenced document\u0027s own canonical bytes. Never embedded: the document is loaded, canonicalized, and hash-verified where it is compiled (Server.WorldServer\u0027s construction), the same load-then-pin discipline Puck.Text.FontAtlasSourceResolver.ResolvePinnedContained already applies to a font asset.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "name": {
+        "description": "The row\u0027s stable name \u2014 its mutation address.",
+        "type": "string"
+      },
+      "source": {
+        "description": "The referenced document\u0027s file path.",
+        "type": "string"
+      },
+      "hash": {
+        "description": "The SHA-256 hex64 of the referenced document\u0027s canonical bytes.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "name",
+      "source",
+      "hash"
+    ],
+    "additionalProperties": false
   },
   "default": null
 }

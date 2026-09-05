@@ -85,10 +85,9 @@ public sealed class InstrumentClockSourceLawTests {
         return fixture.Server.Answer(query: new WorldQuery.MusicState(Index: 1)).Text;
     }
     /// <summary>Builds the fixture: <see cref="Fixtures.BuildDocument"/> plus a real <c>puck.music.v1</c>/
-    /// <c>puck.audio.v1</c> pair written to <paramref name="assetDirectory"/> and referenced by absolute path (the
-    /// same discipline <see cref="ActionEffectJudgeLawTests.BuildJudgePressDocument"/> uses), an engageable
-    /// <c>tune-instrument</c> screen at <see cref="InstrumentScreenIndex"/>, and one music segment whose transition
-    /// discriminates the fold.</summary>
+    /// <c>puck.audio.v1</c> pair written to <paramref name="assetDirectory"/> and referenced by absolute path, an
+    /// engageable <c>tune-instrument</c> screen at <see cref="InstrumentScreenIndex"/>, and one music segment whose
+    /// transition discriminates the fold.</summary>
     private static WorldDefinition BuildDocument(string assetDirectory) {
         var music = MusicCanonicalizer.Canonicalize(document: new MusicDocument(
             Schema: MusicDocument.CurrentSchema,

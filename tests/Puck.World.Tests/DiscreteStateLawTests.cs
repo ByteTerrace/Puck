@@ -86,11 +86,20 @@ public sealed class DiscreteStateLawTests {
         Assert.Equal(5, topology.Neighbour(0, topology.Direction("SE")));
         var wrapped = WorldTopologyCompilation.Find(new(Lattices: [Grid(wrap: WorldTopologyWrap.Both)]), "map")!;
         Assert.Equal(12, wrapped.Neighbour(0, wrapped.Direction("N")));
-        var query = new CompiledWorldBoardQuery(wrapped, WorldBoardQueryKind.RayCell, Direction: wrapped.Direction("E"));
-        Assert.Equal(-1, WorldBoardQueries.Evaluate(query, new long[16], 0, 0));
-        var line = new CompiledWorldBoardQuery(wrapped, WorldBoardQueryKind.Line, Length: 4, Value: 1, Exact: true);
-        Assert.Equal(1, WorldBoardQueries.Evaluate(line, [1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0], 0, -1));
-        Assert.Equal(0, WorldBoardQueries.Evaluate(line with { Length = 3 }, [1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0], 0, -1));
+
+        // A ray over a fully wrapped board whose every cell matches the pattern reads the pattern-engine's own
+        // ReadRay, which breaks the moment it returns to its own origin: the walk still terminates (rather than
+        // looping forever) with no blocker found, since the pattern accepts the whole (CellCount - 1)-cell word —
+        // the wrap-termination guarantee a $match-over-a-ray read now leans on where a dedicated ray query once did.
+        var runOfOnes = new WorldPatternRow(Name("runOfOnes"), CellKind.Int, Symbols: [new(Name("one"), 1, 1)], Pattern: new WorldPatternNode.Star(new WorldPatternNode.Symbol("one")));
+        var wrappedDefinition = Fixtures.BuildDocument() with {
+            StateRaw = new(World: [new WorldStateRow(Name("board"), CellKind.Int, Board: new("map", Empty: 1)), new WorldStateRow(Name("blocker"), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)])], Lattices: [Grid(wrap: WorldTopologyWrap.Both)]),
+            PatternsRaw = [runOfOnes],
+            Rules = [new WorldRule(Name("read"), [new ActionEffect.SetState(State: "blocker", FromState: "$match:runOfOnes:board:E:cell", FromKey: "0")])],
+        };
+        using var fixture = Fixtures.FreshServer(definition: wrappedDefinition);
+        fixture.Step();
+        Assert.Equal(-1L, WorldDefinitionRows.FindCell(Find(fixture.Server.Definition, "blocker").Cells, WorldStateRow.SlotKey)!.Value);
     }
 
     [Fact]

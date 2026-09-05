@@ -430,6 +430,7 @@ public sealed partial class WorldServer {
         WorldRuleFactKind.Board => Finite(ReadBoardFact(operand, tick), CellKind.Int),
         WorldRuleFactKind.Pattern => Finite(ReadPatternFact(operand, tick), CellKind.Int),
         WorldRuleFactKind.History => Finite(ReadHistoryFact(operand, tick), operand.ValueKind),
+        WorldRuleFactKind.Clock => Finite(value: ReadClockPhaseError(), kind: CellKind.Int),
         WorldRuleFactKind.Tick => Finite(value: unchecked((long)tick), kind: CellKind.Int),
         WorldRuleFactKind.Population => Finite(value: m_population.ActiveCount(), kind: CellKind.Int),
         WorldRuleFactKind.PhysicsQuiescent => Finite(value: (m_population.RigidBodiesQuiescent() ? 1 : 0), kind: CellKind.Bool),
@@ -803,11 +804,6 @@ public sealed partial class WorldServer {
             WorldQuery.MusicState state when (Body(index: (state.Index - 1)) is not null) => new QueryAnswer(Text: DescribeMusicState()),
             WorldQuery.MusicState state => new QueryAnswer(
             Text: $"[music.state: player {state.Index} is not an active population entry — see world.population]",
-            Refused: true
-        ),
-            WorldQuery.JudgeState state when (Body(index: (state.Index - 1)) is not null) => new QueryAnswer(Text: DescribeJudgeState()),
-            WorldQuery.JudgeState state => new QueryAnswer(
-            Text: $"[judge.state: player {state.Index} is not an active population entry — see world.population]",
             Refused: true
         ),
             WorldQuery.InstrumentState state when (Body(index: (state.Index - 1)) is not null) => new QueryAnswer(Text: DescribeInstrumentState(seatSlot: (state.Index - 1))),

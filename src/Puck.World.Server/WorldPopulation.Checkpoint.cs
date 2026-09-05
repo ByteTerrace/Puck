@@ -89,7 +89,6 @@ public sealed partial class WorldPopulation {
             (m_effectOutputs.Count != 0) ||
             (m_designationOutputs.Count != 0) ||
             (m_generatorInvocations.Count != 0) ||
-            (m_judgeInvocations.Count != 0) ||
             (m_durableStateOutputs.Count != 0)
         ) {
             throw new InvalidOperationException(message: "a population checkpoint requires every pending-output list to be empty — capture only between a completed Step and the next StepInstances.");

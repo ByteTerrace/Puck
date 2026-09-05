@@ -12499,22 +12499,6 @@
                       "additionalProperties": false
                     },
                     {
-                      "description": "Stages a rhythm-judge grading fact for the body whose trigger fired \u2014 the entity index, the judge window set, and the firing tick are collected during the body\u0027s advance (the same staged-output shape Generate uses) and drained by WorldServer.Step immediately after the body step, where they are graded against the world\u0027s musical clock. The grade is never computed here \u2014 this effect only names which judge row applies.",
-                      "properties": {
-                        "$type": {
-                          "const": "judge"
-                        },
-                        "judgeRef": {
-                          "description": "The declared judges row name (a puck.judge.v1 reference) whose hit windows grade the press.",
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "judgeRef"
-                      ],
-                      "additionalProperties": false
-                    },
-                    {
                       "description": "Upserts a whole HUD panel row \u2014 world scope only (refused at body scope: a per-body action has no HUD panel of its own to author). Admits WorldMutation.UpsertHudPanel into the world-rule effect set through the same seam Generate uses: the compiled effect submits the mutation stamped World, which WorldServer.TryAdmitMutation admits structurally, so the panel\u0027s own validation (capacity, unknown binding) is the ordinary whole-document revalidation every UpsertHudPanel submission \u2014 console, addon, or rule \u2014 already passes through.",
                       "properties": {
                         "$type": {
@@ -13875,7 +13859,7 @@
                             "null"
                           ],
                           "items": {
-                            "$ref": "#/properties/interactions/properties/interactions/items/properties/effects/items/anyOf/20/properties/effects/items"
+                            "$ref": "#/properties/interactions/properties/interactions/items/properties/effects/items/anyOf/19/properties/effects/items"
                           },
                           "default": null
                         }

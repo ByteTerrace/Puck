@@ -970,7 +970,7 @@ public static partial class WorldDefinitionValidator {
     }
     // The kit rows (SIM-AFFECTING): name presence/uniqueness, one motion program, producer parameters, actions, and
     // the machine-pad map.
-    private static HashSet<string> ValidateKits(WorldDefinition definition, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, ISet<string> allChannelNames, ISet<string> compositionChannelNames, ISet<string> dynamicsNames, HashSet<string> targetRegisterNames, HashSet<string> judgeRowNames, IReadOnlyDictionary<string, WorldStateRow> stateRows, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, List<string> errors) {
+    private static HashSet<string> ValidateKits(WorldDefinition definition, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, ISet<string> allChannelNames, ISet<string> compositionChannelNames, ISet<string> dynamicsNames, HashSet<string> targetRegisterNames, IReadOnlyDictionary<string, WorldStateRow> stateRows, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, List<string> errors) {
         var kitNames = new HashSet<string>(comparer: StringComparer.Ordinal);
         var programRows = BodyMotionProgramRows(programs: definition.BodyMotionPrograms);
 
@@ -1092,7 +1092,6 @@ public static partial class WorldDefinitionValidator {
 
                     ValidateActionSpec(
                         errors: errors,
-                        judgeRowNames: judgeRowNames,
                         path: $"{path}.actions[{channelName}]",
                         spec: spec,
                         stateRows: stateRows,

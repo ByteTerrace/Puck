@@ -384,6 +384,36 @@
               "additionalProperties": false
             },
             "default": null
+          },
+          "elementAliases": {
+            "description": "Friendlier names for this topology\u0027s point-group elements (\u0022rot90\u0022 for whatever signed-axis permutation a square grid\u0027s quarter turn spells) \u2014 Element resolves an alias alongside the canonical name; ElementName always answers the canonical spelling.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "description": "A friendlier name for one point-group element, resolved by Element alongside its canonical signed-axis spelling (ElementName always answers the canonical form).",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "name": {
+                  "description": "The alias token a rule or console verb may use instead of Element.",
+                  "type": "string"
+                },
+                "element": {
+                  "description": "The canonical element name (a ElementName value) this alias resolves to.",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "element"
+              ],
+              "additionalProperties": false
+            },
+            "default": null
           }
         },
         "required": [

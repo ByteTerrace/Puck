@@ -622,8 +622,7 @@ planar, then up-shifted planar, then down-shifted planar), so the same trick
 silently paired `N` with a diagonal-and-a-layer-off direction instead of `S`.
 `CompiledWorldTopology.Opposite` is now a table built once at compile time by
 negating each direction's own step vector and looking up the match, refusing
-compilation if a direction has none; `$board:line:…:exact` reads it instead
-of the ordinal trick.
+compilation if a direction has none.
 
 **A topology's directions are authored content, not a fixed per-kind table
 (owner decision).** The compass names above were still a closed C# switch
@@ -637,89 +636,105 @@ set it always had (Grid's eight compass points, Hex's six, Box's 26, Ring's
 forward/backward — the migration is behavior-preserving by construction, so
 no shipped world needed re-authoring), and an authored list replaces that
 default WHOLESALE — the topology's only directions and the only names
-`CompiledWorldTopology.Direction` resolves. Validation requires 1..32
-entries, distinct names, distinct nonzero steps, a Z step only on a `Box`,
-and — the same closure `Opposite` already needed — every step's negation
-present as another entry, refused at validation rather than left to throw
-mid-compile. The garden's 300-tick passive hash is unchanged
-(`0xCC2D4742992B05CC`); `tests/Puck.World.Tests/WorldTopologyDirectionLawTests.cs`
-proves both the preserved default and an authored 4-connected/renamed
-vocabulary, each with a refusal control.
+`CompiledWorldTopology.Direction` resolves. Validation requires 1..64
+entries (`MaxDirections` derived from the bit width of the `long` mask
+`$match:`'s direction-mask facet packs one bit per direction into), distinct
+names, distinct nonzero steps, a Z step only on a `Box`, no Y step on a
+`Ring` (which has no second axis), a step magnitude under the wrapped axis'
+own width or depth (a Ring always wraps X) so the modulo wrap can never fold
+a step past the origin or onto itself, and — the same closure `Opposite`
+already needed — every step's negation present as another entry, refused at
+validation rather than left to throw mid-compile or resolve silently wrong.
+The garden's 300-tick passive hash is unchanged (`0xCC2D4742992B05CC`);
+`tests/Puck.World.Tests/WorldTopologyDirectionLawTests.cs` proves the
+preserved default, an authored 4-connected/renamed vocabulary compiling AND a
+rule compiling against it while the retired default name refuses, the
+magnitude/Ring-axis refusals, and a physical field refusing a direction
+vocabulary outright — each with a refusal control. The shipped garden's
+`chessBoard` topology now authors its eight compass directions explicitly
+(behavior-preserving, proven byte-identical on the same 300-tick hash),
+demonstrating the feature rather than only proving it in isolation.
 
-**Owner ruling owed: is a topology's point-group naming one function, or
-several (decision to make, not made here).** `CompiledWorldTopology`'s
-adjacency (directions, above) and its point group (`BuildSymmetry`/
-`BuildBoxSymmetry`, `WorldTopologySymmetry.cs`) are already two independent
-mechanisms — the box's own signed-axis spelling (`"+x-y+z"`) names an
-element by where each source axis lands and with what sign, while
-Grid/Hex name theirs by hand (`mirrorMain`, `mirror3`, …). One naming
-function over the same signed-axis-permutation representation would
-subsume both without changing which elements exist; authored aliases
-(`"rot90"` for whatever axis-permutation a square grid's quarter turn
-actually is) would carry the friendlier names forward. Separately, and
-undecided independent of the naming question: whether the fixed 240-node
-symmetry lattice behind `$symmetry:` is an engine primitive or content a
-world could reshape. Neither call is made here; a session picking this up
-starts from `WorldTopologySymmetry.cs`'s `AxisMap`/`Name` and the
-`$symmetry:` reserved-channel doc in
-[`references/documents.md`](../.claude/skills/puck-world/references/documents.md).
+**A topology's point-group elements share one naming function; the
+`$symmetry:` lattice question stays open (owner decision).**
+`CompiledWorldTopology`'s point group (`BuildSymmetry`,
+`WorldTopologySymmetry.cs`) named a Box element by its signed-axis spelling
+(`"+x-y+z"`, where each source axis lands and with what sign) while Grid and
+Hex named theirs by hand (`mirrorMain`, `mirror3`, …) — two vocabularies for
+the same kind of fact. One representation now covers all three: an `AxisMap`
+signed-permutation, closed by breadth-first composition over generators
+(mirror each in-play axis, swap axes of equal extent) for Grid (2 planar
+axes, letters `xz`) and Box (3, letters `xyz`), and — Hex's point group is
+exactly the signed permutations of its cube coordinates `(q, r, s)` that
+keep `q + r + s == 0`, which holds only for a bare permutation or the same
+permutation negated throughout, 12 elements enumerated directly rather than
+discovered by closure — for Hex (letters `qrs`). Renaming moved the
+canonical name every element answers to (a 4×4 grid's old `"rot90"` is now
+`"-z+x"`; `tests/Puck.World.Tests/WorldBoardSymmetryLawTests.cs` and
+`WorldBoxTopologyLawTests.cs` assert the new spellings), but changed no
+element's identity, closure, or image table — the garden's 300-tick hash is
+unchanged because it names no element anywhere. A topology may additionally
+author `elementAliases` (`WorldTopologyElementAlias`, name → canonical
+name), resolved by `CompiledWorldTopology.Element` alongside the canonical
+spelling — `"rot90"` for whatever axis permutation a square grid's quarter
+turn actually is — while `ElementName` always answers the canonical form;
+validated against the SAME bare-group enumeration (`ElementNames`, run
+before any topology cell exists, so an alias can be checked without
+materializing per-cell images) so an alias naming no real element refuses at
+load. Separately, and still undecided: whether the fixed 240-node symmetry
+lattice behind `$symmetry:` is an engine primitive or content a world could
+reshape — the `$symmetry:` reserved-channel doc in
+[`references/documents.md`](../.claude/skills/puck-world/references/documents.md)
+is where a session picking that up starts.
 
-**Owner ruling owed: `$board:line`/`rayCell`/`rayDistance` collapse into
-`$match` over a ray (decision to make, not made here).**
-`WorldRuleCompiler.Pattern.cs`'s board-source `$match` already walks the
-identical ray `$board:rayCell`/`rayDistance` do (`WorldServer.Patterns.cs`'s
-`ReadRay`) and reads the WHOLE ray's raw values into a pattern instead of
-stopping at the first occupied cell — strictly more general: a pattern of
-"zero or more empty cells then one occupied cell" read with the `prefix`
-facet already reproduces `rayDistance`'s distance-to-first-blocker exactly.
-`$board:line` (n-in-a-row) has no caller in any shipped world today — only
-`tests/Puck.World.Tests/WorldBoxTopologyLawTests.cs` exercises it — so
-retiring it costs a test rewrite, not a garden re-author. `rayCell`/
-`rayDistance` are different: the garden's chess rules call them 44 times
-(`tabletop-shape-rook`/`-bishop`/`-queen`, the check/castle-transit-attack
-probes) to compare a CELL address (the first blocker equals a specific
-square), not a length — `$match`'s `prefix` facet answers a distance, so
-translating these call sites needs each one re-derived as "does the
-authored-length empty-prefix land exactly on the known square", using the
-postfix expression vocabulary's existing `modulo`/`divide`/`subtract` to
-recover row/column from a cell ordinal, checked per direction per slider
-shape. That is real, error-prone rule surgery over exactly the chess
-legality two prior adversarial review rounds already hardened
-(`349a95ce`, `6b7a67bb`, `ff37ce70`), with no automated exhaustive-position
-battery to catch a silent regression — `puck landing`'s canaries and this
-document's own boot-hash check prove the rules still COMPILE and the
-passive boot still matches, never that check/castle/en-passant legality
-stays correct across the positions an earlier adversarial review already
-found and closed. Retire
-`RayCell`/`RayDistance`/`Line` from `WorldBoardQueryKind` and re-author the
-44 call sites on `$match` only as its own focused, adversarially-reviewed
-landing — never folded silently into an unrelated change.
+**`$board:line`/`rayCell`/`rayDistance` are retired in favour of `$match`
+over a ray (owner decision).** `WorldRuleCompiler.Pattern.cs`'s board-source
+`$match` already walked the identical ray `$board:rayCell`/`rayDistance` did
+(`WorldServer.Patterns.cs`'s `ReadRay`); it now also answers two new facets
+on one direction — `cell` (the first cell one step past the longest accepted
+prefix — the first cell the pattern REJECTS — or -1 when the whole ray is
+accepted) and `distance` (the step count to it) — strictly more general than
+the retired queries, since the "blocker" test is any authored pattern rather
+than only "not equal to the board's empty sentinel". `$board:line` (n-in-a-
+row) had no caller in any shipped world; its two law-test callers in
+`WorldBoxTopologyLawTests.cs` are rewritten on `$match` (a diagonal run read
+with `prefix`, and an exact-run-with-no-continuation check read with the
+plain accept facet over a pattern shaped `<exactly N> <never another>`).
+`rayCell`/`rayDistance`'s 44 garden call sites (`tabletop-shape-rook`/
+`-bishop`/`-queen`, the check/castle-transit-attack probes) are rewritten
+1:1 onto a single shared pattern (`chessRayEmpty`, "zero or more empty cells")
+read with `:cell`/`:distance` — the SAME cell/distance values the retired
+queries answered, since the walk and the empty-run test are identical; the
+garden's 300-tick passive hash is unchanged (`0xCC2D4742992B05CC`). The
+chessBoard topology's `directions` are now authored explicitly in the same
+change (see above). `RayCell`/`RayDistance`/`Line` are gone from
+`WorldBoardQueryKind`; `Offset`'s doc no longer names a piece.
 
-**Owner ruling owed: `ActionEffect.Judge`/the judge asset family collapse
-into a `$clock:<music>:phaseError` operand (decision to make, not made
-here).** `ActionEffect.Judge`, `WorldJudgeRow`/`JudgeDocument`
-(`puck.judge.v1`), and the rhythm mechanism they carry
-(`Puck.Audio.Simulation.RhythmJudge`/`MusicSenseEdge`, wired through
-`MusicDirectorFactory.cs`) are a hit-window judge — the mechanism
-underneath is signed phase error between a firing tick and a named
-`MusicClock`, which an operand (`$clock:<music>:phaseError`) exposes
-directly so a hit window becomes an authored `compareState` range like any
-other gate, with no dedicated effect or section. Unlike the ray queries
-above, this family has ZERO callers in every shipped world
-(`src/Puck.World/Assets/worlds/*.json`) — the only asset that exists is
-`src/Puck.World/Assets/worlds/judges/nexus-drum-easy.judge.json`, referenced
-by no world — so deleting `ActionEffect.Judge`/the `WorldJudgeRow` section/
-`JudgeDocument` touches no shipped rule, only the schema, validator,
-`MusicDirectorFactory.cs`, `SessionRequest.cs`'s wire shape, and
-`tests/Puck.World.Tests/ActionEffectJudgeLawTests.cs`/
-`tests/Puck.World.Schema.Tests/MusicJudgeDocumentLawTests.cs` (replaced by
-law tests for the new operand). Left undone here because it is a real
-rhythm-system reshape in its own right — sized similarly to the topology
-direction work above — not because it is risky to the garden; a session
-picking it up can move directly to deleting the effect/section and adding
-the operand without touching chess legality at all. Rename whichever of the
-state `patterns` section or `Puck.Audio.Simulation`'s musical-pattern
-vocabulary keeps the collision once both use the word.
+**`ActionEffect.Judge`/the judge asset family collapse into a
+`$clock:<music>:phaseError` operand (owner decision).** `ActionEffect.Judge`,
+`WorldJudgeRow`/`JudgeDocument` (`puck.judge.v1`), and the rhythm mechanism
+they carried (`Puck.Audio.Simulation.RhythmJudge`, wired through
+`MusicDirectorFactory.cs`) were a hit-window judge — the mechanism
+underneath is signed phase error between a firing tick and the world's
+`MusicClock`, which the new operand exposes directly: `remainder =
+ElapsedTicks mod ticksPerBeat`, signed to `remainder` (late) or `remainder −
+ticksPerBeat` (early, past half a beat, tied toward "late"). A hit window is
+now an authored `compareState` range over it (`ClockPhaseErrorLawTests`
+proves an authored two-tolerance range grades a press exactly as the
+retired windows list did), with no dedicated effect or section; `music.state`
+carries the live value as its `phaseError` field, the read-back the
+retired `judge.state` verb owned. This family had zero callers in every
+shipped world — the only asset that existed,
+`src/Puck.World/Assets/worlds/judges/nexus-drum-easy.judge.json`, was
+referenced by no world (only by the retired `music-judge-press` canary,
+itself referencing a `prototypes/` world that no longer exists) — so
+deleting it touched no shipped rule: the schema, validator,
+`Puck.Physics.Motion.BodyMotionOp`, the wire vocabulary
+(`WorldQuery.JudgeState`, `SessionRequest.cs`/`WorldSubmissionCodec.cs`),
+the checkpoint codec's `JudgeGrades` section, `MusicDirectorFactory.cs`, and
+their law tests. `Puck.Audio.Simulation`'s vocabulary never grew a "pattern"
+word of its own, so the collision the state `patterns` section might one day
+share with it never materialized — nothing to rename today.
 
 **Carry, as attachment (owner decision).** Picking up a rigid body is not a
 second attachment primitive beside the surface-hold system — it is a
@@ -806,9 +821,10 @@ the mover's own approach AND the piece that landed carries the pawn code;
 either test failing (an unrelated other-side vacate landing on the settle by
 coincidence) reads as a perturbation instead of a forged capture. Movement
 legality asks the SAME small vocabulary outward from the move's own squares:
-a slider's reach is "walking `$board:rayCell` from the destination back
-toward the origin finds the origin itself" (no coordinate arithmetic — an
-occupied origin is always the ray's own answer when the path is clear), a
+a slider's reach is "walking `$match:chessRayEmpty:…:cell` from the
+destination back toward the origin finds the origin itself" (no coordinate
+arithmetic — an occupied origin is always the ray's own answer when the path
+is clear), a
 leaper's is the `$board:offset` cell matching the destination over its fixed
 set of jumps, and check is the mover's king square read the same way,
 attacked or not by an enemy pawn/knight/king/slider probed outward from it.
@@ -980,7 +996,8 @@ managed identity for the silo, authored as bicep in the sibling Azure.Resources 
 The decisions live in the sim (tick clock, director, judge, instrument machines); sound stays
 presentation, per the determinism split in [vision.md](vision.md#determinism-precisely). Its shape is
 ruled; the mixer, the tick clock, the segment director (transitions, conditional layers, director
-embellishments), the rhythm judge, and a player-operated diegetic instrument are built. Voice babble is
+embellishments), the `$clock:<music>:phaseError` operand a rhythm hit window authors a `compareState`
+range over, and a player-operated diegetic instrument are built. Voice babble is
 also landed end to end: `Puck.Audio.Simulation.VoiceBabbler` (a syllable-count-in,
 jittered-trigger-ticks-out sim primitive), the identity's authored selectors
 (`WorldIdentityDefinition.Voice`, a `WorldVoiceProfile` of `PatchId`/`CadenceTicks`), the reserved
@@ -998,8 +1015,9 @@ each piece:
   conditional layers, and director embellishments. No sample assets. Prior art to read before authoring
   the document: iMUSE, Breath of the Wild (state-cued sparse layers, event stings), Hi-Fi Rush (the world
   animates to the beat; judged windows are generous).
-- **The rhythm judge is a sim primitive any lane can opt into** — hit windows in ticks against the
-  tick-denominated musical clock, authored per action lane or interaction. No fifth world.
+- **A rhythm hit window is an authored `compareState` range, not a dedicated primitive** — `$clock:<music>:phaseError`
+  exposes the signed tick distance to the nearest beat, and any lane composes a window over it directly.
+  No fifth world.
 - **A diegetic instrument is a real, engageable screen machine.** A screen's `Machine` source names
   engine id `tune-instrument` (`Puck.Forge.Tune.TuneInstrumentEngine`), whose content is a
   `puck.audio.v1` document rather than a cartridge ROM, booted through `Puck.HumbleGamingBrick`; while a
@@ -1012,7 +1030,7 @@ each piece:
 - **Music, instrument, and voice documents are identity-owned libraries**, referenced from a world's audio
   section as `{Name, Source, Hash}` rows — a stable name, a file path resolved off disk, and a SHA-256 pin
   of the referenced document's own canonical bytes (the font-source-pin convention
-  `Puck.Text.FontAtlasSourceResolver` established first). `WorldMusicRow`/`WorldJudgeRow`/`WorldTune`/
+  `Puck.Text.FontAtlasSourceResolver` established first). `WorldMusicRow`/`WorldTune`/
   `WorldPatch` all carry this one shape; `WorldAssetRowLoader` resolves every one of them. A world document
   never embeds them.
 - `Puck.Audio` parses no document (the `Puck.Physics` boundary); document families live in world
