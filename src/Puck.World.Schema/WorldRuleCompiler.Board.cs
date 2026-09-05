@@ -171,7 +171,7 @@ public static partial class WorldRuleCompiler {
             throw Invalid("board query requires $board:<operation>:<row>:<arguments>");
         }
         var row = WorldDefinitionRows.FindStateRow(definition.State, tokens[2]);
-        if (row?.EffectiveDomain is not WorldStateDomain.CellsOf board || WorldTopologyCompilation.Find(definition.StateRaw, board.Topology) is not { } topology) {
+        if (row?.EffectiveDomain is not WorldStateDomain.CellsOf board || WorldTopologyCompilation.Find(definition, board.Topology) is not { } topology) {
             throw Invalid($"'{tokens[2]}' names no discrete board row");
         }
         var kind = tokens[1] switch {

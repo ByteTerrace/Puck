@@ -615,7 +615,7 @@ public sealed class WorldEventFeed {
                     yawRadians: out _
                 );
             } else {
-                center = FixedVector3.FromVector3(value: placement.Position);
+                center = FixedVector3.FromVector3(value: WorldDefinitionRows.ResolvedPosition(definition: definition, placement: placement));
             }
 
             var radius = FixedQ4816.FromDouble(value: region.Radius);

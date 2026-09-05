@@ -55,7 +55,7 @@ public sealed class WorldTabletopCommandModule(IWorldConsoleAuthority authority)
 
             matched++;
 
-            var topology = WorldTopologyCompilation.Find(definition.StateRaw, board.Topology);
+            var topology = WorldTopologyCompilation.Find(definition, board.Topology);
             var occupancy = WorldDefinitionRows.FindStateRow(definition.State, board.Occupancy);
 
             var text = new StringBuilder(value: "tabletop '").Append(value: placement.Id).Append(value: '\'')

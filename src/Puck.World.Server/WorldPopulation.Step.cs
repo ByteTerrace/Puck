@@ -28,13 +28,10 @@ public sealed partial class WorldPopulation {
             to: end
         ) ?? false);
     }
-    // The distribution for one inhabited body is anchored at the placement root.
-    private static FixedVector3 InhabitantSpawn(WorldPlacement placement, WorldDistribution distribution, int ordinal, int count) {
-        var position = new FixedVector3(
-            X: FixedQ4816.FromDouble(value: placement.Position.X),
-            Y: FixedQ4816.FromDouble(value: placement.Position.Y),
-            Z: FixedQ4816.FromDouble(value: placement.Position.Z)
-        );
+    // The distribution for one inhabited body is anchored at the placement's own COMPOSED (world) frame — see
+    // WorldDefinitionRows.ResolvedFrame — never its authored (possibly parent-relative) Position directly.
+    private static FixedVector3 InhabitantSpawn(CompiledPlacementFrame frame, WorldDistribution distribution, int ordinal, int count) {
+        var position = FixedVector3.FromVector3(value: frame.Position);
         var disc = ((WorldDistributionRegion.Disc)distribution.Region);
         var radius = FixedQ4816.FromDouble(value: disc.Radius);
 

@@ -7,7 +7,7 @@ public static partial class WorldStateTransforms {
         }
         var row = rows[index];
         var setRow = rows[setIndex];
-        if (row.EffectiveDomain is not WorldStateDomain.CellsOf board || WorldTopologyCompilation.Find(definition.StateRaw, board.Topology) is not { } topology || topology.CellCount > WorldBoardMask.MaxCells) {
+        if (row.EffectiveDomain is not WorldStateDomain.CellsOf board || WorldTopologyCompilation.Find(definition, board.Topology) is not { } topology || topology.CellCount > WorldBoardMask.MaxCells) {
             return Refuse($"writeSet requires a board row over a topology of at most {WorldBoardMask.MaxCells} cells", out reason);
         }
         if (setRow.Kind != CellKind.Int || WorldDefinitionRows.FindCell(setRow.Cells, WorldCellName.Parse(writeSet.SetKey ?? WorldStateRow.SlotKey)) is not { } setCell) {

@@ -10,7 +10,7 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        if (WorldTopologyCompilation.Find(definition.StateRaw, board.Topology) is not { } topology || topology.Kind != WorldTopologyKind.Grid) {
+        if (WorldTopologyCompilation.Find(definition, board.Topology) is not { } topology || topology.Kind != WorldTopologyKind.Grid) {
             errors.Add(item: $"{path}.board.topology '{board.Topology}' must name a declared Grid topology in state.lattices.");
         } else if (!boardTopologies.Add(item: board.Topology)) {
             errors.Add(item: $"{path}.board.topology '{board.Topology}' is already carried by another placement — a topology is anchored by at most one tabletop.");

@@ -28,7 +28,7 @@ public static partial class WorldRuleCompiler {
                 break;
             case WorldStateTransform.SetRay ray:
                 var row = Row(ray.Row);
-                if (row.EffectiveDomain is not WorldStateDomain.CellsOf board || WorldTopologyCompilation.Find(definition.StateRaw, board.Topology) is not { } topology ||
+                if (row.EffectiveDomain is not WorldStateDomain.CellsOf board || WorldTopologyCompilation.Find(definition, board.Topology) is not { } topology ||
                     !topology.TryCell(ray.From, out _) || topology.Direction(ray.Direction) < 0 ||
                     definition.Patterns.FirstOrDefault(candidate => candidate.Name.Value == ray.Pattern) is not { } pattern || pattern.Kind != CellKind.Int ||
                     row.ClampToEnvelope(ray.Value) != ray.Value || (row.Kind == CellKind.Bool && ray.Value is not (0 or 1))) {
@@ -60,7 +60,7 @@ public static partial class WorldRuleCompiler {
             case WorldStateTransform.WriteSet writeSet:
                 var written = Row(writeSet.Row);
                 var setSource = Row(writeSet.Set);
-                if (written.EffectiveDomain is not WorldStateDomain.CellsOf writtenBoard || WorldTopologyCompilation.Find(definition.StateRaw, writtenBoard.Topology) is not { } writtenTopology ||
+                if (written.EffectiveDomain is not WorldStateDomain.CellsOf writtenBoard || WorldTopologyCompilation.Find(definition, writtenBoard.Topology) is not { } writtenTopology ||
                     writtenTopology.CellCount > WorldBoardMask.MaxCells || setSource.Kind != CellKind.Int ||
                     (writeSet.SetKey is null ? !setSource.IsSlot : (!setSource.IsKeyed || !WorldCellName.TryParse(writeSet.SetKey, out _, out _))) ||
                     written.ClampToEnvelope(writeSet.Value) != writeSet.Value || (written.Kind == CellKind.Bool && writeSet.Value is not (0 or 1))) {

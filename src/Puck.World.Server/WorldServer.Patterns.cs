@@ -274,7 +274,7 @@ public sealed partial class WorldServer {
             var lines = new List<string>();
 
             if (row.EffectiveDomain is WorldStateDomain.CellsOf board) {
-                if (WorldTopologyCompilation.Find(m_definition.StateRaw, board.Topology) is not { } topology) {
+                if (WorldTopologyCompilation.Find(m_definition, board.Topology) is not { } topology) {
                     return $"[world.match: '{rowName}' names no compiled topology]";
                 }
                 if (key is null || !topology.TryCell(key, out var origin)) {
@@ -378,7 +378,7 @@ public sealed partial class WorldServer {
     /// <returns>A deterministic, headless-safe read-back, or a refusal by name.</returns>
     public string DescribeSymmetry(string topologyName, string? cellKey) {
         lock (m_authorityGate) {
-            if (WorldTopologyCompilation.Find(m_definition.StateRaw, topologyName) is not { } topology) {
+            if (WorldTopologyCompilation.Find(m_definition, topologyName) is not { } topology) {
                 return $"[world.topology: '{topologyName}' names no discrete topology]";
             }
 

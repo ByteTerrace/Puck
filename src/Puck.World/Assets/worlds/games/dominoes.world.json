@@ -61,6 +61,17 @@
   "placements": {
     "rows": [
       {
+        "id": "dominoRun",
+        "position": [
+          3.0,
+          -0.45,
+          -6.0
+        ],
+        "prototypeId": "dominoRun",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
         "id": "domino0",
         "inhabit": {
           "count": 1,
@@ -79,10 +90,11 @@
           "look": "domino",
           "source": "Idle"
         },
+        "parent": "dominoRun",
         "position": [
-          3.0,
-          -0.45,
-          -6.0
+          0.0,
+          0.0,
+          0.0
         ],
         "prototypeId": "domino",
         "scale": 1,
@@ -107,10 +119,11 @@
           "look": "domino",
           "source": "Idle"
         },
+        "parent": "dominoRun",
         "position": [
-          3.08,
-          -0.45,
-          -6.0
+          0.08,
+          0.0,
+          0.0
         ],
         "prototypeId": "domino",
         "scale": 1,
@@ -135,10 +148,11 @@
           "look": "domino",
           "source": "Idle"
         },
+        "parent": "dominoRun",
         "position": [
-          3.16,
-          -0.45,
-          -6.0
+          0.16,
+          0.0,
+          0.0
         ],
         "prototypeId": "domino",
         "scale": 1,
@@ -163,10 +177,11 @@
           "look": "domino",
           "source": "Idle"
         },
+        "parent": "dominoRun",
         "position": [
-          3.24,
-          -0.45,
-          -6.0
+          0.24,
+          0.0,
+          0.0
         ],
         "prototypeId": "domino",
         "scale": 1,
@@ -191,10 +206,11 @@
           "look": "domino",
           "source": "Idle"
         },
+        "parent": "dominoRun",
         "position": [
-          3.32,
-          -0.45,
-          -6.0
+          0.32,
+          0.0,
+          0.0
         ],
         "prototypeId": "domino",
         "scale": 1,
@@ -219,10 +235,11 @@
           "look": "domino",
           "source": "Idle"
         },
+        "parent": "dominoRun",
         "position": [
-          3.4,
-          -0.45,
-          -6.0
+          0.4,
+          0.0,
+          0.0
         ],
         "prototypeId": "domino",
         "scale": 1,
@@ -247,10 +264,11 @@
           "look": "domino",
           "source": "Idle"
         },
+        "parent": "dominoRun",
         "position": [
-          3.48,
-          -0.45,
-          -6.0
+          0.48,
+          0.0,
+          0.0
         ],
         "prototypeId": "domino",
         "scale": 1,
@@ -275,10 +293,11 @@
           "look": "domino",
           "source": "Idle"
         },
+        "parent": "dominoRun",
         "position": [
-          3.56,
-          -0.45,
-          -6.0
+          0.56,
+          0.0,
+          0.0
         ],
         "prototypeId": "domino",
         "scale": 1,
@@ -303,10 +322,11 @@
           "look": "domino",
           "source": "Idle"
         },
+        "parent": "dominoRun",
         "position": [
-          3.64,
-          -0.45,
-          -6.0
+          0.64,
+          0.0,
+          0.0
         ],
         "prototypeId": "domino",
         "scale": 1,
@@ -331,10 +351,11 @@
           "look": "domino",
           "source": "Idle"
         },
+        "parent": "dominoRun",
         "position": [
-          3.72,
-          -0.45,
-          -6.0
+          0.72,
+          0.0,
+          0.0
         ],
         "prototypeId": "domino",
         "scale": 1,
@@ -377,6 +398,41 @@
         ]
       },
       "id": "domino"
+    },
+    {
+      "document": {
+        "name": "dominoRun",
+        "palette": [
+          {
+            "color": "#EDE0C8",
+            "shininess": 15,
+            "specular": 0.1
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "marker",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.001,
+              0.001,
+              0.001
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "dominoRun"
     }
   ]
 }

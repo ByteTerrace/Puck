@@ -95,7 +95,7 @@ public sealed partial class WorldServer {
     // placement's authored, static position never couples to the lattice at all).
     private int ResolveMatchingResponse(WorldFieldLattice lattice, WorldPlacement placement, IReadOnlyList<WorldPlacementResponse> responses, ulong tick) {
         if (!lattice.TryBodyCellOf(
-            position: FixedVector3.FromVector3(value: placement.Position),
+            position: FixedVector3.FromVector3(value: WorldDefinitionRows.ResolvedPosition(definition: m_definition, placement: placement)),
             cell: out var cell
         )) {
             return -1;

@@ -13,7 +13,7 @@ public static partial class WorldDefinitionValidator {
                 errors.Add($"state row '{row.Name}': phaseOf must name a distinct phase protocol row.");
             }
 
-            storage += row.Capacity ?? (row.EffectiveDomain is WorldStateDomain.CellsOf board ? WorldTopologyCompilation.Find(definition.StateRaw, board.Topology)?.CellCount ?? row.CellCeiling : row.CellCeiling);
+            storage += row.Capacity ?? (row.EffectiveDomain is WorldStateDomain.CellsOf board ? WorldTopologyCompilation.Find(definition, board.Topology)?.CellCount ?? row.CellCeiling : row.CellCeiling);
             ValidateVisibility(row.Visibility, row.Name.Value, errors);
             ValidateReadersFrom(definition, row.Visibility, row.Name.Value, errors);
             if (row.Draw is { Secret: { } secret } draw && (secret.IsEmpty || row.Kind != CellKind.Int || !WorldGeneratorEngine.TryResolveSource(definition.Generators, draw, out var generator, out _) || generator.Source != WorldGeneratorSource.StreamDraw || generator.Mode != WorldGeneratorMode.WithReplacement)) {

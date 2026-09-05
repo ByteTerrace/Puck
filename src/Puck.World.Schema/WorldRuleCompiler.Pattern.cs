@@ -26,7 +26,7 @@ public static partial class WorldRuleCompiler {
             if (tokens.Length < 4) {
                 throw Invalid("a board source requires a direction or any");
             }
-            var topology = WorldTopologyCompilation.Find(definition.StateRaw, declaredBoard.Topology) ?? throw Invalid($"'{tokens[2]}' names no compiled topology");
+            var topology = WorldTopologyCompilation.Find(definition, declaredBoard.Topology) ?? throw Invalid($"'{tokens[2]}' names no compiled topology");
             var every = tokens[3] == "any";
             var direction = every ? -1 : topology.Direction(tokens[3]);
             if (direction < 0 && !every) {

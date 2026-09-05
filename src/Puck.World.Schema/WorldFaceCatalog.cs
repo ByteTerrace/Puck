@@ -187,6 +187,7 @@ public sealed class WorldFaceCatalog {
                     ShapeId: shape?.Id,
                     ShapeType: shape?.Type,
                     Frame: DeriveFrame(
+                        definition: definition,
                         placement: placement,
                         shape: shape
                     ),
@@ -215,10 +216,11 @@ public sealed class WorldFaceCatalog {
     // own normal as Cross(Right, Up) (Client.WorldScreenStamper), so the drawn screen and the walked slab would sit
     // on planes that disagree by the pitch angle, with nothing to notice it. A yaw-only face is unaffected bit for
     // bit — rotating (0,1,0) about +Y leaves it unchanged exactly (both cross products vanish).
-    private static WorldFaceFrame DeriveFrame(WorldPlacement placement, ShapeDocument? shape) {
-        var origin = FixedVector3.FromVector3(value: placement.Position);
+    private static WorldFaceFrame DeriveFrame(WorldDefinition definition, WorldPlacement placement, ShapeDocument? shape) {
+        var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
+        var origin = FixedVector3.FromVector3(value: frame.Position);
         var scale = FixedQ4816.FromDouble(value: placement.Scale);
-        var yawDegrees = FixedQ4816.FromDouble(value: placement.YawDegrees);
+        var yawDegrees = FixedQ4816.FromDouble(value: frame.YawDegrees);
 
         // Authored cardinal yaw with an unrotated (or half-turned) face has an exact axis-aligned frame. Sending those
         // angles through pi, SinCos, quaternion rotation, and normalization introduces a small perpendicular

@@ -120,6 +120,13 @@ public sealed record WorldDefinition(
     /// <summary>Gets or initializes the placement rows through the placements section (see <see cref="KitRowsRaw"/>).</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldPlacement>? PlacementRowsRaw { get => PlacementsRaw?.Rows; init => PlacementsRaw = ((PlacementsRaw ?? new WorldPlacementsSection()) with { Rows = value }); }
+    /// <summary>Gets every placement's resolved WORLD-space transform, keyed by <see cref="WorldPlacement.Id"/> — a
+    /// row naming no <see cref="WorldPlacement.Parent"/> resolves to its own authored Position/YawDegrees unchanged;
+    /// a row naming one composes over that parent's own resolved frame (see <see cref="WorldPlacementFrameCompilation"/>).
+    /// Compiled once per distinct <see cref="PlacementsRaw"/> instance and cached; every consumer of a placement's
+    /// WORLD transform reads THIS, never the row's own Position/YawDegrees directly.</summary>
+    [JsonIgnore]
+    public IReadOnlyDictionary<string, CompiledPlacementFrame> PlacementFrames => WorldPlacementFrameCompilation.Resolve(section: PlacementsRaw);
     /// <summary>Gets or initializes the placement policy through the placements section (see <see cref="KitRowsRaw"/>).</summary>
     [JsonIgnore]
     public WorldPlacementPolicyDefaults? AuthoringRaw { get => PlacementsRaw?.Policy; init => PlacementsRaw = ((PlacementsRaw ?? new WorldPlacementsSection()) with { Policy = value }); }

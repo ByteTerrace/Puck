@@ -83,10 +83,11 @@
           "look": "billiardBall",
           "source": "Idle"
         },
+        "parent": "billiardsTray",
         "position": [
-          10.0,
-          -0.35000000000000003,
-          -10.9
+          0.0,
+          -0.35,
+          -0.9
         ],
         "prototypeId": "billiardBall",
         "scale": 1,
@@ -111,10 +112,11 @@
           "look": "billiardBall",
           "source": "Idle"
         },
+        "parent": "billiardsTray",
         "position": [
-          10.0,
-          -0.35000000000000003,
-          -10.0
+          0.0,
+          -0.35,
+          0.0
         ],
         "prototypeId": "billiardBall",
         "scale": 1,
@@ -139,10 +141,11 @@
           "look": "billiardBall",
           "source": "Idle"
         },
+        "parent": "billiardsTray",
         "position": [
-          9.845,
-          -0.35000000000000003,
-          -9.7303
+          -0.155,
+          -0.35,
+          0.2697
         ],
         "prototypeId": "billiardBall",
         "scale": 1,
@@ -167,10 +170,11 @@
           "look": "billiardBall",
           "source": "Idle"
         },
+        "parent": "billiardsTray",
         "position": [
-          10.155,
-          -0.35000000000000003,
-          -9.7303
+          0.155,
+          -0.35,
+          0.2697
         ],
         "prototypeId": "billiardBall",
         "scale": 1,
@@ -195,10 +199,11 @@
           "look": "billiardBall",
           "source": "Idle"
         },
+        "parent": "billiardsTray",
         "position": [
-          9.69,
-          -0.35000000000000003,
-          -9.4606
+          -0.31,
+          -0.35,
+          0.5394
         ],
         "prototypeId": "billiardBall",
         "scale": 1,
@@ -223,10 +228,11 @@
           "look": "billiardBall",
           "source": "Idle"
         },
+        "parent": "billiardsTray",
         "position": [
-          10.0,
-          -0.35000000000000003,
-          -9.4606
+          0.0,
+          -0.35,
+          0.5394
         ],
         "prototypeId": "billiardBall",
         "scale": 1,
@@ -251,10 +257,11 @@
           "look": "billiardBall",
           "source": "Idle"
         },
+        "parent": "billiardsTray",
         "position": [
-          10.31,
-          -0.35000000000000003,
-          -9.4606
+          0.31,
+          -0.35,
+          0.5394
         ],
         "prototypeId": "billiardBall",
         "scale": 1,
@@ -279,10 +286,11 @@
           "look": "billiardBall",
           "source": "Idle"
         },
+        "parent": "billiardsTray",
         "position": [
-          9.535,
-          -0.35000000000000003,
-          -9.1909
+          -0.465,
+          -0.35,
+          0.8091
         ],
         "prototypeId": "billiardBall",
         "scale": 1,
@@ -307,10 +315,11 @@
           "look": "billiardBall",
           "source": "Idle"
         },
+        "parent": "billiardsTray",
         "position": [
-          9.845,
-          -0.35000000000000003,
-          -9.1909
+          -0.155,
+          -0.35,
+          0.8091
         ],
         "prototypeId": "billiardBall",
         "scale": 1,
@@ -335,10 +344,11 @@
           "look": "billiardBall",
           "source": "Idle"
         },
+        "parent": "billiardsTray",
         "position": [
-          10.155,
-          -0.35000000000000003,
-          -9.1909
+          0.155,
+          -0.35,
+          0.8091
         ],
         "prototypeId": "billiardBall",
         "scale": 1,
@@ -363,10 +373,11 @@
           "look": "billiardBall",
           "source": "Idle"
         },
+        "parent": "billiardsTray",
         "position": [
-          10.465,
-          -0.35000000000000003,
-          -9.1909
+          0.465,
+          -0.35,
+          0.8091
         ],
         "prototypeId": "billiardBall",
         "scale": 1,

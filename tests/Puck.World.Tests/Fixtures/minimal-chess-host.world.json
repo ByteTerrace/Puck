@@ -1,0 +1,296 @@
+{
+  "basis": "../../../src/Puck.World/Assets/worlds/standard.basis.json",
+  "bodies": {
+    "capacity": 40,
+    "localSeats": 1
+  },
+  "bodyMotionPrograms": [
+    {
+      "kind": "Motion",
+      "name": "walk",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ResolveHold",
+        "ComputePlanarTargetVelocity",
+        "ShapeVelocity",
+        "SnapYawToPlanarIntent",
+        "RunActionTriggers",
+        "ApplyHold",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ],
+      "version": "puck.body-motion.v1"
+    }
+  ],
+  "channels": [
+    {
+      "frame": "Heading",
+      "name": "forward",
+      "role": "MoveAdvance",
+      "shape": "Bipolar"
+    },
+    {
+      "frame": "Heading",
+      "name": "strafe",
+      "role": "MoveStrafe",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "turn",
+      "role": "Turn",
+      "shape": "Bipolar"
+    }
+  ],
+  "collision": {
+    "contactSkin": 0.02,
+    "gradientProbe": 0.0,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60.0,
+    "requirements": [
+      "SmoothUnionContact"
+    ]
+  },
+  "imports": [
+    "../../../src/Puck.World/Assets/worlds/games/chess.world.json"
+  ],
+  "looks": {
+    "rows": [
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "piece_white_pawn",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "piece_white_pawn"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "piece_white_knight",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "piece_white_knight"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "piece_white_bishop",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "piece_white_bishop"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "piece_white_rook",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "piece_white_rook"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "piece_white_queen",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "piece_white_queen"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "piece_white_king",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "piece_white_king"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "piece_black_pawn",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "piece_black_pawn"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "piece_black_knight",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "piece_black_knight"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "piece_black_bishop",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "piece_black_bishop"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "piece_black_rook",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "piece_black_rook"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "piece_black_queen",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "piece_black_queen"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "piece_black_king",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "piece_black_king"
+        }
+      }
+    ]
+  },
+  "placements": {
+    "rows": [
+      {
+        "id": "tabletop",
+        "position": [
+          20,
+          -0.5,
+          -12
+        ]
+      }
+    ]
+  },
+  "schema": "puck.world.def.v1",
+  "simulation": {
+    "rateHz": 30
+  },
+  "views": {
+    "layouts": [
+      {
+        "name": "action",
+        "seatCount": 0,
+        "slots": [
+          {
+            "camera": null,
+            "height": 1,
+            "width": 1,
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "transitionRenderScale": 0.5,
+        "transitionSeconds": 0.4
+      }
+    ],
+    "seatControl": {
+      "maxPitch": 1.2,
+      "minPitch": -0.35,
+      "yawReference": "World"
+    },
+    "seatRig": {
+      "name": "seatChase",
+      "operations": [
+        {
+          "$type": "orbit",
+          "distance": 5.4626001,
+          "pitch": 0.4145069,
+          "yaw": 0.0
+        },
+        {
+          "$type": "lookAt",
+          "subject": {
+            "$type": "reference"
+          },
+          "targetOffset": [
+            0,
+            1,
+            0
+          ],
+          "worldAxes": false
+        },
+        {
+          "$type": "fov",
+          "fieldOfViewRadians": 0.9599311
+        }
+      ],
+      "version": "puck.camera.v1"
+    }
+  }
+}

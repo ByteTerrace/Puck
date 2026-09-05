@@ -11,7 +11,7 @@ public static partial class WorldStateTransforms {
             return false;
         }
         var row = rows[index];
-        if (row.Knowledge is not { } knowledge || row.EffectiveDomain is not WorldStateDomain.CellsOf board || WorldTopologyCompilation.Find(definition.StateRaw, board.Topology) is not { } topology) {
+        if (row.Knowledge is not { } knowledge || row.EffectiveDomain is not WorldStateDomain.CellsOf board || WorldTopologyCompilation.Find(definition, board.Topology) is not { } topology) {
             return Refuse("observe requires a knowledge board", out reason);
         }
         if (!TryFind(rows, knowledge.Source, out var sourceIndex, out reason) || !TryFind(rows, knowledge.Mask, out var maskIndex, out reason)) {

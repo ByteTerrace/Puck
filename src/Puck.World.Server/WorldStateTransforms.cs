@@ -212,7 +212,7 @@ public static partial class WorldStateTransforms {
             return false;
         }
         var row = rows[index];
-        if (row.EffectiveDomain is not WorldStateDomain.CellsOf board || WorldTopologyCompilation.Find(definition.StateRaw, board.Topology) is not { } topology ||
+        if (row.EffectiveDomain is not WorldStateDomain.CellsOf board || WorldTopologyCompilation.Find(definition, board.Topology) is not { } topology ||
             !topology.TryCell(ray.From, out var origin) || topology.Direction(ray.Direction) < 0 ||
             !patterns.TryGet(ray.Pattern, out var pattern) || pattern.Source.Kind != CellKind.Int) {
             return Refuse("setRay requires a board origin, a valid direction, and a compiled integer-kind pattern", out reason);

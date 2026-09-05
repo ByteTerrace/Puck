@@ -35,8 +35,9 @@ public static class WorldAnchorGeometry {
             );
 
             return ((creation is null)
-                ? placement.Position
+                ? WorldDefinitionRows.ResolvedPosition(definition: definition, placement: placement)
                 : StaticShapePosition(
+                    definition: definition,
                     creation: creation,
                     placement: placement,
                     shapeId: shapeId
@@ -47,30 +48,34 @@ public static class WorldAnchorGeometry {
         return Vector3.Zero;
     }
     /// <summary>The stamped world position of one shape within a placement (root ∘ scale · local under the yaw), or the
-    /// placement root when no shape id resolves.</summary>
+    /// placement root when no shape id resolves. Both root and yaw are the placement's COMPOSED (world) frame — see
+    /// <see cref="WorldDefinitionRows.ResolvedFrame"/> — never its authored Position/YawDegrees directly.</summary>
+    /// <param name="definition">The live definition — resolves the placement's composed frame.</param>
     /// <param name="placement">The placement row.</param>
     /// <param name="creation">The placement's creation.</param>
     /// <param name="shapeId">The shape id, or <see langword="null"/>.</param>
     /// <returns>The stamped world position.</returns>
-    public static Vector3 StaticShapePosition(WorldPlacement placement, WorldPrototype creation, int? shapeId) {
+    public static Vector3 StaticShapePosition(WorldDefinition definition, WorldPlacement placement, WorldPrototype creation, int? shapeId) {
+        var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
+
         if (shapeId is not { } targetShapeId) {
-            return placement.Position;
+            return frame.Position;
         }
 
         foreach (var shape in (creation.EngineDocument.Shapes ?? [])) {
             if (shape.Id == targetShapeId) {
                 var rotation = Quaternion.CreateFromAxisAngle(
                     axis: Vector3.UnitY,
-                    angle: (placement.YawDegrees * (MathF.PI / 180f))
+                    angle: (frame.YawDegrees * (MathF.PI / 180f))
                 );
 
-                return (placement.Position + Vector3.Transform(
+                return (frame.Position + Vector3.Transform(
                     value: (shape.Position * placement.Scale),
                     rotation: rotation
                 ));
             }
         }
 
-        return placement.Position;
+        return frame.Position;
     }
 }

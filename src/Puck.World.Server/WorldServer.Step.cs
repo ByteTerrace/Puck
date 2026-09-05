@@ -219,6 +219,7 @@ public sealed partial class WorldServer {
                     var numeric = WorldStateReader.TryParseCandidateIndex(index: out var index, key: key);
                     m_boundEach = numeric ? index : -1;
                     m_boundEachKey = key.Value;
+                    m_boundEachPosition = position;
                     applied |= EvaluateOnce(
                         latch: latch,
                         binding: new LatchKey(
@@ -234,6 +235,7 @@ public sealed partial class WorldServer {
 
                 m_boundEach = -1;
                 m_boundEachKey = null;
+                m_boundEachPosition = -1;
                 latch.EndSweep(bindings: bindings);
 
                 continue;
@@ -402,6 +404,10 @@ public sealed partial class WorldServer {
     private const int PositionalLatchBase = 0x4000_0000;
     private readonly List<WorldCellName> m_eachKeyScratch = [];
     private string? m_boundEachKey;
+    // The forEach loop's own 0-based position — what 'placement:$each' resolves against
+    // (CompiledBodyRef.PlacementOrdinals is position-indexed, in the SAME order EachKeys walks), -1 outside a forEach
+    // evaluation.
+    private int m_boundEachPosition = -1;
 
     // Every cell key of the iterated row in cell order; an integer key also binds the body of that index.
     private void EachKeys(string row, List<WorldCellName> into) {

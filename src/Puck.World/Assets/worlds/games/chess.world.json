@@ -121,10 +121,11 @@
           "look": "piece_white_rook",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -8.7,
-          1.3,
-          11.3
+          -0.7,
+          1.8,
+          -0.7
         ],
         "prototypeId": "piece_white_rook",
         "scale": 1,
@@ -149,10 +150,11 @@
           "look": "piece_white_knight",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -8.5,
-          1.3,
-          11.3
+          -0.5,
+          1.8,
+          -0.7
         ],
         "prototypeId": "piece_white_knight",
         "scale": 1,
@@ -177,10 +179,11 @@
           "look": "piece_white_bishop",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -8.3,
-          1.3,
-          11.3
+          -0.3,
+          1.8,
+          -0.7
         ],
         "prototypeId": "piece_white_bishop",
         "scale": 1,
@@ -205,10 +208,11 @@
           "look": "piece_white_queen",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -8.1,
-          1.3,
-          11.3
+          -0.1,
+          1.8,
+          -0.7
         ],
         "prototypeId": "piece_white_queen",
         "scale": 1,
@@ -233,10 +237,11 @@
           "look": "piece_white_king",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -7.9,
-          1.3,
-          11.3
+          0.1,
+          1.8,
+          -0.7
         ],
         "prototypeId": "piece_white_king",
         "scale": 1,
@@ -261,10 +266,11 @@
           "look": "piece_white_bishop",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -7.7,
-          1.3,
-          11.3
+          0.3,
+          1.8,
+          -0.7
         ],
         "prototypeId": "piece_white_bishop",
         "scale": 1,
@@ -289,10 +295,11 @@
           "look": "piece_white_knight",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -7.5,
-          1.3,
-          11.3
+          0.5,
+          1.8,
+          -0.7
         ],
         "prototypeId": "piece_white_knight",
         "scale": 1,
@@ -317,10 +324,11 @@
           "look": "piece_white_rook",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -7.3,
-          1.3,
-          11.3
+          0.7,
+          1.8,
+          -0.7
         ],
         "prototypeId": "piece_white_rook",
         "scale": 1,
@@ -345,10 +353,11 @@
           "look": "piece_white_pawn",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -8.7,
-          1.3,
-          11.5
+          -0.7,
+          1.8,
+          -0.5
         ],
         "prototypeId": "piece_white_pawn",
         "scale": 1,
@@ -373,10 +382,11 @@
           "look": "piece_white_pawn",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -8.5,
-          1.3,
-          11.5
+          -0.5,
+          1.8,
+          -0.5
         ],
         "prototypeId": "piece_white_pawn",
         "scale": 1,
@@ -401,10 +411,11 @@
           "look": "piece_white_pawn",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -8.3,
-          1.3,
-          11.5
+          -0.3,
+          1.8,
+          -0.5
         ],
         "prototypeId": "piece_white_pawn",
         "scale": 1,
@@ -429,10 +440,11 @@
           "look": "piece_white_pawn",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -8.1,
-          1.3,
-          11.5
+          -0.1,
+          1.8,
+          -0.5
         ],
         "prototypeId": "piece_white_pawn",
         "scale": 1,
@@ -457,10 +469,11 @@
           "look": "piece_white_pawn",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -7.9,
-          1.3,
-          11.5
+          0.1,
+          1.8,
+          -0.5
         ],
         "prototypeId": "piece_white_pawn",
         "scale": 1,
@@ -485,10 +498,11 @@
           "look": "piece_white_pawn",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -7.7,
-          1.3,
-          11.5
+          0.3,
+          1.8,
+          -0.5
         ],
         "prototypeId": "piece_white_pawn",
         "scale": 1,
@@ -513,10 +527,11 @@
           "look": "piece_white_pawn",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -7.5,
-          1.3,
-          11.5
+          0.5,
+          1.8,
+          -0.5
         ],
         "prototypeId": "piece_white_pawn",
         "scale": 1,
@@ -541,10 +556,11 @@
           "look": "piece_white_pawn",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -7.3,
-          1.3,
-          11.5
+          0.7,
+          1.8,
+          -0.5
         ],
         "prototypeId": "piece_white_pawn",
         "scale": 1,
@@ -569,10 +585,11 @@
           "look": "piece_black_pawn",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -8.7,
-          1.3,
-          12.5
+          -0.7,
+          1.8,
+          0.5
         ],
         "prototypeId": "piece_black_pawn",
         "scale": 1,
@@ -597,10 +614,11 @@
           "look": "piece_black_pawn",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -8.5,
-          1.3,
-          12.5
+          -0.5,
+          1.8,
+          0.5
         ],
         "prototypeId": "piece_black_pawn",
         "scale": 1,
@@ -625,10 +643,11 @@
           "look": "piece_black_pawn",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -8.3,
-          1.3,
-          12.5
+          -0.3,
+          1.8,
+          0.5
         ],
         "prototypeId": "piece_black_pawn",
         "scale": 1,
@@ -653,10 +672,11 @@
           "look": "piece_black_pawn",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -8.1,
-          1.3,
-          12.5
+          -0.1,
+          1.8,
+          0.5
         ],
         "prototypeId": "piece_black_pawn",
         "scale": 1,
@@ -681,10 +701,11 @@
           "look": "piece_black_pawn",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -7.9,
-          1.3,
-          12.5
+          0.1,
+          1.8,
+          0.5
         ],
         "prototypeId": "piece_black_pawn",
         "scale": 1,
@@ -709,10 +730,11 @@
           "look": "piece_black_pawn",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -7.7,
-          1.3,
-          12.5
+          0.3,
+          1.8,
+          0.5
         ],
         "prototypeId": "piece_black_pawn",
         "scale": 1,
@@ -737,10 +759,11 @@
           "look": "piece_black_pawn",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -7.5,
-          1.3,
-          12.5
+          0.5,
+          1.8,
+          0.5
         ],
         "prototypeId": "piece_black_pawn",
         "scale": 1,
@@ -765,10 +788,11 @@
           "look": "piece_black_pawn",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -7.3,
-          1.3,
-          12.5
+          0.7,
+          1.8,
+          0.5
         ],
         "prototypeId": "piece_black_pawn",
         "scale": 1,
@@ -793,10 +817,11 @@
           "look": "piece_black_rook",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -8.7,
-          1.3,
-          12.7
+          -0.7,
+          1.8,
+          0.7
         ],
         "prototypeId": "piece_black_rook",
         "scale": 1,
@@ -821,10 +846,11 @@
           "look": "piece_black_knight",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -8.5,
-          1.3,
-          12.7
+          -0.5,
+          1.8,
+          0.7
         ],
         "prototypeId": "piece_black_knight",
         "scale": 1,
@@ -849,10 +875,11 @@
           "look": "piece_black_bishop",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -8.3,
-          1.3,
-          12.7
+          -0.3,
+          1.8,
+          0.7
         ],
         "prototypeId": "piece_black_bishop",
         "scale": 1,
@@ -877,10 +904,11 @@
           "look": "piece_black_queen",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -8.1,
-          1.3,
-          12.7
+          -0.1,
+          1.8,
+          0.7
         ],
         "prototypeId": "piece_black_queen",
         "scale": 1,
@@ -905,10 +933,11 @@
           "look": "piece_black_king",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -7.9,
-          1.3,
-          12.7
+          0.1,
+          1.8,
+          0.7
         ],
         "prototypeId": "piece_black_king",
         "scale": 1,
@@ -933,10 +962,11 @@
           "look": "piece_black_bishop",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -7.7,
-          1.3,
-          12.7
+          0.3,
+          1.8,
+          0.7
         ],
         "prototypeId": "piece_black_bishop",
         "scale": 1,
@@ -961,10 +991,11 @@
           "look": "piece_black_knight",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -7.5,
-          1.3,
-          12.7
+          0.5,
+          1.8,
+          0.7
         ],
         "prototypeId": "piece_black_knight",
         "scale": 1,
@@ -989,10 +1020,11 @@
           "look": "piece_black_rook",
           "source": "Idle"
         },
+        "parent": "tabletop",
         "position": [
-          -7.3,
-          1.3,
-          12.7
+          0.7,
+          1.8,
+          0.7
         ],
         "prototypeId": "piece_black_rook",
         "scale": 1,
@@ -1000,10 +1032,11 @@
       },
       {
         "id": "boardSquare-0",
+        "parent": "tabletop",
         "position": [
-          -8.7,
-          0.805,
-          11.3
+          -0.7,
+          1.305,
+          -0.7
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1011,10 +1044,11 @@
       },
       {
         "id": "boardSquare-1",
+        "parent": "tabletop",
         "position": [
-          -8.5,
-          0.805,
-          11.3
+          -0.5,
+          1.305,
+          -0.7
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1022,10 +1056,11 @@
       },
       {
         "id": "boardSquare-2",
+        "parent": "tabletop",
         "position": [
-          -8.3,
-          0.805,
-          11.3
+          -0.3,
+          1.305,
+          -0.7
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1033,10 +1068,11 @@
       },
       {
         "id": "boardSquare-3",
+        "parent": "tabletop",
         "position": [
-          -8.1,
-          0.805,
-          11.3
+          -0.1,
+          1.305,
+          -0.7
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1044,10 +1080,11 @@
       },
       {
         "id": "boardSquare-4",
+        "parent": "tabletop",
         "position": [
-          -7.9,
-          0.805,
-          11.3
+          0.1,
+          1.305,
+          -0.7
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1055,10 +1092,11 @@
       },
       {
         "id": "boardSquare-5",
+        "parent": "tabletop",
         "position": [
-          -7.7,
-          0.805,
-          11.3
+          0.3,
+          1.305,
+          -0.7
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1066,10 +1104,11 @@
       },
       {
         "id": "boardSquare-6",
+        "parent": "tabletop",
         "position": [
-          -7.5,
-          0.805,
-          11.3
+          0.5,
+          1.305,
+          -0.7
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1077,10 +1116,11 @@
       },
       {
         "id": "boardSquare-7",
+        "parent": "tabletop",
         "position": [
-          -7.3,
-          0.805,
-          11.3
+          0.7,
+          1.305,
+          -0.7
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1088,10 +1128,11 @@
       },
       {
         "id": "boardSquare-8",
+        "parent": "tabletop",
         "position": [
-          -8.7,
-          0.805,
-          11.5
+          -0.7,
+          1.305,
+          -0.5
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1099,10 +1140,11 @@
       },
       {
         "id": "boardSquare-9",
+        "parent": "tabletop",
         "position": [
-          -8.5,
-          0.805,
-          11.5
+          -0.5,
+          1.305,
+          -0.5
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1110,10 +1152,11 @@
       },
       {
         "id": "boardSquare-10",
+        "parent": "tabletop",
         "position": [
-          -8.3,
-          0.805,
-          11.5
+          -0.3,
+          1.305,
+          -0.5
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1121,10 +1164,11 @@
       },
       {
         "id": "boardSquare-11",
+        "parent": "tabletop",
         "position": [
-          -8.1,
-          0.805,
-          11.5
+          -0.1,
+          1.305,
+          -0.5
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1132,10 +1176,11 @@
       },
       {
         "id": "boardSquare-12",
+        "parent": "tabletop",
         "position": [
-          -7.9,
-          0.805,
-          11.5
+          0.1,
+          1.305,
+          -0.5
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1143,10 +1188,11 @@
       },
       {
         "id": "boardSquare-13",
+        "parent": "tabletop",
         "position": [
-          -7.7,
-          0.805,
-          11.5
+          0.3,
+          1.305,
+          -0.5
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1154,10 +1200,11 @@
       },
       {
         "id": "boardSquare-14",
+        "parent": "tabletop",
         "position": [
-          -7.5,
-          0.805,
-          11.5
+          0.5,
+          1.305,
+          -0.5
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1165,10 +1212,11 @@
       },
       {
         "id": "boardSquare-15",
+        "parent": "tabletop",
         "position": [
-          -7.3,
-          0.805,
-          11.5
+          0.7,
+          1.305,
+          -0.5
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1176,10 +1224,11 @@
       },
       {
         "id": "boardSquare-16",
+        "parent": "tabletop",
         "position": [
-          -8.7,
-          0.805,
-          11.7
+          -0.7,
+          1.305,
+          -0.3
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1187,10 +1236,11 @@
       },
       {
         "id": "boardSquare-17",
+        "parent": "tabletop",
         "position": [
-          -8.5,
-          0.805,
-          11.7
+          -0.5,
+          1.305,
+          -0.3
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1198,10 +1248,11 @@
       },
       {
         "id": "boardSquare-18",
+        "parent": "tabletop",
         "position": [
-          -8.3,
-          0.805,
-          11.7
+          -0.3,
+          1.305,
+          -0.3
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1209,10 +1260,11 @@
       },
       {
         "id": "boardSquare-19",
+        "parent": "tabletop",
         "position": [
-          -8.1,
-          0.805,
-          11.7
+          -0.1,
+          1.305,
+          -0.3
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1220,10 +1272,11 @@
       },
       {
         "id": "boardSquare-20",
+        "parent": "tabletop",
         "position": [
-          -7.9,
-          0.805,
-          11.7
+          0.1,
+          1.305,
+          -0.3
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1231,10 +1284,11 @@
       },
       {
         "id": "boardSquare-21",
+        "parent": "tabletop",
         "position": [
-          -7.7,
-          0.805,
-          11.7
+          0.3,
+          1.305,
+          -0.3
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1242,10 +1296,11 @@
       },
       {
         "id": "boardSquare-22",
+        "parent": "tabletop",
         "position": [
-          -7.5,
-          0.805,
-          11.7
+          0.5,
+          1.305,
+          -0.3
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1253,10 +1308,11 @@
       },
       {
         "id": "boardSquare-23",
+        "parent": "tabletop",
         "position": [
-          -7.3,
-          0.805,
-          11.7
+          0.7,
+          1.305,
+          -0.3
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1264,10 +1320,11 @@
       },
       {
         "id": "boardSquare-24",
+        "parent": "tabletop",
         "position": [
-          -8.7,
-          0.805,
-          11.9
+          -0.7,
+          1.305,
+          -0.1
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1275,10 +1332,11 @@
       },
       {
         "id": "boardSquare-25",
+        "parent": "tabletop",
         "position": [
-          -8.5,
-          0.805,
-          11.9
+          -0.5,
+          1.305,
+          -0.1
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1286,10 +1344,11 @@
       },
       {
         "id": "boardSquare-26",
+        "parent": "tabletop",
         "position": [
-          -8.3,
-          0.805,
-          11.9
+          -0.3,
+          1.305,
+          -0.1
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1297,10 +1356,11 @@
       },
       {
         "id": "boardSquare-27",
+        "parent": "tabletop",
         "position": [
-          -8.1,
-          0.805,
-          11.9
+          -0.1,
+          1.305,
+          -0.1
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1308,10 +1368,11 @@
       },
       {
         "id": "boardSquare-28",
+        "parent": "tabletop",
         "position": [
-          -7.9,
-          0.805,
-          11.9
+          0.1,
+          1.305,
+          -0.1
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1319,10 +1380,11 @@
       },
       {
         "id": "boardSquare-29",
+        "parent": "tabletop",
         "position": [
-          -7.7,
-          0.805,
-          11.9
+          0.3,
+          1.305,
+          -0.1
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1330,10 +1392,11 @@
       },
       {
         "id": "boardSquare-30",
+        "parent": "tabletop",
         "position": [
-          -7.5,
-          0.805,
-          11.9
+          0.5,
+          1.305,
+          -0.1
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1341,10 +1404,11 @@
       },
       {
         "id": "boardSquare-31",
+        "parent": "tabletop",
         "position": [
-          -7.3,
-          0.805,
-          11.9
+          0.7,
+          1.305,
+          -0.1
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1352,10 +1416,11 @@
       },
       {
         "id": "boardSquare-32",
+        "parent": "tabletop",
         "position": [
-          -8.7,
-          0.805,
-          12.1
+          -0.7,
+          1.305,
+          0.1
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1363,10 +1428,11 @@
       },
       {
         "id": "boardSquare-33",
+        "parent": "tabletop",
         "position": [
-          -8.5,
-          0.805,
-          12.1
+          -0.5,
+          1.305,
+          0.1
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1374,10 +1440,11 @@
       },
       {
         "id": "boardSquare-34",
+        "parent": "tabletop",
         "position": [
-          -8.3,
-          0.805,
-          12.1
+          -0.3,
+          1.305,
+          0.1
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1385,10 +1452,11 @@
       },
       {
         "id": "boardSquare-35",
+        "parent": "tabletop",
         "position": [
-          -8.1,
-          0.805,
-          12.1
+          -0.1,
+          1.305,
+          0.1
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1396,10 +1464,11 @@
       },
       {
         "id": "boardSquare-36",
+        "parent": "tabletop",
         "position": [
-          -7.9,
-          0.805,
-          12.1
+          0.1,
+          1.305,
+          0.1
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1407,10 +1476,11 @@
       },
       {
         "id": "boardSquare-37",
+        "parent": "tabletop",
         "position": [
-          -7.7,
-          0.805,
-          12.1
+          0.3,
+          1.305,
+          0.1
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1418,10 +1488,11 @@
       },
       {
         "id": "boardSquare-38",
+        "parent": "tabletop",
         "position": [
-          -7.5,
-          0.805,
-          12.1
+          0.5,
+          1.305,
+          0.1
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1429,10 +1500,11 @@
       },
       {
         "id": "boardSquare-39",
+        "parent": "tabletop",
         "position": [
-          -7.3,
-          0.805,
-          12.1
+          0.7,
+          1.305,
+          0.1
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1440,10 +1512,11 @@
       },
       {
         "id": "boardSquare-40",
+        "parent": "tabletop",
         "position": [
-          -8.7,
-          0.805,
-          12.3
+          -0.7,
+          1.305,
+          0.3
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1451,10 +1524,11 @@
       },
       {
         "id": "boardSquare-41",
+        "parent": "tabletop",
         "position": [
-          -8.5,
-          0.805,
-          12.3
+          -0.5,
+          1.305,
+          0.3
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1462,10 +1536,11 @@
       },
       {
         "id": "boardSquare-42",
+        "parent": "tabletop",
         "position": [
-          -8.3,
-          0.805,
-          12.3
+          -0.3,
+          1.305,
+          0.3
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1473,10 +1548,11 @@
       },
       {
         "id": "boardSquare-43",
+        "parent": "tabletop",
         "position": [
-          -8.1,
-          0.805,
-          12.3
+          -0.1,
+          1.305,
+          0.3
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1484,10 +1560,11 @@
       },
       {
         "id": "boardSquare-44",
+        "parent": "tabletop",
         "position": [
-          -7.9,
-          0.805,
-          12.3
+          0.1,
+          1.305,
+          0.3
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1495,10 +1572,11 @@
       },
       {
         "id": "boardSquare-45",
+        "parent": "tabletop",
         "position": [
-          -7.7,
-          0.805,
-          12.3
+          0.3,
+          1.305,
+          0.3
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1506,10 +1584,11 @@
       },
       {
         "id": "boardSquare-46",
+        "parent": "tabletop",
         "position": [
-          -7.5,
-          0.805,
-          12.3
+          0.5,
+          1.305,
+          0.3
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1517,10 +1596,11 @@
       },
       {
         "id": "boardSquare-47",
+        "parent": "tabletop",
         "position": [
-          -7.3,
-          0.805,
-          12.3
+          0.7,
+          1.305,
+          0.3
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1528,10 +1608,11 @@
       },
       {
         "id": "boardSquare-48",
+        "parent": "tabletop",
         "position": [
-          -8.7,
-          0.805,
-          12.5
+          -0.7,
+          1.305,
+          0.5
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1539,10 +1620,11 @@
       },
       {
         "id": "boardSquare-49",
+        "parent": "tabletop",
         "position": [
-          -8.5,
-          0.805,
-          12.5
+          -0.5,
+          1.305,
+          0.5
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1550,10 +1632,11 @@
       },
       {
         "id": "boardSquare-50",
+        "parent": "tabletop",
         "position": [
-          -8.3,
-          0.805,
-          12.5
+          -0.3,
+          1.305,
+          0.5
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1561,10 +1644,11 @@
       },
       {
         "id": "boardSquare-51",
+        "parent": "tabletop",
         "position": [
-          -8.1,
-          0.805,
-          12.5
+          -0.1,
+          1.305,
+          0.5
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1572,10 +1656,11 @@
       },
       {
         "id": "boardSquare-52",
+        "parent": "tabletop",
         "position": [
-          -7.9,
-          0.805,
-          12.5
+          0.1,
+          1.305,
+          0.5
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1583,10 +1668,11 @@
       },
       {
         "id": "boardSquare-53",
+        "parent": "tabletop",
         "position": [
-          -7.7,
-          0.805,
-          12.5
+          0.3,
+          1.305,
+          0.5
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1594,10 +1680,11 @@
       },
       {
         "id": "boardSquare-54",
+        "parent": "tabletop",
         "position": [
-          -7.5,
-          0.805,
-          12.5
+          0.5,
+          1.305,
+          0.5
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1605,10 +1692,11 @@
       },
       {
         "id": "boardSquare-55",
+        "parent": "tabletop",
         "position": [
-          -7.3,
-          0.805,
-          12.5
+          0.7,
+          1.305,
+          0.5
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1616,10 +1704,11 @@
       },
       {
         "id": "boardSquare-56",
+        "parent": "tabletop",
         "position": [
-          -8.7,
-          0.805,
-          12.7
+          -0.7,
+          1.305,
+          0.7
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1627,10 +1716,11 @@
       },
       {
         "id": "boardSquare-57",
+        "parent": "tabletop",
         "position": [
-          -8.5,
-          0.805,
-          12.7
+          -0.5,
+          1.305,
+          0.7
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1638,10 +1728,11 @@
       },
       {
         "id": "boardSquare-58",
+        "parent": "tabletop",
         "position": [
-          -8.3,
-          0.805,
-          12.7
+          -0.3,
+          1.305,
+          0.7
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1649,10 +1740,11 @@
       },
       {
         "id": "boardSquare-59",
+        "parent": "tabletop",
         "position": [
-          -8.1,
-          0.805,
-          12.7
+          -0.1,
+          1.305,
+          0.7
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1660,10 +1752,11 @@
       },
       {
         "id": "boardSquare-60",
+        "parent": "tabletop",
         "position": [
-          -7.9,
-          0.805,
-          12.7
+          0.1,
+          1.305,
+          0.7
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1671,10 +1764,11 @@
       },
       {
         "id": "boardSquare-61",
+        "parent": "tabletop",
         "position": [
-          -7.7,
-          0.805,
-          12.7
+          0.3,
+          1.305,
+          0.7
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -1682,10 +1776,11 @@
       },
       {
         "id": "boardSquare-62",
+        "parent": "tabletop",
         "position": [
-          -7.5,
-          0.805,
-          12.7
+          0.5,
+          1.305,
+          0.7
         ],
         "prototypeId": "boardSquareDark",
         "scale": 1,
@@ -1693,10 +1788,11 @@
       },
       {
         "id": "boardSquare-63",
+        "parent": "tabletop",
         "position": [
-          -7.3,
-          0.805,
-          12.7
+          0.7,
+          1.305,
+          0.7
         ],
         "prototypeId": "boardSquareLight",
         "scale": 1,
@@ -3211,7 +3307,7 @@
       "effects": [
         {
           "$type": "setState",
-          "fromState": "$board:cellOf:board:each",
+          "fromState": "$board:cellOf:board:placement:$each",
           "key": "$each",
           "state": "pieceCell"
         }
@@ -3229,7 +3325,7 @@
           {
             "$type": "compareState",
             "comparison": "GreaterOrEqual",
-            "state": "$upright:each",
+            "state": "$upright:placement:$each",
             "value": 0.5
           }
         ]
@@ -3261,7 +3357,7 @@
             "predicate": {
               "$type": "compareState",
               "comparison": "GreaterOrEqual",
-              "state": "$upright:each",
+              "state": "$upright:placement:$each",
               "value": 0.5
             }
           }
@@ -3274,12 +3370,13 @@
       "effects": [
         {
           "$type": "setState",
-          "fromKey": "105",
+          "fromKey": "$each",
           "fromState": "pieceCode",
-          "key": "$cell:pieceCell:105",
+          "key": "$cell:pieceCell:$each",
           "state": "board"
         }
       ],
+      "forEach": "pieceCode",
       "gate": {
         "$type": "all",
         "predicates": [
@@ -3292,975 +3389,14 @@
           {
             "$type": "compareState",
             "comparison": "NotEqual",
-            "key": "105",
+            "key": "$each",
             "state": "pieceCell",
             "value": -1
           }
         ]
       },
       "mode": "Edge",
-      "name": "tabletop-write-board-105"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "104",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:104",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "104",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-104"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "103",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:103",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "103",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-103"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "102",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:102",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "102",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-102"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "101",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:101",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "101",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-101"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "100",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:100",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "100",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-100"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "99",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:99",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "99",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-99"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "98",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:98",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "98",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-98"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "97",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:97",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "97",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-97"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "96",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:96",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "96",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-96"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "95",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:95",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "95",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-95"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "94",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:94",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "94",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-94"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "93",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:93",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "93",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-93"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "92",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:92",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "92",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-92"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "91",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:91",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "91",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-91"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "90",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:90",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "90",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-90"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "89",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:89",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "89",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-89"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "88",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:88",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "88",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-88"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "87",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:87",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "87",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-87"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "86",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:86",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "86",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-86"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "85",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:85",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "85",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-85"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "84",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:84",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "84",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-84"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "83",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:83",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "83",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-83"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "82",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:82",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "82",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-82"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "81",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:81",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "81",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-81"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "80",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:80",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "80",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-80"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "79",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:79",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "79",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-79"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "78",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:78",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "78",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-78"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "77",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:77",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "77",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-77"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "76",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:76",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "76",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-76"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "75",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:75",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "75",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-75"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "fromKey": "74",
-          "fromState": "pieceCode",
-          "key": "$cell:pieceCell:74",
-          "state": "board"
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "$physics:quiescent",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "74",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "tabletop-write-board-74"
+      "name": "tabletop-write-board"
     },
     {
       "effects": [
@@ -14047,9 +13183,9 @@
         ],
         "name": "chessBoard",
         "origin": [
-          -8.8,
-          0.75,
-          11.2
+          -0.8,
+          1.25,
+          -0.8
         ],
         "width": 8,
         "wrap": "None"
@@ -15322,131 +14458,131 @@
         "capacity": 32,
         "cells": [
           {
-            "key": "74",
+            "key": "piece0",
             "value": -4
           },
           {
-            "key": "75",
+            "key": "piece1",
             "value": -2
           },
           {
-            "key": "76",
+            "key": "piece2",
             "value": -3
           },
           {
-            "key": "77",
+            "key": "piece3",
             "value": -6
           },
           {
-            "key": "78",
+            "key": "piece4",
             "value": -5
           },
           {
-            "key": "79",
+            "key": "piece5",
             "value": -3
           },
           {
-            "key": "80",
+            "key": "piece6",
             "value": -2
           },
           {
-            "key": "81",
+            "key": "piece7",
             "value": -4
           },
           {
-            "key": "82",
+            "key": "piece8",
             "value": -1
           },
           {
-            "key": "83",
+            "key": "piece9",
             "value": -1
           },
           {
-            "key": "84",
+            "key": "piece10",
             "value": -1
           },
           {
-            "key": "85",
+            "key": "piece11",
             "value": -1
           },
           {
-            "key": "86",
+            "key": "piece12",
             "value": -1
           },
           {
-            "key": "87",
+            "key": "piece13",
             "value": -1
           },
           {
-            "key": "88",
+            "key": "piece14",
             "value": -1
           },
           {
-            "key": "89",
+            "key": "piece15",
             "value": -1
           },
           {
-            "key": "90",
+            "key": "piece16",
             "value": 1
           },
           {
-            "key": "91",
+            "key": "piece17",
             "value": 1
           },
           {
-            "key": "92",
+            "key": "piece18",
             "value": 1
           },
           {
-            "key": "93",
+            "key": "piece19",
             "value": 1
           },
           {
-            "key": "94",
+            "key": "piece20",
             "value": 1
           },
           {
-            "key": "95",
+            "key": "piece21",
             "value": 1
           },
           {
-            "key": "96",
+            "key": "piece22",
             "value": 1
           },
           {
-            "key": "97",
+            "key": "piece23",
             "value": 1
           },
           {
-            "key": "98",
+            "key": "piece24",
             "value": 4
           },
           {
-            "key": "99",
+            "key": "piece25",
             "value": 2
           },
           {
-            "key": "100",
+            "key": "piece26",
             "value": 3
           },
           {
-            "key": "101",
+            "key": "piece27",
             "value": 6
           },
           {
-            "key": "102",
+            "key": "piece28",
             "value": 5
           },
           {
-            "key": "103",
+            "key": "piece29",
             "value": 3
           },
           {
-            "key": "104",
+            "key": "piece30",
             "value": 2
           },
           {
-            "key": "105",
+            "key": "piece31",
             "value": 4
           }
         ],
@@ -15471,131 +14607,131 @@
         "capacity": 32,
         "cells": [
           {
-            "key": "74",
+            "key": "piece0",
             "value": -1
           },
           {
-            "key": "75",
+            "key": "piece1",
             "value": -1
           },
           {
-            "key": "76",
+            "key": "piece2",
             "value": -1
           },
           {
-            "key": "77",
+            "key": "piece3",
             "value": -1
           },
           {
-            "key": "78",
+            "key": "piece4",
             "value": -1
           },
           {
-            "key": "79",
+            "key": "piece5",
             "value": -1
           },
           {
-            "key": "80",
+            "key": "piece6",
             "value": -1
           },
           {
-            "key": "81",
+            "key": "piece7",
             "value": -1
           },
           {
-            "key": "82",
+            "key": "piece8",
             "value": -1
           },
           {
-            "key": "83",
+            "key": "piece9",
             "value": -1
           },
           {
-            "key": "84",
+            "key": "piece10",
             "value": -1
           },
           {
-            "key": "85",
+            "key": "piece11",
             "value": -1
           },
           {
-            "key": "86",
+            "key": "piece12",
             "value": -1
           },
           {
-            "key": "87",
+            "key": "piece13",
             "value": -1
           },
           {
-            "key": "88",
+            "key": "piece14",
             "value": -1
           },
           {
-            "key": "89",
+            "key": "piece15",
             "value": -1
           },
           {
-            "key": "90",
+            "key": "piece16",
             "value": -1
           },
           {
-            "key": "91",
+            "key": "piece17",
             "value": -1
           },
           {
-            "key": "92",
+            "key": "piece18",
             "value": -1
           },
           {
-            "key": "93",
+            "key": "piece19",
             "value": -1
           },
           {
-            "key": "94",
+            "key": "piece20",
             "value": -1
           },
           {
-            "key": "95",
+            "key": "piece21",
             "value": -1
           },
           {
-            "key": "96",
+            "key": "piece22",
             "value": -1
           },
           {
-            "key": "97",
+            "key": "piece23",
             "value": -1
           },
           {
-            "key": "98",
+            "key": "piece24",
             "value": -1
           },
           {
-            "key": "99",
+            "key": "piece25",
             "value": -1
           },
           {
-            "key": "100",
+            "key": "piece26",
             "value": -1
           },
           {
-            "key": "101",
+            "key": "piece27",
             "value": -1
           },
           {
-            "key": "102",
+            "key": "piece28",
             "value": -1
           },
           {
-            "key": "103",
+            "key": "piece29",
             "value": -1
           },
           {
-            "key": "104",
+            "key": "piece30",
             "value": -1
           },
           {
-            "key": "105",
+            "key": "piece31",
             "value": -1
           }
         ],

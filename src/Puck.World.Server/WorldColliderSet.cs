@@ -278,7 +278,8 @@ internal sealed class WorldColliderSet : IContactField {
             }
 
             var margin = FixedQ4816.FromDouble(value: solid.Margin);
-            // The authored yaw enters the contract through the SAME degrees-to-fixed-radians idiom every other
+            var resolvedFrame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
+            // The resolved yaw enters the contract through the SAME degrees-to-fixed-radians idiom every other
             // fixed-point placement path already uses (WorldPopulation, WorldPlacementAttachment), and
             // FixedQuaternion.FromAxisAngle is integer arithmetic — so no platform libm sine reaches a collider.
             // This runs once per boot, but once per boot ON EVERY MACHINE: the compiled colliders are re-derived
@@ -286,7 +287,7 @@ internal sealed class WorldColliderSet : IContactField {
             // transcendental here is a cross-machine divergence rather than a one-time authoring rounding.
             var rotation = FixedQuaternion.FromAxisAngle(
                 axis: UnitY,
-                angle: FixedQ4816.FromDouble(value: (placement.YawDegrees * (Math.PI / 180.0)))
+                angle: FixedQ4816.FromDouble(value: (resolvedFrame.YawDegrees * (Math.PI / 180.0)))
             );
             // Every collider a distribution/mirror expands this ONE row into shares its ONE grip decision — see
             // WorldPlacementGrip's own remarks.
@@ -294,7 +295,7 @@ internal sealed class WorldColliderSet : IContactField {
             var placementHoldableIsOverride = (placement.Grip is not null);
 
             CreationStampLattice.ForEachFixedInstance(
-                origin: FixedVector3.FromVector3(value: placement.Position),
+                origin: FixedVector3.FromVector3(value: resolvedFrame.Position),
                 rotation: rotation,
                 pattern: WorldPlacementStamp.PatternFor(placement: placement),
                 sampledOffsets: WorldPlacementStamp.SampledFixedOffsetsFor(placement: placement, worldSeed: worldSeed),

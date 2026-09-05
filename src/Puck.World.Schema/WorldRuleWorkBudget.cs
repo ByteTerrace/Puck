@@ -189,7 +189,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         switch (transform) {
             case WorldStateTransform.SetRay ray:
                 var board = WorldDefinitionRows.FindStateRow(definition.State, ray.Row)!;
-                var count = WorldTopologyCompilation.Find(definition.StateRaw, ((WorldStateDomain.CellsOf)board.EffectiveDomain).Topology)!.CellCount;
+                var count = WorldTopologyCompilation.Find(definition, ((WorldStateDomain.CellsOf)board.EffectiveDomain).Topology)!.CellCount;
                 cost += (long)count * (count + 2);
                 break;
             case WorldStateTransform.Transfer transfer:
@@ -210,7 +210,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 break;
             case WorldStateTransform.WriteSet writeSet:
                 var written = WorldDefinitionRows.FindStateRow(definition.State, writeSet.Row)!;
-                var writtenCells = WorldTopologyCompilation.Find(definition.StateRaw, ((WorldStateDomain.CellsOf)written.EffectiveDomain).Topology)!.CellCount;
+                var writtenCells = WorldTopologyCompilation.Find(definition, ((WorldStateDomain.CellsOf)written.EffectiveDomain).Topology)!.CellCount;
                 cost += (long)writtenCells * (writtenCells + 1);
                 break;
             case WorldStateTransform.Push push:
@@ -219,7 +219,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 break;
             case WorldStateTransform.Observe observe:
                 var row = WorldDefinitionRows.FindStateRow(definition.State, observe.Row)!;
-                var cells = WorldTopologyCompilation.Find(definition.StateRaw, ((WorldStateDomain.CellsOf)row.EffectiveDomain).Topology)!.CellCount;
+                var cells = WorldTopologyCompilation.Find(definition, ((WorldStateDomain.CellsOf)row.EffectiveDomain).Topology)!.CellCount;
                 cost += (long)cells * (cells + 3);
                 break;
         }

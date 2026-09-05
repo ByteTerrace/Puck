@@ -138,10 +138,11 @@
           "look": "bowlingBall",
           "source": "Idle"
         },
+        "parent": "bowlingLane",
         "position": [
-          10.0,
-          -0.35000000000000003,
-          7.9
+          0.0,
+          -0.35,
+          -2.1
         ],
         "prototypeId": "billiardBall",
         "scale": 1,
@@ -166,10 +167,11 @@
           "look": "bowlingPin",
           "source": "Idle"
         },
+        "parent": "bowlingLane",
         "position": [
-          10.0,
-          -0.35000000000000003,
-          11.6
+          0.0,
+          -0.35,
+          1.6
         ],
         "prototypeId": "bowlingPin",
         "scale": 1,
@@ -194,10 +196,11 @@
           "look": "bowlingPin",
           "source": "Idle"
         },
+        "parent": "bowlingLane",
         "position": [
-          9.87,
-          -0.35000000000000003,
-          11.82
+          -0.13,
+          -0.35,
+          1.82
         ],
         "prototypeId": "bowlingPin",
         "scale": 1,
@@ -222,10 +225,11 @@
           "look": "bowlingPin",
           "source": "Idle"
         },
+        "parent": "bowlingLane",
         "position": [
-          10.13,
-          -0.35000000000000003,
-          11.82
+          0.13,
+          -0.35,
+          1.82
         ],
         "prototypeId": "bowlingPin",
         "scale": 1,
@@ -250,10 +254,11 @@
           "look": "bowlingPin",
           "source": "Idle"
         },
+        "parent": "bowlingLane",
         "position": [
-          9.74,
-          -0.35000000000000003,
-          12.04
+          -0.26,
+          -0.35,
+          2.04
         ],
         "prototypeId": "bowlingPin",
         "scale": 1,
@@ -278,10 +283,11 @@
           "look": "bowlingPin",
           "source": "Idle"
         },
+        "parent": "bowlingLane",
         "position": [
-          10.0,
-          -0.35000000000000003,
-          12.04
+          0.0,
+          -0.35,
+          2.04
         ],
         "prototypeId": "bowlingPin",
         "scale": 1,
@@ -306,10 +312,11 @@
           "look": "bowlingPin",
           "source": "Idle"
         },
+        "parent": "bowlingLane",
         "position": [
-          10.26,
-          -0.35000000000000003,
-          12.04
+          0.26,
+          -0.35,
+          2.04
         ],
         "prototypeId": "bowlingPin",
         "scale": 1,
@@ -334,10 +341,11 @@
           "look": "bowlingPin",
           "source": "Idle"
         },
+        "parent": "bowlingLane",
         "position": [
-          9.61,
-          -0.35000000000000003,
-          12.26
+          -0.39,
+          -0.35,
+          2.26
         ],
         "prototypeId": "bowlingPin",
         "scale": 1,
@@ -362,10 +370,11 @@
           "look": "bowlingPin",
           "source": "Idle"
         },
+        "parent": "bowlingLane",
         "position": [
-          9.87,
-          -0.35000000000000003,
-          12.26
+          -0.13,
+          -0.35,
+          2.26
         ],
         "prototypeId": "bowlingPin",
         "scale": 1,
@@ -390,10 +399,11 @@
           "look": "bowlingPin",
           "source": "Idle"
         },
+        "parent": "bowlingLane",
         "position": [
-          10.13,
-          -0.35000000000000003,
-          12.26
+          0.13,
+          -0.35,
+          2.26
         ],
         "prototypeId": "bowlingPin",
         "scale": 1,
@@ -418,10 +428,11 @@
           "look": "bowlingPin",
           "source": "Idle"
         },
+        "parent": "bowlingLane",
         "position": [
-          10.39,
-          -0.35000000000000003,
-          12.26
+          0.39,
+          -0.35,
+          2.26
         ],
         "prototypeId": "bowlingPin",
         "scale": 1,
