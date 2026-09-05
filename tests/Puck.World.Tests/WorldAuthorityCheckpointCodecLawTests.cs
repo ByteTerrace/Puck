@@ -474,7 +474,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         );
         var identity = new WorldAuthorityIdentity(
             Owner: Guid.NewGuid(),
-            World: WorldSafeName.Parse(candidate: "amber")
+            World: SafeName.Parse(candidate: "amber")
         );
         var cancellationToken = TestContext.Current.CancellationToken;
 

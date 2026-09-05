@@ -150,7 +150,7 @@ public sealed class WorldHostedOrigin : WorldDocumentOrigin {
     private readonly Guid m_owner;
     private readonly IObjectBlobStore m_store;
     private readonly ObjectStorageTarget m_target;
-    private readonly WorldSafeName m_world;
+    private readonly SafeName m_world;
 
     /// <summary>Initializes the origin.</summary>
     /// <param name="owner">The owning identity's oid.</param>
@@ -158,7 +158,7 @@ public sealed class WorldHostedOrigin : WorldDocumentOrigin {
     /// <param name="store">The blob store.</param>
     /// <param name="target">The storage target (the identity's own hosted endpoint).</param>
     /// <exception cref="ArgumentNullException"><paramref name="store"/> or <paramref name="target"/> is <see langword="null"/>.</exception>
-    public WorldHostedOrigin(Guid owner, WorldSafeName world, IObjectBlobStore store, ObjectStorageTarget target) {
+    public WorldHostedOrigin(Guid owner, SafeName world, IObjectBlobStore store, ObjectStorageTarget target) {
         ArgumentNullException.ThrowIfNull(argument: store);
         ArgumentNullException.ThrowIfNull(argument: target);
 
@@ -238,7 +238,7 @@ public sealed class WorldHostedOrigin : WorldDocumentOrigin {
         var candidateId = document[..^WorldOwnedWorldFileName.Suffix.Length];
 
         if (
-            !WorldSafeName.TryParse(
+            !SafeName.TryParse(
             candidate: candidateId,
             name: out var world,
             reason: out var nameReason

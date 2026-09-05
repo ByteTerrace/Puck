@@ -22,7 +22,7 @@ public readonly record struct WorldSyncOutcome(string Id, bool Ok, string Detail
 /// errs on the side that prompts a sync rather than the side that fakes one. Per-world detail lines are the truth;
 /// the cursor is the catalog-level approximation.
 /// <para>One blob name per world id means the id must name the blob unambiguously. <see cref="WorldOwnedWorldFileName"/>
-/// escapes nothing, so the whole of that rule is <see cref="WorldSafeName"/>: an id that does not parse as one is
+/// escapes nothing, so the whole of that rule is <see cref="SafeName"/>: an id that does not parse as one is
 /// refused by name at both push and pull (<c>KeyRefusal</c>) rather than quietly sharing a stranger's key, and two
 /// parsed ids can never collide on one cloud key, whose namespace is case-SENSITIVE. The LOCAL catalog's directory is
 /// not, which is the one asymmetry this engine carries: two cloud keys differing only in case adopt onto one local
@@ -211,7 +211,7 @@ public sealed class WorldOwnedWorldSync {
 
             var candidateId = fileName[..^WorldOwnedWorldFileName.Suffix.Length];
 
-            if (!WorldSafeName.TryParse(
+            if (!SafeName.TryParse(
                 candidate: candidateId,
                 name: out _,
                 reason: out var reason
@@ -243,7 +243,7 @@ public sealed class WorldOwnedWorldSync {
 
         return $"{flat[..cut]}…";
     }
-    /// <summary>Parses a candidate id into a <see cref="WorldSafeName"/>, refusing by name (naming the offending
+    /// <summary>Parses a candidate id into a <see cref="SafeName"/>, refusing by name (naming the offending
     /// character) exactly like every other door in this family — the id arrives here untyped (a console-verb
     /// argument, a sidecar-tracked key, or a candidate <see cref="DiscoverCloudIds"/> extracted from a cloud blob
     /// name), so this is the one place left that still validates rather than trusts. Once parsed, two distinct safe
@@ -251,8 +251,8 @@ public sealed class WorldOwnedWorldSync {
     /// namespace is case-sensitive — so there is no separate "shares a key with a stranger" check left to run here.
     /// The local catalog's own case-insensitive uniqueness rule is held where the document lands, in
     /// <see cref="WorldOwnedWorlds.ReplaceFromSync"/>.</summary>
-    private static string? KeyRefusal(string id, out WorldSafeName safe) {
-        if (!WorldSafeName.TryParse(
+    private static string? KeyRefusal(string id, out SafeName safe) {
+        if (!SafeName.TryParse(
             candidate: id,
             name: out safe,
             reason: out var reason
@@ -903,7 +903,7 @@ public sealed class WorldOwnedWorldSync {
     /// <param name="containerId">The per-user container id.</param>
     /// <param name="id">The owned world id.</param>
     /// <returns>The blob address.</returns>
-    public static ObjectBlobAddress AddressFor(Guid containerId, WorldSafeName id) => new(
+    public static ObjectBlobAddress AddressFor(Guid containerId, SafeName id) => new(
         ObjectId: containerId,
         Key: $"{WorldsNamespace}/{WorldOwnedWorldFileName.For(id: id)}"
     );
@@ -927,7 +927,7 @@ public sealed class WorldOwnedWorldSync {
     /// <param name="leaf">The leaf path under the world's own hosted namespace segment (e.g. <c>"definition.json"</c>,
     /// <c>"checkpoints/latest"</c>).</param>
     /// <returns>The blob address.</returns>
-    public static ObjectBlobAddress HostedAddressFor(Guid containerId, WorldSafeName world, string leaf) {
+    public static ObjectBlobAddress HostedAddressFor(Guid containerId, SafeName world, string leaf) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: leaf);
 
         var root = ((leaf is "definition.json" or "projection.json")

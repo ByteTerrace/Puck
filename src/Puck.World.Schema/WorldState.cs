@@ -52,7 +52,7 @@ public sealed record WorldStateSection(
 /// Legitimate only on a cell whose <see cref="Key"/> is not <see cref="WorldStateRow.SlotKey"/>.</param>
 /// <param name="Visibility">An additional cell-level audience restriction; slot policies belong on the row.</param>
 /// <param name="Observation">The persisted last-seen stamp of a knowledge cell.</param>
-public sealed record WorldStateCell(WorldCellName Key, long Value = 0, string? Text = null, WorldStateAdvance? Advance = null, string? Provenance = null, WorldStateDynamics? Dynamics = null, WorldStateCycle? Cycle = null, WorldStateVisibility? Visibility = null, WorldStateObservation? Observation = null);
+public sealed record WorldStateCell(CellName Key, long Value = 0, string? Text = null, WorldStateAdvance? Advance = null, string? Provenance = null, WorldStateDynamics? Dynamics = null, WorldStateCycle? Cycle = null, WorldStateVisibility? Visibility = null, WorldStateObservation? Observation = null);
 /// <summary>
 /// One row of the <c>state</c> section — a named cell or a named collection of cells, addressed by its stable
 /// <see cref="Name"/>. <see cref="Name"/> is the <c>UpsertStateRow</c>/<c>RemoveStateRow</c> key, the
@@ -159,7 +159,7 @@ public sealed record WorldStateCell(WorldCellName Key, long Value = 0, string? T
 /// engine bookkeeping that names the next slot (<c>cursor mod capacity</c>) and how much of the ring is filled. Zero
 /// without the trait; refused negative.</param>
 public sealed record WorldStateRow(
-    WorldCellName Name,
+    CellName Name,
     CellKind Kind,
     long? Min = null,
     long? Max = null,
@@ -189,8 +189,8 @@ public sealed record WorldStateRow(
     /// <summary>The reserved cell key a slot-shaped row's one implicit cell carries — the address the authored
     /// <c>value</c> sugar writes to, and never a legal author-chosen cell key (see <see cref="IsSlot"/>). Chosen to
     /// be visually distinct from any string a game would plausibly choose as its own key — legal as a
-    /// <see cref="WorldCellName"/> like any other.</summary>
-    public static readonly WorldCellName SlotKey = WorldCellName.Parse(candidate: "$value");
+    /// <see cref="CellName"/> like any other.</summary>
+    public static readonly CellName SlotKey = CellName.Parse(candidate: "$value");
 
     /// <summary>Gets the effective domain: the authored <see cref="Domain"/>, or <see cref="InferDomain"/>'s answer
     /// when unauthored.</summary>
@@ -276,7 +276,7 @@ public sealed record WorldStateRow(
     /// through: the HUD path runs this per frame.</remarks>
     /// <param name="key">The cell key to look for.</param>
     /// <returns><see langword="true"/> when the row declares a cell under that key.</returns>
-    public bool HasCell(string key) => (WorldCellName.TryParse(
+    public bool HasCell(string key) => (CellName.TryParse(
         candidate: key,
         name: out var cellKey,
         reason: out _
@@ -771,14 +771,14 @@ public enum WorldGeneratorMode : byte {
 /// exhausting mode each unit is drawn once per pass. A context's units total at most
 /// <see cref="WorldGeneratorCapacity.MaxEntriesPerSet"/>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldGeneratorAlternative(string Token, ulong Weight, WorldCellName Next, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Multiplicity = null);
+public sealed record WorldGeneratorAlternative(string Token, ulong Weight, CellName Next, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Multiplicity = null);
 /// <summary>One named context of a <see cref="WorldGenerator"/> — the state the walk may be sitting in and the
 /// weighted alternatives it may pick while there. A context declaring NO alternatives is TERMINAL: reaching it ends
 /// the emission.</summary>
 /// <param name="Key">The stable context key, unique within the generator.</param>
 /// <param name="Alternatives">The weighted alternatives out of this context, or empty for a terminal context.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldGeneratorContext(WorldCellName Key, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldGeneratorAlternative>? Alternatives = null);
+public sealed record WorldGeneratorContext(CellName Key, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldGeneratorAlternative>? Alternatives = null);
 /// <summary>The closed vocabulary of a <see cref="WorldGenerator"/>'s draw shape — which of its fields are read, and
 /// what one emission produces: a Markov text walk, a multiset draw, a uniform range, a weighted numeric table, and a
 /// raw stream draw are sources of one family, never parallel primitives with their own seeding, cursoring, and
@@ -890,7 +890,7 @@ public sealed record WorldGenerator(
     WorldGeneratorSource Source = WorldGeneratorSource.Markov,
     // Each source reads a disjoint field set, so the canonical writer omits the ones this source does not own rather
     // than emitting a wall of nulls a reader has to discount.
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCellName? Start = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CellName? Start = null,
     int Bound = WorldGenerator.DefaultBound,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldGeneratorContext>? Contexts = null,
     WorldGeneratorMode Mode = WorldGeneratorMode.WithReplacement,
@@ -915,7 +915,7 @@ public sealed record WorldGenerator(
 /// <see cref="WorldDraw.Source"/> resolves against.</param>
 /// <param name="Generator">The source itself.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldGeneratorRow(WorldCellName Name, WorldGenerator Generator);
+public sealed record WorldGeneratorRow(CellName Name, WorldGenerator Generator);
 /// <summary>The <see cref="WorldGenerator"/> caps enforced by <see cref="WorldDefinitionValidator"/>.</summary>
 /// <remarks>The context cap and the alternative cap are load-bearing together, not decorative: an exhausting mode
 /// records one <see cref="WorldStateRow.DrawnMasks"/> mask per context, and each such mask is a 256-bit drawn set (so
@@ -963,7 +963,7 @@ public static class WorldStateReservedCells {
     /// <param name="key">The cell's key (assumed to carry the reserved prefix — an ordinary key is always admitted).</param>
     /// <param name="reason">Why the cell was refused, in the author's own vocabulary, or empty on success.</param>
     /// <returns><see langword="true"/> when the row mints a cell by that key.</returns>
-    public static bool TryValidateReservedCell(WorldStateRow row, WorldCellName key, out string reason) {
+    public static bool TryValidateReservedCell(WorldStateRow row, CellName key, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: row);
         reason = string.Empty;
 

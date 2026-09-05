@@ -64,14 +64,14 @@ public sealed class WorldBoxTopologyLawTests {
         // origin corner. A pattern of "one or more of the marked value" read with the prefix facet answers how far
         // the run continues past the origin cell exactly as a dedicated line query would, generalized to any
         // authored run shape rather than only exact-length equality.
-        static WorldStateCell Mark(int x, int y, int z) => new(WorldCellName.Parse((((z * 4) + y) * 4 + x).ToString()), 1L);
-        var board = new WorldStateRow(WorldCellName.Parse("cube"), CellKind.Int, Cells: [Mark(0, 0, 0), Mark(1, 1, 1), Mark(2, 2, 2), Mark(3, 3, 3)], Domain: new WorldStateDomain.CellsOf("box"));
-        var runOfOnes = new WorldPatternRow(WorldCellName.Parse("runOfOnes"), CellKind.Int, Symbols: [new(WorldCellName.Parse("one"), 1, 1)], Pattern: new WorldPatternNode.Star(new WorldPatternNode.Symbol("one")));
-        var run = new WorldStateRow(WorldCellName.Parse("run"), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)]);
+        static WorldStateCell Mark(int x, int y, int z) => new(CellName.Parse((((z * 4) + y) * 4 + x).ToString()), 1L);
+        var board = new WorldStateRow(CellName.Parse("cube"), CellKind.Int, Cells: [Mark(0, 0, 0), Mark(1, 1, 1), Mark(2, 2, 2), Mark(3, 3, 3)], Domain: new WorldStateDomain.CellsOf("box"));
+        var runOfOnes = new WorldPatternRow(CellName.Parse("runOfOnes"), CellKind.Int, Symbols: [new(CellName.Parse("one"), 1, 1)], Pattern: new WorldPatternNode.Star(new WorldPatternNode.Symbol("one")));
+        var run = new WorldStateRow(CellName.Parse("run"), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)]);
         var definition = Fixtures.BuildDocument() with {
             StateRaw = new(World: [board, run], Lattices: [Box(4, 4, 4)]),
             PatternsRaw = [runOfOnes],
-            Rules = [new WorldRule(WorldCellName.Parse("read"), [new ActionEffect.SetState(State: "run", FromState: "$match:runOfOnes:cube:USE:prefix", FromKey: "0")])],
+            Rules = [new WorldRule(CellName.Parse("read"), [new ActionEffect.SetState(State: "run", FromState: "$match:runOfOnes:cube:USE:prefix", FromKey: "0")])],
         };
         using var fixture = Fixtures.FreshServer(definition: definition);
         fixture.Step();
@@ -93,12 +93,12 @@ public sealed class WorldBoxTopologyLawTests {
         // accept (no suffix) rather than prefix/cell/distance. Layer 1 exists only so a wrapped-opposite direction
         // resolves to a real, unmarked cell rather than an out-of-range one.
         static WorldStateRow Row(string name, params int[] indices) => new(
-            WorldCellName.Parse(name), CellKind.Int,
-            Cells: [.. indices.Select(i => new WorldStateCell(WorldCellName.Parse(i.ToString(System.Globalization.CultureInfo.InvariantCulture)), 7L))],
+            CellName.Parse(name), CellKind.Int,
+            Cells: [.. indices.Select(i => new WorldStateCell(CellName.Parse(i.ToString(System.Globalization.CultureInfo.InvariantCulture)), 7L))],
             Domain: new WorldStateDomain.CellsOf("box")
         );
-        static WorldStateRow Winner(string name) => new(WorldCellName.Parse(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)]);
-        var runTerminated = new WorldPatternRow(WorldCellName.Parse("runTerminated"), CellKind.Int, Symbols: [new(WorldCellName.Parse("seven"), 7, 7)],
+        static WorldStateRow Winner(string name) => new(CellName.Parse(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)]);
+        var runTerminated = new WorldPatternRow(CellName.Parse("runTerminated"), CellKind.Int, Symbols: [new(CellName.Parse("seven"), 7, 7)],
             Pattern: new WorldPatternNode.Sequence([
                 new WorldPatternNode.Repeat(new WorldPatternNode.Symbol("seven"), 3, 3),
                 new WorldPatternNode.Star(new WorldPatternNode.Except("seven")),
@@ -110,8 +110,8 @@ public sealed class WorldBoxTopologyLawTests {
             StateRaw = new(World: [isolated, extended, Winner("winnerIsolated"), Winner("winnerExtended")], Lattices: [Box(5, 1, 2)]),
             PatternsRaw = [runTerminated],
             Rules = [
-                new WorldRule(WorldCellName.Parse("markIsolated"), [new ActionEffect.SetState(State: "winnerIsolated", FromState: "$match:runTerminated:isolated:E", FromKey: "0")]),
-                new WorldRule(WorldCellName.Parse("markExtended"), [new ActionEffect.SetState(State: "winnerExtended", FromState: "$match:runTerminated:extended:E", FromKey: "0")]),
+                new WorldRule(CellName.Parse("markIsolated"), [new ActionEffect.SetState(State: "winnerIsolated", FromState: "$match:runTerminated:isolated:E", FromKey: "0")]),
+                new WorldRule(CellName.Parse("markExtended"), [new ActionEffect.SetState(State: "winnerExtended", FromState: "$match:runTerminated:extended:E", FromKey: "0")]),
             ],
         };
         using var fixture = Fixtures.FreshServer(definition: definition);

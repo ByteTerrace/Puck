@@ -78,7 +78,7 @@ public sealed class PlacementResponseValidationLawTests {
     private static WorldStateSection FieldsSection() => new(
         World: [
             new WorldStateRow(
-                Name: WorldCellName.Parse(candidate: FieldName),
+                Name: CellName.Parse(candidate: FieldName),
                 Kind: CellKind.Fixed,
                 Domain: new WorldStateDomain.CellsOf(Topology: "world"), Field: new WorldStateFieldTrait(Initial: 0f, Min: 0f, Max: 1f)
             ),

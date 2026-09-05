@@ -58,7 +58,7 @@ public sealed class WorldFieldLatticeLawTests {
         return definition with {
             StateRaw = new WorldStateSection(
                 World: [new WorldStateRow(
-                    Name: WorldCellName.Parse(candidate: "drawn"),
+                    Name: CellName.Parse(candidate: "drawn"),
                     Kind: CellKind.Fixed,
                     DrawCursor: cursor,
                     Domain: new WorldStateDomain.CellsOf(Topology: "grid"),
@@ -209,7 +209,7 @@ public sealed class WorldFieldLatticeLawTests {
                 When: [new WorldFieldCondition(Comparison: WorldFieldComparison.Greater, Field: "grass", Value: 0f)],
                 Then: [new WorldFieldWrite(Field: "grass", Op: WorldFieldWriteOp.Add, Value: new WorldLatticeScalar(Row: "season"))]
             )],
-        }), state: [new WorldStateRow(Name: WorldCellName.Parse(candidate: "season"), Kind: CellKind.Fixed)]);
+        }), state: [new WorldStateRow(Name: CellName.Parse(candidate: "season"), Kind: CellKind.Fixed)]);
         var season = FixedQ4816.Zero;
 
         void StepOnce() => lattice.Step(
@@ -237,7 +237,7 @@ public sealed class WorldFieldLatticeLawTests {
         var lattice = Fixtures.BuildLattice(document: Fields(
             heightScale: 2f,
             reactions: [new WorldReaction.Emit(Amount: 4f, Field: "heat", Tag: "hot")]
-        ), state: [new WorldStateRow(Name: WorldCellName.Parse(candidate: "hot"), Kind: CellKind.Int, Capacity: 1)]);
+        ), state: [new WorldStateRow(Name: CellName.Parse(candidate: "hot"), Kind: CellKind.Int, Capacity: 1)]);
 
         lattice.Step(
             tick: 1,
@@ -263,7 +263,7 @@ public sealed class WorldFieldLatticeLawTests {
         var lattice = Fixtures.BuildLattice(document: Fields(
             heightScale: 2f,
             reactions: [new WorldReaction.Emit(Amount: 4f, Field: "heat", Tag: "hot")]
-        ), state: [new WorldStateRow(Name: WorldCellName.Parse(candidate: "hot"), Kind: CellKind.Int, Capacity: 1)]);
+        ), state: [new WorldStateRow(Name: CellName.Parse(candidate: "hot"), Kind: CellKind.Int, Capacity: 1)]);
 
         lattice.Step(
             tick: 1,
@@ -375,7 +375,7 @@ public sealed class WorldFieldLatticeLawTests {
         )]);
         var lattice = Fixtures.BuildLattice(
             document: document,
-            state: [new WorldStateRow(Name: WorldCellName.Parse(candidate: "exposed"), Kind: CellKind.Int, Capacity: 1)]
+            state: [new WorldStateRow(Name: CellName.Parse(candidate: "exposed"), Kind: CellKind.Int, Capacity: 1)]
         );
 
         lattice.Restore(checkpoint: new WorldFieldLattice.WorldFieldCheckpoint(Raw: [[FixedQ4816.FromInteger(value: 2).Value]]));
@@ -537,7 +537,7 @@ public sealed class WorldFieldLatticeLawTests {
         ]);
         var lattice = Fixtures.BuildLattice(
             document: document,
-            state: [new WorldStateRow(Name: WorldCellName.Parse(candidate: "exposed"), Kind: CellKind.Int, Capacity: 8)]
+            state: [new WorldStateRow(Name: CellName.Parse(candidate: "exposed"), Kind: CellKind.Int, Capacity: 8)]
         );
 
         var cost = lattice.DescribeCost(activeBodyCount: 3, bodyCapacity: 8);
@@ -616,7 +616,7 @@ public sealed class WorldFieldLatticeLawTests {
         // unreachable through public authoring; this law targets the defensive all-or-nothing door itself.
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
             Principal: WorldPrincipal.Console,
-            Row: new WorldStateRow(Name: WorldCellName.Parse(candidate: "probe"), Kind: CellKind.Int)
+            Row: new WorldStateRow(Name: CellName.Parse(candidate: "probe"), Kind: CellKind.Int)
         ));
         fixture.Step();
 

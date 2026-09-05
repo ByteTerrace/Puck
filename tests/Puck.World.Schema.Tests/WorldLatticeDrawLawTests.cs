@@ -51,7 +51,7 @@ public sealed class WorldLatticeDrawLawTests {
         return new WorldStateSection(
             World: [
                 new WorldStateRow(
-                    Name: WorldCellName.Parse(candidate: "tiles"),
+                    Name: CellName.Parse(candidate: "tiles"),
                     Kind: CellKind.Fixed,
                     DrawCursor: cursor,
                     DrawnMasks: masks,
@@ -104,14 +104,14 @@ public sealed class WorldLatticeDrawLawTests {
     public void AMultipliedMarkovContext_DrawsItsUnitsOncePerPass() {
         var walk = new WorldGenerator(
             Source: WorldGeneratorSource.Markov,
-            Start: WorldCellName.Parse(candidate: "bag"),
+            Start: CellName.Parse(candidate: "bag"),
             Mode: WorldGeneratorMode.WithoutReplacement,
             Contexts: [
-                new WorldGeneratorContext(Key: WorldCellName.Parse(candidate: "bag"), Alternatives: [
-                    new WorldGeneratorAlternative(Token: "a", Weight: 1UL, Next: WorldCellName.Parse(candidate: "end"), Multiplicity: 3),
-                    new WorldGeneratorAlternative(Token: "b", Weight: 1UL, Next: WorldCellName.Parse(candidate: "end")),
+                new WorldGeneratorContext(Key: CellName.Parse(candidate: "bag"), Alternatives: [
+                    new WorldGeneratorAlternative(Token: "a", Weight: 1UL, Next: CellName.Parse(candidate: "end"), Multiplicity: 3),
+                    new WorldGeneratorAlternative(Token: "b", Weight: 1UL, Next: CellName.Parse(candidate: "end")),
                 ]),
-                new WorldGeneratorContext(Key: WorldCellName.Parse(candidate: "end")),
+                new WorldGeneratorContext(Key: CellName.Parse(candidate: "end")),
             ]
         );
         var (seed, stream) = Keys();
@@ -155,7 +155,7 @@ public sealed class WorldLatticeDrawLawTests {
             Assert.Equal(expected: masksAfter, actual: advancedMasks);
         }
 
-        var text = new WorldGenerator(Source: WorldGeneratorSource.Markov, Start: WorldCellName.Parse(candidate: "x"), Contexts: [new WorldGeneratorContext(Key: WorldCellName.Parse(candidate: "x"))]);
+        var text = new WorldGenerator(Source: WorldGeneratorSource.Markov, Start: CellName.Parse(candidate: "x"), Contexts: [new WorldGeneratorContext(Key: CellName.Parse(candidate: "x"))]);
 
         Assert.False(condition: WorldGeneratorEngine.TryFireBatch(generator: text, targetKind: CellKind.Fixed, seedState: seed, stream: stream, cursor: 0L, masks: null, values: new long[2], masksAfter: out _, reason: out var textReason));
         Assert.Contains(expectedSubstring: "cannot fill cells", actualString: textReason);
@@ -163,9 +163,9 @@ public sealed class WorldLatticeDrawLawTests {
     [Fact]
     public void Validator_AdmitsOneNumericDrawFillPerLatticeRow() {
         var numeric = new WorldLatticeFill.Draw(Generator: CountedBag(mode: WorldGeneratorMode.RestartOnExhaustion));
-        var markov = new WorldLatticeFill.Draw(Generator: new WorldGenerator(Source: WorldGeneratorSource.Markov, Start: WorldCellName.Parse(candidate: "x"), Contexts: [new WorldGeneratorContext(Key: WorldCellName.Parse(candidate: "x"))]));
-        var named = new WorldLatticeFill.Draw(Source: WorldCellName.Parse(candidate: "loot"));
-        var generators = new[] { new WorldGeneratorRow(Name: WorldCellName.Parse(candidate: "loot"), Generator: CountedBag(mode: WorldGeneratorMode.WithoutReplacement)) };
+        var markov = new WorldLatticeFill.Draw(Generator: new WorldGenerator(Source: WorldGeneratorSource.Markov, Start: CellName.Parse(candidate: "x"), Contexts: [new WorldGeneratorContext(Key: CellName.Parse(candidate: "x"))]));
+        var named = new WorldLatticeFill.Draw(Source: CellName.Parse(candidate: "loot"));
+        var generators = new[] { new WorldGeneratorRow(Name: CellName.Parse(candidate: "loot"), Generator: CountedBag(mode: WorldGeneratorMode.WithoutReplacement)) };
 
         Assert.Equal(expected: string.Empty, actual: Validate(state: LatticeState(fill: numeric)));
         Assert.Equal(expected: string.Empty, actual: Validate(state: LatticeState(fill: named, cursor: 8L, masks: [new(Word0: 0b101UL)]), generators: generators));
@@ -177,7 +177,7 @@ public sealed class WorldLatticeDrawLawTests {
     [Fact]
     public void Validator_RefusesBadMultiplicities_AndTooManyUnits() {
         static string Refusal(WorldGenerator generator) => Validate(state: new WorldStateSection(World: [
-            new WorldStateRow(Name: WorldCellName.Parse(candidate: "loot"), Kind: CellKind.Int, Draw: new WorldDraw(Generator: generator, Timing: WorldDrawTiming.Event)),
+            new WorldStateRow(Name: CellName.Parse(candidate: "loot"), Kind: CellKind.Int, Draw: new WorldDraw(Generator: generator, Timing: WorldDrawTiming.Event)),
         ]));
 
         Assert.Contains(expectedSubstring: ".multiplicity 0 must be at least 1", actualString: Refusal(new WorldGenerator(Source: WorldGeneratorSource.WeightedNumeric, Weighted: [new WorldGeneratorWeightedNumeric(Value: 1, Weight: 1UL, Multiplicity: 0)])));

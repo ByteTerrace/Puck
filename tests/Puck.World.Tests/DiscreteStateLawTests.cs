@@ -51,12 +51,12 @@ public sealed class DiscreteStateLawTests {
         var definition = Document(
             new(Name("turn"), CellKind.Int, Phase: new()),
             new(Name("cards"), CellKind.Int, Cells: [Cell("a")]),
-            new(Name("deck"), CellKind.Bool, Cells: [Cell("a")], Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true), PhaseOf: "turn"),
-            new(Name("hand"), CellKind.Bool, Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true), PhaseOf: "turn"));
+            new(Name("deck"), CellKind.Bool, Cells: [Cell("a")], Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards"), Ordered: true), PhaseOf: "turn"),
+            new(Name("hand"), CellKind.Bool, Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards"), Ordered: true), PhaseOf: "turn"));
         Assert.True(WorldStateTransforms.CanAct(definition, new("turn", 0), WorldPrincipal.Console));
         Assert.False(WorldStateTransforms.CanAct(definition, new("turn", 1), WorldPrincipal.Console));
         using var fixture = Fixtures.FreshServer(definition: definition);
-        var operation = new WorldStateTransform.Transfer("deck", "hand", WorldZoneSelector.First);
+        var operation = new StateTransform.Transfer("deck", "hand", ZoneSelector.First);
         fixture.Server.Submit(new(SubmissionEnvelope.LocalConnectionId, 0, 1, 1, WorldPrincipal.Console,
             new WorldSubmissionPayload.Mutation(new WorldMutation.TransformState(WorldPrincipal.Console, operation))), _ => { });
         fixture.Step();
@@ -69,7 +69,7 @@ public sealed class DiscreteStateLawTests {
         Assert.Equal(1L, Find(fixture.Server.Definition, "turn").Phase!.Sequence);
     }
 
-    private static WorldCellName Name(string value) => WorldCellName.Parse(value);
+    private static CellName Name(string value) => CellName.Parse(value);
     private static WorldStateCell Cell(string key, long value = 1) => new(Name(key), value);
     private static WorldStateRow Row(string name, params WorldStateCell[] cells) => new(Name(name), CellKind.Int, Cells: cells);
     private static WorldStateLatticeTopology.Grid Grid(int width = 4, int depth = 4, WorldTopologyWrap wrap = WorldTopologyWrap.None) => new("map", new DocumentVector3(0, 0, 0), 1, width, depth, Wrap: wrap);
@@ -111,7 +111,7 @@ public sealed class DiscreteStateLawTests {
             PatternsRaw = [CapturePattern()],
         };
         Assert.True(CompiledWorldPatterns.TryCompileAll(definition, out var patterns, []));
-        var operation = new WorldStateTransform.SetRay("board", "0", "E", "capture", 1);
+        var operation = new StateTransform.SetRay("board", "0", "E", "capture", 1);
         Assert.True(WorldStateTransforms.TryApply(definition, operation, WorldPrincipal.World, 1, "test", out var changed, out var reason, patterns), reason);
         Assert.All(Find(changed, "board").Cells!, c => Assert.Equal(1, c.Value));
         Assert.Equal(2, Find(definition, "board").Cells![1].Value);
@@ -129,19 +129,19 @@ public sealed class DiscreteStateLawTests {
     public void TransfersPreserveDuplicateValuedTokenIdentitiesAndPileOrder() {
         var definition = Document(
             new(Name("cards"), CellKind.Int, Cells: [Cell("a",7),Cell("b",7)]),
-            new(Name("deck"), CellKind.Bool, Cells: [Cell("a"),Cell("b")], Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true)),
-            new(Name("hand"), CellKind.Bool, Capacity: 1, Cells: [], Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true)));
-        var operation = new WorldStateTransform.Transfer("deck", "hand", WorldZoneSelector.First);
+            new(Name("deck"), CellKind.Bool, Cells: [Cell("a"),Cell("b")], Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards"), Ordered: true)),
+            new(Name("hand"), CellKind.Bool, Capacity: 1, Cells: [], Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards"), Ordered: true)));
+        var operation = new StateTransform.Transfer("deck", "hand", ZoneSelector.First);
         Assert.True(WorldStateTransforms.TryApply(definition, operation, WorldPrincipal.Console, 0, "test", out var changed, out var reason), reason);
         Assert.Equal("a", Assert.Single(Find(changed, "hand").Cells!).Key.Value);
         Assert.Equal("b", Assert.Single(Find(changed, "deck").Cells!).Key.Value);
         Assert.False(WorldStateTransforms.TryApply(changed, operation, WorldPrincipal.Console, 0, "test", out var refused, out _));
         Assert.Same(changed, refused);
-        Assert.True(WorldStateTransforms.TryApply(definition, new WorldStateTransform.Transfer("deck", "deck", WorldZoneSelector.First), WorldPrincipal.Console, 0, "test", out var reordered, out reason), reason);
+        Assert.True(WorldStateTransforms.TryApply(definition, new StateTransform.Transfer("deck", "deck", ZoneSelector.First), WorldPrincipal.Console, 0, "test", out var reordered, out reason), reason);
         Assert.Equal(new[] { "b", "a" }, Find(reordered, "deck").Cells!.Select(c => c.Key.Value));
     }
 
-    // moveToken (pathfind + allowance debit + baked occupancy, one opaque WorldStateTransform) is retired: the same
+    // moveToken (pathfind + allowance debit + baked occupancy, one opaque StateTransform) is retired: the same
     // shape is now ordinary authoring over three already-general primitives — $board:pathCost's own live target (a
     // '$cell:<row>:<key>' indirection, not a compile-time literal), an authored occupancy board a rule maintains
     // itself, and a Transaction bundling the affordability gate's own cost expression, the position write, and the
@@ -161,8 +161,8 @@ public sealed class DiscreteStateLawTests {
         ) with {
             Rules = [new(Name("move"), Effects: [new ActionEffect.Transaction([
                 new WorldTransactionStep.AddCell("allowance", Key: "0", Expression: new([
-                    new WorldValueToken.State("$board:pathCost:terrain:cell:destination:0:100:16", Key: "$cell:position:0"),
-                    new WorldValueToken.Negate(),
+                    new ValueToken.State("$board:pathCost:terrain:cell:destination:0:100:16", Key: "$cell:position:0"),
+                    new ValueToken.Negate(),
                 ])),
                 new WorldTransactionStep.SetCell("occupancy", Key: "$cell:position:0", Value: 0),
                 new WorldTransactionStep.SetCell("terrain", Key: "$cell:position:0", Value: 1),
@@ -199,11 +199,11 @@ public sealed class DiscreteStateLawTests {
     public void RuleTransactionRollsBackTransferAndPhaseWhenLaterEffectRefuses() {
         var definition = Document(
             new(Name("cards"), CellKind.Int, Cells: [Cell("a",7)]),
-            new(Name("deck"), CellKind.Bool, Cells: [Cell("a")], Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true)),
-            new(Name("hand"), CellKind.Bool, Cells: [], Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true)),
+            new(Name("deck"), CellKind.Bool, Cells: [Cell("a")], Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards"), Ordered: true)),
+            new(Name("hand"), CellKind.Bool, Cells: [], Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards"), Ordered: true)),
             Row("failed", new WorldStateCell(WorldStateRow.SlotKey, 0))) with {
             Rules = [new(Name("atomic"), Effects: [new ActionEffect.Transaction([
-                new WorldTransactionStep.TransformStateStep(new WorldStateTransform.Transfer("deck", "hand", WorldZoneSelector.First)),
+                new WorldTransactionStep.TransformStateStep(new StateTransform.Transfer("deck", "hand", ZoneSelector.First)),
                 new WorldTransactionStep.RemoveCell("hand", "missing")
             ], OnFailure: [new WorldTransactionStep.SetCell("failed", Value: 1)])])],
         };

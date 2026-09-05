@@ -111,7 +111,7 @@ public static partial class WorldDefinitionValidator {
     // vocabulary — which this document family's own project cannot reference without inverting the dependency; and a
     // layer/embellishment `gainThousandths` rides the same CreationSoundDocument.MaxLevel ceiling ValidateCues
     // enforces on a cue row, so the ceiling stays the one place — this validator — that enforces it everywhere.
-    private static AssetCheck? CheckTable(WorldTableRow row) {
+    private static AssetCheck? CheckTable(TableRow row) {
         if (!WorldAssetRowLoader.TryLoadTable(
             document: out var document,
             error: out var loadError,

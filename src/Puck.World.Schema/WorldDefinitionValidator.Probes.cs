@@ -33,7 +33,7 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (!WorldSafeName.TryParse(
+            if (!SafeName.TryParse(
                 candidate: probe.Id,
                 name: out _,
                 reason: out var idReason

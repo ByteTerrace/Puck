@@ -10,10 +10,10 @@ namespace Puck.World.Tests;
 // Run allocation/CPU comparisons after parallel collections; concurrent test activity contaminates the full-step probe.
 [Collection(ConsoleRedirectionCollection.Name)]
 public sealed class WorldDecisionLawTests {
-    private static WorldCellName Name(string value) => WorldCellName.Parse(value);
+    private static CellName Name(string value) => CellName.Parse(value);
     private static WorldStateRow Slot(string name, long value = 0) => new(Name(name), CellKind.Int,
         Cells: [new(WorldStateRow.SlotKey, value)]);
-    private static WorldValueExpression Score(decimal value) => new([new WorldValueToken.Constant(value)]);
+    private static ValueExpression Score(decimal value) => new([new ValueToken.Constant(value)]);
     private static WorldDecisionOption Option(string name, decimal score, ActionPredicate? gate = null, params ActionEffect[] effects) =>
         new(Name(name), Score(score), effects, gate);
     private static ActionPredicate Gate(string row, decimal value = 1) => new ActionPredicate.CompareState(row, ActionStateComparison.Equal, value);
@@ -47,8 +47,8 @@ public sealed class WorldDecisionLawTests {
 
     [Fact]
     public void InvalidScoreCannotWinOrCrashTheDecision() {
-        var broken = new WorldDecisionOption(Name("broken"), new([new WorldValueToken.Constant(1),
-            new WorldValueToken.Constant(0), new WorldValueToken.Divide()]), []);
+        var broken = new WorldDecisionOption(Name("broken"), new([new ValueToken.Constant(1),
+            new ValueToken.Constant(0), new ValueToken.Divide()]), []);
         using var fixture = Fixtures.FreshServer(Document(Rule(Policy(broken, Option("valid", -1)))));
         fixture.Step();
         Assert.Equal(1, State(fixture).Selected);
@@ -71,7 +71,7 @@ public sealed class WorldDecisionLawTests {
     [Fact]
     public void CommitmentBlocksOrdinaryChangesButNotLostEligibility() {
         var policy = Policy(Option("safe", 1, Gate("safe")),
-            new(Name("tempting"), new([new WorldValueToken.State("score")]), [])) with { CommitmentSeconds = 10 };
+            new(Name("tempting"), new([new ValueToken.State("score")]), [])) with { CommitmentSeconds = 10 };
         using var fixture = Fixtures.FreshServer(Document(Rule(policy), Slot("safe", 1), Slot("score")));
         fixture.Step(504);
         Set(fixture, "score", 10); fixture.Step(504);
@@ -294,7 +294,7 @@ public sealed class WorldDecisionLawTests {
     public void DecisionCannotCombineAnEdgeLatchOrMismatchedScoreKinds() {
         var rule = Rule(Policy(Option("a", 1)));
         Assert.Throws<WorldRuleException>(() => WorldRuleCompiler.CompileAll(Document(rule with { Mode = ActionTriggerMode.Edge })));
-        var typed = Policy(new WorldDecisionOption(Name("a"), new([new WorldValueToken.State("score")]), [])) with { ScoreKind = CellKind.Fixed };
+        var typed = Policy(new WorldDecisionOption(Name("a"), new([new ValueToken.State("score")]), [])) with { ScoreKind = CellKind.Fixed };
         Assert.Throws<WorldRuleException>(() => WorldRuleCompiler.CompileAll(Document(Rule(typed), Slot("score", 1))));
     }
 

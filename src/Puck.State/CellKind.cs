@@ -3,7 +3,7 @@ using Puck.Abstractions.Documents;
 
 namespace Puck.State;
 
-/// <summary>The closed set of cell value kinds a <c>WorldStateRow</c> declares, shared by every cell the row
+/// <summary>The closed set of cell value kinds a state row declares, shared by every cell the row
 /// carries. Carries no float kind: simulation state is float-free by the determinism contract (see
 /// <see cref="Fixed"/> for how a fractional value still rides here). A counter is represented as
 /// <see cref="Fixed"/>; a timer is <see cref="Int"/> with <c>NonNegative</c> set.</summary>

@@ -87,7 +87,7 @@ public sealed class ContributionAuthoringValidationLawTests {
             ],
             References = [
                 new WorldReference(
-                    Name: WorldSafeName.Parse(candidate: "peer"),
+                    Name: SafeName.Parse(candidate: "peer"),
                     Document: "peer.world.json",
                     Owner: null,
                     World: null
@@ -95,7 +95,7 @@ public sealed class ContributionAuthoringValidationLawTests {
             ],
             Destinations = [
                 new WorldDestination(
-                    Name: WorldSafeName.Parse(candidate: "peer"),
+                    Name: SafeName.Parse(candidate: "peer"),
                     Reference: "peer",
                     Durability: WorldDestinationDurability.Persisted,
                     Scope: WorldDestinationScope.Global
@@ -103,7 +103,7 @@ public sealed class ContributionAuthoringValidationLawTests {
             ],
             Adjacencies = [
                 new WorldAdjacency(
-                    Name: WorldSafeName.Parse(candidate: LinkName),
+                    Name: SafeName.Parse(candidate: LinkName),
                     Destination: "peer",
                     Counterpart: "south",
                     Boundary: new WorldAdjacencyBoundary(
@@ -121,7 +121,7 @@ public sealed class ContributionAuthoringValidationLawTests {
     private static WorldPlacementContribution WellFormed() => new(
         Tenure: WorldContributionTenure.Presence,
         SlotCreationId: SlotCreation,
-        Link: WorldSafeName.Parse(candidate: LinkName),
+        Link: SafeName.Parse(candidate: LinkName),
         GraceSeconds: 30f
     );
 
@@ -130,7 +130,7 @@ public sealed class ContributionAuthoringValidationLawTests {
     [Fact]
     public void PresenceLinkMustNameADeclaredAdjacency() {
         AssertRefusedNaming(
-            definition: With(contribution: (WellFormed() with { Link = WorldSafeName.Parse(candidate: "elsewhere") })),
+            definition: With(contribution: (WellFormed() with { Link = SafeName.Parse(candidate: "elsewhere") })),
             needle: "contribution.link 'elsewhere' names no adjacencies row"
         );
         AssertRefusedNaming(
@@ -161,7 +161,7 @@ public sealed class ContributionAuthoringValidationLawTests {
             definition: With(contribution: new WorldPlacementContribution(
                 Tenure: WorldContributionTenure.Endowed,
                 SlotCreationId: SlotCreation,
-                Link: WorldSafeName.Parse(candidate: LinkName)
+                Link: SafeName.Parse(candidate: LinkName)
             )),
             needle: "is refused for tenure 'Endowed' — an endowed piece watches no link"
         );

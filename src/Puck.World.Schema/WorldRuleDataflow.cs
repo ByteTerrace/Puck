@@ -157,15 +157,15 @@ public static class WorldRuleDataflow {
             }
         }
     }
-    private static IEnumerable<string> TransformRows(WorldStateTransform transform) => transform switch {
-        WorldStateTransform.Transfer transfer => [transfer.From, transfer.To],
-        WorldStateTransform.SetRay ray => [ray.Row],
-        WorldStateTransform.Shuffle shuffle => [shuffle.Row],
-        WorldStateTransform.SortZone zone => [zone.Row],
-        WorldStateTransform.SortKeyed keyed => [keyed.Row],
-        WorldStateTransform.WriteSet set => [set.Row],
-        WorldStateTransform.Push push => [push.Row],
-        WorldStateTransform.Observe observe => [observe.Row],
+    private static IEnumerable<string> TransformRows(StateTransform transform) => transform switch {
+        StateTransform.Transfer transfer => [transfer.From, transfer.To],
+        StateTransform.SetRay ray => [ray.Row],
+        StateTransform.Shuffle shuffle => [shuffle.Row],
+        StateTransform.SortZone zone => [zone.Row],
+        StateTransform.SortKeyed keyed => [keyed.Row],
+        StateTransform.WriteSet set => [set.Row],
+        StateTransform.Push push => [push.Row],
+        StateTransform.Observe observe => [observe.Row],
         _ => [],
     };
 }

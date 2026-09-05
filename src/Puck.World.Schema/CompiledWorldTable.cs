@@ -49,7 +49,7 @@ public sealed class CompiledWorldTable {
     /// <param name="row">The reference row.</param>
     /// <param name="table">The compiled table, when this method returns <see langword="true"/>.</param>
     /// <param name="error">The failure reason, when this method returns <see langword="false"/>.</param>
-    public static bool TryCompile(WorldTableRow row, out CompiledWorldTable? table, out string? error) {
+    public static bool TryCompile(TableRow row, out CompiledWorldTable? table, out string? error) {
         table = null;
         if (!WorldAssetRowLoader.TryLoadTable(row: row, document: out var document, error: out error)) {
             return false;
@@ -74,7 +74,7 @@ public sealed class CompiledWorldTable {
             for (var column = 0; column < columnCount; column++) {
                 var value = ((columnNames.Length == 0) ? entry.Value!.Value : entry.Values![column]);
                 if (isFixed) {
-                    if (!WorldStateNumericLiteral.TryToFixed(value: value, result: out var fixedValue)) {
+                    if (!NumericLiteral.TryToFixed(value: value, result: out var fixedValue)) {
                         error = $"entries[{index}] value {value} is not representable in Q48.16.";
                         return false;
                     }

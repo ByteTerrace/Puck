@@ -35,12 +35,12 @@ public sealed class OverlayPresentationPredicateLawTests {
         FadeSeconds: fadeSeconds
     );
     private static WorldStateRow IntRow(string name, long value) => new(
-        Name: WorldCellName.Parse(candidate: name),
+        Name: CellName.Parse(candidate: name),
         Kind: CellKind.Int,
         Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: value)]
     );
     private static WorldStateRow TextRow(string name, string text) => new(
-        Name: WorldCellName.Parse(candidate: name),
+        Name: CellName.Parse(candidate: name),
         Kind: CellKind.Text,
         Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Text: text)]
     );

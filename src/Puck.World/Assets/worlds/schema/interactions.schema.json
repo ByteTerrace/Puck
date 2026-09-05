@@ -15,7 +15,7 @@
         ],
         "properties": {
           "name": {
-            "description": "The interaction\u0027s stable name \u2014 unique within the section (a separate namespace from Name, so the two may coincide without colliding). A WorldCellName, never $-prefixed \u2014 that prefix marks what the engine mints, and nothing mints an interaction.",
+            "description": "The interaction\u0027s stable name \u2014 unique within the section (a separate namespace from Name, so the two may coincide without colliding). A CellName, never $-prefixed \u2014 that prefix marks what the engine mints, and nothing mints an interaction.",
             "type": "string"
           },
           "left": {

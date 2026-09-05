@@ -19,8 +19,8 @@ public sealed class WorldRuleTraceLawTests {
     }
 
     private static WorldStateRow Slot(string name, long value) =>
-        new(WorldCellName.Parse(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, value)]);
-    private static WorldValueExpression Expr(string text) => WorldValueExpression.Parse(text);
+        new(CellName.Parse(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, value)]);
+    private static ValueExpression Expr(string text) => ValueExpression.Parse(text);
     private static long Value(WorldFixture fixture, string row) =>
         WorldDefinitionRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
 
@@ -29,13 +29,13 @@ public sealed class WorldRuleTraceLawTests {
     private static WorldDefinition Document() => Fixtures.BuildDocument() with {
         StateRaw = new WorldStateSection(World: [Slot("damage", 30L), Slot("hp", 20L), Slot("hits", 0L)]),
         Rules = [new WorldRule(
-            WorldCellName.Parse("strike"),
+            CellName.Parse("strike"),
             [
                 new ActionEffect.AddState(State: "hp", Expression: Expr("-$bind:dealt")),
                 new ActionEffect.AddState(State: "hits", Value: 1m),
             ],
             Gate: new ActionPredicate.CompareState(State: "hp", Comparison: ActionStateComparison.GreaterOrEqual, Value: 0m),
-            Bindings: [new WorldRuleBinding(WorldCellName.Parse("dealt"), CellKind.Int, Expr("min(damage, hp)"))]
+            Bindings: [new WorldRuleBinding(CellName.Parse("dealt"), CellKind.Int, Expr("min(damage, hp)"))]
         )],
     };
 
@@ -76,7 +76,7 @@ public sealed class WorldRuleTraceLawTests {
         var dividing = Document() with {
             StateRaw = new WorldStateSection(World: [Slot("damage", 30L), Slot("hp", 20L), Slot("hits", 0L), Slot("zero", 0L)]),
             Rules = [Document().Rules![0] with {
-                Bindings = [new WorldRuleBinding(WorldCellName.Parse("dealt"), CellKind.Int, Expr("damage / zero"))],
+                Bindings = [new WorldRuleBinding(CellName.Parse("dealt"), CellKind.Int, Expr("damage / zero"))],
             }],
         };
         using var refused = Fixtures.FreshServer(definition: dividing);

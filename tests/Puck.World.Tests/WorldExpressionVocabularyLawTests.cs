@@ -17,14 +17,14 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Mode: ActionTriggerMode.Edge,
                     Effects: [new ActionEffect.SetState(
                         State: "board",
-                        Expression: new WorldValueExpression(Tokens: [
-                            new WorldValueToken.Constant(Value: 1m),
-                            new WorldValueToken.Constant(Value: 63m),
-                            new WorldValueToken.ShiftLeft(),
-                            new WorldValueToken.Constant(Value: 1m),
-                            new WorldValueToken.BitOr(),
-                            new WorldValueToken.BitNot(),
-                            new WorldValueToken.BitNot(),
+                        Expression: new ValueExpression(Tokens: [
+                            new ValueToken.Constant(Value: 1m),
+                            new ValueToken.Constant(Value: 63m),
+                            new ValueToken.ShiftLeft(),
+                            new ValueToken.Constant(Value: 1m),
+                            new ValueToken.BitOr(),
+                            new ValueToken.BitNot(),
+                            new ValueToken.BitNot(),
                         ])
                     )]
                 ),
@@ -34,10 +34,10 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Gate: new ActionPredicate.CompareState(State: "big", Comparison: ActionStateComparison.Greater, Value: 140_737_488_355_327m),
                     Effects: [new ActionEffect.SetState(
                         State: "seen",
-                        Expression: new WorldValueExpression(Tokens: [
-                            new WorldValueToken.State(Name: "big"),
-                            new WorldValueToken.Constant(Value: 1m),
-                            new WorldValueToken.ShiftRightLogical(),
+                        Expression: new ValueExpression(Tokens: [
+                            new ValueToken.State(Name: "big"),
+                            new ValueToken.Constant(Value: 1m),
+                            new ValueToken.ShiftRightLogical(),
                         ])
                     )]
                 ),
@@ -57,20 +57,20 @@ public sealed class WorldExpressionVocabularyLawTests {
         var definition = Document(
             state: [Slot("packed", 0L), Slot("spread", 0L), Slot("field", 0L), Slot("inserted", 0L), Slot("refused", 7L)],
             rules: [
-                new WorldRule(Name: Name("pext"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.SetState(State: "packed", Expression: new WorldValueExpression(Tokens: [
-                    new WorldValueToken.Constant(Value: 176m), new WorldValueToken.Constant(Value: 240m), new WorldValueToken.ParallelBitExtract(),
+                new WorldRule(Name: Name("pext"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.SetState(State: "packed", Expression: new ValueExpression(Tokens: [
+                    new ValueToken.Constant(Value: 176m), new ValueToken.Constant(Value: 240m), new ValueToken.ParallelBitExtract(),
                 ]))]),
-                new WorldRule(Name: Name("pdep"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.SetState(State: "spread", Expression: new WorldValueExpression(Tokens: [
-                    new WorldValueToken.Constant(Value: 11m), new WorldValueToken.Constant(Value: 240m), new WorldValueToken.ParallelBitDeposit(),
+                new WorldRule(Name: Name("pdep"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.SetState(State: "spread", Expression: new ValueExpression(Tokens: [
+                    new ValueToken.Constant(Value: 11m), new ValueToken.Constant(Value: 240m), new ValueToken.ParallelBitDeposit(),
                 ]))]),
-                new WorldRule(Name: Name("field"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.SetState(State: "field", Expression: new WorldValueExpression(Tokens: [
-                    new WorldValueToken.Constant(Value: 4660m), new WorldValueToken.Constant(Value: 4m), new WorldValueToken.Constant(Value: 8m), new WorldValueToken.BitField(),
+                new WorldRule(Name: Name("field"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.SetState(State: "field", Expression: new ValueExpression(Tokens: [
+                    new ValueToken.Constant(Value: 4660m), new ValueToken.Constant(Value: 4m), new ValueToken.Constant(Value: 8m), new ValueToken.BitField(),
                 ]))]),
-                new WorldRule(Name: Name("insert"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.SetState(State: "inserted", Expression: new WorldValueExpression(Tokens: [
-                    new WorldValueToken.Constant(Value: 4660m), new WorldValueToken.Constant(Value: 255m), new WorldValueToken.Constant(Value: 4m), new WorldValueToken.Constant(Value: 8m), new WorldValueToken.BitInsert(),
+                new WorldRule(Name: Name("insert"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.SetState(State: "inserted", Expression: new ValueExpression(Tokens: [
+                    new ValueToken.Constant(Value: 4660m), new ValueToken.Constant(Value: 255m), new ValueToken.Constant(Value: 4m), new ValueToken.Constant(Value: 8m), new ValueToken.BitInsert(),
                 ]))]),
-                new WorldRule(Name: Name("too-wide"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.SetState(State: "refused", Expression: new WorldValueExpression(Tokens: [
-                    new WorldValueToken.Constant(Value: 1m), new WorldValueToken.Constant(Value: 60m), new WorldValueToken.Constant(Value: 8m), new WorldValueToken.BitField(),
+                new WorldRule(Name: Name("too-wide"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.SetState(State: "refused", Expression: new ValueExpression(Tokens: [
+                    new ValueToken.Constant(Value: 1m), new ValueToken.Constant(Value: 60m), new ValueToken.Constant(Value: 8m), new ValueToken.BitField(),
                 ]))]),
             ]
         );
@@ -93,44 +93,44 @@ public sealed class WorldExpressionVocabularyLawTests {
             rules: [
                 new WorldRule(Name: Name("wrap"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.SetState(
                     State: "pos",
-                    Expression: new WorldValueExpression(Tokens: [
-                        new WorldValueToken.State(Name: "pos"),
-                        new WorldValueToken.Constant(Value: 7m),
-                        new WorldValueToken.Add(),
-                        new WorldValueToken.Constant(Value: 40m),
-                        new WorldValueToken.Modulo(),
+                    Expression: new ValueExpression(Tokens: [
+                        new ValueToken.State(Name: "pos"),
+                        new ValueToken.Constant(Value: 7m),
+                        new ValueToken.Add(),
+                        new ValueToken.Constant(Value: 40m),
+                        new ValueToken.Modulo(),
                     ])
                 )]),
                 new WorldRule(Name: Name("ace"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.SetState(
                     State: "ace",
-                    Expression: new WorldValueExpression(Tokens: [
-                        new WorldValueToken.State(Name: "total"),
-                        new WorldValueToken.Constant(Value: 11m),
-                        new WorldValueToken.Add(),
-                        new WorldValueToken.Constant(Value: 21m),
-                        new WorldValueToken.LessOrEqual(),
-                        new WorldValueToken.Constant(Value: 11m),
-                        new WorldValueToken.Constant(Value: 1m),
-                        new WorldValueToken.Select(),
+                    Expression: new ValueExpression(Tokens: [
+                        new ValueToken.State(Name: "total"),
+                        new ValueToken.Constant(Value: 11m),
+                        new ValueToken.Add(),
+                        new ValueToken.Constant(Value: 21m),
+                        new ValueToken.LessOrEqual(),
+                        new ValueToken.Constant(Value: 11m),
+                        new ValueToken.Constant(Value: 1m),
+                        new ValueToken.Select(),
                     ])
                 )]),
                 new WorldRule(Name: Name("frac"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.SetState(
                     State: "frac",
-                    Expression: new WorldValueExpression(Tokens: [
-                        new WorldValueToken.Constant(Value: 2.5m),
-                        new WorldValueToken.Constant(Value: 1m),
-                        new WorldValueToken.Modulo(),
+                    Expression: new ValueExpression(Tokens: [
+                        new ValueToken.Constant(Value: 2.5m),
+                        new ValueToken.Constant(Value: 1m),
+                        new ValueToken.Modulo(),
                     ])
                 )]),
                 new WorldRule(Name: Name("pick"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.SetState(
                     State: "pick",
-                    Expression: new WorldValueExpression(Tokens: [
-                        new WorldValueToken.Constant(Value: 0.25m),
-                        new WorldValueToken.Constant(Value: 0.5m),
-                        new WorldValueToken.Greater(),
-                        new WorldValueToken.Constant(Value: 3m),
-                        new WorldValueToken.Constant(Value: 0.5m),
-                        new WorldValueToken.Select(),
+                    Expression: new ValueExpression(Tokens: [
+                        new ValueToken.Constant(Value: 0.25m),
+                        new ValueToken.Constant(Value: 0.5m),
+                        new ValueToken.Greater(),
+                        new ValueToken.Constant(Value: 3m),
+                        new ValueToken.Constant(Value: 0.5m),
+                        new ValueToken.Select(),
                     ])
                 )]),
             ]
@@ -154,10 +154,10 @@ public sealed class WorldExpressionVocabularyLawTests {
                 new WorldRule(Name: Name("bad-shift"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.Transaction(
                     Effects: [new WorldTransactionStep.SetCell(
                         State: "target",
-                        Expression: new WorldValueExpression(Tokens: [
-                            new WorldValueToken.Constant(Value: 1m),
-                            new WorldValueToken.Constant(Value: 64m),
-                            new WorldValueToken.ShiftLeft(),
+                        Expression: new ValueExpression(Tokens: [
+                            new ValueToken.Constant(Value: 1m),
+                            new ValueToken.Constant(Value: 64m),
+                            new ValueToken.ShiftLeft(),
                         ])
                     )],
                     OnFailure: [new WorldTransactionStep.SetCell(State: "failed", Value: 1m)]
@@ -165,20 +165,20 @@ public sealed class WorldExpressionVocabularyLawTests {
                 new WorldRule(Name: Name("bad-modulo"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.Transaction(
                     Effects: [new WorldTransactionStep.SetCell(
                         State: "target",
-                        Expression: new WorldValueExpression(Tokens: [
-                            new WorldValueToken.Constant(Value: 1m),
-                            new WorldValueToken.Constant(Value: 0m),
-                            new WorldValueToken.Modulo(),
+                        Expression: new ValueExpression(Tokens: [
+                            new ValueToken.Constant(Value: 1m),
+                            new ValueToken.Constant(Value: 0m),
+                            new ValueToken.Modulo(),
                         ])
                     )],
                     OnFailure: [new WorldTransactionStep.AddCell(State: "failed", Value: 1m)]
                 )]),
                 new WorldRule(Name: Name("min-modulo"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.SetState(
                     State: "zero",
-                    Expression: new WorldValueExpression(Tokens: [
-                        new WorldValueToken.State(Name: "wrapped"),
-                        new WorldValueToken.Constant(Value: -1m),
-                        new WorldValueToken.Modulo(),
+                    Expression: new ValueExpression(Tokens: [
+                        new ValueToken.State(Name: "wrapped"),
+                        new ValueToken.Constant(Value: -1m),
+                        new ValueToken.Modulo(),
                     ])
                 )]),
             ]
@@ -199,10 +199,10 @@ public sealed class WorldExpressionVocabularyLawTests {
             state: [FixedSlot("target", 0L)],
             rules: [new WorldRule(Name: Name("fixed-bitwise"), Effects: [new ActionEffect.SetState(
                 State: "target",
-                Expression: new WorldValueExpression(Tokens: [
-                    new WorldValueToken.Constant(Value: 1m),
-                    new WorldValueToken.Constant(Value: 2m),
-                    new WorldValueToken.BitAnd(),
+                Expression: new ValueExpression(Tokens: [
+                    new ValueToken.Constant(Value: 1m),
+                    new ValueToken.Constant(Value: 2m),
+                    new ValueToken.BitAnd(),
                 ])
             )])]
         );
@@ -210,11 +210,11 @@ public sealed class WorldExpressionVocabularyLawTests {
             state: [FixedSlot("target", 0L)],
             rules: [new WorldRule(Name: Name("fixed-condition"), Effects: [new ActionEffect.SetState(
                 State: "target",
-                Expression: new WorldValueExpression(Tokens: [
-                    new WorldValueToken.Constant(Value: 1m),
-                    new WorldValueToken.Constant(Value: 2m),
-                    new WorldValueToken.Constant(Value: 3m),
-                    new WorldValueToken.Select(),
+                Expression: new ValueExpression(Tokens: [
+                    new ValueToken.Constant(Value: 1m),
+                    new ValueToken.Constant(Value: 2m),
+                    new ValueToken.Constant(Value: 3m),
+                    new ValueToken.Select(),
                 ])
             )])]
         );
@@ -222,10 +222,10 @@ public sealed class WorldExpressionVocabularyLawTests {
             state: [FixedSlot("target", 0L)],
             rules: [new WorldRule(Name: Name("dangling"), Effects: [new ActionEffect.SetState(
                 State: "target",
-                Expression: new WorldValueExpression(Tokens: [
-                    new WorldValueToken.Constant(Value: 1m),
-                    new WorldValueToken.Constant(Value: 2m),
-                    new WorldValueToken.Less(),
+                Expression: new ValueExpression(Tokens: [
+                    new ValueToken.Constant(Value: 1m),
+                    new ValueToken.Constant(Value: 2m),
+                    new ValueToken.Less(),
                 ])
             )])]
         );
@@ -233,10 +233,10 @@ public sealed class WorldExpressionVocabularyLawTests {
             state: [Slot("target", 0L)],
             rules: [new WorldRule(Name: Name("underflow"), Effects: [new ActionEffect.SetState(
                 State: "target",
-                Expression: new WorldValueExpression(Tokens: [
-                    new WorldValueToken.Constant(Value: 1m),
-                    new WorldValueToken.Constant(Value: 2m),
-                    new WorldValueToken.Select(),
+                Expression: new ValueExpression(Tokens: [
+                    new ValueToken.Constant(Value: 1m),
+                    new ValueToken.Constant(Value: 2m),
+                    new ValueToken.Select(),
                 ])
             )])]
         );
@@ -244,13 +244,13 @@ public sealed class WorldExpressionVocabularyLawTests {
             state: [Slot("target", 0L)],
             rules: [new WorldRule(Name: Name("control"), Effects: [new ActionEffect.SetState(
                 State: "target",
-                Expression: new WorldValueExpression(Tokens: [
-                    new WorldValueToken.Constant(Value: 1m),
-                    new WorldValueToken.Constant(Value: 2m),
-                    new WorldValueToken.Less(),
-                    new WorldValueToken.Constant(Value: 7m),
-                    new WorldValueToken.Constant(Value: 9m),
-                    new WorldValueToken.Select(),
+                Expression: new ValueExpression(Tokens: [
+                    new ValueToken.Constant(Value: 1m),
+                    new ValueToken.Constant(Value: 2m),
+                    new ValueToken.Less(),
+                    new ValueToken.Constant(Value: 7m),
+                    new ValueToken.Constant(Value: 9m),
+                    new ValueToken.Select(),
                 ])
             )])]
         );
@@ -273,17 +273,17 @@ public sealed class WorldExpressionVocabularyLawTests {
             state: [Slot("board", board), Slot("count", 0L), Slot("lowest", 0L), Slot("highest", 0L), Slot("next", 0L), Slot("rest", 0L),
                     Slot("flip", 0L), Slot("turn", 0L), Slot("rot", 0L), Slot("neg", 0L), Slot("mag", -6L), FixedSlot("sgn", FixedQ4816.FromInteger(value: -3).Value), FixedSlot("sign", 0L)],
             rules: [
-                Rule("count", "count", [new WorldValueToken.State(Name: "board"), new WorldValueToken.PopCount()]),
-                Rule("lowest", "lowest", [new WorldValueToken.State(Name: "board"), new WorldValueToken.TrailingZeroCount()]),
-                Rule("highest", "highest", [new WorldValueToken.Constant(Value: 63m), new WorldValueToken.State(Name: "board"), new WorldValueToken.LeadingZeroCount(), new WorldValueToken.Subtract()]),
-                Rule("next", "next", [new WorldValueToken.State(Name: "board"), new WorldValueToken.LowestSetBit()]),
-                Rule("rest", "rest", [new WorldValueToken.State(Name: "board"), new WorldValueToken.ClearLowestSetBit()]),
-                Rule("flip", "flip", [new WorldValueToken.State(Name: "board"), new WorldValueToken.ByteSwap()]),
-                Rule("turn", "turn", [new WorldValueToken.State(Name: "board"), new WorldValueToken.BitReverse()]),
-                Rule("rot", "rot", [new WorldValueToken.State(Name: "board"), new WorldValueToken.Constant(Value: 1m), new WorldValueToken.RotateLeft(), new WorldValueToken.Constant(Value: 1m), new WorldValueToken.RotateRight()]),
-                Rule("neg", "neg", [new WorldValueToken.State(Name: "count"), new WorldValueToken.Negate()]),
-                Rule("mag", "mag", [new WorldValueToken.State(Name: "mag"), new WorldValueToken.Abs()]),
-                Rule("sign", "sign", [new WorldValueToken.State(Name: "sgn"), new WorldValueToken.Sign(), new WorldValueToken.Constant(Value: 2.5m), new WorldValueToken.Constant(Value: 7.5m), new WorldValueToken.Select()]),
+                Rule("count", "count", [new ValueToken.State(Name: "board"), new ValueToken.PopCount()]),
+                Rule("lowest", "lowest", [new ValueToken.State(Name: "board"), new ValueToken.TrailingZeroCount()]),
+                Rule("highest", "highest", [new ValueToken.Constant(Value: 63m), new ValueToken.State(Name: "board"), new ValueToken.LeadingZeroCount(), new ValueToken.Subtract()]),
+                Rule("next", "next", [new ValueToken.State(Name: "board"), new ValueToken.LowestSetBit()]),
+                Rule("rest", "rest", [new ValueToken.State(Name: "board"), new ValueToken.ClearLowestSetBit()]),
+                Rule("flip", "flip", [new ValueToken.State(Name: "board"), new ValueToken.ByteSwap()]),
+                Rule("turn", "turn", [new ValueToken.State(Name: "board"), new ValueToken.BitReverse()]),
+                Rule("rot", "rot", [new ValueToken.State(Name: "board"), new ValueToken.Constant(Value: 1m), new ValueToken.RotateLeft(), new ValueToken.Constant(Value: 1m), new ValueToken.RotateRight()]),
+                Rule("neg", "neg", [new ValueToken.State(Name: "count"), new ValueToken.Negate()]),
+                Rule("mag", "mag", [new ValueToken.State(Name: "mag"), new ValueToken.Abs()]),
+                Rule("sign", "sign", [new ValueToken.State(Name: "sgn"), new ValueToken.Sign(), new ValueToken.Constant(Value: 2.5m), new ValueToken.Constant(Value: 7.5m), new ValueToken.Select()]),
             ]
         );
 
@@ -309,26 +309,26 @@ public sealed class WorldExpressionVocabularyLawTests {
         var definition = Document(
             state: [Slot("zero", 0L), Slot("lead", 0L), Slot("trail", 0L), Slot("low", 7L), Slot("min", long.MinValue), Slot("target", 5L), Slot("failed", 0L)],
             rules: [
-                Rule("lead", "lead", [new WorldValueToken.State(Name: "zero"), new WorldValueToken.LeadingZeroCount()]),
-                Rule("trail", "trail", [new WorldValueToken.State(Name: "zero"), new WorldValueToken.TrailingZeroCount()]),
-                Rule("low", "low", [new WorldValueToken.State(Name: "zero"), new WorldValueToken.LowestSetBit()]),
+                Rule("lead", "lead", [new ValueToken.State(Name: "zero"), new ValueToken.LeadingZeroCount()]),
+                Rule("trail", "trail", [new ValueToken.State(Name: "zero"), new ValueToken.TrailingZeroCount()]),
+                Rule("low", "low", [new ValueToken.State(Name: "zero"), new ValueToken.LowestSetBit()]),
                 new WorldRule(Name: Name("refuse-negate"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.Transaction(
-                    Effects: [new WorldTransactionStep.SetCell(State: "target", Expression: new WorldValueExpression(Tokens: [new WorldValueToken.State(Name: "min"), new WorldValueToken.Negate()]))],
+                    Effects: [new WorldTransactionStep.SetCell(State: "target", Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: "min"), new ValueToken.Negate()]))],
                     OnFailure: [new WorldTransactionStep.AddCell(State: "failed", Value: 1m)]
                 )]),
                 new WorldRule(Name: Name("refuse-abs"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.Transaction(
-                    Effects: [new WorldTransactionStep.SetCell(State: "target", Expression: new WorldValueExpression(Tokens: [new WorldValueToken.State(Name: "min"), new WorldValueToken.Abs()]))],
+                    Effects: [new WorldTransactionStep.SetCell(State: "target", Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: "min"), new ValueToken.Abs()]))],
                     OnFailure: [new WorldTransactionStep.AddCell(State: "failed", Value: 1m)]
                 )]),
                 new WorldRule(Name: Name("refuse-rotate"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.Transaction(
-                    Effects: [new WorldTransactionStep.SetCell(State: "target", Expression: new WorldValueExpression(Tokens: [new WorldValueToken.State(Name: "low"), new WorldValueToken.Constant(Value: 64m), new WorldValueToken.RotateLeft()]))],
+                    Effects: [new WorldTransactionStep.SetCell(State: "target", Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: "low"), new ValueToken.Constant(Value: 64m), new ValueToken.RotateLeft()]))],
                     OnFailure: [new WorldTransactionStep.AddCell(State: "failed", Value: 1m)]
                 )]),
             ]
         );
         var censusInFixed = Document(
             state: [FixedSlot("target", 0L)],
-            rules: [new WorldRule(Name: Name("fixed-census"), Effects: [new ActionEffect.SetState(State: "target", Expression: new WorldValueExpression(Tokens: [new WorldValueToken.Constant(Value: 1m), new WorldValueToken.PopCount()]))])]
+            rules: [new WorldRule(Name: Name("fixed-census"), Effects: [new ActionEffect.SetState(State: "target", Expression: new ValueExpression(Tokens: [new ValueToken.Constant(Value: 1m), new ValueToken.PopCount()]))])]
         );
 
         using var fixture = Fixtures.FreshServer(definition: definition);
@@ -344,40 +344,40 @@ public sealed class WorldExpressionVocabularyLawTests {
         Assert.Contains(expectedSubstring: "kind=int expressions only", actualString: reason);
     }
 
-    private static WorldRule Rule(string name, string target, IReadOnlyList<WorldValueToken> tokens) => new(
+    private static WorldRule Rule(string name, string target, IReadOnlyList<ValueToken> tokens) => new(
         Name: Name(name),
         Mode: ActionTriggerMode.Edge,
-        Effects: [new ActionEffect.SetState(State: target, Expression: new WorldValueExpression(Tokens: tokens))]
+        Effects: [new ActionEffect.SetState(State: target, Expression: new ValueExpression(Tokens: tokens))]
     );
 
     [Fact]
     public void EveryOperatorRoundTripsThroughTheStrictWireShape() {
-        WorldValueToken[] tokens = [
-            new WorldValueToken.Constant(Value: 1m), new WorldValueToken.Constant(Value: 2m), new WorldValueToken.Modulo(),
-            new WorldValueToken.Constant(Value: 3m), new WorldValueToken.BitAnd(), new WorldValueToken.Constant(Value: 4m), new WorldValueToken.BitOr(),
-            new WorldValueToken.Constant(Value: 5m), new WorldValueToken.BitXor(), new WorldValueToken.BitNot(),
-            new WorldValueToken.Constant(Value: 1m), new WorldValueToken.ShiftLeft(), new WorldValueToken.Constant(Value: 1m), new WorldValueToken.ShiftRight(),
-            new WorldValueToken.Constant(Value: 1m), new WorldValueToken.ShiftRightLogical(),
-            new WorldValueToken.Constant(Value: 6m), new WorldValueToken.Equal(), new WorldValueToken.Constant(Value: 0m), new WorldValueToken.NotEqual(),
-            new WorldValueToken.Constant(Value: 1m), new WorldValueToken.Less(), new WorldValueToken.Constant(Value: 1m), new WorldValueToken.LessOrEqual(),
-            new WorldValueToken.Constant(Value: 1m), new WorldValueToken.Greater(), new WorldValueToken.Constant(Value: 1m), new WorldValueToken.GreaterOrEqual(),
-            new WorldValueToken.Constant(Value: 8m), new WorldValueToken.Constant(Value: 9m), new WorldValueToken.Select(),
-            new WorldValueToken.PopCount(), new WorldValueToken.LeadingZeroCount(), new WorldValueToken.TrailingZeroCount(),
-            new WorldValueToken.LowestSetBit(), new WorldValueToken.ClearLowestSetBit(),
-            new WorldValueToken.Constant(Value: 3m), new WorldValueToken.RotateLeft(), new WorldValueToken.Constant(Value: 3m), new WorldValueToken.RotateRight(),
-            new WorldValueToken.ByteSwap(), new WorldValueToken.BitReverse(), new WorldValueToken.Negate(), new WorldValueToken.Abs(), new WorldValueToken.Sign(),
-            new WorldValueToken.Constant(Value: 12m), new WorldValueToken.ParallelBitExtract(), new WorldValueToken.Constant(Value: 12m), new WorldValueToken.ParallelBitDeposit(),
-            new WorldValueToken.Constant(Value: 1m), new WorldValueToken.Constant(Value: 2m), new WorldValueToken.BitField(),
-            new WorldValueToken.Constant(Value: 1m), new WorldValueToken.Constant(Value: 1m), new WorldValueToken.Constant(Value: 2m), new WorldValueToken.BitInsert(),
+        ValueToken[] tokens = [
+            new ValueToken.Constant(Value: 1m), new ValueToken.Constant(Value: 2m), new ValueToken.Modulo(),
+            new ValueToken.Constant(Value: 3m), new ValueToken.BitAnd(), new ValueToken.Constant(Value: 4m), new ValueToken.BitOr(),
+            new ValueToken.Constant(Value: 5m), new ValueToken.BitXor(), new ValueToken.BitNot(),
+            new ValueToken.Constant(Value: 1m), new ValueToken.ShiftLeft(), new ValueToken.Constant(Value: 1m), new ValueToken.ShiftRight(),
+            new ValueToken.Constant(Value: 1m), new ValueToken.ShiftRightLogical(),
+            new ValueToken.Constant(Value: 6m), new ValueToken.Equal(), new ValueToken.Constant(Value: 0m), new ValueToken.NotEqual(),
+            new ValueToken.Constant(Value: 1m), new ValueToken.Less(), new ValueToken.Constant(Value: 1m), new ValueToken.LessOrEqual(),
+            new ValueToken.Constant(Value: 1m), new ValueToken.Greater(), new ValueToken.Constant(Value: 1m), new ValueToken.GreaterOrEqual(),
+            new ValueToken.Constant(Value: 8m), new ValueToken.Constant(Value: 9m), new ValueToken.Select(),
+            new ValueToken.PopCount(), new ValueToken.LeadingZeroCount(), new ValueToken.TrailingZeroCount(),
+            new ValueToken.LowestSetBit(), new ValueToken.ClearLowestSetBit(),
+            new ValueToken.Constant(Value: 3m), new ValueToken.RotateLeft(), new ValueToken.Constant(Value: 3m), new ValueToken.RotateRight(),
+            new ValueToken.ByteSwap(), new ValueToken.BitReverse(), new ValueToken.Negate(), new ValueToken.Abs(), new ValueToken.Sign(),
+            new ValueToken.Constant(Value: 12m), new ValueToken.ParallelBitExtract(), new ValueToken.Constant(Value: 12m), new ValueToken.ParallelBitDeposit(),
+            new ValueToken.Constant(Value: 1m), new ValueToken.Constant(Value: 2m), new ValueToken.BitField(),
+            new ValueToken.Constant(Value: 1m), new ValueToken.Constant(Value: 1m), new ValueToken.Constant(Value: 2m), new ValueToken.BitInsert(),
         ];
         var definition = Document(
             state: [Slot("target", 0L)],
-            rules: [new WorldRule(Name: Name("all"), Effects: [new ActionEffect.SetState(State: "target", Expression: new WorldValueExpression(Tokens: tokens))])]
+            rules: [new WorldRule(Name: Name("all"), Effects: [new ActionEffect.SetState(State: "target", Expression: new ValueExpression(Tokens: tokens))])]
         );
 
         var parsed = WorldDefinitionSerialization.Deserialize(utf8Json: WorldDefinitionSerialization.Serialize(definition: definition));
         var effect = Assert.IsType<ActionEffect.SetState>(@object: Assert.Single(collection: Assert.Single(collection: parsed.Rules ?? []).Effects));
-        var round = Assert.IsType<WorldValueExpression>(@object: effect.Expression).Tokens;
+        var round = Assert.IsType<ValueExpression>(@object: effect.Expression).Tokens;
 
         Assert.Equal(expected: tokens.Length, actual: round.Count);
         for (var index = 0; index < tokens.Length; index++) {
@@ -392,7 +392,7 @@ public sealed class WorldExpressionVocabularyLawTests {
     };
     private static WorldStateRow Slot(string name, long value) => new(Name: Name(name), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: value)]);
     private static WorldStateRow FixedSlot(string name, long value) => new(Name: Name(name), Kind: CellKind.Fixed, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: value)]);
-    private static WorldCellName Name(string value) => WorldCellName.Parse(candidate: value);
+    private static CellName Name(string value) => CellName.Parse(candidate: value);
     private static long Value(WorldFixture fixture, string row) {
         var declared = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: row)!;
 

@@ -3,14 +3,14 @@ using System.Buffers;
 namespace Puck.State;
 
 /// <summary>The reserved-character kernel shared by every member of this repository's validated-identifier family
-/// (<see cref="WorldSafeName"/>, <see cref="WorldCellName"/>): control characters and the fixed reserved set (quote,
+/// (<see cref="SafeName"/>, <see cref="CellName"/>): control characters and the fixed reserved set (quote,
 /// angle brackets, pipe, colon, asterisk, question mark, and both slashes) — the strictest host's reserved
 /// characters, a superset of every platform's, so a value that passes is storable everywhere regardless of which
-/// host minted it (the same requirement <c>WorldOwnedWorldFileName</c>'s id↔file-name mapping always
+/// host minted it (the same requirement the document project's id↔file-name mapping always
 /// carried). Neither family member escapes or collapses an offending character the way that mapping used to — each
 /// refuses it, by name, at construction, which is what makes simply holding either type a proof of safety rather
 /// than a courtesy some caller remembered to check.</summary>
-internal static class WorldIdentifierRules {
+internal static class IdentifierRules {
     /// <summary>The reserved-character set spelled out for a refusal sentence.</summary>
     public const string ReservedDescription = "control characters and of the reserved set (quote, angle brackets, pipe, colon, asterisk, question mark, and both slashes)";
 
@@ -49,14 +49,14 @@ internal static class WorldIdentifierRules {
 
 /// <summary>
 /// A validated world/owned-world id or process-local world-instance name — the type cannot hold a value that does
-/// not survive <c>WorldOwnedWorldFileName</c>'s id↔file-name mapping, or that would navigate a directory
+/// not survive the document project's id↔file-name mapping, or that would navigate a directory
 /// instead of naming one segment of it (a bare <c>"."</c> or <c>".."</c>). Construction refuses by name, naming the
 /// offending character (or the navigation rule), so every door that used to hand-check
-/// <c>WorldOwnedWorldFileName.IsSafe</c> plus its own copy of the <c>"."</c>/<c>".."</c> rule now just holds this
+/// that mapping's own safety check plus its own copy of the <c>"."</c>/<c>".."</c> rule now just holds this
 /// type instead — the check happens exactly once, at the earliest door a candidate string crosses (a console verb
 /// argument, or this document's own JSON parse), and every downstream consumer inherits the proof for free.
 /// </summary>
-public readonly record struct WorldSafeName {
+public readonly record struct SafeName {
     /// <summary>The longest suffix a minting site may append to a validated name before it reaches a file system —
     /// a world document's <c>.world.json</c>, eleven characters. Every such suffix is proven no longer than this where
     /// it is declared, so <see cref="MaxLength"/> stays the one ceiling.</summary>
@@ -68,7 +68,7 @@ public readonly record struct WorldSafeName {
     /// it; a bare directory-segment use appends nothing and is covered conservatively.</summary>
     public const int MaxLength = (255 - MaxSuffixLength);
 
-    private WorldSafeName(string value) => Value = value;
+    private SafeName(string value) => Value = value;
 
     /// <summary>Gets the validated string.</summary>
     public string Value { get; }
@@ -77,7 +77,7 @@ public readonly record struct WorldSafeName {
     /// <param name="candidate">The candidate string.</param>
     /// <returns>The validated name.</returns>
     /// <exception cref="FormatException">The candidate is unsafe.</exception>
-    public static WorldSafeName Parse(string candidate) =>
+    public static SafeName Parse(string candidate) =>
         (TryParse(
             candidate: candidate,
             name: out var name,
@@ -94,10 +94,10 @@ public readonly record struct WorldSafeName {
     /// <param name="name">The validated name, on success.</param>
     /// <param name="reason">Why the candidate was refused, or empty on success.</param>
     /// <returns><see langword="true"/> when the candidate is safe.</returns>
-    public static bool TryParse(string? candidate, out WorldSafeName name, out string reason) {
+    public static bool TryParse(string? candidate, out SafeName name, out string reason) {
         name = default;
 
-        if (!WorldIdentifierRules.TryValidateKernel(
+        if (!IdentifierRules.TryValidateKernel(
             candidate: candidate,
             reason: out reason
         )) {
@@ -127,25 +127,25 @@ public readonly record struct WorldSafeName {
             return false;
         }
 
-        name = new WorldSafeName(value: candidate);
+        name = new SafeName(value: candidate);
 
         return true;
     }
 
     /// <summary>Reads as its validated string wherever a plain string is expected.</summary>
-    public static implicit operator string(WorldSafeName name) => name.Value;
+    public static implicit operator string(SafeName name) => name.Value;
 }
 /// <summary>
-/// A validated <c>state</c>-section row name or cell key — the base <see cref="WorldSafeName"/> rule plus no dot
+/// A validated <c>state</c>-section row name or cell key — the base <see cref="SafeName"/> rule plus no dot
 /// anywhere, which is what makes the <c>state.&lt;row&gt;.&lt;key&gt;</c> HUD binding grammar unambiguous by
 /// construction: splitting a bound token on <c>'.'</c> can never mistake part of a row or cell name for a grammar
-/// separator, because neither can hold one. The reserved slot key <c>WorldStateRow.SlotKey</c>
+/// separator, because neither can hold one. A row's reserved slot key
 /// (<c>"$value"</c>) is unaffected — <c>'$'</c> is neither a reserved character nor a dot, so it is already a legal
-/// <see cref="WorldCellName"/> like any other author-chosen key, exactly the one reserved exception the substrate
+/// <see cref="CellName"/> like any other author-chosen key, exactly the one reserved exception the substrate
 /// mints rather than authors.
 /// </summary>
-public readonly record struct WorldCellName {
-    private WorldCellName(string value) => Value = value;
+public readonly record struct CellName {
+    private CellName(string value) => Value = value;
 
     /// <summary>Gets the validated string.</summary>
     public string Value { get; }
@@ -154,7 +154,7 @@ public readonly record struct WorldCellName {
     /// <param name="candidate">The candidate string.</param>
     /// <returns>The validated name.</returns>
     /// <exception cref="FormatException">The candidate is unsafe.</exception>
-    public static WorldCellName Parse(string candidate) =>
+    public static CellName Parse(string candidate) =>
         (TryParse(
             candidate: candidate,
             name: out var name,
@@ -171,10 +171,10 @@ public readonly record struct WorldCellName {
     /// <param name="name">The validated name, on success.</param>
     /// <param name="reason">Why the candidate was refused, or empty on success.</param>
     /// <returns><see langword="true"/> when the candidate is safe.</returns>
-    public static bool TryParse(string? candidate, out WorldCellName name, out string reason) {
+    public static bool TryParse(string? candidate, out CellName name, out string reason) {
         name = default;
 
-        if (!WorldIdentifierRules.TryValidateKernel(
+        if (!IdentifierRules.TryValidateKernel(
             candidate: candidate,
             reason: out reason
         )) {
@@ -187,37 +187,37 @@ public readonly record struct WorldCellName {
             return false;
         }
 
-        name = new WorldCellName(value: candidate);
+        name = new CellName(value: candidate);
 
         return true;
     }
 
     /// <summary>Reads as its validated string wherever a plain string is expected.</summary>
-    public static implicit operator string(WorldCellName name) => name.Value;
+    public static implicit operator string(CellName name) => name.Value;
 }
 
-/// <summary>Reads/writes <see cref="WorldSafeName"/> as its plain string — refusing on read, by name, exactly like
-/// <see cref="WorldSafeName.TryParse"/>, so a document holding one can never carry an unsafe id.</summary>
-public sealed class WorldSafeNameJsonConverter : TryParseStringJsonConverter<WorldSafeName> {
+/// <summary>Reads/writes <see cref="SafeName"/> as its plain string — refusing on read, by name, exactly like
+/// <see cref="SafeName.TryParse"/>, so a document holding one can never carry an unsafe id.</summary>
+public sealed class SafeNameJsonConverter : TryParseStringJsonConverter<SafeName> {
     /// <inheritdoc/>
-    protected override bool TryParse(string? candidate, out WorldSafeName value, out string reason) => WorldSafeName.TryParse(
+    protected override bool TryParse(string? candidate, out SafeName value, out string reason) => SafeName.TryParse(
         candidate: candidate,
         name: out value,
         reason: out reason
     );
     /// <inheritdoc/>
-    protected override string ToValue(WorldSafeName value) => value.Value;
+    protected override string ToValue(SafeName value) => value.Value;
 }
-/// <summary>Reads/writes <see cref="WorldCellName"/> as its plain string — refusing on read, by name, exactly like
-/// <see cref="WorldCellName.TryParse"/>, so a document holding one can never carry a dotted or unsafe row/cell
+/// <summary>Reads/writes <see cref="CellName"/> as its plain string — refusing on read, by name, exactly like
+/// <see cref="CellName.TryParse"/>, so a document holding one can never carry a dotted or unsafe row/cell
 /// name.</summary>
-public sealed class WorldCellNameJsonConverter : TryParseStringJsonConverter<WorldCellName> {
+public sealed class CellNameJsonConverter : TryParseStringJsonConverter<CellName> {
     /// <inheritdoc/>
-    protected override bool TryParse(string? candidate, out WorldCellName value, out string reason) => WorldCellName.TryParse(
+    protected override bool TryParse(string? candidate, out CellName value, out string reason) => CellName.TryParse(
         candidate: candidate,
         name: out value,
         reason: out reason
     );
     /// <inheritdoc/>
-    protected override string ToValue(WorldCellName value) => value.Value;
+    protected override string ToValue(CellName value) => value.Value;
 }

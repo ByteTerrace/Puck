@@ -9,7 +9,7 @@ public static partial class WorldRuleCompiler {
     /// <returns>The validated, bounded expression.</returns>
     /// <exception cref="WorldRuleException">The expression, kind, binding, or fact is invalid in this context.</exception>
     /// <exception cref="ArgumentNullException">The expression or definition is null.</exception>
-    public static CompiledWorldExpressionToken[] CompileFlockAffinity(WorldValueExpression expression, WorldDefinition definition) {
+    public static CompiledWorldExpressionToken[] CompileFlockAffinity(ValueExpression expression, WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(expression);
         ArgumentNullException.ThrowIfNull(definition);
         var bindings = s_bindingScope;

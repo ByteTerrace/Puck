@@ -853,9 +853,9 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
         // The name is a directory segment, not just a label — it is the one component of this instance's
         // owned-worlds path. A name carrying a separator, a drive, or a traversal step would choose where the
-        // instance's documents are written, so WorldSafeName refuses those by construction (empty, a reserved
+        // instance's documents are written, so SafeName refuses those by construction (empty, a reserved
         // character, or a bare '.'/'..'); there is no separate segment-safety re-check downstream.
-        if (!WorldSafeName.TryParse(
+        if (!SafeName.TryParse(
             candidate: name,
             name: out _,
             reason: out var nameReason

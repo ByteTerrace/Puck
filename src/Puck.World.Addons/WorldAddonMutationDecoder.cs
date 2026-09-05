@@ -1291,7 +1291,7 @@ internal static class WorldAddonMutationDecoder {
     // A fixed-kind value is DECIMAL TEXT here, exactly as the document and the console verb spell it — the addon
     // wire's raw-bits convention covers the ABI's numeric channel cells (WorldMutation.UpsertStateCell.Value), never
     // this JSON payload, which is the SAME grammar world.row.set state takes and must not fork from it.
-    private static WorldStateCell DecodeStateCell(WorldCellName key, JsonElement element, CellKind kind, string context) {
+    private static WorldStateCell DecodeStateCell(CellName key, JsonElement element, CellKind kind, string context) {
         switch (kind) {
             case CellKind.Text:
                 if (element.ValueKind != JsonValueKind.String) {
@@ -1787,11 +1787,11 @@ internal static class WorldAddonMutationDecoder {
 
         return element.GetBoolean();
     }
-    // The one door this decoder validates a candidate row/cell name through — WorldCellName refuses an empty, dotted,
+    // The one door this decoder validates a candidate row/cell name through — CellName refuses an empty, dotted,
     // or otherwise unsafe candidate BY NAME, so an addon-authored state row can never reach the substrate holding a
     // name the document's own JSON parse would have refused.
-    private static WorldCellName RequireCellName(string candidate, string context) =>
-        (WorldCellName.TryParse(
+    private static CellName RequireCellName(string candidate, string context) =>
+        (CellName.TryParse(
             candidate: candidate,
             name: out var name,
             reason: out var reason

@@ -949,11 +949,11 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             )
         );
     }
-    // rules and interactions key their Remove mutation by the validated WorldCellName type rather than a plain
+    // rules and interactions key their Remove mutation by the validated CellName type rather than a plain
     // string.
-    private static Func<WorldServer, WorldPrincipal, string, RowOutcome> RemoveByCellName(Func<WorldPrincipal, WorldCellName, WorldMutation> remove) {
+    private static Func<WorldServer, WorldPrincipal, string, RowOutcome> RemoveByCellName(Func<WorldPrincipal, CellName, WorldMutation> remove) {
         return (_, principal, key) => {
-            if (!WorldCellName.TryParse(
+            if (!CellName.TryParse(
                 candidate: key,
                 name: out var name,
                 reason: out var reason
@@ -1413,7 +1413,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         ));
     }
     // The keyed-section reader: a linear scan by the row's own stable key text (every keyed section's key type —
-    // string, DocumentIdentifier, WorldCellName — round-trips through ToString() the same way its Remove delegate's
+    // string, DocumentIdentifier, CellName — round-trips through ToString() the same way its Remove delegate's
     // plain-string key already does).
     private static Func<WorldServer, string, RowReadOutcome> ReadRowByKey<T>(JsonTypeInfo<T> info, Func<WorldServer, IReadOnlyList<T>> select, Func<T, string> keyOf) {
         return (server, key) => {

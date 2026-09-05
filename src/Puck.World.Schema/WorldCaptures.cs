@@ -19,14 +19,14 @@ public sealed record WorldCapturePaletteEntry(int Material, string Color);
 /// document capture the identical moment by construction, and this row only says WHEN to look, never AT WHAT.
 /// </summary>
 /// <param name="Station">The stable name — the manifest's <c>station</c> field and the frame filename's own
-/// prefix (<c>&lt;station&gt;-&lt;tick&gt;.png</c>). A <see cref="WorldCellName"/>: dot-free, non-empty, free of the
+/// prefix (<c>&lt;station&gt;-&lt;tick&gt;.png</c>). A <see cref="CellName"/>: dot-free, non-empty, free of the
 /// reserved character set.</param>
 /// <param name="Ticks">The exact simulation ticks (completed-tick coordinates, ascending, none repeated) this
 /// station arms a capture at. Capacity: <see cref="WorldCapturesCapacity.MaxTicksPerRow"/>.</param>
 /// <param name="Palette">The per-pixel census's material table — at least one entry, at most
 /// <see cref="WorldCapturesCapacity.MaxPaletteEntriesPerRow"/>, unique <see cref="WorldCapturePaletteEntry.Material"/>
 /// indices.</param>
-public sealed record WorldCaptureRow(WorldCellName Station, IReadOnlyList<ulong> Ticks, IReadOnlyList<WorldCapturePaletteEntry> Palette);
+public sealed record WorldCaptureRow(CellName Station, IReadOnlyList<ulong> Ticks, IReadOnlyList<WorldCapturePaletteEntry> Palette);
 /// <summary>
 /// The <c>captures</c> document section — tick-scheduled composed-frame captures, arming the same capture path
 /// <c>world.screenshot</c> uses (<c>SdfWorldRender.RequestCapture</c>/<c>SdfEngineNode.RequestCapture</c>) at exact

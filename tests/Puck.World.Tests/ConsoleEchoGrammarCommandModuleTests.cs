@@ -76,7 +76,7 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
                 ),
             ],
             Groups: [
-                new WorldGroup(Id: WorldSafeName.Parse(candidate: "alpha"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 0)]),
+                new WorldGroup(Id: SafeName.Parse(candidate: "alpha"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 0)]),
             ],
             Ownership: [
                 new WorldOwnership(

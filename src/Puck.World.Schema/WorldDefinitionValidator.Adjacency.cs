@@ -35,7 +35,7 @@ public static partial class WorldDefinitionValidator {
             ) {
                 errors.Add(item: $"{path}.destination '{destination.Name}' must be global and persisted — adjacency names one stable neighbouring authority.");
             }
-            if (!WorldSafeName.TryParse(
+            if (!SafeName.TryParse(
                 candidate: adjacency.Counterpart,
                 name: out _,
                 reason: out var counterpartReason

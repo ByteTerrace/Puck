@@ -173,10 +173,10 @@ public sealed class WorldIdentity {
     }
     // Mints the next monotonic sequence key for rowName's derived "<row>-seq" Int slot counter — reads its current
     // value (0 if the counter row does not exist yet), increments it, persists the increment, and returns the
-    // incremented value's decimal string as a WorldCellName. Deterministic: no wall clock, no RNG — the identical
+    // incremented value's decimal string as a CellName. Deterministic: no wall clock, no RNG — the identical
     // command sequence always mints the identical keys, on every run and every replay.
-    private bool TryNextSequenceKey(WorldCellName rowName, out WorldCellName key, out string reason) {
-        var seqRowName = WorldCellName.Parse(candidate: $"{rowName}-seq");
+    private bool TryNextSequenceKey(CellName rowName, out CellName key, out string reason) {
+        var seqRowName = CellName.Parse(candidate: $"{rowName}-seq");
         var next = 1L;
 
         if (TryReadState(
@@ -203,13 +203,13 @@ public sealed class WorldIdentity {
                 )]
         ));
 
-        return WorldCellName.TryParse(
+        return CellName.TryParse(
             candidate: next.ToString(provider: CultureInfo.InvariantCulture),
             name: out key,
             reason: out reason
         );
     }
-    private void WriteFixed(WorldCellName? slot, FixedQ4816 value) {
+    private void WriteFixed(CellName? slot, FixedQ4816 value) {
         if (slot is { } name) {
             WriteState(row: new WorldStateRow(
                 Name: name,
@@ -304,7 +304,7 @@ public sealed class WorldIdentity {
     /// <param name="evictedKey">The evicted key, or <see langword="null"/> when nothing was evicted.</param>
     /// <param name="reason">Why the append was refused, or empty on success.</param>
     /// <returns><see langword="true"/> when the append applied.</returns>
-    public bool TryAppendEvictingText(WorldCellName rowName, string text, out WorldCellName? evictedKey, out string reason) {
+    public bool TryAppendEvictingText(CellName rowName, string text, out CellName? evictedKey, out string reason) {
         evictedKey = null;
 
         if (!TryReadState(

@@ -37,8 +37,8 @@ public sealed record WorldFlockProfile(float Range, float SeparationRadius, int 
     float UpdateSeconds, WorldFlockSpace Space, float Separation, float Alignment, float Cohesion, float Goal,
     float Inertia, float ArrivalDistance, float HalfAngleDegrees, bool RequiresLineOfSight,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? MovementDomain = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldValueExpression? CohesionAffinity = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldValueExpression? AlignmentAffinity = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ValueExpression? CohesionAffinity = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ValueExpression? AlignmentAffinity = null);
 
 /// <summary>The fixed-point, allocation-free runtime arguments for one validated flock profile.</summary>
 public sealed class FixedWorldFlockProfile {

@@ -4624,7 +4624,7 @@
                               "const": "compareState"
                             },
                             "state": {
-                              "description": "At body scope, a named counter slot the kit declares. At world scope (see WorldRule), a declared state-section row name, or one of WorldRuleFacts\u0027s reserved channels.",
+                              "description": "At body scope, a named counter slot the kit declares. At world scope (see WorldRule), a declared state-section row name, or one of RuleFacts\u0027s reserved channels.",
                               "type": "string"
                             },
                             "comparison": {
@@ -4655,7 +4655,7 @@
                               "default": null
                             },
                             "comparandState": {
-                              "description": "world scope only (refused at body scope, on the same terms as Key): another declared state-section row name, or one of WorldRuleFacts\u0027s reserved channels, read live and compared instead of Value. A dotted spelling (an author reaching for row.key in one string) is refused by name \u2014 address the cell with ComparandKey instead. Comparing across incompatible cell kinds (an int row against a fixed row, say) is refused by name \u2014 mixing scales silently is worse than naming the mismatch.",
+                              "description": "world scope only (refused at body scope, on the same terms as Key): another declared state-section row name, or one of RuleFacts\u0027s reserved channels, read live and compared instead of Value. A dotted spelling (an author reaching for row.key in one string) is refused by name \u2014 address the cell with ComparandKey instead. Comparing across incompatible cell kinds (an int row against a fixed row, say) is refused by name \u2014 mixing scales silently is worse than naming the mismatch.",
                               "type": [
                                 "string",
                                 "null"
@@ -4693,14 +4693,14 @@
                                   "maxLength": 4096
                                 },
                                 {
-                                  "description": "The postfix object spelling of a WorldValueExpression: { \u0022tokens\u0022: [...] }. The converter reads this shape when an expression is authored as tokens and writes it back for an expression that carries no infix text.",
+                                  "description": "The postfix object spelling of a ValueExpression: { \u0022tokens\u0022: [...] }. The converter reads this shape when an expression is authored as tokens and writes it back for an expression that carries no infix text.",
                                   "type": "object",
                                   "properties": {
                                     "tokens": {
                                       "description": "The postfix tokens, in evaluation order.",
                                       "type": "array",
                                       "items": {
-                                        "description": "One authored token in a WorldValueExpression.",
+                                        "description": "One authored token in a ValueExpression.",
                                         "type": "object",
                                         "required": [
                                           "$type"
@@ -5280,7 +5280,7 @@
                                         "const": "compareState"
                                       },
                                       "state": {
-                                        "description": "At body scope, a named counter slot the kit declares. At world scope (see WorldRule), a declared state-section row name, or one of WorldRuleFacts\u0027s reserved channels.",
+                                        "description": "At body scope, a named counter slot the kit declares. At world scope (see WorldRule), a declared state-section row name, or one of RuleFacts\u0027s reserved channels.",
                                         "type": "string"
                                       },
                                       "comparison": {
@@ -5311,7 +5311,7 @@
                                         "default": null
                                       },
                                       "comparandState": {
-                                        "description": "world scope only (refused at body scope, on the same terms as Key): another declared state-section row name, or one of WorldRuleFacts\u0027s reserved channels, read live and compared instead of Value. A dotted spelling (an author reaching for row.key in one string) is refused by name \u2014 address the cell with ComparandKey instead. Comparing across incompatible cell kinds (an int row against a fixed row, say) is refused by name \u2014 mixing scales silently is worse than naming the mismatch.",
+                                        "description": "world scope only (refused at body scope, on the same terms as Key): another declared state-section row name, or one of RuleFacts\u0027s reserved channels, read live and compared instead of Value. A dotted spelling (an author reaching for row.key in one string) is refused by name \u2014 address the cell with ComparandKey instead. Comparing across incompatible cell kinds (an int row against a fixed row, say) is refused by name \u2014 mixing scales silently is worse than naming the mismatch.",
                                         "type": [
                                           "string",
                                           "null"
@@ -5521,7 +5521,7 @@
                                                 "const": "compareState"
                                               },
                                               "state": {
-                                                "description": "At body scope, a named counter slot the kit declares. At world scope (see WorldRule), a declared state-section row name, or one of WorldRuleFacts\u0027s reserved channels.",
+                                                "description": "At body scope, a named counter slot the kit declares. At world scope (see WorldRule), a declared state-section row name, or one of RuleFacts\u0027s reserved channels.",
                                                 "type": "string"
                                               },
                                               "comparison": {
@@ -5552,7 +5552,7 @@
                                                 "default": null
                                               },
                                               "comparandState": {
-                                                "description": "world scope only (refused at body scope, on the same terms as Key): another declared state-section row name, or one of WorldRuleFacts\u0027s reserved channels, read live and compared instead of Value. A dotted spelling (an author reaching for row.key in one string) is refused by name \u2014 address the cell with ComparandKey instead. Comparing across incompatible cell kinds (an int row against a fixed row, say) is refused by name \u2014 mixing scales silently is worse than naming the mismatch.",
+                                                "description": "world scope only (refused at body scope, on the same terms as Key): another declared state-section row name, or one of RuleFacts\u0027s reserved channels, read live and compared instead of Value. A dotted spelling (an author reaching for row.key in one string) is refused by name \u2014 address the cell with ComparandKey instead. Comparing across incompatible cell kinds (an int row against a fixed row, say) is refused by name \u2014 mixing scales silently is worse than naming the mismatch.",
                                                 "type": [
                                                   "string",
                                                   "null"
@@ -11527,7 +11527,7 @@
             ],
             "properties": {
               "name": {
-                "description": "The interaction\u0027s stable name \u2014 unique within the section (a separate namespace from Name, so the two may coincide without colliding). A WorldCellName, never $-prefixed \u2014 that prefix marks what the engine mints, and nothing mints an interaction.",
+                "description": "The interaction\u0027s stable name \u2014 unique within the section (a separate namespace from Name, so the two may coincide without colliding). A CellName, never $-prefixed \u2014 that prefix marks what the engine mints, and nothing mints an interaction.",
                 "type": "string"
               },
               "left": {
@@ -11673,7 +11673,7 @@
                           "default": null
                         },
                         "fromState": {
-                          "description": "world scope only (refused at body scope, on the same terms as Value): another declared state-section row name, or one of WorldRuleFacts\u0027s reserved channels, read live at fire time and copied in place of an authored Value \u2014 the row that resets to another row\u0027s own current value (a shadow row mirroring a counter someone else advances), never only a standing literal. Resolved through the same operand walk CompareState\u0027s own ComparandState uses; mixing a fixed row into an int destination (or the reverse) is refused by name rather than coerced.",
+                          "description": "world scope only (refused at body scope, on the same terms as Value): another declared state-section row name, or one of RuleFacts\u0027s reserved channels, read live at fire time and copied in place of an authored Value \u2014 the row that resets to another row\u0027s own current value (a shadow row mirroring a counter someone else advances), never only a standing literal. Resolved through the same operand walk CompareState\u0027s own ComparandState uses; mixing a fixed row into an int destination (or the reverse) is refused by name rather than coerced.",
                           "type": [
                             "string",
                             "null"
@@ -13641,7 +13641,7 @@
         ],
         "properties": {
           "name": {
-            "description": "The reference\u0027s own name \u2014 WorldSafeName-shaped, unique within the section.",
+            "description": "The reference\u0027s own name \u2014 SafeName-shaped, unique within the section.",
             "type": "string"
           },
           "document": {
@@ -13662,7 +13662,7 @@
             "default": null
           },
           "world": {
-            "description": "The remote world\u0027s own WorldSafeName-shaped id within its owner\u0027s account. Required together with Owner; refused alone.",
+            "description": "The remote world\u0027s own SafeName-shaped id within its owner\u0027s account. Required together with Owner; refused alone.",
             "default": null,
             "type": [
               "string",
@@ -13691,7 +13691,7 @@
         ],
         "properties": {
           "name": {
-            "description": "The destination\u0027s own name \u2014 WorldSafeName-shaped, unique within the section. A Destination facet resolves against this name (see WorldDefinitionValidator).",
+            "description": "The destination\u0027s own name \u2014 SafeName-shaped, unique within the section. A Destination facet resolves against this name (see WorldDefinitionValidator).",
             "type": "string"
           },
           "reference": {

@@ -5,12 +5,12 @@ namespace Puck.State.Tests;
 /// <summary>The infix spelling is syntax over the postfix tokens: C precedence parses to the tokens an author would
 /// write by hand, and every token kind prints to a spelling that parses back to itself with only the parentheses
 /// precedence needs. The world document's converter and schema facts live in <c>tests/Puck.World.Schema.Tests</c>.</summary>
-public sealed class WorldExpressionSyntaxLawTests {
-    private static WorldValueToken S(string name, string? key = null) => new WorldValueToken.State(name, key);
-    private static WorldValueToken C(decimal value) => new WorldValueToken.Constant(value);
+public sealed class ExpressionSpellingLawTests {
+    private static ValueToken S(string name, string? key = null) => new ValueToken.State(name, key);
+    private static ValueToken C(decimal value) => new ValueToken.Constant(value);
 
-    private static IReadOnlyList<WorldValueToken> Parse(string text) {
-        Assert.True(WorldExpressionSyntax.TryParse(text, out var tokens, out var error), error);
+    private static IReadOnlyList<ValueToken> Parse(string text) {
+        Assert.True(ExpressionSpelling.TryParse(text, out var tokens, out var error), error);
         return tokens;
     }
 
@@ -30,27 +30,27 @@ public sealed class WorldExpressionSyntaxLawTests {
     public void UnaryMinusFoldsIntoALiteralAndNegatesAnythingElse() {
         Assert.Equal([C(-1m)], Parse("-1"));
         Assert.Equal([C(-0.25m)], Parse("-0.25"));
-        Assert.Equal([S("a"), new WorldValueToken.Negate()], Parse("-a"));
-        Assert.Equal([S("a"), new WorldValueToken.BitNot()], Parse("~a"));
-        Assert.Equal([S("a"), C(-1m), new WorldValueToken.Multiply()], Parse("a * -1"));
+        Assert.Equal([S("a"), new ValueToken.Negate()], Parse("-a"));
+        Assert.Equal([S("a"), new ValueToken.BitNot()], Parse("~a"));
+        Assert.Equal([S("a"), C(-1m), new ValueToken.Multiply()], Parse("a * -1"));
         Assert.Equal([C(65280m)], Parse("0xFF00"));
     }
 
     [Fact]
     public void TernaryIsSelectAndAssociatesRight() {
-        Assert.Equal([S("c"), S("a"), S("b"), new WorldValueToken.Select()], Parse("c ? a : b"));
+        Assert.Equal([S("c"), S("a"), S("b"), new ValueToken.Select()], Parse("c ? a : b"));
         Assert.Equal(
-            [S("c"), S("a"), S("d"), S("b"), S("e"), new WorldValueToken.Select(), new WorldValueToken.Select()],
+            [S("c"), S("a"), S("d"), S("b"), S("e"), new ValueToken.Select(), new ValueToken.Select()],
             Parse("c ? a : d ? b : e")
         );
-        Assert.Equal([S("$bind:x"), C(1m), C(0m), new WorldValueToken.Select()], Parse("$bind:x ? 1 : 0"));
+        Assert.Equal([S("$bind:x"), C(1m), C(0m), new ValueToken.Select()], Parse("$bind:x ? 1 : 0"));
     }
 
     [Fact]
     public void NamesKeysCallsAndBoardOpsSpellTheirTokens() {
         Assert.Equal([S("hp", "$each")], Parse("hp[$each]"));
         Assert.Equal([S("seat-1", "0")], Parse("`seat-1`[0]"));
-        Assert.Equal([S("$table:armor:$each"), C(2m), new WorldValueToken.Multiply()], Parse("$table:armor:$each * 2"));
+        Assert.Equal([S("$table:armor:$each"), C(2m), new ValueToken.Multiply()], Parse("$table:armor:$each * 2"));
         Assert.Equal([S("$table:armor:$each")], Parse("$table:armor[$each]"));
         Assert.Equal([S("$table:moves:power:$bind:move")], Parse("$table:moves:power[$bind:move]"));
         Assert.Equal([S("$table:moves:power:$cell:turn:move")], Parse("$table:moves:power[$cell:turn:move]"));
@@ -58,15 +58,15 @@ public sealed class WorldExpressionSyntaxLawTests {
         Assert.Equal([S("buffs", "$cell:minion:$each")], Parse("buffs[minion[$each]]"));
         Assert.Equal([S("buffs", "$cell:minion:$cell:squad:$each")], Parse("buffs[minion[squad[$each]]]"));
         Assert.Equal([S("$table:t:$cell:minion:$each")], Parse("$table:t[minion[$each]]"));
-        Assert.Equal("buffs[minion[$each]]", WorldExpressionSyntax.Print([S("buffs", "$cell:minion:$each")]));
-        Assert.Equal("$table:moves:power[$bind:move] + $table:armor[7]", WorldExpressionSyntax.Print([S("$table:moves:power:$bind:move"), S("$table:armor:7"), new WorldValueToken.Add()]));
-        Assert.Equal([S("damage"), S("hp"), new WorldValueToken.Min()], Parse("min(damage, hp)"));
-        Assert.Equal([S("v"), C(0m), C(10m), new WorldValueToken.Clamp()], Parse("clamp(v, 0, 10)"));
-        Assert.Equal([S("v"), C(8m), C(4m), new WorldValueToken.BitField()], Parse("bitField(v, 8, 4)"));
-        Assert.Equal([S("m"), new WorldValueToken.BoardShift("board", "north")], Parse("boardShift(m, board, north)"));
-        Assert.Equal([S("m"), new WorldValueToken.BoardImage("board", "rot180")], Parse("boardImage(m, board, rot180)"));
-        Assert.Equal([S("m"), new WorldValueToken.PopCount()], Parse("popCount(m)"));
-        Assert.Equal([S("c"), S("a"), S("b"), new WorldValueToken.Select()], Parse("select(c, a, b)"));
+        Assert.Equal("buffs[minion[$each]]", ExpressionSpelling.Print([S("buffs", "$cell:minion:$each")]));
+        Assert.Equal("$table:moves:power[$bind:move] + $table:armor[7]", ExpressionSpelling.Print([S("$table:moves:power:$bind:move"), S("$table:armor:7"), new ValueToken.Add()]));
+        Assert.Equal([S("damage"), S("hp"), new ValueToken.Min()], Parse("min(damage, hp)"));
+        Assert.Equal([S("v"), C(0m), C(10m), new ValueToken.Clamp()], Parse("clamp(v, 0, 10)"));
+        Assert.Equal([S("v"), C(8m), C(4m), new ValueToken.BitField()], Parse("bitField(v, 8, 4)"));
+        Assert.Equal([S("m"), new ValueToken.BoardShift("board", "north")], Parse("boardShift(m, board, north)"));
+        Assert.Equal([S("m"), new ValueToken.BoardImage("board", "rot180")], Parse("boardImage(m, board, rot180)"));
+        Assert.Equal([S("m"), new ValueToken.PopCount()], Parse("popCount(m)"));
+        Assert.Equal([S("c"), S("a"), S("b"), new ValueToken.Select()], Parse("select(c, a, b)"));
     }
 
     [Theory]
@@ -81,7 +81,7 @@ public sealed class WorldExpressionSyntaxLawTests {
     [InlineData("a # b", "unexpected character '#'")]
     [InlineData("boardShift(m, board)", "expected ','")]
     public void AMalformedSpellingIsRefusedByName(string text, string expected) {
-        Assert.False(WorldExpressionSyntax.TryParse(text, out _, out var error));
+        Assert.False(ExpressionSpelling.TryParse(text, out _, out var error));
         Assert.Contains(expected, error, StringComparison.Ordinal);
     }
 
@@ -105,20 +105,20 @@ public sealed class WorldExpressionSyntaxLawTests {
     [InlineData("buffs[minion[$each]] + $table:t[minion[owner]]")]
     public void PrintingIsTheInverseOfParsingWithOnlyTheParenthesesPrecedenceNeeds(string text) {
         var tokens = Parse(text);
-        var printed = WorldExpressionSyntax.Print(tokens);
+        var printed = ExpressionSpelling.Print(tokens);
         Assert.Equal(text.Replace("0xFF", "255", StringComparison.Ordinal), printed);
         Assert.Equal(tokens, Parse(printed));
     }
 
     [Fact]
     public void AMalformedPostfixListDoesNotPrint() {
-        Assert.False(WorldExpressionSyntax.TryPrint([new WorldValueToken.Add()], out _));
-        Assert.False(WorldExpressionSyntax.TryPrint([C(1m), C(2m)], out _));
+        Assert.False(ExpressionSpelling.TryPrint([new ValueToken.Add()], out _));
+        Assert.False(ExpressionSpelling.TryPrint([C(1m), C(2m)], out _));
     }
 
-    private static string Spell(WorldValueToken token) => token switch {
-        WorldValueToken.State state => state.Name,
-        WorldValueToken.Constant constant => constant.Value.ToString(System.Globalization.CultureInfo.InvariantCulture),
+    private static string Spell(ValueToken token) => token switch {
+        ValueToken.State state => state.Name,
+        ValueToken.Constant constant => constant.Value.ToString(System.Globalization.CultureInfo.InvariantCulture),
         _ => char.ToLowerInvariant(token.GetType().Name[0]) + token.GetType().Name[1..],
     };
 }

@@ -48,11 +48,11 @@ public sealed class CreationCharacterLawTests {
         };
     }
     private static WorldStateCell Cell(string key, double value) => new(
-        Key: WorldCellName.Parse(candidate: key),
+        Key: CellName.Parse(candidate: key),
         Value: FixedQ4816.FromDouble(value: value).Value
     );
     private static WorldStateRow FixedRow(string name, double value) => new(
-        Name: WorldCellName.Parse(candidate: name),
+        Name: CellName.Parse(candidate: name),
         Kind: CellKind.Fixed,
         Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: FixedQ4816.FromDouble(value: value).Value)]
     );
@@ -92,7 +92,7 @@ public sealed class CreationCharacterLawTests {
             Limb(swing: new ShapeSwingDocument(Driver: "stride", Pivot: Vector3.Zero, Axis: Vector3.UnitZ, Amplitude: Bound(reference: "state.gait.reach"), Phase: 0.25f))
         );
         var world = World(creation: creation, state: [
-            new WorldStateRow(Name: WorldCellName.Parse(candidate: "gait"), Kind: CellKind.Fixed, Cells: [Cell(key: "cadence", value: 6.5), Cell(key: "reach", value: 0.75)]),
+            new WorldStateRow(Name: CellName.Parse(candidate: "gait"), Kind: CellKind.Fixed, Cells: [Cell(key: "cadence", value: 6.5), Cell(key: "reach", value: 0.75)]),
         ]);
 
         Assert.True(condition: WorldStateDocumentValues.TryRefresh(definition: world, refreshed: out var refreshed, reason: out var reason, rowName: "gait"), userMessage: reason);
@@ -172,7 +172,7 @@ public sealed class CreationCharacterLawTests {
             drivers: [new CreationDriverDocument(Name: "clock", Signal: "state.label", Cadence: 1f, When: ["always"])],
             Limb(swing: new ShapeSwingDocument(Driver: "clock", Pivot: Vector3.Zero, Axis: Vector3.UnitZ, Amplitude: 1f))
         );
-        var textRow = new WorldStateRow(Name: WorldCellName.Parse(candidate: "label"), Kind: CellKind.Text, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Text: "north")]);
+        var textRow = new WorldStateRow(Name: CellName.Parse(candidate: "label"), Kind: CellKind.Text, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Text: "north")]);
 
         Assert.Contains(expectedSubstring: "a signal reads an int or fixed cell", actualString: Refusal(definition: World(creation: clocked, state: [textRow])));
         Assert.Contains(expectedSubstring: "names no declared state row", actualString: Refusal(definition: World(creation: clocked)));

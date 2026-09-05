@@ -7,13 +7,13 @@ namespace Puck.World.Schema.Tests;
 /// the lines that put it there.</summary>
 public sealed class WorldRuleWorkBudgetContributorLawTests {
     private static WorldStateRow Slot(string name) =>
-        new(WorldCellName.Parse(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)]);
+        new(CellName.Parse(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)]);
     private static WorldStateRow Keyed(string name, int capacity) =>
-        new(WorldCellName.Parse(name), CellKind.Int, Capacity: capacity, Cells: [new WorldStateCell(WorldCellName.Parse("0"), 0L)]);
+        new(CellName.Parse(name), CellKind.Int, Capacity: capacity, Cells: [new WorldStateCell(CellName.Parse("0"), 0L)]);
     private static ActionPredicate PhaseIs(long value) =>
         new ActionPredicate.CompareState(State: "phase", Comparison: ActionStateComparison.Equal, Value: value);
     private static WorldRule Rule(string name, string? forEach, ActionPredicate? gate = null) =>
-        new(WorldCellName.Parse(name), [new ActionEffect.AddState(State: "count", Value: 1m)], Gate: gate, ForEach: forEach);
+        new(CellName.Parse(name), [new ActionEffect.AddState(State: "count", Value: 1m)], Gate: gate, ForEach: forEach);
 
     private static WorldDefinition Document(params WorldRule[] rules) => new(
         Simulation: new WorldSimulationDefaults(RateHz: 240),

@@ -216,7 +216,7 @@ public sealed class LinkLivenessLawTests {
             Principal: peer,
             Payload: new WorldSubmissionPayload.Mutation(Value: new WorldMutation.UpsertStateRow(
                 Principal: peer,
-                Row: new WorldStateRow(Name: WorldCellName.Parse(candidate: "peer-probe"), Kind: CellKind.Int)
+                Row: new WorldStateRow(Name: CellName.Parse(candidate: "peer-probe"), Kind: CellKind.Int)
             ))
         ));
 
@@ -226,7 +226,7 @@ public sealed class LinkLivenessLawTests {
         // during a drive, so taping them would apply each twice.
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
             Principal: WorldPrincipal.Console,
-            Row: new WorldStateRow(Name: WorldCellName.Parse(candidate: "internal-probe"), Kind: CellKind.Int)
+            Row: new WorldStateRow(Name: CellName.Parse(candidate: "internal-probe"), Kind: CellKind.Int)
         ));
 
         Assert.Equal(actual: observed, expected: [peer]);
@@ -335,7 +335,7 @@ public sealed class LinkLivenessLawTests {
         fixture.Server.Definition.State.Single(predicate: static row => (row.Name.Value == "alarm")).Cells!.Single().Value;
     private static WorldDefinition GatedSeamDocument(float graceSeconds) {
         var definition = SeamDocument(graceSeconds: graceSeconds);
-        var alarm = WorldCellName.Parse(candidate: "alarm");
+        var alarm = CellName.Parse(candidate: "alarm");
         var grace = definition.AdjacencyLivenessGraceTicks(adjacency: definition.Adjacencies!.Single()!).Ticks;
 
         return definition with {
@@ -348,7 +348,7 @@ public sealed class LinkLivenessLawTests {
             ]),
             Rules = [
                 new WorldRule(
-                    Name: WorldCellName.Parse(candidate: "seam-alarm"),
+                    Name: CellName.Parse(candidate: "seam-alarm"),
                     Gate: new ActionPredicate.CompareState(
                         State: $"{WorldRuleFacts.LinkPrefix}{LinkRow}",
                         Comparison: ActionStateComparison.GreaterOrEqual,
@@ -369,13 +369,13 @@ public sealed class LinkLivenessLawTests {
     private static WorldDefinition SeamDocument(float graceSeconds) => Fixtures.BuildDocument() with {
         References = [
             new WorldReference(
-                Name: WorldSafeName.Parse(candidate: "north-neighbour"),
+                Name: SafeName.Parse(candidate: "north-neighbour"),
                 Document: "north.world.json"
             )
         ],
         Destinations = [
             new WorldDestination(
-                Name: WorldSafeName.Parse(candidate: "north-destination"),
+                Name: SafeName.Parse(candidate: "north-destination"),
                 Reference: "north-neighbour",
                 Durability: WorldDestinationDurability.Persisted,
                 Scope: WorldDestinationScope.Global
@@ -383,7 +383,7 @@ public sealed class LinkLivenessLawTests {
         ],
         Adjacencies = [
             new WorldAdjacency(
-                Name: WorldSafeName.Parse(candidate: LinkRow),
+                Name: SafeName.Parse(candidate: LinkRow),
                 Destination: "north-destination",
                 Counterpart: "south",
                 Boundary: new WorldAdjacencyBoundary(

@@ -18,16 +18,16 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         source = source with {
             PlacementRowsRaw = [source.Placements[0] with { Position = new Vector3(x: 100f, y: 0f, z: 100f) }],
             References = [
-                new WorldReference(WorldSafeName.Parse(candidate: "unused-east-ref"), "unused-east.world.json"),
-                new WorldReference(WorldSafeName.Parse(candidate: "unused-south-ref"), "unused-south.world.json"),
+                new WorldReference(SafeName.Parse(candidate: "unused-east-ref"), "unused-east.world.json"),
+                new WorldReference(SafeName.Parse(candidate: "unused-south-ref"), "unused-south.world.json"),
             ],
             Destinations = [
-                new WorldDestination(WorldSafeName.Parse(candidate: "unused-east"), "unused-east-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
-                new WorldDestination(WorldSafeName.Parse(candidate: "unused-south"), "unused-south-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(SafeName.Parse(candidate: "unused-east"), "unused-east-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(SafeName.Parse(candidate: "unused-south"), "unused-south-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
             ],
             Adjacencies = [
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "east"), "unused-east", "west", Boundary(yaw: 90f)),
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "south"), "unused-south", "north", Boundary(yaw: 0f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "east"), "unused-east", "west", Boundary(yaw: 90f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "south"), "unused-south", "north", Boundary(yaw: 0f)),
             ],
         };
         var corner = Fixtures.BuildGradientUpDocument(gradientUp: false);
@@ -184,9 +184,9 @@ public sealed class WorldAdjacencyCornerContactLawTests {
                 new WorldSpawnPoint(Id: "seat-3", Position: new Vector3(x: 4f, y: 1f, z: spawn)),
                 new WorldSpawnPoint(Id: "seat-4", Position: new Vector3(x: 6f, y: 1f, z: spawn)),
             ],
-            References = [new WorldReference(WorldSafeName.Parse(candidate: "beyond-ref"), "beyond.world.json")],
-            Destinations = [new WorldDestination(WorldSafeName.Parse(candidate: "beyond"), "beyond-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global)],
-            Adjacencies = [new WorldAdjacency(WorldSafeName.Parse(candidate: "seam"), "beyond", "seam", SeamBoundary(outwardYaw: ((floorCenterZ < 0f) ? 0f : 180f)))],
+            References = [new WorldReference(SafeName.Parse(candidate: "beyond-ref"), "beyond.world.json")],
+            Destinations = [new WorldDestination(SafeName.Parse(candidate: "beyond"), "beyond-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global)],
+            Adjacencies = [new WorldAdjacency(SafeName.Parse(candidate: "seam"), "beyond", "seam", SeamBoundary(outwardYaw: ((floorCenterZ < 0f) ? 0f : 180f)))],
         };
     }
     private static SeamWalker SeamWalk(WorldDefinition local, bool neighbourHasField = true, bool attachSource = true) {

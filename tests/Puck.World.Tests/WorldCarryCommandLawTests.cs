@@ -181,12 +181,12 @@ public sealed class WorldCarryCommandLawTests {
     }
     private static WorldDefinition WithCarrierScale(WorldDefinition source, FixedQ4816 scale) {
         var row = new WorldStateRow(
-            Name: WorldCellName.Parse(candidate: "scale"),
+            Name: CellName.Parse(candidate: "scale"),
             Kind: CellKind.Fixed,
             Min: FixedQ4816.FromDouble(value: 0.05d).Value,
             Max: FixedQ4816.One.Value,
             Capacity: 8,
-            Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: scale.Value)]
+            Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "0"), Value: scale.Value)]
         );
 
         return source with {

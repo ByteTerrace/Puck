@@ -10,12 +10,12 @@ namespace Puck.World.Tests;
 
 [Collection(ConsoleRedirectionCollection.Name)]
 public sealed class WorldDecisionNeighborLawTests {
-    private static WorldCellName Name(string value) => WorldCellName.Parse(value);
-    private static WorldValueExpression Constant(decimal value) => new([new WorldValueToken.Constant(value)]);
+    private static CellName Name(string value) => CellName.Parse(value);
+    private static ValueExpression Constant(decimal value) => new([new ValueToken.Constant(value)]);
     private static WorldStateRow Row(string name, params long[] values) => new(Name(name), CellKind.Int, Capacity: Math.Max(1, values.Length),
         Cells: values.Select((value, index) => new WorldStateCell(Name(index.ToString()), value)).ToArray());
     private static WorldDecision Policy(WorldDecisionNeighbors? neighbors = null) => new([
-        new(Name("companion"), new([new WorldValueToken.State("appeal", "$right")]),
+        new(Name("companion"), new([new ValueToken.State("appeal", "$right")]),
             [new ActionEffect.AddState("entries", Value: 1)], Neighbors: neighbors ?? new(20, 4, 3)),
         new(Name("alone"), Constant(0), []),
     ], 0.01m, ScoreKind: CellKind.Int);
@@ -177,7 +177,7 @@ public sealed class WorldDecisionNeighborLawTests {
         var doc = Document();
         Assert.NotNull(WorldRuleCompiler.CompileAll(doc)[0].Decision!.Options[0].Neighbors);
         var rule = doc.Rules![0];
-        var fixedOption = rule.Decision!.Options[1] with { Score = new([new WorldValueToken.State("appeal", "$right")]) };
+        var fixedOption = rule.Decision!.Options[1] with { Score = new([new ValueToken.State("appeal", "$right")]) };
         Assert.Throws<WorldRuleException>(() => WorldRuleCompiler.Compile(rule with {
             Decision = rule.Decision with { Options = [rule.Decision.Options[0], fixedOption] },
         }, doc));

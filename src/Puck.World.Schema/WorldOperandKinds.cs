@@ -30,7 +30,7 @@ public sealed class StateCellOperand : WorldOperandFact, IStateAddressedOperand 
     public WorldStateHandle StateHandle { get; }
 }
 
-/// <summary>A value the enclosing rule bound for this evaluation (<see cref="WorldRuleFacts.BindPrefix"/>).</summary>
+/// <summary>A value the enclosing rule bound for this evaluation (<see cref="RuleFacts.BindPrefix"/>).</summary>
 public sealed class BindingOperand : WorldOperandFact {
     /// <summary>Reads a value the enclosing rule bound for this evaluation.</summary>
     /// <param name="ordinal">The binding's slot in the evaluation's bound-value scratch.</param>
@@ -46,7 +46,7 @@ public sealed class BindingOperand : WorldOperandFact {
     public string Name { get; }
 }
 
-/// <summary>A static table entry (<see cref="WorldRuleFacts.TablePrefix"/>). A key the table does not carry reads
+/// <summary>A static table entry (<see cref="RuleFacts.TablePrefix"/>). A key the table does not carry reads
 /// as a forever fact: an expression over it refuses and a gate over it never holds.</summary>
 public sealed class TableOperand : WorldOperandFact {
     /// <summary>Reads one entry of a static table.</summary>
@@ -84,7 +84,7 @@ public sealed class TableOperand : WorldOperandFact {
     public int EntryCount { get; }
 }
 
-/// <summary>The server's completed-tick counter (<see cref="WorldRuleFacts.Tick"/>). Stateless: every read shares
+/// <summary>The server's completed-tick counter (<see cref="RuleFacts.Tick"/>). Stateless: every read shares
 /// <see cref="Instance"/>.</summary>
 public sealed class TickOperand : WorldOperandFact {
     /// <summary>The shared instance.</summary>
@@ -139,7 +139,7 @@ public sealed class MachineMemoryOperand : WorldOperandFact {
     public int Address { get; }
 }
 
-/// <summary>A numeric aggregate over a row's cells (<see cref="WorldRuleFacts.ReducePrefix"/>).</summary>
+/// <summary>A numeric aggregate over a row's cells (<see cref="RuleFacts.ReducePrefix"/>).</summary>
 public sealed class ReductionOperand : WorldOperandFact {
     /// <param name="row">The aggregated row.</param>
     /// <param name="stateHandle">The compiled row handle.</param>
@@ -301,7 +301,7 @@ public sealed class NavigationOperand : WorldOperandFact {
     public string Row { get; }
 }
 
-/// <summary>A <see cref="WorldRuleFacts.SymmetryPrefix"/> read: a cell's node through one symmetry-lattice map.</summary>
+/// <summary>A <see cref="RuleFacts.SymmetryPrefix"/> read: a cell's node through one symmetry-lattice map.</summary>
 public sealed class SymmetryOperand : WorldOperandFact, IStateAddressedOperand {
     /// <param name="row">The source row.</param>
     /// <param name="key">The literal source cell key, or <see langword="null"/> when <paramref name="keyFrom"/> applies.</param>
@@ -353,7 +353,7 @@ public sealed class SymmetryOperand : WorldOperandFact, IStateAddressedOperand {
     public CompiledCellRef? SymmetryOtherCell { get; }
 }
 
-/// <summary>A bounded discrete topology query (<see cref="WorldRuleFacts.MatchPrefix"/>'s board-adjacent sibling —
+/// <summary>A bounded discrete topology query (<see cref="RuleFacts.MatchPrefix"/>'s board-adjacent sibling —
 /// see <c>WorldRuleCompiler.Board.cs</c>'s <c>$board:</c> resolver).</summary>
 public sealed class BoardOperand : WorldOperandFact, IStateAddressedOperand {
     /// <param name="row">The board row.</param>
@@ -388,7 +388,7 @@ public sealed class BoardOperand : WorldOperandFact, IStateAddressedOperand {
     public CompiledBodyRef? BodyA { get; }
 }
 
-/// <summary>A phase protocol progression value (<see cref="WorldRuleFacts.SymmetryPrefix"/>'s <c>$phase:</c> sibling —
+/// <summary>A phase protocol progression value (<see cref="RuleFacts.SymmetryPrefix"/>'s <c>$phase:</c> sibling —
 /// see <c>WorldRuleCompiler.Phase.cs</c>).</summary>
 public sealed class PhaseOperand : WorldOperandFact {
     /// <param name="row">The phase row.</param>
@@ -404,7 +404,7 @@ public sealed class PhaseOperand : WorldOperandFact {
     public WorldStateHandle StateHandle { get; }
 }
 
-/// <summary>A pattern-language match over a row's word (<see cref="WorldRuleFacts.MatchPrefix"/>).</summary>
+/// <summary>A pattern-language match over a row's word (<see cref="RuleFacts.MatchPrefix"/>).</summary>
 public sealed class PatternOperand : WorldOperandFact, IStateAddressedOperand {
     /// <param name="row">The source row.</param>
     /// <param name="key">The literal board-origin cell key, or <see langword="null"/> when <paramref name="keyFrom"/>
@@ -454,7 +454,7 @@ public sealed class PatternOperand : WorldOperandFact, IStateAddressedOperand {
     public CompiledWorldExpressionToken[]? TokenExpression { get; }
 }
 
-/// <summary>One value of a history ring by age (<see cref="WorldRuleFacts.HistoryPrefix"/>).</summary>
+/// <summary>One value of a history ring by age (<see cref="RuleFacts.HistoryPrefix"/>).</summary>
 public sealed class HistoryOperand : WorldOperandFact {
     /// <param name="row">The history row.</param>
     /// <param name="stateHandle">The compiled row handle.</param>

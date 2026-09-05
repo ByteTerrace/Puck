@@ -19,7 +19,7 @@ public sealed class WorldHistoryLawTests {
 
         var pushed = definition;
         foreach (var value in new long[] { 10, 20, 30, 40 }) {
-            pushed = Apply(pushed, new WorldStateTransform.Push("taps", value));
+            pushed = Apply(pushed, new StateTransform.Push("taps", value));
         }
         var row = Find(pushed, "taps");
         Assert.Equal(4L, row.HistoryCursor);
@@ -32,7 +32,7 @@ public sealed class WorldHistoryLawTests {
         Assert.Equal(40L, Value(fixture, "latest"));
         Assert.Equal(20L, Value(fixture, "oldest"));
 
-        var young = Apply(definition, new WorldStateTransform.Push("taps", 7));
+        var young = Apply(definition, new StateTransform.Push("taps", 7));
         using var sparse = Fixtures.FreshServer(definition: young);
         sparse.Step();
         Assert.Equal(7L, Value(sparse, "latest"));
@@ -53,14 +53,14 @@ public sealed class WorldHistoryLawTests {
 
         var pushed = definition;
         foreach (var value in new long[] { 9, 1, 1, 2 }) {
-            pushed = Apply(pushed, new WorldStateTransform.Push("taps", value));
+            pushed = Apply(pushed, new StateTransform.Push("taps", value));
         }
         using var fixture = Fixtures.FreshServer(definition: pushed);
         fixture.Step();
         Assert.Equal(1L, Value(fixture, "hit"));
         Assert.Contains("accept=1", fixture.Server.DescribeMatch("combo", "taps", null, null, null));
 
-        var wrapped = Apply(pushed, new WorldStateTransform.Push("taps", 5));
+        var wrapped = Apply(pushed, new StateTransform.Push("taps", 5));
         using var stale = Fixtures.FreshServer(definition: wrapped);
         stale.Step();
         Assert.Equal(0L, Value(stale, "hit"));
@@ -68,8 +68,8 @@ public sealed class WorldHistoryLawTests {
         var effects = Document([ring, Slot("source", 2), Slot("count")], [
             new WorldRule(Name("push-literal"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.PushState(State: "taps", Value: 1m)]),
             new WorldRule(Name("push-from"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.PushState(State: "taps", FromState: "source")]),
-            new WorldRule(Name("push-expression"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.PushState(State: "taps", Expression: new WorldValueExpression(Tokens: [
-                new WorldValueToken.State(Name: "source"), new WorldValueToken.Constant(Value: 3m), new WorldValueToken.Multiply(),
+            new WorldRule(Name("push-expression"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.PushState(State: "taps", Expression: new ValueExpression(Tokens: [
+                new ValueToken.State(Name: "source"), new ValueToken.Constant(Value: 3m), new ValueToken.Multiply(),
             ]))]),
             new WorldRule(Name("count"), [new ActionEffect.SetState(State: "count", FromState: "$history:taps:0")]),
         ]);
@@ -105,7 +105,7 @@ public sealed class WorldHistoryLawTests {
         Assert.Contains("integer or fixed", kindReason);
         Assert.False(WorldDefinitionValidator.TryValidateLocally(Document([new WorldStateRow(Name("t"), CellKind.Int, Domain: new WorldStateDomain.Ring(2), Phase: new(0))], []), out var traitReason));
         Assert.Contains("no other storage", traitReason);
-        Assert.False(WorldStateTransforms.TryApply(Document([Slot("plain")], []), new WorldStateTransform.Push("plain", 1), WorldPrincipal.World, 0, "test", out _, out var pushReason));
+        Assert.False(WorldStateTransforms.TryApply(Document([Slot("plain")], []), new StateTransform.Push("plain", 1), WorldPrincipal.World, 0, "test", out _, out var pushReason));
         Assert.Contains("requires a history row", pushReason);
     }
 
@@ -114,11 +114,11 @@ public sealed class WorldHistoryLawTests {
         PatternsRaw = patterns ?? [],
         Rules = rules,
     };
-    private static WorldDefinition Apply(WorldDefinition definition, WorldStateTransform transform) {
+    private static WorldDefinition Apply(WorldDefinition definition, StateTransform transform) {
         Assert.True(WorldStateTransforms.TryApply(definition, transform, WorldPrincipal.World, 1, "test", out var candidate, out var reason), reason);
         return candidate!;
     }
-    private static WorldCellName Name(string value) => WorldCellName.Parse(value);
+    private static CellName Name(string value) => CellName.Parse(value);
     private static WorldStateCell Cell(string key, long value = 1) => new(Name(key), value);
     private static WorldStateRow Slot(string name, long value = 0) => new(Name(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, value)]);
     private static WorldStateRow Find(WorldDefinition document, string row) => WorldDefinitionRows.FindStateRow(document.State, row)!;

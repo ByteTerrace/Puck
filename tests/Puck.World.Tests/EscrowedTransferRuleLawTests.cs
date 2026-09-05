@@ -8,7 +8,7 @@ namespace Puck.World.Tests;
 /// <summary>Proves the market's replacement primitive — an escrowed conditional transfer over ordinary keyed rows,
 /// authored entirely as <see cref="WorldRule"/>s over the pre-existing generic vocabulary
 /// (<see cref="ActionEffect.AddState"/>/<see cref="ActionEffect.SetState"/> with a live copy or an
-/// <see cref="WorldValueExpression"/>, <see cref="ActionEffect.ScheduleState"/> for a deadline,
+/// <see cref="ValueExpression"/>, <see cref="ActionEffect.ScheduleState"/> for a deadline,
 /// <see cref="ActionEffect.PushState"/> for an ordered history ring), with no engine-side market mechanism at all.
 /// A seller's own <c>list</c> cell escrows a quantity out of their inventory into a scratch row (the "handle");
 /// settle moves the escrowed quantity to the winner's cell and a fee slice into a shared reserve row; return moves
@@ -25,17 +25,17 @@ public sealed class EscrowedTransferRuleLawTests {
     private static readonly WorldPrincipal Buyer = WorldPrincipal.Seat(slot: 3);
 
     private static WorldStateRow HolderRow(string name, bool nonNegative, params long[] balances) => new(
-        Name: WorldCellName.Parse(candidate: name),
+        Name: CellName.Parse(candidate: name),
         Kind: CellKind.Int,
         Capacity: 4,
         NonNegative: nonNegative,
         Cells: [.. balances.Select(selector: static (value, index) => new WorldStateCell(
-            Key: WorldCellName.Parse(candidate: index.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+            Key: CellName.Parse(candidate: index.ToString(System.Globalization.CultureInfo.InvariantCulture)),
             Value: value
         ))]
     );
     private static WorldStateRow Slot(string name, long initial, bool nonNegative = false) => new(
-        Name: WorldCellName.Parse(candidate: name),
+        Name: CellName.Parse(candidate: name),
         Kind: CellKind.Int,
         NonNegative: nonNegative,
         Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: initial)]
@@ -45,27 +45,27 @@ public sealed class EscrowedTransferRuleLawTests {
     private static ActionEffect.AddState Add(string state, decimal value, string? key = null) => new(State: state, Value: value, Key: key);
     private static ActionEffect.AddState AddFrom(string state, string fromState, string? key = null) => new(State: state, FromState: fromState, Key: key);
     private static ActionEffect.AddState AddNegated(string state, string key, string fromState) => new(
-        State: state, Key: key, Expression: new WorldValueExpression([new WorldValueToken.State(Name: fromState), new WorldValueToken.Negate()])
+        State: state, Key: key, Expression: new ValueExpression([new ValueToken.State(Name: fromState), new ValueToken.Negate()])
     );
     // The fee/net-of-fee split every settle arm needs. Both sides derive from the SAME single division so
     // fee + net always equals amount exactly: net is amount minus the one computed fee, never a second,
     // independently truncated division (amount*bps/10000 and amount*(10000-bps)/10000 can each round down, so their
     // sum can fall short of amount). "fromState" reads a live row's slot cell; "fromValue" splits a compile-time
     // authored constant instead (the buyout's fixed price).
-    private static WorldValueToken AmountToken(string? fromState, long? fromValue) => (fromState, fromValue) switch {
-        ({ } state, null) => new WorldValueToken.State(Name: state),
-        (null, { } value) => new WorldValueToken.Constant(Value: value),
+    private static ValueToken AmountToken(string? fromState, long? fromValue) => (fromState, fromValue) switch {
+        ({ } state, null) => new ValueToken.State(Name: state),
+        (null, { } value) => new ValueToken.Constant(Value: value),
         _ => throw new System.ArgumentException("exactly one of fromState/fromValue"),
     };
-    private static WorldValueExpression Fee(int bps, string? fromState = null, long? fromValue = null) => new([
-        AmountToken(fromState, fromValue), new WorldValueToken.Constant(Value: bps), new WorldValueToken.Multiply(),
-        new WorldValueToken.Constant(Value: 10_000m), new WorldValueToken.Divide(),
+    private static ValueExpression Fee(int bps, string? fromState = null, long? fromValue = null) => new([
+        AmountToken(fromState, fromValue), new ValueToken.Constant(Value: bps), new ValueToken.Multiply(),
+        new ValueToken.Constant(Value: 10_000m), new ValueToken.Divide(),
     ]);
-    private static WorldValueExpression NetOfFee(int bps, string? fromState = null, long? fromValue = null) => new([
+    private static ValueExpression NetOfFee(int bps, string? fromState = null, long? fromValue = null) => new([
         AmountToken(fromState, fromValue),
-        AmountToken(fromState, fromValue), new WorldValueToken.Constant(Value: bps), new WorldValueToken.Multiply(),
-        new WorldValueToken.Constant(Value: 10_000m), new WorldValueToken.Divide(),
-        new WorldValueToken.Subtract(),
+        AmountToken(fromState, fromValue), new ValueToken.Constant(Value: bps), new ValueToken.Multiply(),
+        new ValueToken.Constant(Value: 10_000m), new ValueToken.Divide(),
+        new ValueToken.Subtract(),
     ]);
     private static ActionPredicate.CompareState Cmp(string state, ActionStateComparison comparison, decimal? value = null, string? comparandState = null, string? comparandKey = null, string? key = null) =>
         new(State: state, Comparison: comparison, Value: value, Key: key, ComparandState: comparandState, ComparandKey: comparandKey);
@@ -84,7 +84,7 @@ public sealed class EscrowedTransferRuleLawTests {
             Slot(name: "auctionDeadline", initial: 0, nonNegative: true),
             Slot(name: "auctionBidRequest1", initial: -1),
             Slot(name: "auctionBidRequest2", initial: -1),
-            new(Name: WorldCellName.Parse(candidate: "auctionBidHistory"), Kind: CellKind.Int, Domain: new WorldStateDomain.Ring(Capacity: 8, Empty: -1)),
+            new(Name: CellName.Parse(candidate: "auctionBidHistory"), Kind: CellKind.Int, Domain: new WorldStateDomain.Ring(Capacity: 8, Empty: -1)),
             Slot(name: "feeReserve", initial: 0, nonNegative: true),
             Slot(name: "buyoutListRequest", initial: -1),
             Slot(name: "buyoutActive", initial: 0),
@@ -94,7 +94,7 @@ public sealed class EscrowedTransferRuleLawTests {
         };
 
         WorldRule BidRule(int seat, string request, string other) => new(
-            Name: WorldCellName.Parse(candidate: $"auction-bid-seat{seat}"),
+            Name: CellName.Parse(candidate: $"auction-bid-seat{seat}"),
             Gate: new ActionPredicate.All([
                 Cmp(state: "auctionActive", comparison: ActionStateComparison.Equal, value: 1),
                 Cmp(state: request, comparison: ActionStateComparison.Greater, value: -1),
@@ -120,7 +120,7 @@ public sealed class EscrowedTransferRuleLawTests {
         var document = Fixtures.BuildDocument().WithWorldState(rows: rows) with {
             Rules = [
                 new WorldRule(
-                    Name: WorldCellName.Parse(candidate: "auction-list"),
+                    Name: CellName.Parse(candidate: "auction-list"),
                     Gate: new ActionPredicate.All([
                         Cmp(state: "auctionListRequest", comparison: ActionStateComparison.Greater, value: 0),
                         Cmp(state: "auctionActive", comparison: ActionStateComparison.Equal, value: 0),
@@ -139,15 +139,15 @@ public sealed class EscrowedTransferRuleLawTests {
                 BidRule(seat: 1, request: "auctionBidRequest1", other: "2"),
                 BidRule(seat: 2, request: "auctionBidRequest2", other: "1"),
                 new WorldRule(
-                    Name: WorldCellName.Parse(candidate: "auction-settle-with-bid"),
+                    Name: CellName.Parse(candidate: "auction-settle-with-bid"),
                     Gate: new ActionPredicate.All([
                         Cmp(state: "auctionActive", comparison: ActionStateComparison.Equal, value: 1),
-                        Cmp(state: WorldRuleFacts.Tick, comparison: ActionStateComparison.GreaterOrEqual, comparandState: "auctionDeadline"),
+                        Cmp(state: RuleFacts.Tick, comparison: ActionStateComparison.GreaterOrEqual, comparandState: "auctionDeadline"),
                         Cmp(state: "auctionCurrentBidder", comparison: ActionStateComparison.NotEqual, value: -1),
                     ]),
                     Mode: ActionTriggerMode.Edge,
                     Effects: [
-                        new ActionEffect.AddState(State: "goods", Key: $"{WorldRuleFacts.CellKeyPrefix}auctionCurrentBidder:{WorldStateRow.SlotKey}", FromState: "auctionEscrowItem"),
+                        new ActionEffect.AddState(State: "goods", Key: $"{RuleFacts.CellKeyPrefix}auctionCurrentBidder:{WorldStateRow.SlotKey}", FromState: "auctionEscrowItem"),
                         Set(state: "auctionEscrowItem", value: 0),
                         new ActionEffect.AddState(State: "coins", Key: "0", Expression: NetOfFee(bps: FeeBasisPoints, fromState: "auctionEscrowCoin")),
                         new ActionEffect.AddState(State: "feeReserve", Expression: Fee(bps: FeeBasisPoints, fromState: "auctionEscrowCoin")),
@@ -157,10 +157,10 @@ public sealed class EscrowedTransferRuleLawTests {
                     ]
                 ),
                 new WorldRule(
-                    Name: WorldCellName.Parse(candidate: "auction-expire-no-bid"),
+                    Name: CellName.Parse(candidate: "auction-expire-no-bid"),
                     Gate: new ActionPredicate.All([
                         Cmp(state: "auctionActive", comparison: ActionStateComparison.Equal, value: 1),
-                        Cmp(state: WorldRuleFacts.Tick, comparison: ActionStateComparison.GreaterOrEqual, comparandState: "auctionDeadline"),
+                        Cmp(state: RuleFacts.Tick, comparison: ActionStateComparison.GreaterOrEqual, comparandState: "auctionDeadline"),
                         Cmp(state: "auctionCurrentBidder", comparison: ActionStateComparison.Equal, value: -1),
                     ]),
                     Mode: ActionTriggerMode.Edge,
@@ -171,7 +171,7 @@ public sealed class EscrowedTransferRuleLawTests {
                     ]
                 ),
                 new WorldRule(
-                    Name: WorldCellName.Parse(candidate: "buyout-list"),
+                    Name: CellName.Parse(candidate: "buyout-list"),
                     Gate: new ActionPredicate.All([
                         Cmp(state: "buyoutListRequest", comparison: ActionStateComparison.Greater, value: 0),
                         Cmp(state: "buyoutActive", comparison: ActionStateComparison.Equal, value: 0),
@@ -186,7 +186,7 @@ public sealed class EscrowedTransferRuleLawTests {
                     ]
                 ),
                 new WorldRule(
-                    Name: WorldCellName.Parse(candidate: "buyout-execute"),
+                    Name: CellName.Parse(candidate: "buyout-execute"),
                     Gate: new ActionPredicate.All([
                         Cmp(state: "buyoutActive", comparison: ActionStateComparison.Equal, value: 1),
                         Cmp(state: "buyoutRequest3", comparison: ActionStateComparison.Equal, value: 1),
@@ -204,10 +204,10 @@ public sealed class EscrowedTransferRuleLawTests {
                     ]
                 ),
                 new WorldRule(
-                    Name: WorldCellName.Parse(candidate: "buyout-expire"),
+                    Name: CellName.Parse(candidate: "buyout-expire"),
                     Gate: new ActionPredicate.All([
                         Cmp(state: "buyoutActive", comparison: ActionStateComparison.Equal, value: 1),
-                        Cmp(state: WorldRuleFacts.Tick, comparison: ActionStateComparison.GreaterOrEqual, comparandState: "buyoutDeadline"),
+                        Cmp(state: RuleFacts.Tick, comparison: ActionStateComparison.GreaterOrEqual, comparandState: "buyoutDeadline"),
                     ]),
                     Mode: ActionTriggerMode.Edge,
                     Effects: [
@@ -224,7 +224,7 @@ public sealed class EscrowedTransferRuleLawTests {
 
     private static long Read(WorldDefinition definition, string row, string key) {
         var found = WorldDefinitionRows.FindStateRow(rows: definition.State, name: row)!;
-        var cellKey = WorldCellName.Parse(candidate: key);
+        var cellKey = CellName.Parse(candidate: key);
 
         return WorldDefinitionRows.FindCell(cells: found.Cells, key: cellKey)!.Value;
     }

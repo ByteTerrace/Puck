@@ -36,8 +36,8 @@ public sealed class WorldBoardSymmetryLawTests {
             new WorldRule(Name("print"), [new ActionEffect.SetState(State: "print", FromState: "$board:canonical:board")]),
             // The image op composes with the one board-set read ($board:mask) instead of a dedicated read+image
             // query: one spelling for "carry a mask through an element" everywhere it is needed.
-            new WorldRule(Name("imageMask"), [new ActionEffect.SetState(State: "imageMask", Expression: new WorldValueExpression(Tokens: [
-                new WorldValueToken.State(Name: "$board:mask:board:1:2"), new WorldValueToken.BoardImage(Topology: "map", Element: "-z+x"),
+            new WorldRule(Name("imageMask"), [new ActionEffect.SetState(State: "imageMask", Expression: new ValueExpression(Tokens: [
+                new ValueToken.State(Name: "$board:mask:board:1:2"), new ValueToken.BoardImage(Topology: "map", Element: "-z+x"),
             ]))]),
         ]);
         var topology = WorldTopologyCompilation.Find(definition.StateRaw, "map")!;
@@ -65,8 +65,8 @@ public sealed class WorldBoardSymmetryLawTests {
         Assert.Contains("elements=8", baseline.Server.DescribeSymmetry("map", null));
         Assert.Contains("-x-z→3", baseline.Server.DescribeSymmetry("map", "12"));
         var badElement = Document([board, Slot("bad")], [
-            new WorldRule(Name("bad"), [new ActionEffect.SetState(State: "bad", Expression: new WorldValueExpression(Tokens: [
-                new WorldValueToken.State(Name: "$board:mask:board:1:2"), new WorldValueToken.BoardImage(Topology: "map", Element: "rot45"),
+            new WorldRule(Name("bad"), [new ActionEffect.SetState(State: "bad", Expression: new ValueExpression(Tokens: [
+                new ValueToken.State(Name: "$board:mask:board:1:2"), new ValueToken.BoardImage(Topology: "map", Element: "rot45"),
             ]))]),
         ]);
         Assert.Throws<WorldRuleException>(() => WorldRuleCompiler.CompileAll(badElement));
@@ -101,7 +101,7 @@ public sealed class WorldBoardSymmetryLawTests {
         StateRaw = new(World: rows, Lattices: [new WorldStateLatticeTopology.Grid("map", new DocumentVector3(0, 0, 0), 1, 4, 4)]),
         Rules = rules,
     };
-    private static WorldCellName Name(string value) => WorldCellName.Parse(value);
+    private static CellName Name(string value) => CellName.Parse(value);
     private static WorldStateCell Cell(string key, long value = 1) => new(Name(key), value);
     private static WorldStateRow Slot(string name) => new(Name(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)]);
     private static long Value(WorldFixture fixture, string row) =>

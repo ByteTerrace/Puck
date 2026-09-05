@@ -33,7 +33,7 @@ public interface IStateAddressedEffect {
     string Row { get; }
     /// <summary>The destination cell key (or an unused constant for a whole-row upsert/remove).</summary>
     string Key { get; }
-    /// <summary>The live key indirection (<see cref="WorldRuleFacts.CellKeyPrefix"/>), or <see langword="null"/> for
+    /// <summary>The live key indirection (<see cref="RuleFacts.CellKeyPrefix"/>), or <see langword="null"/> for
     /// a literal <see cref="Key"/>.</summary>
     CompiledCellRef? KeyFrom { get; }
 }

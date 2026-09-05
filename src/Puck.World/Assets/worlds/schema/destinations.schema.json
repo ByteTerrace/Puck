@@ -11,7 +11,7 @@
     ],
     "properties": {
       "name": {
-        "description": "The destination\u0027s own name \u2014 WorldSafeName-shaped, unique within the section. A Destination facet resolves against this name (see WorldDefinitionValidator).",
+        "description": "The destination\u0027s own name \u2014 SafeName-shaped, unique within the section. A Destination facet resolves against this name (see WorldDefinitionValidator).",
         "type": "string"
       },
       "reference": {

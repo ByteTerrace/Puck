@@ -97,14 +97,14 @@ public sealed class WorldRuleCompilerAdversarialLawTests {
         const string Property = "probe";
         var definition = Fixtures.BuildDocument() with {
             StateRaw = new WorldStateSection(World: [new WorldStateRow(
-                Name: WorldCellName.Parse(candidate: Property),
+                Name: CellName.Parse(candidate: Property),
                 Kind: CellKind.Int,
                 Capacity: 1,
-                Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: 1L)]
+                Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "0"), Value: 1L)]
             )]),
             Properties = new WorldPropertyRegistrySection(Names: [Property]),
             Interactions = new WorldInteractionsSection(Interactions: [new WorldInteraction(
-                Name: WorldCellName.Parse(candidate: "adversarialInteraction"),
+                Name: CellName.Parse(candidate: "adversarialInteraction"),
                 Left: Property,
                 Right: Property,
                 CoOccurrence: WorldInteractionCoOccurrence.Distance,
@@ -132,7 +132,7 @@ public sealed class WorldRuleCompilerAdversarialLawTests {
     );
 
     private static WorldRule Rule(IReadOnlyList<ActionEffect> effects, ActionPredicate? gate = null) => new(
-        Name: WorldCellName.Parse(candidate: "adversarial"),
+        Name: CellName.Parse(candidate: "adversarial"),
         Effects: effects,
         Gate: gate
     );

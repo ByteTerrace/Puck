@@ -160,7 +160,7 @@ public sealed record WorldAdjacencyBoundary(DocumentVector3 Center, float Outwar
 /// <para>A world whose rate is 0 has no tick mapping for a positive value (see <see cref="CompiledTickDuration"/>),
 /// which reads as never dropped.</para></param>
 public sealed record WorldAdjacency(
-    WorldSafeName Name,
+    SafeName Name,
     string Destination,
     string Counterpart,
     WorldAdjacencyBoundary Boundary,
@@ -260,7 +260,7 @@ public static class WorldAdjacencyRegion {
 /// <param name="Document">The resolved document this edge's destination names, or <see langword="null"/> when that
 /// destination does not resolve.</param>
 /// <param name="Boundary">The authored boundary rectangle and its outward orientation.</param>
-public readonly record struct WorldAdjacencyEdgeView(WorldSafeName Name, string Counterpart, string? Document, WorldAdjacencyBoundary Boundary) {
+public readonly record struct WorldAdjacencyEdgeView(SafeName Name, string Counterpart, string? Document, WorldAdjacencyBoundary Boundary) {
     internal static WorldAdjacencyEdgeView From(WorldAdjacency row, string? document) => new(
         Boundary: row.Boundary,
         Counterpart: row.Counterpart,
@@ -408,7 +408,7 @@ public static class WorldAdjacencyPolicy {
         );
     }
     private static FixedQ4816 CeilingFixed(decimal value) {
-        var fixedValue = FixedQ4816.Abs(value: WorldStateNumericLiteral.ToFixed(value: value));
+        var fixedValue = FixedQ4816.Abs(value: NumericLiteral.ToFixed(value: value));
         var exact = ((decimal)fixedValue.Value / 65_536m);
 
         return ((exact < decimal.Abs(value: value))

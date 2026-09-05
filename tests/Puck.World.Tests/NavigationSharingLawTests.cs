@@ -246,7 +246,7 @@ public sealed partial class NavigationLawTests {
     public void SharedNavigationDoesNotRestartForAnUnrelatedFieldWrite() {
         var document = SharedNavigationDocument(budget: 3, medium: true);
         document = document with { StateRaw = document.StateRaw! with { World = [.. document.State,
-            new WorldStateRow(WorldCellName.Parse("heat"), CellKind.Fixed,
+            new WorldStateRow(CellName.Parse("heat"), CellKind.Fixed,
                 Domain: new WorldStateDomain.CellsOf("water-space"), Field: new WorldStateFieldTrait(Initial: 0, Min: 0, Max: 1))] } };
         using var fixture = Fixtures.FreshServer(document);
         _ = JoinNavigator(fixture, SharedGoal());

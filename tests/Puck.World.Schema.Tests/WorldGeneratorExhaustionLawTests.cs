@@ -44,7 +44,7 @@ public sealed class WorldGeneratorExhaustionLawTests {
             Simulation: new WorldSimulationDefaults(RateHz: 240),
             StateRaw: new WorldStateSection(World: [
                 new WorldStateRow(
-                    Name: WorldCellName.Parse(candidate: "loot"),
+                    Name: CellName.Parse(candidate: "loot"),
                     Kind: kind,
                     Draw: new WorldDraw(Generator: generator, Timing: timing)
                 ),

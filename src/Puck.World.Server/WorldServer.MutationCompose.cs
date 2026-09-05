@@ -597,7 +597,7 @@ public sealed partial class WorldServer {
     // never silently compose against tick zero. `evictedKey` is non-null only when an UpsertStateCell write against an
     // Evicts row dropped its oldest cell to make room — the same pure function every re-composition (live apply,
     // world.undo's journal replay) runs, so the reported victim and the actually-dropped cell can never disagree.
-    private static bool TryCompose(WorldDefinition current, WorldMutation mutation, ulong tick, string instanceIdentity, out WorldDefinition candidate, out string reason, out WorldCellName? evictedKey, CompiledWorldPatterns? patterns = null) {
+    private static bool TryCompose(WorldDefinition current, WorldMutation mutation, ulong tick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, CompiledWorldPatterns? patterns = null) {
         if (!TryComposeCore(
             candidate: out candidate,
             current: current,
@@ -643,7 +643,7 @@ public sealed partial class WorldServer {
             rowName: row
         )
     );
-    private static bool TryComposeCore(WorldDefinition current, WorldMutation mutation, ulong tick, string instanceIdentity, out WorldDefinition candidate, out string reason, out WorldCellName? evictedKey, CompiledWorldPatterns? patterns = null) {
+    private static bool TryComposeCore(WorldDefinition current, WorldMutation mutation, ulong tick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, CompiledWorldPatterns? patterns = null) {
         reason = string.Empty;
         evictedKey = null;
 
@@ -1371,7 +1371,7 @@ public sealed partial class WorldServer {
                         return false;
                     }
 
-                    if (!WorldCellName.TryParse(
+                    if (!CellName.TryParse(
                         candidate: m.Key,
                         name: out var cellKey,
                         reason: out var keyReason
@@ -1564,7 +1564,7 @@ public sealed partial class WorldServer {
                     // tick's rotation into it (which would double the turn on the next read).
                     if (
                         (addendRow is not null) &&
-                        WorldCellName.TryParse(candidate: m.Key, name: out var addendKey, reason: out _) &&
+                        CellName.TryParse(candidate: m.Key, name: out var addendKey, reason: out _) &&
                         (WorldDefinitionRows.FindCell(cells: addendRow.Cells, key: addendKey) is { } phaseCell) &&
                         ((phaseCell.Cycle is not null) || ((phaseCell.Key == WorldStateRow.SlotKey) && (addendRow.Cycle is not null)))
                     ) {
@@ -1790,13 +1790,13 @@ public sealed partial class WorldServer {
             case WorldMutation.FormGroup m: {
                     var groupsSection = (current.Groups ?? WorldGroupsSection.Empty);
 
-                    // The earliest door a LIVE-minted group id crosses (WorldSafeName's own doctrine — see
+                    // The earliest door a LIVE-minted group id crosses (SafeName's own doctrine — see
                     // WorldGroup.Id's remarks): a document-authored id already crossed this door at JSON parse, but
                     // FormGroup mints one at RUNTIME, so this mutation's own apply site IS that door for it. Refused by
                     // name rather than let an unsafe id reach WorldGroup.Id, which the id-to-instance-name composition
                     // (WorldSessionResolver.MintInstanceName) depends on staying safe for every group id, live-formed or
                     // authored alike.
-                    if (!WorldSafeName.TryParse(
+                    if (!SafeName.TryParse(
                         candidate: m.Id,
                         name: out var safeId,
                         reason: out var idReason

@@ -881,7 +881,7 @@ public static partial class WorldRuleCompiler {
             (key is null) ||
             !key.StartsWith(
             comparisonType: StringComparison.Ordinal,
-            value: WorldRuleFacts.CellKeyPrefix
+            value: RuleFacts.CellKeyPrefix
         )
         ) {
             cell = default;
@@ -889,13 +889,13 @@ public static partial class WorldRuleCompiler {
             return false;
         }
 
-        var tokens = key[WorldRuleFacts.CellKeyPrefix.Length..].Split(separator: ':');
+        var tokens = key[RuleFacts.CellKeyPrefix.Length..].Split(separator: ':');
 
         if (tokens.Length != 2) {
             throw new WorldRuleException(
                 refusal: WorldRuleRefusal.StateCellUnaddressable,
                 ruleName: ruleName,
-                detail: $"'{verb}' {keyFieldLabel} '{key}' does not spell '{WorldRuleFacts.CellKeyPrefix}<row>:<key>'"
+                detail: $"'{verb}' {keyFieldLabel} '{key}' does not spell '{RuleFacts.CellKeyPrefix}<row>:<key>'"
             );
         }
 
@@ -911,7 +911,7 @@ public static partial class WorldRuleCompiler {
     }
     private static string ResolveKey(WorldStateRow row, string? key, string ruleName, string verb, string keyFieldLabel) {
         if (key is { } authored) {
-            return (WorldCellName.TryParse(
+            return (CellName.TryParse(
                 candidate: authored,
                 name: out var parsed,
                 reason: out var reason
@@ -985,12 +985,12 @@ public static partial class WorldRuleCompiler {
     // through the ordinary row/key walk, so every key rule (a keyed row needs a key, $each/$cell: indirections, the
     // declared-cell requirement of a read) holds for it unchanged; a cell argument resolves the same way.
     private static ResolvedOperand ResolveSymmetryOperand(string name, string? key, string ruleName, WorldDefinition definition, string verb, string fieldLabel, string keyFieldLabel, string describe) {
-        var tokens = name[WorldRuleFacts.SymmetryPrefix.Length..].Split(separator: ':');
+        var tokens = name[RuleFacts.SymmetryPrefix.Length..].Split(separator: ':');
 
         static WorldRuleException Malformed(string ruleName, string name, string detail) => new(
             refusal: WorldRuleRefusal.SymmetryChannelMalformed,
             ruleName: ruleName,
-            detail: $"'{name}' {detail} — a symmetry channel spells '{WorldRuleFacts.SymmetryPrefix}<ring|antipode|canonicalRay|cycle:<steps>|reflect:<node|cell:<row>[.<key>]>|orthogonal:<node|cell:<row>[.<key>]>|innerProduct:<node|cell:<row>[.<key>]>|projectionX|projectionY>:<row>'"
+            detail: $"'{name}' {detail} — a symmetry channel spells '{RuleFacts.SymmetryPrefix}<ring|antipode|canonicalRay|cycle:<steps>|reflect:<node|cell:<row>[.<key>]>|orthogonal:<node|cell:<row>[.<key>]>|innerProduct:<node|cell:<row>[.<key>]>|projectionX|projectionY>:<row>'"
         );
 
         if (tokens.Length < 2) {
@@ -1089,19 +1089,19 @@ public static partial class WorldRuleCompiler {
         if (name.StartsWith("$board:", StringComparison.Ordinal)) {
             return ResolveBoardOperand(name, key, ruleName, definition);
         }
-        if (name.StartsWith(WorldRuleFacts.MatchPrefix, StringComparison.Ordinal)) {
+        if (name.StartsWith(RuleFacts.MatchPrefix, StringComparison.Ordinal)) {
             return ResolvePatternOperand(name, key, ruleName, definition);
         }
-        if (name.StartsWith(WorldRuleFacts.HistoryPrefix, StringComparison.Ordinal)) {
+        if (name.StartsWith(RuleFacts.HistoryPrefix, StringComparison.Ordinal)) {
             return ResolveHistoryOperand(name, key, ruleName, definition);
         }
         if (name.StartsWith(WorldRuleFacts.ClockPrefix, StringComparison.Ordinal)) {
             return ResolveClockOperand(name, key, ruleName, definition);
         }
-        if (name.StartsWith(WorldRuleFacts.BindPrefix, StringComparison.Ordinal)) {
+        if (name.StartsWith(RuleFacts.BindPrefix, StringComparison.Ordinal)) {
             return ResolveBindingOperand(name, key, ruleName, keyFieldLabel);
         }
-        if (name.StartsWith(WorldRuleFacts.TablePrefix, StringComparison.Ordinal)) {
+        if (name.StartsWith(RuleFacts.TablePrefix, StringComparison.Ordinal)) {
             return ResolveTableOperand(name, key, ruleName, definition, keyFieldLabel);
         }
         var describe = $"{name}{((key is { } spelledKey)
@@ -1110,7 +1110,7 @@ public static partial class WorldRuleCompiler {
 
         if (string.Equals(
             a: name,
-            b: WorldRuleFacts.Tick,
+            b: RuleFacts.Tick,
             comparisonType: StringComparison.Ordinal
         )) {
             RefuseKeyOnReservedChannel(
@@ -1260,7 +1260,7 @@ public static partial class WorldRuleCompiler {
 
         if (name.StartsWith(
             comparisonType: StringComparison.Ordinal,
-            value: WorldRuleFacts.ReducePrefix
+            value: RuleFacts.ReducePrefix
         )) {
             RefuseKeyOnReservedChannel(
                 key: key,
@@ -1269,7 +1269,7 @@ public static partial class WorldRuleCompiler {
                 ruleName: ruleName
             );
 
-            var suffix = name[WorldRuleFacts.ReducePrefix.Length..];
+            var suffix = name[RuleFacts.ReducePrefix.Length..];
             var separator = suffix.IndexOf(
                 comparisonType: StringComparison.Ordinal,
                 value: ':'
@@ -1286,7 +1286,7 @@ public static partial class WorldRuleCompiler {
                 throw new WorldRuleException(
                     refusal: WorldRuleRefusal.ReduceChannelMalformed,
                     ruleName: ruleName,
-                    detail: $"'{name}' does not spell '{WorldRuleFacts.ReducePrefix}<max|min|sum|count>:<row>'"
+                    detail: $"'{name}' does not spell '{RuleFacts.ReducePrefix}<max|min|sum|count>:<row>'"
                 );
             }
 
@@ -1741,7 +1741,7 @@ public static partial class WorldRuleCompiler {
 
         if (name.StartsWith(
             comparisonType: StringComparison.Ordinal,
-            value: WorldRuleFacts.SymmetryPrefix
+            value: RuleFacts.SymmetryPrefix
         )) {
             return ResolveSymmetryOperand(
                 definition: definition,
@@ -1762,11 +1762,11 @@ public static partial class WorldRuleCompiler {
             throw new WorldRuleException(
                 refusal: WorldRuleRefusal.StateRowUnknown,
                 ruleName: ruleName,
-                detail: $"'{name}' carries the reserved '{WorldStateRow.ReservedNamePrefix}' prefix but names none of the reserved channels ('{WorldRuleFacts.Tick}', '{WorldRuleFacts.Population}', '{WorldRuleFacts.RegionPrefix}<placementId>', '{WorldRuleFacts.MachinePrefix}<screen>:<address>', '{WorldRuleFacts.ReducePrefix}<op>:<row>', '{WorldRuleFacts.ArgMaxPrefix}<row>', '{WorldRuleFacts.ArgMinPrefix}<row>', '{WorldRuleFacts.DistancePrefix}<a>:<b>', '{WorldRuleFacts.LineOfSightPrefix}<a>:<b>', '{WorldRuleFacts.UprightPrefix}<bodyRef>', '{WorldRuleFacts.NavigationPrefix}<bodyRef>:<facet>', '{WorldRuleFacts.ParkedPrefix}<bodyRef>', '{WorldRuleFacts.LinkPrefix}<adjacencyName>', '{WorldRuleFacts.ChannelPrefix}<seat>:<channelName>')"
+                detail: $"'{name}' carries the reserved '{WorldStateRow.ReservedNamePrefix}' prefix but names none of the reserved channels ('{RuleFacts.Tick}', '{WorldRuleFacts.Population}', '{WorldRuleFacts.RegionPrefix}<placementId>', '{WorldRuleFacts.MachinePrefix}<screen>:<address>', '{RuleFacts.ReducePrefix}<op>:<row>', '{WorldRuleFacts.ArgMaxPrefix}<row>', '{WorldRuleFacts.ArgMinPrefix}<row>', '{WorldRuleFacts.DistancePrefix}<a>:<b>', '{WorldRuleFacts.LineOfSightPrefix}<a>:<b>', '{WorldRuleFacts.UprightPrefix}<bodyRef>', '{WorldRuleFacts.NavigationPrefix}<bodyRef>:<facet>', '{WorldRuleFacts.ParkedPrefix}<bodyRef>', '{WorldRuleFacts.LinkPrefix}<adjacencyName>', '{WorldRuleFacts.ChannelPrefix}<seat>:<channelName>')"
             );
         }
 
-        // A declared row name is dot-free by construction (WorldCellName refuses a dot) — this only ever fires for an
+        // A declared row name is dot-free by construction (CellName refuses a dot) — this only ever fires for an
         // author reaching for a "row.key" spelling in one string. Named explicitly rather than falling through to a
         // generic "unknown row", which would leave the actual mistake (use the separate key field) unsaid.
         if (name.Contains(value: '.')) {
@@ -1784,7 +1784,7 @@ public static partial class WorldRuleCompiler {
             ?? throw new WorldRuleException(
             refusal: WorldRuleRefusal.StateRowUnknown,
             ruleName: ruleName,
-            detail: $"'{name}' names no state row, and is not a reserved channel ('{WorldRuleFacts.Tick}', '{WorldRuleFacts.Population}', '{WorldRuleFacts.RegionPrefix}<placementId>', '{WorldRuleFacts.MachinePrefix}<screen>:<address>', '{WorldRuleFacts.ReducePrefix}<op>:<row>', '{WorldRuleFacts.ArgMaxPrefix}<row>', '{WorldRuleFacts.ArgMinPrefix}<row>', '{WorldRuleFacts.DistancePrefix}<a>:<b>', '{WorldRuleFacts.LineOfSightPrefix}<a>:<b>', '{WorldRuleFacts.UprightPrefix}<bodyRef>', '{WorldRuleFacts.NavigationPrefix}<bodyRef>:<facet>', '{WorldRuleFacts.ParkedPrefix}<bodyRef>', '{WorldRuleFacts.LinkPrefix}<adjacencyName>', '{WorldRuleFacts.ChannelPrefix}<seat>:<channelName>')"
+            detail: $"'{name}' names no state row, and is not a reserved channel ('{RuleFacts.Tick}', '{WorldRuleFacts.Population}', '{WorldRuleFacts.RegionPrefix}<placementId>', '{WorldRuleFacts.MachinePrefix}<screen>:<address>', '{RuleFacts.ReducePrefix}<op>:<row>', '{WorldRuleFacts.ArgMaxPrefix}<row>', '{WorldRuleFacts.ArgMinPrefix}<row>', '{WorldRuleFacts.DistancePrefix}<a>:<b>', '{WorldRuleFacts.LineOfSightPrefix}<a>:<b>', '{WorldRuleFacts.UprightPrefix}<bodyRef>', '{WorldRuleFacts.NavigationPrefix}<bodyRef>:<facet>', '{WorldRuleFacts.ParkedPrefix}<bodyRef>', '{WorldRuleFacts.LinkPrefix}<adjacencyName>', '{WorldRuleFacts.ChannelPrefix}<seat>:<channelName>')"
         ));
 
         if (
@@ -2040,7 +2040,7 @@ public static partial class WorldRuleCompiler {
         try {
             var raw = kind switch {
                 CellKind.Int => checked((long)decimal.Round(d: literal, decimals: 0, mode: MidpointRounding.ToEven)),
-                CellKind.Fixed => WorldStateNumericLiteral.ToFixed(value: literal).Value,
+                CellKind.Fixed => NumericLiteral.ToFixed(value: literal).Value,
                 _ => ((literal != decimal.Zero) ? 1L : 0L), // Bool — Text is refused before numeric lowering.
             };
 
@@ -2164,7 +2164,7 @@ public static partial class WorldRuleCompiler {
 
         for (var index = 0; (index < rules.Count); index++) {
             var rule = rules[index];
-            // WorldCellName already proved the shape (non-empty, dot-free, free of the reserved character set) at the
+            // CellName already proved the shape (non-empty, dot-free, free of the reserved character set) at the
             // JSON converter or at the console verb, naming the offending character — a default-valued struct from a
             // programmatically built definition is the one way an empty name still reaches here.
             var name = (rule?.Name.Value ?? string.Empty);
@@ -2244,7 +2244,7 @@ public static partial class WorldRuleCompiler {
 
         for (var index = 0; (index < interactions.Count); index++) {
             var interaction = interactions[index];
-            // WorldCellName already proved the shape at the JSON converter or console verb — a default-valued struct
+            // CellName already proved the shape at the JSON converter or console verb — a default-valued struct
             // from a programmatically built definition is the one way an empty name still reaches here, the same
             // caveat CompileAll's own name walk carries.
             var name = (interaction?.Name.Value ?? string.Empty);
@@ -2373,7 +2373,7 @@ public static partial class WorldRuleCompiler {
                     Interaction: new CompiledInteraction(
                         CoOccurrence: row.CoOccurrence,
                         Left: row.Left,
-                        Range: WorldStateNumericLiteral.ToFixed(value: row.Range),
+                        Range: NumericLiteral.ToFixed(value: row.Range),
                         Right: row.Right
                     )
                 );

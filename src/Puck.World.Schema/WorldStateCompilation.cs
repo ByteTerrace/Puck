@@ -225,7 +225,7 @@ public sealed class WorldStateCatalog {
     /// <param name="name">The validated authored name.</param>
     /// <param name="handle">The resolved handle, or the invalid default value when no declaration matches.</param>
     /// <returns><see langword="true"/> when the lane declares the name.</returns>
-    public bool TryResolve(WorldStateOwnershipLane lane, WorldCellName name, out WorldStateHandle handle) => TryResolve(
+    public bool TryResolve(WorldStateOwnershipLane lane, CellName name, out WorldStateHandle handle) => TryResolve(
         lane: lane,
         name: name.Value,
         handle: out handle

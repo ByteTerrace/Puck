@@ -79,7 +79,7 @@ public sealed class IdentityProjectionWireLawTests {
         // An identity claiming no rates: the named slots exist, their rows do not.
         var rateless = owned with {
             StateRaw = new WorldStateSection(World: [
-                new WorldStateRow(Name: WorldCellName.Parse(candidate: PrivateStateRow), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: WorldStateRow.SlotKey), Value: 91L)]),
+                new WorldStateRow(Name: CellName.Parse(candidate: PrivateStateRow), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: CellName.Parse(candidate: WorldStateRow.SlotKey), Value: 91L)]),
             ]),
         };
         var identity = new WorldIdentity(document: rateless, defaults: defaults);
@@ -125,16 +125,16 @@ public sealed class IdentityProjectionWireLawTests {
         return document with {
             DocumentId = "traveller-one",
             Identity = new WorldIdentityDefinition(
-                Id: WorldSafeName.Parse(candidate: "traveller-one"),
+                Id: SafeName.Parse(candidate: "traveller-one"),
                 Name: "Traveller One",
                 Color: "#3366cc",
-                MoveSpeedState: WorldCellName.Parse(candidate: "ownMoveSpeed"),
-                TurnSpeedState: WorldCellName.Parse(candidate: "ownTurnSpeed"),
+                MoveSpeedState: CellName.Parse(candidate: "ownMoveSpeed"),
+                TurnSpeedState: CellName.Parse(candidate: "ownTurnSpeed"),
                 Controllers: []),
             StateRaw = new WorldStateSection(World: [
-                new WorldStateRow(Name: WorldCellName.Parse(candidate: "ownMoveSpeed"), Kind: CellKind.Fixed, Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: WorldStateRow.SlotKey), Value: FixedQ4816.FromDouble(value: 4.5).Value)]),
-                new WorldStateRow(Name: WorldCellName.Parse(candidate: "ownTurnSpeed"), Kind: CellKind.Fixed, Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: WorldStateRow.SlotKey), Value: FixedQ4816.FromDouble(value: 2.25).Value)]),
-                new WorldStateRow(Name: WorldCellName.Parse(candidate: PrivateStateRow), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: WorldStateRow.SlotKey), Value: 91L)]),
+                new WorldStateRow(Name: CellName.Parse(candidate: "ownMoveSpeed"), Kind: CellKind.Fixed, Cells: [new WorldStateCell(Key: CellName.Parse(candidate: WorldStateRow.SlotKey), Value: FixedQ4816.FromDouble(value: 4.5).Value)]),
+                new WorldStateRow(Name: CellName.Parse(candidate: "ownTurnSpeed"), Kind: CellKind.Fixed, Cells: [new WorldStateCell(Key: CellName.Parse(candidate: WorldStateRow.SlotKey), Value: FixedQ4816.FromDouble(value: 2.25).Value)]),
+                new WorldStateRow(Name: CellName.Parse(candidate: PrivateStateRow), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: CellName.Parse(candidate: WorldStateRow.SlotKey), Value: 91L)]),
             ]),
             GrantsRaw = [
                 new WorldGrant(Principal: WorldPrincipal.Document(id: PrivateChatPeer), Capability: WorldCapability.Mutate, Subject: GrantSubject.Section(section: WorldSection.State), Exclusive: false),

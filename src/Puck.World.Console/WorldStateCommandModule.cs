@@ -175,7 +175,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
 
         var cell = WorldDefinitionRows.FindCell(
             cells: row.Cells,
-            key: WorldCellName.Parse(candidate: key)
+            key: CellName.Parse(candidate: key)
         );
 
         return new CommandResult(Output: DescribeCell(

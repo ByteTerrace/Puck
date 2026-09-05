@@ -11,9 +11,9 @@ public sealed class WorldPatternDifferentialLawTests {
     private const int Trees = 300;
 
     private static readonly WorldPatternSymbol[] s_symbols = [
-        new(WorldCellName.Parse("a"), 1, 1),
-        new(WorldCellName.Parse("b"), 2, 2),
-        new(WorldCellName.Parse("c"), 3, 3),
+        new(CellName.Parse("a"), 1, 1),
+        new(CellName.Parse("b"), 2, 2),
+        new(CellName.Parse("c"), 3, 3),
     ];
 
     [Fact]
@@ -26,7 +26,7 @@ public sealed class WorldPatternDifferentialLawTests {
 
         for (var tree = 0; tree < Trees; tree++) {
             var node = Random(random, depth: 0);
-            var row = new WorldPatternRow(WorldCellName.Parse("t"), CellKind.Int, s_symbols, node, MaxStates: WorldPatternCapacity.MaxStates);
+            var row = new WorldPatternRow(CellName.Parse("t"), CellKind.Int, s_symbols, node, MaxStates: WorldPatternCapacity.MaxStates);
 
             if (!CompiledWorldPattern.TryCompile(row, out var machine, out var reason)) {
                 Assert.Contains("states", reason);

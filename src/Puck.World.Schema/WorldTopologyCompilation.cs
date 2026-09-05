@@ -44,7 +44,7 @@ public sealed partial class CompiledWorldTopology {
     private readonly int[] m_neighbours;
     private readonly int[] m_opposite;
     private readonly string[] m_keys;
-    private readonly WorldCellName[] m_names;
+    private readonly CellName[] m_names;
     private readonly string[] m_directionNames;
     private readonly int m_width;
     private readonly int m_depth;
@@ -75,16 +75,16 @@ public sealed partial class CompiledWorldTopology {
         m_origin = origin;
         m_cellSize = cellSize;
         m_keys = new string[count];
-        m_names = new WorldCellName[count];
+        m_names = new CellName[count];
         for (var cell = 0; cell < count; cell++) {
             m_keys[cell] = cell.ToString(CultureInfo.InvariantCulture);
-            m_names[cell] = WorldCellName.Parse(m_keys[cell]);
+            m_names[cell] = CellName.Parse(m_keys[cell]);
         }
     }
 
     /// <summary>Gets a cell's key as a parsed cell name, without re-parsing.</summary>
     /// <param name="cell">The cell ordinal.</param>
-    public WorldCellName CellName(int cell) => m_names[cell];
+    public CellName NameOf(int cell) => m_names[cell];
 
     /// <summary>Gets the shape.</summary>
     public WorldTopologyKind Kind { get; }
@@ -373,7 +373,7 @@ public static class WorldTopologyCompilation {
         var canonical = CompiledWorldTopology.ElementNames(kind, width, depth, layers);
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var alias in aliases) {
-            if (alias is null || !WorldCellName.TryParse(alias.Name, out _, out _) || Array.IndexOf(canonical, alias.Name) >= 0 || !names.Add(alias.Name)) {
+            if (alias is null || !CellName.TryParse(alias.Name, out _, out _) || Array.IndexOf(canonical, alias.Name) >= 0 || !names.Add(alias.Name)) {
                 reason = "elementAliases requires a distinct name per entry that is not already a canonical element name";
                 return false;
             }
@@ -400,7 +400,7 @@ public static class WorldTopologyCompilation {
         var names = new HashSet<string>(StringComparer.Ordinal);
         var steps = new HashSet<(int, int, int)>();
         foreach (var direction in directions) {
-            if (direction is null || !WorldCellName.TryParse(direction.Name, out _, out _) || !names.Add(direction.Name)) {
+            if (direction is null || !CellName.TryParse(direction.Name, out _, out _) || !names.Add(direction.Name)) {
                 reason = "directions requires a distinct, valid name per entry";
                 return false;
             }
@@ -465,13 +465,13 @@ public static class WorldTopologyCompilation {
     /// reader below, which this split does not otherwise touch.</summary>
     public static (int Width, int Depth, int Layers, WorldTopologyWrap Wrap, float Band, float LayerHeight, int Radius,
         IReadOnlyList<WorldTopologyDirection>? Directions, IReadOnlyList<WorldTopologyElementAlias>? ElementAliases) Normalize(WorldStateLatticeTopology topology) => topology switch {
-        WorldStateLatticeTopology.Field field => (field.Width, field.Depth, field.Layers, WorldTopologyWrap.None, 0f, 0f, 0, null, null),
-        WorldStateLatticeTopology.Grid grid => (grid.Width, grid.Depth, 1, grid.Wrap, grid.Band, 0f, 0, grid.Directions, grid.ElementAliases),
-        WorldStateLatticeTopology.Ring ring => (ring.Width, 1, 1, WorldTopologyWrap.None, 0f, 0f, 0, ring.Directions, ring.ElementAliases),
-        WorldStateLatticeTopology.Hex hex => (1, 1, 1, WorldTopologyWrap.None, 0f, 0f, hex.Radius, hex.Directions, hex.ElementAliases),
-        WorldStateLatticeTopology.Box box => (box.Width, box.Depth, box.Layers, WorldTopologyWrap.None, 0f, box.LayerHeight, 0, box.Directions, box.ElementAliases),
-        _ => throw new InvalidOperationException($"'{topology.Kind}' is not a defined WorldTopologyKind"),
-    };
+            WorldStateLatticeTopology.Field field => (field.Width, field.Depth, field.Layers, WorldTopologyWrap.None, 0f, 0f, 0, null, null),
+            WorldStateLatticeTopology.Grid grid => (grid.Width, grid.Depth, 1, grid.Wrap, grid.Band, 0f, 0, grid.Directions, grid.ElementAliases),
+            WorldStateLatticeTopology.Ring ring => (ring.Width, 1, 1, WorldTopologyWrap.None, 0f, 0f, 0, ring.Directions, ring.ElementAliases),
+            WorldStateLatticeTopology.Hex hex => (1, 1, 1, WorldTopologyWrap.None, 0f, 0f, hex.Radius, hex.Directions, hex.ElementAliases),
+            WorldStateLatticeTopology.Box box => (box.Width, box.Depth, box.Layers, WorldTopologyWrap.None, 0f, box.LayerHeight, 0, box.Directions, box.ElementAliases),
+            _ => throw new InvalidOperationException($"'{topology.Kind}' is not a defined WorldTopologyKind"),
+        };
 
     // Cells are (X, Y, Z) triples: a grid or ring keeps Z at 0 and Y as its depth axis, a hex uses (q, r), a box
     // fills layers along Z. Every kind's directions are steps in the same triple, so one neighbour loop serves all.
@@ -503,12 +503,12 @@ public static class WorldTopologyCompilation {
                 directionNames[index] = authored[index].Name;
             }
         } else {
-            var planar = new (int X, int Y, int Z)[] { (0,-1,0),(1,-1,0),(1,0,0),(1,1,0),(0,1,0),(-1,1,0),(-1,0,0),(-1,-1,0) };
+            var planar = new (int X, int Y, int Z)[] { (0, -1, 0), (1, -1, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0), (-1, 1, 0), (-1, 0, 0), (-1, -1, 0) };
             (directions, directionNames) = topology.Kind switch {
                 WorldTopologyKind.Grid => (planar, new[] { "N", "NE", "E", "SE", "S", "SW", "W", "NW" }),
-                WorldTopologyKind.Hex => ([(1,0,0),(1,-1,0),(0,-1,0),(-1,0,0),(-1,1,0),(0,1,0)], new[] { "E", "NE", "NW", "W", "SW", "SE" }),
-                WorldTopologyKind.Box => ([.. planar, (0,0,1), .. planar.Select(p => (p.X, p.Y, 1)), (0,0,-1), .. planar.Select(p => (p.X, p.Y, -1))], CompiledWorldTopology.BoxDirectionNames),
-                _ => ([(1,0,0),(-1,0,0)], new[] { "forward", "backward" }),
+                WorldTopologyKind.Hex => ([(1, 0, 0), (1, -1, 0), (0, -1, 0), (-1, 0, 0), (-1, 1, 0), (0, 1, 0)], new[] { "E", "NE", "NW", "W", "SW", "SE" }),
+                WorldTopologyKind.Box => ([.. planar, (0, 0, 1), .. planar.Select(p => (p.X, p.Y, 1)), (0, 0, -1), .. planar.Select(p => (p.X, p.Y, -1))], CompiledWorldTopology.BoxDirectionNames),
+                _ => ([(1, 0, 0), (-1, 0, 0)], new[] { "forward", "backward" }),
             };
         }
         var indices = new Dictionary<(int, int, int), int>();
@@ -527,7 +527,7 @@ public static class WorldTopologyCompilation {
                 if (wrap is WorldTopologyWrap.Y or WorldTopologyWrap.Both) {
                     y = (y + depth) % depth;
                 }
-                neighbours[cell * directions.Length + direction] = indices.TryGetValue((x,y,z), out var next) ? next : -1;
+                neighbours[cell * directions.Length + direction] = indices.TryGetValue((x, y, z), out var next) ? next : -1;
             }
         }
         var opposite = new int[directions.Length];

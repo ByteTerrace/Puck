@@ -24,7 +24,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             : m_worlds.Defaults.NeutralColor
         );
 
-        if (!WorldSafeName.TryParse(
+        if (!SafeName.TryParse(
             candidate: id,
             name: out var safeId,
             reason: out var nameReason

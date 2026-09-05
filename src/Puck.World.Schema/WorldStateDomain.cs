@@ -58,7 +58,7 @@ public abstract record WorldStateDomain {
     /// <param name="Row">The row whose keys this row's own keys are drawn from.</param>
     /// <param name="Ordered">Whether cell order carries gameplay meaning (a pile) rather than being incidental.</param>
     [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-    public sealed record KeysOf(WorldCellName Row, bool Ordered = false) : WorldStateDomain;
+    public sealed record KeysOf(CellName Row, bool Ordered = false) : WorldStateDomain;
 
     /// <summary>One value per cell of a named <c>state.lattices</c> topology — the old <c>board</c> and <c>lattice</c>
     /// facets' shared shape. Which of the two storage strategies a row actually gets (sparse cells overlaying

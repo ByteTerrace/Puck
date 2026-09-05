@@ -12,19 +12,19 @@ public sealed class WorldDealAndRevealLawTests {
     public void ACountedTransferDealsInOneMutationAndRefusesPastThePile() {
         var definition = Document([
             new(Name("cards"), CellKind.Int, Capacity: 6, Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4"), Cell("c5"), Cell("c6")]),
-            new(Name("deck"), CellKind.Bool, Capacity: 6, Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4"), Cell("c5"), Cell("c6")], Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true)),
-            new(Name("hand"), CellKind.Bool, Capacity: 6, Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true)),
+            new(Name("deck"), CellKind.Bool, Capacity: 6, Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4"), Cell("c5"), Cell("c6")], Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards"), Ordered: true)),
+            new(Name("hand"), CellKind.Bool, Capacity: 6, Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards"), Ordered: true)),
         ], []);
 
-        var dealt = Apply(definition, new WorldStateTransform.Transfer("deck", "hand", WorldZoneSelector.First, Count: 5));
+        var dealt = Apply(definition, new StateTransform.Transfer("deck", "hand", ZoneSelector.First, Count: 5));
         Assert.Equal(new[] { "c1", "c2", "c3", "c4", "c5" }, Keys(dealt, "hand"));
         Assert.Equal(new[] { "c6" }, Keys(dealt, "deck"));
 
-        Assert.False(WorldStateTransforms.TryApply(dealt, new WorldStateTransform.Transfer("deck", "hand", WorldZoneSelector.First, Count: 2), WorldPrincipal.World, 0, "test", out _, out var shortReason));
+        Assert.False(WorldStateTransforms.TryApply(dealt, new StateTransform.Transfer("deck", "hand", ZoneSelector.First, Count: 2), WorldPrincipal.World, 0, "test", out _, out var shortReason));
         Assert.Contains("fewer than the 2", shortReason);
-        Assert.False(WorldStateTransforms.TryApply(definition, new WorldStateTransform.Transfer("deck", "hand", WorldZoneSelector.Key, Key: "c1", Count: 2), WorldPrincipal.World, 0, "test", out _, out var keyReason));
+        Assert.False(WorldStateTransforms.TryApply(definition, new StateTransform.Transfer("deck", "hand", ZoneSelector.Key, Key: "c1", Count: 2), WorldPrincipal.World, 0, "test", out _, out var keyReason));
         Assert.Contains("exactly 1 for a key", keyReason);
-        Assert.False(WorldDefinitionValidator.TryValidateLocally(definition with { Rules = [new WorldRule(Name("bad"), [new ActionEffect.TransformState(new WorldStateTransform.Transfer("deck", "hand", WorldZoneSelector.First, Count: 0))])] }, out var compileReason));
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(definition with { Rules = [new WorldRule(Name("bad"), [new ActionEffect.TransformState(new StateTransform.Transfer("deck", "hand", ZoneSelector.First, Count: 0))])] }, out var compileReason));
         Assert.Contains("count of 1..", compileReason);
     }
 
@@ -32,11 +32,11 @@ public sealed class WorldDealAndRevealLawTests {
     public void ARuleQuantifiedOverTokenKeysBindsEachToTheKey() {
         var definition = Document([
             new(Name("cards"), CellKind.Int, Capacity: 3, Cells: [Cell("c1"), Cell("c2"), Cell("c3")]),
-            new(Name("rank"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards")), Capacity: 3, Cells: [Cell("c1", 5), Cell("c2", 9), Cell("c3", 2)]),
-            new(Name("doubled"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards")), Capacity: 3, Cells: [Cell("c1", 0), Cell("c2", 0), Cell("c3", 0)]),
+            new(Name("rank"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards")), Capacity: 3, Cells: [Cell("c1", 5), Cell("c2", 9), Cell("c3", 2)]),
+            new(Name("doubled"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards")), Capacity: 3, Cells: [Cell("c1", 0), Cell("c2", 0), Cell("c3", 0)]),
         ], [
-            new WorldRule(Name("double"), Mode: ActionTriggerMode.Edge, ForEach: "rank", Effects: [new ActionEffect.SetState(State: "doubled", Key: "$each", Expression: new WorldValueExpression(Tokens: [
-                new WorldValueToken.State(Name: "rank", Key: "$each"), new WorldValueToken.Constant(Value: 2m), new WorldValueToken.Multiply(),
+            new WorldRule(Name("double"), Mode: ActionTriggerMode.Edge, ForEach: "rank", Effects: [new ActionEffect.SetState(State: "doubled", Key: "$each", Expression: new ValueExpression(Tokens: [
+                new ValueToken.State(Name: "rank", Key: "$each"), new ValueToken.Constant(Value: 2m), new ValueToken.Multiply(),
             ]))]),
         ]);
 
@@ -83,12 +83,12 @@ public sealed class WorldDealAndRevealLawTests {
         StateRaw = new(World: rows),
         Rules = rules,
     };
-    private static WorldDefinition Apply(WorldDefinition definition, WorldStateTransform transform) {
+    private static WorldDefinition Apply(WorldDefinition definition, StateTransform transform) {
         Assert.True(WorldStateTransforms.TryApply(definition, transform, WorldPrincipal.World, 1, "test", out var candidate, out var reason), reason);
         return candidate!;
     }
     private static string[] Keys(WorldDefinition document, string row) => (Find(document, row).Cells ?? []).Select(c => c.Key.Value).ToArray();
-    private static WorldCellName Name(string value) => WorldCellName.Parse(value);
+    private static CellName Name(string value) => CellName.Parse(value);
     private static WorldStateCell Cell(string key, long value = 1) => new(Name(key), value);
     private static WorldStateRow Slot(string name, long value) => new(Name(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, value)]);
     private static WorldStateRow Find(WorldDefinition document, string row) => WorldDefinitionRows.FindStateRow(document.State, row)!;

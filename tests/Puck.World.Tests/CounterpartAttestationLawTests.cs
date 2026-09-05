@@ -92,16 +92,16 @@ public sealed class CounterpartAttestationLawTests {
     public void AttestedEdgeBoundaryRoundTripsToTheSameCompiledFrame() {
         var definition = Fixtures.BuildDocument() with {
             References = [
-                new WorldReference(WorldSafeName.Parse(candidate: "east-ref"), "east.world.json"),
-                new WorldReference(WorldSafeName.Parse(candidate: "north-ref"), "north.world.json"),
+                new WorldReference(SafeName.Parse(candidate: "east-ref"), "east.world.json"),
+                new WorldReference(SafeName.Parse(candidate: "north-ref"), "north.world.json"),
             ],
             Destinations = [
-                new WorldDestination(WorldSafeName.Parse(candidate: "east"), "east-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
-                new WorldDestination(WorldSafeName.Parse(candidate: "north"), "north-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(SafeName.Parse(candidate: "east"), "east-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(SafeName.Parse(candidate: "north"), "north-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
             ],
             Adjacencies = [
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "east-edge"), "east", "west-edge", new WorldAdjacencyBoundary(Center: new Vector3(x: 10f, y: 0f, z: 0f), OutwardYawDegrees: 90f, OutwardPitchDegrees: 0f, Width: 8f, Height: 6f)),
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "north-edge"), "north", "south-edge", new WorldAdjacencyBoundary(Center: new Vector3(x: 0f, y: 0f, z: 10f), OutwardYawDegrees: 0f, OutwardPitchDegrees: 30f, Width: 6f, Height: 6f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "east-edge"), "east", "west-edge", new WorldAdjacencyBoundary(Center: new Vector3(x: 10f, y: 0f, z: 0f), OutwardYawDegrees: 90f, OutwardPitchDegrees: 0f, Width: 8f, Height: 6f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "north-edge"), "north", "south-edge", new WorldAdjacencyBoundary(Center: new Vector3(x: 0f, y: 0f, z: 10f), OutwardYawDegrees: 0f, OutwardPitchDegrees: 30f, Width: 6f, Height: 6f)),
             ],
         };
 
@@ -247,63 +247,63 @@ public sealed class CounterpartAttestationLawTests {
 
     private static (WorldDefinition Source, WorldDefinition Left, WorldDefinition Right, WorldDefinition Corner) OwnerCorner(Guid owner, string world) {
         var boundary = static (float yaw) => new WorldAdjacencyBoundary(Center: Vector3.Zero, OutwardYawDegrees: yaw, OutwardPitchDegrees: 0f, Width: 8f, Height: 8f);
-        var cornerReference = new WorldReference(Name: WorldSafeName.Parse(candidate: "corner-ref"), Owner: owner, World: WorldSafeName.Parse(candidate: world));
+        var cornerReference = new WorldReference(Name: SafeName.Parse(candidate: "corner-ref"), Owner: owner, World: SafeName.Parse(candidate: world));
         var source = Fixtures.BuildDocument() with {
             References = [
-                new WorldReference(WorldSafeName.Parse(candidate: "left-ref"), "left.world.json"),
-                new WorldReference(WorldSafeName.Parse(candidate: "right-ref"), "right.world.json"),
+                new WorldReference(SafeName.Parse(candidate: "left-ref"), "left.world.json"),
+                new WorldReference(SafeName.Parse(candidate: "right-ref"), "right.world.json"),
                 cornerReference,
             ],
             Destinations = [
-                new WorldDestination(WorldSafeName.Parse(candidate: "left"), "left-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
-                new WorldDestination(WorldSafeName.Parse(candidate: "right"), "right-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
-                new WorldDestination(WorldSafeName.Parse(candidate: "corner"), "corner-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(SafeName.Parse(candidate: "left"), "left-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(SafeName.Parse(candidate: "right"), "right-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(SafeName.Parse(candidate: "corner"), "corner-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
             ],
             Adjacencies = [
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "left-edge"), "left", "source-edge", boundary(90f)),
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "right-edge"), "right", "source-edge", boundary(0f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "left-edge"), "left", "source-edge", boundary(90f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "right-edge"), "right", "source-edge", boundary(0f)),
             ],
         };
         var left = Fixtures.BuildDocument() with {
             References = [
-                new WorldReference(WorldSafeName.Parse(candidate: "source-ref"), "source.world.json"),
+                new WorldReference(SafeName.Parse(candidate: "source-ref"), "source.world.json"),
                 cornerReference,
             ],
             Destinations = [
-                new WorldDestination(WorldSafeName.Parse(candidate: "source"), "source-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
-                new WorldDestination(WorldSafeName.Parse(candidate: "corner"), "corner-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(SafeName.Parse(candidate: "source"), "source-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(SafeName.Parse(candidate: "corner"), "corner-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
             ],
             Adjacencies = [
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "source-edge"), "source", "left-edge", boundary(-90f)),
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "corner-edge"), "corner", "left-edge", boundary(0f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "source-edge"), "source", "left-edge", boundary(-90f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "corner-edge"), "corner", "left-edge", boundary(0f)),
             ],
         };
         var right = Fixtures.BuildDocument() with {
             References = [
-                new WorldReference(WorldSafeName.Parse(candidate: "source-ref"), "source.world.json"),
+                new WorldReference(SafeName.Parse(candidate: "source-ref"), "source.world.json"),
                 cornerReference,
             ],
             Destinations = [
-                new WorldDestination(WorldSafeName.Parse(candidate: "source"), "source-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
-                new WorldDestination(WorldSafeName.Parse(candidate: "corner"), "corner-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(SafeName.Parse(candidate: "source"), "source-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(SafeName.Parse(candidate: "corner"), "corner-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
             ],
             Adjacencies = [
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "source-edge"), "source", "right-edge", boundary(180f)),
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "corner-edge"), "corner", "right-edge", boundary(90f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "source-edge"), "source", "right-edge", boundary(180f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "corner-edge"), "corner", "right-edge", boundary(90f)),
             ],
         };
         var corner = Fixtures.BuildDocument() with {
             References = [
-                new WorldReference(WorldSafeName.Parse(candidate: "left-ref"), "left.world.json"),
-                new WorldReference(WorldSafeName.Parse(candidate: "right-ref"), "right.world.json"),
+                new WorldReference(SafeName.Parse(candidate: "left-ref"), "left.world.json"),
+                new WorldReference(SafeName.Parse(candidate: "right-ref"), "right.world.json"),
             ],
             Destinations = [
-                new WorldDestination(WorldSafeName.Parse(candidate: "left"), "left-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
-                new WorldDestination(WorldSafeName.Parse(candidate: "right"), "right-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(SafeName.Parse(candidate: "left"), "left-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(SafeName.Parse(candidate: "right"), "right-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
             ],
             Adjacencies = [
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "left-edge"), "left", "corner-edge", boundary(180f)),
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "right-edge"), "right", "corner-edge", boundary(-90f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "left-edge"), "left", "corner-edge", boundary(180f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "right-edge"), "right", "corner-edge", boundary(-90f)),
             ],
         };
 
@@ -485,14 +485,14 @@ public sealed class CounterpartAttestationLawTests {
 
         return (baseDocument with {
             Admission = admission,
-            References = [new WorldReference(Name: WorldSafeName.Parse(candidate: "neighbour"), Document: document)],
+            References = [new WorldReference(Name: SafeName.Parse(candidate: "neighbour"), Document: document)],
             Destinations = [new WorldDestination(
-                Name: WorldSafeName.Parse(candidate: "neighbour"),
-                Reference: WorldSafeName.Parse(candidate: "neighbour"),
+                Name: SafeName.Parse(candidate: "neighbour"),
+                Reference: SafeName.Parse(candidate: "neighbour"),
                 Scope: WorldDestinationScope.Global,
                 Durability: WorldDestinationDurability.Persisted)],
             Adjacencies = [new WorldAdjacency(
-                Name: WorldSafeName.Parse(candidate: name),
+                Name: SafeName.Parse(candidate: name),
                 Destination: "neighbour",
                 Counterpart: counterpart,
                 Boundary: new WorldAdjacencyBoundary(Center: center, Height: 6f, OutwardPitchDegrees: 0f, OutwardYawDegrees: yaw, Width: 8f))],

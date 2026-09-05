@@ -19,7 +19,7 @@
         ],
         "properties": {
           "station": {
-            "description": "The stable name \u2014 the manifest\u0027s station field and the frame filename\u0027s own prefix (\u003Cstation\u003E-\u003Ctick\u003E.png). A WorldCellName: dot-free, non-empty, free of the reserved character set.",
+            "description": "The stable name \u2014 the manifest\u0027s station field and the frame filename\u0027s own prefix (\u003Cstation\u003E-\u003Ctick\u003E.png). A CellName: dot-free, non-empty, free of the reserved character set.",
             "type": "string"
           },
           "ticks": {

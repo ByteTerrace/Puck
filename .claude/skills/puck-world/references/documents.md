@@ -117,7 +117,7 @@ none has a `WorldSection` axis or a `MutationKind` ordinal, so nothing
 mutates them in session and no grant subject names them:
 
 - **`References`** (`WorldReferences.cs`) — `IReadOnlyList<WorldReference>?`,
-  each row `(WorldSafeName Name, string? Document, Guid? Owner, WorldSafeName?
+  each row `(SafeName Name, string? Document, Guid? Owner, SafeName?
   World)` — exactly one of `Document` (a local document path) or
   `Owner`+`World` together (a remote owner-named world; worlds ARE users) is
   authored, never both, never neither. `NeighbourKey` (computed, never
@@ -248,7 +248,7 @@ named forms as calls, `row[key]` reads, `$table:t:col[key]` and nested
 `buffs[minion[$each]]` (the `$cell:` indirection), backquoted names, `0x`
 literals) as
 well as the postfix `{ "tokens": [...] }` object; the string parses to the same
-tokens (`WorldExpressionSyntax`) and writes back as a string. `$table:<name>[:<column>]:<key>` reads a static
+tokens (`ExpressionSpelling`) and writes back as a string. `$table:<name>[:<column>]:<key>` reads a static
 `tables` document (`puck.table.v1`, hash-pinned, outside simulation state) by an
 integer literal, a `$cell:` indirection, `$each`, or an int `$bind:`; a missing
 dynamic key is a `TableKeyMissing` refusal, never a value. Every top-level
@@ -306,7 +306,7 @@ cooldown is a `NonNegative` countdown row decremented while `>0`, gated `<=0`,
 NOT a `$tick` threshold — see `WorldRules.cs` remarks). `mode` is `Level` (fires
 every tick the gate holds) or `Edge` (fires once per crossing, re-arming when the
 gate closes) — a rule that writes a row almost always wants `Edge`. A rule's `name`
-is a `WorldCellName`, the SAME validated-identifier type a state row and a cell
+is a `CellName`, the SAME validated-identifier type a state row and a cell
 key ride (dot-free, free of the reserved character set, refused by name at the
 JSON converter and at `world.row.remove rules`), and `WorldRuleCompiler` additionally
 refuses the reserved `$` prefix — `$` marks what the engine mints, and nothing
@@ -897,7 +897,7 @@ the addon ABI channel stay raw. `min`/`max` are BOTH-OR-NEITHER on a numeric
 row (a half-declared range refuses); when both are present every cell must
 fall inside — the range a HUD gauge bound to `state.<row>` or
 `state.<row>.<key>` reads (see [hud.md](hud.md)). The row `name` and every
-cell `key` are `WorldCellName` (`Puck.State/WorldSafeName.cs`) — a
+cell `key` are `CellName` (`Puck.State/SafeName.cs`) — a
 validated type that cannot hold an empty, unsafe, or DOTTED value, refused at
 JSON parse naming the character; the dot-free rule is what makes
 `state.<row>.<key>` parse unambiguously (the engine-minted `"$value"` slot
@@ -1029,9 +1029,9 @@ laws: `tests/Puck.World.Schema.Tests/StateCycleReadLawTests.cs` and
 `StateCycleWordLawTests.cs`; live proof: `tests/Puck.World.Canaries/state-cycle-trait`.
 
 World/owned-world ids (`Server/WorldOwnedWorlds.cs`) and `world.instance.start`
-names are `WorldSafeName` (the same `WorldSafeName.cs`) — the reserved-character
-kernel `WorldCellName` shares, plus a bare `"."`/`".."` refusal instead of the
-dot-free rule; `WorldOwnedWorldFileName.For` takes a `WorldSafeName` and escapes
+names are `SafeName` (the same `SafeName.cs`) — the reserved-character
+kernel `CellName` shares, plus a bare `"."`/`".."` refusal instead of the
+dot-free rule; `WorldOwnedWorldFileName.For` takes a `SafeName` and escapes
 nothing, so the id→file-name mapping is injective into file-name STRINGS — but
 not into storage LOCATIONS, since the catalog directory resolves names
 case-insensitively. One id names one location only under the separate
@@ -1883,7 +1883,7 @@ row: `WorldOwnedWorlds` (`Server/WorldOwnedWorlds.cs`) is the CATALOG (seats
 select identities from it; a seat's profile IS a `WorldIdentity` wrapping one
 owned document), one file per identity under the local state directory,
 named `WorldOwnedWorldFileName.For(id)` (`"<id>.world.json"`). Every id is a
-`WorldSafeName`, so the mapping escapes nothing and is injective into file-name
+`SafeName`, so the mapping escapes nothing and is injective into file-name
 STRINGS — but a string is not a storage location, and the catalog directory
 resolves names case-insensitively, so **ids are unique IGNORING CASE**. That is
 the rule the seed-list validator holds (a case-variant pair refuses at

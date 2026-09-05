@@ -99,7 +99,7 @@ public sealed class PokerHandStrengthLawTests {
         var definition = Fixtures.BuildDocument() with {
             StateRaw = new(World: [
                 new(Name("cards"), CellKind.Int, Capacity: 2, Cells: [Cell("AS", 0), Cell("KS", 0)]),
-                new(Name("hand1"), CellKind.Bool, Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true), Capacity: 2,
+                new(Name("hand1"), CellKind.Bool, Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards"), Ordered: true), Capacity: 2,
                     Cells: [Cell("AS", 1), Cell("KS", 1)],
                     Visibility: new(Readers: ["seat1"], ReadersFrom: "audience1")),
                 new(Name("audience1"), CellKind.Text, Capacity: 1),
@@ -121,6 +121,6 @@ public sealed class PokerHandStrengthLawTests {
         Assert.Contains(hand1.Cells, c => c.Key == "KS");
     }
 
-    private static WorldCellName Name(string value) => WorldCellName.Parse(value);
+    private static CellName Name(string value) => CellName.Parse(value);
     private static WorldStateCell Cell(string key, long value = 1) => new(Name(key), value);
 }

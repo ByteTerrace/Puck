@@ -3,7 +3,7 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public static partial class WorldStateTransforms {
-    private static bool TryObserve(WorldDefinition definition, WorldStateRow[] rows, WorldStateTransform.Observe operation, WorldPrincipal actor, ulong tick, out string reason) {
+    private static bool TryObserve(WorldDefinition definition, WorldStateRow[] rows, StateTransform.Observe operation, WorldPrincipal actor, ulong tick, out string reason) {
         if (actor != WorldPrincipal.World) {
             return Refuse("only the authority may refresh knowledge", out reason);
         }
@@ -32,7 +32,7 @@ public static partial class WorldStateTransforms {
 
             var key = topology.Key(cell);
             var found = cells.FindIndex(c => c.Key.Value == key);
-            var observed = new WorldStateCell(WorldCellName.Parse(key), values[cell], Observation: new(checked((long)tick), true));
+            var observed = new WorldStateCell(CellName.Parse(key), values[cell], Observation: new(checked((long)tick), true));
             if (found < 0) {
                 cells.Add(observed);
             } else {

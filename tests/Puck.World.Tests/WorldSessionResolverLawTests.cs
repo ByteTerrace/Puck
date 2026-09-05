@@ -34,27 +34,27 @@ public sealed class WorldSessionResolverLawTests {
         );
         var groups = new WorldGroup[] {
             // "alpha" — the `named` law's member (Seat 1) and non-member (Seat 2) control.
-            new(Id: WorldSafeName.Parse(candidate: "alpha"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 1)]),
+            new(Id: SafeName.Parse(candidate: "alpha"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 1)]),
             // "gamma" — the `tagged` law's UNIQUE match: Seat 3 holds exactly one membership tagged "raiders".
-            new(Id: WorldSafeName.Parse(candidate: "gamma"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 3)], Tags: ["raiders"]),
+            new(Id: SafeName.Parse(candidate: "gamma"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 3)], Tags: ["raiders"]),
             // "delta"/"epsilon" — the `tagged` law's AMBIGUOUS case: Seat 4 holds two memberships both tagged
             // "explorers", so neither should be picked silently.
-            new(Id: WorldSafeName.Parse(candidate: "delta"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 4)], Tags: ["explorers"]),
-            new(Id: WorldSafeName.Parse(candidate: "epsilon"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 4)], Tags: ["explorers"]),
+            new(Id: SafeName.Parse(candidate: "delta"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 4)], Tags: ["explorers"]),
+            new(Id: SafeName.Parse(candidate: "epsilon"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 4)], Tags: ["explorers"]),
         };
 
         return Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(Groups: groups, Kinds: [kind], Ownership: []) };
     }
     private static WorldDestination GlobalDestination(string name = "camp") =>
-        new(Name: WorldSafeName.Parse(candidate: name), Reference: DestinationReference, Durability: WorldDestinationDurability.Ephemeral);
+        new(Name: SafeName.Parse(candidate: name), Reference: DestinationReference, Durability: WorldDestinationDurability.Ephemeral);
     private static WorldDestination PersistedGlobalDestination(string name = "camp") =>
-        new(Name: WorldSafeName.Parse(candidate: name), Reference: DestinationReference, Durability: WorldDestinationDurability.Persisted);
+        new(Name: SafeName.Parse(candidate: name), Reference: DestinationReference, Durability: WorldDestinationDurability.Persisted);
     private static WorldDestination UserDestination(string name = "workshop") =>
-        new(Name: WorldSafeName.Parse(candidate: name), Reference: DestinationReference, Durability: WorldDestinationDurability.Ephemeral, Scope: WorldDestinationScope.User);
+        new(Name: SafeName.Parse(candidate: name), Reference: DestinationReference, Durability: WorldDestinationDurability.Ephemeral, Scope: WorldDestinationScope.User);
     private static WorldDestination NamedGroupDestination(string groupId, string name = "hall", WorldDestinationDurability durability = WorldDestinationDurability.Ephemeral) =>
-        new(Name: WorldSafeName.Parse(candidate: name), Reference: DestinationReference, Durability: durability, Scope: WorldDestinationScope.Group, Selector: new WorldGroupSelector.Named(Group: groupId));
+        new(Name: SafeName.Parse(candidate: name), Reference: DestinationReference, Durability: durability, Scope: WorldDestinationScope.Group, Selector: new WorldGroupSelector.Named(Group: groupId));
     private static WorldDestination TaggedGroupDestination(string tag, string name = "lodge") =>
-        new(Name: WorldSafeName.Parse(candidate: name), Reference: DestinationReference, Durability: WorldDestinationDurability.Ephemeral, Scope: WorldDestinationScope.Group, Selector: new WorldGroupSelector.Tagged(Tag: tag));
+        new(Name: SafeName.Parse(candidate: name), Reference: DestinationReference, Durability: WorldDestinationDurability.Ephemeral, Scope: WorldDestinationScope.Group, Selector: new WorldGroupSelector.Tagged(Tag: tag));
     private static WorldSessionResolver.CohortMember[] Cohort(params (int Slot, string? IdentityId)[] members) {
         var result = new WorldSessionResolver.CohortMember[members.Length];
 
@@ -168,8 +168,8 @@ public sealed class WorldSessionResolverLawTests {
         // resolves to two DIFFERENT group ids under the same tag — the cross-member disagreement this law targets.
         var kind = new WorldGroupKind(Name: "party", Roles: [], OwnershipPolicy: WorldGroupOwnershipPolicy.None, Lifetime: WorldGroupLifetime.Persistent, EvictionPolicy: WorldGroupEvictionPolicy.Remove, Capacity: 8);
         var groups = new WorldGroup[] {
-            new(Id: WorldSafeName.Parse(candidate: "north"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 1)], Tags: ["shared"]),
-            new(Id: WorldSafeName.Parse(candidate: "south"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 2)], Tags: ["shared"]),
+            new(Id: SafeName.Parse(candidate: "north"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 1)], Tags: ["shared"]),
+            new(Id: SafeName.Parse(candidate: "south"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 2)], Tags: ["shared"]),
         };
         var definition = Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(Groups: groups, Kinds: [kind], Ownership: []) };
         var destination = TaggedGroupDestination(name: "lodge-cohort", tag: "shared");
@@ -182,14 +182,14 @@ public sealed class WorldSessionResolverLawTests {
             controlOutcome: () => resolver.TryResolve(sourceDefinition: definition, destination: destination, referencedDocument: RefDoc, cohort: Cohort((1, null)), resolved: out _, reason: out _));
     }
     // G1 — SCOPED INSTANCE NAMES ARE INJECTIVE BY CONSTRUCTION. Before the fix, MintInstanceName joined
-    // destinationName + '~' + a hand-sanitized scope key: the sanitizer only folded WorldSafeName's OWN reserved
+    // destinationName + '~' + a hand-sanitized scope key: the sanitizer only folded SafeName's OWN reserved
     // characters (quote/angle-brackets/pipe/colon/asterisk/question-mark/both-slashes), never '~' itself, so a
     // destination name and a group id that DIFFER only in where a '~' falls could still mint the IDENTICAL instance
     // name. Concretely, under the old scheme: destination "d~group_a" + group "b" and destination "d" + group
     // "a~group_b" both minted "d~group_a~group_b" — the second destination's raw group id "a~group_b" was legal
-    // under the OLD plain-`string` WorldGroup.Id (and is legal under the NEW WorldSafeName-typed one too, since '~'
+    // under the OLD plain-`string` WorldGroup.Id (and is legal under the NEW SafeName-typed one too, since '~'
     // is not a reserved character either way; the two destinations that collide are chosen from OPPOSITE ends of the
-    // '~' rather than from a character WorldSafeName has ever forbidden). This law proves the two now resolve to
+    // '~' rather than from a character SafeName has ever forbidden). This law proves the two now resolve to
     // DISTINCT instance names and that retiring one never touches the other's cache entry — see
     // WorldSessionResolver.MintInstanceName's own remarks for the length-prefixed ("netstring") construction that
     // makes this a proof rather than a hope.
@@ -198,8 +198,8 @@ public sealed class WorldSessionResolverLawTests {
         var resolver = new WorldSessionResolver();
         var kind = new WorldGroupKind(Name: "party", Roles: [], OwnershipPolicy: WorldGroupOwnershipPolicy.None, Lifetime: WorldGroupLifetime.Persistent, EvictionPolicy: WorldGroupEvictionPolicy.Remove, Capacity: 8);
         var groups = new WorldGroup[] {
-            new(Id: WorldSafeName.Parse(candidate: "b"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 1)]),
-            new(Id: WorldSafeName.Parse(candidate: "a~group_b"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 2)]),
+            new(Id: SafeName.Parse(candidate: "b"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 1)]),
+            new(Id: SafeName.Parse(candidate: "a~group_b"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 2)]),
         };
         var definition = Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(Groups: groups, Kinds: [kind], Ownership: []) };
         // PERSISTED — no generation-ordinal suffix, so nothing but the composition itself could keep these apart
@@ -243,8 +243,8 @@ public sealed class WorldSessionResolverLawTests {
         const string collidingGlobalName = "1~a4~user1~b";
         // PERSISTED both — no generation-ordinal suffix, so nothing but the KIND-segment fix itself could keep these
         // apart (an Ephemeral pair would coincidentally disambiguate via the resolver's own generation counter).
-        var globalDestination = new WorldDestination(Name: WorldSafeName.Parse(candidate: collidingGlobalName), Reference: DestinationReference, Durability: WorldDestinationDurability.Persisted);
-        var scopedDestination = new WorldDestination(Name: WorldSafeName.Parse(candidate: "a"), Reference: DestinationReference, Durability: WorldDestinationDurability.Persisted, Scope: WorldDestinationScope.User);
+        var globalDestination = new WorldDestination(Name: SafeName.Parse(candidate: collidingGlobalName), Reference: DestinationReference, Durability: WorldDestinationDurability.Persisted);
+        var scopedDestination = new WorldDestination(Name: SafeName.Parse(candidate: "a"), Reference: DestinationReference, Durability: WorldDestinationDurability.Persisted, Scope: WorldDestinationScope.User);
         var definition = Fixtures.BuildDocument();
 
         Assert.True(condition: resolver.TryResolve(sourceDefinition: definition, destination: globalDestination, referencedDocument: RefDoc, cohort: Cohort((1, null)), resolved: out var global, reason: out var globalReason), userMessage: globalReason);

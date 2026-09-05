@@ -19,7 +19,7 @@ public enum WorldStorageNamespace {
 /// The cloud-backed <see cref="IWorldNeighbourResolver"/> — reads a named neighbour's document as an ordinary blob
 /// read, reusing <see cref="WorldOwnedWorldSync"/>'s own address shape (the same namespace prefix, quoted rather than
 /// duplicated) instead of inventing a second resolution mechanism. A <see cref="WorldReference.Document"/> value must
-/// be the canonical file name emitted for a <see cref="WorldSafeName"/>-shaped world id. The resolver parses that id
+/// be the canonical file name emitted for a <see cref="SafeName"/>-shaped world id. The resolver parses that id
 /// and calls <see cref="WorldOwnedWorldSync.AddressFor"/> or <see cref="WorldOwnedWorldSync.HostedAddressFor"/>
 /// (selected by <see cref="WorldStorageNamespace"/>), so a reader cannot drift from the writer's encoding or reach an
 /// object the writer could never have produced.
@@ -75,7 +75,7 @@ public sealed class WorldStorageNeighbourResolver : IWorldNeighbourResolver {
         var candidateId = document[..^WorldOwnedWorldFileName.Suffix.Length];
 
         if (
-            !WorldSafeName.TryParse(
+            !SafeName.TryParse(
             candidate: candidateId,
             name: out var id,
             reason: out var nameReason

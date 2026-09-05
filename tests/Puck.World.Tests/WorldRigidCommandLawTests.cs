@@ -123,12 +123,12 @@ public sealed class WorldRigidCommandLawTests {
     private static WorldDefinition ScaledFallingRigidBallDocument(FixedQ4816 cellValue) {
         var source = FallingRigidBallDocument();
         var scaleRow = new WorldStateRow(
-            Name: WorldCellName.Parse(candidate: "scale"),
+            Name: CellName.Parse(candidate: "scale"),
             Kind: CellKind.Fixed,
             Min: FixedQ4816.FromDouble(value: 0.05).Value,
             Max: FixedQ4816.One.Value,
             Capacity: 8,
-            Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: cellValue.Value)]
+            Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "0"), Value: cellValue.Value)]
         );
 
         return (source with {

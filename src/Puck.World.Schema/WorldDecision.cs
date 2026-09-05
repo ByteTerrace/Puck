@@ -52,8 +52,8 @@ public sealed record WorldDecision(
 /// right the candidate, only inside this option's gate, score, and effects. A different individual is a selection transition.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldDecisionOption(
-    WorldCellName Name,
-    WorldValueExpression Score,
+    CellName Name,
+    ValueExpression Score,
     IReadOnlyList<ActionEffect> Effects,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ActionPredicate? Gate = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDecisionNeighbors? Neighbors = null

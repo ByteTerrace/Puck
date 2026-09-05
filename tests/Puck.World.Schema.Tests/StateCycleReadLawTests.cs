@@ -16,7 +16,7 @@ public sealed class StateCycleReadLawTests {
         StateRaw: new WorldStateSection(World: rows)
     );
     private static WorldStateRow SlotRow(string name, CellKind kind, long value, WorldStateCycle cycle, long? min = null, long? max = null) => new(
-        Name: WorldCellName.Parse(candidate: name),
+        Name: CellName.Parse(candidate: name),
         Kind: kind,
         Min: min,
         Max: max,
@@ -95,12 +95,12 @@ public sealed class StateCycleReadLawTests {
     [Fact]
     public void KeyedCells_TurnIndependently_AndAPlainCellStaysStored() {
         var row = new WorldStateRow(
-            Name: WorldCellName.Parse(candidate: "dials"),
+            Name: CellName.Parse(candidate: "dials"),
             Kind: CellKind.Int,
             Cells: [
-                new WorldStateCell(Key: WorldCellName.Parse(candidate: "a"), Value: 0L, Cycle: new WorldStateCycle(Power: 1)),
-                new WorldStateCell(Key: WorldCellName.Parse(candidate: "b"), Value: 10L, Cycle: new WorldStateCycle(Power: 7, TicksPerStep: 2)),
-                new WorldStateCell(Key: WorldCellName.Parse(candidate: "c"), Value: 4L),
+                new WorldStateCell(Key: CellName.Parse(candidate: "a"), Value: 0L, Cycle: new WorldStateCycle(Power: 1)),
+                new WorldStateCell(Key: CellName.Parse(candidate: "b"), Value: 10L, Cycle: new WorldStateCycle(Power: 7, TicksPerStep: 2)),
+                new WorldStateCell(Key: CellName.Parse(candidate: "c"), Value: 4L),
             ]
         );
         var definition = BuildDefinition(row);
@@ -169,16 +169,16 @@ public sealed class StateCycleReadLawTests {
         Assert.Contains(expectedSubstring: "is not a symmetry-lattice node", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Int, value: 240L, cycle: new WorldStateCycle(Output: WorldCycleOutput.Node))));
         Assert.Contains(expectedSubstring: "declares both advance and cycle", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Int, value: 0L, cycle: new WorldStateCycle()) with { Advance = new WorldStateAdvance(RateDenominator: 1, RateNumerator: 1) }));
         Assert.Contains(expectedSubstring: "declares cycle on a keyed row", actualString: Refusal(new WorldStateRow(
-            Name: WorldCellName.Parse(candidate: "r"),
+            Name: CellName.Parse(candidate: "r"),
             Kind: CellKind.Int,
             Capacity: 4,
-            Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: 0L)],
+            Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "0"), Value: 0L)],
             Cycle: new WorldStateCycle()
         )));
         Assert.Contains(expectedSubstring: "declares cycle beside advance or dynamics", actualString: Refusal(new WorldStateRow(
-            Name: WorldCellName.Parse(candidate: "r"),
+            Name: CellName.Parse(candidate: "r"),
             Kind: CellKind.Int,
-            Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: "k"), Value: 0L, Advance: new WorldStateAdvance(RateDenominator: 1, RateNumerator: 1), Cycle: new WorldStateCycle())]
+            Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "k"), Value: 0L, Advance: new WorldStateAdvance(RateDenominator: 1, RateNumerator: 1), Cycle: new WorldStateCycle())]
         )));
 
         // The well-formed shapes validate clean, so the refusals above are not a validator that refuses everything.

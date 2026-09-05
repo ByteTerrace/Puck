@@ -78,16 +78,16 @@ public sealed class OwnedWorldAddressingLawTests {
         lawId: "owned-world.seed-ids-unique-ignoring-case",
         deniedOutcome: () => WorldDefinitionValidator.TryValidate(
             definition: WithSeeds(
-                new WorldIdentitySeed(Id: WorldSafeName.Parse(candidate: "amber"), Name: "amber", Color: "#ED8530"),
-                new WorldIdentitySeed(Id: WorldSafeName.Parse(candidate: "Amber"), Name: "amberling", Color: "#112233")
+                new WorldIdentitySeed(Id: SafeName.Parse(candidate: "amber"), Name: "amber", Color: "#ED8530"),
+                new WorldIdentitySeed(Id: SafeName.Parse(candidate: "Amber"), Name: "amberling", Color: "#112233")
             ),
             neighbours: null,
             reason: out _
         ),
         controlOutcome: () => WorldDefinitionValidator.TryValidate(
             definition: WithSeeds(
-                new WorldIdentitySeed(Id: WorldSafeName.Parse(candidate: "amber"), Name: "amber", Color: "#ED8530"),
-                new WorldIdentitySeed(Id: WorldSafeName.Parse(candidate: "cobalt"), Name: "amberling", Color: "#112233")
+                new WorldIdentitySeed(Id: SafeName.Parse(candidate: "amber"), Name: "amber", Color: "#ED8530"),
+                new WorldIdentitySeed(Id: SafeName.Parse(candidate: "cobalt"), Name: "amberling", Color: "#112233")
             ),
             neighbours: null,
             reason: out _
@@ -99,8 +99,8 @@ public sealed class OwnedWorldAddressingLawTests {
     public void CaseVariantSeedRefusal_NamesTheIdAndTheRule() {
         Assert.False(condition: WorldDefinitionValidator.TryValidate(
             definition: WithSeeds(
-                new WorldIdentitySeed(Id: WorldSafeName.Parse(candidate: "amber"), Name: "amber", Color: "#ED8530"),
-                new WorldIdentitySeed(Id: WorldSafeName.Parse(candidate: "Amber"), Name: "amberling", Color: "#112233")
+                new WorldIdentitySeed(Id: SafeName.Parse(candidate: "amber"), Name: "amber", Color: "#ED8530"),
+                new WorldIdentitySeed(Id: SafeName.Parse(candidate: "Amber"), Name: "amberling", Color: "#112233")
             ),
             neighbours: null,
             reason: out var reason
@@ -260,7 +260,7 @@ public sealed class OwnedWorldAddressingLawTests {
             deniedOutcome: () => {
                 var created = catalog.Create(
                     colorHex: "#ED8530",
-                    name: WorldSafeName.Parse(candidate: "amber"),
+                    name: SafeName.Parse(candidate: "amber"),
                     reason: out var reason
                 );
 
@@ -275,7 +275,7 @@ public sealed class OwnedWorldAddressingLawTests {
             },
             controlOutcome: () => (catalog.Create(
                 colorHex: "#ED8530",
-                name: WorldSafeName.Parse(candidate: "cobalt"),
+                name: SafeName.Parse(candidate: "cobalt"),
                 reason: out _
             ) is not null)
         );

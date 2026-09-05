@@ -78,11 +78,11 @@ public static class WorldAssetRowLoader {
             error: out error,
             source: row.Source
         );
-    /// <summary>Loads a <see cref="WorldTableRow"/>'s referenced <c>puck.table.v1</c> document.</summary>
+    /// <summary>Loads a <see cref="TableRow"/>'s referenced <c>puck.table.v1</c> document.</summary>
     /// <param name="row">The reference row.</param>
     /// <param name="document">The loaded document, when this method returns <see langword="true"/>.</param>
     /// <param name="error">A human-readable failure reason, when this method returns <see langword="false"/>.</param>
-    public static bool TryLoadTable(WorldTableRow row, out TableDocument? document, out string? error) =>
+    public static bool TryLoadTable(TableRow row, out TableDocument? document, out string? error) =>
         TryLoad(
             document: out document,
             error: out error,

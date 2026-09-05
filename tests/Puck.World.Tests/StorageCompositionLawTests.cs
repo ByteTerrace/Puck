@@ -32,7 +32,7 @@ public sealed class StorageCompositionLawTests {
         var amber = (worlds.FindById(id: "amber") ?? throw new InvalidOperationException(message: "seeding must produce 'amber'"));
         var tipPath = Path.Combine(
             path1: worlds.FilePath,
-            path2: WorldOwnedWorldFileName.For(id: WorldSafeName.Parse(candidate: "amber"))
+            path2: WorldOwnedWorldFileName.For(id: SafeName.Parse(candidate: "amber"))
         );
         var flatBytes = File.ReadAllBytes(path: tipPath);
         var basisDirectory = Path.Combine(
@@ -65,7 +65,7 @@ public sealed class StorageCompositionLawTests {
     // through these rather than a hand-spelled literal, so a seed can never drift from the encoding it is proving.
     private static string TipKey(string id) => WorldOwnedWorldSync.AddressFor(
         containerId: ContainerId,
-        id: WorldSafeName.Parse(candidate: id)
+        id: SafeName.Parse(candidate: id)
     ).Key;
 
     [Fact]
@@ -286,7 +286,7 @@ public sealed class StorageCompositionLawTests {
         );
         var basisBytes = File.ReadAllBytes(path: Path.Combine(
             path1: worlds.FilePath,
-            path2: WorldOwnedWorldFileName.For(id: WorldSafeName.Parse(candidate: "amber"))
+            path2: WorldOwnedWorldFileName.For(id: SafeName.Parse(candidate: "amber"))
         ));
         var store = new FakeObjectBlobStore();
 
@@ -336,7 +336,7 @@ public sealed class StorageCompositionLawTests {
 
         var tipPath = Path.Combine(
             path1: worlds.FilePath,
-            path2: WorldOwnedWorldFileName.For(id: WorldSafeName.Parse(candidate: "amber"))
+            path2: WorldOwnedWorldFileName.For(id: SafeName.Parse(candidate: "amber"))
         );
         var tipDocument = ((JsonObject)JsonNode.Parse(json: File.ReadAllText(path: tipPath))!);
 
@@ -355,7 +355,7 @@ public sealed class StorageCompositionLawTests {
         );
         var basisBytes = File.ReadAllBytes(path: Path.Combine(
             path1: worlds.FilePath,
-            path2: WorldOwnedWorldFileName.For(id: WorldSafeName.Parse(candidate: "amber"))
+            path2: WorldOwnedWorldFileName.For(id: SafeName.Parse(candidate: "amber"))
         ));
         var store = new FakeObjectBlobStore();
 
@@ -422,7 +422,7 @@ public sealed class StorageCompositionLawTests {
         );
         var cloudBasisBytes = File.ReadAllBytes(path: Path.Combine(
             path1: worlds.FilePath,
-            path2: WorldOwnedWorldFileName.For(id: WorldSafeName.Parse(candidate: "amber"))
+            path2: WorldOwnedWorldFileName.For(id: SafeName.Parse(candidate: "amber"))
         ));
         var store = new FakeObjectBlobStore();
 
@@ -547,7 +547,7 @@ public sealed class StorageCompositionLawTests {
 
         Assert.NotNull(@object: worlds.Create(
             colorHex: "#3388CC",
-            name: WorldSafeName.Parse(candidate: "topaz"),
+            name: SafeName.Parse(candidate: "topaz"),
             reason: out var createReason
         ));
         Assert.Equal(
@@ -557,7 +557,7 @@ public sealed class StorageCompositionLawTests {
 
         var topazPath = Path.Combine(
             path1: worlds.FilePath,
-            path2: WorldOwnedWorldFileName.For(id: WorldSafeName.Parse(candidate: "topaz"))
+            path2: WorldOwnedWorldFileName.For(id: SafeName.Parse(candidate: "topaz"))
         );
 
         File.WriteAllText(
@@ -624,7 +624,7 @@ public sealed class StorageCompositionLawTests {
         );
         var basisBytes = File.ReadAllBytes(path: Path.Combine(
             path1: worlds.FilePath,
-            path2: WorldOwnedWorldFileName.For(id: WorldSafeName.Parse(candidate: "amber"))
+            path2: WorldOwnedWorldFileName.For(id: SafeName.Parse(candidate: "amber"))
         ));
         var store = new FakeObjectBlobStore();
 
@@ -941,7 +941,7 @@ public sealed class StorageCompositionLawTests {
         );
         var basisBytes = File.ReadAllBytes(path: Path.Combine(
             path1: worlds.FilePath,
-            path2: WorldOwnedWorldFileName.For(id: WorldSafeName.Parse(candidate: "amber"))
+            path2: WorldOwnedWorldFileName.For(id: SafeName.Parse(candidate: "amber"))
         ));
         var store = new FakeObjectBlobStore();
 

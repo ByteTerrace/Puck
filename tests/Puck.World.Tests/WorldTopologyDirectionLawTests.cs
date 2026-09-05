@@ -72,11 +72,11 @@ public sealed class WorldTopologyDirectionLawTests {
         var orthogonal = new WorldTopologyDirection[] {
             new("north", 0, -1), new("south", 0, 1), new("east", 1, 0), new("west", -1, 0),
         };
-        var board = new WorldStateRow(WorldCellName.Parse("board"), CellKind.Int, Domain: new WorldStateDomain.CellsOf("grid"));
-        var slot = new WorldStateRow(WorldCellName.Parse("neighbour"), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)]);
+        var board = new WorldStateRow(CellName.Parse("board"), CellKind.Int, Domain: new WorldStateDomain.CellsOf("grid"));
+        var slot = new WorldStateRow(CellName.Parse("neighbour"), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)]);
         WorldDefinition Document(string direction) => Fixtures.BuildDocument() with {
             StateRaw = new(World: [board, slot], Lattices: [Grid() with { Directions = orthogonal }]),
-            Rules = [new WorldRule(WorldCellName.Parse("read"), [new ActionEffect.SetState(State: "neighbour", FromState: $"$board:neighbour:board:{direction}", FromKey: "0")])],
+            Rules = [new WorldRule(CellName.Parse("read"), [new ActionEffect.SetState(State: "neighbour", FromState: $"$board:neighbour:board:{direction}", FromKey: "0")])],
         };
 
         Assert.True(WorldDefinitionValidator.TryValidateLocally(Document("north"), out var authoredReason), authoredReason);

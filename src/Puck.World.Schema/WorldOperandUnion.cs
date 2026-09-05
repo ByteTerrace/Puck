@@ -30,7 +30,7 @@ public abstract class WorldOperandFact {
 public interface IStateAddressedOperand {
     /// <summary>The row this operand addresses.</summary>
     string Row { get; }
-    /// <summary>The live key indirection (<see cref="WorldRuleFacts.CellKeyPrefix"/>), or <see langword="null"/> for
+    /// <summary>The live key indirection (<see cref="RuleFacts.CellKeyPrefix"/>), or <see langword="null"/> for
     /// a literal key.</summary>
     CompiledCellRef? KeyFrom { get; }
 }

@@ -6,7 +6,7 @@ using Puck.World.Protocol;
 namespace Puck.World.Tests;
 
 /// <summary>Proves the social-memory replacement primitive — an impression is an ordinary keyed row, and evidence
-/// deduplication is an authored gate over two existing pieces of vocabulary: a <see cref="WorldValueExpression"/>
+/// deduplication is an authored gate over two existing pieces of vocabulary: a <see cref="ValueExpression"/>
 /// packing (origin, sequence) into one Int64 via <c>shiftLeft</c>/<c>bitOr</c>, and
 /// <see cref="ActionPredicate.CompareValue"/> comparing that live pair against a row's own remembered marker. A
 /// Level-mode rule re-evaluates its gate every tick it holds, so without the freshness check a standing claim would
@@ -14,37 +14,37 @@ namespace Puck.World.Tests;
 /// isolate exactly that difference, fed by the same origin/sequence pair, one gated and one not.</summary>
 public sealed class KeyedImpressionDedupLawTests {
     private static WorldStateRow Slot(string name, long initial = 0, bool nonNegative = false) => new(
-        Name: WorldCellName.Parse(candidate: name), Kind: CellKind.Int, NonNegative: nonNegative,
+        Name: CellName.Parse(candidate: name), Kind: CellKind.Int, NonNegative: nonNegative,
         Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: initial)]
     );
-    private static WorldValueExpression Packed() => new([
-        new WorldValueToken.State(Name: "origin"), new WorldValueToken.Constant(Value: 32), new WorldValueToken.ShiftLeft(),
-        new WorldValueToken.State(Name: "seq"), new WorldValueToken.BitOr(),
+    private static ValueExpression Packed() => new([
+        new ValueToken.State(Name: "origin"), new ValueToken.Constant(Value: 32), new ValueToken.ShiftLeft(),
+        new ValueToken.State(Name: "seq"), new ValueToken.BitOr(),
     ]);
     // (1 - trust) * 0.5 — the same bounded blend-toward-one the garden's re-authored belief rows use.
-    private static WorldValueExpression Blend(string trustRow) => new([
-        new WorldValueToken.Constant(Value: 1), new WorldValueToken.State(Name: trustRow, Key: "0"), new WorldValueToken.Subtract(),
-        new WorldValueToken.Constant(Value: 0.5m), new WorldValueToken.Multiply(),
+    private static ValueExpression Blend(string trustRow) => new([
+        new ValueToken.Constant(Value: 1), new ValueToken.State(Name: trustRow, Key: "0"), new ValueToken.Subtract(),
+        new ValueToken.Constant(Value: 0.5m), new ValueToken.Multiply(),
     ]);
 
     private static WorldDefinition BuildDocument() {
         var rows = new List<WorldStateRow> {
             Slot(name: "origin"), Slot(name: "seq", nonNegative: true),
-            new(Name: WorldCellName.Parse(candidate: "trust"), Kind: CellKind.Fixed, Capacity: 4, Min: 0L, Max: 65_536L,
-                Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: 0)]),
-            new(Name: WorldCellName.Parse(candidate: "mark"), Kind: CellKind.Int, Capacity: 4, NonNegative: true,
-                Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: 0)]),
-            new(Name: WorldCellName.Parse(candidate: "trustUngated"), Kind: CellKind.Fixed, Capacity: 4, Min: 0L, Max: 65_536L,
-                Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: 0)]),
+            new(Name: CellName.Parse(candidate: "trust"), Kind: CellKind.Fixed, Capacity: 4, Min: 0L, Max: 65_536L,
+                Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "0"), Value: 0)]),
+            new(Name: CellName.Parse(candidate: "mark"), Kind: CellKind.Int, Capacity: 4, NonNegative: true,
+                Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "0"), Value: 0)]),
+            new(Name: CellName.Parse(candidate: "trustUngated"), Kind: CellKind.Fixed, Capacity: 4, Min: 0L, Max: 65_536L,
+                Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "0"), Value: 0)]),
         };
 
         return Fixtures.BuildDocument().WithWorldState(rows: rows) with {
             Rules = [
                 new WorldRule(
-                    Name: WorldCellName.Parse(candidate: "gated-belief"),
+                    Name: CellName.Parse(candidate: "gated-belief"),
                     Mode: ActionTriggerMode.Level,
                     Gate: new ActionPredicate.CompareValue(
-                        Left: new WorldValueExpression([new WorldValueToken.State(Name: "mark", Key: "0")]),
+                        Left: new ValueExpression([new ValueToken.State(Name: "mark", Key: "0")]),
                         Comparison: ActionStateComparison.NotEqual,
                         Right: Packed(),
                         Kind: CellKind.Int
@@ -57,7 +57,7 @@ public sealed class KeyedImpressionDedupLawTests {
                 // The control: the same blend, the same Level cadence, no freshness gate at all — proving the
                 // dedup gate above is load-bearing rather than a no-op the effects would already refuse.
                 new WorldRule(
-                    Name: WorldCellName.Parse(candidate: "ungated-belief"),
+                    Name: CellName.Parse(candidate: "ungated-belief"),
                     Mode: ActionTriggerMode.Level,
                     Gate: new ActionPredicate.CompareState(State: "origin", Comparison: ActionStateComparison.GreaterOrEqual, Value: 0),
                     Effects: [new ActionEffect.AddState(State: "trustUngated", Key: "0", Expression: Blend(trustRow: "trustUngated"))]
@@ -68,7 +68,7 @@ public sealed class KeyedImpressionDedupLawTests {
 
     private static long Read(WorldDefinition definition, string row) {
         var found = WorldDefinitionRows.FindStateRow(rows: definition.State, name: row)!;
-        return WorldDefinitionRows.FindCell(cells: found.Cells, key: WorldCellName.Parse(candidate: "0"))?.Value ?? 0L;
+        return WorldDefinitionRows.FindCell(cells: found.Cells, key: CellName.Parse(candidate: "0"))?.Value ?? 0L;
     }
     private static void Write(WorldFixture fixture, string row, long value) => fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
         Principal: WorldPrincipal.Console, Row: row, Key: WorldStateRow.SlotKey.Value, Value: value, Kind: WorldDocumentWriteKind.Set

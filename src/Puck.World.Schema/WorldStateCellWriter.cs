@@ -21,7 +21,7 @@ public static class WorldStateCellWriter {
     /// <param name="addedNewKey">Whether the triggering write minted a brand-new key rather than rewriting an existing one.</param>
     /// <param name="evictedKey">The evicted key, or <see langword="null"/> when nothing was evicted.</param>
     /// <returns>The post-eviction cell list.</returns>
-    public static IReadOnlyList<WorldStateCell> ApplyEviction(WorldStateRow row, IReadOnlyList<WorldStateCell> cells, bool addedNewKey, out WorldCellName? evictedKey) {
+    public static IReadOnlyList<WorldStateCell> ApplyEviction(WorldStateRow row, IReadOnlyList<WorldStateCell> cells, bool addedNewKey, out CellName? evictedKey) {
         evictedKey = null;
 
         if (
@@ -62,7 +62,7 @@ public static class WorldStateCellWriter {
     /// <param name="cells">The row's current cells.</param>
     /// <param name="key">The key to look for.</param>
     /// <returns><see langword="true"/> when a cell already carries <paramref name="key"/>.</returns>
-    public static bool ContainsKey(IReadOnlyList<WorldStateCell> cells, WorldCellName key) {
+    public static bool ContainsKey(IReadOnlyList<WorldStateCell> cells, CellName key) {
         foreach (var cell in cells) {
             if (cell.Key == key) {
                 return true;
@@ -82,7 +82,7 @@ public static class WorldStateCellWriter {
     /// <param name="evictedKey">The evicted key, or <see langword="null"/> when nothing was evicted.</param>
     /// <param name="reason">Why the write was refused, or empty on success.</param>
     /// <returns><see langword="true"/> when the write composed.</returns>
-    public static bool TryComposeTextCell(WorldStateRow row, WorldCellName key, string text, out IReadOnlyList<WorldStateCell> cells, out WorldCellName? evictedKey, out string reason) {
+    public static bool TryComposeTextCell(WorldStateRow row, CellName key, string text, out IReadOnlyList<WorldStateCell> cells, out CellName? evictedKey, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: row);
 
         cells = (row.Cells ?? []);

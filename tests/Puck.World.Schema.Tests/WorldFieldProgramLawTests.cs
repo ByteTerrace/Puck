@@ -246,7 +246,7 @@ public sealed class WorldFieldProgramLawTests {
             World = [
                 .. state.World!,
                 new WorldStateRow(
-                    Name: WorldCellName.Parse(candidate: "cold"),
+                    Name: CellName.Parse(candidate: "cold"),
                     Kind: CellKind.Fixed,
                     Domain: new WorldStateDomain.CellsOf(Topology: "ground"),
                     Field: new WorldStateFieldTrait()
@@ -354,7 +354,7 @@ public sealed class WorldFieldProgramLawTests {
     public void Compile_RefusesAStateDependencyWithTheWrongShapeOrKind() {
         var state = BuildState(
             season: new WorldStateRow(
-                Name: WorldCellName.Parse(candidate: "season"),
+                Name: CellName.Parse(candidate: "season"),
                 Kind: CellKind.Int,
                 Capacity: 4
             ),
@@ -403,7 +403,7 @@ public sealed class WorldFieldProgramLawTests {
         )],
         World: [
             new WorldStateRow(
-                Name: WorldCellName.Parse(candidate: fieldName),
+                Name: CellName.Parse(candidate: fieldName),
                 Kind: CellKind.Fixed,
                 Domain: new WorldStateDomain.CellsOf(Topology: "ground"),
                 Field: new WorldStateFieldTrait(
@@ -413,17 +413,17 @@ public sealed class WorldFieldProgramLawTests {
                 )
             ),
             (season ?? new WorldStateRow(
-                Name: WorldCellName.Parse(candidate: "season"),
+                Name: CellName.Parse(candidate: "season"),
                 Kind: CellKind.Fixed,
                 Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0L)]
             )),
             new WorldStateRow(
-                Name: WorldCellName.Parse(candidate: "burning"),
+                Name: CellName.Parse(candidate: "burning"),
                 Kind: CellKind.Int,
                 Capacity: 16
             ),
             new WorldStateRow(
-                Name: WorldCellName.Parse(candidate: "exposed"),
+                Name: CellName.Parse(candidate: "exposed"),
                 Kind: CellKind.Int,
                 Capacity: 16
             ),

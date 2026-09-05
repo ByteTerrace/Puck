@@ -53,7 +53,7 @@ public static partial class WorldDefinitionValidator {
         }
     }
 
-    private static void ValidateFlockAffinity(WorldValueExpression? expression, WorldDefinition definition, string path, List<string> errors) {
+    private static void ValidateFlockAffinity(ValueExpression? expression, WorldDefinition definition, string path, List<string> errors) {
         if (expression is null) { return; }
         try { _ = WorldRuleCompiler.CompileFlockAffinity(expression, definition); }
         catch (WorldRuleException exception) { errors.Add($"{path}: {exception.Message}"); }

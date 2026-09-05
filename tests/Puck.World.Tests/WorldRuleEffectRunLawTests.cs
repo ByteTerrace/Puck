@@ -7,10 +7,10 @@ namespace Puck.World.Tests;
 /// Only a transaction groups effects atomically.</summary>
 public sealed class WorldRuleEffectRunLawTests {
     private static WorldStateRow Slot(string name, long value, long max) =>
-        new(WorldCellName.Parse(name), CellKind.Int, Min: 0, Max: max, Cells: [new WorldStateCell(WorldStateRow.SlotKey, value)]);
-    private static ActionEffect.SetState Set(string state, params WorldValueToken[] tokens) => new(State: state, Expression: new WorldValueExpression(tokens));
-    private static WorldTransactionStep.SetCell Step(string state, params WorldValueToken[] tokens) => new(State: state, Expression: new WorldValueExpression(tokens));
-    private static WorldValueToken[] Tz(string row) => [new WorldValueToken.State(row), new WorldValueToken.TrailingZeroCount()];
+        new(CellName.Parse(name), CellKind.Int, Min: 0, Max: max, Cells: [new WorldStateCell(WorldStateRow.SlotKey, value)]);
+    private static ActionEffect.SetState Set(string state, params ValueToken[] tokens) => new(State: state, Expression: new ValueExpression(tokens));
+    private static WorldTransactionStep.SetCell Step(string state, params ValueToken[] tokens) => new(State: state, Expression: new ValueExpression(tokens));
+    private static ValueToken[] Tz(string row) => [new ValueToken.State(row), new ValueToken.TrailingZeroCount()];
     private static long Value(WorldFixture fixture, string row) =>
         WorldDefinitionRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
 
@@ -23,8 +23,8 @@ public sealed class WorldRuleEffectRunLawTests {
                 Slot("fromCell", 0L, 16), Slot("toCell", 0L, 16), Slot("capturedCell", 0L, capturedMax),
             ]),
             Rules = [
-                new WorldRule(WorldCellName.Parse("masks"), [Set("ownVac", new WorldValueToken.Constant(1m)), Set("ownOcc", new WorldValueToken.Constant(4m))]),
-                new WorldRule(WorldCellName.Parse("cells"), asTransaction ? [new ActionEffect.Transaction(Effects: steps)] : writes),
+                new WorldRule(CellName.Parse("masks"), [Set("ownVac", new ValueToken.Constant(1m)), Set("ownOcc", new ValueToken.Constant(4m))]),
+                new WorldRule(CellName.Parse("cells"), asTransaction ? [new ActionEffect.Transaction(Effects: steps)] : writes),
             ],
         };
     }

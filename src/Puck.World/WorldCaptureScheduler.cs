@@ -43,7 +43,7 @@ internal sealed record WorldCaptureManifest(string Schema, string Backend, strin
 /// the evaluator's own construction seam.
 /// </remarks>
 internal sealed class WorldCaptureScheduler {
-    private readonly record struct Pending(WorldCellName Station, ulong Tick, string Path, string FrameName, ulong StateHash, IReadOnlyList<WorldCapturePaletteEntry> Palette);
+    private readonly record struct Pending(CellName Station, ulong Tick, string Path, string FrameName, ulong StateHash, IReadOnlyList<WorldCapturePaletteEntry> Palette);
 
     private readonly string m_backend;
     private readonly string m_directory;

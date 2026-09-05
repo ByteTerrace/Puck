@@ -235,7 +235,7 @@ internal static class Fixtures {
 
         var playerDefaults = new WorldPlayerDefaults(
             IdentitiesRaw: [
-                new WorldIdentitySeed(Id: WorldSafeName.Parse(candidate: "amber"), Name: "amber", Color: "#ED8530"),
+                new WorldIdentitySeed(Id: SafeName.Parse(candidate: "amber"), Name: "amber", Color: "#ED8530"),
             ],
             NeutralColorRaw: "#8C8C8C",
             ColorSequenceRaw: new WorldSequence(Name: WorldSequence.Additive, Offset: 0, Step: 0.618034f),
@@ -731,7 +731,7 @@ internal static class Fixtures {
     /// full-value lattice row over <paramref name="topology"/> whose <paramref name="heightScale"/> places the free
     /// surface at that Y.</summary>
     public static WorldStateRow MediumRow(string topology = "world", string name = "medium", float heightScale = 5f) => new(
-        Name: WorldCellName.Parse(candidate: name),
+        Name: CellName.Parse(candidate: name),
         Kind: CellKind.Fixed,
         Domain: new WorldStateDomain.CellsOf(Topology: topology),
         Field: new WorldStateFieldTrait(

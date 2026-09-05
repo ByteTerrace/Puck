@@ -192,7 +192,7 @@ public enum WorldSection : byte {
     /// <c>WorldMutation.RemoveCurve</c>.</summary>
     Curves,
 
-    /// <summary>The static lookup-table asset rows (<see cref="WorldTableRow"/>).</summary>
+    /// <summary>The static lookup-table asset rows (<see cref="TableRow"/>).</summary>
     Tables,
 }
 /// <summary>Which flavor of subject a <see cref="GrantSubject"/> addresses.</summary>

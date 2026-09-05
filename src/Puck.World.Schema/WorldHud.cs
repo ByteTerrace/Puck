@@ -408,7 +408,7 @@ public static class HudBindingVocabulary {
         }
 
         // state.<row> binds the row's own slot cell; state.<row>.<key> binds one named cell. Neither a row name nor a
-        // cell name can hold a dot (WorldCellName refuses one at document parse), so the FIRST dot after the prefix is
+        // cell name can hold a dot (CellName refuses one at document parse), so the FIRST dot after the prefix is
         // always the grammar separator — a second dot in the remainder names no row/key pair this substrate could
         // ever hold, so it refuses rather than guessing which half is which. A trailing .$target facet is stripped
         // before that split runs, so it never competes with the row/key dot.

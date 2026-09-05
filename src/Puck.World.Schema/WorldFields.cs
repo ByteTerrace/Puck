@@ -195,7 +195,7 @@ public sealed record WorldFieldsSection(
                     Min: row.Min,
                     Paint: null
                 ),
-                Name: WorldCellName.Parse(candidate: row.Name)
+                Name: CellName.Parse(candidate: row.Name)
             ));
         }
 
@@ -583,7 +583,7 @@ public abstract record WorldLatticeFill {
     /// load/reset, and a draw-rewinding undo repaint the pass the document names.</summary>
     /// <param name="Source">A declared <c>generators</c> row, or <see langword="null"/> when <paramref name="Generator"/> is inlined.</param>
     /// <param name="Generator">An inline numeric source, or <see langword="null"/> when <paramref name="Source"/> is named.</param>
-    public sealed record Draw([property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCellName? Source = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldGenerator? Generator = null) : WorldLatticeFill;
+    public sealed record Draw([property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CellName? Source = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldGenerator? Generator = null) : WorldLatticeFill;
 
     /// <summary>Returns the one <see cref="Draw"/> fill a field trait's paint carries, or <see langword="null"/>.</summary>
     /// <param name="trait">The trait, or <see langword="null"/> for a row that is not a field.</param>

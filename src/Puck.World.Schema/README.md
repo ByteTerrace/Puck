@@ -672,7 +672,7 @@ draw band (`WorldHudLayer`: under, over, or replace) as a document property.
 binds one named cell in ANY row shape, with a gauge's fraction still read from
 the ROW's own declared `min`/`max` (cells carry no envelope of their own) —
 the split on the FIRST dot after `state.` is unambiguous because a row/cell
-name can never itself hold a dot (`WorldCellName`, below). `HudValidation.cs`
+name can never itself hold a dot (`CellName`, below). `HudValidation.cs`
 gates capacities, ids, and — for a `state.*` binding — that the named row (and,
 for the cell form, the named cell) actually exists in the document's own
 `state` section. An owned identity world may carry the same HUD and binding
@@ -820,7 +820,7 @@ for a slot-shaped row so a load→save round-trip is byte-identical. There is
 no `$type` and no `rows` member; the retired spellings refuse as unmapped
 members like any other stale field, and the addon mutation decoder speaks
 this identical grammar rather than forking one of its own. `name` and every
-cell `key` are `WorldCellName` (`Puck.State`'s `WorldSafeName.cs`) — a validated type that
+cell `key` are `CellName` (`Puck.State`'s `SafeName.cs`) — a validated type that
 CANNOT hold an empty, unsafe, or dotted value, refusing at JSON parse (naming
 the offending character) rather than at whole-document validation; the
 dot-free rule is what makes the `state.<row>.<key>` HUD binding grammar
@@ -1708,7 +1708,7 @@ is `$table:moves:power:$bind:move`), a key read from another cell as nested
 brackets (`buffs[minion[$each]]` is the `$cell:minion:$each` indirection — a
 two-hop join in one read), decimal or `0x` literals — or as the postfix `{ "tokens": [...] }`
 object. The string is syntax only: it parses to exactly the tokens an author
-could have written by hand (`WorldExpressionSyntax`, which lives with the
+could have written by hand (`ExpressionSpelling`, which lives with the
 token vocabulary, the opcode enum, the arithmetic, and the state transforms in
 `Puck.State`), the compiler proves and
 prices the tokens the same way, and the document writes back whichever

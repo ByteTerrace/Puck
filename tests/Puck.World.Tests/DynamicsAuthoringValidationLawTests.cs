@@ -174,12 +174,12 @@ public sealed class DynamicsAuthoringValidationLawTests {
         var document = WithDynamics(rows: [Chase]);
         var dangling = document with {
             StateRaw = new WorldStateSection(World: [
-                new WorldStateRow(Name: WorldCellName.Parse(candidate: "gauge"), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0)], Dynamics: new WorldStateDynamics(Row: "missing", Y0: 0, V0: 0)),
+                new WorldStateRow(Name: CellName.Parse(candidate: "gauge"), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0)], Dynamics: new WorldStateDynamics(Row: "missing", Y0: 0, V0: 0)),
             ]),
         };
         var resolving = document with {
             StateRaw = new WorldStateSection(World: [
-                new WorldStateRow(Name: WorldCellName.Parse(candidate: "gauge"), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0)], Dynamics: new WorldStateDynamics(Row: "chase", Y0: 0, V0: 0)),
+                new WorldStateRow(Name: CellName.Parse(candidate: "gauge"), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0)], Dynamics: new WorldStateDynamics(Row: "chase", Y0: 0, V0: 0)),
             ]),
         };
 
@@ -193,7 +193,7 @@ public sealed class DynamicsAuthoringValidationLawTests {
         var denied = document with {
             StateRaw = new WorldStateSection(World: [
                 new WorldStateRow(
-                    Name: WorldCellName.Parse(candidate: "gauge"),
+                    Name: CellName.Parse(candidate: "gauge"),
                     Kind: CellKind.Int,
                     Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0)],
                     Advance: new WorldStateAdvance(RateNumerator: 1, RateDenominator: 1),
@@ -203,7 +203,7 @@ public sealed class DynamicsAuthoringValidationLawTests {
         };
         var admitted = document with {
             StateRaw = new WorldStateSection(World: [
-                new WorldStateRow(Name: WorldCellName.Parse(candidate: "gauge"), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0)], Dynamics: new WorldStateDynamics(Row: "chase", Y0: 0, V0: 0)),
+                new WorldStateRow(Name: CellName.Parse(candidate: "gauge"), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0)], Dynamics: new WorldStateDynamics(Row: "chase", Y0: 0, V0: 0)),
             ]),
         };
 

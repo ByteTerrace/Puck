@@ -23,7 +23,7 @@ public static partial class WorldDefinitionValidator {
                 sharedWork += sharing.ExpandedNodesPerTick;
             }
 
-            if (!WorldSafeName.TryParse(candidate: domain.Name, name: out _, reason: out var nameReason)) {
+            if (!SafeName.TryParse(candidate: domain.Name, name: out _, reason: out var nameReason)) {
                 errors.Add(item: $"{path}.name {nameReason}");
             } else if (!names.Add(item: domain.Name)) {
                 errors.Add(item: $"{path}.name '{domain.Name}' is duplicated.");

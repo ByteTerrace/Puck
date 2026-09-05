@@ -36,7 +36,7 @@ public sealed record WorldSiloFederation(string KeyFile);
 /// <param name="Pinned">Whether this row activates at silo start and never idle-deactivates.</param>
 public sealed record WorldSiloWorldRow(
     Guid Owner,
-    WorldSafeName World,
+    SafeName World,
     WorldSiloFederation Federation,
     bool Pinned = false
 );

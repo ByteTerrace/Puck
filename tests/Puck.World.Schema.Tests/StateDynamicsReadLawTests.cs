@@ -20,7 +20,7 @@ public sealed class StateDynamicsReadLawTests {
         StateRaw: new WorldStateSection(World: [row])
     );
     private static WorldStateRow EasingRow(string dynamicsRow) => new(
-        Name: WorldCellName.Parse(candidate: "gauge"),
+        Name: CellName.Parse(candidate: "gauge"),
         Kind: CellKind.Int,
         Min: 0,
         Max: 1000,
@@ -28,7 +28,7 @@ public sealed class StateDynamicsReadLawTests {
         Dynamics: new WorldStateDynamics(EpochTick: 0, Row: dynamicsRow, V0: 0, Y0: 0)
     );
     private static WorldStateRow PlainRow() => new(
-        Name: WorldCellName.Parse(candidate: "gauge"),
+        Name: CellName.Parse(candidate: "gauge"),
         Kind: CellKind.Int,
         Min: 0,
         Max: 1000,

@@ -52,7 +52,7 @@ public sealed record WorldPlayerDefaults(
 /// <param name="Name">The display name.</param>
 /// <param name="Color">The body color as <c>#RRGGBB</c>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldIdentitySeed(WorldSafeName Id, string Name, string Color);
+public sealed record WorldIdentitySeed(SafeName Id, string Name, string Color);
 /// <summary>The person or character identity an owned world represents.</summary>
 /// <param name="Id">The stable owned-world id.</param>
 /// <param name="Name">The display name.</param>
@@ -63,12 +63,12 @@ public sealed record WorldIdentitySeed(WorldSafeName Id, string Name, string Col
 /// <param name="Voice">The identity's authored voice-babble selectors, or <see langword="null"/> for none (see
 /// <see cref="WorldVoiceProfile"/>).</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldIdentityDefinition(WorldSafeName Id, string Name, string Color, WorldCellName MoveSpeedState, WorldCellName TurnSpeedState, IReadOnlyList<WorldControllerStateSlots>? Controllers = null, WorldVoiceProfile? Voice = null);
+public sealed record WorldIdentityDefinition(SafeName Id, string Name, string Color, CellName MoveSpeedState, CellName TurnSpeedState, IReadOnlyList<WorldControllerStateSlots>? Controllers = null, WorldVoiceProfile? Voice = null);
 /// <summary>Two text state rows that identify one reconnect-stable controller.</summary>
 /// <param name="MachineState">The row containing the machine id.</param>
 /// <param name="DeviceState">The row containing the device id.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldControllerStateSlots(WorldCellName MachineState, WorldCellName DeviceState);
+public sealed record WorldControllerStateSlots(CellName MachineState, CellName DeviceState);
 /// <summary>The document-authored selectors driving an identity's synthesized voice babble (text renders as babble
 /// plus caption; there is no spoken-audio asset). Both fields select into already-declared audio vocabulary rather
 /// than carry raw pitch/timbre floats — <paramref name="PatchId"/> names the <see cref="WorldPatch"/> row voicing

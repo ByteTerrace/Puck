@@ -7,11 +7,11 @@ namespace Puck.World.Schema.Tests;
 /// charges the group its most expensive value; rules sharing a value, or gated on anything else, sum.</summary>
 public sealed class WorldRuleWorkBudgetExclusionLawTests {
     private static WorldStateRow Slot(string name) =>
-        new(WorldCellName.Parse(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)]);
+        new(CellName.Parse(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)]);
     private static WorldStateRow Keyed(string name, int capacity) =>
-        new(WorldCellName.Parse(name), CellKind.Int, Capacity: capacity, Cells: [new WorldStateCell(WorldCellName.Parse("0"), 0L)]);
+        new(CellName.Parse(name), CellKind.Int, Capacity: capacity, Cells: [new WorldStateCell(CellName.Parse("0"), 0L)]);
     private static WorldRule Rule(string name, ActionPredicate? gate, string forEach = "many") =>
-        new(WorldCellName.Parse(name), [new ActionEffect.AddState(State: "count", Value: 1m)], Gate: gate, ForEach: forEach);
+        new(CellName.Parse(name), [new ActionEffect.AddState(State: "count", Value: 1m)], Gate: gate, ForEach: forEach);
     private static ActionPredicate PhaseIs(long value) =>
         new ActionPredicate.CompareState(State: "phase", Comparison: ActionStateComparison.Equal, Value: value);
 
@@ -19,7 +19,7 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
         new ActionPredicate.CompareState(State: "sub", Comparison: ActionStateComparison.Equal, Value: value);
     private static ActionPredicate Both(long phase, long sub) => new ActionPredicate.All([PhaseIs(phase), SubIs(sub)]);
     private static WorldRule Advance(string name, ActionPredicate? gate) =>
-        new(WorldCellName.Parse(name), [new ActionEffect.SetState(State: "phase", Value: 2m)], Gate: gate);
+        new(CellName.Parse(name), [new ActionEffect.SetState(State: "phase", Value: 2m)], Gate: gate);
 
     private static WorldDefinition Document(params WorldRule[] rules) => new(
         Simulation: new WorldSimulationDefaults(RateHz: 240),

@@ -24,10 +24,10 @@ public sealed class WorldRuleExtensionLawTests {
                 Effects: [new ActionEffect.Transaction(Effects: [
                     new WorldTransactionStep.SetCell(
                         State: "target",
-                        Expression: new WorldValueExpression(Tokens: [
-                            new WorldValueToken.State(Name: "source"),
-                            new WorldValueToken.Constant(Value: 3m),
-                            new WorldValueToken.Add(),
+                        Expression: new ValueExpression(Tokens: [
+                            new ValueToken.State(Name: "source"),
+                            new ValueToken.Constant(Value: 3m),
+                            new ValueToken.Add(),
                         ])
                     ),
                     new WorldTransactionStep.ScheduleCell(State: "target", DelaySeconds: 0.01m),
@@ -43,10 +43,10 @@ public sealed class WorldRuleExtensionLawTests {
         var set = Assert.IsType<WorldTransactionStep.SetCell>(@object: transaction.Effects[0]);
 
         Assert.Collection(
-            collection: Assert.IsType<WorldValueExpression>(@object: set.Expression).Tokens,
-            token => _ = Assert.IsType<WorldValueToken.State>(@object: token),
-            token => _ = Assert.IsType<WorldValueToken.Constant>(@object: token),
-            token => _ = Assert.IsType<WorldValueToken.Add>(@object: token)
+            collection: Assert.IsType<ValueExpression>(@object: set.Expression).Tokens,
+            token => _ = Assert.IsType<ValueToken.State>(@object: token),
+            token => _ = Assert.IsType<ValueToken.Constant>(@object: token),
+            token => _ = Assert.IsType<ValueToken.Add>(@object: token)
         );
         _ = Assert.IsType<WorldTransactionStep.ScheduleCell>(@object: transaction.Effects[1]);
     }
@@ -63,15 +63,15 @@ public sealed class WorldRuleExtensionLawTests {
                 ]),
                 Effects: [new ActionEffect.SetState(
                     State: "result",
-                    Expression: new WorldValueExpression(Tokens: [
-                        new WorldValueToken.State(Name: "a"),
-                        new WorldValueToken.Constant(Value: 2m),
-                        new WorldValueToken.Add(),
-                        new WorldValueToken.Constant(Value: 3m),
-                        new WorldValueToken.Multiply(),
-                        new WorldValueToken.Constant(Value: 0m),
-                        new WorldValueToken.Constant(Value: 8m),
-                        new WorldValueToken.Clamp(),
+                    Expression: new ValueExpression(Tokens: [
+                        new ValueToken.State(Name: "a"),
+                        new ValueToken.Constant(Value: 2m),
+                        new ValueToken.Add(),
+                        new ValueToken.Constant(Value: 3m),
+                        new ValueToken.Multiply(),
+                        new ValueToken.Constant(Value: 0m),
+                        new ValueToken.Constant(Value: 8m),
+                        new ValueToken.Clamp(),
                     ])
                 )]
             )]
@@ -193,10 +193,10 @@ public sealed class WorldRuleExtensionLawTests {
                 Name: Name("diagnostic"),
                 Effects: [new ActionEffect.SetState(
                     State: "target",
-                    Expression: new WorldValueExpression(Tokens: [
-                        new WorldValueToken.Constant(Value: 1m),
-                        new WorldValueToken.Constant(Value: 0m),
-                        new WorldValueToken.Divide(),
+                    Expression: new ValueExpression(Tokens: [
+                        new ValueToken.Constant(Value: 1m),
+                        new ValueToken.Constant(Value: 0m),
+                        new ValueToken.Divide(),
                     ])
                 )]
             )]
@@ -254,7 +254,7 @@ public sealed class WorldRuleExtensionLawTests {
     public void DynamicBodyKeysDoNotAllocatePerRuleEvaluationAfterWarmup() {
         static WorldRule[] Rules(string key) => Enumerable.Range(start: 0, count: ManyRules)
             .Select(index => new WorldRule(
-                Name: WorldCellName.Parse(candidate: $"key-{index}"),
+                Name: CellName.Parse(candidate: $"key-{index}"),
                 Gate: new ActionPredicate.CompareState(State: "values", Comparison: ActionStateComparison.Equal, Value: 2m, Key: key),
                 Effects: [new ActionEffect.SetState(State: "target", Value: 1m)]
             )).ToArray();
@@ -355,7 +355,7 @@ public sealed class WorldRuleExtensionLawTests {
                         new WorldTransactionStep.SetCell(State: "bounded", Value: 5m),
                         new WorldTransactionStep.AddCell(
                             State: "bounded",
-                            Expression: new WorldValueExpression(Tokens: [new WorldValueToken.State(Name: "bounded")])
+                            Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: "bounded")])
                         ),
                     ],
                     OnFailure: [new WorldTransactionStep.SetCell(State: "failed", Value: 1m)]
@@ -380,10 +380,10 @@ public sealed class WorldRuleExtensionLawTests {
                 Effects: [new ActionEffect.Transaction(
                     Effects: [new WorldTransactionStep.SetCell(
                         State: "target",
-                        Expression: new WorldValueExpression(Tokens: [
-                            new WorldValueToken.Constant(Value: 1m),
-                            new WorldValueToken.Constant(Value: 0m),
-                            new WorldValueToken.Divide(),
+                        Expression: new ValueExpression(Tokens: [
+                            new ValueToken.Constant(Value: 1m),
+                            new ValueToken.Constant(Value: 0m),
+                            new ValueToken.Divide(),
                         ])
                     )],
                     OnFailure: [new WorldTransactionStep.SetCell(State: "failed", Value: 1m)]
@@ -408,10 +408,10 @@ public sealed class WorldRuleExtensionLawTests {
                 Effects: [new ActionEffect.Transaction(
                     Effects: [new WorldTransactionStep.SetCell(
                         State: "target",
-                        Expression: new WorldValueExpression(Tokens: [
-                            new WorldValueToken.Constant(Value: 100_000_000m),
-                            new WorldValueToken.Constant(Value: 100_000_000m),
-                            new WorldValueToken.Multiply(),
+                        Expression: new ValueExpression(Tokens: [
+                            new ValueToken.Constant(Value: 100_000_000m),
+                            new ValueToken.Constant(Value: 100_000_000m),
+                            new ValueToken.Multiply(),
                         ])
                     )],
                     OnFailure: [new WorldTransactionStep.SetCell(State: "failed", Value: 1m)]
@@ -628,7 +628,7 @@ public sealed class WorldRuleExtensionLawTests {
     private static WorldStateRow FixedSlot(string name, long value) => new(Name: Name(name), Kind: CellKind.Fixed, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: value)]);
     private static WorldStateRow Keyed(string name, int capacity, IReadOnlyList<WorldStateCell> cells) => new(Name: Name(name), Kind: CellKind.Int, Capacity: capacity, Cells: cells);
     private static WorldStateCell Cell(string key, long value) => new(Key: Name(key), Value: value);
-    private static WorldCellName Name(string value) => WorldCellName.Parse(candidate: value);
+    private static CellName Name(string value) => CellName.Parse(candidate: value);
     private static long Value(WorldFixture fixture, string row, string? key = null) {
         var declared = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: row)!;
         var cellName = ((key is null) ? WorldStateRow.SlotKey : Name(key));

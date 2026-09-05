@@ -12,7 +12,7 @@ namespace Puck.World;
 /// world declares no <c>probes</c> rows when it wants no camera-derived reading at all. Boot-authored only: no
 /// <see cref="Protocol.WorldSection"/> dispatch axis carries a live mutation kind for it yet (see
 /// <see cref="Protocol.WorldSection.Probes"/>), the same standing <c>music</c> carries.</summary>
-/// <param name="Id">The probe's own name — <see cref="WorldSafeName"/>-shaped, unique among the rows; <c>probe.status</c>
+/// <param name="Id">The probe's own name — <see cref="SafeName"/>-shaped, unique among the rows; <c>probe.status</c>
 /// and <c>probe.record</c> address it.</param>
 /// <param name="Kind">The registered probe kind id (a <c>puck.probe.v1</c> manifest's file stem) — checked
 /// against the shipped vocabulary at document load

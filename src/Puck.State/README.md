@@ -40,30 +40,31 @@ terms.
 The extraction is the campaign's "`Puck.State`: the state and rule engine as a
 standalone deterministic library" charter in `docs/campaign.md`, landing in
 three phases. This is the first: the pure pieces, moved with no behaviour
-change and every type keeping its `World` prefix, so each diff reads as a move.
+change. Nothing here carries a `World` name — a state library names no world.
 
-- *Expressions:* `WorldValueExpression` and its `WorldValueToken` postfix
+- *Expressions:* `ValueExpression` and its `ValueToken` postfix
   vocabulary (constants, state reads, arithmetic, comparison, bit and board
-  operations, `select`), `WorldExpressionSyntax` (the infix spelling and its
-  inverse — syntax only, no second evaluator), `WorldValueExpressionJsonConverter`
-  (reads either spelling, writes each back in its own), `WorldExpressionOp` (the
-  compiled opcode), and `WorldExpressionArithmetic` (the allocation-free Int and
+  operations, `select`), `ExpressionSpelling` (the infix spelling and its
+  inverse — syntax only, no second evaluator), `ValueExpressionJsonConverter`
+  (reads either spelling, writes each back in its own), `ExpressionOp` (the
+  compiled opcode), and `ExpressionArithmetic` (the allocation-free Int and
   Q48.16 evaluator every opcode lowers to).
 - *Tables:* `TableDocument` (`puck.table.v1`), `TableEntryDocument`, and
   `TableCanonicalizer` (validate → normalize → canonicalize), with
-  `WorldTableRow` as the name/source/hash reference a document pins one by.
-- *State transforms:* the `WorldStateTransform` union (`transfer`, `setRay`,
+  `TableRow` as the name/source/hash reference a document pins one by.
+- *State transforms:* the `StateTransform` union (`transfer`, `setRay`,
   `shuffle`, `sortZone`, `sortKeyed`, `writeSet`, `push`, `observe`),
-  `WorldZoneSelector`, and `WorldSortKey`.
-- *Identifiers:* `WorldSafeName` and `WorldCellName` (validated at
-  construction, refusing by name), the `WorldOwnedWorldFileName` id↔file-name
-  mapping the length ceiling derives from, their JSON converters, and the
+  `ZoneSelector`, and `SortKey`.
+- *Identifiers:* `SafeName` and `CellName` (validated at construction,
+  refusing by name; `SafeName.MaxSuffixLength` reserves the file suffix a
+  document project may append), their JSON converters, and the
   `TryParseStringJsonConverter<T>` shape they share.
-- *Reserved channels:* `WorldRuleFacts`, the `$`-prefixed fact channels a rule
-  may compare against instead of a declared row (`$tick`, `$population`,
-  `$reduce:`, `$table:`, `$bind:`, `$distance:`, …). The library names them; a
-  host answers them.
-- *Literals:* `WorldStateNumericLiteral`, the one decimal→Q48.16 conversion
+- *Reserved channels:* `RuleFacts`, the state-neutral `$`-prefixed channels
+  a rule may read instead of a declared row (`$tick`, `$bind:`, `$table:`,
+  `$cell:`, `$reduce:`, `$match:`, `$history:`, `$symmetry:`). The channels
+  only a world can answer — bodies, distance, line of sight, screens, links,
+  regions, the population — are the document project's `WorldRuleFacts`.
+- *Literals:* `NumericLiteral`, the one decimal→Q48.16 conversion
   every authored constant and table value crosses.
 
 ## 🧭 What it will hold
@@ -77,8 +78,7 @@ The charter's next two phases, in order:
    compiler.
 2. *The evaluator*, behind a state-host interface — the mutation door, the
    journal, checkpoints, and the fact reader the operands answer through —
-   that `WorldServer` implements. Only then do the `World` prefixes go, in one
-   rename sweep.
+   that `WorldServer` implements.
 
 Refused by the charter: a compatibility shim between old and new spellings at
 any phase, and moving the evaluator before the seams exist.

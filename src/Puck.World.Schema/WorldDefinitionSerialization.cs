@@ -60,10 +60,10 @@ namespace Puck.World;
 // WorldAnchor.Placement and WorldCameraSubject.Placement share a simple name, which the source generator would
 // otherwise resolve to one generated accessor for both (SYSLIB1031). Naming this arm explicitly keeps both.
 [JsonSerializable(typeof(WorldCameraSubject.Placement), TypeInfoPropertyName = "WorldCameraSubjectPlacement")]
-[JsonSerializable(typeof(WorldValueToken.Select), TypeInfoPropertyName = "WorldValueTokenSelect")]
-// The postfix object spelling WorldValueExpressionJsonConverter reads and writes; the expression type itself rides
+[JsonSerializable(typeof(ValueToken.Select), TypeInfoPropertyName = "ValueTokenSelect")]
+// The postfix object spelling ValueExpressionJsonConverter reads and writes; the expression type itself rides
 // the converter, so the object arm needs its own entry to be reachable.
-[JsonSerializable(typeof(WorldValueExpressionTokens))]
+[JsonSerializable(typeof(ValueExpressionTokens))]
 [JsonSerializable(typeof(WorldPatternNode.Symbol), TypeInfoPropertyName = "WorldPatternNodeSymbol")]
 [JsonSerializable(typeof(WorldPatternNode.AnySymbol), TypeInfoPropertyName = "WorldPatternNodeAnySymbol")]
 [JsonSerializable(typeof(WorldPatternNode.None), TypeInfoPropertyName = "WorldPatternNodeNone")]
@@ -203,7 +203,7 @@ namespace Puck.World;
 // Disambiguates the generated type-info property name from WorldStateLatticeTopology.Ring, an unrelated type
 // sharing the simple name "Ring" (see SYSLIB1031).
 [JsonSerializable(typeof(WorldStateDomain.Ring), TypeInfoPropertyName = "WorldStateDomainRing")]
-[JsonSerializable(typeof(WorldStateTransform))]
+[JsonSerializable(typeof(StateTransform))]
 [JsonSerializable(typeof(WorldObservedRow[]))]
 [JsonSerializable(typeof(WorldStatePhase))]
 [JsonSerializable(typeof(WorldStateVisibility))]
@@ -258,7 +258,7 @@ namespace Puck.World;
     // their converter at their own declaration now (Puck.Commands references Puck.Abstractions for exactly that),
     // so this context and Puck.Commands.BindingProfileJsonContext read the shape off the TYPE rather than each
     // repeating a registration the other could drift from.
-    Converters = new[] { typeof(Puck.Assets.Documents.Vector2JsonConverter), typeof(Puck.Assets.Documents.Vector3JsonConverter), typeof(Puck.Assets.Documents.QuaternionJsonConverter), typeof(CreationDocumentJsonConverter), typeof(WorldBackendPreferenceJsonConverter), typeof(SurfaceFormatJsonConverter), typeof(GrantSubjectJsonConverter), typeof(WorldPrincipalJsonConverter), typeof(ChannelReachMaskJsonConverter), typeof(ChannelConsentMaskJsonConverter), typeof(MutationKindMaskJsonConverter), typeof(DocumentWriteMaskJsonConverter), typeof(WorldStateRowJsonConverter), typeof(WorldSafeNameJsonConverter), typeof(WorldCellNameJsonConverter), typeof(WorldDestinationDurabilityJsonConverter), typeof(WorldPortalTravelJsonConverter), typeof(WorldPortalArrivalJsonConverter), typeof(WorldDestinationScopeJsonConverter) },
+    Converters = new[] { typeof(Puck.Assets.Documents.Vector2JsonConverter), typeof(Puck.Assets.Documents.Vector3JsonConverter), typeof(Puck.Assets.Documents.QuaternionJsonConverter), typeof(CreationDocumentJsonConverter), typeof(WorldBackendPreferenceJsonConverter), typeof(SurfaceFormatJsonConverter), typeof(GrantSubjectJsonConverter), typeof(WorldPrincipalJsonConverter), typeof(ChannelReachMaskJsonConverter), typeof(ChannelConsentMaskJsonConverter), typeof(MutationKindMaskJsonConverter), typeof(DocumentWriteMaskJsonConverter), typeof(WorldStateRowJsonConverter), typeof(SafeNameJsonConverter), typeof(CellNameJsonConverter), typeof(WorldDestinationDurabilityJsonConverter), typeof(WorldPortalTravelJsonConverter), typeof(WorldPortalArrivalJsonConverter), typeof(WorldDestinationScopeJsonConverter) },
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     // The OTHER half of strict parse. UnmappedMemberHandling below refuses a member the model does not have; this
     // refuses a member the model REQUIRES and the document does not carry. Without it, a constructor parameter with
@@ -485,7 +485,7 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
             EpochTick: epochTick
         );
     }
-    private static WorldStateCell ReadCell(CellKind cellKind, WorldCellName key, JsonElement element, string context, WorldStateAdvance? advance = null, string? provenance = null, WorldStateDynamics? dynamics = null, WorldStateCycle? cycle = null) => cellKind switch {
+    private static WorldStateCell ReadCell(CellKind cellKind, CellName key, JsonElement element, string context, WorldStateAdvance? advance = null, string? provenance = null, WorldStateDynamics? dynamics = null, WorldStateCycle? cycle = null) => cellKind switch {
         CellKind.Text => new WorldStateCell(
         Key: key,
         Text: RequireString(
@@ -579,7 +579,7 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
             if (string.IsNullOrEmpty(value: key)) {
                 throw new JsonException(message: $"state row '{name}'.cells[{index}] requires member 'key'.");
             }
-            if (!WorldCellName.TryParse(
+            if (!CellName.TryParse(
                 candidate: key,
                 name: out var cellKey,
                 reason: out var keyReason
@@ -909,7 +909,7 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
         if (string.IsNullOrEmpty(value: name)) {
             throw new JsonException(message: $"a state row requires member 'name' — a state row is {Shape}.");
         }
-        if (!WorldCellName.TryParse(
+        if (!CellName.TryParse(
             candidate: name,
             name: out var rowName,
             reason: out var nameReason
