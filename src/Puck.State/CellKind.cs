@@ -3,14 +3,14 @@ using Puck.Abstractions.Documents;
 
 namespace Puck.State;
 
-/// <summary>The closed set of cell value kinds a <see cref="T:Puck.World.WorldStateRow"/> declares, shared by every cell the row
+/// <summary>The closed set of cell value kinds a <c>WorldStateRow</c> declares, shared by every cell the row
 /// carries. Carries no float kind: simulation state is float-free by the determinism contract (see
 /// <see cref="Fixed"/> for how a fractional value still rides here). A counter is represented as
-/// <see cref="Fixed"/>; a timer is <see cref="Int"/> with <see cref="P:Puck.World.WorldStateRow.NonNegative"/> set.</summary>
+/// <see cref="Fixed"/>; a timer is <see cref="Int"/> with <c>NonNegative</c> set.</summary>
 [JsonConverter(typeof(StrictEnumConverter<CellKind>))]
 public enum CellKind : byte {
     /// <summary>A whole 64-bit signed integer cell (a score, a round counter, an inventory count, or — with
-    /// <see cref="P:Puck.World.WorldStateRow.NonNegative"/> set — a tick-count timer).</summary>
+    /// <c>NonNegative</c> set — a tick-count timer).</summary>
     Int,
 
     /// <summary>A fixed-point cell holding raw <c>FixedQ4816</c> bits — the deterministic replacement for a float in
@@ -23,8 +23,8 @@ public enum CellKind : byte {
     Bool,
 
     /// <summary>A short-text cell (a status label, a player name slot), bounded to
-    /// <see cref="F:Puck.World.WorldStateCapacity.MaxTextValueLength"/> UTF-16 code units. Carries no range — a gauge cannot bind
-    /// to it. The only kind whose value is carried in <see cref="P:Puck.World.WorldStateCell.Text"/> rather than
-    /// <see cref="P:Puck.World.WorldStateCell.Value"/>.</summary>
+    /// <c>MaxTextValueLength</c> UTF-16 code units. Carries no range — a gauge cannot bind
+    /// to it. The only kind whose value is carried in <c>Text</c> rather than
+    /// <c>Value</c>.</summary>
     Text,
 }

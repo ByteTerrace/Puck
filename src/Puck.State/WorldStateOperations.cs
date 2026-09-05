@@ -37,7 +37,7 @@ public abstract record WorldStateTransform {
     /// <param name="Key">The token key for key selection.</param>
     /// <param name="InsertFirst">Insert at the first position rather than the last.</param>
     /// <param name="Draw">A streamDraw site for random selection; absent for other selectors.</param>
-    /// <param name="Count">How many tokens move in this one transfer, 1..<see cref="F:Puck.World.WorldStateTransferCapacity.MaxTransferCount"/>,
+    /// <param name="Count">How many tokens move in this one transfer, 1..<c>MaxTransferCount</c>,
     /// each selected afresh from what remains (a five-card deal is one mutation); a key selection moves exactly one.</param>
     public sealed record Transfer(string From, string To, WorldZoneSelector Selector = WorldZoneSelector.Key,
         string? Key = null, bool InsertFirst = false, string? Draw = null, int Count = 1) : WorldStateTransform;
@@ -63,7 +63,7 @@ public abstract record WorldStateTransform {
     /// <summary>Reorders an ordered zone by attribute rows over its token domain, stably: the first key decides and
     /// each later key breaks the ties before it. The canonical order a pattern reads a hand in.</summary>
     /// <param name="Row">The ordered zone.</param>
-    /// <param name="By">The attribute keys, 1..<see cref="F:Puck.World.WorldStateCapacity.MaxSortKeys"/> distinct numeric rows
+    /// <param name="By">The attribute keys, 1..<c>MaxSortKeys</c> distinct numeric rows
     /// keyed over the zone's token domain, in precedence order; each carries its own direction.</param>
     public sealed record SortZone(string Row, IReadOnlyList<WorldSortKey> By) : WorldStateTransform;
     /// <summary>Reorders a keyed numeric row by its own cell values, stably.</summary>
