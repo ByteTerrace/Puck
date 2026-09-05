@@ -1,8 +1,8 @@
 namespace Puck.AdvancedGamingBrick.Post;
 
-/// <summary>Discovers reference-ROM test cases under the corpus root (resolved by <c>Program</c> from <c>--roms</c> or the
-/// <c>PUCK_AGB_TESTROMS</c> environment variable). ROMs are never committed to the repository, so an absent corpus (or an
-/// absent file within it) yields no cases and the owning Tier-B stage skips rather than fails.</summary>
+/// <summary>Discovers reference-ROM test cases under a corpus root (resolved by <c>Program</c> from a command-line flag or
+/// the manifest's cached archive). ROMs are never committed to the repository, so an absent corpus (or an absent file
+/// within it) yields no cases and the owning Tier-B stage skips rather than fails.</summary>
 internal static class RomCatalog {
     /// <summary>Resolves a fixed set of relative ROM paths under the corpus root into cases, keeping only the ones that
     /// exist on disk.</summary>
@@ -37,20 +37,10 @@ internal static class RomCatalog {
 
         return resolved;
     }
-    /// <summary>Enumerates the ARM/Thumb fuzz-corpus ROMs, which by the harness convention live in a sibling
-    /// <c>FuzzARM</c> directory beside the conformance-corpus root.</summary>
-    /// <param name="root">The resolved conformance-corpus root, or <see langword="null"/> when no corpus is available.</param>
-    /// <returns>A case per existing fuzz-corpus ROM; empty when the sibling directory or every ROM is absent.</returns>
+    /// <summary>Enumerates the ARM/Thumb fuzz-corpus ROMs under the fuzz-corpus root.</summary>
+    /// <param name="root">The resolved fuzz-corpus root, or <see langword="null"/> when no corpus is available.</param>
+    /// <returns>A case per existing fuzz-corpus ROM; empty when the root or every ROM is absent.</returns>
     public static IReadOnlyList<RomCase> ArmFuzz(string? root) {
-        if (root is null) {
-            return [];
-        }
-
-        var fuzzArmRoot = Path.Combine(
-            path1: (Path.GetDirectoryName(path: Path.TrimEndingDirectorySeparator(path: root)) ?? root),
-            path2: "FuzzARM"
-        );
-
         (string RelativePath, string Name)[] known = [
             ("ARM_Any.gba", "ARM_Any"),
             ("THUMB_Any.gba", "THUMB_Any"),
@@ -62,7 +52,7 @@ internal static class RomCatalog {
         return Resolve(
             cases: known,
             group: "arm-fuzz",
-            root: fuzzArmRoot
+            root: root
         );
     }
 }

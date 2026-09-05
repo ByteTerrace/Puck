@@ -21,6 +21,16 @@ public interface IMachineMemoryPeek {
     /// <param name="address">A machine-defined bus address.</param>
     /// <returns>The byte at that address, or 0.</returns>
     byte PeekByte(int address);
+    /// <summary>Reads a run of bytes starting at <paramref name="address"/>, without side effects, as one observation —
+    /// a host that marshals reads onto a worker thread answers this with one round trip rather than one per byte, and
+    /// the bytes are a coherent snapshot of one instant. Bytes outside the machine's readable space read as 0.</summary>
+    /// <param name="address">The first machine-defined bus address.</param>
+    /// <param name="destination">Receives one byte per address, in order.</param>
+    void PeekBytes(int address, Span<byte> destination) {
+        for (var offset = 0; (offset < destination.Length); ++offset) {
+            destination[offset] = PeekByte(address: (address + offset));
+        }
+    }
     /// <summary>Forces one byte into the machine's bus address space — a debug mutation outside the replay-determinism
     /// contract. The write lands only on writable regions (RAM); an address outside the machine's writable space, or an
     /// unassigned machine, is a no-op. Because the poked byte is an unrecorded input, the caller must treat any captured

@@ -4,7 +4,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 
 /// <summary>
 /// Tier-C stage: the real link cable exercised by a real commercial multiplayer game. Two ARM7TDMI consoles boot the
-/// same cartridge (named by <c>PUCK_AGB_LINK_GAME</c>) through the real BIOS — a full-boot commercial game, not the
+/// same cartridge (named by <c>--link-game</c>) through the real BIOS — a full-boot commercial game, not the
 /// hand-assembled <see cref="MicroRoms"/> protocol — joined on one <see cref="AgbLinkCable"/> and advanced together
 /// through an <see cref="AgbLinkSession"/> in a fixed sub-frame budget schedule. The stage proves two things about the
 /// link stack under a genuine game:
@@ -24,14 +24,11 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// surface faithfully (the <c>link-replay</c> micro-ROM gate proves rounds cross both ways) but does not derive those
 /// SD/SI ready-line bits from link-partner presence, so the game never advances to a lobby. The stage records how far
 /// the handshake reached as its pass detail; the divergence is a documented core gap, not a stage failure. The stage
-/// skips cleanly when the ROM (<c>PUCK_AGB_LINK_GAME</c>) or a real boot BIOS (<c>PUCK_AGB_BIOS</c>) is absent.
+/// skips cleanly when the ROM (<c>--link-game</c>) or a real boot BIOS (<c>--bios</c>) is absent.
 /// </para>
 /// </summary>
 internal sealed class LinkGameReplayStage : IPostStage<PostContext> {
     /// <summary>The environment variable naming the commercial multiplayer ROM this stage links two consoles on.</summary>
-    private const string RomEnvironmentVariable = "PUCK_AGB_LINK_GAME";
-    // The dev-box path the ROM lives at, echoed into the skip message so the stage is discoverable without hunting.
-    private const string DevBoxRomPath = @"D:\Source\ByteTerrace\Silo\ROMS\Mario Kart - Super Circuit (USA).gba";
     // Frames to advance the linked pair: enough to cover the game's boot-time link-probe window (empirically frames
     // ~30-270 for the captured link-session cart) with margin.
     private const int Frames = 300;
@@ -51,18 +48,15 @@ internal sealed class LinkGameReplayStage : IPostStage<PostContext> {
     public PostStageOutcome Run(PostContext context) {
         ArgumentNullException.ThrowIfNull(argument: context);
 
-        var romPath = Environment.GetEnvironmentVariable(variable: RomEnvironmentVariable);
+        var romPath = context.LinkGamePath;
 
-        if (
-            string.IsNullOrEmpty(value: romPath) ||
-            !File.Exists(path: romPath)
-        ) {
-            return PostStageOutcome.Skip(detail: $"set {RomEnvironmentVariable} to a multiplayer ROM (dev box: {DevBoxRomPath}) to run this stage");
+        if (romPath is null) {
+            return PostStageOutcome.Skip(detail: "no multiplayer ROM (pass --link-game with a link-capable cartridge)");
         }
 
         // A commercial game boots through the real BIOS; the zeroed replacement stub cannot full-boot it.
         if (AgbBiosProfile.Identify(image: context.BiosImage.Span).Kind == AgbBiosKind.ReplacementStub) {
-            return PostStageOutcome.Skip(detail: $"needs a real boot BIOS (PUCK_AGB_BIOS) to full-boot {Path.GetFileName(path: romPath)}");
+            return PostStageOutcome.Skip(detail: $"needs a real boot BIOS (--bios) to full-boot {Path.GetFileName(path: romPath)}");
         }
 
         var rom = File.ReadAllBytes(path: romPath);

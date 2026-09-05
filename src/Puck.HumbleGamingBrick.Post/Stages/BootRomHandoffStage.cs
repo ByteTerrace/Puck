@@ -82,6 +82,9 @@ internal sealed class BootRomHandoffStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
+    /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
@@ -96,30 +99,50 @@ internal sealed class BootRomHandoffStage : IPostStage<PostContext> {
             return PostStageOutcome.Infra(detail: $"{(References.Length - loaded.Count)} of {References.Length} reference cartridges are missing from the corpus at \"{context.TestRomRoot}\"");
         }
 
-        var cases = BootRomHandoffCases.Create();
-        var images = Enum.GetValues<ConsoleModel>().ToDictionary(
-            elementSelector: static model => BootRomBuilder.Build(model: model),
-            keySelector: static model => model
+        var cases = BootRomHandoffCases.Create()
+            .Select(selector: static item => (Name: item.Name, Rom: item.Rom))
+            .Concat(second: loaded.Select(selector: static reference => (Name: reference.Reference.Path, Rom: reference.Rom)))
+            .ToArray();
+        var models = Enum.GetValues<ConsoleModel>();
+        // Every revision's image is authored once; the boots themselves share nothing, so every (revision, cartridge)
+        // pair runs at once and the first divergence in table order is the one reported.
+        var images = models
+            .AsParallel()
+            .WithDegreeOfParallelism(degreeOfParallelism: context.Parallelism)
+            .Select(selector: static model => (Model: model, Image: BootRomBuilder.Build(model: model)))
+            .ToDictionary(
+            elementSelector: static item => item.Image,
+            keySelector: static item => item.Model
         );
-        var comparisons = 0;
+        var boots = models
+            .SelectMany(selector: model => cases.Select(selector: item => (Model: model, Name: item.Name, Rom: item.Rom)))
+            .ToArray();
+        var differences = new string?[boots.Length];
 
-        foreach (var model in Enum.GetValues<ConsoleModel>()) {
-            var image = images[model];
+        _ = Parallel.For(
+            body: index => {
+                var (model, _, rom) = boots[index];
 
-            foreach (var (name, rom) in cases.Concat(second: loaded.Select(selector: static reference => (reference.Reference.Path, reference.Rom)))) {
-                var difference = BootRomHandoff.Compare(
-                    bootRom: image,
+                differences[index] = BootRomHandoff.Compare(
+                    bootRom: images[model],
                     model: model,
                     rom: rom
                 );
+            },
+            fromInclusive: 0,
+            parallelOptions: new ParallelOptions {
+                MaxDegreeOfParallelism = context.Parallelism,
+            },
+            toExclusive: boots.Length
+        );
 
-                ++comparisons;
-
-                if (difference is not null) {
-                    return PostStageOutcome.Fail(detail: $"{model} booting \"{name}\" diverged from the seeded handoff: {difference}");
-                }
+        for (var index = 0; (index < boots.Length); ++index) {
+            if (differences[index] is { } difference) {
+                return PostStageOutcome.Fail(detail: $"{boots[index].Model} booting \"{boots[index].Name}\" diverged from the seeded handoff: {difference}");
             }
         }
+
+        var comparisons = boots.Length;
 
         var pinned = 0;
 

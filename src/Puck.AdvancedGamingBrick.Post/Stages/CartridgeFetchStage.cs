@@ -6,6 +6,8 @@ internal sealed class CartridgeFetchStage : IPostStage<PostContext> {
     public string Name => "cartridge-fetch";
     /// <inheritdoc/>
     public PostTier Tier => PostTier.A;
+    /// <inheritdoc/>
+    public bool IsConcurrent => true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {

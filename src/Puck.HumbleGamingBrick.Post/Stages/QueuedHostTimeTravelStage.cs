@@ -21,6 +21,9 @@ internal sealed class QueuedHostTimeTravelStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
+    /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
@@ -47,10 +50,17 @@ internal sealed class QueuedHostTimeTravelStage : IPostStage<PostContext> {
     // the cycles run, so a rewind that restored the wrong tick-to-cycle phase (a different cycle budget) folds to a
     // different value.
     private static long ObserveState(MachineHost host) {
+        Span<byte> window = stackalloc byte[0x100];
+
+        host.PeekBytes(
+            address: 0xFF00,
+            destination: window
+        );
+
         var hash = Fnv1aHash.Create();
 
-        for (var address = 0xFF00; (address <= 0xFFFF); ++address) {
-            hash.Add(value: host.PeekByte(address: address));
+        foreach (var value in window) {
+            hash.Add(value: value);
         }
 
         return unchecked((long)hash.Value);

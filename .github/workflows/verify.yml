@@ -2,8 +2,9 @@ name: Verify
 
 # The emulator gates. `gate` runs on every change: the Humble GamingBrick battery's self-contained stages plus every
 # ledger row recorded as passing, against the corpora pinned in src/Puck.HumbleGamingBrick.Post/corpora.json, and
-# fails the build on any regression. `frontier` runs nightly and on request: the rows recorded as failing or
-# inconclusive, re-measured to find ratchets and pixel-count changes, with the candidate ledger uploaded so a
+# fails the build on any regression. `advanced` runs the Advanced GamingBrick battery the same way against its own
+# corpora; its BIOS-dependent stages skip here. `frontier` runs nightly and on request: the rows recorded as failing
+# or inconclusive, re-measured to find ratchets and pixel-count changes, with the candidate ledger uploaded so a
 # ratchet is accepted by `--accept-candidate` on the downloaded file rather than by a second run. Both batteries are
 # pure-CPU console applications; neither needs a GPU or a display.
 
@@ -33,6 +34,7 @@ env:
   CI: true
   DOTNET_NOLOGO: true
   POST: src/Puck.HumbleGamingBrick.Post
+  AGB_POST: src/Puck.AdvancedGamingBrick.Post
 
 jobs:
   gate:
@@ -83,6 +85,57 @@ jobs:
         with:
           name: Humble GamingBrick ${{ github.event.inputs.lane || 'gate' }}
           path: artifacts/gb-post/results.junit.xml
+          reporter: java-junit
+          fail-on-error: false
+
+  advanced:
+    if: ${{ github.event_name != 'schedule' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore corpus cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/Puck/corpora
+          key: corpora-agb-${{ hashFiles('src/Puck.AdvancedGamingBrick.Post/corpora.json') }}
+
+      - name: Build the battery
+        run: dotnet build "$AGB_POST" --configuration Release
+
+      - name: Fetch corpora
+        run: dotnet run --project "$AGB_POST" --configuration Release --no-build -- --fetch-corpora
+
+      - name: Run the battery
+        run: dotnet run --project "$AGB_POST" --configuration Release --no-build -- --artifacts artifacts/agb-post
+
+      - name: Report
+        if: always()
+        run: |
+          {
+            echo '```'
+            cat artifacts/agb-post/post-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agb-post
+          path: artifacts/agb-post
+          if-no-files-found: error
+
+      - name: Test results
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Advanced GamingBrick
+          path: artifacts/agb-post/results.junit.xml
           reporter: java-junit
           fail-on-error: false
 

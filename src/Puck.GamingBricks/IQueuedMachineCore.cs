@@ -47,6 +47,16 @@ public interface IQueuedMachineCore : ITimeTravelMachineCore<MachinePadState>, I
     /// <param name="address">A machine-defined bus address.</param>
     /// <returns>The byte at that address, or 0.</returns>
     byte PeekByte(int address) => 0;
+    /// <summary>Reads a run of bytes from the core's bus address space without side effects — the worker-thread source of
+    /// a host's <see cref="IMachineMemoryPeek.PeekBytes"/>, answered as one coherent inter-instruction observation. The
+    /// default reads each byte through <see cref="PeekByte"/>.</summary>
+    /// <param name="address">The first machine-defined bus address.</param>
+    /// <param name="destination">Receives one byte per address, in order.</param>
+    void PeekBytes(int address, Span<byte> destination) {
+        for (var offset = 0; (offset < destination.Length); ++offset) {
+            destination[offset] = PeekByte(address: (address + offset));
+        }
+    }
     /// <summary>Forces one byte into a writable region of the core's bus address space — the worker-thread source of a
     /// host's <see cref="IMachineMemoryPeek.PokeByte"/>, a debug mutation outside replay determinism. The worker calls
     /// this on its own execution thread between steps. The default is a no-op (a core with no debug memory window).</summary>

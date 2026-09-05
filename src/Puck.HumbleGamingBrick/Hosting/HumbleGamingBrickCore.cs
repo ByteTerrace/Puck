@@ -116,6 +116,15 @@ internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
         (((address < 0x0000) || (address > 0xFFFF))
         ? (byte)0
         : m_systemBus.DebugReadByte(address: ((ushort)address)));
+    /// <summary>Reads a run of bytes for the host's <see cref="IMachineMemoryPeek"/>, each a side-effect-free poll; an
+    /// address outside the bus reads as 0.</summary>
+    /// <param name="address">The first 16-bit bus address.</param>
+    /// <param name="destination">Receives one byte per address, in order.</param>
+    public void PeekBytes(int address, Span<byte> destination) {
+        for (var offset = 0; (offset < destination.Length); ++offset) {
+            destination[offset] = PeekByte(address: (address + offset));
+        }
+    }
     /// <summary>Forces one byte into a writable bus region for the host's <see cref="IMachineMemoryPeek"/> — a debug
     /// mutation outside replay determinism (the host drops rewind history). A no-op for an out-of-range address.</summary>
     /// <param name="address">A 16-bit bus address.</param>

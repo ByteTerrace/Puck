@@ -379,6 +379,11 @@ public sealed class QueuedMachineWorker : IDisposable {
                 value: request.Value
             );
             m_timeTravel?.Reset();
+        } else if (request.Block is { } block) {
+            core.PeekBytes(
+                address: request.Address,
+                destination: block
+            );
         } else {
             request.Result = core.PeekByte(address: request.Address);
         }
@@ -1125,6 +1130,21 @@ public sealed class QueuedMachineWorker : IDisposable {
 
         return request.Result;
     }
+    /// <summary>Reads a run of bytes from the attached core's bus address space through the worker as one marshaled
+    /// observation, so a host's <see cref="IMachineMemoryPeek.PeekBytes"/> costs one round trip and sees one instant.
+    /// Reads as zeros when no core is attached.</summary>
+    /// <param name="address">The first machine-defined bus address.</param>
+    /// <param name="destination">Receives one byte per address, in order.</param>
+    public void PeekBytes(int address, Span<byte> destination) {
+        if (destination.IsEmpty) {
+            return;
+        }
+
+        var request = new MemoryRequest { Address = address, Block = new byte[destination.Length], IsWrite = false };
+
+        RunMemoryAccess(request: request);
+        request.Block.CopyTo(destination: destination);
+    }
     /// <summary>Forces one byte into the attached core's bus address space through the worker (marshaled between steps),
     /// dropping the rewind history atomically with the mutation, so a host's <see cref="IMachineMemoryPeek.PokeByte"/>
     /// never lands mid-instruction. A no-op when no core is attached.</summary>
@@ -1335,6 +1355,7 @@ public sealed class QueuedMachineWorker : IDisposable {
     // barrier completes.
     private sealed class MemoryRequest {
         public int Address;
+        public byte[]? Block;
         public bool IsWrite;
         public byte Result;
         public byte Value;

@@ -9,6 +9,8 @@ internal sealed class CycleBudgetExecutionStage : IPostStage<PostContext> {
     public string Name => "cycle-budget-execution";
     /// <inheritdoc/>
     public PostTier Tier => PostTier.A;
+    /// <inheritdoc/>
+    public bool IsConcurrent => true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {

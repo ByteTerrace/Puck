@@ -3,10 +3,10 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Puck.HumbleGamingBrick.Post;
+namespace Puck.GamingBricks.Post;
 
 /// <summary>
-/// The external corpora the battery reads, declared in <c>corpora.json</c> beside this file: each names a release
+/// The external corpora a battery reads, declared in a <c>corpora.json</c> beside its program: each names a release
 /// archive by URL, version, and SHA-256, and the directory inside the archive that is the corpus root. A corpus
 /// resolves, in order, to an explicit command-line root, else to its entry in the local cache
 /// (<c>%LOCALAPPDATA%/Puck/corpora/&lt;name&gt;/&lt;version&gt;</c>), else to nothing — in which case the stages that
@@ -14,7 +14,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// declared one. The manifest is the only place a corpus's identity lives: bumping a version there is what changes
 /// which bytes every machine, including a build agent, measures against.
 /// </summary>
-internal sealed partial class CorpusManifest {
+public sealed partial class CorpusManifest {
     private sealed class CorpusDto {
         public required string Name { get; init; }
         public required string Version { get; init; }
@@ -52,14 +52,19 @@ internal sealed partial class CorpusManifest {
         path3: "corpora"
     );
 
-    /// <summary>Loads <c>corpora.json</c> from beside this source file.</summary>
+    /// <summary>Resolves the <c>corpora.json</c> beside the calling source file, independent of the process's working
+    /// directory or build-output layout.</summary>
     /// <param name="sourceFile">Supplied by the compiler; never pass explicitly.</param>
+    /// <returns>The manifest's path.</returns>
+    public static string BesideSource([System.Runtime.CompilerServices.CallerFilePath] string sourceFile = "") =>
+        Path.Combine(
+        path1: (Path.GetDirectoryName(path: sourceFile) ?? "."),
+        path2: "corpora.json"
+    );
+    /// <summary>Loads a manifest.</summary>
+    /// <param name="path">The manifest file's path.</param>
     /// <returns>The manifest.</returns>
-    public static CorpusManifest Load([System.Runtime.CompilerServices.CallerFilePath] string sourceFile = "") {
-        var path = Path.Combine(
-            path1: (Path.GetDirectoryName(path: sourceFile) ?? "."),
-            path2: "corpora.json"
-        );
+    public static CorpusManifest Load(string path) {
         var dtos = (JsonSerializer.Deserialize(
             json: File.ReadAllText(path: path),
             jsonTypeInfo: CorpusJsonContext.Default.CorpusDtoArray

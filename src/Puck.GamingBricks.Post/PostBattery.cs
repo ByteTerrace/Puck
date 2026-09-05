@@ -4,9 +4,9 @@ namespace Puck.GamingBricks.Post;
 
 /// <summary>Runs an ordered list of <see cref="IPostStage{TContext}"/> once each, isolating failures so one stage's
 /// infrastructure failure (an exception, recorded as <see cref="PostVerdict.Infra"/>) never aborts the rest, timing
-/// each, and gathering the results into a <see cref="PostReport"/>. Stages run one after another: a stage that
-/// measures many cases parallelizes inside itself, where the cases are independent by construction, while the stages
-/// themselves may own threads, measure throughput, or hold the console.</summary>
+/// each, and gathering the results into a <see cref="PostReport"/>. A run of adjacent stages that declare
+/// <see cref="IPostStage{TContext}.IsConcurrent"/> executes at once and reports in list order; every other stage runs
+/// alone, because it measures many cases on every processor itself, measures throughput, or holds the console.</summary>
 /// <typeparam name="TContext">The battery's per-run context type.</typeparam>
 public sealed class PostBattery<TContext> {
     private readonly string m_banner;
@@ -34,26 +34,47 @@ public sealed class PostBattery<TContext> {
 
         var results = new List<PostStageResult>(capacity: m_stages.Count);
         var batteryStart = Stopwatch.GetTimestamp();
+        var index = 0;
 
-        foreach (var stage in m_stages) {
-            var stageStart = Stopwatch.GetTimestamp();
-            PostStageOutcome outcome;
+        while (index < m_stages.Count) {
+            var groupEnd = index;
 
-            try {
-                outcome = stage.Run(context: context);
-            } catch (Exception exception) {
-                outcome = PostStageOutcome.Infra(detail: $"threw {exception.GetType().Name}: {exception.Message}");
+            while (
+                (groupEnd < m_stages.Count) &&
+                m_stages[groupEnd].IsConcurrent
+            ) {
+                ++groupEnd;
             }
 
-            var duration = Stopwatch.GetElapsedTime(startingTimestamp: stageStart);
+            if (groupEnd == index) {
+                results.Add(item: RunOne(
+                    context: context,
+                    stage: m_stages[index]
+                ));
+                ++index;
 
-            Console.Out.WriteLine(value: $"[{stage.Tier}] {stage.Name}: {outcome.Verdict} | {PostReport.FormatDuration(duration: duration)} | {outcome.Detail}");
-            results.Add(item: new PostStageResult(
-                Duration: duration,
-                Name: stage.Name,
-                Outcome: outcome,
-                Tier: stage.Tier
-            ));
+                continue;
+            }
+
+            var group = new PostStageResult[(groupEnd - index)];
+            var first = index;
+
+            _ = Parallel.For(
+                body: offset => group[offset] = RunOne(
+                    context: context,
+                    stage: m_stages[(first + offset)],
+                    announce: false
+                ),
+                fromInclusive: 0,
+                toExclusive: group.Length
+            );
+
+            foreach (var result in group) {
+                Announce(result: result);
+                results.Add(item: result);
+            }
+
+            index = groupEnd;
         }
 
         return new PostReport(
@@ -61,5 +82,31 @@ public sealed class PostBattery<TContext> {
             duration: Stopwatch.GetElapsedTime(startingTimestamp: batteryStart),
             results: results
         );
+    }
+
+    private static void Announce(PostStageResult result) =>
+        Console.Out.WriteLine(value: $"[{result.Tier}] {result.Name}: {result.Outcome.Verdict} | {PostReport.FormatDuration(duration: result.Duration)} | {result.Outcome.Detail}");
+    private static PostStageResult RunOne(IPostStage<TContext> stage, TContext context, bool announce = true) {
+        var stageStart = Stopwatch.GetTimestamp();
+        PostStageOutcome outcome;
+
+        try {
+            outcome = stage.Run(context: context);
+        } catch (Exception exception) {
+            outcome = PostStageOutcome.Infra(detail: $"threw {exception.GetType().Name}: {exception.Message}");
+        }
+
+        var result = new PostStageResult(
+            Duration: Stopwatch.GetElapsedTime(startingTimestamp: stageStart),
+            Name: stage.Name,
+            Outcome: outcome,
+            Tier: stage.Tier
+        );
+
+        if (announce) {
+            Announce(result: result);
+        }
+
+        return result;
     }
 }

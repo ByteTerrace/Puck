@@ -9,6 +9,8 @@ internal sealed class PpuCompositionStage : IPostStage<PostContext> {
     public string Name => "ppu-composition";
     /// <inheritdoc/>
     public PostTier Tier => PostTier.A;
+    /// <inheritdoc/>
+    public bool IsConcurrent => true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {

@@ -86,9 +86,10 @@ public static class QueuedHostContractProbe {
         where THost : IMachineMemoryPeek {
         var region = new byte[length];
 
-        for (var offset = 0; (offset < length); ++offset) {
-            region[offset] = host.PeekByte(address: (start + offset));
-        }
+        host.PeekBytes(
+            address: start,
+            destination: region
+        );
 
         return region;
     }

@@ -14,6 +14,9 @@ internal sealed class SerialResumeCreditGuardStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
+    /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {

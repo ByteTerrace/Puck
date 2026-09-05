@@ -9,6 +9,8 @@ internal sealed class PpuTextRowStage : IPostStage<PostContext> {
     public string Name => "ppu-text-row";
     /// <inheritdoc/>
     public PostTier Tier => PostTier.A;
+    /// <inheritdoc/>
+    public bool IsConcurrent => true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {

@@ -6,21 +6,37 @@ cycle, render, state, and co-simulation diagnostics used for accuracy work.
 ## Run the battery
 
 ```powershell
-dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release
+dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release -- --fetch-corpora
+dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release -- --bios <GBA_bios.rom>
 ```
 
-Optional battery arguments:
+The first command fills the local corpus cache from the archives pinned in
+[corpora.json](corpora.json); it is needed once per version bump. Without a
+BIOS the BIOS-dependent stages skip.
 
 | Argument | Purpose |
 |---|---|
 | `--tier A|B|C` | Run one tier. |
 | `--filter <text>` | Run stages whose names contain the text. |
-| `--roms <directory>` | Override the reference-ROM root. |
-| `--games <directory>` | Override the commercial-ROM root. |
+| `--parallelism <n>` | Cases measured at once inside a corpus stage; default one per logical processor. |
+| `--bios <file>` | The 16 KiB BIOS image every machine boots with; a zeroed stub without it. |
+| `--roms <directory>` | A conformance-corpus root instead of the cached `gba-tests` corpus. |
+| `--fuzz <directory>` | A fuzz-corpus root instead of the cached `fuzzarm` corpus. |
+| `--games <directory>` | The commercial-ROM directory for the render-hash floors. |
+| `--accuracy-suite <file>` | The accuracy-suite ROM; its stage skips without it. |
+| `--ags <file>` | The AGS aging-cartridge ROM; its stage skips without it. |
+| `--link-game <file>` | A commercial multiplayer cartridge for `link-game-replay`; skips without it. |
+| `--solar-rom <file>` | A commercial solar-sensor cartridge for `solar-replay`; skips without it. |
 | `--artifacts <directory>` | Override `artifacts/agb-post`. |
+| `--fetch-corpora` | Fill the corpus cache from the manifest and exit. |
 
 Exit code 0 means every selected stage passed or skipped. Exit code 1 means a
 check failed. Exit code 2 means infrastructure prevented a stage from running.
+Every run writes `post-report.txt`, `summary.json`, and `results.junit.xml`
+(one test case per conformance ROM, fuzz ROM, or render floor) under the
+artifacts directory. Corpus stages run their cases on every processor at
+once; the self-contained Tier-A stages run at the same time as each other,
+except the throughput and zero-alloc measurements, which run alone.
 
 ## Tiers
 
@@ -28,24 +44,26 @@ check failed. Exit code 2 means infrastructure prevented a stage from running.
 |---|---|---|
 | A | CPU and bus smoke vectors; exhaustive BG/OBJ priority and transparency combinations with window/effect cases; text tile-row sampling; cycle-budget execution parity; determinism; state round trip; fork determinism; save round trip; bounded queued-host backpressure and immutable frame publication; throughput; zero-alloc-per-frame | none; execution-parity IRQ variants additionally use a verified retail BIOS when available |
 | B | conformance CPU/save/misc suites; ARM fuzz corpus; render hashes; accuracy suite; AGS aging cartridge | assets listed below; stages skip when absent |
-| C | deterministic multiplayer cable replay and a commercial link-game replay | synthetic replay needs none; commercial replay needs a retail BIOS and `PUCK_AGB_LINK_GAME` |
+| C | deterministic multiplayer cable replay and a commercial link-game replay | synthetic replay needs none; commercial replay needs a retail BIOS and `--link-game` |
 
 ## External assets
 
 None of these ship with the repository; each stage skips cleanly when its asset
-is absent. Corpus names and download sources are listed here as the one place
-they are needed (to fetch the right ROMs); the rest of the codebase refers to
-them only by role.
+is absent. The two public corpora are pinned by archive, version, and SHA-256
+in [corpora.json](corpora.json) and fetched once into
+`%LOCALAPPDATA%\Puck\corpora` (`~/.local/share/Puck/corpora` elsewhere);
+everything else is a per-machine file named on the command line.
 
 | Asset | Source | Configuration |
 |---|---|---|
-| 16 KiB AGB BIOS | (retail dump) | `PUCK_AGB_BIOS` |
-| conformance + PPU corpus root | jsmolka `gba-tests` (`github.com/jsmolka/gba-tests`) | `--roms` or `PUCK_AGB_TESTROMS` |
-| ARM fuzz corpus | `github.com/DenSinH/FuzzARM` — clone into a `FuzzARM` directory beside the corpus root | discovered beside `--roms` |
-| commercial-ROM root | (user ROMs) | `--games` or `PUCK_AGB_GAMES` |
-| accuracy-suite ROM | `mgba-emu/suite` | `PUCK_AGB_ACCURACY_SUITE` |
-| TCHK10 AGS aging cartridge | (aging-cartridge dump) | `PUCK_AGB_AGS` |
-| commercial multiplayer cartridge | (user ROM) | `PUCK_AGB_LINK_GAME` |
+| 16 KiB AGB BIOS | (retail dump) | `--bios` |
+| conformance + PPU corpus | jsmolka `gba-tests` | `corpora.json`, or `--roms` |
+| ARM fuzz corpus | `DenSinH/FuzzARM` | `corpora.json`, or `--fuzz` |
+| commercial-ROM root | (user ROMs) | `--games` |
+| accuracy-suite ROM | `mgba-emu/suite` (built from source) | `--accuracy-suite` |
+| TCHK10 AGS aging cartridge | (aging-cartridge dump) | `--ags` |
+| commercial multiplayer cartridge | (user ROM) | `--link-game` |
+| commercial solar-sensor cartridge | (user ROM) | `--solar-rom` |
 
 Diagnostics that depend on retail BIOS timing reject replacement or unknown
 images unless `--allow-replacement-bios` is supplied deliberately. Missing

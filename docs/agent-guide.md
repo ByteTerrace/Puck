@@ -122,7 +122,8 @@ pending one.
 ```powershell
 dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --fetch-corpora
 dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --lane gate
-dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release
+dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release -- --fetch-corpora
+dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release -- --bios <GBA_bios.rom>
 ```
 
 The Humble battery's reference corpora are declared in its `corpora.json`
@@ -133,9 +134,10 @@ the recorded fails and inconclusives; a plain run measures both. Every run
 writes `summary.json`, `results.junit.xml`, and a candidate ledger under
 `artifacts/gb-post`; `--accept` promotes the candidate under the refusal rules
 in the project README. Iterate with `--filter`; never chain runs to record.
-The Advanced battery still reads its corpora from the `PUCK_AGB_*` variables
-below and exposes lockstep, trace, I/O-dump, render-hash, and divergence
-diagnostics; see its project README.
+The Advanced battery works the same way: its corpora are pinned in its own
+`corpora.json`, the BIOS and commercial cartridges are command-line flags, and
+it exposes lockstep, trace, I/O-dump, render-hash, and divergence diagnostics;
+see its project README.
 
 ### Performance changes
 
@@ -178,9 +180,9 @@ behavior; the procedure above is the complete add-a-field procedure.
 configuration belongs in the world document; live operations belong in console
 verbs.
 
-The remaining environment variables are engine, launcher, GBA-emulator, or
-content-development diagnostics (the Humble battery takes its inputs on the
-command line: `--roms`, `--sst`, `--link-rom`, `--trade-rom`):
+The remaining environment variables are engine, launcher, or
+content-development diagnostics (both emulator batteries take their inputs on
+the command line; see their READMEs):
 
 | Variable | Purpose |
 |---|---|
@@ -191,8 +193,7 @@ command line: `--roms`, `--sst`, `--link-rom`, `--trade-rom`):
 | `PUCK_D3D12_DEBUG` | Opt in to the Direct3D 12 debug layer. |
 | `PUCK_CAPTURE_FRAME=<number>` | Delay one-shot capture for a world-document run. |
 | `PUCK_FLAGSHIPS_REGENERATE=1` | Regenerate committed flagship creation documents. |
-| `PUCK_AGB_BIOS`, `PUCK_AGB_TESTROMS`, `PUCK_AGB_ACCURACY_SUITE`, `PUCK_AGB_AGS`, `PUCK_AGB_GAMES` | GBA reference inputs. |
-| `PUCK_AGB_SOLARROM` | Commercial Boktai (solar-sensor) cartridge for `SolarReplayStage` (skip when absent). |
+| `PUCK_AGB_BIOS`, `PUCK_ARES_COSIM`, `PUCK_AGB_FULLBOOT`, `PUCK_AGS_TRACE`, `PUCK_AGB_SUITE_FOCUS` | Read only by the Advanced battery's diagnostic modes (lockstep co-simulation, full-boot renders, AGS tracing, suite focus); the battery itself takes every input on the command line. |
 
 GPU timing has no environment variable. Arm it with the `gpu.timing` feature
 switch, the `world.timing` verb, `host.timing`, `--timing`, or the benchmark

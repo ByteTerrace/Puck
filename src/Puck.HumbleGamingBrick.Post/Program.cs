@@ -45,7 +45,7 @@ var parallelism = int.Parse(
         name: "--parallelism"
     ) ?? "0")
 );
-var corpora = CorpusManifest.Load();
+var corpora = CorpusManifest.Load(path: CorpusManifest.BesideSource());
 
 // --fetch-corpora fills the local cache from the manifest's pinned archives and exits; a build agent runs it once per
 // cache key, a developer once per version bump.

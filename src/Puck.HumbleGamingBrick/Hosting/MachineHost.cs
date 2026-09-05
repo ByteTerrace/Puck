@@ -66,6 +66,12 @@ public sealed class MachineHost : QueuedMachineHost, IMachineMemoryPeek, IReconf
     public byte PeekByte(int address) =>
         Worker.PeekByte(address: address);
     /// <inheritdoc/>
+    public void PeekBytes(int address, Span<byte> destination) =>
+        Worker.PeekBytes(
+        address: address,
+        destination: destination
+    );
+    /// <inheritdoc/>
     public void PokeByte(int address, byte value) =>
         Worker.PokeByte(
         address: address,
