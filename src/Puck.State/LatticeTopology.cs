@@ -19,6 +19,9 @@ public enum TopologyKind : byte {
     /// <summary>An explicit graph: authored cells with centres and directed edges along named direction slots — a
     /// territory map, a star board, or any tiling a tool emits — with no axial structure and identity symmetry alone.</summary>
     Graph,
+    /// <summary>A regular, Archimedean, or Penrose tiling within a radius, generated into a graph: its tiles are the
+    /// cells, its shared edges the adjacency, its edge normals the direction slots.</summary>
+    Tiling,
     /// <summary>A box of width by layers by depth cells with the 26 space directions, indexed by (layer times depth
     /// plus z) times width plus x.</summary>
     Box,
@@ -70,6 +73,7 @@ public interface IDiscreteLatticeTopology {
 [JsonDerivedType(typeof(Hex), typeDiscriminator: "hex")]
 [JsonDerivedType(typeof(Box), typeDiscriminator: "box")]
 [JsonDerivedType(typeof(Graph), typeDiscriminator: "graph")]
+[JsonDerivedType(typeof(Tiling), typeDiscriminator: "tiling")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public abstract record LatticeTopology(string Name, DocumentVector3 Origin, float CellSize) {
     /// <summary>A dense field or a discrete grid, ring, hex, or box — the case's own kind, never authored.</summary>
@@ -154,6 +158,21 @@ public abstract record LatticeTopology(string Name, DocumentVector3 Origin, floa
         /// <inheritdoc/>
         [JsonIgnore]
         public override TopologyKind Kind => TopologyKind.Box;
+    }
+    /// <summary>A tiling generated within a radius — the tiles whose centres lie within <c>radius</c> edge lengths of
+    /// the origin, <c>cellSize</c> being the edge length in world units. It is the <see cref="Graph"/>
+    /// <see cref="TilingGenerator.Generate"/> materializes: cell <c>i</c> is the i-th tile outward from the origin,
+    /// directions are the edge normals by angle (<c>a0</c>, <c>a30</c>, …, counterclockwise from +X), and a
+    /// position resolves to the nearest tile centre within half an edge. The symmetry group is the identity.</summary>
+    /// <param name="Name">The topology's name.</param>
+    /// <param name="Origin">The frame the tiling is laid in.</param>
+    /// <param name="CellSize">The edge length, in world units.</param>
+    /// <param name="Family">The tiling.</param>
+    /// <param name="Radius">The patch radius in edge lengths, at least 1.</param>
+    public sealed record Tiling(string Name, DocumentVector3 Origin, float CellSize, TilingFamily Family, int Radius) : LatticeTopology(Name, Origin, CellSize) {
+        /// <inheritdoc/>
+        [JsonIgnore]
+        public override TopologyKind Kind => TopologyKind.Tiling;
     }
     /// <summary>An explicit graph. Cell <c>i</c> is <c>cells[i]</c>; its centre is relative to <c>origin</c> in world
     /// units, and <c>cellSize</c> is the resolution radius — a position within half a cell size of a centre resolves to

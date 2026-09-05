@@ -740,9 +740,11 @@ spelling). `state.lattices` declares one or more topologies (name, origin,
 `cellSize`, `width` × `depth` × `layers`, `stepEveryTicks`, `reactions`); at
 most one is `Field`-kind and drives THIS trait (`WorldTopologyCompilation.
 FindPhysical` — reactions, lattice-derived geometry) — the rest are discrete
-`Grid`/`Ring`/`Hex`/`Graph` topologies: a placement's `board` facet
-(`$board:cellOf`/`offset`, `world.tabletop`) anchors a `Grid`, a `Hex`, or a
-`Graph` topology (`Ring` refuses it) — a grid resolves positions against its
+`Grid`/`Ring`/`Hex`/`Graph`/`Tiling` topologies: a placement's `board` facet
+(`$board:cellOf`/`offset`, `world.tabletop`) anchors a `Grid`, a `Hex`, a
+`Graph`, or a `Tiling` (`family`: triangular, kagome, truncatedSquare, rhombitrihexagonal, truncatedHexagonal,
+elongatedTriangular, truncatedTrihexagonal, penrose; `radius` in edge lengths; a graph generated at boot, directions
+`a<degrees>`) topology (`Ring` refuses it) — a grid resolves positions against its
 rectangular X/Z frame, a hex against its lattice (cell `(q, r)` at origin +
 cellSize · (q − r/2, 0, r·√3/2), ordinals in `HexagonalIndex` ring order,
 directions `E, SE, SW, W, NW, NE`), a graph to the nearest authored centre

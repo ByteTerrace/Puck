@@ -20,7 +20,7 @@ process that composes everything is [`Puck.World`](../Puck.World/README.md).
 ## Discrete boards, cards, and turns
 
 The discrete substrate shares `state.lattices` with physical fields. Declare a
-`state.lattices` entry `$type: "grid"`, `"ring"`, `"hex"`, or `"graph"` (`Puck.State.LatticeTopology`'s
+`state.lattices` entry `$type: "grid"`, `"ring"`, `"hex"`, `"graph"`, or `"tiling"` (`Puck.State.LatticeTopology`'s
 discrete cases — a `"box"` case exists too, for a 3-layer discrete board; the document's own
 `"field"` case is `WorldFieldTopology`, registered through `WorldJsonVocabulary`) and bind an
 integer/boolean row through `domain: { "$type": "cellsOf", "topology": "map", "empty": 0 }`. Only
@@ -48,6 +48,15 @@ distinct directions; a territory map (Risk), a star board (Nine Men's Morris),
 or a tiling a tool emits. `$board:cellOf` resolves the nearest centre within
 half a `cellSize`; `$board:offset` refuses a graph (there is no axis); its
 symmetry group is the identity, so `$board:canonical` is the plain fingerprint.
+A `tiling` (`family`, `radius`) is a graph generated at boot — `triangular`,
+`kagome` (3.6.3.6), `truncatedSquare` (4.8.8), `rhombitrihexagonal` (3.4.6.4),
+`truncatedHexagonal` (3.12.12), `elongatedTriangular` (3.3.3.4.4),
+`truncatedTrihexagonal` (4.6.12), or `penrose` (P3 rhombs) — of every tile whose
+centre lies within `radius` edge lengths of the origin, `cellSize` being the edge
+length; ordinal 0 is the tile at the origin and ordinals grow outward, directions
+are the edge normals by angle (`a0`, `a30`, … counterclockwise from +X, opposite
+being +180°), and a position resolves to the nearest tile centre within half an
+edge. The two snub tilings (3.3.4.3.4, 3.3.3.3.6) are not generated.
 All shapes still carry the registry's required `origin` and `cellSize` fields.
 Missing board entries read as the declared `empty` value. Wrapped scans stop
 before revisiting their origin.

@@ -1373,9 +1373,14 @@ unless one-way. A territory map, a star board, or a tiling a tool emits is a
 document, not a new runtime; the constraints are the table's own — at most
 4,096 cells, at most 64 directions (a `$match:` direction mask is one word),
 nearest-centre resolution within half a cell size, no axial offset, and the
-identity as its whole symmetry group. Archimedean tilings and a Penrose
-inflation, when wanted, are generators that emit a graph, on the same terms
-`radius` generates a hex disk.
+identity as its whole symmetry group. The `tiling` kind is such a generator:
+the triangular, kagome, truncated-square, rhombitrihexagonal,
+truncated-hexagonal, elongated-triangular, and truncated-trihexagonal uniform
+tilings from their unit cells, and the Penrose P3 rhombs by Robinson-triangle
+inflation from a sun, each cut to a radius in edge lengths and compiled through
+the graph path with edge normals as its directions — boot-time geometry in
+doubles whose vertex merge quantizes to a fine grid, so the graph is the same
+on every machine. The two snub tilings wait on a vertex-configuration grower.
 
 **Placements compose, and a game addresses its bodies by placement.** A
 placement may name a `parent`: its position and yaw become a local offset and

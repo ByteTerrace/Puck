@@ -409,6 +409,50 @@
             "additionalProperties": false
           },
           {
+            "description": "A tiling generated within a radius \u2014 the tiles whose centres lie within radius edge lengths of the origin, cellSize being the edge length in world units. It is the GraphGenerate materializes: cell i is the i-th tile outward from the origin, directions are the edge normals by angle (a0, a30, \u2026, counterclockwise from \u002BX), and a position resolves to the nearest tile centre within half an edge. The symmetry group is the identity.",
+            "properties": {
+              "$type": {
+                "const": "tiling"
+              },
+              "family": {
+                "description": "The tiling.",
+                "enum": [
+                  "Triangular",
+                  "Kagome",
+                  "TruncatedSquare",
+                  "Rhombitrihexagonal",
+                  "TruncatedHexagonal",
+                  "ElongatedTriangular",
+                  "TruncatedTrihexagonal",
+                  "Penrose"
+                ]
+              },
+              "radius": {
+                "description": "The patch radius in edge lengths, at least 1.",
+                "type": "integer"
+              },
+              "name": {
+                "description": "The topology\u0027s name \u2014 what a row\u0027s cellsOf domain references.",
+                "type": "string"
+              },
+              "origin": {
+                "description": "The minimum corner, world units."
+              },
+              "cellSize": {
+                "description": "The cubic cell edge, world units.",
+                "type": "number"
+              }
+            },
+            "required": [
+              "family",
+              "radius",
+              "name",
+              "origin",
+              "cellSize"
+            ],
+            "additionalProperties": false
+          },
+          {
             "description": "The physical state.lattices topology: a scalar field over the lattice\u0027s footprint, evolved by reactions each StepEveryTicks \u2014 the document\u0027s own case of LatticeTopology, registered under the field discriminator beside the engine\u0027s discrete cases.",
             "properties": {
               "$type": {

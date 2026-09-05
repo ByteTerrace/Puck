@@ -68,8 +68,26 @@ public static class TopologyCompilation {
         LatticeTopology.Hex hex => TryValidateHex(hex, out reason),
         LatticeTopology.Box box => TryValidateBox(box, out reason),
         LatticeTopology.Graph graph => TryValidateGraph(graph, out reason),
-        _ => Refuse(out reason, "a discrete topology requires kind grid, ring, hex, box, or graph"),
+        LatticeTopology.Tiling tiling => TryValidateTiling(tiling, out reason),
+        _ => Refuse(out reason, "a discrete topology requires kind grid, ring, hex, box, graph, or tiling"),
     };
+
+    private static bool TryValidateTiling(LatticeTopology.Tiling tiling, out string reason) {
+        if (!TryValidateFrame(tiling.CellSize, tiling.Origin, out reason)) {
+            return false;
+        }
+        if (!Enum.IsDefined(tiling.Family)) {
+            return Refuse(out reason, $"'{tiling.Family}' is not a tiling family");
+        }
+        if (tiling.Radius < 1) {
+            return Refuse(out reason, "a tiling requires a radius of at least 1 edge length");
+        }
+        var graph = TilingGenerator.Generate(tiling);
+        if (graph.Cells.Count > MaxCells) {
+            return Refuse(out reason, $"a {tiling.Family} tiling of radius {tiling.Radius} holds {graph.Cells.Count} tiles; a discrete topology admits at most {MaxCells}");
+        }
+        return TryValidateGraph(graph, out reason);
+    }
 
     // 1..MaxCells cells with distinct non-empty ids and Q48.16 centres; 1..MaxDirections distinct directions whose
     // opposites are declared and involutive; edges over declared ids and directions, never a self-loop, and never two
@@ -324,6 +342,7 @@ public static class TopologyCompilation {
             LatticeTopology.Hex hex => (1, 1, 1, TopologyWrap.None, 0f, 0f, hex.Radius, hex.Directions, hex.ElementAliases),
             LatticeTopology.Box box => (box.Width, box.Depth, box.Layers, TopologyWrap.None, 0f, box.LayerHeight, 0, box.Directions, box.ElementAliases),
             LatticeTopology.Graph graph => (graph.Cells.Count, 1, 1, TopologyWrap.None, 0f, 0f, 0, null, null),
+            LatticeTopology.Tiling tiling => (TilingGenerator.Generate(tiling).Cells.Count, 1, 1, TopologyWrap.None, 0f, 0f, tiling.Radius, null, null),
             _ => throw new InvalidOperationException($"'{topology?.Kind}' is not a discrete TopologyKind"),
         };
 
@@ -350,7 +369,10 @@ public static class TopologyCompilation {
         ArgumentNullException.ThrowIfNull(argument: topology);
 
         if (topology is LatticeTopology.Graph graph) {
-            return CompileGraph(graph: graph, anchorOffset: anchorOffset);
+            return CompileGraph(graph: graph, anchorOffset: anchorOffset, kind: TopologyKind.Graph, radius: 0);
+        }
+        if (topology is LatticeTopology.Tiling tiling) {
+            return CompileGraph(graph: TilingGenerator.Generate(tiling), anchorOffset: anchorOffset, kind: TopologyKind.Tiling, radius: tiling.Radius);
         }
 
         // Cells are (X, Y, Z) triples: a grid or ring keeps Z at 0 and Y as its depth axis, a hex uses (q, r), a box
@@ -441,7 +463,7 @@ public static class TopologyCompilation {
     // A validated graph (TryValidateGraph) compiles straight into the flat adjacency table every other kind fills
     // through its coordinates: slot (cell, direction) holds the edge's destination, the implied reverse edge fills
     // the destination's opposite slot, and every unfilled slot reads -1.
-    private static CompiledTopology CompileGraph(LatticeTopology.Graph graph, Vector3 anchorOffset) {
+    private static CompiledTopology CompileGraph(LatticeTopology.Graph graph, Vector3 anchorOffset, TopologyKind kind, int radius) {
         var count = graph.Cells.Count;
         var directionCount = graph.Directions.Count;
         var ids = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -478,7 +500,7 @@ public static class TopologyCompilation {
         }
         var identity = new int[count];
         for (var index = 0; index < count; index++) { identity[index] = index; }
-        return new CompiledTopology(TopologyKind.Graph, count, directionCount, neighbours, opposite, count, 1, 0, TopologyWrap.None,
+        return new CompiledTopology(kind, count, directionCount, neighbours, opposite, count, 1, radius, TopologyWrap.None,
             new FixedVector3(
                 X: FixedQ4816.FromDouble(graph.Origin.X + anchorOffset.X),
                 Y: FixedQ4816.FromDouble(graph.Origin.Y + anchorOffset.Y),

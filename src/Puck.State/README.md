@@ -58,8 +58,8 @@ Nothing here carries a `World` name — a state library names no world.
   `StatePhase`/`PhaseGuard` (a guarded submission generation).
 - *Domains:* the `StateDomain` union (`slot`, `keys`, `keysOf`, `cellsOf`,
   `ring`), closed over `Union.cs`' `[Union]` marker.
-- *Topologies:* `LatticeTopology` (`grid`, `ring`, `hex`, `box`, `graph` — a
-  host registers its dense `field` case as a further derived record),
+- *Topologies:* `LatticeTopology` (`grid`, `ring`, `hex`, `box`, `graph`, `tiling`
+  — a host registers its dense `field` case as a further derived record),
   `TopologyKind`/`TopologyWrap`/`TopologyDirection`/`TopologyElementAlias`,
   `CompiledTopology` (adjacency, opposites, point-group images, element
   aliases, cell centres, position-to-cell, axial offsets), and
@@ -74,7 +74,13 @@ Nothing here carries a `World` name — a state library names no world.
   fill one slot per (cell, direction) and, unless one-way, the reverse slot —
   a territory map, a star board, or any tiling a tool emits; position-to-cell
   is the nearest centre within half a `cellSize`, there is no axial offset, and
-  the symmetry group is the identity.
+  the symmetry group is the identity. A tiling (`TilingGenerator`) is a graph
+  generated within a radius: the triangular, kagome, truncated-square,
+  rhombitrihexagonal, truncated-hexagonal, elongated-triangular, and
+  truncated-trihexagonal uniform tilings from their unit cells, and the Penrose
+  P3 rhombs by Robinson-triangle inflation from a sun; tiles are cells outward
+  from the origin, shared sides are adjacency, and edge normals (`a0`, `a30`, …)
+  are the direction slots.
 - *The catalog and the reader:* `StateCatalog` compiles a section into
   `StateDescriptor`s and catalog-bound `StateHandle`s by `StateLane`
   (`Document`, `Participant`, `Identity`) and `StateStorageShape`;
