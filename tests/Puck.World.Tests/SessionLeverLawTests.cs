@@ -20,7 +20,6 @@ public sealed class SessionLeverLawTests {
         WorldSessionLevers.Compose(
             audio: new RecordingAudioLever(),
             bindingBar: visibility,
-            instrumentClock: new RecordingInstrumentClockLever(),
             pacing: new PresentPacingControl(initialTargetHertz: null),
             settings: new WorldRenderSettings(defaults: Fixtures.BuildDocument().Render)
         );
@@ -79,7 +78,6 @@ public sealed class SessionLeverLawTests {
             WorldSessionLevers.AmbientOcclusionQuality,
             WorldSessionLevers.BindingBar,
             WorldSessionLevers.FarBound,
-            WorldSessionLevers.InstrumentClock,
             WorldSessionLevers.MasterVolume,
             WorldSessionLevers.RenderScale,
             WorldSessionLevers.ShadowAccumulation,
@@ -278,10 +276,6 @@ public sealed class SessionLeverLawTests {
 
     private sealed class RecordingAudioLever : IWorldAudioLever {
         public void SetMasterVolume(float value) {
-        }
-    }
-    private sealed class RecordingInstrumentClockLever : IWorldInstrumentClockLever {
-        public void SetInstrumentClockEngaged(int seat, bool engaged) {
         }
     }
     private sealed class RecordingClientSink : IClientSink {

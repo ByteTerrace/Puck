@@ -1475,8 +1475,8 @@ each piece:
   `puck.audio.v1` document rather than a cartridge ROM, booted through `Puck.HumbleGamingBrick`; while a
   seat holds the application, `WorldServer.InstrumentClockBoundary` folds the instrument's own authored
   tempo into the world's `MusicClock` boundary each tick (holding the application is the whole gate — a
-  session lever cannot feed simulation state). `instrument.state`/`world.instrument-clock` are its
-  read-back/echo; `tests/Puck.World.Canaries/instrument-clock-source` proves the path end to end.
+  session lever cannot feed simulation state, so none exists beside the gate). `instrument.state` is its
+  read-back; `tests/Puck.World.Canaries/instrument-clock-source` proves the path end to end.
 - **Voice is synthesized babble**, not recorded lines: pitch, timbre, and cadence authored on the
   identity; text renders as babble plus caption. Deterministic, asset-free, localization-free.
 - **Music, instrument, and voice documents are identity-owned libraries**, referenced from a world's audio

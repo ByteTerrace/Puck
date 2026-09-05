@@ -1307,6 +1307,8 @@ public sealed partial class WorldServer {
             // SetPopulationDefaults is a THIRD timing class: the census figures are document defaults (next boot), but
             // the distribution is LIVE for future activations while INERT for bodies already standing — spell out the split.
             WorldMutation.SetPopulationDefaults => $"{Describe(mutation: mutation)} applied — census figures next boot; spawn policy live for future activations, standing bodies unmoved",
+            WorldMutation.SetPopulationDistribution => $"{Describe(mutation: mutation)} applied — spawn policy live for future activations, standing bodies unmoved",
+            WorldMutation.SetPopulationCensus => $"{Describe(mutation: mutation)} applied — census figures next boot",
             _ => $"{Describe(mutation: mutation)} applied{(documentOnly
             ? " — document default (next boot; live levers unchanged)"
             : string.Empty)}",

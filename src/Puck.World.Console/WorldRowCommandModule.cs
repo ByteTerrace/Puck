@@ -612,16 +612,16 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             select: static server => [.. server.Definition.SpawnPoints]
         )
     ),
-        // The two views sub-rows RMW the CURRENT Views row (SetViewDefaults carries the whole section) — the same
-        // read-modify-write world.row.set views.seatRig/world.view.look performed before folding into this table.
+        // A sub-row of a whole-section row submits its own field-scoped mutation, composed against the section as it
+        // stands when the mutation applies — never a whole-section replacement built here from the live document,
+        // which a sibling sub-row's edit queued in the same tick would revert.
         ["views.seatRig"] = new RowSection(
-        ReadsLiveDocument: true,
         RowType: typeof(WorldCameraProgram),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldCameraProgram,
-            toMutation: static (server, principal, rig) => new WorldMutation.SetViewDefaults(
+            toMutation: static (principal, rig) => new WorldMutation.SetViewSeatRig(
                 Principal: principal,
-                Views: (server.Definition.Views with { SeatRig = rig })
+                SeatRig: rig
             )
         ),
         Remove: null,
@@ -631,13 +631,12 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         )
     ),
         ["views.seatControl"] = new RowSection(
-        ReadsLiveDocument: true,
         RowType: typeof(WorldSeatViewControl),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldSeatViewControl,
-            toMutation: static (server, principal, control) => new WorldMutation.SetViewDefaults(
+            toMutation: static (principal, control) => new WorldMutation.SetViewSeatControl(
                 Principal: principal,
-                Views: (server.Definition.Views with { SeatControl = control })
+                SeatControl: control
             )
         ),
         Remove: null,
@@ -647,13 +646,12 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         )
     ),
         ["playerDefaults.seatLook"] = new RowSection(
-        ReadsLiveDocument: true,
         RowType: typeof(WorldSeatCameraFeel),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldSeatCameraFeel,
-            toMutation: static (server, principal, look) => new WorldMutation.SetPlayerDefaults(
+            toMutation: static (principal, look) => new WorldMutation.SetPlayerSeatLook(
                 Principal: principal,
-                Defaults: (server.Definition.PlayerDefaults with { SeatLookRaw = look })
+                SeatLook: look
             )
         ),
         Remove: null,

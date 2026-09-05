@@ -1,7 +1,6 @@
 using System.Globalization;
 using Puck.Commands;
 using Puck.Maths;
-using Puck.World.Protocol;
 using Puck.World.Server;
 
 namespace Puck.World;
@@ -43,7 +42,8 @@ internal sealed partial class PlayerCommandModule {
     }
     // Shared front matter for body.attach/body.detach: resolve the target, refuse by name when the target's OWN kit
     // carries no tether facet or no channel for this lane (a kit authoring none keeps every body's tether inert),
-    // then press the resolved ordinal for one host step — the same edge a bound pad chord would fire, scripted.
+    // then press that channel BY NAME through the same door body.press takes — routed to a transferred seat's
+    // destination, or drained locally — for one host step, the same edge a bound pad chord would fire, scripted.
     private CommandResult PressTetherLane(CommandContext context, in WireArgs args, Func<WorldBody, int> ordinalOf, string laneName, string verb) {
         var (player, index, error) = ResolveTarget(
             args: in args,
@@ -65,22 +65,21 @@ internal sealed partial class PlayerCommandModule {
             return CommandResult.Error(output: $"[{verb}: body:{index}'s kit tether facet declares no {laneName} channel]");
         }
 
-        if (ReplayDriveError(verb: verb) is { } driveError) {
-            return driveError;
-        }
+        var pressed = PressChannel(
+            context: context,
+            args: in args,
+            verb: verb,
+            index: index,
+            channelName: m_channels.Name(ordinal: ordinal)!,
+            value: FixedQ4816.One,
+            holdSeconds: null,
+            authoredHoldSeconds: 0f,
+            requiredCount: 0,
+            routed: out var routed
+        );
 
-        m_link.SubmitCommand(command: new WorldCommand.PressChannel(
-            Principal: context.ActingPrincipal(),
-            EntityIndex: index,
-            ChannelOrdinal: ordinal,
-            Value: FixedQ4816.One,
-            HoldSeconds: null
-        ));
-
-        var refusal = m_population.PressRefusal(bodyIndex: index);
-
-        if (refusal is { Length: > 0 }) {
-            return new CommandResult(Output: $"[{verb}: body:{index} refused → {refusal}]");
+        if (routed || pressed.IsError || (pressed.Output?.Contains(value: "refused", comparisonType: StringComparison.Ordinal) ?? false)) {
+            return pressed;
         }
 
         return new CommandResult(Output: DescribeTether(
@@ -146,12 +145,13 @@ internal sealed partial class PlayerCommandModule {
             return CommandResult.Error(output: $"[body.reel: body:{index}'s kit tether facet declares no reel channel]");
         }
 
+        var authoredHoldSeconds = 0f;
         float? holdSeconds = null;
 
         if (args.Count >= 2) {
             if (!args.TryFloat(
                 index: 1,
-                value: out var authoredHoldSeconds
+                value: out authoredHoldSeconds
             )) {
                 return CommandResult.Error(output: "[body.reel: could not parse <holdSeconds> as a number]");
             }
@@ -159,28 +159,18 @@ internal sealed partial class PlayerCommandModule {
             holdSeconds = authoredHoldSeconds;
         }
 
-        if (ReplayDriveError(verb: "body.reel") is { } driveError) {
-            return driveError;
-        }
-
-        m_link.SubmitCommand(command: new WorldCommand.PressChannel(
-            Principal: context.ActingPrincipal(),
-            EntityIndex: index,
-            ChannelOrdinal: ordinal,
-            Value: FixedQ4816.FromDouble(value: rate),
-            HoldSeconds: holdSeconds
-        ));
-
-        var refusal = m_population.PressRefusal(bodyIndex: index);
-
-        if (refusal is { Length: > 0 }) {
-            return new CommandResult(Output: $"[body.reel: body:{index} refused → {refusal}]");
-        }
-
-        return new CommandResult(Output: DescribeTether(
-            body: player,
-            index: index
-        ));
+        return PressChannel(
+            context: context,
+            args: in args,
+            verb: "body.reel",
+            index: index,
+            channelName: m_channels.Name(ordinal: ordinal)!,
+            value: FixedQ4816.FromDouble(value: rate),
+            holdSeconds: holdSeconds,
+            authoredHoldSeconds: authoredHoldSeconds,
+            requiredCount: 2,
+            routed: out _
+        );
     }
     private CommandResult HoldHandler(CommandContext context, WireArgs args) {
         if (args.Count > 1) {

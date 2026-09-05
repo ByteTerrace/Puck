@@ -212,8 +212,7 @@ internal static class WorldBootComposition {
             settings: sp.GetRequiredService<WorldRenderSettings>(),
             pacing: sp.GetRequiredService<PresentPacingControl>(),
             audio: sp.GetRequiredService<WorldAudioDirector>(),
-            bindingBar: sp.GetRequiredService<WorldBindingBarVisibility>(),
-            instrumentClock: sp.GetRequiredService<WorldAudioDirector>()
+            bindingBar: sp.GetRequiredService<WorldBindingBarVisibility>()
         ));
 
         // The frame-rate witness (a plain 2-second rolling window over presentation-fed deltas — no device

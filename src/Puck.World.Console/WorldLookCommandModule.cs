@@ -152,11 +152,9 @@ public sealed class WorldLookCommandModule(IWorldConsoleAuthority authority, ISe
                     return error;
                 }
 
-                var current = server.Definition.Population;
-
-                return link.Submit(mutation: new WorldMutation.SetPopulationDefaults(
+                return link.Submit(mutation: new WorldMutation.SetPopulationDistribution(
                     Principal: context.ActingPrincipal(),
-                    Population: (current with { DistributionRaw = distribution })
+                    Distribution: distribution
                 ));
             },
             routing: CommandRouting.Simulation

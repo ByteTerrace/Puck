@@ -277,10 +277,7 @@ internal sealed partial class PlayerCommandModule {
             return CommandResult.Error(output: "[body.press: expected a channel name — plus an optional value, hold time, and body index]");
         }
 
-        // Layout: <channel> [value] [holdSeconds] [body]. Resolve the console-facing seat before the channel:
-        // after a transfer the destination document owns both the body's channel vocabulary and the command door.
-        // Looking either up in the boot world makes an otherwise fully routed seat lose action buttons precisely at
-        // an invisible boundary (movement continued to work because body.fly already followed this route).
+        // Layout: <channel> [value] [holdSeconds] [body].
         if (!WorldArgs.TryParseIndex(
             args: in args,
             at: 3,
@@ -291,6 +288,58 @@ internal sealed partial class PlayerCommandModule {
         )) {
             return CommandResult.Error(output: $"[body.press: body index must be an integer 0..{(m_population.Capacity - 1)}]");
         }
+
+        var value = FixedQ4816.One;
+
+        if (args.Count >= 2) {
+            if (!args.TryFloat(
+                index: 1,
+                value: out var authoredValue
+            )) {
+                return CommandResult.Error(output: "[body.press: could not parse <value> as a number]");
+            }
+
+            value = FixedQ4816.FromDouble(value: authoredValue);
+        }
+
+        float? holdSeconds = null;
+        var authoredHoldSeconds = 0f;
+
+        if (args.Count >= 3) {
+            if (!args.TryFloat(
+                index: 2,
+                value: out authoredHoldSeconds
+            )) {
+                return CommandResult.Error(output: "[body.press: could not parse <holdSeconds> as a number]");
+            }
+
+            // Sent raw, unclamped — the server is the sole authority over both caps (the deciding grant's ceiling
+            // and the engine backstop) and the one that labels which bound the result. NaN and non-positive values
+            // are handled authoritatively server-side (PressHoldCapKind.Ignored).
+            holdSeconds = authoredHoldSeconds;
+        }
+
+        return PressChannel(
+            context: context,
+            args: in args,
+            verb: "body.press",
+            index: index,
+            channelName: args[0].ToString(),
+            value: value,
+            holdSeconds: holdSeconds,
+            authoredHoldSeconds: authoredHoldSeconds,
+            requiredCount: 3,
+            routed: out _
+        );
+    }
+    // The ONE press door body.press and the tether wrappers (body.attach/detach/reel) share. Resolves the
+    // console-facing seat before the channel: after a transfer the destination document owns both the body's channel
+    // vocabulary and the command door, so a routed seat's press travels to the destination's endpoint by channel NAME
+    // and is echoed as a request (its refusal surfaces through wire.errors); a local body's press drains synchronously
+    // and reads back the authoritative refusal or hold outcome. Looking either up in the boot world makes an otherwise
+    // fully routed seat lose action buttons precisely at an invisible boundary.
+    private CommandResult PressChannel(CommandContext context, in WireArgs args, string verb, int index, string channelName, FixedQ4816 value, float? holdSeconds, float authoredHoldSeconds, int requiredCount, out bool routed) {
+        routed = false;
 
         WorldAuthorityRoute? routedLocation = null;
         var targetChannels = m_channels;
@@ -312,21 +361,19 @@ internal sealed partial class PlayerCommandModule {
             }
         }
 
-        var channelName = args[0].ToString();
-
         if (!targetChannels.TryGetOrdinal(
             name: channelName,
             ordinal: out var ordinal
         )) {
-            return CommandResult.Error(output: $"[body.press: unknown channel '{channelName}' — see world.affordances]");
+            return CommandResult.Error(output: $"[{verb}: unknown channel '{channelName}' — see world.affordances]");
         }
 
         if (routedLocation is null) {
             // Preserve the boot body's joined/active refusal and pending-seat semantics when no handoff occurred.
             var (player, _, error) = ResolveTarget(
                 args: in args,
-                requiredCount: 3,
-                verb: "body.press"
+                requiredCount: requiredCount,
+                verb: verb
             );
 
             if (player is null) {
@@ -335,30 +382,18 @@ internal sealed partial class PlayerCommandModule {
 
             if (PendingTapeError(
                 index: index,
-                verb: "body.press"
+                verb: verb
             ) is { } pendingError) {
                 return pendingError;
             }
         }
 
         var shape = targetChannels.Shape(ordinal: ordinal);
-        var value = FixedQ4816.One;
-
-        if (args.Count >= 2) {
-            if (!args.TryFloat(
-                index: 1,
-                value: out var authoredValue
-            )) {
-                return CommandResult.Error(output: "[body.press: could not parse <value> as a number]");
-            }
-
-            value = FixedQ4816.FromDouble(value: authoredValue);
-        }
 
         var shapeError = shape switch {
-            ChannelShape.Binary when ((value != FixedQ4816.Zero) && (value != FixedQ4816.One)) => $"[body.press: channel \"{channelName}\" is binary — value must be 0 or 1]",
-            ChannelShape.Unipolar when ((value < FixedQ4816.Zero) || (value > FixedQ4816.One)) => $"[body.press: channel \"{channelName}\" is unipolar — value must be in [0, 1]]",
-            ChannelShape.Bipolar when ((value < -FixedQ4816.One) || (value > FixedQ4816.One)) => $"[body.press: channel \"{channelName}\" is bipolar — value must be in [-1, 1]]",
+            ChannelShape.Binary when ((value != FixedQ4816.Zero) && (value != FixedQ4816.One)) => $"[{verb}: channel \"{channelName}\" is binary — value must be 0 or 1]",
+            ChannelShape.Unipolar when ((value < FixedQ4816.Zero) || (value > FixedQ4816.One)) => $"[{verb}: channel \"{channelName}\" is unipolar — value must be in [0, 1]]",
+            ChannelShape.Bipolar when ((value < -FixedQ4816.One) || (value > FixedQ4816.One)) => $"[{verb}: channel \"{channelName}\" is bipolar — value must be in [-1, 1]]",
             _ => null,
         };
 
@@ -366,22 +401,7 @@ internal sealed partial class PlayerCommandModule {
             return CommandResult.Error(output: shapeError);
         }
 
-        float? holdSeconds = null;
-        var authoredHoldSeconds = 0f;
-
-        if (args.Count >= 3) {
-            if (!args.TryFloat(
-                index: 2,
-                value: out authoredHoldSeconds
-            )) {
-                return CommandResult.Error(output: "[body.press: could not parse <holdSeconds> as a number]");
-            }
-
-            // Sent raw, unclamped — the server is the sole authority over both caps (the deciding grant's ceiling
-            // and the engine backstop) and the one that labels which bound the result. NaN and non-positive values
-            // are handled authoritatively server-side (PressHoldCapKind.Ignored).
-            holdSeconds = authoredHoldSeconds;
-        }
+        routed = (routedLocation is not null);
 
         if (routedLocation is { } route) {
             route.Endpoint.Submissions.SubmitCommand(command: new WorldCommand.PressChannel(
@@ -402,11 +422,11 @@ internal sealed partial class PlayerCommandModule {
 
             return Echoed(
                 args: in args,
-                handler: $"[body.press: {channelName}={((double)value):0.###} body:{index} via '{route.Endpoint.Identity}' body={route.EntityIndex}{routedDuration}]"
+                handler: $"[{verb}: {channelName}={((double)value):0.###} body:{index} via '{route.Endpoint.Identity}' body={route.EntityIndex}{routedDuration}]"
             );
         }
 
-        if (ReplayDriveError(verb: "body.press") is { } driveError) {
+        if (ReplayDriveError(verb: verb) is { } driveError) {
             return driveError;
         }
 
@@ -426,7 +446,7 @@ internal sealed partial class PlayerCommandModule {
         var refusal = m_population.PressRefusal(bodyIndex: index);
 
         if (refusal is { Length: > 0 }) {
-            return new CommandResult(Output: $"[body.press: {channelName}={((double)value):0.###} body:{index} refused → {refusal}]");
+            return new CommandResult(Output: $"[{verb}: {channelName}={((double)value):0.###} body:{index} refused → {refusal}]");
         }
 
         if (holdSeconds is { } seconds) {
@@ -441,29 +461,29 @@ internal sealed partial class PlayerCommandModule {
                 case PressHoldCapKind.Ignored:
                     return Echoed(
                         args: in args,
-                        handler: $"[body.press: {channelName}={((double)value):0.###} body:{index} — non-positive hold ignored, in-flight hold (if any) left untouched]"
+                        handler: $"[{verb}: {channelName}={((double)value):0.###} body:{index} — non-positive hold ignored, in-flight hold (if any) left untouched]"
                     );
                 case PressHoldCapKind.GrantBudget:
                     return Echoed(
                         args: in args,
-                        handler: $"[body.press: {channelName}={((double)value):0.###} body:{index} holding {((double)outcome.EffectiveHoldSeconds):0.###}s — requested {authoredHoldSeconds:0.###}, capped by the grant's hold budget]"
+                        handler: $"[{verb}: {channelName}={((double)value):0.###} body:{index} holding {((double)outcome.EffectiveHoldSeconds):0.###}s — requested {authoredHoldSeconds:0.###}, capped by the grant's hold budget]"
                     );
                 case PressHoldCapKind.EngineCeiling:
                     return Echoed(
                         args: in args,
-                        handler: $"[body.press: {channelName}={((double)value):0.###} body:{index} holding {((double)outcome.EffectiveHoldSeconds):0.###}s — requested {authoredHoldSeconds:0.###}, capped by the engine's {WorldBody.MaxActionHoldSeconds:0.###}s hold ceiling]"
+                        handler: $"[{verb}: {channelName}={((double)value):0.###} body:{index} holding {((double)outcome.EffectiveHoldSeconds):0.###}s — requested {authoredHoldSeconds:0.###}, capped by the engine's {WorldBody.MaxActionHoldSeconds:0.###}s hold ceiling]"
                     );
                 default:
                     return Echoed(
                         args: in args,
-                        handler: $"[body.press: {channelName}={((double)value):0.###} body:{index} for {seconds:0.###}s]"
+                        handler: $"[{verb}: {channelName}={((double)value):0.###} body:{index} for {seconds:0.###}s]"
                     );
             }
         }
 
         return Echoed(
             args: in args,
-            handler: $"[body.press: {channelName}={((double)value):0.###} body:{index} for one host step]"
+            handler: $"[{verb}: {channelName}={((double)value):0.###} body:{index} for one host step]"
         );
     }
     private static string SourceWord(IntentSource source) => (source.IsIdle

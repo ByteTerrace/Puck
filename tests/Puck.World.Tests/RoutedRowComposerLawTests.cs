@@ -31,7 +31,7 @@ public sealed class RoutedRowComposerLawTests {
             error: out var liveDocumentError,
             json: "{}",
             mutation: out _,
-            path: "views.seatRig",
+            path: "inputHold",
             principal: WorldPrincipal.Console
         ));
         Assert.Contains(actualString: liveDocumentError, comparisonType: StringComparison.Ordinal, expectedSubstring: "addressed world's own live document");

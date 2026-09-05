@@ -601,4 +601,36 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Guard">Optional admission against a phase generation and the stamped actor.</param>
     [MutationKind(ordinal: 75, section: WorldSection.State)]
     public sealed record TransformState(WorldPrincipal Principal, StateTransform Transform, PhaseGuard? Guard = null) : WorldMutation(Principal);
+    /// <summary>Sets the population's spawn distribution alone, composed against the population row as it stands when
+    /// the mutation applies — never a whole-row replacement built from a snapshot the console read earlier, which
+    /// another queued edit to a sibling field would silently revert.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Distribution">The spawn distribution.</param>
+    [MutationKind(ordinal: 76, section: WorldSection.Population)]
+    public sealed record SetPopulationDistribution(WorldPrincipal Principal, WorldDistribution Distribution) : WorldMutation(Principal);
+    /// <summary>Sets the population's census figures alone — the per-seat activation policy and the network player
+    /// count — composed against the population row as it stands when the mutation applies.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="SeatActivation">The per-local-seat activation policy.</param>
+    /// <param name="NetworkPlayers">The network player count.</param>
+    [MutationKind(ordinal: 77, section: WorldSection.Population)]
+    public sealed record SetPopulationCensus(WorldPrincipal Principal, IReadOnlyList<SeatActivationPolicy> SeatActivation, int NetworkPlayers) : WorldMutation(Principal);
+    /// <summary>Sets the views section's seat rig alone, composed against the views row as it stands when the
+    /// mutation applies.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="SeatRig">The seat camera program.</param>
+    [MutationKind(ordinal: 78, section: WorldSection.Views)]
+    public sealed record SetViewSeatRig(WorldPrincipal Principal, WorldCameraProgram SeatRig) : WorldMutation(Principal);
+    /// <summary>Sets the views section's seat control alone, composed against the views row as it stands when the
+    /// mutation applies.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="SeatControl">The seat view control.</param>
+    [MutationKind(ordinal: 79, section: WorldSection.Views)]
+    public sealed record SetViewSeatControl(WorldPrincipal Principal, WorldSeatViewControl SeatControl) : WorldMutation(Principal);
+    /// <summary>Sets the player defaults' seat look alone, composed against the player-defaults row as it stands when
+    /// the mutation applies.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="SeatLook">The seat camera feel.</param>
+    [MutationKind(ordinal: 80, section: WorldSection.PlayerDefaults)]
+    public sealed record SetPlayerSeatLook(WorldPrincipal Principal, WorldSeatCameraFeel SeatLook) : WorldMutation(Principal);
 }

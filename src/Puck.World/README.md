@@ -820,11 +820,9 @@ plays passively and booted on a real `Puck.HumbleGamingBrick.MachineHost`, so
 `body.engage` reaches it exactly like any other screen machine. While a seat
 holds the application, `WorldServer.InstrumentClockBoundary` folds the
 instrument's own authored tempo into the world's `MusicClock` boundary each
-tick — holding the application is the whole gate; the `world.instrument-clock`
-session lever (`WorldSessionLevers.InstrumentClock`) is a presentation-only
-echo of that fact for a future HUD cue, never a second gate (`WorldSessionLever`'s
-own remarks: a knob the simulation reads is a mutation, not a lever).
-`instrument.state` reads which screen (if any) the routed seat is engaged
+tick — holding the application is the whole gate, and there is deliberately no
+session lever beside it (`WorldSessionLever`'s own remarks: a knob the
+simulation reads is a mutation, not a lever). `instrument.state` reads which screen (if any) the routed seat is engaged
 with, whether it carries the capability, and its tempo. See
 [`Audio/README.md`](Audio/README.md) for the instrument host itself.
 

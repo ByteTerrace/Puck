@@ -104,11 +104,12 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     );
                 }
 
-                // Preserve the document's live peer-source default (the world.population source verb owns it) and the
-                // spawn policy (world.population.spawn owns it) — this verb only sets the local/network census figures.
-                return link.Submit(mutation: new WorldMutation.SetPopulationDefaults(
+                // This verb owns the census figures alone; the spawn policy is world.population.spawn's, and each composes
+                // against the population row at application time, so the two never revert each other.
+                return link.Submit(mutation: new WorldMutation.SetPopulationCensus(
                     Principal: context.ActingPrincipal(),
-                    Population: (server.Definition.Population with { SeatActivationRaw = seatActivation, NetworkPlayers = network })
+                    SeatActivation: seatActivation,
+                    NetworkPlayers: network
                 ));
             }
         );

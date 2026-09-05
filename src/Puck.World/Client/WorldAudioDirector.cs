@@ -53,7 +53,7 @@ namespace Puck.World.Client;
 /// plan serializes on one reentrant gate. The gate is uncontended in steady state (reconciles are rare, a mix block
 /// is microseconds), which is the deliberate trade: one honest lock instead of a lock-free mixer-mutation protocol.</para>
 /// </remarks>
-internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFeed, IWorldInstrumentClockLever {
+internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFeed {
     /// <summary>The default per-publish clock advance for cue aging: one 240 Hz sim step (the offline drivers'
     /// cadence — one publish per mixed 200-frame block). The live frame source passes its real presentation delta.</summary>
     public const float DefaultPublishDeltaSeconds = (1f / 240f);
@@ -101,9 +101,6 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
     private float? m_sessionMasterVolume;
     private int m_slabIndex;
 
-    // The world.instrument-clock session lever's echo, by 0-based local seat — presentation only (see
-    // IWorldInstrumentClockLever's own remarks); the simulation-side clock fold never reads this.
-    private readonly HashSet<int> m_instrumentClockSeats = new();
     private readonly PublishBuffer<AudioSnapshot> m_buffer = new();
     private readonly List<EmitterPlan> m_plan = new();
     // The stable-id registry: emitter key → (id, identity signature). Survives reconciles so property edits keep
@@ -1784,26 +1781,6 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
             if (m_mixer is { } mixer) {
                 mixer.MasterGainQ16 = MasterGainQ16;
             }
-        }
-    }
-    // ---- the instrument-clock session lever's presentation echo -------------------------------------------------
-
-    /// <inheritdoc/>
-    public void SetInstrumentClockEngaged(int seat, bool engaged) {
-        lock (m_gate) {
-            if (engaged) {
-                _ = m_instrumentClockSeats.Add(item: seat);
-            } else {
-                _ = m_instrumentClockSeats.Remove(item: seat);
-            }
-        }
-    }
-    /// <summary>Gets whether <paramref name="seat"/>'s <c>world.instrument-clock</c> lever last engaged — the
-    /// echo <c>world.instrument-clock</c>'s own no-argument read reports. Carries no simulation effect.</summary>
-    /// <param name="seat">The 0-based local seat.</param>
-    public bool InstrumentClockEngaged(int seat) {
-        lock (m_gate) {
-            return m_instrumentClockSeats.Contains(item: seat);
         }
     }
     // ---- the cue engine ----------------------------------------------------------------------------------------------

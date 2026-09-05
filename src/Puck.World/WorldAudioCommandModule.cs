@@ -136,39 +136,6 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             handler: $"[voice.babble: identity={identityId} syllables={syllableCount} utterance={utteranceOrdinal}]"
         ));
     }
-    // The world.instrument-clock lever: 0/1 engages the session lever for the ACTING principal's own seat
-    // (presentation echo only — IWorldInstrumentClockLever's own remarks; the simulation-side clock fold is gated
-    // by holding the screen application itself, never by this lever); no argument reads the acting seat's echo.
-    private CommandResult InstrumentClockHandler(CommandContext context, WireArgs args) {
-        var principal = context.ActingPrincipal();
-        var seat = principal.Index;
-
-        if (args.Count == 0) {
-            return new CommandResult(Output: $"[world.instrument-clock: seat {seat} {(director.InstrumentClockEngaged(seat: seat) ? "engaged" : "disengaged")}]");
-        }
-
-        if (
-            (args.Count != 1) ||
-            !args.TryFloat(
-            index: 0,
-            value: out var flag
-        )
-        ) {
-            return CommandResult.Error(output: "[world.instrument-clock: expected 0 or 1]");
-        }
-
-        link.SubmitSessionLever(
-            lever: new WorldSessionLever(
-                A: flag,
-                Name: WorldSessionLevers.InstrumentClock,
-                Seat: seat,
-                Section: WorldSection.Audio
-            ),
-            principal: principal
-        );
-
-        return new CommandResult(Output: $"[world.instrument-clock: seat {seat} {(director.InstrumentClockEngaged(seat: seat) ? "engaged" : "disengaged")}]");
-    }
     // The world.volume lever: one float argument engages the session lever (bounded by the shared audio gain
     // ceiling); no argument reads the effective volume and which side owns it.
     private CommandResult VolumeHandler(CommandContext context, WireArgs args) {
@@ -242,12 +209,6 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             name: "world.volume",
             description: "The master-volume SESSION lever (the render-levers asymmetry): world.volume <0..8> applies the live mix gain NOW and owns it for the session (world.save folds it into audio.masterGain; world.status names 'audio' drift); no argument reads the effective volume. Until first engaged, the document's audio.masterGain flows live. A query/lever — always echoes.",
             handler: VolumeHandler
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.instrument-clock",
-            description: "The instrument-clock SESSION lever, for the acting principal's own seat: world.instrument-clock <0|1> engages/disengages it now; no argument reads the acting seat's current echo. Presentation echo only — the simulation-side clock fold music.state's boundary-derived fields depend on is gated by holding the screen application itself (body.engage), never by this lever; see instrument.state. A query/lever — always echoes.",
-            handler: InstrumentClockHandler
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,

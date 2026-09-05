@@ -25,7 +25,7 @@ public sealed partial class WorldServer {
         // SetPopulationDefaults carries the distribution and variation rows: Rebuild recompiles their fixed spawn
         // policy so it is LIVE for future activations (the live census count still stays the world.population verb — this
         // Rebuild re-seeds SpawnPosition but never re-activates or teleports a standing body).
-        WorldMutation.SetPopulationDefaults or
+        WorldMutation.SetPopulationDefaults or WorldMutation.SetPopulationDistribution or WorldMutation.SetPopulationCensus or
         // A placement row can change the census (Arc 7's Inhabit facet: a placement contributes driven bodies), and an
         // inhabited row's kit resolution reads the creation's Locomotion, so a creation swap can move a body between
         // kits — all must trigger Rebuild + ReconcileInhabitants. (R13: the third and last edit to this switch.)
@@ -139,7 +139,7 @@ public sealed partial class WorldServer {
     // Whether a mutation is DOCUMENT-DEFAULTS class (edits the next boot's wake state; live session levers own "now").
     // Everything else, cameras included, applies live on delivery.
     private static bool IsDocumentDefaults(WorldMutation mutation) => (mutation is
-        WorldMutation.SetRenderDefaults or WorldMutation.SetPopulationDefaults or WorldMutation.SetHostDefaults);
+        WorldMutation.SetRenderDefaults or WorldMutation.SetPopulationDefaults or WorldMutation.SetPopulationDistribution or WorldMutation.SetPopulationCensus or WorldMutation.SetHostDefaults);
     // An EXPLICIT write to a cell carrying StateAdvance or StateDynamics — a whole-row UpsertStateRow
     // (which re-bases the row's OWN slot trait AND every keyed cell's own trait, since it re-declares the whole
     // row), or an UpsertStateCell (which re-bases ONLY the one cell it names — the row's slot trait when that cell IS
@@ -451,7 +451,7 @@ public sealed partial class WorldServer {
         WorldMutation.UpsertCamera or WorldMutation.RemoveCamera => WorldSection.Cameras,
         WorldMutation.SetSpawns => WorldSection.Spawns,
         WorldMutation.SetMotion => WorldSection.Motion,
-        WorldMutation.SetPopulationDefaults => WorldSection.Population,
+        WorldMutation.SetPopulationDefaults or WorldMutation.SetPopulationDistribution or WorldMutation.SetPopulationCensus => WorldSection.Population,
         WorldMutation.SetRenderDefaults => WorldSection.Render,
         WorldMutation.UpsertAddon or WorldMutation.RemoveAddon => WorldSection.Addons,
         WorldMutation.UpsertBindingOverlay or WorldMutation.RemoveBindingOverlay => WorldSection.Bindings,
@@ -464,8 +464,8 @@ public sealed partial class WorldServer {
         WorldMutation.SetAudioDefaults => WorldSection.Audio,
         WorldMutation.SetCollision => WorldSection.Collision,
         WorldMutation.SetHostDefaults => WorldSection.Host,
-        WorldMutation.SetViewDefaults or WorldMutation.UpsertViewLayout or WorldMutation.RemoveViewLayout => WorldSection.Views,
-        WorldMutation.SetPlayerDefaults => WorldSection.PlayerDefaults,
+        WorldMutation.SetViewDefaults or WorldMutation.SetViewSeatRig or WorldMutation.SetViewSeatControl or WorldMutation.UpsertViewLayout or WorldMutation.RemoveViewLayout => WorldSection.Views,
+        WorldMutation.SetPlayerDefaults or WorldMutation.SetPlayerSeatLook => WorldSection.PlayerDefaults,
         WorldMutation.UpsertLook or WorldMutation.RemoveLook or WorldMutation.SetLookAssignment => WorldSection.Looks,
         WorldMutation.UpsertDynamics or WorldMutation.RemoveDynamics => WorldSection.Dynamics,
         WorldMutation.UpsertCurve or WorldMutation.RemoveCurve => WorldSection.Curves,
@@ -744,6 +744,16 @@ public sealed partial class WorldServer {
                 return true;
             case WorldMutation.SetPopulationDefaults m:
                 candidate = (current with { PopulationRaw = m.Population });
+
+                return true;
+            // The field-scoped population and views edits compose against the row AS IT STANDS HERE — the pending
+            // candidate — so two console verbs queued in one tick each keep the other's field.
+            case WorldMutation.SetPopulationDistribution m:
+                candidate = (current with { PopulationRaw = (current.Population with { DistributionRaw = m.Distribution }) });
+
+                return true;
+            case WorldMutation.SetPopulationCensus m:
+                candidate = (current with { PopulationRaw = (current.Population with { SeatActivationRaw = m.SeatActivation, NetworkPlayers = m.NetworkPlayers }) });
 
                 return true;
             case WorldMutation.SetRenderDefaults m:
@@ -1049,8 +1059,20 @@ public sealed partial class WorldServer {
                 candidate = (current with { ViewsRaw = m.Views });
 
                 return true;
+            case WorldMutation.SetViewSeatRig m:
+                candidate = (current with { ViewsRaw = (current.Views with { SeatRig = m.SeatRig }) });
+
+                return true;
+            case WorldMutation.SetViewSeatControl m:
+                candidate = (current with { ViewsRaw = (current.Views with { SeatControl = m.SeatControl }) });
+
+                return true;
             case WorldMutation.SetPlayerDefaults m:
                 candidate = (current with { PlayerDefaultsRaw = m.Defaults });
+
+                return true;
+            case WorldMutation.SetPlayerSeatLook m:
+                candidate = (current with { PlayerDefaultsRaw = (current.PlayerDefaults with { SeatLookRaw = m.SeatLook }) });
 
                 return true;
             case WorldMutation.UpsertViewLayout m: {
