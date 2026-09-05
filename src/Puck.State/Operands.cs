@@ -170,6 +170,9 @@ public sealed class ReductionOperand : OperandFact {
         if (!StateReader.TryReadHandle(rows: reader.Rows, catalog: reader.Catalog, handle: StateHandle, key: null, tick: reader.Tick, row: out var declared, rawValue: out _, text: out _)) {
             return RuleFact.Finite(value: 0L, kind: ValueKind);
         }
+        if (Reduce == StateReduceOp.ArrangementRank) {
+            return RuleFact.Finite(value: StateReader.ArrangementRank(rows: reader.Rows, zone: declared), kind: ValueKind);
+        }
         if (FilterRow is null) {
             return RuleFact.Finite(value: StateReader.ReduceRaw(row: declared, op: Reduce, tick: reader.Tick), kind: ValueKind);
         }

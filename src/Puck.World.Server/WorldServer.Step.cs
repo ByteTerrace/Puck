@@ -213,7 +213,11 @@ public sealed partial class WorldServer {
                 tick: tick
             );
 
+            var budget = interaction.Neighbours;
+
             foreach (var left in lefts) {
+                var kept = 0;
+
                 foreach (var right in rights) {
                     // A carrier an earlier pair's effect despawned mid-sweep reads the sentinel, never a distance.
                     var distanceSquared = ReadBodyDistanceSquared(
@@ -228,6 +232,34 @@ public sealed partial class WorldServer {
                     ) {
                         continue;
                     }
+
+                    if (budget > 0) {
+                        // Keep the nearest `budget` rights, ascending by distance then index; the sweep evaluates them
+                        // after the scan so the kept set is the same whatever order the carriers were listed in.
+                        var slot = kept;
+                        while ((slot > 0) && ((m_neighbourDistance[slot - 1] > distanceSquared) || ((m_neighbourDistance[slot - 1] == distanceSquared) && (m_neighbourIndex[slot - 1] > right)))) {
+                            if (slot < budget) {
+                                m_neighbourDistance[slot] = m_neighbourDistance[slot - 1];
+                                m_neighbourIndex[slot] = m_neighbourIndex[slot - 1];
+                            }
+                            slot--;
+                        }
+                        if (slot < budget) {
+                            m_neighbourDistance[slot] = distanceSquared;
+                            m_neighbourIndex[slot] = right;
+                            kept = Math.Min(val1: (kept + 1), val2: budget);
+                        }
+
+                        continue;
+                    }
+
+                    m_evaluator.BoundLeft = left;
+                    m_evaluator.BoundRight = right;
+                    applied |= m_evaluator.EvaluateOnce(rule: rule, latch: latch, bindings: bindings, binding: new LatchKey(Left: left, Right: right), tick: tick, stepTicks: stepTicks);
+                }
+
+                for (var index = 0; index < kept; index++) {
+                    var right = m_neighbourIndex[index];
 
                     m_evaluator.BoundLeft = left;
                     m_evaluator.BoundRight = right;

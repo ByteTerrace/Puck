@@ -182,6 +182,29 @@ public sealed class DiscreteStateLawTests {
     }
 
     [Fact]
+    public void AnOrderedZoneHasAnArrangementRankAndArrangePutsItBack() {
+        var definition = Document(
+            new(Name("cards"), CellKind.Int, Cells: [Cell("a",1),Cell("b",2),Cell("c",3)]),
+            new(Name("pile"), CellKind.Bool, Cells: [Cell("c"),Cell("a"),Cell("b")], Domain: new StateDomain.KeysOf(CellName.Parse("cards"), Ordered: true)),
+            new(Name("rank"), CellKind.Int, Cells: [Cell(WorldStateRow.SlotKey, 0)]));
+        var pile = Find(definition, "pile");
+        // (c, a, b) is domain ordinals (2, 0, 1): Lehmer rank 2·2! + 0·1! + 0 = 4 of the six orders.
+        Assert.Equal(4L, StateReader.ArrangementRank(definition.State, pile));
+        Assert.Equal(-1L, StateReader.ArrangementRank(definition.State, Find(definition, "cards")));
+
+        var arrange = new StateTransform.Arrange("pile", "rank");
+        Assert.True(WorldStateTransforms.TryApply(definition, arrange, WorldPrincipal.Console, 0, "test", out var sorted, out var reason), reason);
+        Assert.Equal(new[] { "a", "b", "c" }, Find(sorted, "pile").Cells!.Select(c => c.Key.Value));
+        Assert.Equal(0L, StateReader.ArrangementRank(sorted.State, Find(sorted, "pile")));
+        var atFour = definition with { StateRaw = new(World: [.. definition.State.Select(r => r.Name.Value == "rank" ? r with { Cells = [Cell(WorldStateRow.SlotKey, 4)] } : r)], Lattices: definition.StateRaw!.Lattices) };
+        Assert.True(WorldStateTransforms.TryApply(sorted with { StateRaw = atFour.StateRaw }, arrange, WorldPrincipal.Console, 0, "test", out var back, out reason), reason);
+        Assert.Equal(new[] { "c", "a", "b" }, Find(back, "pile").Cells!.Select(c => c.Key.Value));
+        var atSix = definition with { StateRaw = new(World: [.. definition.State.Select(r => r.Name.Value == "rank" ? r with { Cells = [Cell(WorldStateRow.SlotKey, 6)] } : r)], Lattices: definition.StateRaw!.Lattices) };
+        Assert.False(WorldStateTransforms.TryApply(atSix, arrange, WorldPrincipal.Console, 0, "test", out _, out var outside));
+        Assert.Contains("outside", outside);
+    }
+
+    [Fact]
     public void TransfersPreserveDuplicateValuedTokenIdentitiesAndPileOrder() {
         var definition = Document(
             new(Name("cards"), CellKind.Int, Cells: [Cell("a",7),Cell("b",7)]),

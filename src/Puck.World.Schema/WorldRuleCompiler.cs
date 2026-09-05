@@ -117,10 +117,17 @@ public static partial class WorldRuleCompiler {
                         throw new RuleException(refusal: WorldRuleRefusal.SpatialChannelMalformed, ruleName: name, detail: $"'range' {row.Range} is not a non-negative distance", subject: "interaction");
                     }
 
+                    if (row.Neighbours is { } neighbours && (neighbours < 1 || neighbours > WorldInteractionCapacity.MaxNeighbours)) {
+                        throw new RuleException(refusal: RuleRefusal.PredicateKindInadmissible, ruleName: name, detail: $"'neighbours' is {neighbours}; 1..{WorldInteractionCapacity.MaxNeighbours} are admitted", subject: "interaction");
+                    }
+
                     context.BindingScope = [BoundKey.Left, BoundKey.Right];
 
                     break;
                 case WorldInteractionCoOccurrence.Region:
+                    if (row.Neighbours is not null) {
+                        throw new RuleException(refusal: RuleRefusal.PredicateKindInadmissible, ruleName: name, detail: "'neighbours' budgets a distance interaction's pairs; a region interaction has no pairs", subject: "interaction");
+                    }
                     if (!context.HasRegion(placementId: row.Right)) {
                         throw new RuleException(refusal: WorldRuleRefusal.RegionUnknown, ruleName: name, detail: $"'right' names placement '{row.Right}', which declares no region facet", subject: "interaction");
                     }
@@ -140,7 +147,7 @@ public static partial class WorldRuleCompiler {
                     Mode: row.Mode,
                     Gate: [],
                     Effects: effects,
-                    Interaction: new CompiledInteraction(Left: row.Left, Right: row.Right, CoOccurrence: row.CoOccurrence, Range: NumericLiteral.ToFixed(value: row.Range)),
+                    Interaction: new CompiledInteraction(Left: row.Left, Right: row.Right, CoOccurrence: row.CoOccurrence, Range: NumericLiteral.ToFixed(value: row.Range), Neighbours: (row.Neighbours ?? 0)),
                     Bindings: RuleCompiler.AllBindings(declared: [], context: context)
                 );
             } finally {

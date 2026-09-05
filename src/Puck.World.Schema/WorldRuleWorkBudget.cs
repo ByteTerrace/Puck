@@ -91,8 +91,10 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
 
     private static long Multiplier(WorldDefinition definition, WorldRuleCompileContext context, CompiledWorldRule rule) {
         if (rule.Interaction is { } interaction) {
+            var others = Math.Max(val1: 0, val2: (definition.Population.Capacity - 1));
+
             return ((interaction.CoOccurrence == WorldInteractionCoOccurrence.Distance)
-                ? ((long)definition.Population.Capacity * Math.Max(val1: 0, val2: (definition.Population.Capacity - 1)))
+                ? ((long)definition.Population.Capacity * ((interaction.Neighbours > 0) ? Math.Min(val1: interaction.Neighbours, val2: others) : others))
                 : definition.Population.Capacity);
         }
 

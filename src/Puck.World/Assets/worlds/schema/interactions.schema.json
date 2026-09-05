@@ -45,12 +45,19 @@
             }
           },
           "mode": {
-            "description": "Whether the interaction fires every tick the co-occurrence holds (Level) or once per crossing (Edge, the default \u2014 an interaction that transforms/spawns/despawns almost always wants Edge, for the same reason a rule that writes a row does: level-firing a spawn is a journal entry every tick the co-occurrence holds).",
+            "description": "Whether the interaction fires every tick the co-occurrence holds For a distance interaction, at most this many right carriers per left carrier \u2014 the nearest first, ties broken by the lower body index \u2014 or null for every carrier in range. The work sheet prices the pair count at this budget. (Level) or once per crossing (Edge, the default \u2014 an interaction that transforms/spawns/despawns almost always wants Edge, for the same reason a rule that writes a row does: level-firing a spawn is a journal entry every tick the co-occurrence holds).",
             "enum": [
               "Level",
               "Edge"
             ],
             "default": "Edge"
+          },
+          "neighbours": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
           }
         },
         "required": [

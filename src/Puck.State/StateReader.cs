@@ -21,6 +21,10 @@ public enum StateReduceOp : byte {
 
     /// <summary>The number of cells the row declares.</summary>
     Count,
+    /// <summary>The Lehmer rank, over k! for a zone of k tokens, of an ordered zone's order relative to its token
+    /// domain's own cell order — the arrangement a shuffle or a sort left the pile in, as one integer; -1 when the
+    /// zone holds more than 20 tokens or a token its domain does not declare.</summary>
+    ArrangementRank,
 }
 /// <summary>
 /// The one (row, key) → raw-value implementation over a state section's rows, exposed through a name-resolving
@@ -292,12 +296,76 @@ public static class StateReader {
             return FixedQ4816.Zero;
         }
 
-        var raw = ReduceRaw(row: declared, op: op, tick: tick);
-        var kind = ((op == StateReduceOp.Count) ? CellKind.Int : declared.Kind);
+        var raw = ((op == StateReduceOp.ArrangementRank) ? ArrangementRank(rows: rows, zone: declared) : ReduceRaw(row: declared, op: op, tick: tick));
+        var kind = ((op is StateReduceOp.Count or StateReduceOp.ArrangementRank) ? CellKind.Int : declared.Kind);
 
         return ((kind == CellKind.Fixed)
             ? FixedQ4816.FromRawBits(value: raw)
             : LiftSaturating(raw: raw));
+    }
+    /// <summary>The most tokens an arrangement rank or an <c>arrange</c> transform covers: 20! is the last factorial
+    /// below 2^63.</summary>
+    public const int MaxArrangementTokens = 20;
+
+    /// <summary>Returns the Lehmer rank of an ordered zone's token order relative to its token domain's cell order —
+    /// over k! for k tokens — or -1 when the zone is not an ordered zone, holds more than
+    /// <see cref="MaxArrangementTokens"/> tokens, or holds a token its domain does not declare.</summary>
+    /// <param name="rows">The section's rows.</param>
+    /// <param name="zone">The ordered zone.</param>
+    public static long ArrangementRank(IReadOnlyList<StateRow>? rows, StateRow zone) {
+        ArgumentNullException.ThrowIfNull(argument: zone);
+        Span<int> ordinals = stackalloc int[MaxArrangementTokens];
+        var count = DomainOrdinals(rows: rows, zone: zone, ordinals: ordinals);
+        if (count < 0) {
+            return -1L;
+        }
+        Span<int> relative = stackalloc int[MaxArrangementTokens];
+        RelativeOrder(ordinals: ordinals[..count], relative: relative[..count]);
+        return unchecked((long)Puck.Maths.Combinatorics.PermutationRank(permutation: relative[..count]));
+    }
+
+    /// <summary>Fills each zone token's ordinal in its token domain's cell order, in zone order. Returns the token
+    /// count, or -1 when the zone is not an ordered zone, exceeds <see cref="MaxArrangementTokens"/>, or holds a
+    /// token the domain does not declare.</summary>
+    /// <param name="rows">The section's rows.</param>
+    /// <param name="zone">The ordered zone.</param>
+    /// <param name="ordinals">Scratch of at least <see cref="MaxArrangementTokens"/>.</param>
+    public static int DomainOrdinals(IReadOnlyList<StateRow>? rows, StateRow zone, Span<int> ordinals) {
+        var cells = (zone.Cells ?? []);
+        if (zone.EffectiveDomain is not StateDomain.KeysOf { Ordered: true } keysOf || cells.Count > MaxArrangementTokens ||
+            StateRows.FindStateRow(rows: rows, name: keysOf.Row.Value) is not { Cells: { } domain }) {
+            return -1;
+        }
+        for (var index = 0; index < cells.Count; index++) {
+            var ordinal = -1;
+            for (var candidate = 0; candidate < domain.Count; candidate++) {
+                if (domain[candidate].Key == cells[index].Key) {
+                    ordinal = candidate;
+                    break;
+                }
+            }
+            if (ordinal < 0) {
+                return -1;
+            }
+            ordinals[index] = ordinal;
+        }
+        return cells.Count;
+    }
+
+    /// <summary>Maps distinct ordinals to their ranks among themselves — 0 for the smallest — so a subset's order is
+    /// a permutation of 0..k-1.</summary>
+    /// <param name="ordinals">The ordinals, distinct.</param>
+    /// <param name="relative">Receives each ordinal's rank.</param>
+    public static void RelativeOrder(ReadOnlySpan<int> ordinals, Span<int> relative) {
+        for (var index = 0; index < ordinals.Length; index++) {
+            var rank = 0;
+            for (var other = 0; other < ordinals.Length; other++) {
+                if (ordinals[other] < ordinals[index]) {
+                    rank++;
+                }
+            }
+            relative[index] = rank;
+        }
     }
     /// <summary>Lifts a whole-number cell to fixed point, saturating at <see cref="FixedQ4816"/>'s integer band.
     /// An int cell spans the whole <see cref="long"/>; the few readers that need a continuous quantity (a symmetry
@@ -323,6 +391,10 @@ public static class StateReader {
 
         if (op == StateReduceOp.Count) {
             return cells.Count;
+        }
+        if (op == StateReduceOp.ArrangementRank) {
+            // The rank needs the token domain's order, which only the section holds (ArrangementRank).
+            return -1L;
         }
 
         var hasAcc = false;

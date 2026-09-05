@@ -18,6 +18,7 @@ public static partial class WorldStateTransforms {
         StateTransform.SortKeyed sortKeyed => [sortKeyed.Row],
         StateTransform.WriteSet writeSet => [writeSet.Row],
         StateTransform.BoardCombine combine => [combine.Row],
+        StateTransform.Arrange arrange => [arrange.Row],
         StateTransform.Push push => [push.Row],
         _ => [],
     };
@@ -49,6 +50,7 @@ public static partial class WorldStateTransforms {
                 StateTransform.SortKeyed sortKeyed => TrySortKeyed(rows, sortKeyed, out reason),
                 StateTransform.WriteSet writeSet => TryWriteSet(definition, rows, writeSet, out reason),
                 StateTransform.BoardCombine combine => TryBoardCombine(definition, rows, combine, out reason),
+                StateTransform.Arrange arrange => TryArrange(rows, arrange, out reason),
                 StateTransform.Push push => TryPush(rows, push, out reason),
                 _ => Refuse("unknown state transform", out reason),
             };
@@ -238,6 +240,41 @@ public static partial class WorldStateTransforms {
         rows[from] = source with { Cells = cells };
         rows[to] = destination with { Cells = target };
         reason = string.Empty;
+        return true;
+    }
+    // The zone's tokens sorted into their domain's order are arrangement 0; the rank's Lehmer code picks the order.
+    private static bool TryArrange(WorldStateRow[] rows, StateTransform.Arrange arrange, out string reason) {
+        if (!TryFind(rows, arrange.Row, out var index, out reason) || !TryFind(rows, arrange.From, out var fromIndex, out reason)) {
+            return false;
+        }
+        var zone = rows[index];
+        var source = rows[fromIndex];
+        if (source.Kind != CellKind.Int || StateRows.FindCell(source.Cells, CellName.Parse(arrange.FromKey ?? WorldStateRow.SlotKey)) is not { } rankCell) {
+            return Refuse("arrange reads its rank from an integer cell", out reason);
+        }
+        Span<int> ordinals = stackalloc int[StateReader.MaxArrangementTokens];
+        var count = StateReader.DomainOrdinals(rows, zone, ordinals);
+        if (count < 0) {
+            return Refuse($"arrange requires an ordered zone of at most {StateReader.MaxArrangementTokens} tokens, every one declared by its domain", out reason);
+        }
+        if (rankCell.Value < 0L || (ulong)rankCell.Value >= Puck.Maths.Combinatorics.Factorial(count)) {
+            return Refuse($"arrange rank {rankCell.Value} is outside 0..{count}!-1", out reason);
+        }
+        var cells = (zone.Cells ?? []).ToArray();
+        Span<int> relative = stackalloc int[StateReader.MaxArrangementTokens];
+        StateReader.RelativeOrder(ordinals[..count], relative[..count]);
+        // sorted[r] is the token whose relative rank is r; the unranked permutation says which rank each position takes.
+        var sorted = new StateCell[count];
+        for (var position = 0; position < count; position++) {
+            sorted[relative[position]] = cells[position];
+        }
+        Span<int> permutation = stackalloc int[StateReader.MaxArrangementTokens];
+        Puck.Maths.Combinatorics.PermutationUnrank((ulong)rankCell.Value, permutation[..count]);
+        var arranged = new StateCell[count];
+        for (var position = 0; position < count; position++) {
+            arranged[position] = sorted[permutation[position]];
+        }
+        rows[index] = zone with { Cells = arranged };
         return true;
     }
     private static bool TrySetRay(WorldDefinition definition, WorldStateRow[] rows, StateTransform.SetRay ray, CompiledPatterns patterns, out string reason) {

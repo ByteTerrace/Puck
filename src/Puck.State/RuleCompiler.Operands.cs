@@ -152,7 +152,7 @@ public static partial class RuleCompiler {
             throw new RuleException(
                 refusal: RuleRefusal.ReduceChannelMalformed,
                 ruleName: ruleName,
-                detail: $"'{name}' does not spell '{RuleFacts.ReducePrefix}<max|min|sum|count>:<row>'"
+                detail: $"'{name}' does not spell '{RuleFacts.ReducePrefix}<max|min|sum|count|arrangementRank>:<row>'"
             );
         }
 
@@ -166,6 +166,9 @@ public static partial class RuleCompiler {
             throw new RuleException(refusal: RuleRefusal.ReduceChannelMalformed, ruleName: ruleName, detail: $"'{name}' carries ':where:' without a filter row");
         }
         var reduceRow = ResolveNumericRow(channel: name, context: context, malformed: RuleRefusal.ReduceChannelMalformed, name: rowName, requireKeyed: false, ruleName: ruleName);
+        if (op == StateReduceOp.ArrangementRank && (reduceRow.EffectiveDomain is not StateDomain.KeysOf { Ordered: true } || filterRowName is not null)) {
+            throw new RuleException(refusal: RuleRefusal.ReduceChannelMalformed, ruleName: ruleName, detail: $"'{name}' ranks an ordered zone's arrangement and takes no ':where:' filter");
+        }
         StateHandle filterHandle = default;
         if (filterRowName is not null) {
             _ = ResolveNumericRow(channel: name, context: context, malformed: RuleRefusal.ReduceChannelMalformed, name: filterRowName, requireKeyed: true, ruleName: ruleName);
@@ -174,7 +177,7 @@ public static partial class RuleCompiler {
             }
             filterHandle = ResolveHandle(context: context, name: filterRowName);
         }
-        var reduceValueKind = ((op == StateReduceOp.Count) ? CellKind.Int : reduceRow.Kind);
+        var reduceValueKind = ((op is StateReduceOp.Count or StateReduceOp.ArrangementRank) ? CellKind.Int : reduceRow.Kind);
 
         return new ResolvedOperand(
             operand: new ReductionOperand(row: rowName, stateHandle: ResolveHandle(context: context, name: rowName), reduce: op, filterRow: filterRowName, filterHandle: filterHandle, valueKind: reduceValueKind),
@@ -191,6 +194,7 @@ public static partial class RuleCompiler {
             "min" => StateReduceOp.Min,
             "sum" => StateReduceOp.Sum,
             "count" => StateReduceOp.Count,
+            "arrangementRank" => StateReduceOp.ArrangementRank,
             _ => StateReduceOp.None,
         };
 

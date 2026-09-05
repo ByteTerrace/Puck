@@ -225,6 +225,9 @@ public sealed partial class WorldServer : IWorldServerHost {
     // distance interaction.
     private readonly List<int> m_carrierScratchLeft = [];
     private readonly List<int> m_carrierScratchRight = [];
+    // A distance interaction's nearest-neighbour selection, ascending by distance then index (WorldInteraction.Neighbours).
+    private readonly FixedQ4816[] m_neighbourDistance = new FixedQ4816[WorldInteractionCapacity.MaxNeighbours];
+    private readonly int[] m_neighbourIndex = new int[WorldInteractionCapacity.MaxNeighbours];
     // Reused scratch for the despawn-ownership guard (FireWorldRuleEffect's RemovePlacement arm) — rule-fire cadence
     // only, cleared and refilled on every check rather than allocated per firing.
     private readonly List<int> m_ruleInhabitantScratch = [];

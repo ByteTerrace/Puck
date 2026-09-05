@@ -309,6 +309,9 @@ public sealed class TransformStateEffect : EffectFact {
             case StateTransform.BoardCombine combine:
                 cost += 3L * BoardCells(context: context, row: combine.Row);
                 break;
+            case StateTransform.Arrange arrange:
+                cost += 4L * context.RowCapacity(name: arrange.Row);
+                break;
             case StateTransform.SortZone sortZone:
                 cost += 2L * context.RowCapacity(name: sortZone.Row) * Math.Max(1, sortZone.By.Count);
                 break;
@@ -361,6 +364,7 @@ public sealed class TransformStateEffect : EffectFact {
         StateTransform.SortKeyed keyed => [keyed.Row],
         StateTransform.WriteSet set => [set.Row],
         StateTransform.BoardCombine combine => [combine.Row],
+        StateTransform.Arrange arrange => [arrange.Row],
         StateTransform.Push push => [push.Row],
         StateTransform.Observe observe => [observe.Row],
         _ => [],

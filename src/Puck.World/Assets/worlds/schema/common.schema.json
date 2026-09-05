@@ -4907,6 +4907,35 @@
       ],
       "additionalProperties": false
     },
+    "StateTransformArrange": {
+      "description": "Reorders an ordered zone of at most 20 tokens into the arrangement at a Lehmer rank read from an integer cell \u2014 the inverse of $reduce:arrangementRank: rank 0 is the token domain\u0027s own order, and a rank at or past k! refuses.",
+      "properties": {
+        "$type": {
+          "const": "arrange"
+        },
+        "row": {
+          "description": "The ordered zone.",
+          "type": "string"
+        },
+        "from": {
+          "description": "The integer row the rank is read from.",
+          "type": "string"
+        },
+        "fromKey": {
+          "description": "The cell of that row, or null for its slot cell.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "row",
+        "from"
+      ],
+      "additionalProperties": false
+    },
     "StateTransformPush": {
       "description": "Appends one value to a history row\u0027s ring, overwriting the oldest slot once the ring is full, and advances its cursor by one.",
       "properties": {
@@ -4970,6 +4999,9 @@
         },
         {
           "$ref": "#/$defs/StateTransformBoardCombine"
+        },
+        {
+          "$ref": "#/$defs/StateTransformArrange"
         },
         {
           "$ref": "#/$defs/StateTransformPush"

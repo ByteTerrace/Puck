@@ -56,7 +56,8 @@ public readonly record struct CompiledBodyRef(CompiledBodyRefKind Kind, int Inde
 /// <param name="Right">The right property, or the region placement.</param>
 /// <param name="CoOccurrence">Distance or region.</param>
 /// <param name="Range">The distance range.</param>
-public readonly record struct CompiledInteraction(string Left, string Right, WorldInteractionCoOccurrence CoOccurrence, FixedQ4816 Range);
+/// <param name="Neighbours">At most this many right carriers per left carrier for a distance interaction, the nearest first; 0 for every carrier in range.</param>
+public readonly record struct CompiledInteraction(string Left, string Right, WorldInteractionCoOccurrence CoOccurrence, FixedQ4816 Range, int Neighbours = 0);
 
 /// <summary>A compiled body motion effect.</summary>
 public readonly record struct CompiledWorldBodyEffect(

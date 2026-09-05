@@ -56,6 +56,7 @@ public enum BoardCombineOp : byte {
 [JsonDerivedType(typeof(StateTransform.SortKeyed), "sortKeyed")]
 [JsonDerivedType(typeof(StateTransform.WriteSet), "writeSet")]
 [JsonDerivedType(typeof(StateTransform.BoardCombine), "boardCombine")]
+[JsonDerivedType(typeof(StateTransform.Arrange), "arrange")]
 [JsonDerivedType(typeof(StateTransform.Push), "push")]
 [JsonDerivedType(typeof(StateTransform.Observe), "observe")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -128,6 +129,13 @@ public abstract record StateTransform {
     /// <param name="Value">The value written to every member; never the board's own <c>empty</c>.</param>
     public sealed record BoardCombine(string Row, BoardCombineOp Operation, string? Left = null, string? Right = null,
         string? Direction = null, string? Element = null, long Value = 1) : StateTransform;
+    /// <summary>Reorders an ordered zone of at most 20 tokens into the arrangement at a Lehmer rank read from an
+    /// integer cell — the inverse of <c>$reduce:arrangementRank</c>: rank 0 is the token domain's own order, and a
+    /// rank at or past k! refuses.</summary>
+    /// <param name="Row">The ordered zone.</param>
+    /// <param name="From">The integer row the rank is read from.</param>
+    /// <param name="FromKey">The cell of that row, or null for its slot cell.</param>
+    public sealed record Arrange(string Row, string From, string? FromKey = null) : StateTransform;
     /// <summary>Appends one value to a history row's ring, overwriting the oldest slot once the ring is full, and
     /// advances its cursor by one.</summary>
     /// <param name="Row">The history row.</param>

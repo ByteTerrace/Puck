@@ -47,6 +47,9 @@ public enum WorldInteractionCoOccurrence : byte {
 /// unchecked) under <see cref="WorldInteractionCoOccurrence.Region"/>.</param>
 /// <param name="Effects">The effects applied in order when the interaction fires — see this type's remarks.</param>
 /// <param name="Mode">Whether the interaction fires every tick the co-occurrence holds
+/// <param name="Neighbours">For a distance interaction, at most this many right carriers per left carrier — the
+/// nearest first, ties broken by the lower body index — or <see langword="null"/> for every carrier in range.
+/// The work sheet prices the pair count at this budget.</param>
 /// (<see cref="ActionTriggerMode.Level"/>) or once per crossing (<see cref="ActionTriggerMode.Edge"/>, the default —
 /// an interaction that transforms/spawns/despawns almost always wants Edge, for the same reason a rule that writes a
 /// row does: level-firing a spawn is a journal entry every tick the co-occurrence holds).</param>
@@ -58,7 +61,8 @@ public sealed record WorldInteraction(
     WorldInteractionCoOccurrence CoOccurrence,
     decimal Range,
     IReadOnlyList<ActionEffect> Effects,
-    ActionTriggerMode Mode = ActionTriggerMode.Edge
+    ActionTriggerMode Mode = ActionTriggerMode.Edge,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] int? Neighbours = null
 );
 /// <summary>The <c>interactions</c> document section — the generalized property-interaction table's document shape.
 /// Optional (like <c>rules</c>/<c>groups</c>): a document declaring none carries a <see langword="null"/> section
@@ -74,6 +78,8 @@ public sealed record WorldInteractionsSection(IReadOnlyList<WorldInteraction> In
 /// engine primitive; a genre world authors its own interaction count, never a size drawn from a specific game).
 /// </summary>
 public static class WorldInteractionCapacity {
+    /// <summary>The most right carriers a <c>neighbours</c> budget admits per left carrier.</summary>
+    public const int MaxNeighbours = 64;
     /// <summary>The maximum declared interaction rows a document may carry.</summary>
     public const int MaxInteractions = 128;
 }

@@ -507,6 +507,15 @@ public static partial class RuleCompiler {
                 }
                 break;
             }
+            case StateTransform.Arrange arrange: {
+                var arrangedZone = Row(arrange.Row);
+                var rank = Row(arrange.From);
+                if (arrangedZone.EffectiveDomain is not StateDomain.KeysOf { Ordered: true } || rank.Kind != CellKind.Int ||
+                    (arrange.FromKey is null ? !rank.IsSlot : (!rank.IsKeyed || !CellName.TryParse(arrange.FromKey, out _, out _)))) {
+                    throw Invalid("arrange requires an ordered zone and an integer rank cell");
+                }
+                break;
+            }
             case StateTransform.Push push:
                 var ring = Row(push.Row);
                 if (ring.EffectiveDomain is not StateDomain.Ring || ring.ClampToEnvelope(push.Value) != push.Value) {

@@ -287,7 +287,8 @@ holds the first 15 primes at count one (their product is 6.1e17) and overflows a
 count multiplies, so cap the row or the item set; `$board:mask`/`writeSet` stop at 64 cells while a topology
 admits 4,096 — a wider board's set algebra is the `boardCombine` transform (and/or/xor/andNot/not/shift/image
 over whole board rows, one journaled mutation each); a `transfer` of `count > 1` takes `first`/`last`/`random`,
-and an interior run is `slice`: the keyed token and everything after it, in order. `$table:<name>[:<column>]:<key>` reads a static
+and an interior run is `slice`: the keyed token and everything after it, in order; a pile's order is one integer
+through `$reduce:arrangementRank:<zone>` (k ≤ 20) and the `arrange` transform puts it back. `$table:<name>[:<column>]:<key>` reads a static
 `tables` document (`puck.table.v1`, hash-pinned, outside simulation state) by an
 integer literal, a `$cell:` indirection, `$each`, or an int `$bind:`; a missing
 dynamic key is a `TableKeyMissing` refusal, never a value. Every top-level

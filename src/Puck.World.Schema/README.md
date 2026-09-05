@@ -165,7 +165,10 @@ serialized as exactly 64 hexadecimal digits, and supports 256 drawn entries.
 
 The closed `transformState` effect and transaction step carry one of `transfer`,
 `setRay`, `shuffle`, `sortZone`, `sortKeyed`,
-`writeSet`, `boardCombine`, `push`, or `observe`. `writeSet` (`row`, `set`, `setKey`,
+`writeSet`, `boardCombine`, `arrange`, `push`, or `observe`. `arrange` (`row`,
+`from`, `fromKey`) reorders an ordered zone of at most 20 tokens into the
+arrangement at the Lehmer rank read from an integer cell, rank 0 being the token
+domain's own order — the inverse of `$reduce:arrangementRank`. `writeSet` (`row`, `set`, `setKey`,
 `value`) writes one value into every cell of a board (at most 64 cells) whose
 bit is set in a cell-set mask read from an integer cell — the one board-writing
 form for a set built from `$board:mask`, `boardShift`/`boardImage`, and the
@@ -1718,8 +1721,11 @@ ADDRESS one. A `compareState` may instead name a reserved
 channel — `$tick` (the completed-tick counter), `$population` (the live
 active-entry count), `$region:<placementId>` (that region's live occupant count),
 `$machine:<screen>:<address>` (one live byte off a screen's booted machine),
-`$reduce:<max|min|sum|count>:<row>` (an aggregate over a row's cells; append
-`:where:<filterRow>` to admit only keys whose numeric filter cell is nonzero),
+`$reduce:<max|min|sum|count|arrangementRank>:<row>` (an aggregate over a row's cells; append
+`:where:<filterRow>` to admit only keys whose numeric filter cell is nonzero;
+`arrangementRank` is an ordered zone's order as one integer — the Lehmer rank
+relative to its token domain's order, over k! for k ≤ 20 tokens, -1 past that —
+and the `arrange` transform is its inverse),
 `$symmetry:<function>[:<argument>]:<row>` (a cell holding a symmetry-lattice
 node 0..239 read through `ring`, `antipode`, `canonicalRay`, `cycle:<steps>`,
 `reflect:<node|cell:<row>[.<key>]>`, `orthogonal:<node|cell:…>` (1/0),
@@ -1912,6 +1918,9 @@ total is traceable to the rows that make it up. A `forEach` line's multiplier
 is its row's capacity: a row left at the default room prices at 128 cells, a
 registry-sized row authors the capacity it needs. Interaction `range` is an
 exact JSON decimal lowered directly to fixed point, with no binary32 round trip.
+A distance interaction's `neighbours` (1..64) evaluates at most that many right
+carriers per left carrier — the nearest first, ties by the lower body index —
+and its line prices pairs at that budget instead of the population squared.
 
 Live effect failures are bounded diagnostics, not a Level-rule log flood.
 `world.rule.failures` reports one fixed counter per refusal category plus its

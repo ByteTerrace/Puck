@@ -12740,6 +12740,35 @@
                               "additionalProperties": false
                             },
                             {
+                              "description": "Reorders an ordered zone of at most 20 tokens into the arrangement at a Lehmer rank read from an integer cell \u2014 the inverse of $reduce:arrangementRank: rank 0 is the token domain\u0027s own order, and a rank at or past k! refuses.",
+                              "properties": {
+                                "$type": {
+                                  "const": "arrange"
+                                },
+                                "row": {
+                                  "description": "The ordered zone.",
+                                  "type": "string"
+                                },
+                                "from": {
+                                  "description": "The integer row the rank is read from.",
+                                  "type": "string"
+                                },
+                                "fromKey": {
+                                  "description": "The cell of that row, or null for its slot cell.",
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "default": null
+                                }
+                              },
+                              "required": [
+                                "row",
+                                "from"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
                               "description": "Appends one value to a history row\u0027s ring, overwriting the oldest slot once the ring is full, and advances its cursor by one.",
                               "properties": {
                                 "$type": {
@@ -13164,6 +13193,35 @@
                                         "required": [
                                           "row",
                                           "operation"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "description": "Reorders an ordered zone of at most 20 tokens into the arrangement at a Lehmer rank read from an integer cell \u2014 the inverse of $reduce:arrangementRank: rank 0 is the token domain\u0027s own order, and a rank at or past k! refuses.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "arrange"
+                                          },
+                                          "row": {
+                                            "description": "The ordered zone.",
+                                            "type": "string"
+                                          },
+                                          "from": {
+                                            "description": "The integer row the rank is read from.",
+                                            "type": "string"
+                                          },
+                                          "fromKey": {
+                                            "description": "The cell of that row, or null for its slot cell.",
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ],
+                                            "default": null
+                                          }
+                                        },
+                                        "required": [
+                                          "row",
+                                          "from"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -14375,12 +14433,19 @@
                 }
               },
               "mode": {
-                "description": "Whether the interaction fires every tick the co-occurrence holds (Level) or once per crossing (Edge, the default \u2014 an interaction that transforms/spawns/despawns almost always wants Edge, for the same reason a rule that writes a row does: level-firing a spawn is a journal entry every tick the co-occurrence holds).",
+                "description": "Whether the interaction fires every tick the co-occurrence holds For a distance interaction, at most this many right carriers per left carrier \u2014 the nearest first, ties broken by the lower body index \u2014 or null for every carrier in range. The work sheet prices the pair count at this budget. (Level) or once per crossing (Edge, the default \u2014 an interaction that transforms/spawns/despawns almost always wants Edge, for the same reason a rule that writes a row does: level-firing a spawn is a journal entry every tick the co-occurrence holds).",
                 "enum": [
                   "Level",
                   "Edge"
                 ],
                 "default": "Edge"
+              },
+              "neighbours": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "default": null
               }
             },
             "required": [

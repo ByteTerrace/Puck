@@ -37,7 +37,8 @@ public static class RuleFacts {
     public const string TablePrefix = "$table:";
     /// <summary>The prefix; <c>$reduce:&lt;op&gt;:&lt;row&gt;</c> aggregates every cell a keyed (or slot) row
     /// declares — <c>max</c>/<c>min</c>/<c>sum</c> read the row's own <c>CellKind</c>, <c>count</c> is always
-    /// integer (the number of cells present, regardless of what they hold). The reserved-channel exemption from
+    /// integer (the number of cells present, regardless of what they hold), and <c>arrangementRank</c> is an ordered
+    /// zone's order as one integer (the Lehmer rank relative to its token domain's order, k ≤ 20). The reserved-channel exemption from
     /// the compiler's ordinary (row, key) pair rule: a reduction addresses the whole row rather
     /// than one cell, so it is the one place a keyed row is read with no key at all — admitted deliberately, not a
     /// hole in the pair rule (the compiler's reduce branch). The optional suffix

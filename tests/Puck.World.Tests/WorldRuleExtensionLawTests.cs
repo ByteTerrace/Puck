@@ -233,6 +233,34 @@ public sealed class WorldRuleExtensionLawTests {
     }
 
     [Fact]
+    public void ANeighbourBudgetCarriesThroughCompileAndPricesPairsAtTheBudget() {
+        const string Property = "tag";
+        static WorldDefinition With(int? neighbours, WorldInteractionCoOccurrence coOccurrence = WorldInteractionCoOccurrence.Distance) => Document(state: [Keyed(Property, 2, [])], rules: []) with {
+            Properties = new WorldPropertyRegistrySection(Names: [Property]),
+            Interactions = new WorldInteractionsSection(Interactions: [new WorldInteraction(
+                Name: Name("near"),
+                Left: Property,
+                Right: Property,
+                CoOccurrence: coOccurrence,
+                Range: 4m,
+                Effects: [new WorldEffect.EmitCue(Name: "near.hit")],
+                Neighbours: neighbours
+            )]),
+        };
+
+        var budgeted = Assert.Single(collection: WorldRuleCompiler.CompileAllInteractions(definition: With(neighbours: 1)));
+        Assert.Equal(expected: 1, actual: budgeted.Interaction!.Value.Neighbours);
+        var capacity = With(neighbours: 1).Population.Capacity;
+        var every = WorldRuleWorkBudget.Measure(definition: With(neighbours: null)).WorkUnitsPerTick;
+        var one = WorldRuleWorkBudget.Measure(definition: With(neighbours: 1)).WorkUnitsPerTick;
+        // Every pair prices at capacity·(capacity−1); one neighbour per carrier prices at capacity·1.
+        Assert.True(condition: (capacity > 2) && (one < every), userMessage: $"capacity {capacity}: every={every} one={one}");
+
+        Assert.Throws<RuleException>(testCode: () => WorldRuleCompiler.CompileAllInteractions(definition: With(neighbours: 0)));
+        Assert.Throws<RuleException>(testCode: () => WorldRuleCompiler.CompileAllInteractions(definition: With(neighbours: WorldInteractionCapacity.MaxNeighbours + 1)));
+    }
+
+    [Fact]
     public void AggregateRuleBudgetRejectsAValidButPathologicallyExpensiveProgram() {
         var effects = Enumerable.Range(start: 0, count: RuleCapacity.MaxEffectsPerRule)
             .Select(static _ => (ActionEffect)new ActionEffect.AddState(State: "counter", Value: 1m))
