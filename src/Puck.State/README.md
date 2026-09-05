@@ -95,7 +95,18 @@ Nothing here carries a `World` name — a state library names no world.
   `hilbertX`/`hilbertY`; the hex family over `HexagonalIndex` (`hex(q, r)`,
   `hexQ`, `hexR`, `hexRadius`, `hexNorm`, `hexDistance`, `hexNeighbor`,
   `hexRotate`, `hexConjugate`, `hexSwap`, `hexAdd`, `hexSubtract`,
-  `hexMultiply`, `hexScale`, `hexTranslate`); the layer family over
+  `hexMultiply`, `hexScale`, `hexTranslate`); the square family over
+  `SquareIndex` on the same spellings (`square(x, y)`, `squareX`, `squareY`,
+  `squareRadius` (Chebyshev), `squareLength` (Manhattan), `squareNorm`,
+  `squareDistance` (Manhattan), `squareChebyshev`, `squareNeighbor` (E, N, W,
+  S), `squareRotate` (quarter turns), `squareConjugate`, `squareSwap`,
+  `squareAdd`, `squareSubtract`, `squareMultiply`, `squareScale`,
+  `squareTranslate`); `gcd`/`lcm`; the floored `mod(a, m)` with
+  `cycleForward(a, b, m)` and `cycleDistance(a, b, m)` over an m-cycle; `mex`
+  (the smallest clear bit of a 64-bit set); `isPrime(n)` (exact over 64 bits
+  in bounded work) and `prime(i)` (the first 256 primes, derived once) — never
+  a next-prime or n-th-prime search, which is unbounded on the tick path and
+  belongs to a generator draw source; the layer family over
   `LayerSequence` (`layer`, `layerOffset`, `layerStart`, `layerSize`, each
   `(index-or-layer, start, step, seed)`); and `sqrt` (int floor root or fixed
   root), `sin`, `cos` (fixed radians). Every function is int-only except

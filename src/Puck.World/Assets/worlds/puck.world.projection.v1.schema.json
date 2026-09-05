@@ -5415,6 +5415,231 @@
                                               }
                                             },
                                             "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The shell-ordered index of the square cell at Gaussian coordinates (x, y); squareX/squareY invert it.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "square"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The x coordinate of a square index.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "squareX"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The y coordinate of a square index.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "squareY"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The shell a square index lies on: its Chebyshev distance from the origin.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "squareRadius"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The Manhattan distance of a square index from the origin.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "squareLength"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The Gaussian norm x\u00B2 \u002B y\u00B2 of a square index.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "squareNorm"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The Manhattan (rook-step) distance between two square indices.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "squareDistance"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The Chebyshev (king-step) distance between two square indices.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "squareChebyshev"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The square index one step away in direction 0..3 (east, north, west, south; any integer, taken modulo 4).",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "squareNeighbor"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The square index rotated about the origin by quarter turns (any integer, taken modulo 4).",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "squareRotate"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The square index reflected across the x axis.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "squareConjugate"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The square index with x and y exchanged.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "squareSwap"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The square index of the coordinate sum.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "squareAdd"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The square index of the coordinate difference.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "squareSubtract"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The square index of the Gaussian product.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "squareMultiply"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The square index scaled by an integer.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "squareScale"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The square index moved by (x, y).",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "squareTranslate"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The greatest common divisor of two integers\u0027 magnitudes; gcd(dx, dy) == 1 is a lattice line with no interior point.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "gcd"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The least common multiple of two integers\u0027 magnitudes.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "lcm"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The floored remainder of a by m: for a positive m the value in [0, m) congruent to a, whatever a\u0027s sign.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "mod"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The forward (clockwise) distance from a to b around an m-cycle: mod(b \u2212 a, m).",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "cycleForward"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The shortest distance between a and b around an m-cycle, in either direction.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "cycleDistance"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The minimum excluded value of a 64-bit set: the smallest non-negative integer whose bit is clear (the Sprague\u2013Grundy value of a position whose options\u0027 values are the set).",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "mex"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Whether a non-negative integer is prime, decided exactly over the whole 64-bit range in bounded work.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "isPrime"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "The i-th prime for i in 0..255 (2, 3, 5, \u2026 1619): the bounded table a G\u00F6del multiset or a coprime stride reaches for.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "prime"
+                                              }
+                                            },
+                                            "additionalProperties": false
                                           }
                                         ]
                                       }

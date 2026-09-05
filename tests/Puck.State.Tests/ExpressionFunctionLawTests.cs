@@ -40,6 +40,9 @@ public sealed class ExpressionFunctionLawTests {
         return value;
     }
 
+    internal static long EvalPublic(string text) => Eval(text: text);
+    internal static bool TryEvalPublic(string text) => TryEval(text: text, value: out _);
+
     private static string Fixed(double value) => FixedQ4816.FromDouble(value: value).Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     [Theory]

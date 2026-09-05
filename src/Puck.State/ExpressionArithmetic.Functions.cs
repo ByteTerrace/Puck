@@ -8,6 +8,16 @@ public static partial class ExpressionArithmetic {
     private const long MaxMortonComponent = ((1L << 31) - 1L);
     private const int MaxHilbertOrder = 31;
     private const int HexDirections = HexagonalCoordinate.NeighborCount;
+    // The first 256 primes, derived once from the same enumeration that decides them — never a literal table.
+    private static readonly long[] s_primes = BuildPrimes(count: 256);
+
+    private static long[] BuildPrimes(int count) {
+        var primes = new long[count];
+        for (var index = 0; index < count; index++) {
+            primes[index] = ((uint)index).NthPrime();
+        }
+        return primes;
+    }
 
     /// <summary>Returns how many values a function token consumes, or 0 for an operator token the arithmetic core
     /// evaluates itself.</summary>
@@ -21,6 +31,12 @@ public static partial class ExpressionArithmetic {
             or ExpressionOp.HexIndex or ExpressionOp.HexDistance or ExpressionOp.HexNeighbor or ExpressionOp.HexRotate or ExpressionOp.HexAdd or ExpressionOp.HexSubtract or ExpressionOp.HexMultiply or ExpressionOp.HexScale => 2,
         ExpressionOp.Hilbert or ExpressionOp.HexTranslate => 3,
         ExpressionOp.Layer or ExpressionOp.LayerOffset or ExpressionOp.LayerStart or ExpressionOp.LayerSize => 4,
+        ExpressionOp.SquareX or ExpressionOp.SquareY or ExpressionOp.SquareRadius or ExpressionOp.SquareLength or ExpressionOp.SquareNorm or ExpressionOp.SquareConjugate or ExpressionOp.SquareSwap
+            or ExpressionOp.MinimumExcluded or ExpressionOp.IsPrime or ExpressionOp.Prime => 1,
+        ExpressionOp.SquareIndex or ExpressionOp.SquareDistance or ExpressionOp.SquareChebyshev or ExpressionOp.SquareNeighbor or ExpressionOp.SquareRotate or ExpressionOp.SquareAdd
+            or ExpressionOp.SquareSubtract or ExpressionOp.SquareMultiply or ExpressionOp.SquareScale
+            or ExpressionOp.GreatestCommonDivisor or ExpressionOp.LeastCommonMultiple or ExpressionOp.FloorModulo => 2,
+        ExpressionOp.SquareTranslate or ExpressionOp.CycleForward or ExpressionOp.CycleDistance => 3,
         _ => 0,
     };
 
@@ -230,6 +246,125 @@ public static partial class ExpressionArithmetic {
                     };
                     return true;
                 }
+                case ExpressionOp.SquareIndex:
+                    if (!IsInt(arguments[0]) || !IsInt(arguments[1])) { return false; }
+                    value = Puck.Maths.SquareIndex.FromCoordinate(coordinate: new SquareCoordinate(X: ((int)arguments[0]), Y: ((int)arguments[1]))).Value;
+                    return true;
+                case ExpressionOp.SquareX:
+                case ExpressionOp.SquareY: {
+                    if (!TrySquare(arguments[0], out var cell)) { return false; }
+                    var coordinate = cell.ToCoordinate();
+                    value = ((operation == ExpressionOp.SquareX) ? coordinate.X : coordinate.Y);
+                    return true;
+                }
+                case ExpressionOp.SquareRadius: {
+                    if (!TrySquare(arguments[0], out var cell)) { return false; }
+                    value = cell.Radius;
+                    return true;
+                }
+                case ExpressionOp.SquareLength: {
+                    if (!TrySquare(arguments[0], out var cell)) { return false; }
+                    value = cell.ToCoordinate().Length;
+                    return true;
+                }
+                case ExpressionOp.SquareNorm: {
+                    if (!TrySquare(arguments[0], out var cell)) { return false; }
+                    value = cell.Norm;
+                    return true;
+                }
+                case ExpressionOp.SquareDistance: {
+                    if (!TrySquare(arguments[0], out var left) || !TrySquare(arguments[1], out var right)) { return false; }
+                    value = Puck.Maths.SquareIndex.Distance(left: left, right: right);
+                    return true;
+                }
+                case ExpressionOp.SquareChebyshev: {
+                    if (!TrySquare(arguments[0], out var left) || !TrySquare(arguments[1], out var right)) { return false; }
+                    var a = left.ToCoordinate();
+                    var b = right.ToCoordinate();
+                    value = Math.Max(val1: Math.Abs(value: (((long)a.X) - b.X)), val2: Math.Abs(value: (((long)a.Y) - b.Y)));
+                    return true;
+                }
+                case ExpressionOp.SquareNeighbor: {
+                    if (!TrySquare(arguments[0], out var cell)) { return false; }
+                    value = cell.Neighbor(direction: ((int)arguments[1].FloorModulo(modulus: SquareCoordinate.NeighborCount))).Value;
+                    return true;
+                }
+                case ExpressionOp.SquareRotate: {
+                    if (!TrySquare(arguments[0], out var cell)) { return false; }
+                    value = cell.Rotate(turns: ((int)arguments[1].FloorModulo(modulus: SquareCoordinate.NeighborCount))).Value;
+                    return true;
+                }
+                case ExpressionOp.SquareConjugate: {
+                    if (!TrySquare(arguments[0], out var cell)) { return false; }
+                    value = cell.Conjugate().Value;
+                    return true;
+                }
+                case ExpressionOp.SquareSwap: {
+                    if (!TrySquare(arguments[0], out var cell)) { return false; }
+                    value = cell.Swap().Value;
+                    return true;
+                }
+                case ExpressionOp.SquareAdd: {
+                    if (!TrySquare(arguments[0], out var left) || !TrySquare(arguments[1], out var right)) { return false; }
+                    value = (left + right).Value;
+                    return true;
+                }
+                case ExpressionOp.SquareSubtract: {
+                    if (!TrySquare(arguments[0], out var left) || !TrySquare(arguments[1], out var right)) { return false; }
+                    value = (left - right).Value;
+                    return true;
+                }
+                case ExpressionOp.SquareMultiply: {
+                    if (!TrySquare(arguments[0], out var left) || !TrySquare(arguments[1], out var right)) { return false; }
+                    value = (left * right).Value;
+                    return true;
+                }
+                case ExpressionOp.SquareScale: {
+                    if (!TrySquare(arguments[0], out var cell) || !IsInt(arguments[1])) { return false; }
+                    value = cell.Scale(factor: ((int)arguments[1])).Value;
+                    return true;
+                }
+                case ExpressionOp.SquareTranslate: {
+                    if (!TrySquare(arguments[0], out var cell) || !IsInt(arguments[1]) || !IsInt(arguments[2])) { return false; }
+                    value = cell.Translate(displacement: new SquareCoordinate(X: ((int)arguments[1]), Y: ((int)arguments[2]))).Value;
+                    return true;
+                }
+                case ExpressionOp.GreatestCommonDivisor:
+                    if ((arguments[0] == long.MinValue) || (arguments[1] == long.MinValue)) { return false; }
+                    value = arguments[0].GreatestCommonDivisor(other: arguments[1]);
+                    return true;
+                case ExpressionOp.LeastCommonMultiple: {
+                    if ((arguments[0] == long.MinValue) || (arguments[1] == long.MinValue)) { return false; }
+                    var a = Math.Abs(value: arguments[0]);
+                    var b = Math.Abs(value: arguments[1]);
+                    if ((a == 0L) || (b == 0L)) { value = 0L; return true; }
+                    var multiple = (((Int128)(a / a.GreatestCommonDivisor(other: b))) * b);
+                    if (multiple > long.MaxValue) { return false; }
+                    value = ((long)multiple);
+                    return true;
+                }
+                case ExpressionOp.FloorModulo:
+                    if ((arguments[1] == 0L) || ((arguments[1] == -1L) && (arguments[0] == long.MinValue))) { return false; }
+                    value = arguments[0].FloorModulo(modulus: arguments[1]);
+                    return true;
+                case ExpressionOp.CycleForward:
+                case ExpressionOp.CycleDistance: {
+                    var modulus = arguments[2];
+                    if (modulus <= 0L) { return false; }
+                    var forward = unchecked(arguments[1] - arguments[0]).FloorModulo(modulus: modulus);
+                    value = ((operation == ExpressionOp.CycleForward) ? forward : Math.Min(val1: forward, val2: (modulus - forward)));
+                    return true;
+                }
+                case ExpressionOp.MinimumExcluded:
+                    value = System.Numerics.BitOperations.TrailingZeroCount(~((ulong)arguments[0]));
+                    return true;
+                case ExpressionOp.IsPrime:
+                    value = (((arguments[0] >= 0L) && (((arguments[0] <= uint.MaxValue) ? ((uint)arguments[0]).IsPrime() : PrimeField64.IsPrime(value: ((ulong)arguments[0]))))) ? 1L : 0L);
+                    return true;
+                case ExpressionOp.Prime:
+                    if ((arguments[0] < 0L) || (arguments[0] >= s_primes.Length)) { return false; }
+                    value = s_primes[arguments[0]];
+                    return true;
                 default:
                     return false;
             }
@@ -243,6 +378,15 @@ public static partial class ExpressionArithmetic {
     }
 
     private static bool IsInt(long value) => ((value >= int.MinValue) && (value <= int.MaxValue));
+
+    private static bool TrySquare(long value, out Puck.Maths.SquareIndex cell) {
+        if ((value < 0L) || (value > Puck.Maths.SquareIndex.MaxValue)) {
+            cell = default;
+            return false;
+        }
+        cell = new Puck.Maths.SquareIndex(value: value);
+        return true;
+    }
 
     private static bool TryHex(long value, out HexagonalIndex cell) {
         if ((value < 0L) || (value > HexagonalIndex.MaxValue)) {

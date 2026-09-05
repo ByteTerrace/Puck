@@ -105,6 +105,31 @@ public sealed record ValueExpression(IReadOnlyList<ValueToken> Tokens) {
 [JsonDerivedType(typeof(ValueToken.SquareRoot), typeDiscriminator: "sqrt")]
 [JsonDerivedType(typeof(ValueToken.Sine), typeDiscriminator: "sin")]
 [JsonDerivedType(typeof(ValueToken.Cosine), typeDiscriminator: "cos")]
+[JsonDerivedType(typeof(ValueToken.SquareIndex), typeDiscriminator: "square")]
+[JsonDerivedType(typeof(ValueToken.SquareX), typeDiscriminator: "squareX")]
+[JsonDerivedType(typeof(ValueToken.SquareY), typeDiscriminator: "squareY")]
+[JsonDerivedType(typeof(ValueToken.SquareRadius), typeDiscriminator: "squareRadius")]
+[JsonDerivedType(typeof(ValueToken.SquareLength), typeDiscriminator: "squareLength")]
+[JsonDerivedType(typeof(ValueToken.SquareNorm), typeDiscriminator: "squareNorm")]
+[JsonDerivedType(typeof(ValueToken.SquareDistance), typeDiscriminator: "squareDistance")]
+[JsonDerivedType(typeof(ValueToken.SquareChebyshev), typeDiscriminator: "squareChebyshev")]
+[JsonDerivedType(typeof(ValueToken.SquareNeighbor), typeDiscriminator: "squareNeighbor")]
+[JsonDerivedType(typeof(ValueToken.SquareRotate), typeDiscriminator: "squareRotate")]
+[JsonDerivedType(typeof(ValueToken.SquareConjugate), typeDiscriminator: "squareConjugate")]
+[JsonDerivedType(typeof(ValueToken.SquareSwap), typeDiscriminator: "squareSwap")]
+[JsonDerivedType(typeof(ValueToken.SquareAdd), typeDiscriminator: "squareAdd")]
+[JsonDerivedType(typeof(ValueToken.SquareSubtract), typeDiscriminator: "squareSubtract")]
+[JsonDerivedType(typeof(ValueToken.SquareMultiply), typeDiscriminator: "squareMultiply")]
+[JsonDerivedType(typeof(ValueToken.SquareScale), typeDiscriminator: "squareScale")]
+[JsonDerivedType(typeof(ValueToken.SquareTranslate), typeDiscriminator: "squareTranslate")]
+[JsonDerivedType(typeof(ValueToken.GreatestCommonDivisor), typeDiscriminator: "gcd")]
+[JsonDerivedType(typeof(ValueToken.LeastCommonMultiple), typeDiscriminator: "lcm")]
+[JsonDerivedType(typeof(ValueToken.FloorModulo), typeDiscriminator: "mod")]
+[JsonDerivedType(typeof(ValueToken.CycleForward), typeDiscriminator: "cycleForward")]
+[JsonDerivedType(typeof(ValueToken.CycleDistance), typeDiscriminator: "cycleDistance")]
+[JsonDerivedType(typeof(ValueToken.MinimumExcluded), typeDiscriminator: "mex")]
+[JsonDerivedType(typeof(ValueToken.IsPrime), typeDiscriminator: "isPrime")]
+[JsonDerivedType(typeof(ValueToken.Prime), typeDiscriminator: "prime")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record ValueToken {
     /// <summary>An exact authored decimal, converted to the destination row's numeric kind at compile time.</summary>
@@ -301,6 +326,56 @@ public abstract record ValueToken {
     public sealed record Sine : ValueToken;
     /// <summary>The cosine of a fixed-point angle in radians; fixed expressions only.</summary>
     public sealed record Cosine : ValueToken;
+    /// <summary>The shell-ordered index of the square cell at Gaussian coordinates (x, y); <c>squareX</c>/<c>squareY</c> invert it.</summary>
+    public sealed record SquareIndex : ValueToken;
+    /// <summary>The x coordinate of a square index.</summary>
+    public sealed record SquareX : ValueToken;
+    /// <summary>The y coordinate of a square index.</summary>
+    public sealed record SquareY : ValueToken;
+    /// <summary>The shell a square index lies on: its Chebyshev distance from the origin.</summary>
+    public sealed record SquareRadius : ValueToken;
+    /// <summary>The Manhattan distance of a square index from the origin.</summary>
+    public sealed record SquareLength : ValueToken;
+    /// <summary>The Gaussian norm x² + y² of a square index.</summary>
+    public sealed record SquareNorm : ValueToken;
+    /// <summary>The Manhattan (rook-step) distance between two square indices.</summary>
+    public sealed record SquareDistance : ValueToken;
+    /// <summary>The Chebyshev (king-step) distance between two square indices.</summary>
+    public sealed record SquareChebyshev : ValueToken;
+    /// <summary>The square index one step away in direction 0..3 (east, north, west, south; any integer, taken modulo 4).</summary>
+    public sealed record SquareNeighbor : ValueToken;
+    /// <summary>The square index rotated about the origin by quarter turns (any integer, taken modulo 4).</summary>
+    public sealed record SquareRotate : ValueToken;
+    /// <summary>The square index reflected across the x axis.</summary>
+    public sealed record SquareConjugate : ValueToken;
+    /// <summary>The square index with x and y exchanged.</summary>
+    public sealed record SquareSwap : ValueToken;
+    /// <summary>The square index of the coordinate sum.</summary>
+    public sealed record SquareAdd : ValueToken;
+    /// <summary>The square index of the coordinate difference.</summary>
+    public sealed record SquareSubtract : ValueToken;
+    /// <summary>The square index of the Gaussian product.</summary>
+    public sealed record SquareMultiply : ValueToken;
+    /// <summary>The square index scaled by an integer.</summary>
+    public sealed record SquareScale : ValueToken;
+    /// <summary>The square index moved by (x, y).</summary>
+    public sealed record SquareTranslate : ValueToken;
+    /// <summary>The greatest common divisor of two integers' magnitudes; gcd(dx, dy) == 1 is a lattice line with no interior point.</summary>
+    public sealed record GreatestCommonDivisor : ValueToken;
+    /// <summary>The least common multiple of two integers' magnitudes.</summary>
+    public sealed record LeastCommonMultiple : ValueToken;
+    /// <summary>The floored remainder of a by m: for a positive m the value in [0, m) congruent to a, whatever a's sign.</summary>
+    public sealed record FloorModulo : ValueToken;
+    /// <summary>The forward (clockwise) distance from a to b around an m-cycle: mod(b − a, m).</summary>
+    public sealed record CycleForward : ValueToken;
+    /// <summary>The shortest distance between a and b around an m-cycle, in either direction.</summary>
+    public sealed record CycleDistance : ValueToken;
+    /// <summary>The minimum excluded value of a 64-bit set: the smallest non-negative integer whose bit is clear (the Sprague–Grundy value of a position whose options' values are the set).</summary>
+    public sealed record MinimumExcluded : ValueToken;
+    /// <summary>Whether a non-negative integer is prime, decided exactly over the whole 64-bit range in bounded work.</summary>
+    public sealed record IsPrime : ValueToken;
+    /// <summary>The i-th prime for i in 0..255 (2, 3, 5, … 1619): the bounded table a Gödel multiset or a coprime stride reaches for.</summary>
+    public sealed record Prime : ValueToken;
 }
 
 /// <summary>Converts an exact authored decimal literal into the Q48.16 fixed-point carrier a state cell holds — the one
