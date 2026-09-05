@@ -61,6 +61,9 @@ namespace Puck.World;
 // otherwise resolve to one generated accessor for both (SYSLIB1031). Naming this arm explicitly keeps both.
 [JsonSerializable(typeof(WorldCameraSubject.Placement), TypeInfoPropertyName = "WorldCameraSubjectPlacement")]
 [JsonSerializable(typeof(WorldValueToken.Select), TypeInfoPropertyName = "WorldValueTokenSelect")]
+// The postfix object spelling WorldValueExpressionJsonConverter reads and writes; the expression type itself rides
+// the converter, so the object arm needs its own entry to be reachable.
+[JsonSerializable(typeof(WorldValueExpressionTokens))]
 [JsonSerializable(typeof(WorldPatternNode.Symbol), TypeInfoPropertyName = "WorldPatternNodeSymbol")]
 [JsonSerializable(typeof(WorldPatternNode.AnySymbol), TypeInfoPropertyName = "WorldPatternNodeAnySymbol")]
 [JsonSerializable(typeof(WorldPatternNode.None), TypeInfoPropertyName = "WorldPatternNodeNone")]

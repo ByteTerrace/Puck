@@ -1688,7 +1688,18 @@ vocabulary — composition, not a new mechanism:
 engine-tick `ValueSeconds`, a live copy `(FromState, FromKey)`, or a numeric
 `Expression`. A copy or expression operand is read fresh every firing through
 the same `ResolveOperand`/`ReadWorldFact` path the comparand uses, and every
-operand must match the destination's `int` or `fixed` kind. Expressions are
+operand must match the destination's `int` or `fixed` kind. An expression is
+authored either as an infix string — `"min(damage, hp[$each]) * 2 - armor"`,
+C precedence over `+ - * / %`, `& | ^ ~`, `<< >> >>>`, `== != < <= > >=`, and
+`c ? a : b`, the named forms as calls (`min(a, b)`, `clamp(v, lo, hi)`,
+`popCount(m)`, `bitField(v, offset, width)`, `boardShift(m, topology,
+direction)`, ...), a state read as its row name keyed `row[key]` (backquoted,
+`` `seat-1` ``, when the name is not a bare identifier; a `$`-channel carries
+its colons), decimal or `0x` literals — or as the postfix `{ "tokens": [...] }`
+object. The string is syntax only: it parses to exactly the tokens an author
+could have written by hand (`WorldExpressionSyntax`), the compiler proves and
+prices the tokens the same way, and the document writes back whichever
+spelling it read. Expressions are
 postfix token lists with a 64-token ceiling; they provide constants, state or
 reserved-channel reads, `add`, `subtract`, `multiply`, `divide`, `modulo`
 (remainder toward zero; in `fixed` the raw remainder, so `2.5 modulo 1` is
@@ -1780,14 +1791,30 @@ tick. The cost includes gate/expression operands, keyed scans, `forEach`, the
 quadratic worst case of distance interactions, mutation rebuild weights, nested
 transaction preflight, field-paint candidate visits, and flock-affinity expressions
 for every body's worst-case simultaneous initial sample. Validation refuses a
-document above the aggregate ceiling; `world.budget` prints the current rule,
-interaction, evaluation-slot, and work-unit totals. Interaction `range` is an
+document above the aggregate ceiling, naming the three costliest lines with
+their multipliers; `world.budget` prints the current rule,
+interaction, evaluation-slot, and work-unit totals, and `world.budget.rules
+[top]` lists every rule's and interaction's line — multiplier, unit cost,
+total, and the cell it prices exclusively under — costliest first, so the
+total is traceable to the rows that make it up. A `forEach` line's multiplier
+is its row's capacity: a row left at the default room prices at 128 cells, a
+registry-sized row authors the capacity it needs. Interaction `range` is an
 exact JSON decimal lowered directly to fixed point, with no binary32 round trip.
 
 Live effect failures are bounded diagnostics, not a Level-rule log flood.
 `world.rule.failures` reports one fixed counter per refusal category plus its
 latest tick, rule, effect, and concrete reason; stderr narrates only the first
-occurrence of each category.
+occurrence of each category. To see WHY one rule did what it did,
+`world.rule.trace <rule> [evaluations]` arms a capture of its next evaluations
+(at most 32); after `world.wait`, `world.rule.trace` prints one line per
+evaluation — the tick, the `forEach` key, every binding's value, every gate
+conjunct with the two values it compared and its verdict, whether the gate
+held (and whether an edge rule was already held), and each effect's spelling,
+computed value, and outcome: applied, refused with the reason, emitted, or
+skipped because the write could not move its destination. The capture is an
+observer — a traced run hashes identically to an untraced one — and
+`world.rule.trace off` disarms it. With `replay.verify` to reach the tick, this
+is the breakpoint.
 
 The high-frequency `UpsertStateCell` path validates only the addressed mutable
 cell and installs only value-derived state. Declaration-shape mutations retain

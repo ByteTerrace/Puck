@@ -242,7 +242,11 @@ value at every read/firing (effect `key`/`fromKey`, `compareState`
 `key`/`comparandKey`), and a body-reference token `cell:<row>:<key>` does the
 same inside `$distance:`/`$los:`/`$nearest:`. `$bind:<name>` reads a value the
 enclosing rule's `bindings` list computed for this evaluation (feed-forward,
-declared order, never stored). `$table:<name>[:<column>]:<key>` reads a static
+declared order, never stored). Any `expression`/`left`/`right`/`score`/affinity
+member accepts an infix string (`"min(damage, hp[$each]) * 2"`, C precedence,
+named forms as calls, `row[key]` reads, backquoted names, `0x` literals) as
+well as the postfix `{ "tokens": [...] }` object; the string parses to the same
+tokens (`WorldExpressionSyntax`) and writes back as a string. `$table:<name>[:<column>]:<key>` reads a static
 `tables` document (`puck.table.v1`, hash-pinned, outside simulation state) by an
 integer literal, a `$cell:` indirection, `$each`, or an int `$bind:`; a missing
 dynamic key is a `TableKeyMissing` refusal, never a value. Every top-level

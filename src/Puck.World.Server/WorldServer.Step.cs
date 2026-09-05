@@ -258,6 +258,7 @@ public sealed partial class WorldServer {
     // closed by the enclosing sweep, which is what re-arms an Edge interaction whose synthesized gate is always open.
     private bool EvaluateOnce(CompiledWorldRule rule, RuleLatch latch, Dictionary<LatchKey, bool> bindings, LatchKey binding, ulong tick, ulong stepTicks) {
         m_tableKeyMissingRule = rule.Name;
+        var trace = BeginRuleTrace(rule: rule, tick: tick);
         // Bound values first, in declared order, each visible to the ones after it and to the gate and effects. A
         // binding that cannot evaluate (overflow, a divide by zero) closes the gate for this evaluation and is
         // reported once per category like any effect's arithmetic refusal.
@@ -265,15 +266,20 @@ public sealed partial class WorldServer {
         for (var ordinal = 0; ordinal < bound.Length; ordinal++) {
             var declared = bound[ordinal];
             if (!TryEvaluateExpression(program: declared.Expression, kind: declared.Kind, tick: tick, value: out var value)) {
+                trace?.Bindings.Add(item: $"{declared.Name}=refused");
                 ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.Arithmetic, ruleName: rule.Name, effect: $"binding '{declared.Name}'", tick: tick, detail: "the binding's expression overflowed, divided by zero, or produced an invalid stack result");
+                EndRuleTrace(entry: trace);
                 return false;
             }
             m_ruleBindingValues[ordinal] = value;
+            trace?.Bindings.Add(item: $"{declared.Name}={DescribeTracedFact(value: value, kind: declared.Kind, isForever: false)}");
         }
+        m_gateTrace = trace?.Conjuncts;
         var open = RuleGateOpen(
             gate: rule.Gate,
             tick: tick
         );
+        m_gateTrace = null;
         ref var slot = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(
             dictionary: bindings,
             exists: out _,
@@ -284,14 +290,19 @@ public sealed partial class WorldServer {
         slot = open;
         latch.Touch(binding: binding);
 
-        if (
-            !open ||
-            ((rule.Mode == ActionTriggerMode.Edge) && wasOpen)
-        ) {
+        var fires = (open && ((rule.Mode != ActionTriggerMode.Edge) || !wasOpen));
+        if (trace is not null) {
+            trace.GateOpen = open;
+            trace.EdgeHeld = (open && !fires);
+        }
+        if (!fires) {
+            EndRuleTrace(entry: trace);
             return false;
         }
 
-        return FireWorldRuleEffects(effects: rule.Effects, ruleName: rule.Name, tick: tick, stepTicks: stepTicks);
+        var applied = FireWorldRuleEffects(effects: rule.Effects, ruleName: rule.Name, tick: tick, stepTicks: stepTicks);
+        EndRuleTrace(entry: trace);
+        return applied;
     }
     // Every top-level effect is its own boundary: each performs its own refusal-suppressing preflight and either
     // installs or refuses alone, so a later effect's refusal never rolls back an earlier sibling's write. The one
@@ -299,9 +310,14 @@ public sealed partial class WorldServer {
     // as one candidate before any of it installs.
     private bool FireWorldRuleEffects(CompiledWorldEffect[] effects, string ruleName, ulong tick, ulong stepTicks) {
         var applied = false;
+        var trace = m_traceEntry;
 
         for (var index = 0; index < effects.Length; index++) {
-            applied |= FireWorldRuleEffect(effect: effects[index], ruleName: ruleName, stepTicks: stepTicks, tick: tick);
+            var effect = effects[index];
+            var serial = m_ruleRefusalSerial;
+            var fired = FireWorldRuleEffect(effect: effect, ruleName: ruleName, stepTicks: stepTicks, tick: tick);
+            applied |= fired;
+            trace?.Effects.Add(item: DescribeTracedEffect(effect: effect, applied: fired, refused: (m_ruleRefusalSerial != serial)));
         }
 
         return applied;
@@ -764,6 +780,9 @@ public sealed partial class WorldServer {
                 }
                 ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.Arithmetic, ruleName: ruleName, effect: effect, tick: tick, detail: "the expression overflowed, divided by zero, or produced an invalid stack result");
                 return false;
+            }
+            if ((m_traceEntry is not null) && !strict) {
+                m_traceEffectValue = DescribeTracedFact(value: raw, kind: row.Kind, isForever: false);
             }
             var next = ((write.Write == WorldDocumentWriteKind.Add)
                 ? unchecked((current + raw))
@@ -1320,6 +1339,7 @@ public sealed partial class WorldServer {
         foreach (var predicate in gate) {
             if (predicate.Kind == CompiledWorldPredicateKind.Not) {
                 stack[top - 1] = !stack[top - 1];
+                m_gateTrace?.Add(item: $"not -> {(stack[top - 1] ? "true" : "false")}");
                 continue;
             }
             if (predicate.Kind is CompiledWorldPredicateKind.All or CompiledWorldPredicateKind.Any) {
@@ -1334,13 +1354,21 @@ public sealed partial class WorldServer {
 
                 top = start;
                 stack[top++] = result;
+                m_gateTrace?.Add(item: $"{((predicate.Kind == CompiledWorldPredicateKind.All) ? "all" : "any")} of {predicate.Arity} -> {(result ? "true" : "false")}");
                 continue;
             }
 
             if (predicate.LeftExpression is { } leftExpression) {
-                stack[top++] = TryEvaluateExpression(leftExpression, predicate.ValueKind, tick, out var leftValue) &&
-                    TryEvaluateExpression(predicate.RightExpression!, predicate.ValueKind, tick, out var rightValue) &&
-                    WorldFactHolds(predicate.Comparison, leftValue, false, rightValue, false);
+                var rightValue = 0L;
+                var leftOk = TryEvaluateExpression(leftExpression, predicate.ValueKind, tick, out var leftValue);
+                var rightOk = leftOk && TryEvaluateExpression(predicate.RightExpression!, predicate.ValueKind, tick, out rightValue);
+                var holds = rightOk && WorldFactHolds(predicate.Comparison, leftValue, false, rightValue, false);
+                stack[top++] = holds;
+                if (m_gateTrace is { } valueTrace) {
+                    var left = (leftOk ? DescribeTracedFact(value: leftValue, kind: predicate.ValueKind, isForever: false) : "refused");
+                    var right = (rightOk ? DescribeTracedFact(value: rightValue, kind: predicate.ValueKind, isForever: false) : "refused");
+                    valueTrace.Add(item: $"{predicate.Describe}: {left} {DescribeTracedComparison(comparison: predicate.Comparison)} {right} -> {(holds ? "true" : "false")}");
+                }
                 continue;
             }
             // Reached only for a Compare token with no LeftExpression (the two prior branches continue past every
@@ -1366,13 +1394,15 @@ public sealed partial class WorldServer {
                 )
             );
 
-            stack[top++] = WorldFactHolds(
+            var holdsHere = WorldFactHolds(
                 comparison: predicate.Comparison,
                 value: value.Value,
                 valueIsForever: value.IsForever,
                 expected: expected.Value,
                 expectedIsForever: expected.IsForever
             );
+            stack[top++] = holdsHere;
+            m_gateTrace?.Add(item: $"{predicate.Describe}: {DescribeTracedFact(value: value.Value, kind: value.Kind, isForever: value.IsForever)} {DescribeTracedComparison(comparison: predicate.Comparison)} {DescribeTracedFact(value: expected.Value, kind: expected.Kind, isForever: expected.IsForever)} -> {(holdsHere ? "true" : "false")}");
         }
 
         return ((top == 1) && stack[0]);

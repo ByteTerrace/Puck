@@ -86,9 +86,26 @@ public abstract record ActionPredicate {
 }
 
 /// <summary>A bounded postfix numeric expression evaluated by a world rule, decision, or flock affinity. Each token either pushes a value or
-/// consumes preceding values; the compiler proves stack shape and numeric kind before simulation begins.</summary>
+/// consumes preceding values; the compiler proves stack shape and numeric kind before simulation begins. Authored
+/// either as an infix string (<see cref="WorldExpressionSyntax"/>, <c>"min(damage, hp) * 2"</c>) or as the postfix
+/// <c>{ "tokens": [...] }</c> object; both parse to the same tokens and each writes back in its own spelling.</summary>
 /// <param name="Tokens">The postfix tokens, in evaluation order.</param>
-public sealed record WorldValueExpression(IReadOnlyList<WorldValueToken> Tokens);
+[JsonConverter(typeof(WorldValueExpressionJsonConverter))]
+public sealed record WorldValueExpression(IReadOnlyList<WorldValueToken> Tokens) {
+    /// <summary>Gets the infix spelling this expression was authored in, or <see langword="null"/> for one authored
+    /// as tokens; the serializer writes whichever spelling is present.</summary>
+    [JsonIgnore]
+    public string? Text { get; init; }
+
+    /// <summary>Parses an infix spelling.</summary>
+    /// <param name="text">The spelling.</param>
+    /// <returns>The expression, carrying <paramref name="text"/> as its <see cref="Text"/>.</returns>
+    /// <exception cref="FormatException">The spelling does not parse.</exception>
+    public static WorldValueExpression Parse(string text) =>
+        (WorldExpressionSyntax.TryParse(text: text, tokens: out var tokens, error: out var error)
+            ? new WorldValueExpression(Tokens: tokens) { Text = text }
+            : throw new FormatException(message: $"expression \"{text}\" {error}"));
+}
 /// <summary>One authored token in a <see cref="WorldValueExpression"/>.</summary>
 [JsonDerivedType(typeof(WorldValueToken.Constant), typeDiscriminator: "constant")]
 [JsonDerivedType(typeof(WorldValueToken.State), typeDiscriminator: "state")]

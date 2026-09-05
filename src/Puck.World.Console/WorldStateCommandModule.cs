@@ -422,6 +422,8 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         ));
     }
 
+    private const int DefaultRuleTraceEvaluations = 8;
+
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         foreach (var command in DiscreteCommands()) {
@@ -440,6 +442,54 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                 }
                 return new CommandResult(Output: server.DescribeRuleRuntimeDiagnostics());
             }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.rule.trace",
+            description: $"Captures one rule's or interaction's next evaluations and reads them back (Immediate): world.rule.trace <rule> [evaluations 1..{WorldServer.MaxRuleTraceEvaluations}] arms a capture (default {DefaultRuleTraceEvaluations}; replaces any earlier one); world.rule.trace alone prints what was captured so far — per evaluation its tick, the forEach key, every binding's value, every gate conjunct with the two values it compared and its verdict, whether the gate held (and whether an edge rule was already held), and each effect's spelling, computed value, and outcome: applied, refused with the reason, emitted, or skipped because the write could not move its destination; world.rule.trace off disarms. Arm, world.wait the ticks the rule should run over, then read. An observer only — a traced run hashes identically to an untraced one. A decision rule is refused here; world.decisions echoes it.",
+            handler: (context, args) => {
+                if (!authority.TryResolveServer(context: context, error: out var error, server: out var server, verb: "world.rule.trace")) {
+                    return error;
+                }
+                if (args.Count == 0) {
+                    return new CommandResult(Output: server.DescribeRuleTrace());
+                }
+                if ((args.Count == 1) && args[0].Equals(other: "off", comparisonType: StringComparison.Ordinal)) {
+                    return new CommandResult(Output: (server.DisarmRuleTrace() ? "[world.rule.trace: disarmed]" : "[world.rule.trace: none armed]"));
+                }
+                var evaluations = DefaultRuleTraceEvaluations;
+                if ((args.Count > 2) || ((args.Count == 2) && !args.TryInt(index: 1, value: out evaluations))) {
+                    return CommandResult.Usage(form: $"[<rule> [evaluations 1..{WorldServer.MaxRuleTraceEvaluations}] | off]", verb: "world.rule.trace");
+                }
+                var rule = args[0].ToString();
+                return (server.TryArmRuleTrace(rule: rule, evaluations: evaluations, refusal: out var refusal)
+                    ? new CommandResult(Output: $"[world.rule.trace {rule}: armed for {evaluations} evaluation(s) — world.wait, then world.rule.trace reads them back]")
+                    : new CommandResult(Output: refusal) { IsError = true });
+            },
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.budget.rules",
+            description: "Lists every rule's and interaction's worst-case work per tick, costliest first (Immediate): world.budget.rules [top]. Each line carries the evaluation multiplier (a forEach row's capacity, an interaction's carrier or pair count), the cost of one evaluation, the line's total, and — when the gate pins a literal cell to a constant — the cell and value it prices exclusively under, so the total world.budget reports can be traced to the lines that make it up.",
+            handler: (context, args) => {
+                if (!authority.TryResolveServer(context: context, error: out var error, server: out var server, verb: "world.budget.rules")) {
+                    return error;
+                }
+                var top = int.MaxValue;
+                if ((args.Count > 1) || ((args.Count == 1) && (!args.TryInt(index: 0, value: out top) || (top < 1)))) {
+                    return CommandResult.Usage(form: "[top]", verb: "world.budget.rules");
+                }
+                var lines = WorldRuleWorkBudget.Contributors(definition: server.Definition);
+                var shown = Math.Min(top, lines.Count);
+                var output = new List<string>(capacity: shown + 1) { $"[world.budget.rules: {lines.Count} line(s), showing {shown}]" };
+                for (var index = 0; index < shown; index++) {
+                    var line = lines[index];
+                    output.Add(item: $"[world.budget.rules {line.Name}{(line.IsInteraction ? " interaction" : string.Empty)} x{line.Multiplier} unit={line.UnitCost} work={line.WorkUnits}{((line.ExclusiveCell is { } cell) ? $" exclusive {cell}={line.ExclusiveValue}" : string.Empty)}]");
+                }
+                return new CommandResult(Output: string.Join(separator: Environment.NewLine, values: output));
+            },
+            routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,

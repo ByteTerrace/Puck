@@ -1279,6 +1279,23 @@ C# "recipe executor" (game nouns in the engine), a `copyCells` transform
 (derivable from `forEach`), and a per-effect `isolate` flag (a second
 atomicity mechanism where making the boundary explicit was the fix).
 
+**Infix expressions, the rule trace, and the budget breakdown.** An expression
+is authored as an infix string as well as a token list: the string is syntax
+over the same postfix tokens — one parser, one printer, no second evaluator, no
+new cost — so the authoring surface stops being the reason a rule is hard to
+read without the engine gaining a language. Debugging a rule is a read-back,
+not a debugger: `world.rule.trace` captures a rule's next evaluations with
+every binding value, every gate conjunct's compared values and verdict, and
+every effect's computed value and outcome, as an observer that leaves the
+state hash alone; replay reaches the tick, the trace explains it. The work
+budget stays worst-case — that is what makes the tick a bound — but it is no
+longer opaque: an over-budget refusal names the costliest lines with their
+multipliers, and `world.budget.rules` lists every line, so the fix is a
+capacity on the row that is actually multiplying, never a guess. Refused on
+the same review: loosening the budget to an average-case estimate (a bound
+that can be exceeded is not a bound), and a stepping debugger (there is no
+call stack; a rule's evaluation is one line of facts).
+
 ## After this arc
 
 Owner review of this branch gates the next wave. Recorded as decisions, not status — none of this has
