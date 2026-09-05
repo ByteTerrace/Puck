@@ -26,7 +26,7 @@ public sealed class WorldSymmetryChannelLawTests {
 
         Assert.Single(collection: compiled);
 
-        return Assert.IsType<SymmetryOperand>(@object: compiled[0].Effects[0].From!.Value.Value);
+        return Assert.IsType<SymmetryOperand>(@object: ((WriteEffect)compiled[0].Effects[0].Value!).From!.Value.Value);
     }
     private static string Refusal(string channel, string? key = null, string destination = "out") {
         var exception = Assert.Throws<WorldRuleException>(testCode: () => WorldRuleCompiler.CompileAll(definition: Definition(new ActionEffect.SetState(State: destination, FromState: channel, FromKey: key))));

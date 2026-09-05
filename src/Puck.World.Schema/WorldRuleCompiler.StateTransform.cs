@@ -88,7 +88,6 @@ public static partial class WorldRuleCompiler {
             default:
                 throw Invalid("unknown or null state transform");
         }
-        return new(WorldRuleEffectKind.TransformState, string.Empty, string.Empty, default, 0, null,
-            $"transformState {transform.GetType().Name}", Transform: transform);
+        return new CompiledWorldEffect(new TransformStateEffect(transform: transform, describe: $"transformState {transform.GetType().Name}"));
     }
 }

@@ -50,6 +50,6 @@ public static partial class WorldRuleCompiler {
             definition: definition,
             verb: "pushState"
         );
-        return write with { Kind = WorldRuleEffectKind.PushState, Key = string.Empty, Describe = $"pushState {push.State}" };
+        return new CompiledWorldEffect(PushStateEffect.FromWrite((WriteEffect)write.Value!, $"pushState {push.State}"));
     }
 }

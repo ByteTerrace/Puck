@@ -74,12 +74,7 @@ public readonly partial struct CompiledWorldOperand : IUnion {
     /// <summary>The raw encoding this operand's value is returned in (<see cref="WorldOperandFact.ValueKind"/>).</summary>
     public CellKind ValueKind => m_value!.ValueKind;
 
-    /// <summary>Reads the carried case as <typeparamref name="T"/> when it holds one — the union's own
-    /// <c>TryGetValue(out T)</c>.</summary>
-    /// <typeparam name="T">The expected case type.</typeparam>
-    /// <param name="value">The case, on success; <see langword="null"/> otherwise.</param>
-    /// <returns>Whether the carried case is a <typeparamref name="T"/>.</returns>
-    public bool TryGetValue<T>([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out T? value) where T : WorldOperandFact {
+    private bool TryGetCore<T>([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out T? value) where T : WorldOperandFact {
         if (m_value is T typed) {
             value = typed;
             return true;
@@ -87,6 +82,51 @@ public readonly partial struct CompiledWorldOperand : IUnion {
         value = null;
         return false;
     }
+
+    /// <summary>Reads the carried case as a <see cref="StateCellOperand"/> when it holds one.</summary>
+    public bool TryGetValue([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out StateCellOperand? value) => TryGetCore(out value);
+    /// <summary>Reads the carried case as a <see cref="TickOperand"/> when it holds one.</summary>
+    public bool TryGetValue([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out TickOperand? value) => TryGetCore(out value);
+    /// <summary>Reads the carried case as a <see cref="PopulationOperand"/> when it holds one.</summary>
+    public bool TryGetValue([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out PopulationOperand? value) => TryGetCore(out value);
+    /// <summary>Reads the carried case as a <see cref="PhysicsQuiescentOperand"/> when it holds one.</summary>
+    public bool TryGetValue([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out PhysicsQuiescentOperand? value) => TryGetCore(out value);
+    /// <summary>Reads the carried case as a <see cref="RegionOccupancyOperand"/> when it holds one.</summary>
+    public bool TryGetValue([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out RegionOccupancyOperand? value) => TryGetCore(out value);
+    /// <summary>Reads the carried case as a <see cref="MachineMemoryOperand"/> when it holds one.</summary>
+    public bool TryGetValue([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out MachineMemoryOperand? value) => TryGetCore(out value);
+    /// <summary>Reads the carried case as a <see cref="ReductionOperand"/> when it holds one.</summary>
+    public bool TryGetValue([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ReductionOperand? value) => TryGetCore(out value);
+    /// <summary>Reads the carried case as an <see cref="ArgBodyOperand"/> when it holds one.</summary>
+    public bool TryGetValue([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ArgBodyOperand? value) => TryGetCore(out value);
+    /// <summary>Reads the carried case as a <see cref="BodyDistanceOperand"/> when it holds one.</summary>
+    public bool TryGetValue([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out BodyDistanceOperand? value) => TryGetCore(out value);
+    /// <summary>Reads the carried case as a <see cref="LineOfSightOperand"/> when it holds one.</summary>
+    public bool TryGetValue([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out LineOfSightOperand? value) => TryGetCore(out value);
+    /// <summary>Reads the carried case as a <see cref="ParkedOperand"/> when it holds one.</summary>
+    public bool TryGetValue([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ParkedOperand? value) => TryGetCore(out value);
+    /// <summary>Reads the carried case as an <see cref="UprightOperand"/> when it holds one.</summary>
+    public bool TryGetValue([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out UprightOperand? value) => TryGetCore(out value);
+    /// <summary>Reads the carried case as a <see cref="LinkStalenessOperand"/> when it holds one.</summary>
+    public bool TryGetValue([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out LinkStalenessOperand? value) => TryGetCore(out value);
+    /// <summary>Reads the carried case as a <see cref="ChannelOperand"/> when it holds one.</summary>
+    public bool TryGetValue([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ChannelOperand? value) => TryGetCore(out value);
+    /// <summary>Reads the carried case as a <see cref="NearestOperand"/> when it holds one.</summary>
+    public bool TryGetValue([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out NearestOperand? value) => TryGetCore(out value);
+    /// <summary>Reads the carried case as a <see cref="SymmetryOperand"/> when it holds one.</summary>
+    public bool TryGetValue([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out SymmetryOperand? value) => TryGetCore(out value);
+    /// <summary>Reads the carried case as a <see cref="NavigationOperand"/> when it holds one.</summary>
+    public bool TryGetValue([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out NavigationOperand? value) => TryGetCore(out value);
+    /// <summary>Reads the carried case as a <see cref="BoardOperand"/> when it holds one.</summary>
+    public bool TryGetValue([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out BoardOperand? value) => TryGetCore(out value);
+    /// <summary>Reads the carried case as a <see cref="PhaseOperand"/> when it holds one.</summary>
+    public bool TryGetValue([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out PhaseOperand? value) => TryGetCore(out value);
+    /// <summary>Reads the carried case as a <see cref="PatternOperand"/> when it holds one.</summary>
+    public bool TryGetValue([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out PatternOperand? value) => TryGetCore(out value);
+    /// <summary>Reads the carried case as a <see cref="HistoryOperand"/> when it holds one.</summary>
+    public bool TryGetValue([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out HistoryOperand? value) => TryGetCore(out value);
+    /// <summary>Reads the carried case as a <see cref="ClockOperand"/> when it holds one.</summary>
+    public bool TryGetValue([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ClockOperand? value) => TryGetCore(out value);
 
     /// <summary>Constructs a carrier over a <see cref="StateCellOperand"/> case.</summary>
     public CompiledWorldOperand(StateCellOperand value) => m_value = value;

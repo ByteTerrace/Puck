@@ -103,7 +103,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                     ExpressionCost(expression, definition), ExpressionCost(token.RightExpression!, definition))));
                 continue;
             }
-            cost = SaturatingAdd(cost, OperandCost(token.Left, definition));
+            if (token.Left is { } left) { cost = SaturatingAdd(cost, OperandCost(left, definition)); }
             if (token.Comparand is { } comparand) { cost = SaturatingAdd(cost, OperandCost(comparand, definition)); }
         }
         return cost;
@@ -142,16 +142,16 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
             WorldRuleEffectKind.Write or WorldRuleEffectKind.Countdown or WorldRuleEffectKind.RemoveStateCell or WorldRuleEffectKind.ScheduleState => 512L,
             WorldRuleEffectKind.PushState => 1_024L,
             WorldRuleEffectKind.Generate => 4_096L,
-            WorldRuleEffectKind.TransformState => TransformCost(effect.Transform!, definition),
+            WorldRuleEffectKind.TransformState => TransformCost(((TransformStateEffect)effect.Value!).Transform, definition),
             WorldRuleEffectKind.UpsertHudPanel or WorldRuleEffectKind.RemoveHudPanel => 4_096L,
             WorldRuleEffectKind.UpsertPlacement or WorldRuleEffectKind.RemovePlacement => 32_768L,
             _ => 1L,
         };
 
-        if (effect.From is { } source) {
+        if (effect.Value is IValueSourcedEffect { From: { } source }) {
             cost = SaturatingAdd(left: cost, right: OperandCost(operand: source, definition: definition));
         }
-        if (effect.Expression is { } expression) {
+        if (effect.Value is IValueSourcedEffect { Expression: { } expression }) {
             foreach (var token in expression) {
                 cost = SaturatingAdd(
                     left: cost,
@@ -161,13 +161,13 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 );
             }
         }
-        if (effect.Paint is { } paint) {
+        if (effect.Value is PaintFieldEffect { Paint: var paint }) {
             var diameter = ((2L * paint.Radius) + 1L);
             cost = SaturatingAdd(left: cost, right: SaturatingMultiply(left: diameter, right: SaturatingMultiply(left: diameter, right: diameter)));
         }
-        if (effect.Effects is { } main) {
+        if (effect.Value is TransactionEffect { Effects: { } main } transaction) {
             var mainCost = EffectsCost(effects: main, definition: definition);
-            var failureCost = EffectsCost(effects: (effect.OnFailure ?? []), definition: definition);
+            var failureCost = EffectsCost(effects: transaction.OnFailure, definition: definition);
             // Success preflights and applies main. Refusal may inspect all of main, then preflight and apply failure.
             var success = SaturatingMultiply(left: 2L, right: mainCost);
             var refusal = SaturatingAdd(
@@ -267,10 +267,8 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
             return definition.Population.Capacity;
         }
         if (operand.Value is PatternOperand pattern) {
-            // Reached only when pattern.Board is null (a board-sourced pattern already returned above), so the
-            // board-ray term below is always zero — kept for the same shape the record-struct version carried.
-            var rays = ((pattern.Board is { Direction: < 0 } every) ? every.Topology.DirectionCount : 1);
-            return WorldPatternCapacity.MaxWord * (1L + (pattern.TokenExpression?.Length ?? 0)) + ((pattern.Board?.Topology.CellCount ?? 0) * rays);
+            // Reached only when pattern.Board is null (a board-sourced pattern already returned above).
+            return WorldPatternCapacity.MaxWord * (1L + (pattern.TokenExpression?.Length ?? 0));
         }
 
         return 1L;

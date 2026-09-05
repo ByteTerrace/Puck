@@ -37,7 +37,7 @@ public sealed partial class WorldServer {
         )}]";
     }
 
-    private void ReportRuleEffectRefusal(WorldRuleEffectRefusal refusal, string ruleName, in CompiledWorldEffect effect, ulong tick, string detail) {
+    private void ReportRuleEffectRefusal(WorldRuleEffectRefusal refusal, string ruleName, CompiledWorldEffect effect, ulong tick, string detail) {
         var index = (int)refusal;
         var count = m_ruleRefusalCounts[index];
         count = ((count == ulong.MaxValue) ? count : (count + 1UL));

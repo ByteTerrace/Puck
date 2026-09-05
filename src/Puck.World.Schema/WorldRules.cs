@@ -1,6 +1,5 @@
 using System.Text.Json.Serialization;
 using Puck.Maths;
-using Puck.World.Protocol;
 using Puck.Physics.Motion;
 
 namespace Puck.World;
@@ -543,7 +542,12 @@ public enum CompiledWorldPredicateKind : byte {
 /// <summary>One token in a compiled postfix world-rule gate. The representation preserves arbitrary nested
 /// <see cref="ActionPredicate.All"/>/<see cref="ActionPredicate.Any"/>/<see cref="ActionPredicate.Not"/> trees while
 /// evaluation remains a single bounded, allocation-free pass.</summary>
-/// <param name="Left">The primary operand — the <c>(State, Key)</c> side of the authored <c>compareState</c>.</param>
+/// <param name="Left">The primary operand — the <c>(State, Key)</c> side of the authored <c>compareState</c>. Set
+/// only for a <see cref="CompiledWorldPredicateKind.Compare"/> token spelled as an ordinary comparison;
+/// <see langword="null"/> for an <see cref="CompiledWorldPredicateKind.All"/>/<see cref="CompiledWorldPredicateKind.Any"/>/
+/// <see cref="CompiledWorldPredicateKind.Not"/> logical token (which reads no operand) and for a
+/// <c>compareValue</c> token (which reads <paramref name="LeftExpression"/>/<paramref name="RightExpression"/>
+/// instead) — never a default-initialized carrier standing in for "absent".</param>
 /// <param name="Comparison">The comparison to apply.</param>
 /// <param name="Value">The authored constant comparand, converted directly from its exact decimal token to the
 /// left operand's raw cell encoding at compile time — read only when
@@ -560,7 +564,7 @@ public enum CompiledWorldPredicateKind : byte {
 /// <param name="LeftExpression">Left postfix expression for compareValue; null for an ordinary comparison.</param>
 /// <param name="RightExpression">Right postfix expression for compareValue.</param>
 public readonly record struct CompiledWorldPredicate(
-    CompiledWorldOperand Left,
+    CompiledWorldOperand? Left,
     ActionStateComparison Comparison,
     long Value,
     CellKind ValueKind,
@@ -747,63 +751,10 @@ public enum WorldRuleEffectKind : byte {
     /// <summary>Push one evaluated value into a history row's ring.</summary>
     PushState,
 }
-/// <summary>One compiled world-rule effect. Document and state effects submit ordinary mutations under
-/// <see cref="WorldPrincipal.World"/>, so journal and undo cover them like other writes. Save, pose, cue, body, and
-/// lattice effects instead use their dedicated deterministic runtime paths.</summary>
-/// <param name="Kind">The effect's execution path.</param>
-/// <param name="Row">The destination state row name for <see cref="WorldRuleEffectKind.Write"/>/
-/// <see cref="WorldRuleEffectKind.Generate"/>, the panel/placement id for
-/// <see cref="WorldRuleEffectKind.RemoveHudPanel"/>/<see cref="WorldRuleEffectKind.RemovePlacement"/>, or the
-/// spawn-point id (empty when <paramref name="Pose"/> carries a literal) for <see cref="WorldRuleEffectKind.Pose"/>.</param>
-/// <param name="Key">The destination cell key, body index, or authored body-key indirection.</param>
-/// <param name="Write">Set or add, for <see cref="WorldRuleEffectKind.Write"/>.</param>
-/// <param name="RawValue">The authored constant, pre-converted to the destination row's raw encoding at compile
-/// time — read only when <paramref name="From"/> is <see langword="null"/> (the literal spelling).</param>
-/// <param name="Generator">The generator row name, for <see cref="WorldRuleEffectKind.Generate"/>.</param>
-/// <param name="Describe">The authored spelling, for the <c>world.rules</c> read-back.</param>
-/// <param name="HudPanel">The whole panel row, for <see cref="WorldRuleEffectKind.UpsertHudPanel"/>.</param>
-/// <param name="Placement">The whole placement row, for <see cref="WorldRuleEffectKind.UpsertPlacement"/>.</param>
-/// <param name="From">The live copy-source operand — another row/reserved channel read fresh on every firing (the
-/// same <see cref="CompiledWorldOperand"/> and <c>ReadWorldFact</c> path a <see cref="CompiledWorldPredicate"/>'s
-/// comparand reads through) — or <see langword="null"/> when the effect writes the authored constant
-/// <paramref name="RawValue"/> instead. Applies only to <see cref="WorldRuleEffectKind.Write"/>.</param>
-/// <param name="KeyFrom">The destination cell's key indirection (<see cref="WorldRuleFacts.CellKeyPrefix"/>), or
-/// <see langword="null"/> when <paramref name="Key"/> is literal.</param>
-/// <param name="Pose">The literal pose, for a <see cref="WorldRuleEffectKind.Pose"/> effect authored with a
-/// position; <see langword="null"/> when <paramref name="Row"/> names a spawn point instead.</param>
-/// <param name="Text">The text literal a <see cref="WorldRuleEffectKind.Write"/> into a <c>kind=text</c> row
-/// carries; <see langword="null"/> for a numeric write.</param>
-/// <param name="Expression">The compiled numeric expression, or <see langword="null"/> for another source spelling.</param>
-/// <param name="Effects">The atomic transaction's main branch.</param>
-/// <param name="OnFailure">The transaction's refusal branch.</param>
-/// <param name="Cue">The gameplay cue identifier, or <see langword="null"/> for another effect kind.</param>
-/// <param name="Payload">The optional cue payload.</param>
-/// <param name="Body">The compiled body operation.</param>
-/// <param name="Paint">The compiled lattice paint.</param>
-/// <param name="Transform">The discrete state transform.</param>
-public readonly record struct CompiledWorldEffect(
-    WorldRuleEffectKind Kind,
-    string Row,
-    string Key,
-    WorldDocumentWriteKind Write,
-    long RawValue,
-    string? Generator,
-    string Describe,
-    WorldHudPanel? HudPanel = null,
-    WorldPlacement? Placement = null,
-    CompiledWorldOperand? From = null,
-    CompiledWorldPose? Pose = null,
-    string? Text = null,
-    CompiledCellRef? KeyFrom = null,
-    CompiledWorldExpressionToken[]? Expression = null,
-    CompiledWorldEffect[]? Effects = null,
-    CompiledWorldEffect[]? OnFailure = null,
-    string? Cue = null,
-    string? Payload = null,
-    CompiledWorldBodyEffect? Body = null,
-    CompiledWorldFieldPaint? Paint = null,
-    WorldStateTransform? Transform = null
-);
+// CompiledWorldEffect is now the closed-union carrier declared in WorldEffectUnion.cs, with its case types in
+// WorldEffectKinds.cs (one sealed class per WorldRuleEffectKind below). Document and state effects submit ordinary
+// mutations under WorldPrincipal.World, so journal and undo cover them like other writes; save, pose, cue, body, and
+// lattice effects instead use their dedicated deterministic runtime paths.
 /// <summary>A literal body pose compiled to deterministic numerics — angles in radians.</summary>
 /// <param name="Position">The world position.</param>
 /// <param name="YawRadians">The yaw about +Y.</param>

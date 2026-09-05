@@ -121,15 +121,7 @@ public static partial class WorldRuleCompiler {
         effect: removePlacement,
         ruleName: ruleName
     ),
-        ActionEffect.Save => new CompiledWorldEffect(
-        Kind: WorldRuleEffectKind.Save,
-        Row: string.Empty,
-        Key: string.Empty,
-        Write: default,
-        RawValue: 0L,
-        Generator: null,
-        Describe: "save"
-    ),
+        ActionEffect.Save => new CompiledWorldEffect(SaveEffect.Instance),
         ActionEffect.Pose pose => ResolvePose(
         definition: definition,
         effect: pose,
@@ -276,16 +268,11 @@ public static partial class WorldRuleCompiler {
 
             const double DegreesToRadians = (Math.PI / 180.0);
 
-            return new CompiledWorldEffect(
-                Kind: WorldRuleEffectKind.Pose,
-                Row: string.Empty,
-                Key: effect.Key,
-                Write: default,
-                RawValue: 0L,
-                Generator: null,
-                Describe: $"pose body:{bodyText} at ({position.X}, {position.Y}, {position.Z}) yaw={effect.YawDegrees} pitch={effect.PitchDegrees} roll={effect.RollDegrees}",
-                KeyFrom: keyFrom,
-                Pose: new CompiledWorldPose(
+            return new CompiledWorldEffect(new PoseEffect(
+                spawnPoint: string.Empty,
+                key: effect.Key,
+                keyFrom: keyFrom,
+                pose: new CompiledWorldPose(
                     Position: new FixedVector3(
                         X: FixedQ4816.FromDouble(value: position.X),
                         Y: FixedQ4816.FromDouble(value: position.Y),
@@ -294,8 +281,9 @@ public static partial class WorldRuleCompiler {
                     YawRadians: FixedQ4816.FromDouble(value: (effect.YawDegrees * DegreesToRadians)),
                     PitchRadians: FixedQ4816.FromDouble(value: (effect.PitchDegrees * DegreesToRadians)),
                     RollRadians: FixedQ4816.FromDouble(value: (effect.RollDegrees * DegreesToRadians))
-                )
-            );
+                ),
+                describe: $"pose body:{bodyText} at ({position.X}, {position.Y}, {position.Z}) yaw={effect.YawDegrees} pitch={effect.PitchDegrees} roll={effect.RollDegrees}"
+            ));
         }
 
         if (WorldDefinitionRows.FindSpawnPoint(
@@ -309,16 +297,13 @@ public static partial class WorldRuleCompiler {
             );
         }
 
-        return new CompiledWorldEffect(
-            Kind: WorldRuleEffectKind.Pose,
-            Row: spawnPoint,
-            Key: effect.Key,
-            Write: default,
-            RawValue: 0L,
-            Generator: null,
-            Describe: $"pose body:{bodyText} at {spawnPoint}",
-            KeyFrom: keyFrom
-        );
+        return new CompiledWorldEffect(new PoseEffect(
+            spawnPoint: spawnPoint,
+            key: effect.Key,
+            keyFrom: keyFrom,
+            pose: null,
+            describe: $"pose body:{bodyText} at {spawnPoint}"
+        ));
     }
     private static string DescribeCellKind(CellKind kind) => kind.ToString().ToLowerInvariant();
     private static string DescribeComparison(ActionStateComparison comparison) => comparison switch {
@@ -440,7 +425,7 @@ public static partial class WorldRuleCompiler {
                 if (expression.Kind is not (CellKind.Int or CellKind.Fixed) || !Enum.IsDefined(expression.Comparison)) {
                     throw new WorldRuleException(WorldRuleRefusal.PredicateKindInadmissible, ruleName, "compareValue requires Int or Fixed and a defined comparison");
                 }
-                gate.Add(new(default, expression.Comparison, 0, expression.Kind, null, $"compareValue {expression.Kind} {expression.Comparison}",
+                gate.Add(new(null, expression.Comparison, 0, expression.Kind, null, $"compareValue {expression.Kind} {expression.Comparison}",
                     LeftExpression: CompileExpression(expression.Left, expression.Kind, ruleName, "compareValue left", definition),
                     RightExpression: CompileExpression(expression.Right, expression.Kind, ruleName, "compareValue right", definition)));
                 break;
@@ -461,7 +446,7 @@ public static partial class WorldRuleCompiler {
         }
 
         static CompiledWorldPredicate Logical(CompiledWorldPredicateKind kind, int arity, string describe) => new(
-            Left: default,
+            Left: null,
             Comparison: default,
             Value: 0L,
             ValueKind: default,
@@ -721,16 +706,12 @@ public static partial class WorldRuleCompiler {
             );
         }
 
-        return new CompiledWorldEffect(
-            Kind: WorldRuleEffectKind.Countdown,
-            Row: effect.State,
-            Key: resolvedKey,
-            Write: WorldDocumentWriteKind.Add,
-            RawValue: 0L,
-            Generator: null,
-            Describe: $"countdownState {effect.State}.{resolvedKey} by runtime step",
-            KeyFrom: keyFrom
-        );
+        return new CompiledWorldEffect(new CountdownEffect(
+            row: effect.State,
+            key: resolvedKey,
+            keyFrom: keyFrom,
+            describe: $"countdownState {effect.State}.{resolvedKey} by runtime step"
+        ));
     }
     // A 'generate' effect names ONE thing: the SITE to redraw. The source is the site's own facet (named or
     // inlined), so there is no second row to resolve and no key to address — a draw site is a scalar slot by
@@ -796,15 +777,11 @@ public static partial class WorldRuleCompiler {
             );
         }
 
-        return new CompiledWorldEffect(
-            Kind: WorldRuleEffectKind.Generate,
-            Row: generate.Row,
-            Key: WorldStateRow.SlotKey,
-            Write: WorldDocumentWriteKind.Set,
-            RawValue: 0L,
-            Generator: generate.Row,
-            Describe: $"generate {generate.Row}"
-        );
+        return new CompiledWorldEffect(new GenerateEffect(
+            row: generate.Row,
+            generator: generate.Row,
+            describe: $"generate {generate.Row}"
+        ));
     }
 
     // The (row, key) PAIR rule: a null key means the row's slot cell, and WorldStateRow.IsKeyed — never "declares a
@@ -1021,7 +998,7 @@ public static partial class WorldRuleCompiler {
             verb: verb
         );
 
-        if (!source.Operand.TryGetValue<StateCellOperand>(out var sourceCell)) {
+        if (!source.Operand.TryGetValue(out StateCellOperand? sourceCell)) {
             throw Malformed(ruleName: ruleName, name: name, detail: $"names '{rowName}', which is not a state row — the source of a symmetry read is a declared row's cell");
         }
 
@@ -1050,7 +1027,7 @@ public static partial class WorldRuleCompiler {
                     verb: verb
                 );
 
-                if (!resolved.Operand.TryGetValue<StateCellOperand>(out var otherCell) || (otherCell.KeyFrom is not null)) {
+                if (!resolved.Operand.TryGetValue(out StateCellOperand? otherCell) || (otherCell.KeyFrom is not null)) {
                     throw Malformed(ruleName: ruleName, name: name, detail: $"argument '{argument}' does not name a declared row's cell by a literal key");
                 }
 
@@ -1956,15 +1933,7 @@ public static partial class WorldRuleCompiler {
             );
         }
 
-        return new CompiledWorldEffect(
-            Kind: WorldRuleEffectKind.RemoveHudPanel,
-            Row: effect.Id,
-            Key: string.Empty,
-            Write: default,
-            RawValue: 0L,
-            Generator: null,
-            Describe: $"removeHudPanel {effect.Id}"
-        );
+        return new CompiledWorldEffect(new RemoveHudPanelEffect(id: effect.Id, describe: $"removeHudPanel {effect.Id}"));
     }
     private static CompiledWorldEffect ResolveRemovePlacement(ActionEffect.RemovePlacement effect, string ruleName) {
         if (string.IsNullOrWhiteSpace(value: effect.Id)) {
@@ -1975,15 +1944,7 @@ public static partial class WorldRuleCompiler {
             );
         }
 
-        return new CompiledWorldEffect(
-            Kind: WorldRuleEffectKind.RemovePlacement,
-            Row: effect.Id,
-            Key: string.Empty,
-            Write: default,
-            RawValue: 0L,
-            Generator: null,
-            Describe: $"removePlacement {effect.Id}"
-        );
+        return new CompiledWorldEffect(new RemovePlacementEffect(id: effect.Id, describe: $"removePlacement {effect.Id}"));
     }
     // upsertHudPanel/upsertPlacement are whole-row upserts, exactly like WorldMutation.UpsertHudPanel/UpsertPlacement
     // submitted from the console or an addon — the row's own content (capacity, unknown binding, unresolved
@@ -2001,16 +1962,7 @@ public static partial class WorldRuleCompiler {
             );
         }
 
-        return new CompiledWorldEffect(
-            Kind: WorldRuleEffectKind.UpsertHudPanel,
-            Row: effect.Panel.Id,
-            Key: string.Empty,
-            Write: default,
-            RawValue: 0L,
-            Generator: null,
-            Describe: $"upsertHudPanel {effect.Panel.Id}",
-            HudPanel: effect.Panel
-        );
+        return new CompiledWorldEffect(new UpsertHudPanelEffect(panel: effect.Panel, describe: $"upsertHudPanel {effect.Panel.Id}"));
     }
     private static CompiledWorldEffect ResolveUpsertPlacement(ActionEffect.UpsertPlacement effect, string ruleName) {
         if (
@@ -2024,16 +1976,7 @@ public static partial class WorldRuleCompiler {
             );
         }
 
-        return new CompiledWorldEffect(
-            Kind: WorldRuleEffectKind.UpsertPlacement,
-            Row: effect.Placement.Id,
-            Key: string.Empty,
-            Write: default,
-            RawValue: 0L,
-            Generator: null,
-            Describe: $"upsertPlacement {effect.Placement.Id}",
-            Placement: effect.Placement
-        );
+        return new CompiledWorldEffect(new UpsertPlacementEffect(placement: effect.Placement, describe: $"upsertPlacement {effect.Placement.Id}"));
     }
     // value XOR valueSeconds XOR (fromState, fromKey): the same duality ResolvePredicate enforces for compareState's
     // comparand, applied to the write side and widened by one spelling. 'fromKey' is an appendage of 'fromState' on
@@ -2407,15 +2350,16 @@ public static partial class WorldRuleCompiler {
     }
 
     // One resolved operand (address + value kind + read-back spelling) plus the cell kind the mixed-kind guard reads.
-    // The operand's own ValueKind is baked in by its case constructor at every call site; this assertion is the one
+    // The operand's own ValueKind is baked in by its case constructor at every call site; this check is the one
     // place that invariant is checked rather than silently re-stamped (a record struct's own "with" could once fix a
     // drifted ValueKind for free — a case-type union has no such generic clone, so the two must already agree).
     private readonly record struct ResolvedOperand {
         public ResolvedOperand(CompiledWorldOperand Operand, CellKind ValueKind, string Describe) {
-            System.Diagnostics.Debug.Assert(
-                condition: (Operand.ValueKind == ValueKind),
-                message: "a resolved operand's own ValueKind must already match the case constructor's ValueKind"
-            );
+            if (Operand.ValueKind != ValueKind) {
+                throw new InvalidOperationException(
+                    message: $"a resolved '{Describe}' operand's own ValueKind ({Operand.ValueKind}) does not match the case constructor's ValueKind ({ValueKind})"
+                );
+            }
             this.Operand = Operand;
             this.ValueKind = ValueKind;
             this.Describe = Describe;

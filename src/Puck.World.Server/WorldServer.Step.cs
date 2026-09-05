@@ -533,14 +533,14 @@ public sealed partial class WorldServer {
     // outright rather than submitting). SAVE is the one exception to all of this: it submits no WorldMutation at all (see
     // ActionEffect.Save's remarks) and is handled before the mutation switch below ever runs.
     private bool FireWorldRuleEffect(CompiledWorldEffect effect, string ruleName, ulong tick, ulong stepTicks, bool preflight = false, bool strict = false) {
-        if (effect.Kind == WorldRuleEffectKind.TransformState) {
-            return ApplyWorldRuleMutation(effect: in effect, ruleName: ruleName, mutation: new WorldMutation.TransformState(WorldPrincipal.World, effect.Transform!), tick: tick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false, preflight: preflight);
+        if (effect.Value is TransformStateEffect transformState) {
+            return ApplyWorldRuleMutation(effect: effect, ruleName: ruleName, mutation: new WorldMutation.TransformState(WorldPrincipal.World, transformState.Transform), tick: tick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false, preflight: preflight);
         }
         if (effect.Kind == WorldRuleEffectKind.Transaction) {
             return FireWorldRuleTransaction(transaction: effect, ruleName: ruleName, tick: tick, stepTicks: stepTicks);
         }
         if (effect.Kind == WorldRuleEffectKind.PushState) {
-            return FirePushState(effect: in effect, ruleName: ruleName, tick: tick, preflight: preflight);
+            return FirePushState(effect: effect, ruleName: ruleName, tick: tick, preflight: preflight);
         }
         if (effect.Kind == WorldRuleEffectKind.EmitCue) {
             if (!preflight) {
@@ -559,7 +559,7 @@ public sealed partial class WorldServer {
         if (effect.Kind == WorldRuleEffectKind.Save) {
             if (preflight) {
                 m_ruleStatePreflightRejected = true;
-                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.SaveUnavailable, ruleName: ruleName, effect: in effect, tick: tick, detail: "save effects are not atomic transaction steps");
+                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.SaveUnavailable, ruleName: ruleName, effect: effect, tick: tick, detail: "save effects are not atomic transaction steps");
                 return false;
             }
             // No compose, no validate, no install, no journal — SaveEffectTap performs the identical settle-at-save
@@ -568,7 +568,7 @@ public sealed partial class WorldServer {
             if (SaveEffectTap is { } save) {
                 save(tick);
             } else {
-                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.SaveUnavailable, ruleName: ruleName, effect: in effect, tick: tick, detail: "no save-effect host is attached");
+                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.SaveUnavailable, ruleName: ruleName, effect: effect, tick: tick, detail: "no save-effect host is attached");
             }
 
             return false;
@@ -602,17 +602,20 @@ public sealed partial class WorldServer {
             }
         }
 
-        // A '$cell:' destination resolves its key fresh every firing, exactly as a gate operand's does.
+        // A '$cell:' destination resolves its key fresh every firing, exactly as a gate operand's does — reached only
+        // for the case types that address a state cell (or a whole-row upsert/remove's id) before their own
+        // kind-specific work runs (see IStateAddressedEffect's own remarks).
+        var addressed = (IStateAddressedEffect)effect.Value!;
         var destinationKey = ResolveOperandKey(
-            key: effect.Key,
-            keyFrom: effect.KeyFrom,
+            key: addressed.Key,
+            keyFrom: addressed.KeyFrom,
             tick: tick
         );
 
-        if (effect.Kind == WorldRuleEffectKind.RemoveStateCell) {
+        if (effect.Value is RemoveStateCellEffect removeStateCell) {
             if (WorldStateReader.TryRead(
                 definition: m_definition,
-                rowName: effect.Row,
+                rowName: removeStateCell.Row,
                 key: destinationKey,
                 tick: tick,
                 row: out _,
@@ -625,9 +628,9 @@ public sealed partial class WorldServer {
             }
 
             return ApplyWorldRuleMutation(
-                effect: in effect,
+                effect: effect,
                 ruleName: ruleName,
-                mutation: new WorldMutation.RemoveStateCell(Principal: WorldPrincipal.World, Row: effect.Row, Key: destinationKey),
+                mutation: new WorldMutation.RemoveStateCell(Principal: WorldPrincipal.World, Row: removeStateCell.Row, Key: destinationKey),
                 tick: tick,
                 connectionId: SubmissionEnvelope.LocalConnectionId,
                 correlationId: 0,
@@ -636,7 +639,7 @@ public sealed partial class WorldServer {
             );
         }
 
-        if (effect.Kind is WorldRuleEffectKind.Write or WorldRuleEffectKind.Countdown or WorldRuleEffectKind.ScheduleState) {
+        if (effect.Value is IStateWriteEffect write) {
             // The destination's CURRENT value through the same shared resolver the gate read: an absent cell reads as
             // zero (an Add mints it), an absent ROW is nothing to write. On an ADVANCING row that is the LIVE value,
             // not the stored base, which is what the could-this-move skip below needs: a base is a fixed point of
@@ -645,7 +648,7 @@ public sealed partial class WorldServer {
             // can reset an advancing row at all.
             if (!WorldStateReader.TryRead(
                 definition: m_definition,
-                rowName: effect.Row,
+                rowName: write.Row,
                 key: destinationKey,
                 tick: tick,
                 row: out var row,
@@ -656,11 +659,14 @@ public sealed partial class WorldServer {
             }
 
             if (row.Kind == CellKind.Text) {
-                var nextText = effect.Text;
+                // A ScheduleState/Countdown row is refused at compile time unless kind=int, so a kind=text row here
+                // can only be a Write.
+                var textWrite = (WriteEffect)write;
+                var nextText = textWrite.Text;
 
                 if (
                     (nextText is null) &&
-                    (effect.From?.Value is StateCellOperand source)
+                    (textWrite.From?.Value is StateCellOperand source)
                 ) {
                     if (!WorldStateReader.TryRead(
                         definition: m_definition,
@@ -691,11 +697,11 @@ public sealed partial class WorldServer {
                 }
 
                 return ApplyWorldRuleMutation(
-                    effect: in effect,
+                    effect: effect,
                     ruleName: ruleName,
                     mutation: new WorldMutation.UpsertStateCell(
                         Principal: WorldPrincipal.World,
-                        Row: effect.Row,
+                        Row: write.Row,
                         Key: destinationKey,
                         Value: 0L,
                         Kind: WorldDocumentWriteKind.Set,
@@ -727,9 +733,9 @@ public sealed partial class WorldServer {
             // destination row's own encoding; a literal effect keeps the value the compiler already converted once.
             // A FOREVER fact ($parked: on a forever-parked body) has no number to store — the copy silently does not
             // fire, the same no-narration shape a level gate's own not-holding takes (see ReadParkedRemaining).
+            // Countdown/ScheduleState never carry a live 'from' operand, so this test naturally excludes them.
             if (
-                (effect.Kind != WorldRuleEffectKind.Countdown) &&
-                (effect.From is { } foreverProbe) &&
+                (write is WriteEffect { From: { } foreverProbe }) &&
                 ReadWorldFact(
                 operand: foreverProbe,
                 tick: tick
@@ -741,32 +747,32 @@ public sealed partial class WorldServer {
             var expressionFailed = false;
             long raw;
 
-            if (effect.Kind == WorldRuleEffectKind.Countdown) {
+            if (write is CountdownEffect) {
                 raw = -Math.Min(
                     val1: current,
                     val2: checked((long)stepTicks)
                 );
-            } else if (effect.Kind == WorldRuleEffectKind.ScheduleState) {
-                raw = ScheduleDueTick(tick: tick, delayTicks: effect.RawValue, failed: out expressionFailed);
-            } else if (effect.Expression is { } expression) {
+            } else if (write is ScheduleStateEffect schedule) {
+                raw = ScheduleDueTick(tick: tick, delayTicks: schedule.DelayTicks, failed: out expressionFailed);
+            } else if (((WriteEffect)write).Expression is { } expression) {
                 raw = (TryEvaluateExpression(program: expression, kind: row.Kind, tick: tick, value: out var evaluated)
                     ? evaluated
                     : FailedExpression(out expressionFailed)
                 );
-            } else if (effect.From is { } from) {
+            } else if (((WriteEffect)write).From is { } from) {
                 raw = ConvertWorldFactToRaw(value: ReadWorldFact(operand: from, tick: tick), kind: row.Kind);
             } else {
-                raw = effect.RawValue;
+                raw = ((WriteEffect)write).RawValue;
             }
 
             if (expressionFailed) {
                 if (preflight) {
                     m_ruleStatePreflightRejected = true;
                 }
-                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.Arithmetic, ruleName: ruleName, effect: in effect, tick: tick, detail: "the expression overflowed, divided by zero, or produced an invalid stack result");
+                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.Arithmetic, ruleName: ruleName, effect: effect, tick: tick, detail: "the expression overflowed, divided by zero, or produced an invalid stack result");
                 return false;
             }
-            var next = ((effect.Write == WorldDocumentWriteKind.Add)
+            var next = ((write.Write == WorldDocumentWriteKind.Add)
                 ? unchecked((current + raw))
                 : raw
             );
@@ -786,14 +792,14 @@ public sealed partial class WorldServer {
             }
 
             return ApplyWorldRuleMutation(
-                effect: in effect,
+                effect: effect,
                 ruleName: ruleName,
                 mutation: new WorldMutation.UpsertStateCell(
                     Principal: WorldPrincipal.World,
-                    Row: effect.Row,
+                    Row: write.Row,
                     Key: destinationKey,
                     Value: raw,
-                    Kind: effect.Write
+                    Kind: write.Write
                 ),
                 tick: tick,
                 connectionId: SubmissionEnvelope.LocalConnectionId,
@@ -813,14 +819,14 @@ public sealed partial class WorldServer {
         // binding out from under it (the slot a later, unrelated inhabitant can then claim). OWNER DECISION: REFUSE,
         // never orphan-to-escrow (see the refusal's own remarks for why).
         if (
-            (effect.Kind == WorldRuleEffectKind.RemovePlacement) &&
+            (effect.Value is RemovePlacementEffect removePlacement) &&
             TryFindPossessedInhabitant(
-            placementId: effect.Row,
+            placementId: removePlacement.Row,
             bodyIndex: out var possessedBody,
             holder: out var possessor
         )
         ) {
-            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.CarrierPossessed, ruleName: ruleName, effect: in effect, tick: tick, detail: $"placement '{effect.Row}' carries inhabitant body:{possessedBody}, possessed by {possessor.Describe()}");
+            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.CarrierPossessed, ruleName: ruleName, effect: effect, tick: tick, detail: $"placement '{removePlacement.Row}' carries inhabitant body:{possessedBody}, possessed by {possessor.Describe()}");
             if (preflight) {
                 m_ruleStatePreflightRejected = true;
             }
@@ -828,32 +834,32 @@ public sealed partial class WorldServer {
             return false;
         }
 
-        WorldMutation mutation = effect.Kind switch {
-            WorldRuleEffectKind.Generate => new WorldMutation.Generate(
+        WorldMutation mutation = effect.Value switch {
+            GenerateEffect generate => new WorldMutation.Generate(
             Principal: WorldPrincipal.World,
-            Row: effect.Row
+            Row: generate.Row
         ),
-            WorldRuleEffectKind.UpsertHudPanel => new WorldMutation.UpsertHudPanel(
+            UpsertHudPanelEffect upsertHudPanel => new WorldMutation.UpsertHudPanel(
             Principal: WorldPrincipal.World,
-            Panel: effect.HudPanel!
+            Panel: upsertHudPanel.HudPanel
         ),
-            WorldRuleEffectKind.RemoveHudPanel => new WorldMutation.RemoveHudPanel(
+            RemoveHudPanelEffect removeHudPanel => new WorldMutation.RemoveHudPanel(
             Principal: WorldPrincipal.World,
-            Id: effect.Row
+            Id: removeHudPanel.Row
         ),
-            WorldRuleEffectKind.UpsertPlacement => new WorldMutation.UpsertPlacement(
+            UpsertPlacementEffect upsertPlacement => new WorldMutation.UpsertPlacement(
             Principal: WorldPrincipal.World,
-            Placement: effect.Placement!
+            Placement: upsertPlacement.Placement
         ),
-            WorldRuleEffectKind.RemovePlacement => new WorldMutation.RemovePlacement(
+            RemovePlacementEffect removePlacementFire => new WorldMutation.RemovePlacement(
             Principal: WorldPrincipal.World,
-            Id: effect.Row
+            Id: removePlacementFire.Row
         ),
             _ => throw new InvalidOperationException(message: $"world rule effect kind '{effect.Kind}' has no fire mapping."),
         };
 
         return ApplyWorldRuleMutation(
-            effect: in effect,
+            effect: effect,
             ruleName: ruleName,
             connectionId: SubmissionEnvelope.LocalConnectionId,
             correlationId: 0,
@@ -968,7 +974,8 @@ public sealed partial class WorldServer {
         return (top == 1);
     }
     private bool FireWorldRuleTransaction(CompiledWorldEffect transaction, string ruleName, ulong tick, ulong stepTicks) {
-        var effects = transaction.Effects!;
+        var compiled = (TransactionEffect)transaction.Value!;
+        var effects = compiled.Effects;
         var installed = m_definition;
         m_ruleStatePreflightRejected = false;
 
@@ -986,7 +993,7 @@ public sealed partial class WorldServer {
 
         if (m_ruleStatePreflightRejected) {
             m_ruleStatePreflightRejected = false;
-            var failure = (transaction.OnFailure ?? []);
+            var failure = compiled.OnFailure;
             if (failure.Length == 0) {
                 return false;
             }
@@ -1021,32 +1028,34 @@ public sealed partial class WorldServer {
         return applied;
     }
     private void FireGameplayCue(CompiledWorldEffect effect, ulong tick) {
+        var cueEffect = (EmitCueEffect)effect.Value!;
         int? body = null;
-        if (effect.Key.Length > 0) {
-            var key = ResolveOperandKey(key: effect.Key, keyFrom: effect.KeyFrom, tick: tick);
+        if (cueEffect.Key.Length > 0) {
+            var key = ResolveOperandKey(key: cueEffect.Key, keyFrom: cueEffect.KeyFrom, tick: tick);
             if (int.TryParse(s: key, style: System.Globalization.NumberStyles.Integer, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var parsed) && (Body(index: parsed) is not null)) {
                 body = parsed;
             }
         }
 
-        var cue = new WorldGameplayCue(Name: effect.Cue!, Payload: effect.Payload, Body: body, Tick: tick);
+        var cue = new WorldGameplayCue(Name: cueEffect.Cue, Payload: cueEffect.Payload, Body: body, Tick: tick);
         GameplayCueTap?.Invoke(obj: cue);
         Console.Error.WriteLine(value: $"[world.cue: {cue.Name} tick={tick}{(body is { } index ? $" body:{index}" : string.Empty)}]");
     }
     private void FireBodyEffect(CompiledWorldEffect effect, string ruleName, ulong tick, bool preflight) {
-        var key = ResolveOperandKey(key: effect.Key, keyFrom: effect.KeyFrom, tick: tick);
+        var bodyEffect = (BodyEffect)effect.Value!;
+        var key = ResolveOperandKey(key: bodyEffect.Key, keyFrom: bodyEffect.KeyFrom, tick: tick);
         if (!int.TryParse(s: key, style: System.Globalization.NumberStyles.Integer, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var bodyIndex) || (Body(index: bodyIndex) is not { } body)) {
-            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.BodyInactive, ruleName: ruleName, effect: in effect, tick: tick, detail: $"body '{key}' is inactive");
+            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.BodyInactive, ruleName: ruleName, effect: effect, tick: tick, detail: $"body '{key}' is inactive");
             if (preflight) {
                 m_ruleStatePreflightRejected = true;
             }
             return;
         }
 
-        var operation = effect.Body!.Value;
+        var operation = bodyEffect.Body;
         if (operation.Operation == BodyMotionOp.Designate) {
             if (!m_population.TryResolveTargetRegister(name: operation.Register!, index: out var registerIndex)) {
-                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.BodyTargetInvalid, ruleName: ruleName, effect: in effect, tick: tick, detail: $"target register '{operation.Register}' is unavailable");
+                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.BodyTargetInvalid, ruleName: ruleName, effect: effect, tick: tick, detail: $"target register '{operation.Register}' is unavailable");
                 if (preflight) {
                     m_ruleStatePreflightRejected = true;
                 }
@@ -1061,7 +1070,7 @@ public sealed partial class WorldServer {
 
             var targetKey = ResolveOperandKey(key: operation.TargetKey, keyFrom: operation.TargetKeyFrom, tick: tick);
             if (!int.TryParse(s: targetKey, style: System.Globalization.NumberStyles.Integer, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var targetIndex)) {
-                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.BodyTargetInvalid, ruleName: ruleName, effect: in effect, tick: tick, detail: $"target body key '{targetKey}' is invalid");
+                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.BodyTargetInvalid, ruleName: ruleName, effect: effect, tick: tick, detail: $"target body key '{targetKey}' is invalid");
                 if (preflight) {
                     m_ruleStatePreflightRejected = true;
                 }
@@ -1072,7 +1081,7 @@ public sealed partial class WorldServer {
                     ? $"body:{bodyIndex} cannot designate itself"
                     : $"target body:{targetIndex} is inactive"
                 );
-                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.BodyTargetInvalid, ruleName: ruleName, effect: in effect, tick: tick, detail: detail);
+                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.BodyTargetInvalid, ruleName: ruleName, effect: effect, tick: tick, detail: detail);
                 if (preflight) {
                     m_ruleStatePreflightRejected = true;
                 }
@@ -1109,16 +1118,16 @@ public sealed partial class WorldServer {
     }
     private void FireFieldPaint(CompiledWorldEffect effect, string ruleName, ulong tick, bool preflight) {
         if (m_population.Fields is not { } lattice) {
-            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.FieldUnavailable, ruleName: ruleName, effect: in effect, tick: tick, detail: "no live field lattice is installed");
+            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.FieldUnavailable, ruleName: ruleName, effect: effect, tick: tick, detail: "no live field lattice is installed");
             if (preflight) {
                 m_ruleStatePreflightRejected = true;
             }
             return;
         }
 
-        var paint = effect.Paint!.Value;
+        var paint = ((PaintFieldEffect)effect.Value!).Paint;
         if (!lattice.TryFieldIndex(name: paint.Field, field: out _)) {
-            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.FieldUnavailable, ruleName: ruleName, effect: in effect, tick: tick, detail: $"live field '{paint.Field}' is unavailable");
+            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.FieldUnavailable, ruleName: ruleName, effect: effect, tick: tick, detail: $"live field '{paint.Field}' is unavailable");
             if (preflight) {
                 m_ruleStatePreflightRejected = true;
             }
@@ -1137,7 +1146,7 @@ public sealed partial class WorldServer {
             value: paint.Value
         );
     }
-    private bool ApplyWorldRuleMutation(in CompiledWorldEffect effect, string ruleName, WorldMutation mutation, ulong tick, int connectionId, long correlationId, bool preMetered, bool preflight) {
+    private bool ApplyWorldRuleMutation(CompiledWorldEffect effect, string ruleName, WorldMutation mutation, ulong tick, int connectionId, long correlationId, bool preMetered, bool preflight) {
         if (!preflight) {
             var applied = TryApplyMutation(
                 mutation: mutation,
@@ -1147,7 +1156,7 @@ public sealed partial class WorldServer {
                 preMetered: preMetered
             );
             if (!applied) {
-                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.MutationRejected, ruleName: ruleName, effect: in effect, tick: tick, detail: "the ordinary mutation door refused the effect; its mutation rejection names the concrete reason");
+                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.MutationRejected, ruleName: ruleName, effect: effect, tick: tick, detail: "the ordinary mutation door refused the effect; its mutation rejection names the concrete reason");
             }
             return applied;
         }
@@ -1165,7 +1174,7 @@ public sealed partial class WorldServer {
             patterns: m_patterns
         )) {
             m_ruleStatePreflightRejected = true;
-            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.MutationRejected, ruleName: ruleName, effect: in effect, tick: tick, detail: composeReason);
+            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.MutationRejected, ruleName: ruleName, effect: effect, tick: tick, detail: composeReason);
             return false;
         }
 
@@ -1173,7 +1182,7 @@ public sealed partial class WorldServer {
 
         if (!TryValidateMutationCandidate(candidate: candidate, mutation: mutation, reason: out var validationReason)) {
             m_ruleStatePreflightRejected = true;
-            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.MutationRejected, ruleName: ruleName, effect: in effect, tick: tick, detail: validationReason);
+            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.MutationRejected, ruleName: ruleName, effect: effect, tick: tick, detail: validationReason);
             return false;
         }
 
@@ -1194,7 +1203,7 @@ public sealed partial class WorldServer {
         }
         if (refusal is not null) {
             m_ruleStatePreflightRejected = true;
-            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.MutationRejected, ruleName: ruleName, effect: in effect, tick: tick, detail: refusal);
+            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.MutationRejected, ruleName: ruleName, effect: effect, tick: tick, detail: refusal);
             return false;
         }
 
@@ -1237,10 +1246,11 @@ public sealed partial class WorldServer {
     // but as the world's own act — no drive-gate or grant check, since a gated body is one a rule still needs to
     // move.
     private void FirePoseEffect(CompiledWorldEffect effect, string ruleName, ulong tick, bool preflight) {
+        var poseEffect = (PoseEffect)effect.Value!;
         // A '$cell:' indirection yields the cell's integer, which may exceed int — a body index it can never name.
         var spelled = ResolveOperandKey(
-            key: effect.Key,
-            keyFrom: effect.KeyFrom,
+            key: poseEffect.Key,
+            keyFrom: poseEffect.KeyFrom,
             tick: tick
         );
 
@@ -1254,7 +1264,7 @@ public sealed partial class WorldServer {
             (resolved < 0L) ||
             (resolved > int.MaxValue)
         ) {
-            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.BodyInactive, ruleName: ruleName, effect: in effect, tick: tick, detail: $"key '{spelled}' is not a body index");
+            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.BodyInactive, ruleName: ruleName, effect: effect, tick: tick, detail: $"key '{spelled}' is not a body index");
             if (preflight) {
                 m_ruleStatePreflightRejected = true;
             }
@@ -1265,7 +1275,7 @@ public sealed partial class WorldServer {
         var bodyIndex = ((int)resolved);
 
         if (Body(index: bodyIndex) is not { } body) {
-            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.BodyInactive, ruleName: ruleName, effect: in effect, tick: tick, detail: $"body:{bodyIndex} is inactive");
+            ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.BodyInactive, ruleName: ruleName, effect: effect, tick: tick, detail: $"body:{bodyIndex} is inactive");
             if (preflight) {
                 m_ruleStatePreflightRejected = true;
             }
@@ -1275,11 +1285,11 @@ public sealed partial class WorldServer {
 
         CompiledWorldPose pose;
 
-        if (effect.Pose is { } literal) {
+        if (poseEffect.Pose is { } literal) {
             pose = literal;
         } else if (WorldDefinitionRows.FindSpawnPoint(
             spawnPoints: m_definition.SpawnPoints,
-            id: effect.Row
+            id: poseEffect.SpawnPoint
         ) is { } point) {
             var spawn = FixedSpawnPoint.Compile(point: in point);
 
@@ -1290,7 +1300,7 @@ public sealed partial class WorldServer {
                 RollRadians: FixedQ4816.Zero
             );
         } else {
-            Console.Error.WriteLine(value: $"[world.rule: pose skipped — spawnPoint '{effect.Row}' is no longer declared]");
+            Console.Error.WriteLine(value: $"[world.rule: pose skipped — spawnPoint '{poseEffect.SpawnPoint}' is no longer declared]");
 
             return;
         }
@@ -1353,8 +1363,10 @@ public sealed partial class WorldServer {
                     WorldFactHolds(predicate.Comparison, leftValue, false, rightValue, false);
                 continue;
             }
+            // Reached only for a Compare token with no LeftExpression (the two prior branches continue past every
+            // other kind), so Left is always set here — never a default carrier standing in for "absent".
             var value = ReadWorldFact(
-                operand: predicate.Left,
+                operand: predicate.Left!.Value,
                 tick: tick
             );
 

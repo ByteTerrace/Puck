@@ -219,22 +219,23 @@ public sealed partial class WorldServer {
 
     // pushState: the value is resolved the way a write's is, then lands as a Push transform so the ring's cursor and
     // slot move in one journaled mutation.
-    private bool FirePushState(in CompiledWorldEffect effect, string ruleName, ulong tick, bool preflight) {
-        if (WorldDefinitionRows.FindStateRow(rows: m_definition.State, name: effect.Row) is not { History: not null } row) {
+    private bool FirePushState(CompiledWorldEffect effect, string ruleName, ulong tick, bool preflight) {
+        var push = (PushStateEffect)effect.Value!;
+        if (WorldDefinitionRows.FindStateRow(rows: m_definition.State, name: push.Row) is not { History: not null } row) {
             return false;
         }
 
         long raw;
 
-        if (effect.Expression is { } expression) {
+        if (push.Expression is { } expression) {
             if (!TryEvaluateExpression(program: expression, kind: row.Kind, tick: tick, value: out raw)) {
                 if (preflight) {
                     m_ruleStatePreflightRejected = true;
                 }
-                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.Arithmetic, ruleName: ruleName, effect: in effect, tick: tick, detail: "the pushed expression overflowed, divided by zero, or shifted out of range");
+                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.Arithmetic, ruleName: ruleName, effect: effect, tick: tick, detail: "the pushed expression overflowed, divided by zero, or shifted out of range");
                 return false;
             }
-        } else if (effect.From is { } from) {
+        } else if (push.From is { } from) {
             var fact = ReadWorldFact(operand: from, tick: tick);
 
             if (fact.IsForever) {
@@ -243,10 +244,10 @@ public sealed partial class WorldServer {
 
             raw = ConvertWorldFactToRaw(value: fact, kind: row.Kind);
         } else {
-            raw = effect.RawValue;
+            raw = push.RawValue;
         }
 
-        return ApplyWorldRuleMutation(effect: in effect, ruleName: ruleName, mutation: new WorldMutation.TransformState(WorldPrincipal.World, new WorldStateTransform.Push(row.Name.Value, raw)), tick: tick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false, preflight: preflight);
+        return ApplyWorldRuleMutation(effect: effect, ruleName: ruleName, mutation: new WorldMutation.TransformState(WorldPrincipal.World, new WorldStateTransform.Push(row.Name.Value, raw)), tick: tick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false, preflight: preflight);
     }
 
     /// <summary>Walks one word through a pattern at the console and narrates every step: the raw values, the letter
