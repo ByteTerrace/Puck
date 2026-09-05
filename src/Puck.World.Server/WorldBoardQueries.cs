@@ -246,8 +246,8 @@ public static class WorldBoardQueries {
 }
 
 public sealed partial class WorldServer {
-    private long ReadBoardFact(CompiledWorldOperand operand, ulong tick) {
-        var query = operand.Board!;
+    private long ReadBoardFact(BoardOperand operand, ulong tick) {
+        var query = operand.Board;
         if (query.Kind == WorldBoardQueryKind.CellOf) {
             var index = ResolveBodyRef(bodyRef: operand.BodyA!.Value, tick: tick);
             return Body(index: index) is { } body && query.Topology.TryCellOf(position: body.FixedPosition, cell: out var cell) ? cell : -1;

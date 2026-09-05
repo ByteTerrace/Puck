@@ -16,6 +16,6 @@ public static partial class WorldRuleCompiler {
         if (definition.Music is not { Count: > 0 } music || music[0]?.Name != tokens[1]) {
             throw Invalid($"'{tokens[1]}' does not name the document's declared music row");
         }
-        return new(new CompiledWorldOperand(WorldRuleFactKind.Clock, Row: null, Key: null, ValueKind: CellKind.Int), CellKind.Int, name);
+        return new(new CompiledWorldOperand(ClockOperand.Instance), CellKind.Int, name);
     }
 }

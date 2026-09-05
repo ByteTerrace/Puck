@@ -49,8 +49,8 @@ public sealed partial class WorldServer {
         return m_boardScratch.AsSpan(0, count);
     }
 
-    private long ReadPatternFact(CompiledWorldOperand operand, ulong tick) {
-        if (!m_patterns.TryGet(name: operand.Pattern!, pattern: out var pattern)) {
+    private long ReadPatternFact(PatternOperand operand, ulong tick) {
+        if (!m_patterns.TryGet(name: operand.Pattern, pattern: out var pattern)) {
             throw new InvalidOperationException($"pattern operand '{operand.Pattern}' outlived the compiled rules");
         }
         if (!WorldStateReader.TryReadHandle(definition: m_definition, catalog: m_definition.StateCatalog, handle: operand.StateHandle, key: null, tick: tick, row: out var row, rawValue: out _, text: out _)) {
@@ -208,13 +208,13 @@ public sealed partial class WorldServer {
     }
 
     // $history:<row>:<age> through the compiled row handle.
-    private long ReadHistoryFact(CompiledWorldOperand operand, ulong tick) {
+    private long ReadHistoryFact(HistoryOperand operand, ulong tick) {
         if (!WorldStateReader.TryReadHandle(definition: m_definition, catalog: m_definition.StateCatalog, handle: operand.StateHandle, key: null, tick: tick, row: out var row, rawValue: out _, text: out _) ||
             row.History is not { } history) {
             throw new InvalidOperationException($"history operand over '{operand.Row}' outlived its compiled row handle");
         }
 
-        return ReadHistorySlot(row, history, operand.SymmetryArgument, tick);
+        return ReadHistorySlot(row, history, operand.Age, tick);
     }
 
     // pushState: the value is resolved the way a write's is, then lands as a Push transform so the ring's cursor and

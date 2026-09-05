@@ -660,11 +660,11 @@ public sealed partial class WorldServer {
 
                 if (
                     (nextText is null) &&
-                    (effect.From is { Kind: WorldRuleFactKind.StateCell } source)
+                    (effect.From?.Value is StateCellOperand source)
                 ) {
                     if (!WorldStateReader.TryRead(
                         definition: m_definition,
-                        rowName: source.Row!,
+                        rowName: source.Row,
                         key: ResolveOperandKey(
                             key: source.Key,
                             keyFrom: source.KeyFrom,

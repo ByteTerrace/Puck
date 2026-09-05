@@ -1,0 +1,135 @@
+namespace Puck.World;
+
+// The hand-written C# 15 basic union pattern (docs/campaign.md, "Compiled rule operands are a closed union"),
+// polyfilled internally until .NET 11 supplies the real attribute/interface pair. The day the toolchain moves, the
+// flip is deleting these two markers and switching on the carrier's Value directly wherever a case-type dispatch
+// exists today; nothing else moves.
+/// <summary>Marks a hand-written carrier struct as a closed discriminated union over a sealed class hierarchy —
+/// the polyfilled stand-in for the future C# union pattern's own attribute.</summary>
+[AttributeUsage(AttributeTargets.Struct)]
+internal sealed class UnionAttribute : Attribute;
+/// <summary>The polyfilled stand-in for the future C# union pattern's own marker interface: a union carrier exposes
+/// its one boxed case through <see cref="Value"/>, untyped, for reflection or generic tooling that does not know the
+/// concrete case type.</summary>
+internal interface IUnion {
+    /// <summary>The one live case, or <see langword="null"/> for a default-initialized carrier.</summary>
+    object? Value { get; }
+}
+
+/// <summary>The abstract case-type base for <see cref="CompiledWorldOperand"/>'s closed union — one sealed class per
+/// <see cref="WorldRuleFactKind"/>, declared in <c>WorldOperandKinds.cs</c>, each carrying only the parameters that
+/// kind's own reader actually touches. Case types are CLASSES, never records or structs: nothing at runtime compares
+/// two operands for equality or identity, so a generated structural <c>Equals</c> would be a hazard nobody asked for,
+/// and a value-type case would box on every store into the carrier below anyway. <see cref="Kind"/> and
+/// <see cref="ValueKind"/> are the two members every case carries, set once by the case's own constructor and never
+/// overridden afterward — everything else lives on the concrete case type, reached by a type-pattern switch (see
+/// <c>WorldServer.ReadWorldFact</c> and <c>WorldRuleWorkBudget.OperandCost</c>) or through one of the narrow shared
+/// interfaces below when several cases genuinely share a shape. The <see langword="private protected"/> constructor
+/// closes the union to this assembly — no external project may add a case.</summary>
+public abstract class WorldOperandFact {
+    private protected WorldOperandFact(WorldRuleFactKind kind, CellKind valueKind) {
+        Kind = kind;
+        ValueKind = valueKind;
+    }
+
+    /// <summary>Which live quantity this operand reads — one-to-one with the concrete case type.</summary>
+    public WorldRuleFactKind Kind { get; }
+    /// <summary>The raw encoding this operand's value is returned in (see <c>Server.WorldServer.ReadWorldFact</c>).</summary>
+    public CellKind ValueKind { get; }
+}
+
+/// <summary>Shared shape for the four case types that address a state row through a (row, key-or-indirection)
+/// pair — <see cref="StateCellOperand"/>, <see cref="BoardOperand"/>, <see cref="PatternOperand"/>, and
+/// <see cref="SymmetryOperand"/> — so a generic caller that must accept any of them (a token-domain check inside a
+/// pattern's own value expression, <c>WorldRuleCompiler.TryCompilePatternValue</c>) can read the row name and the
+/// live key indirection without a type-pattern switch enumerating every other case.</summary>
+public interface IStateAddressedOperand {
+    /// <summary>The row this operand addresses.</summary>
+    string Row { get; }
+    /// <summary>The live key indirection (<see cref="WorldRuleFacts.CellKeyPrefix"/>), or <see langword="null"/> for
+    /// a literal key.</summary>
+    CompiledCellRef? KeyFrom { get; }
+}
+
+/// <summary>One resolved operand of a world-rule comparison — a closed union over <see cref="WorldOperandFact"/>'s
+/// case hierarchy (<c>WorldOperandKinds.cs</c>), one case per <see cref="WorldRuleFactKind"/>. Both sides of a
+/// <see cref="ActionPredicate.CompareState"/> conjunct — the primary and, when spelled, the comparand — carry this
+/// same carrier type, read by the same <c>Server.WorldServer.ReadWorldFact</c> switch, so the two sides can never
+/// drift into two readings of one name. See <see cref="WorldOperandFact"/>'s own remarks for why the case types are
+/// classes and why dispatch is a type-pattern switch rather than a per-kind field on this carrier.</summary>
+[Union]
+public readonly partial struct CompiledWorldOperand : IUnion {
+    private readonly WorldOperandFact? m_value;
+
+    /// <summary>The one live case. <see langword="null"/> only for a default-initialized carrier, which no compiled
+    /// rule ever installs (every operand is minted by <c>WorldRuleCompiler.ResolveOperand</c> or a sibling resolver).</summary>
+    public WorldOperandFact? Value => m_value;
+    object? IUnion.Value => m_value;
+
+    /// <summary>Whether this carrier holds a case at all — <see langword="false"/> only for <see langword="default"/>.</summary>
+    public bool HasValue => (m_value is not null);
+
+    /// <summary>Which live quantity this operand reads (<see cref="WorldOperandFact.Kind"/>).</summary>
+    public WorldRuleFactKind Kind => m_value!.Kind;
+    /// <summary>The raw encoding this operand's value is returned in (<see cref="WorldOperandFact.ValueKind"/>).</summary>
+    public CellKind ValueKind => m_value!.ValueKind;
+
+    /// <summary>Reads the carried case as <typeparamref name="T"/> when it holds one — the union's own
+    /// <c>TryGetValue(out T)</c>.</summary>
+    /// <typeparam name="T">The expected case type.</typeparam>
+    /// <param name="value">The case, on success; <see langword="null"/> otherwise.</param>
+    /// <returns>Whether the carried case is a <typeparamref name="T"/>.</returns>
+    public bool TryGetValue<T>([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out T? value) where T : WorldOperandFact {
+        if (m_value is T typed) {
+            value = typed;
+            return true;
+        }
+        value = null;
+        return false;
+    }
+
+    /// <summary>Constructs a carrier over a <see cref="StateCellOperand"/> case.</summary>
+    public CompiledWorldOperand(StateCellOperand value) => m_value = value;
+    /// <summary>Constructs a carrier over a <see cref="TickOperand"/> case.</summary>
+    public CompiledWorldOperand(TickOperand value) => m_value = value;
+    /// <summary>Constructs a carrier over a <see cref="PopulationOperand"/> case.</summary>
+    public CompiledWorldOperand(PopulationOperand value) => m_value = value;
+    /// <summary>Constructs a carrier over a <see cref="PhysicsQuiescentOperand"/> case.</summary>
+    public CompiledWorldOperand(PhysicsQuiescentOperand value) => m_value = value;
+    /// <summary>Constructs a carrier over a <see cref="RegionOccupancyOperand"/> case.</summary>
+    public CompiledWorldOperand(RegionOccupancyOperand value) => m_value = value;
+    /// <summary>Constructs a carrier over a <see cref="MachineMemoryOperand"/> case.</summary>
+    public CompiledWorldOperand(MachineMemoryOperand value) => m_value = value;
+    /// <summary>Constructs a carrier over a <see cref="ReductionOperand"/> case.</summary>
+    public CompiledWorldOperand(ReductionOperand value) => m_value = value;
+    /// <summary>Constructs a carrier over an <see cref="ArgBodyOperand"/> case.</summary>
+    public CompiledWorldOperand(ArgBodyOperand value) => m_value = value;
+    /// <summary>Constructs a carrier over a <see cref="BodyDistanceOperand"/> case.</summary>
+    public CompiledWorldOperand(BodyDistanceOperand value) => m_value = value;
+    /// <summary>Constructs a carrier over a <see cref="LineOfSightOperand"/> case.</summary>
+    public CompiledWorldOperand(LineOfSightOperand value) => m_value = value;
+    /// <summary>Constructs a carrier over a <see cref="ParkedOperand"/> case.</summary>
+    public CompiledWorldOperand(ParkedOperand value) => m_value = value;
+    /// <summary>Constructs a carrier over an <see cref="UprightOperand"/> case.</summary>
+    public CompiledWorldOperand(UprightOperand value) => m_value = value;
+    /// <summary>Constructs a carrier over a <see cref="LinkStalenessOperand"/> case.</summary>
+    public CompiledWorldOperand(LinkStalenessOperand value) => m_value = value;
+    /// <summary>Constructs a carrier over a <see cref="ChannelOperand"/> case.</summary>
+    public CompiledWorldOperand(ChannelOperand value) => m_value = value;
+    /// <summary>Constructs a carrier over a <see cref="NearestOperand"/> case.</summary>
+    public CompiledWorldOperand(NearestOperand value) => m_value = value;
+    /// <summary>Constructs a carrier over a <see cref="SymmetryOperand"/> case.</summary>
+    public CompiledWorldOperand(SymmetryOperand value) => m_value = value;
+    /// <summary>Constructs a carrier over a <see cref="NavigationOperand"/> case.</summary>
+    public CompiledWorldOperand(NavigationOperand value) => m_value = value;
+    /// <summary>Constructs a carrier over a <see cref="BoardOperand"/> case.</summary>
+    public CompiledWorldOperand(BoardOperand value) => m_value = value;
+    /// <summary>Constructs a carrier over a <see cref="PhaseOperand"/> case.</summary>
+    public CompiledWorldOperand(PhaseOperand value) => m_value = value;
+    /// <summary>Constructs a carrier over a <see cref="PatternOperand"/> case.</summary>
+    public CompiledWorldOperand(PatternOperand value) => m_value = value;
+    /// <summary>Constructs a carrier over a <see cref="HistoryOperand"/> case.</summary>
+    public CompiledWorldOperand(HistoryOperand value) => m_value = value;
+    /// <summary>Constructs a carrier over a <see cref="ClockOperand"/> case.</summary>
+    public CompiledWorldOperand(ClockOperand value) => m_value = value;
+}

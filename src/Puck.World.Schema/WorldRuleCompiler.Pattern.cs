@@ -67,8 +67,18 @@ public static partial class WorldRuleCompiler {
                         throw Invalid(valueReason);
                     }
                     kind = pattern.Kind;
-                    return new(new CompiledWorldOperand(WorldRuleFactKind.Pattern, tokens[2], key, Board: null, Pattern: tokens[1], ValueKind: CellKind.Int, MatchFacet: facet,
-                        StateHandle: ResolveWorldStateHandle(definition: definition, name: tokens[2]), TokenExpression: tokenExpression), CellKind.Int, name);
+                    return new(new CompiledWorldOperand(new PatternOperand(
+                        row: tokens[2],
+                        key: key,
+                        keyFrom: null,
+                        stateHandle: ResolveWorldStateHandle(definition: definition, name: tokens[2]),
+                        pattern: tokens[1],
+                        board: null,
+                        filterRow: null,
+                        filterHandle: default,
+                        matchFacet: facet,
+                        tokenExpression: tokenExpression
+                    )), CellKind.Int, name);
                 }
                 attribute = pattern.Attribute ?? throw Invalid($"pattern '{pattern.Name}' reads a zone and so needs an attribute row or a value expression");
                 var attributeRow = WorldDefinitionRows.FindStateRow(definition.State, attribute) ?? throw Invalid($"attribute '{attribute}' names no state row");
@@ -86,9 +96,18 @@ public static partial class WorldRuleCompiler {
         if (kind != pattern.Kind) {
             throw Invalid($"pattern '{pattern.Name}' reads kind={pattern.Kind} but the source word is kind={kind}");
         }
-        return new(new CompiledWorldOperand(WorldRuleFactKind.Pattern, tokens[2], key, KeyFrom: keyFrom, Board: board, FilterRow: attribute, Pattern: tokens[1], ValueKind: CellKind.Int, MatchFacet: facet,
-            StateHandle: ResolveWorldStateHandle(definition: definition, name: tokens[2]),
-            FilterHandle: (attribute is null) ? default : ResolveWorldStateHandle(definition: definition, name: attribute)), CellKind.Int, name);
+        return new(new CompiledWorldOperand(new PatternOperand(
+            row: tokens[2],
+            key: key,
+            keyFrom: keyFrom,
+            stateHandle: ResolveWorldStateHandle(definition: definition, name: tokens[2]),
+            pattern: tokens[1],
+            board: board,
+            filterRow: attribute,
+            filterHandle: (attribute is null) ? default : ResolveWorldStateHandle(definition: definition, name: attribute),
+            matchFacet: facet,
+            tokenExpression: null
+        )), CellKind.Int, name);
     }
 
     /// <summary>Compiles a pattern row's value expression for one zone: inside it, a state token keyed
@@ -108,8 +127,8 @@ public static partial class WorldRuleCompiler {
         try {
             tokens = CompileExpression(expression: pattern.Value, kind: pattern.Kind, ruleName: ruleName, verb: $"pattern '{pattern.Name}' value", definition: definition);
             foreach (var token in tokens) {
-                if (token.Operand is { KeyFrom: { Binding: RuleBinding.Token } } operand &&
-                    (WorldDefinitionRows.FindStateRow(definition.State, operand.Row ?? string.Empty) is not { } row || row.KeysFrom != tokenDomain)) {
+                if (token.Operand?.Value is IStateAddressedOperand { KeyFrom: { Binding: RuleBinding.Token } } operand &&
+                    (WorldDefinitionRows.FindStateRow(definition.State, operand.Row) is not { } row || row.KeysFrom != tokenDomain)) {
                     tokens = null;
                     reason = $"pattern '{pattern.Name}' value reads '{operand.Row}' by $token, which must be a row keyed over token domain '{tokenDomain}'";
                     return false;

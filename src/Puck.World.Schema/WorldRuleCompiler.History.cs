@@ -19,8 +19,12 @@ public static partial class WorldRuleCompiler {
         if (!int.TryParse(tokens[2], NumberStyles.None, CultureInfo.InvariantCulture, out var age) || age >= history.Capacity) {
             throw Invalid($"age must be 0..{history.Capacity - 1} on '{tokens[1]}'");
         }
-        return new(new CompiledWorldOperand(WorldRuleFactKind.History, tokens[1], null, ValueKind: row.Kind, SymmetryArgument: age,
-            StateHandle: ResolveWorldStateHandle(definition: definition, name: tokens[1])), row.Kind, name);
+        return new(new CompiledWorldOperand(new HistoryOperand(
+            row: tokens[1],
+            stateHandle: ResolveWorldStateHandle(definition: definition, name: tokens[1]),
+            age: age,
+            valueKind: row.Kind
+        )), row.Kind, name);
     }
 
     // pushState is a write whose destination is the ring's next slot rather than a named cell: it borrows the

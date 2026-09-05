@@ -21,12 +21,12 @@ public sealed class WorldSymmetryChannelLawTests {
         ]),
         Rules: [new WorldRule(Name: WorldCellName.Parse(candidate: "probe"), Effects: effects, Mode: ActionTriggerMode.Edge)]
     );
-    private static CompiledWorldOperand Compile(string channel, string? key = null, string destination = "out") {
+    private static SymmetryOperand Compile(string channel, string? key = null, string destination = "out") {
         var compiled = WorldRuleCompiler.CompileAll(definition: Definition(new ActionEffect.SetState(State: destination, FromState: channel, FromKey: key)));
 
         Assert.Single(collection: compiled);
 
-        return compiled[0].Effects[0].From!.Value;
+        return Assert.IsType<SymmetryOperand>(@object: compiled[0].Effects[0].From!.Value.Value);
     }
     private static string Refusal(string channel, string? key = null, string destination = "out") {
         var exception = Assert.Throws<WorldRuleException>(testCode: () => WorldRuleCompiler.CompileAll(definition: Definition(new ActionEffect.SetState(State: destination, FromState: channel, FromKey: key))));

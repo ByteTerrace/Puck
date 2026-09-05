@@ -236,29 +236,41 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
     }
 
     private static long OperandCost(CompiledWorldOperand operand, WorldDefinition definition) {
-        if (operand.Board is { } board) {
-            var visits = board.Kind switch {
-                WorldBoardQueryKind.PathCost => (long)(board.MaxVisits + 1) * (board.Topology.CellCount + board.Topology.DirectionCount),
-                WorldBoardQueryKind.Canonical => (long)board.Topology.CellCount * board.Topology.ElementCount,
-                WorldBoardQueryKind.Attacks => (long)board.Topology.CellCount * (board.Directions?.Length ?? 1),
-                _ => board.Topology.CellCount,
+        // A board query prices as itself regardless of which case carries it — a Board operand always, a Pattern
+        // operand only when its word source is a board ray (see PatternOperand.Board's own remarks).
+        var board = operand.Value switch {
+            BoardOperand b => b.Board,
+            PatternOperand { Board: { } patternBoard } => patternBoard,
+            _ => null,
+        };
+        if (board is { } query) {
+            var visits = query.Kind switch {
+                WorldBoardQueryKind.PathCost => (long)(query.MaxVisits + 1) * (query.Topology.CellCount + query.Topology.DirectionCount),
+                WorldBoardQueryKind.Canonical => (long)query.Topology.CellCount * query.Topology.ElementCount,
+                WorldBoardQueryKind.Attacks => (long)query.Topology.CellCount * (query.Directions?.Length ?? 1),
+                _ => query.Topology.CellCount,
             };
-            return board.Topology.CellCount + visits;
+            return query.Topology.CellCount + visits;
         }
-        if (operand.Kind is WorldRuleFactKind.Reduction or WorldRuleFactKind.ArgBody) {
-            return (RowCapacity(definition, operand.Row ?? string.Empty)
-            );
+        if (operand.Value is ReductionOperand or ArgBodyOperand) {
+            var row = operand.Value switch {
+                ReductionOperand reduction => reduction.Row,
+                ArgBodyOperand argBody => argBody.Row,
+                _ => string.Empty,
+            };
+            return RowCapacity(definition, row);
         }
         // PhysicsQuiescent scans every population slot for an active rigid body not yet at rest
         // (WorldPopulation.RigidBodiesQuiescent) — the same per-tick cost as Nearest/RegionOccupancy's own
         // capacity-wide scan, so it is priced on the same terms rather than read as a free operand.
-        if (operand.Kind is WorldRuleFactKind.Nearest or WorldRuleFactKind.RegionOccupancy or WorldRuleFactKind.PhysicsQuiescent) {
+        if (operand.Value is NearestOperand or RegionOccupancyOperand or PhysicsQuiescentOperand) {
             return definition.Population.Capacity;
         }
-        if (operand.Kind == WorldRuleFactKind.Pattern) {
-            var pattern = definition.Patterns.FirstOrDefault(candidate => candidate.Name.Value == operand.Pattern);
-            var rays = ((operand.Board is { Direction: < 0 } every) ? every.Topology.DirectionCount : 1);
-            return WorldPatternCapacity.MaxWord * (1L + (operand.TokenExpression?.Length ?? 0)) + ((operand.Board?.Topology.CellCount ?? 0) * rays);
+        if (operand.Value is PatternOperand pattern) {
+            // Reached only when pattern.Board is null (a board-sourced pattern already returned above), so the
+            // board-ray term below is always zero — kept for the same shape the record-struct version carried.
+            var rays = ((pattern.Board is { Direction: < 0 } every) ? every.Topology.DirectionCount : 1);
+            return WorldPatternCapacity.MaxWord * (1L + (pattern.TokenExpression?.Length ?? 0)) + ((pattern.Board?.Topology.CellCount ?? 0) * rays);
         }
 
         return 1L;

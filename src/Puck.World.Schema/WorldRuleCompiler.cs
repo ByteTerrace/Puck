@@ -1021,7 +1021,7 @@ public static partial class WorldRuleCompiler {
             verb: verb
         );
 
-        if (source.Operand.Kind != WorldRuleFactKind.StateCell) {
+        if (!source.Operand.TryGetValue<StateCellOperand>(out var sourceCell)) {
             throw Malformed(ruleName: ruleName, name: name, detail: $"names '{rowName}', which is not a state row — the source of a symmetry read is a declared row's cell");
         }
 
@@ -1050,25 +1050,28 @@ public static partial class WorldRuleCompiler {
                     verb: verb
                 );
 
-                if ((resolved.Operand.Kind != WorldRuleFactKind.StateCell) || (resolved.Operand.KeyFrom is not null)) {
+                if (!resolved.Operand.TryGetValue<StateCellOperand>(out var otherCell) || (otherCell.KeyFrom is not null)) {
                     throw Malformed(ruleName: ruleName, name: name, detail: $"argument '{argument}' does not name a declared row's cell by a literal key");
                 }
 
-                other = new CompiledCellRef(Row: resolved.Operand.Row!, Key: (resolved.Operand.Key ?? string.Empty), Handle: resolved.Operand.StateHandle);
+                other = new CompiledCellRef(Row: otherCell.Row, Key: (otherCell.Key ?? string.Empty), Handle: otherCell.StateHandle);
             }
             else if (!long.TryParse(s: argument, style: System.Globalization.NumberStyles.None, provider: System.Globalization.CultureInfo.InvariantCulture, result: out literal) || (literal >= SymmetryLattice.NodeCount)) {
                 throw Malformed(ruleName: ruleName, name: name, detail: $"argument '{argument}' is neither a node 0..{SymmetryLattice.NodeCount - 1} nor 'cell:<row>[.<key>]'");
             }
         }
 
+        var symmetryValueKind = ((function is WorldSymmetryFunction.ProjectionX or WorldSymmetryFunction.ProjectionY) ? CellKind.Fixed : CellKind.Int);
+
         return new ResolvedOperand(
-            Operand: (source.Operand with {
-                Kind = WorldRuleFactKind.Symmetry,
-                Symmetry = function,
-                SymmetryArgument = literal,
-                SymmetryOtherCell = other,
-            }),
-            ValueKind: ((function is WorldSymmetryFunction.ProjectionX or WorldSymmetryFunction.ProjectionY) ? CellKind.Fixed : CellKind.Int),
+            Operand: new CompiledWorldOperand(SymmetryOperand.FromStateCell(
+                source: sourceCell,
+                symmetry: function,
+                symmetryArgument: literal,
+                symmetryOtherCell: other,
+                valueKind: symmetryValueKind
+            )),
+            ValueKind: symmetryValueKind,
             Describe: describe
         );
     }
@@ -1105,11 +1108,7 @@ public static partial class WorldRuleCompiler {
             );
 
             return new ResolvedOperand(
-                Operand: new CompiledWorldOperand(
-                    Kind: WorldRuleFactKind.Tick,
-                    Row: null,
-                    Key: null
-                ),
+                Operand: new CompiledWorldOperand(TickOperand.Instance),
                 ValueKind: CellKind.Int,
                 Describe: describe
             );
@@ -1128,11 +1127,7 @@ public static partial class WorldRuleCompiler {
             );
 
             return new ResolvedOperand(
-                Operand: new CompiledWorldOperand(
-                    Kind: WorldRuleFactKind.Population,
-                    Row: null,
-                    Key: null
-                ),
+                Operand: new CompiledWorldOperand(PopulationOperand.Instance),
                 ValueKind: CellKind.Int,
                 Describe: describe
             );
@@ -1151,11 +1146,7 @@ public static partial class WorldRuleCompiler {
             );
 
             return new ResolvedOperand(
-                Operand: new CompiledWorldOperand(
-                    Kind: WorldRuleFactKind.PhysicsQuiescent,
-                    Row: null,
-                    Key: null
-                ),
+                Operand: new CompiledWorldOperand(PhysicsQuiescentOperand.Instance),
                 ValueKind: CellKind.Bool,
                 Describe: describe
             );
@@ -1189,11 +1180,7 @@ public static partial class WorldRuleCompiler {
             }
 
             return new ResolvedOperand(
-                Operand: new CompiledWorldOperand(
-                    Kind: WorldRuleFactKind.RegionOccupancy,
-                    Row: placementId,
-                    Key: null
-                ),
+                Operand: new CompiledWorldOperand(new RegionOccupancyOperand(placementId)),
                 ValueKind: CellKind.Int,
                 Describe: describe
             );
@@ -1252,13 +1239,7 @@ public static partial class WorldRuleCompiler {
             }
 
             return new ResolvedOperand(
-                Operand: new CompiledWorldOperand(
-                    Kind: WorldRuleFactKind.MachineMemory,
-                    Row: null,
-                    Key: null,
-                    Screen: screen,
-                    Address: address
-                ),
+                Operand: new CompiledWorldOperand(new MachineMemoryOperand(screen, address)),
                 ValueKind: CellKind.Int,
                 Describe: describe
             );
@@ -1342,15 +1323,14 @@ public static partial class WorldRuleCompiler {
             );
 
             return new ResolvedOperand(
-                Operand: new CompiledWorldOperand(
-                    Kind: WorldRuleFactKind.Reduction,
-                    Row: rowName,
-                    Key: null,
-                    Reduce: op,
-                    StateHandle: ResolveWorldStateHandle(definition: definition, name: rowName),
-                    FilterRow: filterRowName,
-                    FilterHandle: filterHandle
-                ),
+                Operand: new CompiledWorldOperand(new ReductionOperand(
+                    row: rowName,
+                    stateHandle: ResolveWorldStateHandle(definition: definition, name: rowName),
+                    reduce: op,
+                    filterRow: filterRowName,
+                    filterHandle: filterHandle,
+                    valueKind: reduceValueKind
+                )),
                 ValueKind: reduceValueKind,
                 Describe: describe
             );
@@ -1417,17 +1397,13 @@ public static partial class WorldRuleCompiler {
             }
 
             return new ResolvedOperand(
-                Operand: new CompiledWorldOperand(
-                    Kind: WorldRuleFactKind.ArgBody,
-                    Row: rowName,
-                    Key: null,
-                    Reduce: (isMax
-                ? WorldStateReduceOp.Max
-                : WorldStateReduceOp.Min),
-                    StateHandle: ResolveWorldStateHandle(definition: definition, name: rowName),
-                    FilterRow: filterRowName,
-                    FilterHandle: filterHandle
-                ),
+                Operand: new CompiledWorldOperand(new ArgBodyOperand(
+                    row: rowName,
+                    stateHandle: ResolveWorldStateHandle(definition: definition, name: rowName),
+                    reduce: (isMax ? WorldStateReduceOp.Max : WorldStateReduceOp.Min),
+                    filterRow: filterRowName,
+                    filterHandle: filterHandle
+                )),
                 ValueKind: CellKind.Int,
                 Describe: describe
             );
@@ -1484,22 +1460,15 @@ public static partial class WorldRuleCompiler {
                 start: widthA,
                 tokens: tokens
             );
-            var spatialKind = (isDistance
-                ? WorldRuleFactKind.BodyDistance
-                : WorldRuleFactKind.LineOfSight
-            );
             var spatialValueKind = (isDistance
                 ? CellKind.Fixed
                 : CellKind.Bool
             );
 
             return new ResolvedOperand(
-                Operand: new CompiledWorldOperand(
-                    Kind: spatialKind,
-                    Row: null,
-                    Key: null,
-                    BodyA: bodyA,
-                    BodyB: bodyB
+                Operand: (isDistance
+                    ? new CompiledWorldOperand(new BodyDistanceOperand(bodyA, bodyB))
+                    : new CompiledWorldOperand(new LineOfSightOperand(bodyA, bodyB))
                 ),
                 ValueKind: spatialValueKind,
                 Describe: describe
@@ -1540,12 +1509,7 @@ public static partial class WorldRuleCompiler {
             );
 
             return new ResolvedOperand(
-                Operand: new CompiledWorldOperand(
-                    Kind: WorldRuleFactKind.Upright,
-                    Row: null,
-                    Key: null,
-                    BodyA: uprightBody
-                ),
+                Operand: new CompiledWorldOperand(new UprightOperand(uprightBody)),
                 ValueKind: CellKind.Fixed,
                 Describe: describe
             );
@@ -1584,12 +1548,7 @@ public static partial class WorldRuleCompiler {
             );
 
             return new ResolvedOperand(
-                Operand: new CompiledWorldOperand(
-                    Kind: WorldRuleFactKind.Parked,
-                    Row: null,
-                    Key: null,
-                    BodyA: parkedBody
-                ),
+                Operand: new CompiledWorldOperand(new ParkedOperand(parkedBody)),
                 ValueKind: CellKind.Int,
                 Describe: describe
             );
@@ -1650,13 +1609,7 @@ public static partial class WorldRuleCompiler {
             }
 
             return new ResolvedOperand(
-                Operand: new CompiledWorldOperand(
-                    Kind: WorldRuleFactKind.Channel,
-                    Row: null,
-                    Key: null,
-                    Seat: (seat - 1),
-                    ChannelOrdinal: channelOrdinal
-                ),
+                Operand: new CompiledWorldOperand(new ChannelOperand(seat: (seat - 1), channelOrdinal: channelOrdinal)),
                 ValueKind: CellKind.Fixed,
                 Describe: describe
             );
@@ -1693,11 +1646,7 @@ public static partial class WorldRuleCompiler {
             }
 
             return new ResolvedOperand(
-                Operand: new CompiledWorldOperand(
-                    Kind: WorldRuleFactKind.LinkStaleness,
-                    Row: adjacencyName,
-                    Key: null
-                ),
+                Operand: new CompiledWorldOperand(new LinkStalenessOperand(adjacencyName)),
                 ValueKind: CellKind.Int,
                 Describe: describe
             );
@@ -1715,12 +1664,10 @@ public static partial class WorldRuleCompiler {
                 );
             }
             return new ResolvedOperand(
-                Operand: new CompiledWorldOperand(
-                    Kind: WorldRuleFactKind.Navigation,
-                    Row: tokens[width],
-                    Key: null,
-                    BodyA: ResolveBodyRefToken(channel: name, definition: definition, ruleName: ruleName, start: 0, tokens: tokens)
-                ),
+                Operand: new CompiledWorldOperand(new NavigationOperand(
+                    bodyA: ResolveBodyRefToken(channel: name, definition: definition, ruleName: ruleName, start: 0, tokens: tokens),
+                    row: tokens[width]
+                )),
                 ValueKind: CellKind.Int,
                 Describe: describe
             );
@@ -1769,13 +1716,11 @@ public static partial class WorldRuleCompiler {
             );
 
             return new ResolvedOperand(
-                Operand: new CompiledWorldOperand(
-                    Kind: WorldRuleFactKind.Nearest,
-                    Row: tokens[width],
-                    Key: null,
-                    BodyA: from,
-                    StateHandle: ResolveWorldStateHandle(definition: definition, name: tokens[width])
-                ),
+                Operand: new CompiledWorldOperand(new NearestOperand(
+                    bodyA: from,
+                    row: tokens[width],
+                    stateHandle: ResolveWorldStateHandle(definition: definition, name: tokens[width])
+                )),
                 ValueKind: CellKind.Int,
                 Describe: describe
             );
@@ -1857,13 +1802,13 @@ public static partial class WorldRuleCompiler {
             }
 
             return new ResolvedOperand(
-                Operand: new CompiledWorldOperand(
-                    Kind: WorldRuleFactKind.StateCell,
-                    Row: name,
-                    Key: null,
-                    KeyFrom: dynamicKey,
-                    StateHandle: ResolveWorldStateHandle(definition: definition, name: name)
-                ),
+                Operand: new CompiledWorldOperand(new StateCellOperand(
+                    row: name,
+                    key: null,
+                    keyFrom: dynamicKey,
+                    stateHandle: ResolveWorldStateHandle(definition: definition, name: name),
+                    valueKind: row.Kind
+                )),
                 ValueKind: row.Kind,
                 Describe: describe
             );
@@ -1898,12 +1843,13 @@ public static partial class WorldRuleCompiler {
         }
 
         return new ResolvedOperand(
-            Operand: new CompiledWorldOperand(
-                Kind: WorldRuleFactKind.StateCell,
-                Row: name,
-                Key: resolvedKey,
-                StateHandle: ResolveWorldStateHandle(definition: definition, name: name)
-            ),
+            Operand: new CompiledWorldOperand(new StateCellOperand(
+                row: name,
+                key: resolvedKey,
+                keyFrom: null,
+                stateHandle: ResolveWorldStateHandle(definition: definition, name: name),
+                valueKind: row.Kind
+            )),
             ValueKind: row.Kind,
             Describe: describe
         );
@@ -2461,9 +2407,16 @@ public static partial class WorldRuleCompiler {
     }
 
     // One resolved operand (address + value kind + read-back spelling) plus the cell kind the mixed-kind guard reads.
+    // The operand's own ValueKind is baked in by its case constructor at every call site; this assertion is the one
+    // place that invariant is checked rather than silently re-stamped (a record struct's own "with" could once fix a
+    // drifted ValueKind for free — a case-type union has no such generic clone, so the two must already agree).
     private readonly record struct ResolvedOperand {
         public ResolvedOperand(CompiledWorldOperand Operand, CellKind ValueKind, string Describe) {
-            this.Operand = Operand with { ValueKind = ValueKind };
+            System.Diagnostics.Debug.Assert(
+                condition: (Operand.ValueKind == ValueKind),
+                message: "a resolved operand's own ValueKind must already match the case constructor's ValueKind"
+            );
+            this.Operand = Operand;
             this.ValueKind = ValueKind;
             this.Describe = Describe;
         }

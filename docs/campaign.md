@@ -779,19 +779,30 @@ neutral value it should never need to. This is a pure representation change: the
 after. The case-type/union rewrite below is unstarted; this only clears its stated first step.
 
 **Compiled rule operands are a closed union, built to the union pattern before the compiler
-has it (owner decision).** `CompiledWorldOperand` and `CompiledWorldEffect` are flattened
-structs carrying every fact kind's parameters at once, copied by value into every predicate,
-expression token, and reader; the shape is wrong, not merely large. The replacement is one
-sealed record per fact kind as the case types and an eight-byte carrier written to the C# 15
-basic union pattern by hand — a `[Union]` struct holding one `object?`, a constructor per
-case, `Value`, `HasValue`, and a `TryGetValue` per case — with the two attribute and
-interface types polyfilled internally until .NET 11 supplies them. Dispatch is a type-pattern
-switch over the cases; a law enumerates every fact kind against it until the compiler's
-exhaustiveness takes over. The day the toolchain moves, the flip is deleting the polyfills and
-switching on the carrier instead of its `Value`; nothing else moves. Case types stay classes,
-never structs, because a union boxes value cases on store. Row and key names leave the hot
-object for compiled handles, kept only in the refusal text. Sequenced after `garden/w3`
-merges, since it rewrites the compiler arms the lanes are producing operands in.
+has it (owner decision). The operand half has landed; the effect half has not.**
+`CompiledWorldOperand` and `CompiledWorldEffect` were flattened structs carrying every fact
+kind's parameters at once, copied by value into every predicate, expression token, and
+reader — the shape was wrong, not merely large. `CompiledWorldOperand` is now a carrier
+struct (`WorldOperandUnion.cs`) over one sealed CLASS per `WorldRuleFactKind`
+(`WorldOperandKinds.cs`, 22 cases — never records or structs, since a union boxes a value
+case on store and nothing at runtime compares two operands for equality or identity), written
+to the C# 15 basic union pattern by hand: a `[Union]` struct holding one `object?`, a
+constructor per case, `Value`, `HasValue`, and a generic `TryGetValue<T>` — with the two
+attribute and interface types (`UnionAttribute`/`IUnion`) polyfilled internally until .NET 11
+supplies them. Dispatch is a type-pattern switch over the cases at `WorldServer.ReadWorldFact`
+and `WorldRuleWorkBudget.OperandCost`; `WorldOperandUnionLawTests` enumerates every fact kind
+against the case-type table until the compiler's exhaustiveness takes over. The day the
+toolchain moves, the flip is deleting the polyfills and switching on the carrier instead of its
+`Value`; nothing else moves. `Kind`/`ValueKind` are the only members every case carries
+(`WorldOperandFact`'s base, set once by each case's own constructor); everything else lives on
+the concrete case, reached by the type-pattern switch or, for the four cases that share a
+(row, key-indirection) address (`StateCellOperand`/`BoardOperand`/`PatternOperand`/
+`SymmetryOperand`), through the narrow `IStateAddressedOperand` interface. Row and key names
+still leave the hot object for compiled handles, kept only in the refusal text. This is a pure
+representation change — the passive 300-tick garden replay hashes identically before and after
+(`0x397968B8F541A2C4`). `CompiledWorldEffect` is still the flattened struct described above and
+awaits the same treatment (explicit factories in place of the compiler's `with` clones,
+firing/preflight/transaction switched on the case types, `in` dropped on reference parameters).
 
 **Cellset-domain unification, the 64-cell half (landed).** The forked
 vocabulary was never a type-system problem: `$board:mask` already reads a

@@ -259,7 +259,7 @@ public sealed partial class WorldServer {
     // kind, matching the compiler's own ValueKind (WorldRuleCompiler.ResolveOperand's reduce branch). An empty row
     // reads as zero for every op — the same "absent reads as zero" precedent ReadStateCell itself follows for a
     // vanished cell.
-    private long ReadReduction(CompiledWorldOperand operand, ulong tick) {
+    private long ReadReduction(ReductionOperand operand, ulong tick) {
         if (!WorldStateReader.TryReadHandle(
             definition: m_definition,
             catalog: m_definition.StateCatalog,
@@ -377,7 +377,7 @@ public sealed partial class WorldServer {
     // $symmetry: — the source cell read through the same resolver as an ordinary cell, its whole part taken as a
     // lattice node, and one of SymmetryLattice's maps applied. A cell holding no node reads the neutral value: -1
     // for the node-valued maps, 0 for orthogonal and the projections.
-    private FixedQ4816 ReadSymmetry(CompiledWorldOperand operand, ulong tick) {
+    private FixedQ4816 ReadSymmetry(SymmetryOperand operand, ulong tick) {
         var node = NodeOf(value: ReadStateCellByHandle(
             handle: operand.StateHandle,
             key: ResolveOperandKey(
@@ -421,66 +421,66 @@ public sealed partial class WorldServer {
     }
     // Shared by both sides of a compareState conjunct — the primary operand and, when present, the comparand — so
     // the two reads can never diverge in how a reserved channel or a declared row resolves to a live fact.
-    private WorldFact ReadWorldFact(CompiledWorldOperand operand, ulong tick) => operand.Kind switch {
-        WorldRuleFactKind.Phase => Finite(ReadPhaseFact(operand, tick), CellKind.Int),
-        WorldRuleFactKind.Board => Finite(ReadBoardFact(operand, tick), CellKind.Int),
-        WorldRuleFactKind.Pattern => Finite(ReadPatternFact(operand, tick), CellKind.Int),
-        WorldRuleFactKind.History => Finite(ReadHistoryFact(operand, tick), operand.ValueKind),
-        WorldRuleFactKind.Clock => Finite(value: ReadClockPhaseError(), kind: CellKind.Int),
-        WorldRuleFactKind.Tick => Finite(value: unchecked((long)tick), kind: CellKind.Int),
-        WorldRuleFactKind.Population => Finite(value: m_population.ActiveCount(), kind: CellKind.Int),
-        WorldRuleFactKind.PhysicsQuiescent => Finite(value: (m_population.RigidBodiesQuiescent() ? 1 : 0), kind: CellKind.Bool),
-        WorldRuleFactKind.RegionOccupancy => Finite(value: m_events.OccupantCount(placementId: operand.Row!), kind: CellKind.Int),
+    private WorldFact ReadWorldFact(CompiledWorldOperand operand, ulong tick) => operand.Value switch {
+        PhaseOperand phase => Finite(ReadPhaseFact(phase, tick), CellKind.Int),
+        BoardOperand board => Finite(ReadBoardFact(board, tick), CellKind.Int),
+        PatternOperand pattern => Finite(ReadPatternFact(pattern, tick), CellKind.Int),
+        HistoryOperand history => Finite(ReadHistoryFact(history, tick), history.ValueKind),
+        ClockOperand => Finite(value: ReadClockPhaseError(), kind: CellKind.Int),
+        TickOperand => Finite(value: unchecked((long)tick), kind: CellKind.Int),
+        PopulationOperand => Finite(value: m_population.ActiveCount(), kind: CellKind.Int),
+        PhysicsQuiescentOperand => Finite(value: (m_population.RigidBodiesQuiescent() ? 1 : 0), kind: CellKind.Bool),
+        RegionOccupancyOperand region => Finite(value: m_events.OccupantCount(placementId: region.Row), kind: CellKind.Int),
         // $link: — the same per-tick staleness the link event family's own threshold comparison reads, in SIMULATION
         // ticks. An edge whose livenessGraceSeconds is unauthored is held at 0 by the feed itself, so a staleness
         // gate stays closed rather than opening on a world that never asked for liveness sensing.
-        WorldRuleFactKind.LinkStaleness => Finite(value: m_events.LinkStalenessTicks(adjacencyName: operand.Row!), kind: CellKind.Int),
+        LinkStalenessOperand link => Finite(value: m_events.LinkStalenessTicks(adjacencyName: link.Row), kind: CellKind.Int),
         // The same IWorldMachineMemoryPeek.TryPeek primitive WorldAddonRuntime's memory-watch family already rides,
         // called directly instead of accumulated as a change event. No machine booted (or no peek capability) reads
         // as 0 — never a hard refusal, since the machine can boot on a later tick.
-        WorldRuleFactKind.MachineMemory => Finite(value: (Machines.TryPeek(
-        screen: operand.Screen,
-        address: operand.Address,
+        MachineMemoryOperand machine => Finite(value: (Machines.TryPeek(
+        screen: machine.Screen,
+        address: machine.Address,
         out var raw
     )
         ? raw
         : (byte)0), kind: CellKind.Int),
-        WorldRuleFactKind.Reduction => Finite(value: ReadReduction(operand: operand, tick: tick), kind: operand.ValueKind),
-        WorldRuleFactKind.ArgBody => Finite(value: ResolveArgBody(
-        handle: operand.StateHandle,
-        op: operand.Reduce,
+        ReductionOperand reduction => Finite(value: ReadReduction(operand: reduction, tick: tick), kind: reduction.ValueKind),
+        ArgBodyOperand argBody => Finite(value: ResolveArgBody(
+        handle: argBody.StateHandle,
+        op: argBody.Reduce,
         tick: tick,
-        filterHandle: operand.FilterHandle,
-        hasFilter: (operand.FilterRow is not null)
+        filterHandle: argBody.FilterHandle,
+        hasFilter: (argBody.FilterRow is not null)
     ), kind: CellKind.Int),
-        WorldRuleFactKind.BodyDistance => Finite(value: ReadBodyDistance(
-        bodyA: operand.BodyA!.Value,
-        bodyB: operand.BodyB!.Value,
+        BodyDistanceOperand distance => Finite(value: ReadBodyDistance(
+        bodyA: distance.BodyA,
+        bodyB: distance.BodyB,
         tick: tick
     )),
-        WorldRuleFactKind.LineOfSight => Finite(value: (ReadBodyLineOfSight(
-        bodyA: operand.BodyA!.Value,
-        bodyB: operand.BodyB!.Value,
+        LineOfSightOperand los => Finite(value: (ReadBodyLineOfSight(
+        bodyA: los.BodyA,
+        bodyB: los.BodyB,
         tick: tick
     )
         ? 1
         : 0), kind: CellKind.Bool),
-        WorldRuleFactKind.Upright => Finite(value: ReadBodyUpright(
-        bodyRef: operand.BodyA!.Value,
+        UprightOperand upright => Finite(value: ReadBodyUpright(
+        bodyRef: upright.BodyA,
         tick: tick
     )),
-        WorldRuleFactKind.Navigation => Finite(
+        NavigationOperand navigation => Finite(
             value: m_population.NavigationFact(
-                index: ResolveBodyRef(bodyRef: operand.BodyA!.Value, tick: tick),
-                facet: operand.Row!
+                index: ResolveBodyRef(bodyRef: navigation.BodyA, tick: tick),
+                facet: navigation.Row
             ),
             kind: CellKind.Int
         ),
         // Preserve the reserved channel's authored contract: $parked reports the population deadline's own
         // SIMULATION-tick unit. Engine-tick countdown rows use countdownState instead; changing this unrelated
         // channel's unit would silently retune every existing raw compareState threshold and fromState copy.
-        WorldRuleFactKind.Parked => ((ReadParkedRemaining(
-        bodyRef: operand.BodyA!.Value,
+        ParkedOperand parked => ((ReadParkedRemaining(
+        bodyRef: parked.BodyA,
         tick: tick
     ) is { } remaining)
         ? Finite(value: remaining, kind: CellKind.Int)
@@ -489,29 +489,30 @@ public sealed partial class WorldServer {
             Kind: CellKind.Int,
             IsForever: true
         )),
-        WorldRuleFactKind.Channel => Finite(value: ReadChannelValue(
-        seat: operand.Seat,
-        ordinal: operand.ChannelOrdinal
+        ChannelOperand channel => Finite(value: ReadChannelValue(
+        seat: channel.Seat,
+        ordinal: channel.ChannelOrdinal
     )),
-        WorldRuleFactKind.Nearest => Finite(value: ResolveNearestBody(
-        from: operand.BodyA!.Value,
-        tagRowHandle: operand.StateHandle,
+        NearestOperand nearest => Finite(value: ResolveNearestBody(
+        from: nearest.BodyA,
+        tagRowHandle: nearest.StateHandle,
         tick: tick
     ), kind: CellKind.Int),
-        WorldRuleFactKind.Symmetry => Finite(value: ConvertFixedToRaw(
+        SymmetryOperand symmetry => Finite(value: ConvertFixedToRaw(
         value: ReadSymmetry(
-        operand: operand,
+        operand: symmetry,
         tick: tick
-    ), kind: operand.ValueKind), kind: operand.ValueKind),
-        _ => ReadStateFact(
-        handle: operand.StateHandle,
+    ), kind: symmetry.ValueKind), kind: symmetry.ValueKind),
+        StateCellOperand stateCell => ReadStateFact(
+        handle: stateCell.StateHandle,
         key: ResolveOperandKey(
-        key: operand.Key,
-        keyFrom: operand.KeyFrom,
+        key: stateCell.Key,
+        keyFrom: stateCell.KeyFrom,
         tick: tick
     ),
         tick: tick
     ),
+        _ => throw new InvalidOperationException($"unhandled compiled world operand case '{operand.Value?.GetType().Name}'"),
     };
 
     private WorldFact ReadStateFact(WorldStateHandle handle, string key, ulong tick) {
@@ -788,7 +789,7 @@ public sealed partial class WorldServer {
     // whose magnitude can exceed every number — $parked: on a forever-parked body. Infinity participates in
     // comparisons through the ActionStateComparisons overload and is never encoded as a numeric stand-in.
     private readonly record struct WorldFact(long Value, CellKind Kind, bool IsForever);
-    private long ReadPhaseFact(CompiledWorldOperand operand, ulong tick) {
+    private long ReadPhaseFact(PhaseOperand operand, ulong tick) {
         if (!WorldStateReader.TryReadHandle(
             catalog: m_definition.StateCatalog,
             definition: m_definition,

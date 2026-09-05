@@ -511,78 +511,8 @@ public enum WorldRuleFactKind : byte {
     /// (<see cref="WorldRuleFacts.ClockPrefix"/>).</summary>
     Clock,
 }
-/// <summary>One resolved operand of a world-rule comparison — the (<see cref="Kind"/>, <see cref="Row"/>,
-/// <see cref="Key"/>) address plus the <see cref="Screen"/>/<see cref="Address"/> machine coordinates, the live
-/// quantity <c>WorldServer.RuleGateOpen</c> reads to a <see cref="FixedQ4816"/>. Both sides of a
-/// <see cref="ActionPredicate.CompareState"/> conjunct — the primary and, when spelled, the comparand — are the same
-/// operand type, read by the same <c>ReadWorldFact</c> helper, so the two sides can never drift into two readings of
-/// one name.</summary>
-/// <param name="Kind">Which live quantity this operand reads.</param>
-/// <param name="Row">The state row name for <see cref="WorldRuleFactKind.StateCell"/>, the placement id for
-/// <see cref="WorldRuleFactKind.RegionOccupancy"/>, the adjacency row name for
-/// <see cref="WorldRuleFactKind.LinkStaleness"/>, or the facet name for
-/// <see cref="WorldRuleFactKind.Navigation"/>; <see langword="null"/> otherwise.</param>
-/// <param name="Key">The cell key inside <paramref name="Row"/> for <see cref="WorldRuleFactKind.StateCell"/>,
-/// <see langword="null"/> otherwise.</param>
-/// <param name="Screen">The declared screen index for <see cref="WorldRuleFactKind.MachineMemory"/>; unused otherwise.</param>
-/// <param name="Address">The machine-defined memory address for <see cref="WorldRuleFactKind.MachineMemory"/>; unused
-/// otherwise.</param>
-/// <param name="Reduce">The aggregate/extremum for <see cref="WorldRuleFactKind.Reduction"/> (any op) or
-/// <see cref="WorldRuleFactKind.ArgBody"/> (<see cref="WorldStateReduceOp.Max"/>/<see cref="WorldStateReduceOp.Min"/>
-/// only); <see cref="WorldStateReduceOp.None"/> otherwise.</param>
-/// <param name="BodyA">The first named body for <see cref="WorldRuleFactKind.BodyDistance"/>/
-/// <see cref="WorldRuleFactKind.LineOfSight"/>, or the one named body for <see cref="WorldRuleFactKind.Parked"/>,
-/// <see cref="WorldRuleFactKind.Upright"/>, and <see cref="WorldRuleFactKind.Navigation"/> (which read no second
-/// body); <see langword="null"/> otherwise.</param>
-/// <param name="BodyB">The second named body for <see cref="WorldRuleFactKind.BodyDistance"/>/
-/// <see cref="WorldRuleFactKind.LineOfSight"/>; <see langword="null"/> otherwise (including
-/// <see cref="WorldRuleFactKind.Parked"/>, which is single-body).</param>
-/// <param name="Seat">The 0-based local-seat body index for <see cref="WorldRuleFactKind.Channel"/>; unused
-/// otherwise.</param>
-/// <param name="ChannelOrdinal">The declared channel's document-order ordinal (the same ordinal
-/// <c>WorldChannelTable.Compile</c> assigns) for <see cref="WorldRuleFactKind.Channel"/>; unused otherwise.</param>
-/// <param name="KeyFrom">For <see cref="WorldRuleFactKind.StateCell"/>, the cell key read by indirection
-/// (<see cref="WorldRuleFacts.CellKeyPrefix"/>) in place of <paramref name="Key"/>; <see langword="null"/> otherwise.</param>
-/// <param name="Symmetry">The lattice map a <see cref="WorldRuleFactKind.Symmetry"/> operand applies to its source node.</param>
-/// <param name="SymmetryArgument">The literal argument of that map — the step count of <see cref="WorldSymmetryFunction.Cycle"/>,
-/// or the other node of <see cref="WorldSymmetryFunction.Reflect"/>/<see cref="WorldSymmetryFunction.Orthogonal"/>
-/// when <paramref name="SymmetryOtherCell"/> is <see langword="null"/>.</param>
-/// <param name="SymmetryOtherCell">The cell the other node is read from live, or <see langword="null"/> for the literal
-/// <paramref name="SymmetryArgument"/>; an empty key addresses a slot row's own cell.</param>
-/// <param name="ValueKind">The raw encoding returned by this operand. Carrying it beside the address lets the
-/// runtime compare integer cells without narrowing them through binary32.</param>
-/// <param name="StateHandle">The compiled world-lane row handle for state-backed operands; invalid for channels
-/// that do not read a state row.</param>
-/// <param name="FilterRow">The optional keyed row whose nonzero cells admit reduction candidates.</param>
-/// <param name="FilterHandle">The compiled handle for <paramref name="FilterRow"/>.</param>
-/// <param name="Board">The compiled discrete query, when present.</param>
-/// <param name="Pattern">The pattern a <see cref="WorldRuleFactKind.Pattern"/> operand runs; the word source is <paramref name="Row"/> and, for a zone, <paramref name="FilterRow"/> is its attribute row.</param>
-/// <param name="MatchFacet">What the pattern operand answers; a board query whose <c>Direction</c> is -1 walks every direction.</param>
-/// <param name="TokenExpression">For a zone source whose pattern carries a value expression, that expression compiled with <c>$token</c> keys bound per token.</param>
-public readonly record struct CompiledWorldOperand(
-    WorldRuleFactKind Kind,
-    string? Row,
-    string? Key,
-    int Screen = 0,
-    int Address = 0,
-    WorldStateReduceOp Reduce = WorldStateReduceOp.None,
-    CompiledBodyRef? BodyA = null,
-    CompiledBodyRef? BodyB = null,
-    int Seat = 0,
-    int ChannelOrdinal = 0,
-    CompiledCellRef? KeyFrom = null,
-    WorldSymmetryFunction Symmetry = WorldSymmetryFunction.Ring,
-    long SymmetryArgument = 0L,
-    CompiledCellRef? SymmetryOtherCell = null,
-    CellKind ValueKind = CellKind.Fixed,
-    WorldStateHandle StateHandle = default,
-    string? FilterRow = null,
-    WorldStateHandle FilterHandle = default,
-    CompiledWorldBoardQuery? Board = null,
-    string? Pattern = null,
-    WorldMatchFacet MatchFacet = WorldMatchFacet.Accept,
-    CompiledWorldExpressionToken[]? TokenExpression = null
-);
+// CompiledWorldOperand is now the closed-union carrier declared in WorldOperandUnion.cs, with its case types in
+// WorldOperandKinds.cs (one sealed class per WorldRuleFactKind below).
 /// <summary>What a <c>$match:</c> operand answers about its word.</summary>
 public enum WorldMatchFacet : byte {
     /// <summary>1 when the whole word is in the language, else 0.</summary>
