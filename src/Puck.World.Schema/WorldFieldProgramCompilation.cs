@@ -64,7 +64,7 @@ public readonly record struct WorldFieldScalarInput(FixedQ4816 Literal, WorldSta
 /// <param name="Minimum">The inclusive cell-value floor.</param>
 /// <param name="Maximum">The inclusive cell-value ceiling.</param>
 /// <param name="HeightScale">World units of geometry height per field unit.</param>
-/// <param name="IsMedium">Whether this field is a fluid medium (see <see cref="WorldStateLatticeTrait.Medium"/>) —
+/// <param name="IsMedium">Whether this field is a fluid medium (see <see cref="WorldStateFieldTrait.Medium"/>) —
 /// its value times <paramref name="HeightScale"/> over the lattice origin is a free surface bodies sample.</param>
 public readonly record struct WorldFieldDescriptor(
     WorldFieldHandle Handle,

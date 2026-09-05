@@ -128,17 +128,14 @@ public static partial class WorldStateTransforms {
         }
         var source = rows[from];
         var destination = rows[to];
-        if (source.Zone is not { } sourceZone || destination.Zone is not { } destinationZone || sourceZone.Tokens != destinationZone.Tokens || !Enum.IsDefined(transfer.Selector)) {
+        if (source.EffectiveDomain is not WorldStateDomain.KeysOf { Ordered: true } sourceZone || destination.EffectiveDomain is not WorldStateDomain.KeysOf { Ordered: true } destinationZone || sourceZone.Row != destinationZone.Row || !Enum.IsDefined(transfer.Selector)) {
             return Refuse("transfer requires zones in one token domain and a defined selector", out reason);
-        }
-        if ((transfer.Selector is WorldZoneSelector.First or WorldZoneSelector.Last) && !sourceZone.Ordered || transfer.InsertFirst && !destinationZone.Ordered) {
-            return Refuse("positional selection and insertion require ordered zones", out reason);
         }
         if ((transfer.Selector == WorldZoneSelector.Key) != (transfer.Key is not null) || (transfer.Selector == WorldZoneSelector.Random) != (transfer.Draw is not null)) {
             return Refuse("key selection requires only key; random selection requires only draw", out reason);
         }
-        if (transfer.Count < 1 || transfer.Count > WorldStateTokens.MaxTransferCount || (transfer.Selector == WorldZoneSelector.Key && transfer.Count != 1)) {
-            return Refuse($"transfer count must be 1..{WorldStateTokens.MaxTransferCount}, and exactly 1 for a key selection", out reason);
+        if (transfer.Count < 1 || transfer.Count > WorldStateTransferCapacity.MaxTransferCount || (transfer.Selector == WorldZoneSelector.Key && transfer.Count != 1)) {
+            return Refuse($"transfer count must be 1..{WorldStateTransferCapacity.MaxTransferCount}, and exactly 1 for a key selection", out reason);
         }
         var cells = (source.Cells ?? []).ToList();
         if (cells.Count < transfer.Count) {
@@ -206,7 +203,7 @@ public static partial class WorldStateTransforms {
             return false;
         }
         var row = rows[index];
-        if (row.Board is not { } board || WorldTopologyCompilation.Find(definition.StateRaw, board.Topology) is not { } topology ||
+        if (row.EffectiveDomain is not WorldStateDomain.CellsOf board || WorldTopologyCompilation.Find(definition.StateRaw, board.Topology) is not { } topology ||
             !topology.TryCell(ray.From, out var origin) || topology.Direction(ray.Direction) < 0 ||
             !patterns.TryGet(ray.Pattern, out var pattern) || pattern.Source.Kind != CellKind.Int) {
             return Refuse("setRay requires a board origin, a valid direction, and a compiled integer-kind pattern", out reason);
@@ -255,7 +252,7 @@ public static partial class WorldStateTransforms {
         var row = rows[index];
         var cells = (row.Cells ?? []).ToArray();
         var count = cells.Length;
-        if (row.Zone is not { Ordered: true } zone || sort.By is not { Count: >= 1 and <= WorldStateCapacity.MaxSortKeys }) {
+        if (row.EffectiveDomain is not WorldStateDomain.KeysOf { Ordered: true } zone || sort.By is not { Count: >= 1 and <= WorldStateCapacity.MaxSortKeys }) {
             return Refuse($"sortZone requires an ordered zone and 1..{WorldStateCapacity.MaxSortKeys} attribute keys, each carrying its own direction", out reason);
         }
         var position = new Dictionary<WorldCellName, int>(count);
@@ -270,8 +267,8 @@ public static partial class WorldStateTransforms {
                 return Refuse("a sort key names no state row", out reason);
             }
             var by = rows[byIndex];
-            if (!by.IsKeyed || by.Kind is not (CellKind.Int or CellKind.Fixed) || by.KeysFrom != zone.Tokens) {
-                return Refuse($"a sort attribute must be a numeric row keyed over token domain '{zone.Tokens}'", out reason);
+            if (by.Kind is not (CellKind.Int or CellKind.Fixed) || by.EffectiveDomain is not WorldStateDomain.KeysOf byKeysOf || byKeysOf.Row != zone.Row) {
+                return Refuse($"a sort attribute must be a numeric row keyed over token domain '{zone.Row}'", out reason);
             }
             foreach (var cell in by.Cells ?? []) {
                 if (position.TryGetValue(cell.Key, out var cellIndex)) {
@@ -328,8 +325,8 @@ public static partial class WorldStateTransforms {
             return false;
         }
         var row = rows[index];
-        if (!(row.Zone is { Ordered: true } || (row.Zone is null && row.IsKeyed))) {
-            return Refuse("shuffle requires an ordered zone or a keyed row", out reason);
+        if (!row.IsKeyed) {
+            return Refuse("shuffle requires a keyed row", out reason);
         }
         var cells = (row.Cells ?? []).ToArray();
         if (cells.Length < 2) {

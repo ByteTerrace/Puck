@@ -152,9 +152,10 @@ public static class WorldStateDisclosure {
             Name = recipient?.Describe();
             m_zonesByDomain = new(StringComparer.Ordinal);
             foreach (var row in definition.State) {
-                if (row.Zone?.Tokens is not { } domain) {
+                if (row.EffectiveDomain is not WorldStateDomain.KeysOf { Ordered: true } zoneDomain) {
                     continue;
                 }
+                var domain = zoneDomain.Row.Value;
                 if (!m_zonesByDomain.TryGetValue(domain, out var zones)) {
                     zones = [];
                     m_zonesByDomain[domain] = zones;
@@ -170,7 +171,7 @@ public static class WorldStateDisclosure {
                 return false;
             }
 
-            var domain = row.Tokens is not null ? row.Name.Value : row.KeysFrom;
+            var domain = (row.EffectiveDomain is WorldStateDomain.KeysOf keysOf) ? keysOf.Row.Value : row.Name.Value;
             if (domain is null || !m_zonesByDomain.TryGetValue(domain, out var zones)) {
                 return true;
             }

@@ -531,8 +531,8 @@ own code winning the write, not the capturing piece's.
 
 The garden also carries a hidden-hand poker table, state only — no card
 bodies — beside the chess set: a `cards` token domain (52 identities, `rank`
-and `suit` attribute rows, each keeping `keysFrom: cards` so a hidden card's
-value inherits its owning zone's own visibility — see below) with a
+and `suit` attribute rows, each declaring a `keysOf: cards` domain so a hidden
+card's value inherits its owning zone's own visibility — see below) with a
 `deck`/`hand1`/`hand2`/`community` zone family, a `cardStream` streamDraw
 site, a plain int `pokerTurn` (0 = deal, 1 = bet — not the `phase` trait; a
 guarded row costs the same per-tick budget as any other transform-touched
@@ -561,7 +561,8 @@ correct against a sorted or order-independent word respectively, reachable via
 `WorldRuleWorkBudget.TransformCost` prices every `transformState`
 effect — a `sortKeyed`, a `transfer`, a `setRay` alike — against the WHOLE
 document's declared cell storage (`suit` and `rank`'s privacy-required
-`keysFrom` each add a full topology-sized share to that storage on their own),
+`keysOf` domain declares no capacity of its own, so each still adds a full
+4096-cell share to that storage),
 so the deal's three transfers plus the two sorts are a real, non-trivial cost
 alongside chess's and the rigid facets' own rules — consult `world.budget`
 for the live per-tick tally rather than a fraction quoted here. Trip/quad/
@@ -575,7 +576,7 @@ other seat on success — a real turn order, not a free-for-all. Hidden cards
 are placeholders through `rank`/`suit`'s own public, `Hidden: Placeholder`
 visibility: each cell resolves through its OWNING zone's own visibility
 (`WorldStateDisclosure.Observer.CanRead`'s nested zones-by-domain lookup,
-which is *why* `keysFrom` cannot be dropped to save budget on either row) —
+which is *why* the `keysOf` domain cannot be dropped to save budget on either row) —
 `deck` is authority-only and `hand1`/`hand2` are each their own seat until a
 rule (`poker-showdown-reveal`) writes the other seat's token into
 `audience1`/`audience2`, the same `readersFrom` widening the tabletop's own

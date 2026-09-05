@@ -168,7 +168,7 @@ public sealed class WorldStateCatalog {
             Add(
                 name: row.Name,
                 ownership: WorldStateOwnershipLane.World,
-                storage: ((row.Lattice is not null)
+                storage: ((row.Field is not null)
                     ? WorldStateStorageShape.Lattice
                     : (row.IsKeyed
                         ? WorldStateStorageShape.Keyed
@@ -302,7 +302,7 @@ public sealed class WorldStateCatalog {
                 !Match(
                     name: row.Name,
                     ownership: WorldStateOwnershipLane.World,
-                    storage: ((row.Lattice is not null)
+                    storage: ((row.Field is not null)
                         ? WorldStateStorageShape.Lattice
                         : (row.IsKeyed
                             ? WorldStateStorageShape.Keyed

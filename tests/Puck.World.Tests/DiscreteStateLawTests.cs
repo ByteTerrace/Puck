@@ -31,7 +31,7 @@ public sealed class DiscreteStateLawTests {
     public void WarmBoardReadsAndPathQueriesAllocateNothing() {
         var state = new WorldStateSection(Lattices: [Grid()]);
         var topology = WorldTopologyCompilation.Find(state, "map")!;
-        var row = new WorldStateRow(Name("terrain"), CellKind.Int, Cells: [Cell("1",2)], Board: new("map",1));
+        var row = new WorldStateRow(Name("terrain"), CellKind.Int, Cells: [Cell("1",2)], Domain: new WorldStateDomain.CellsOf("map",1));
         var query = new CompiledWorldBoardQuery(topology, WorldBoardQueryKind.PathCost, Target: 15, MaxCost: 100, MaxVisits: 16);
         Span<long> values = stackalloc long[16];
         WorldBoardQueries.Read(row, topology, values);
@@ -49,9 +49,9 @@ public sealed class DiscreteStateLawTests {
     public void APhaseOfTaggedRowRefusesAnUnguardedTransformAndAMatchingGuardAdvancesTheGenerationOnSuccess() {
         var definition = Document(
             new(Name("turn"), CellKind.Int, Phase: new()),
-            new(Name("cards"), CellKind.Int, Cells: [Cell("a")], Tokens: new()),
-            new(Name("deck"), CellKind.Bool, Cells: [Cell("a")], Zone: new("cards"), PhaseOf: "turn"),
-            new(Name("hand"), CellKind.Bool, Zone: new("cards"), PhaseOf: "turn"));
+            new(Name("cards"), CellKind.Int, Cells: [Cell("a")]),
+            new(Name("deck"), CellKind.Bool, Cells: [Cell("a")], Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true), PhaseOf: "turn"),
+            new(Name("hand"), CellKind.Bool, Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true), PhaseOf: "turn"));
         Assert.True(WorldStateTransforms.CanAct(definition, new("turn", 0), WorldPrincipal.Console));
         Assert.False(WorldStateTransforms.CanAct(definition, new("turn", 1), WorldPrincipal.Console));
         using var fixture = Fixtures.FreshServer(definition: definition);
@@ -77,7 +77,7 @@ public sealed class DiscreteStateLawTests {
 
     [Fact]
     public void DiscreteTopologiesDoNotAllocatePhysicalFieldsAndWrappedRaysTerminate() {
-        var definition = Document(new WorldStateRow(Name("board"), CellKind.Int, Board: new("map")));
+        var definition = Document(new WorldStateRow(Name("board"), CellKind.Int, Domain: new WorldStateDomain.CellsOf("map")));
         Assert.Null(definition.Fields);
         var topology = WorldTopologyCompilation.Find(definition.StateRaw, "map")!;
         Assert.Equal(-1, topology.Neighbour(0, topology.Direction("N")));
@@ -91,7 +91,7 @@ public sealed class DiscreteStateLawTests {
         // the wrap-termination guarantee a $match-over-a-ray read now leans on where a dedicated ray query once did.
         var runOfOnes = new WorldPatternRow(Name("runOfOnes"), CellKind.Int, Symbols: [new(Name("one"), 1, 1)], Pattern: new WorldPatternNode.Star(new WorldPatternNode.Symbol("one")));
         var wrappedDefinition = Fixtures.BuildDocument() with {
-            StateRaw = new(World: [new WorldStateRow(Name("board"), CellKind.Int, Board: new("map", Empty: 1)), new WorldStateRow(Name("blocker"), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)])], Lattices: [Grid(wrap: WorldTopologyWrap.Both)]),
+            StateRaw = new(World: [new WorldStateRow(Name("board"), CellKind.Int, Domain: new WorldStateDomain.CellsOf("map", Empty: 1)), new WorldStateRow(Name("blocker"), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)])], Lattices: [Grid(wrap: WorldTopologyWrap.Both)]),
             PatternsRaw = [runOfOnes],
             Rules = [new WorldRule(Name("read"), [new ActionEffect.SetState(State: "blocker", FromState: "$match:runOfOnes:board:E:cell", FromKey: "0")])],
         };
@@ -106,7 +106,7 @@ public sealed class DiscreteStateLawTests {
 
     [Fact]
     public void BracketedRayCommitsTheAcceptedPrefixOrRefusesOnAnEmptyOne() {
-        var definition = Document(new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0",1),Cell("1",2),Cell("2",2),Cell("3",1)], Board: new("map"))) with {
+        var definition = Document(new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0",1),Cell("1",2),Cell("2",2),Cell("3",1)], Domain: new WorldStateDomain.CellsOf("map"))) with {
             PatternsRaw = [CapturePattern()],
         };
         Assert.True(CompiledWorldPatterns.TryCompileAll(definition, out var patterns, []));
@@ -116,7 +116,7 @@ public sealed class DiscreteStateLawTests {
         Assert.Equal(2, Find(definition, "board").Cells![1].Value);
         // Control: a board holding only "through" values never reaches the required "until" terminator, so the
         // longest accepted prefix is empty and the whole write is refused.
-        var open = Document(new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0",1),Cell("1",2),Cell("2",2),Cell("3",2)], Board: new("map"))) with {
+        var open = Document(new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0",1),Cell("1",2),Cell("2",2),Cell("3",2)], Domain: new WorldStateDomain.CellsOf("map"))) with {
             PatternsRaw = [CapturePattern()],
         };
         Assert.True(CompiledWorldPatterns.TryCompileAll(open, out var openPatterns, []));
@@ -127,9 +127,9 @@ public sealed class DiscreteStateLawTests {
     [Fact]
     public void TransfersPreserveDuplicateValuedTokenIdentitiesAndPileOrder() {
         var definition = Document(
-            new(Name("cards"), CellKind.Int, Cells: [Cell("a",7),Cell("b",7)], Tokens: new()),
-            new(Name("deck"), CellKind.Bool, Cells: [Cell("a"),Cell("b")], Zone: new("cards")),
-            new(Name("hand"), CellKind.Bool, Capacity: 1, Cells: [], Zone: new("cards")));
+            new(Name("cards"), CellKind.Int, Cells: [Cell("a",7),Cell("b",7)]),
+            new(Name("deck"), CellKind.Bool, Cells: [Cell("a"),Cell("b")], Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true)),
+            new(Name("hand"), CellKind.Bool, Capacity: 1, Cells: [], Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true)));
         var operation = new WorldStateTransform.Transfer("deck", "hand", WorldZoneSelector.First);
         Assert.True(WorldStateTransforms.TryApply(definition, operation, WorldPrincipal.Console, 0, "test", out var changed, out var reason), reason);
         Assert.Equal("a", Assert.Single(Find(changed, "hand").Cells!).Key.Value);
@@ -143,10 +143,10 @@ public sealed class DiscreteStateLawTests {
     [Fact]
     public void MovementSpendsPointsAtomicallyAndOccupancyBlocksEntry() {
         var definition = Document(
-            new(Name("units"), CellKind.Int, Cells: [Cell("a"),Cell("b")], Tokens: new()),
-            new(Name("terrain"), CellKind.Int, Board: new("map", Empty: 1)),
-            new(Name("positions"), CellKind.Int, Cells: [Cell("a",0),Cell("b",1)], KeysFrom: "units", ValuesFrom: "map"),
-            new(Name("points"), CellKind.Int, Cells: [Cell("a",2),Cell("b",2)], KeysFrom: "units"));
+            new(Name("units"), CellKind.Int, Cells: [Cell("a"),Cell("b")]),
+            new(Name("terrain"), CellKind.Int, Domain: new WorldStateDomain.CellsOf("map", Empty: 1)),
+            new(Name("positions"), CellKind.Int, Cells: [Cell("a",0),Cell("b",1)], Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("units")), ValuesFrom: "map"),
+            new(Name("points"), CellKind.Int, Cells: [Cell("a",2),Cell("b",2)], Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("units"))));
         var move = new WorldStateTransform.MoveToken("positions", "a", 4, "terrain", "points", 16);
         Assert.True(WorldStateTransforms.TryApply(definition, move, WorldPrincipal.Console, 1, "test", out var changed, out var reason), reason);
         Assert.Equal(4, Find(changed, "positions").Cells![0].Value);
@@ -160,9 +160,9 @@ public sealed class DiscreteStateLawTests {
     [Fact]
     public void RuleTransactionRollsBackTransferAndPhaseWhenLaterEffectRefuses() {
         var definition = Document(
-            new(Name("cards"), CellKind.Int, Cells: [Cell("a",7)], Tokens: new()),
-            new(Name("deck"), CellKind.Bool, Cells: [Cell("a")], Zone: new("cards")),
-            new(Name("hand"), CellKind.Bool, Cells: [], Zone: new("cards")),
+            new(Name("cards"), CellKind.Int, Cells: [Cell("a",7)]),
+            new(Name("deck"), CellKind.Bool, Cells: [Cell("a")], Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true)),
+            new(Name("hand"), CellKind.Bool, Cells: [], Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true)),
             Row("failed", new WorldStateCell(WorldStateRow.SlotKey, 0))) with {
             Rules = [new(Name("atomic"), Effects: [new ActionEffect.Transaction([
                 new WorldTransactionStep.TransformStateStep(new WorldStateTransform.Transfer("deck", "hand", WorldZoneSelector.First)),
@@ -178,7 +178,7 @@ public sealed class DiscreteStateLawTests {
 
     [Fact]
     public void AttacksQueryStopsAtTheFirstBlockerAndOnlyMatchesItsOwnValue() {
-        var definition = Document(new WorldStateRow(Name("board"), CellKind.Int, Board: new("map")));
+        var definition = Document(new WorldStateRow(Name("board"), CellKind.Int, Domain: new WorldStateDomain.CellsOf("map")));
         var topology = WorldTopologyCompilation.Find(definition.StateRaw, "map")!;
         var east = topology.Direction("E");
         var south = topology.Direction("S");

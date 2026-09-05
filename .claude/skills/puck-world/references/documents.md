@@ -272,10 +272,14 @@ footgun a level-triggered `addState` already carries (see `WorldRule.Mode`'s own
 remarks); a write failure is caught at the tap and narrated on stderr by name,
 never fatal to the tick. Effects and
 predicates address a (row, KEY) PAIR — an omitted key means the row's slot cell,
-and `WorldStateRow.IsKeyed` is the discriminator (deliberately NOT `!IsSlot`: a
-row with no cells at all is slot-addressable, since the first write mints its
-slot cell — `IsSlot` asks whether a value exists to READ, `IsKeyed` whether an
-omitted key can ADDRESS one). `CompareState` may instead name
+and `WorldStateRow.IsKeyed` is the discriminator: one switch over the row's
+declared `Domain` (`WorldStateDomain` — `Slot`/`Keys`/`KeysOf`/`CellsOf`/`Ring`;
+an unauthored row infers `Slot` or `Keys` from `cells`/`capacity`/`phase` alone
+(a `phase` row has no single value to read even before its first participant,
+so it infers `Keys`), so a plain row spells nothing new), exhaustive with
+`IsSlot` by construction. A row
+with no cells at all still infers `Slot`, since the first write mints its slot
+cell. `CompareState` may instead name
 a reserved channel: `$tick`, `$population`, `$region:<placementId>`,
 `$machine:<screen>:<address>` (one live byte off a declared screen's booted
 machine — the same `IWorldMachineMemoryPeek.TryPeek` primitive
@@ -692,10 +696,15 @@ water field — see `Puck.World.Schema/README.md`'s tabletop-primitive
 section). A discrete topology's own `directions` (optional; each kind's
 compass/space names are the unauthored default) replaces its whole direction
 vocabulary — see the schema README's discrete-boards section for the
-authoring shape and validation. Lattice-shaped
-state rows: `{"name": …, "kind": "fixed", "lattice":
-{"topology": …, "initial"/"min"/"max", optional "heightScale"/"color",
-"paint": […]}}`. `WorldFieldsSection.Compile` assembles the runtime composite
+authoring shape and validation. Field-shaped
+state rows: `{"name": …, "kind": "fixed", "domain": {"$type": "cellsOf",
+"topology": …}, "field": {"initial"/"min"/"max", optional
+"heightScale"/"color", "paint": […]}}` — `domain.topology` names the
+`Field`-kind topology (the same `cellsOf` case a discrete board's own domain
+uses; which storage a `cellsOf` row gets is an implementation choice keyed on
+`kind`, never a second authored trait), and `lattice` (`WorldStateFieldTrait`)
+carries only what is left once the topology moves to `domain`.
+`WorldFieldsSection.Compile` assembles the runtime composite
 the engine consumes (`WorldDefinition.Fields` is that compiled view — never
 an authored section; there is no top-level `fields` member any more). A cell
 write against a lattice row (`world.state.cell.set`) refuses through
@@ -1078,7 +1087,7 @@ Presentation-only on the same terms, pinned by `CreationEffectorLawTests`. `body
 census, simulation (30 Hz), host (windowed, loopback-default — `--listen` binds
 QUIC), collision, gravity, channels, the `walk` body-motion program, the `walker` kit
 (`defaultSeatKit`), keyboard/gamepad bindings, the chase seat rig, the pip look, and grants — is the
-world document's own. A lattice trait's `color` speaks the same grammar (resolved live at
+world document's own. A field trait's `color` speaks the same grammar (resolved live at
 emit — a state cell write recolors a height field on the next frame, no re-bake, bricks hold only
 distances; `world.fields` echoes the authored token).
 The world's one placement is the `debugRoom` prototype at origin: a 48 m platform (top at y = −0.5)
@@ -2261,7 +2270,10 @@ zone, and neutral-grace duration.
 - `WorldViews.cs` — the `views` section (slots, layouts, seat framing).
 - `WorldState.cs` — the `state` section: `WorldStateSection` (world/body/identity ownership lanes),
   `WorldStateRow` (the document-cell substrate — `kind` int/fixed/bool/text,
-  `value` sugar or `cells`), `WorldStateCell`, and `WorldStateCapacity`.
+  `value` sugar or `cells`, a `Domain`), `WorldStateCell`, and `WorldStateCapacity`.
+- `WorldStateDomain.cs` — the row's declared cell domain (`Slot`/`Keys`/
+  `KeysOf`/`CellsOf`/`Ring`), a closed union over `UnionPolyfill.cs`'s shared
+  `[Union]` marker.
 - `WorldStateCompilation.cs` — the immutable typed descriptor catalog over the
   state section: ownership lane, storage shape, value kind, stable handle and
   lane-local ordinals, plus one-time `(lane, name)` resolution for runtime

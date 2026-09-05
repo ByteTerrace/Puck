@@ -521,7 +521,7 @@ public static partial class WorldDefinitionValidator {
             }
             if (hold.Bond == BodyHoldBond.Medium) {
                 if (!hasMedium) {
-                    errors.Add(item: $"{rowPath}.bond 'Medium' requires a medium lattice row (state.world[].lattice.medium) — a medium hold implies a medium to stand in.");
+                    errors.Add(item: $"{rowPath}.bond 'Medium' requires a medium lattice row (state.world[].field.medium) — a medium hold implies a medium to stand in.");
                 }
                 if (hold.Medium is not { } medium) {
                     errors.Add(item: $"{rowPath}.medium is required for a medium hold — the idle drift, the equilibrium offset and the settle rate are its whole law.");

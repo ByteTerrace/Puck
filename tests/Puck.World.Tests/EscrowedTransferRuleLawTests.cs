@@ -84,7 +84,7 @@ public sealed class EscrowedTransferRuleLawTests {
             Slot(name: "auctionDeadline", initial: 0, nonNegative: true),
             Slot(name: "auctionBidRequest1", initial: -1),
             Slot(name: "auctionBidRequest2", initial: -1),
-            new(Name: WorldCellName.Parse(candidate: "auctionBidHistory"), Kind: CellKind.Int, History: new WorldStateHistory(Capacity: 8, Empty: -1)),
+            new(Name: WorldCellName.Parse(candidate: "auctionBidHistory"), Kind: CellKind.Int, Domain: new WorldStateDomain.Ring(Capacity: 8, Empty: -1)),
             Slot(name: "feeReserve", initial: 0, nonNegative: true),
             Slot(name: "buyoutListRequest", initial: -1),
             Slot(name: "buyoutActive", initial: 0),
@@ -233,7 +233,7 @@ public sealed class EscrowedTransferRuleLawTests {
     // own ReadHistorySlot performs for a $history: read.
     private static long ReadHistoryTop(WorldDefinition definition, string row) {
         var found = WorldDefinitionRows.FindStateRow(rows: definition.State, name: row)!;
-        var capacity = found.History!.Capacity;
+        var capacity = ((WorldStateDomain.Ring)found.EffectiveDomain).Capacity;
         var slot = (int)((found.HistoryCursor - 1L) % capacity);
 
         return found.Cells![slot].Value;

@@ -11757,7 +11757,7 @@
                       "additionalProperties": false
                     },
                     {
-                      "description": "World scope only: pushes one numeric value into a history row\u0027s ring (see WorldStateHistory), the same source spellings as SetState minus text: exactly one of Value, FromState, or Expression.",
+                      "description": "World scope only: pushes one numeric value into a history row\u0027s ring (see Ring), the same source spellings as SetState minus text: exactly one of Value, FromState, or Expression.",
                       "properties": {
                         "$type": {
                           "const": "pushState"

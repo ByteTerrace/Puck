@@ -733,8 +733,8 @@ internal static class Fixtures {
     public static WorldStateRow MediumRow(string topology = "world", string name = "medium", float heightScale = 5f) => new(
         Name: WorldCellName.Parse(candidate: name),
         Kind: CellKind.Fixed,
-        Lattice: new WorldStateLatticeTrait(
-            Topology: topology,
+        Domain: new WorldStateDomain.CellsOf(Topology: topology),
+        Field: new WorldStateFieldTrait(
             Initial: 1f,
             Min: 0f,
             Max: 1f,

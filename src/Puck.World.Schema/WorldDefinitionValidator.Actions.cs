@@ -456,8 +456,8 @@ public static partial class WorldDefinitionValidator {
 
         if (destination.Draw is not { } draw) {
             // A lattice row painted by a draw fill is redrawn a whole pass at a time and carries no timing.
-            if (WorldLatticeFill.FindDraw(trait: destination.Lattice) is null) {
-                errors.Add(item: $"{path}.row '{row}' declares no draw — 'generate' redraws a draw site or a lattice row painted by a draw fill.");
+            if (WorldLatticeFill.FindDraw(trait: destination.Field) is null) {
+                errors.Add(item: $"{path}.row '{row}' declares no draw — 'generate' redraws a draw site or a field row painted by a draw fill.");
             }
 
             return;

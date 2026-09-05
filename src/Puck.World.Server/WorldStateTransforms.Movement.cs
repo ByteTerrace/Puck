@@ -24,8 +24,8 @@ public static partial class WorldStateTransforms {
         var allowance = rows[allowanceIndex];
         var terrain = rows[terrainIndex];
         if (positions.Kind != CellKind.Int || allowance.Kind != CellKind.Int || terrain.Kind != CellKind.Int ||
-            positions.KeysFrom is null || allowance.KeysFrom != positions.KeysFrom ||
-            terrain.Board is not { } board || positions.ValuesFrom != board.Topology || allowance.ValuesFrom is not null ||
+            positions.EffectiveDomain is not WorldStateDomain.KeysOf positionsKeysOf || allowance.EffectiveDomain is not WorldStateDomain.KeysOf allowanceKeysOf || allowanceKeysOf.Row != positionsKeysOf.Row ||
+            terrain.EffectiveDomain is not WorldStateDomain.CellsOf board || positions.ValuesFrom != board.Topology || allowance.ValuesFrom is not null ||
             WorldTopologyCompilation.Find(definition.StateRaw, board.Topology) is not { } topology ||
             (uint)move.Destination >= topology.CellCount || move.MaxVisits < 1 || move.MaxVisits > topology.CellCount ||
             !WorldCellName.TryParse(move.Token, out var token, out _)) {

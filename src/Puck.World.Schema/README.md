@@ -21,7 +21,7 @@ process that composes everything is [`Puck.World`](../Puck.World/README.md).
 
 The discrete substrate shares `state.lattices` with physical fields. Declare
 `kind: "Grid"`, `"Ring"`, or `"Hex"` and bind an integer/boolean row through
-`board: { "topology": "map", "empty": 0 }`. Only `Field` declarations create
+`domain: { "$type": "cellsOf", "topology": "map", "empty": 0 }`. Only `Field` declarations create
 physical field storage. A world may declare at most 16 topologies, including
 at most one physical field topology. Each discrete topology admits 4096 cells;
 boards together admit 65536 cells, and all declared state storage admits
@@ -130,12 +130,17 @@ destination cell's entry cost. Negative terrain is impassable. Equal-cost
 nodes settle by ordinal; the visit bound counts settled nodes. A path budget
 refusal is distinct from proof that no route exists.
 
-`tokens: { "capacity": 256 }` declares stable token identities. `keysFrom`
-restricts an attribute row to those identities; `valuesFrom` additionally
-restricts integer positions to a named topology. A `zone: { "tokens": "cards",
-"ordered": true }` row contains boolean membership cells. For any domain
-with zones, every token belongs to exactly one zone. Cell order is pile order;
-two cards with equal ranks still have different keys. Drawn-generator masks
+A plain keyed row with a declared `capacity` IS the stable token-identity
+domain — no dedicated facet, just `WorldStateDomain.Keys` (`Domain` omitted or
+`{"$type": "keys"}`). Another row's `domain: {"$type": "keysOf", "row":
+"cards"}` restricts its keys to that domain's; `valuesFrom` additionally
+restricts integer positions to a named topology. A `domain: {"$type": "keysOf",
+"row": "cards", "ordered": true}` row contains boolean membership cells. The
+"every token belongs to exactly one zone" invariant is not engine law — it is
+an authored rule (the garden's `cardsZoneAccounting`/`cardsZoneInvariant`
+sums `$reduce:count:` over every zone against the domain's own capacity).
+Cell order is pile order; two cards with equal ranks still have different
+keys. Drawn-generator masks
 are separate from these piles: each `drawnMasks` mask is four 64-bit words,
 serialized as exactly 64 hexadecimal digits, and supports 256 drawn entries.
 
@@ -239,7 +244,7 @@ cells; acceptance is always 1 or
 name `any` in place of a direction, answering the mask of accepting
 directions (bit d for direction ordinal d) or, with a trailing `count`, how
 many. `world.match` walks one word at the console and narrates every step:
-value, letter, state, verdict. A `history` row (`capacity` 1..128, `empty`)
+value, letter, state, verdict. A row declaring `domain: { "$type": "ring", "capacity": 1..128, "empty": ... }`
 is a ring of the last pushed values, the temporal twin of a ray: `push`
 (`row`, `value`) and the `pushState` effect (`value`/`fromState`/
 `expression`, world scope) append to it and advance its `historyCursor`;
@@ -687,7 +692,7 @@ number.
 
 ## Medium fields — a fluid free surface, as lattice content
 
-A `state.world` row's `lattice` trait may carry a `medium` facet
+A `state.world` row's `field` trait may carry a `medium` facet
 (`WorldLatticeMedium`, `WorldFields.cs`): the row's value times its
 `heightScale`, over the lattice origin, is a fluid free surface every active
 body samples at its coupled cell each tick (the same coupling
@@ -874,9 +879,11 @@ consolidation.
 
 A lattice is not a separate section: `state.lattices` (`WorldStateLatticeTopology`
 — name, origin, `cellSize`, `width`×`depth`×`layers`, `stepEveryTicks`,
-`reactions`) plus a `lattice` trait on ordinary `fixed`-kind `state.world` rows
-(`WorldStateLatticeTrait` — `topology`, `initial`/`min`/`max`, optional
-`heightScale`/`color`, `paint`) is the whole spelling.
+`reactions`) plus a `domain: {"$type": "cellsOf", "topology": …}` and a
+`field` trait on ordinary `fixed`-kind `state.world` rows
+(`WorldStateFieldTrait` — `initial`/`min`/`max`, optional
+`heightScale`/`color`, `paint`; the topology itself lives on `domain`, shared
+with a discrete board's own `cellsOf` case) is the whole spelling.
 `WorldFieldsSection.Compile(state)` assembles the runtime composite
 (`WorldDefinition.Fields`, cached, never an authored member); `ToStateSection`
 is its inverse, for the projection reconstruction that must hand a client-side
