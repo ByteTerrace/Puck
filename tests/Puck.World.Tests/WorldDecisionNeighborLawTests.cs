@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using Puck.Hosting;
 using Puck.Maths;
-using Puck.Physics.Motion;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;

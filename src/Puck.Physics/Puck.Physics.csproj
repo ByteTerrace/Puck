@@ -12,5 +12,6 @@
     <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <ProjectReference Include="..\Puck.State\Puck.State.csproj" />
     </ItemGroup>
 </Project>

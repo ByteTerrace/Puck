@@ -1,5 +1,4 @@
 using Puck.Assets.Documents;
-using Puck.Physics.Motion;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;

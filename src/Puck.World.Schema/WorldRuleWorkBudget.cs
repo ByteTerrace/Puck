@@ -204,15 +204,15 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
             }
             var value = predicate.Value;
             (long Low, long High) range = predicate.Comparison switch {
-                Puck.Physics.Motion.ActionStateComparison.Equal => (value, value),
-                Puck.Physics.Motion.ActionStateComparison.Less => (long.MinValue, (value == long.MinValue) ? long.MinValue : value - 1),
-                Puck.Physics.Motion.ActionStateComparison.LessOrEqual => (long.MinValue, value),
-                Puck.Physics.Motion.ActionStateComparison.Greater => ((value == long.MaxValue) ? long.MaxValue : value + 1, long.MaxValue),
-                Puck.Physics.Motion.ActionStateComparison.GreaterOrEqual => (value, long.MaxValue),
+                ActionStateComparison.Equal => (value, value),
+                ActionStateComparison.Less => (long.MinValue, (value == long.MinValue) ? long.MinValue : value - 1),
+                ActionStateComparison.LessOrEqual => (long.MinValue, value),
+                ActionStateComparison.Greater => ((value == long.MaxValue) ? long.MaxValue : value + 1, long.MaxValue),
+                ActionStateComparison.GreaterOrEqual => (value, long.MaxValue),
                 _ => (long.MinValue, long.MaxValue),
             };
-            if (predicate.Comparison == Puck.Physics.Motion.ActionStateComparison.Less && value == long.MinValue) { range = (1L, 0L); }
-            if (predicate.Comparison == Puck.Physics.Motion.ActionStateComparison.Greater && value == long.MaxValue) { range = (1L, 0L); }
+            if (predicate.Comparison == ActionStateComparison.Less && value == long.MinValue) { range = (1L, 0L); }
+            if (predicate.Comparison == ActionStateComparison.Greater && value == long.MaxValue) { range = (1L, 0L); }
             if (range == (long.MinValue, long.MaxValue)) {
                 continue;
             }

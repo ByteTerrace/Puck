@@ -28,7 +28,7 @@ public sealed class WorldStateLiteralLawTests {
                 Name: CellName.Parse(candidate: "exact-literal"),
                 Gate: new ActionPredicate.CompareState(
                     State: sourceName.Value,
-                    Comparison: Puck.Physics.Motion.ActionStateComparison.Equal,
+                    Comparison: ActionStateComparison.Equal,
                     Value: BeyondBinary32ExactInteger
                 ),
                 Effects: [new ActionEffect.SetState(
@@ -60,7 +60,7 @@ public sealed class WorldStateLiteralLawTests {
             ]),
             Rules = [new WorldRule(
                 Name: CellName.Parse(candidate: "wide-literal"),
-                Gate: new ActionPredicate.CompareState(State: sourceName.Value, Comparison: Puck.Physics.Motion.ActionStateComparison.Equal, Value: Value),
+                Gate: new ActionPredicate.CompareState(State: sourceName.Value, Comparison: ActionStateComparison.Equal, Value: Value),
                 Effects: [new ActionEffect.SetState(State: destinationName.Value, Value: 1m)]
             )],
         };
@@ -111,7 +111,7 @@ public sealed class WorldStateLiteralLawTests {
             Name: CellName.Parse(candidate: "oversized-literal"),
             Gate: new ActionPredicate.CompareState(
                 State: name.Value,
-                Comparison: Puck.Physics.Motion.ActionStateComparison.Equal,
+                Comparison: ActionStateComparison.Equal,
                 Value: decimal.MaxValue
             ),
             Effects: []

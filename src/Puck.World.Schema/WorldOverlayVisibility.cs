@@ -1,6 +1,5 @@
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
-using Puck.Physics.Motion;
 
 namespace Puck.World;
 

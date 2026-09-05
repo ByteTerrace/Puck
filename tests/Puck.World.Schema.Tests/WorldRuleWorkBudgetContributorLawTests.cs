@@ -1,4 +1,3 @@
-using Puck.Physics.Motion;
 using Xunit;
 
 namespace Puck.World.Schema.Tests;

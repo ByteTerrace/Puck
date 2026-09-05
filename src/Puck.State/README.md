@@ -13,10 +13,10 @@ another engine's frontend can run authoritative rules over `Puck.Maths` and
 
 `dotnet pack` produces `ByteTerrace.Puck.State`; the first NuGet.org release has
 not been published yet. The project depends on `ByteTerrace.Puck.Abstractions`,
-`ByteTerrace.Puck.Assets`, `ByteTerrace.Puck.Maths`, and
-`ByteTerrace.Puck.Physics`, each named directly, so the package's declared
-dependencies are the whole closure rather than part of it plus whatever another
-package happens to carry along.
+`ByteTerrace.Puck.Assets`, and `ByteTerrace.Puck.Maths`, each named directly, so
+the package's declared dependencies are the whole closure rather than part of it
+plus whatever another package happens to carry along. `Puck.Physics` references
+this package, never the reverse.
 
 ## ⚖️ Licensing
 
@@ -66,6 +66,11 @@ change. Nothing here carries a `World` name — a state library names no world.
   regions, the population — are the document project's `WorldRuleFacts`.
 - *Literals:* `NumericLiteral`, the one decimal→Q48.16 conversion
   every authored constant and table value crosses.
+- *Gate vocabulary:* `ActionStateComparison` (with `ActionStateComparisons.Holds`,
+  the one evaluation, including the positive-infinity case) and
+  `ActionTriggerMode` (level or edge) — shared by a `compareState` operand and
+  `Puck.Physics`' compiled per-body predicates, so neither can grow an arm the
+  other lacks.
 
 ## 🧭 What it will hold
 

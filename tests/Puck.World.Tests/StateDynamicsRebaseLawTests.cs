@@ -1,7 +1,6 @@
 using Xunit;
 
 using Puck.Maths;
-using Puck.Physics.Motion;
 using Puck.World.Protocol;
 
 namespace Puck.World.Tests;

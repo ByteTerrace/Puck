@@ -1,6 +1,5 @@
 using Xunit;
 
-using Puck.Physics.Motion;
 using Puck.World.Authoring;
 using Puck.World.Protocol;
 

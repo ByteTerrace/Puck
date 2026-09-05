@@ -13,12 +13,10 @@
     <ItemGroup>
         <!-- Puck.Abstractions is named for Puck.Abstractions.Documents' converter contracts (StrictEnumConverter,
              IJsonSchemaNodeConverter, IJsonSchemaStringConverter); Puck.Assets for the canonical-document boundary the
-             table document crosses; Puck.Maths for the Q48.16 carrier every state value rides; Puck.Physics for the
-             motion-program facts a reserved channel names. Each is declared here rather than inherited so the
-             package's dependencies are its whole closure. -->
+             table document crosses; Puck.Maths for the Q48.16 carrier every state value rides. Each is declared here
+             rather than inherited so the package's dependencies are its whole closure. -->
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
         <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
-        <ProjectReference Include="..\Puck.Physics\Puck.Physics.csproj" />
     </ItemGroup>
 </Project>

@@ -25,7 +25,7 @@ namespace Puck.World;
 /// conversion (writes the exact declared member name, refuses a numeric token on read) at the enum's OWN
 /// declaration via <c>[JsonConverter(typeof(StrictEnumConverter&lt;TEnum&gt;))]</c> (<see cref="Puck.Physics.Motion.BodyMotionOp"/>,
 /// <see cref="IntentSource"/>, <see cref="WorldContactRequirement"/>, <see cref="Puck.Physics.Motion.ActionFact"/>,
-/// <see cref="Puck.Physics.Motion.ActionStateComparison"/>, <see cref="ChannelRole"/>, <see cref="ShadowTier"/>,
+/// <see cref="ActionStateComparison"/>, <see cref="ChannelRole"/>, <see cref="ShadowTier"/>,
 /// <see cref="WorldRenderScaleTier"/>, <see cref="Puck.Abstractions.Presentation.PresentMode"/>,
 /// <see cref="Puck.World.Protocol.WorldCapability"/>, and every <c>Puck.Commands</c> binding enum) — never on this
 /// context's converter list. That is the point rather than a tidiness: a converter listed on a context binds THAT
