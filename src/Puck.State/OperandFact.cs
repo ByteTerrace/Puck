@@ -53,6 +53,19 @@ public abstract class KeyFact {
     public virtual void CollectReads(List<RuleAccess> into) { }
 }
 
+/// <summary>The key an implicit binding computed: the cell whose ordinal is the bound integer, spelled as that
+/// integer — what <c>row[from + 1]</c> resolves through.</summary>
+public sealed class BindingKeyFact : KeyFact {
+    /// <summary>Initializes the fact.</summary>
+    /// <param name="ordinal">The binding's slot in the rule.</param>
+    public BindingKeyFact(int ordinal) => Ordinal = ordinal;
+
+    /// <summary>Gets the binding's slot.</summary>
+    public int Ordinal { get; }
+    /// <inheritdoc/>
+    public override string Resolve(IRuleReader reader) => IndexKeyCache.Get(index: reader.BindingValue(ordinal: Ordinal));
+}
+
 /// <summary>A state cell address whose integer value is read as a cell key at evaluation time
 /// (<see cref="RuleFacts.CellKeyPrefix"/>), a bound key token, or a document project's own live key
 /// (<see cref="Custom"/>) — every dynamic key resolves through this one indirection carrier.</summary>

@@ -43,7 +43,7 @@ public static partial class WorldRuleCompiler {
                 Effects: effects,
                 ForEach: rule.ForEach,
                 Decision: CompileDecision(rule: rule, context: context),
-                Bindings: bindings
+                Bindings: RuleCompiler.AllBindings(declared: bindings, context: context)
             );
         } finally {
             context.ClearScope();
@@ -133,12 +133,15 @@ public static partial class WorldRuleCompiler {
             }
 
             try {
+                var effects = RuleCompiler.CompileEffects(effects: row.Effects, ruleName: name, context: context, subject: "interaction");
+
                 compiled[index] = new CompiledWorldRule(
                     Name: name,
                     Mode: row.Mode,
                     Gate: [],
-                    Effects: RuleCompiler.CompileEffects(effects: row.Effects, ruleName: name, context: context, subject: "interaction"),
-                    Interaction: new CompiledInteraction(Left: row.Left, Right: row.Right, CoOccurrence: row.CoOccurrence, Range: NumericLiteral.ToFixed(value: row.Range))
+                    Effects: effects,
+                    Interaction: new CompiledInteraction(Left: row.Left, Right: row.Right, CoOccurrence: row.CoOccurrence, Range: NumericLiteral.ToFixed(value: row.Range)),
+                    Bindings: RuleCompiler.AllBindings(declared: [], context: context)
                 );
             } finally {
                 context.ClearScope();

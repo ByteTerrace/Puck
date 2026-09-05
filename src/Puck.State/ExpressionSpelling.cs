@@ -361,8 +361,15 @@ public static class ExpressionSpelling {
                 into.Append(value: ']');
             }
         }
-        // A "$cell:row:key" key prints as row[key], nesting as deep as the indirection goes.
+        // A "$cell:row:key" key prints as row[key], nesting as deep as the indirection goes; an "$expr:" key prints
+        // its canonical infix text, which is what the parser produced it from.
         private static void AppendKey(StringBuilder into, string key) {
+            if (key.StartsWith(value: RuleFacts.ExpressionKeyPrefix, comparisonType: StringComparison.Ordinal)) {
+                // A bare name inside [ ] is a literal key, so an expression that is one bare read prints parenthesized.
+                var text = key[RuleFacts.ExpressionKeyPrefix.Length..];
+                into.Append(value: (IsBareName(name: text) ? $"({text})" : text));
+                return;
+            }
             if (key.StartsWith(value: RuleFacts.CellKeyPrefix, comparisonType: StringComparison.Ordinal)) {
                 var rest = key[RuleFacts.CellKeyPrefix.Length..];
                 var colon = rest.IndexOf(value: ':');
@@ -690,22 +697,35 @@ public static class ExpressionSpelling {
                     throw Fail(message: $"expected a value but found '{m_value}'");
             }
         }
-        // A key: a bare or backquoted name, a number, or a name indexed once more — row[key] — which is the
-        // "$cell:row:key" indirection, the key read live from another cell.
+        // A key: a bare or backquoted name, a number, a name indexed once more — row[key], the "$cell:row:key"
+        // indirection read live from another cell — or any other expression, which becomes an "$expr:" key the
+        // compiler turns into an implicit binding. The simple forms are recognised by lookahead and the lexer rewound
+        // when the key turns out to be an expression after all (row[other[k] + 1]).
         private string ParseKey() {
             Prime();
-            if (m_kind is not (Lexeme.Name or Lexeme.Number)) {
-                throw Fail(message: $"expected a key inside [ ]{Found()}");
+            var saved = (m_position, m_kind, m_value, m_quoted, m_start, m_primed);
+            if (m_kind is Lexeme.Name or Lexeme.Number) {
+                var key = m_value;
+                var indexable = ((m_kind == Lexeme.Name) && !m_quoted);
+                Advance();
+                Prime();
+                if ((m_kind == Lexeme.Punctuation) && (m_value == "]")) {
+                    return key;
+                }
+                if (indexable && Accept(punctuation: "[")) {
+                    var inner = ParseKey();
+                    Expect(punctuation: "]");
+                    Prime();
+                    if ((m_kind == Lexeme.Punctuation) && (m_value == "]") && !inner.StartsWith(value: RuleFacts.ExpressionKeyPrefix, comparisonType: StringComparison.Ordinal)) {
+                        return $"{RuleFacts.CellKeyPrefix}{key}:{inner}";
+                    }
+                }
+                (m_position, m_kind, m_value, m_quoted, m_start, m_primed) = saved;
             }
-            var key = m_value;
-            var indexable = ((m_kind == Lexeme.Name) && !m_quoted);
-            Advance();
-            if (indexable && Accept(punctuation: "[")) {
-                var inner = ParseKey();
-                Expect(punctuation: "]");
-                return $"{RuleFacts.CellKeyPrefix}{key}:{inner}";
-            }
-            return key;
+            var node = ParseExpression();
+            var tokens = new List<ValueToken>();
+            node.Emit(into: tokens);
+            return $"{RuleFacts.ExpressionKeyPrefix}{Print(tokens: tokens)}";
         }
         private Node ParseCall(string name, int arity, int names) {
             Expect(punctuation: "(");

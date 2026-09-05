@@ -318,6 +318,36 @@ public sealed class RuleEvaluatorLawTests {
     }
 
     [Fact]
+    public void AnExpressionKeyCompilesToAnImplicitBindingEvaluatedBeforeTheGate() {
+        var rule = new Rule(
+            Name: CellName.Parse(candidate: "step"),
+            Effects: [new ActionEffect.SetState(State: "next", Expression: Expr(text: "board[from + 1] + board[board[(from)] - 5]"))],
+            Gate: new ActionPredicate.CompareValue(Left: Expr(text: "board[from + 1]"), Comparison: ActionStateComparison.Equal, Right: Expr(text: "7"), Kind: CellKind.Int)
+        );
+        var (host, evaluator, rules, latch) = Arrange(rules: [rule], rows: [Keyed(name: "board", cells: [("2", 6L), ("3", 7L), ("1", 40L)]), Slot(name: "from", value: 2L), Slot(name: "next", value: 0L)]);
+
+        Assert.Equal(4, rules[0].Bindings!.Length);
+        Assert.Equal(["$key0", "$key1", "$key2", "$key3"], rules[0].Bindings!.Select(static b => b.Name));
+        Assert.True(evaluator.ArmTrace(rule: "step", evaluations: 1));
+        Assert.True(evaluator.Evaluate(rules: rules, latch: latch, tick: 1UL, stepTicks: 1UL));
+        // board[3] + board[board[2] - 5] = 7 + board[1] = 47; the gate key, the two effect keys, and the nested read each bind
+        Assert.Equal(47L, host.Cell(row: "next"));
+        Assert.Contains("$key0=3", evaluator.DescribeTrace(verb: "trace")!, StringComparison.Ordinal);
+        Assert.Contains("$key2=2", evaluator.DescribeTrace(verb: "trace")!, StringComparison.Ordinal);
+        Assert.Contains("$key3=1", evaluator.DescribeTrace(verb: "trace")!, StringComparison.Ordinal);
+
+        // The infix spelling round-trips: a key expression prints back as it was written.
+        Assert.True(ExpressionSpelling.TryParse(text: "board[from + 1]", tokens: out var tokens, error: out _));
+        Assert.Equal("board[from + 1]", ExpressionSpelling.Print(tokens: tokens));
+        Assert.True(ExpressionSpelling.TryParse(text: "board[other[k]]", tokens: out var nested, error: out _));
+        Assert.Equal("board[other[k]]", ExpressionSpelling.Print(tokens: nested));
+        Assert.True(ExpressionSpelling.TryParse(text: "board[(from)]", tokens: out var read, error: out _));
+        Assert.Equal("board[(from)]", ExpressionSpelling.Print(tokens: read));
+        Assert.True(ExpressionSpelling.TryParse(text: "board[other[(k)] * 2]", tokens: out var deep, error: out _));
+        Assert.Equal("board[other[(k)] * 2]", ExpressionSpelling.Print(tokens: deep));
+    }
+
+    [Fact]
     public void BindingsComputeBeforeTheGateAndReachTheEffects() {
         var rule = new Rule(
             Name: CellName.Parse(candidate: "score"),

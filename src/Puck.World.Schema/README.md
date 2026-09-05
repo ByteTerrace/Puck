@@ -1795,7 +1795,10 @@ authored either as an infix string — `"min(damage, hp[$each]) * 2 - armor"`,
 C precedence over `+ - * / %`, `& | ^ ~`, `<< >> >>>`, `== != < <= > >=`, and
 `c ? a : b`, the named forms as calls (`min(a, b)`, `clamp(v, lo, hi)`,
 `popCount(m)`, `bitField(v, offset, width)`, `boardShift(m, topology,
-direction)`, ...), a state read as its row name keyed `row[key]` (backquoted,
+direction)`, ...), a state read as its row name keyed `row[key]` — a bare name or number is the literal key,
+`row[other[k]]` reads the key live from another cell, and any other expression (`row[from + 1]`, or
+`row[(from)]` to read row `from`'s value as the key) compiles to an implicit int binding evaluated before the
+gate (traced as `$key<n>`, counted against the rule's binding ceiling) — (backquoted,
 `` `seat-1` ``, when the name is not a bare identifier; a `$`-channel carries
 its colons), a table read indexed the same way (`$table:moves:power[$bind:move]`
 is `$table:moves:power:$bind:move`), a key read from another cell as nested

@@ -150,7 +150,8 @@ Nothing here carries a `World` name — a state library names no world.
   unions: each answers `Read(IRuleReader)` (operands), `Cost(context)`, and
   the cells it reads and writes (`CollectReads`/`CollectWrites` into
   `RuleAccess` lists). `CompiledCellRef` is the one key-indirection carrier
-  (`$cell:`, a bound key, or a document project's `KeyFact`).
+  (`$cell:`, a bound key, an `$expr:` key that compiles to an implicit binding
+  read back through `BindingKeyFact`, or a document project's `KeyFact`).
 - *Evaluation:* `RuleEvaluator` runs a compiled family over an `IRuleHost` —
   gates in array order, bindings before the gate, Edge/Level latching per
   binding in a `RuleLatch` (simulation state: it hashes, flattens to a

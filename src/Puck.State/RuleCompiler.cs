@@ -26,17 +26,29 @@ public static partial class RuleCompiler {
             var bindings = CompileBindings(rule: rule, context: context);
             var gate = CompileGate(predicate: rule.Gate, ruleName: rule.Name, context: context);
 
+            var effects = CompileEffects(effects: rule.Effects, ruleName: rule.Name, context: context, subject: "rule");
+
             return new CompiledRule(
                 Name: rule.Name,
                 Mode: rule.Mode,
                 Gate: gate,
-                Effects: CompileEffects(effects: rule.Effects, ruleName: rule.Name, context: context, subject: "rule"),
+                Effects: effects,
                 ForEach: rule.ForEach,
-                Bindings: bindings
+                Bindings: AllBindings(declared: bindings, context: context)
             );
         } finally {
             context.ClearScope();
         }
+    }
+
+    /// <summary>Returns a rule's bindings after its gate and effects compiled: the declared ones plus every implicit
+    /// key binding an expression key added, in evaluation order.</summary>
+    /// <param name="declared">The declared bindings <see cref="CompileBindings"/> returned.</param>
+    /// <param name="context">The compile context.</param>
+    public static CompiledRuleBinding[] AllBindings(CompiledRuleBinding[] declared, RuleCompileContext context) {
+        ArgumentNullException.ThrowIfNull(argument: context);
+
+        return ((context.RuleBindings is { } all && (all.Count != declared.Length)) ? [.. all] : declared);
     }
 
     /// <summary>Opens a rule's per-compile scope on the context: the <c>$each</c> binding when the rule declares
@@ -520,6 +532,12 @@ public static partial class RuleCompiler {
             }
         }
 
+        if ((key is not null) && key.StartsWith(value: RuleFacts.ExpressionKeyPrefix, comparisonType: StringComparison.Ordinal)) {
+            cell = CompileKeyExpression(text: key[RuleFacts.ExpressionKeyPrefix.Length..], ruleName: ruleName, context: context, where: $"'{verb}' {keyFieldLabel}");
+
+            return true;
+        }
+
         if ((key is null) || !key.StartsWith(value: RuleFacts.CellKeyPrefix, comparisonType: StringComparison.Ordinal)) {
             cell = default;
 
@@ -539,6 +557,35 @@ public static partial class RuleCompiler {
         cell = ResolveCellRef(channel: $"{verb} {keyFieldLabel} '{key}'", context: context, key: tokens[1], row: tokens[0], ruleName: ruleName);
 
         return true;
+    }
+
+    /// <summary>Compiles an expression key (<see cref="RuleFacts.ExpressionKeyPrefix"/>) into an implicit int binding
+    /// appended to the rule's bindings — evaluated before the gate like a declared one, traced as <c>$key&lt;n&gt;</c> —
+    /// and returns the key that reads it back. An implicit binding a declared binding's expression needs is appended
+    /// before that binding, so evaluation order is always dependency order.</summary>
+    /// <param name="text">The expression's canonical infix spelling.</param>
+    /// <param name="ruleName">The rule being compiled.</param>
+    /// <param name="context">The compile context.</param>
+    /// <param name="where">The field the key was spelled in, for refusal text.</param>
+    public static CompiledCellRef CompileKeyExpression(string text, string ruleName, RuleCompileContext context, string where) {
+        ArgumentNullException.ThrowIfNull(argument: context);
+
+        if (!ExpressionSpelling.TryParse(text: text, tokens: out var tokens, error: out var error)) {
+            throw new RuleException(refusal: RuleRefusal.StateCellUnaddressable, ruleName: ruleName, detail: $"{where} key expression '{text}' does not parse: {error}");
+        }
+
+        var bindings = (context.RuleBindings ??= []);
+
+        if (bindings.Count >= RuleCapacity.MaxBindingsPerRule) {
+            throw new RuleException(refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName, detail: $"{where} key expression '{text}' would be binding {bindings.Count + 1}, exceeding the {RuleCapacity.MaxBindingsPerRule}-binding ceiling (declared and implicit key bindings together)");
+        }
+
+        var program = CompileExpression(expression: new ValueExpression(Tokens: tokens), kind: CellKind.Int, ruleName: ruleName, verb: $"{where} key expression", context: context);
+        var ordinal = bindings.Count;
+
+        bindings.Add(item: new CompiledRuleBinding(Name: $"$key{ordinal}", Kind: CellKind.Int, Expression: program));
+
+        return new CompiledCellRef(Row: string.Empty, Key: string.Empty, Custom: new BindingKeyFact(ordinal: ordinal));
     }
 
     /// <summary>Resolves a literal key against a row under the (row, key) pair rule: a null key means the row's slot

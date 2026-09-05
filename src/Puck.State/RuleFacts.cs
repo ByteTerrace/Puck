@@ -25,6 +25,10 @@ public static class RuleFacts {
     /// on a <c>compareState</c> <c>key</c>/<c>comparandKey</c> and on a world-scope effect's <c>key</c>/<c>fromKey</c>;
     /// a body-reference token spells the same indirection as <c>cell:&lt;row&gt;:&lt;key&gt;</c>.</summary>
     public const string CellKeyPrefix = "$cell:";
+    /// <summary>The prefix of a key computed by an expression — <c>row[from + 1]</c> in the infix spelling — which
+    /// compiles to an implicit rule binding evaluated before the gate and read back as the cell key; the text after
+    /// the prefix is the expression's canonical infix spelling.</summary>
+    public const string ExpressionKeyPrefix = "$expr:";
     /// <summary>The prefix of a rule-scoped bound value: <c>$bind:&lt;name&gt;</c> reads the value the enclosing
     /// rule's same-named binding computed for this evaluation.</summary>
     public const string BindPrefix = "$bind:";

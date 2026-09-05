@@ -273,6 +273,9 @@ permutation of 0..n−1 packed as nibbles (position i in bits 4i..4i+3, n ≤ 16
 turn order or a shuffled short deck is one cell, read back with `bitField(packed, 4 * i, 4)`;
 the layer family over `LayerSequence` (`layer`, `layerOffset`, `layerStart`, `layerSize`, each
 `(index-or-layer, start, step, seed)` — `layer(i, 6, 6, 1)` is `hexRadius(i)`); and `sqrt` (both kinds),
+a keyed read is `row[key]` (a bare name or number is the literal key), `row[other[k]]` (a `$cell:` indirection), or
+`row[from + 1]` / `row[(from)]` (any other expression as the key — an implicit int binding evaluated before the
+gate, traced as `$key<n>`, one of the rule's bindings; parenthesize a bare name to read its row's value);
 `sin`, `cos` (fixed radians). Every other function is int-only, and a domain fault fails the expression the way
 an overflow does — and is counted: a faulting binding, effect, or `compareValue` conjunct reports `Arithmetic`
 in `world.rule.failures` (narrated once per category on stderr) and `world.rule.trace` shows the conjunct as
