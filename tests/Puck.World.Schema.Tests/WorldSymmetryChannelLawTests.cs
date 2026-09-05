@@ -25,31 +25,30 @@ public sealed class WorldSymmetryChannelLawTests {
 
         Assert.Single(collection: compiled);
 
-        return Assert.IsType<SymmetryOperand>(@object: ((WriteEffect)compiled[0].Effects[0].Value!).From!.Value.Value);
+        return Assert.IsType<SymmetryOperand>(@object: ((WriteEffect)compiled[0].Effects[0]).From);
     }
     private static string Refusal(string channel, string? key = null, string destination = "out") {
-        var exception = Assert.Throws<WorldRuleException>(testCode: () => WorldRuleCompiler.CompileAll(definition: Definition(new ActionEffect.SetState(State: destination, FromState: channel, FromKey: key))));
+        var exception = Assert.Throws<RuleException>(testCode: () => WorldRuleCompiler.CompileAll(definition: Definition(new ActionEffect.SetState(State: destination, FromState: channel, FromKey: key))));
 
-        Assert.Equal(expected: WorldRuleRefusal.SymmetryChannelMalformed, actual: exception.Refusal);
+        Assert.Equal(expected: RuleRefusal.SymmetryChannelMalformed, actual: exception.Refusal);
 
         return exception.Message;
     }
 
     [Fact]
     public void EveryFunction_CompilesToASymmetryOperandOverTheSourceCell() {
-        foreach (var (channel, function, argument) in new (string, WorldSymmetryFunction, long)[] {
-            ("$symmetry:ring:node", WorldSymmetryFunction.Ring, 0L),
-            ("$symmetry:antipode:node", WorldSymmetryFunction.Antipode, 0L),
-            ("$symmetry:canonicalRay:node", WorldSymmetryFunction.CanonicalRay, 0L),
-            ("$symmetry:cycle:3:node", WorldSymmetryFunction.Cycle, 3L),
-            ("$symmetry:cycle:-7:node", WorldSymmetryFunction.Cycle, -7L),
-            ("$symmetry:reflect:17:node", WorldSymmetryFunction.Reflect, 17L),
-            ("$symmetry:orthogonal:239:node", WorldSymmetryFunction.Orthogonal, 239L),
-            ("$symmetry:innerProduct:17:node", WorldSymmetryFunction.InnerProduct, 17L),
+        foreach (var (channel, function, argument) in new (string, SymmetryFunction, long)[] {
+            ("$symmetry:ring:node", SymmetryFunction.Ring, 0L),
+            ("$symmetry:antipode:node", SymmetryFunction.Antipode, 0L),
+            ("$symmetry:canonicalRay:node", SymmetryFunction.CanonicalRay, 0L),
+            ("$symmetry:cycle:3:node", SymmetryFunction.Cycle, 3L),
+            ("$symmetry:cycle:-7:node", SymmetryFunction.Cycle, -7L),
+            ("$symmetry:reflect:17:node", SymmetryFunction.Reflect, 17L),
+            ("$symmetry:orthogonal:239:node", SymmetryFunction.Orthogonal, 239L),
+            ("$symmetry:innerProduct:17:node", SymmetryFunction.InnerProduct, 17L),
         }) {
             var operand = Compile(channel: channel);
 
-            Assert.Equal(expected: WorldRuleFactKind.Symmetry, actual: operand.Kind);
             Assert.Equal(expected: "node", actual: operand.Row);
             Assert.Equal(expected: function, actual: operand.Symmetry);
             Assert.Equal(expected: argument, actual: operand.SymmetryArgument);
@@ -57,7 +56,7 @@ public sealed class WorldSymmetryChannelLawTests {
         }
 
         foreach (var channel in new[] { "$symmetry:projectionX:node", "$symmetry:projectionY:node" }) {
-            Assert.Equal(expected: WorldRuleFactKind.Symmetry, actual: Compile(channel: channel, destination: "outFixed").Kind);
+            Assert.NotNull(@object: Compile(channel: channel, destination: "outFixed"));
         }
     }
     [Fact]
@@ -89,9 +88,9 @@ public sealed class WorldSymmetryChannelLawTests {
         Assert.Contains(expectedSubstring: "names no source row", actualString: Refusal(channel: "$symmetry:ring"));
 
         // The source walk's own refusals still apply: a keyed row needs a key.
-        var keyed = Assert.Throws<WorldRuleException>(testCode: () => WorldRuleCompiler.CompileAll(definition: Definition(new ActionEffect.SetState(State: "out", FromState: "$symmetry:ring:nodes"))));
+        var keyed = Assert.Throws<RuleException>(testCode: () => WorldRuleCompiler.CompileAll(definition: Definition(new ActionEffect.SetState(State: "out", FromState: "$symmetry:ring:nodes"))));
 
-        Assert.NotEqual(expected: WorldRuleRefusal.SymmetryChannelMalformed, actual: keyed.Refusal);
+        Assert.NotEqual(expected: RuleRefusal.SymmetryChannelMalformed, actual: keyed.Refusal);
     }
     [Fact]
     public void TheCanaryPins_AreTheLatticesOwnNumbers() {

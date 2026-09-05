@@ -3,7 +3,6 @@ using System.Numerics;
 using Puck.Assets.Documents;
 using Puck.Maths;
 using Puck.SignedDistance;
-using Puck.Physics.Motion;
 using Puck.World.Authoring;
 using Puck.World.Protocol;
 

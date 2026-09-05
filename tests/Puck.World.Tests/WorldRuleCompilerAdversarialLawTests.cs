@@ -38,7 +38,7 @@ public sealed class WorldRuleCompilerAdversarialLawTests {
     [Fact]
     public void NullAllPredicateList_RefusesByNameRatherThanThrowingNullReference() => Refuses(
         rule: Rule(
-            effects: [new ActionEffect.Save()],
+            effects: [new WorldEffect.Save()],
             gate: new ActionPredicate.All(Predicates: null!)
         ),
         expected: "non-null predicate list"
@@ -46,7 +46,7 @@ public sealed class WorldRuleCompilerAdversarialLawTests {
     [Fact]
     public void NullPredicateInsideAll_RefusesByNameRatherThanBeingIgnored() => Refuses(
         rule: Rule(
-            effects: [new ActionEffect.Save()],
+            effects: [new WorldEffect.Save()],
             gate: new ActionPredicate.All(Predicates: [null!])
         ),
         expected: "null predicate row"
@@ -54,7 +54,7 @@ public sealed class WorldRuleCompilerAdversarialLawTests {
     [Fact]
     public void EmptyAnyPredicate_RefusesRatherThanCompilingAnAlwaysFalseDeadRule() => Refuses(
         rule: Rule(
-            effects: [new ActionEffect.Save()],
+            effects: [new WorldEffect.Save()],
             gate: new ActionPredicate.Any(Predicates: [])
         ),
         expected: "at least one predicate"
@@ -74,7 +74,7 @@ public sealed class WorldRuleCompilerAdversarialLawTests {
     }
     [Fact]
     public void NonUnitWorldImpulse_RefusesBecauseRuntimeDoesNotNormalizeIt() => Refuses(
-        rule: Rule(effects: [new ActionEffect.ApplyBodyImpulse(
+        rule: Rule(effects: [new WorldEffect.ApplyBodyImpulse(
             Key: "0",
             BodyDirection: new DocumentVector3(x: 2f, y: 0f, z: 0f),
             Speed: 1m,
@@ -84,7 +84,7 @@ public sealed class WorldRuleCompilerAdversarialLawTests {
     );
     [Fact]
     public void OutOfRangeWorldBodyScalar_RefusesByNameRatherThanThrowingOverflow() => Refuses(
-        rule: Rule(effects: [new ActionEffect.SetBodyVerticalVelocity(Key: "0", Velocity: decimal.MaxValue)]),
+        rule: Rule(effects: [new WorldEffect.SetBodyVerticalVelocity(Key: "0", Velocity: decimal.MaxValue)]),
         expected: "outside the Q48.16 range"
     );
     [Fact]
@@ -113,7 +113,7 @@ public sealed class WorldRuleCompilerAdversarialLawTests {
             )]),
         };
 
-        var exception = Assert.Throws<WorldRuleException>(testCode: () => WorldRuleCompiler.CompileAllInteractions(definition: definition));
+        var exception = Assert.Throws<RuleException>(testCode: () => WorldRuleCompiler.CompileAllInteractions(definition: definition));
 
         Assert.Contains(
             expectedSubstring: "non-empty effect list",
@@ -123,7 +123,7 @@ public sealed class WorldRuleCompilerAdversarialLawTests {
     }
     [Fact]
     public void SpawnPointPose_WithLiteralAngles_RefusesRatherThanDiscardingAngles() => Refuses(
-        rule: Rule(effects: [new ActionEffect.Pose(
+        rule: Rule(effects: [new WorldEffect.Pose(
             Key: "0",
             SpawnPoint: WorldSpawnPointDefaults.ImplicitOriginId,
             YawDegrees: 15f
@@ -137,7 +137,7 @@ public sealed class WorldRuleCompilerAdversarialLawTests {
         Gate: gate
     );
     private static void Refuses(WorldRule rule, string expected) {
-        var exception = Assert.Throws<WorldRuleException>(testCode: () => WorldRuleCompiler.Compile(
+        var exception = Assert.Throws<RuleException>(testCode: () => WorldRuleCompiler.Compile(
             rule: rule,
             definition: Fixtures.BuildDocument()
         ));

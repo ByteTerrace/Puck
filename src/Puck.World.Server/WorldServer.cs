@@ -500,7 +500,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// (<c>WorldPostBuildWiring.Install</c>). <c>WorldReplaySnapshot.Drive</c> — the offline replay-verification
     /// drive — wires its own narration-only tap instead of the live closure, so replay verification stays
     /// side-effect-free: a fired save effect there is suppressed, never reaching disk, and is named on stderr rather
-    /// than left indistinguishable from a rule that never fired. See <c>ActionEffect.Save</c>'s remarks for why this
+    /// than left indistinguishable from a rule that never fired. See <c>WorldEffect.Save</c>'s remarks for why this
     /// effect submits no <see cref="WorldMutation"/> and so needs a seam other than <c>TryApplyMutation</c> at
     /// all.</summary>
     public Action<ulong>? SaveEffectTap { get; set; }

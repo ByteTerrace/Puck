@@ -33,7 +33,7 @@ public enum WorldInteractionCoOccurrence : byte {
 /// reads, on the same deterministic, replayable per-tick evaluation order every other world-rule chain rides.</para>
 /// </remarks>
 /// <param name="Name">The interaction's stable name — unique within the section (a separate namespace from
-/// <see cref="WorldRule.Name"/>, so the two may coincide without colliding). A <see cref="CellName"/>, never
+/// <see cref="Rule.Name"/>, so the two may coincide without colliding). A <see cref="CellName"/>, never
 /// <c>$</c>-prefixed — that prefix marks what the engine mints, and nothing mints an interaction.</param>
 /// <param name="Left">A property name, validated against the declared <c>properties</c> registry — every body whose
 /// cell in that keyed row reads nonzero is a left carrier.</param>

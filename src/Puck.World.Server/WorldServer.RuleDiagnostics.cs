@@ -37,7 +37,7 @@ public sealed partial class WorldServer {
         )}]";
     }
 
-    private void ReportRuleEffectRefusal(WorldRuleEffectRefusal refusal, string ruleName, CompiledWorldEffect effect, ulong tick, string detail) =>
+    private void ReportRuleEffectRefusal(WorldRuleEffectRefusal refusal, string ruleName, EffectFact effect, ulong tick, string detail) =>
         ReportRuleEffectRefusal(refusal: refusal, ruleName: ruleName, effect: effect.Describe, tick: tick, detail: detail);
     private void ReportRuleEffectRefusal(WorldRuleEffectRefusal refusal, string ruleName, string effect, ulong tick, string detail) {
         var index = (int)refusal;

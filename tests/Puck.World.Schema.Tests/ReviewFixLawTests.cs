@@ -93,7 +93,7 @@ public sealed class ReviewFixLawTests {
     }
     [Fact]
     public void AFractionalComparand_LowersToTheExactIntegerGate() {
-        static CompiledWorldPredicate Compile(ActionStateComparison comparison, decimal literal, CellKind kind = CellKind.Int) {
+        static GateToken Compile(ActionStateComparison comparison, decimal literal, CellKind kind = CellKind.Int) {
             var definition = Definition(
                 rows: [Slot(name: "count", kind: kind, value: 2)],
                 rules: [new WorldRule(Name: CellName.Parse(candidate: "probe"), Effects: [new ActionEffect.SetState(State: "count", Value: 1m)], Gate: new ActionPredicate.CompareState(State: "count", Comparison: comparison, Value: literal), Mode: ActionTriggerMode.Edge)]
@@ -150,7 +150,7 @@ public sealed class ReviewFixLawTests {
         );
 
         Assert.Equal(expected: string.Empty, actual: Refusal(definition: definition));
-        Assert.Equal(expected: WorldRuleEffectKind.Generate, actual: WorldRuleCompiler.CompileAll(definition: definition)[0].Effects[0].Kind);
+        Assert.IsType<GenerateEffect>(@object: WorldRuleCompiler.CompileAll(definition: definition)[0].Effects[0]);
     }
     [Fact]
     public void DynamicsState_RoundTripsInTheFixedSpelling_OnAnIntRow() {

@@ -27,7 +27,7 @@ public sealed class WorldRuleBindingLawTests {
                     new ActionEffect.AddState(State: "hp", Expression: Expr([.. dealt.Tokens, new ValueToken.Negate()])),
                     new ActionEffect.AddState(State: "attacker", Expression: Expr([.. dealt.Tokens, new ValueToken.Constant(4m), new ValueToken.Divide(), new ValueToken.Negate()])),
                 ],
-                Bindings: bound ? [new WorldRuleBinding(CellName.Parse("dealt"), CellKind.Int, Expr(State("damage"), State("hp"), new ValueToken.Min()))] : null
+                Bindings: bound ? [new RuleBinding(CellName.Parse("dealt"), CellKind.Int, Expr(State("damage"), State("hp"), new ValueToken.Min()))] : null
             )],
         };
     }
@@ -51,17 +51,17 @@ public sealed class WorldRuleBindingLawTests {
         var later = Fixtures.BuildDocument() with {
             StateRaw = new WorldStateSection(World: [Slot("a", 1L)]),
             Rules = [new WorldRule(CellName.Parse("r"), [new ActionEffect.SetState(State: "a", Expression: Expr(State("$bind:x")))], Bindings: [
-                new WorldRuleBinding(CellName.Parse("x"), CellKind.Int, Expr(State("$bind:y"))),
-                new WorldRuleBinding(CellName.Parse("y"), CellKind.Int, Expr(State("a"))),
+                new RuleBinding(CellName.Parse("x"), CellKind.Int, Expr(State("$bind:y"))),
+                new RuleBinding(CellName.Parse("y"), CellKind.Int, Expr(State("a"))),
             ])],
         };
-        var refusal = Assert.Throws<WorldRuleException>(() => WorldRuleCompiler.CompileAll(later));
+        var refusal = Assert.Throws<RuleException>(() => WorldRuleCompiler.CompileAll(later));
         Assert.Contains("$bind:y", refusal.Message, StringComparison.Ordinal);
 
         var ordered = later with {
             Rules = [new WorldRule(CellName.Parse("r"), [new ActionEffect.SetState(State: "a", Expression: Expr(State("$bind:x")))], Bindings: [
-                new WorldRuleBinding(CellName.Parse("y"), CellKind.Int, Expr(State("a"))),
-                new WorldRuleBinding(CellName.Parse("x"), CellKind.Int, Expr(State("$bind:y"), new ValueToken.Constant(2m), new ValueToken.Multiply())),
+                new RuleBinding(CellName.Parse("y"), CellKind.Int, Expr(State("a"))),
+                new RuleBinding(CellName.Parse("x"), CellKind.Int, Expr(State("$bind:y"), new ValueToken.Constant(2m), new ValueToken.Multiply())),
             ])],
         };
         var compiled = Assert.Single(WorldRuleCompiler.CompileAll(ordered));
@@ -75,7 +75,7 @@ public sealed class WorldRuleBindingLawTests {
             Rules = [new WorldRule(
                 CellName.Parse("r"),
                 [new ActionEffect.SetState(State: "hit", Value: 1m)],
-                Bindings: [new WorldRuleBinding(CellName.Parse("q"), CellKind.Int, Expr(new ValueToken.Constant(1m), State("zero"), new ValueToken.Divide()))]
+                Bindings: [new RuleBinding(CellName.Parse("q"), CellKind.Int, Expr(new ValueToken.Constant(1m), State("zero"), new ValueToken.Divide()))]
             )],
         };
         using var fixture = Fixtures.FreshServer(definition: document);

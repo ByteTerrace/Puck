@@ -215,18 +215,6 @@ public static class BodyFactVocabulary {
     /// <returns>The token.</returns>
     public static string Token(ActionFact fact) => s_tokenByFact[(int)fact];
 }
-/// <summary>The entity an action effect addresses.</summary>
-[JsonConverter(typeof(StrictEnumConverter<ActionTarget>))]
-public enum ActionTarget : byte {
-    /// <summary>The body whose trigger fired.</summary>
-    Self,
-
-    /// <summary>The target selected by the body's active producer.</summary>
-    ProducerTarget,
-
-    /// <summary>The body that applied the recipient's most recent targeted effect.</summary>
-    AffectingSubject,
-}
 /// <summary>The storage kind of a named persistent action-state slot.</summary>
 [JsonConverter(typeof(StrictEnumConverter<ActionStateKind>))]
 public enum ActionStateKind : byte {

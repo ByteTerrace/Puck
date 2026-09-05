@@ -117,12 +117,12 @@ public sealed class WorldStateLiteralLawTests {
             Effects: []
         );
 
-        var exception = Assert.Throws<WorldRuleException>(() => WorldRuleCompiler.Compile(
+        var exception = Assert.Throws<RuleException>(() => WorldRuleCompiler.Compile(
             definition: definition,
             rule: rule
         ));
 
-        Assert.Equal(expected: WorldRuleRefusal.StateCellUnaddressable, actual: exception.Refusal);
+        Assert.Equal(expected: RuleRefusal.StateCellUnaddressable, actual: exception.Refusal);
         Assert.Contains(expectedSubstring: "oversized-literal", actualString: exception.Message, comparisonType: StringComparison.Ordinal);
     }
 }

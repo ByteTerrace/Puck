@@ -221,7 +221,7 @@ public static partial class WorldStateTransforms {
         Span<long> values = stackalloc long[topology.CellCount];
         Span<long> word = stackalloc long[topology.CellCount];
         Span<int> affected = stackalloc int[topology.CellCount];
-        WorldBoardQueries.Read(row, topology, values);
+        BoardQueries.Read(row, topology, values);
         var count = 0;
         var cell = origin;
         for (var visited = 1; visited < topology.CellCount; visited++) {

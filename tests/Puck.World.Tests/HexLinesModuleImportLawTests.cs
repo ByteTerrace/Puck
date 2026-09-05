@@ -121,7 +121,7 @@ public sealed class HexLinesModuleImportLawTests {
         var compiled = WorldTopologyCompilation.Find(definition: definition, name: TopologyName);
 
         Assert.NotNull(compiled);
-        Assert.Equal(WorldTopologyKind.Hex, compiled!.Kind);
+        Assert.Equal(TopologyKind.Hex, compiled!.Kind);
         Assert.Equal(CellCount, compiled.CellCount);
         Assert.Equal(CellSize, (float)(double)compiled.CellSize, precision: 4);
 
@@ -133,7 +133,7 @@ public sealed class HexLinesModuleImportLawTests {
         var occupancy = WorldDefinitionRows.FindStateRow(definition.State, "hexBoard");
 
         Assert.NotNull(occupancy);
-        Assert.True(occupancy!.EffectiveDomain is WorldStateDomain.CellsOf { Topology: TopologyName });
+        Assert.True(occupancy!.EffectiveDomain is StateDomain.CellsOf { Topology: TopologyName });
         Assert.Equal([.. Enumerable.Range(0, CellCount).Select(n => n.ToString())], RowKeys(definition, "hexBoard"));
     }
 

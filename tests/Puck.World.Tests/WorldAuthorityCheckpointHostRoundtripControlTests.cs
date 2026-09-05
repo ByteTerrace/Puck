@@ -97,7 +97,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
                 new WorldRule(
                     Name: ruleName,
                     Gate: new ActionPredicate.CompareState(State: "$population", Comparison: ActionStateComparison.Greater, Value: long.MaxValue),
-                    Effects: [new ActionEffect.Save()]),
+                    Effects: [new WorldEffect.Save()]),
             ],
         };
 

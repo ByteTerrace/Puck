@@ -147,7 +147,7 @@ public sealed class TransferAbortKitWideningLawTests {
                 // hold, which THIS row's own Recently clock then reflects (WorldBody.MotionRecency's own capture).
                 // Row 1 is the unconditional row (no gate), required last.
                 Shaping: [
-                    new WorldShaping(When: new ActionPredicate.Recently(Fact: ActionFact.Rising, WindowSeconds: 1f), Along: new WorldShapingAlong(Engage: 9f, Release: 5f)),
+                    new WorldShaping(When: new WorldPredicate.Recently(Fact: ActionFact.Rising, WindowSeconds: 1f), Along: new WorldShapingAlong(Engage: 9f, Release: 5f)),
                     new WorldShaping(Along: new WorldShapingAlong(Engage: 7f, Release: 3.5f)),
                 ],
                 Holds: [

@@ -177,13 +177,13 @@ public sealed class WorldDecisionNeighborLawTests {
         Assert.NotNull(WorldRuleCompiler.CompileAll(doc)[0].Decision!.Options[0].Neighbors);
         var rule = doc.Rules![0];
         var fixedOption = rule.Decision!.Options[1] with { Score = new([new ValueToken.State("appeal", "$right")]) };
-        Assert.Throws<WorldRuleException>(() => WorldRuleCompiler.Compile(rule with {
+        Assert.Throws<RuleException>(() => WorldRuleCompiler.Compile(rule with {
             Decision = rule.Decision with { Options = [rule.Decision.Options[0], fixedOption] },
         }, doc));
-        Assert.Throws<WorldRuleException>(() => WorldRuleCompiler.Compile(rule with {
+        Assert.Throws<RuleException>(() => WorldRuleCompiler.Compile(rule with {
             Effects = [new ActionEffect.SetState("appeal", Key: "$right", Value: 1)],
         }, doc));
-        Assert.Throws<WorldRuleException>(() => WorldRuleCompiler.Compile(rule with { ForEach = null }, doc));
+        Assert.Throws<RuleException>(() => WorldRuleCompiler.Compile(rule with { ForEach = null }, doc));
         Assert.NotNull(WorldRuleCompiler.Compile(rule, doc).Decision);
     }
 
@@ -195,7 +195,7 @@ public sealed class WorldDecisionNeighborLawTests {
             0 => source with { Range = 0 }, 1 => source with { Range = 1000001 }, 2 => source with { CandidateBudget = 0 },
             3 => source with { MaxCandidates = 5 }, 4 => source with { HalfAngleDegrees = 0 }, _ => source with { MaxCandidates = 33, CandidateBudget = 128 },
         };
-        Assert.Throws<WorldRuleException>(() => WorldRuleCompiler.CompileAll(Document(Policy(source))));
+        Assert.Throws<RuleException>(() => WorldRuleCompiler.CompileAll(Document(Policy(source))));
     }
 
     [Fact]

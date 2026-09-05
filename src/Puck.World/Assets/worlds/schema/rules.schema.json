@@ -4,18 +4,18 @@
     "null"
   ],
   "items": {
-    "description": "One world-scoped rule: a condition over world facts and the effects that follow \u2014 the same primitive a kit\u0027s per-body actions already run on (ActionPredicate, ActionEffect, ActionTriggerMode), widened to the world\u0027s own scope rather than a sibling engine with its own vocabulary. There is no scheduler and no trigger taxonomy beside this: time is just another fact.",
+    "description": "A world rule: a state-library Rule plus the optional choice policy only a world evaluates. Compiled by WorldRuleCompiler, which composes the library\u0027s own compile pieces with the world\u0027s registered vocabulary (WorldRuleVocabulary).",
     "type": [
       "object",
       "null"
     ],
     "properties": {
       "name": {
-        "description": "The rule\u0027s stable name \u2014 unique within the section, the WorldMutation.UpsertWorldRule/WorldMutation.RemoveWorldRule key, and the world.rules read-back line. A CellName, the same validated-identifier type a state row and a cell key ride: dot-free and free of the reserved character set, refused by name (naming the offending character) at the JSON converter before a document can hold one. The reserved $ prefix is refused on top of that, by CompileAll \u2014 exactly as it is for a state row name, and for the same reason: $ marks what the engine mints, and nothing mints a rule.",
+        "description": "The rule\u0027s stable name \u2014 unique within the section. A CellName, the same validated-identifier type a state row and a cell key ride: dot-free and free of the reserved character set, refused by name at the JSON converter. The reserved $ prefix is refused on top of that, by CompileAll \u2014 exactly as it is for a state row name, and for the same reason: $ marks what the engine mints, and nothing mints a rule.",
         "type": "string"
       },
       "effects": {
-        "description": "The effects applied in order when the rule fires. With a Decision, these are common entry effects and may be empty.",
+        "description": "The effects applied in order when the rule fires.",
         "type": "array",
         "items": {
           "$ref": "./common.schema.json#/$defs/ActionEffect"
@@ -27,7 +27,7 @@
         "default": null
       },
       "mode": {
-        "description": "Without a Decision, whether the rule fires every tick the gate holds (Level, the default) or once per crossing (Edge). A rule that writes a row almost always wants Edge: level-firing an addState is what wrote 503 journal entries in 500 ticks.",
+        "description": "Whether the rule fires every tick the gate holds (Level, the default) or once per crossing (Edge). A rule that writes a row almost always wants Edge: level-firing an addState writes one journal entry per tick.",
         "enum": [
           "Level",
           "Edge"
@@ -35,7 +35,7 @@
         "default": "Level"
       },
       "forEach": {
-        "description": "A keyed state row to iterate, or null for one evaluation per tick. With a row named, the gate and effects evaluate once per cell the row holds at the top of the tick, with $each bound to that cell\u0027s key \u2014 the quantifier that lets one rule tick a status for every body carrying it, or one rule judge every piece or card of a keyed row. An integer key also binds the each body reference; a non-integer key binds $each alone. The latch is kept per key, by the key\u0027s value when it is an integer and by its position in the row otherwise.",
+        "description": "A keyed state row to iterate, or null for one evaluation per tick. With a row named, the gate and effects evaluate once per cell the row holds at the top of the tick, with $each bound to that cell\u0027s key \u2014 the quantifier that lets one rule tick a status for every participant carrying it, or one rule judge every piece or card of a keyed row. An integer key also binds the each participant reference; a non-integer key binds $each alone. The latch is kept per key, by the key\u0027s value when it is an integer and by its position in the row otherwise.",
         "type": [
           "string",
           "null"
@@ -43,7 +43,7 @@
         "default": null
       },
       "decision": {
-        "description": "Optional choice policy; requires Level mode. Common effects run only when entering a selected option.",
+        "description": "The optional choice policy; common effects run only when entering a selected option.",
         "type": [
           "object",
           "null"

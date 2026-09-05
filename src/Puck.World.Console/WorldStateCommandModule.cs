@@ -508,7 +508,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                 var output = new List<string>(capacity: shown + 1) { $"[world.rule.hazards: {hazards.Count} hazard(s), showing {shown}]" };
                 for (var index = 0; index < shown; index++) {
                     var hazard = hazards[index];
-                    output.Add(item: $"[world.rule.hazards {((hazard.Kind == WorldRuleHazardKind.WriteAfterRead) ? "write-after-read" : "write-after-write")} first='{hazard.First}' second='{hazard.Second}' cell={hazard.Cell}: {hazard.Detail}]");
+                    output.Add(item: $"[world.rule.hazards {((hazard.Kind == RuleHazardKind.WriteAfterRead) ? "write-after-read" : "write-after-write")} first='{hazard.First}' second='{hazard.Second}' cell={hazard.Cell}: {hazard.Detail}]");
                 }
                 return new CommandResult(Output: string.Join(separator: Environment.NewLine, values: output));
             },

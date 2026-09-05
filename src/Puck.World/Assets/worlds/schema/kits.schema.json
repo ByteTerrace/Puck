@@ -643,7 +643,7 @@
               "null"
             ],
             "additionalProperties": {
-              "description": "A lane\u0027s full binding: the press trigger and the release trigger. What a channel does is this data \u2014 the engine implements only the facts, predicates, and effects.",
+              "description": "One authored action: what fires on press, on release, and on a body fact\u0027s edge.",
               "type": [
                 "object",
                 "null"
@@ -651,22 +651,22 @@
               "properties": {
                 "onPress": {
                   "$ref": "./common.schema.json#/$defs/ActionTrigger",
-                  "description": "The rising-edge trigger, or null.",
+                  "description": "The press trigger.",
                   "default": null
                 },
                 "onRelease": {
                   "$ref": "./common.schema.json#/$defs/ActionTrigger",
-                  "description": "The falling-edge trigger (evaluated immediately, never latched), or null.",
+                  "description": "The release trigger.",
                   "default": null
                 },
                 "onFact": {
-                  "description": "Engine-fact-triggered effect lists evaluated independently of channel edges.",
+                  "description": "The fact-edge triggers.",
                   "type": [
                     "array",
                     "null"
                   ],
                   "items": {
-                    "description": "An authored effect list fired by one engine fact pulse \u2014 gated and edged by the same ActionTriggerMode vocabulary a world rule uses.",
+                    "description": "A trigger that fires on a body fact, level or edge.",
                     "type": [
                       "object",
                       "null"
@@ -674,7 +674,7 @@
                     "properties": {
                       "fact": {
                         "$ref": "./common.schema.json#/$defs/ActionFact",
-                        "description": "The fact that fires the rule."
+                        "description": "The body fact."
                       },
                       "effects": {
                         "description": "The effects applied in order.",
@@ -685,11 +685,11 @@
                       },
                       "gate": {
                         "$ref": "./common.schema.json#/$defs/ActionPredicateNullable2",
-                        "description": "An additional predicate that must hold beside Fact, or null for none.",
+                        "description": "The predicate that must hold, or null for always.",
                         "default": null
                       },
                       "mode": {
-                        "description": "Whether the trigger fires every tick the condition holds (Level, the default) or once per crossing (Edge). The condition is Fact and Gate together \u2014 an edge trigger re-arms only when that conjunction stops holding.",
+                        "description": "Level or edge.",
                         "enum": [
                           "Level",
                           "Edge"

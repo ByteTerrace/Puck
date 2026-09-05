@@ -21,7 +21,7 @@ public sealed class WorldRuleExtensionLawTests {
                     new ActionPredicate.CompareState(State: "source", Comparison: ActionStateComparison.Equal, Value: 0m),
                 ])),
                 Effects: [new ActionEffect.Transaction(Effects: [
-                    new WorldTransactionStep.SetCell(
+                    new TransactionStep.SetCell(
                         State: "target",
                         Expression: new ValueExpression(Tokens: [
                             new ValueToken.State(Name: "source"),
@@ -29,7 +29,7 @@ public sealed class WorldRuleExtensionLawTests {
                             new ValueToken.Add(),
                         ])
                     ),
-                    new WorldTransactionStep.ScheduleCell(State: "target", DelaySeconds: 0.01m),
+                    new TransactionStep.ScheduleCell(State: "target", DelaySeconds: 0.01m),
                 ])]
             )]
         );
@@ -39,7 +39,7 @@ public sealed class WorldRuleExtensionLawTests {
         var not = Assert.IsType<ActionPredicate.Not>(@object: rule.Gate);
         _ = Assert.IsType<ActionPredicate.Any>(@object: not.Predicate);
         var transaction = Assert.IsType<ActionEffect.Transaction>(@object: Assert.Single(collection: rule.Effects));
-        var set = Assert.IsType<WorldTransactionStep.SetCell>(@object: transaction.Effects[0]);
+        var set = Assert.IsType<TransactionStep.SetCell>(@object: transaction.Effects[0]);
 
         Assert.Collection(
             collection: Assert.IsType<ValueExpression>(@object: set.Expression).Tokens,
@@ -47,7 +47,7 @@ public sealed class WorldRuleExtensionLawTests {
             token => _ = Assert.IsType<ValueToken.Constant>(@object: token),
             token => _ = Assert.IsType<ValueToken.Add>(@object: token)
         );
-        _ = Assert.IsType<WorldTransactionStep.ScheduleCell>(@object: transaction.Effects[1]);
+        _ = Assert.IsType<TransactionStep.ScheduleCell>(@object: transaction.Effects[1]);
     }
 
     [Fact]
@@ -91,10 +91,10 @@ public sealed class WorldRuleExtensionLawTests {
                 Name: Name("atomic"),
                 Effects: [new ActionEffect.Transaction(
                     Effects: [
-                        new WorldTransactionStep.SetCell(State: "target", Value: 9m),
-                        new WorldTransactionStep.RemoveCell(State: "bag", Key: "missing"),
+                        new TransactionStep.SetCell(State: "target", Value: 9m),
+                        new TransactionStep.RemoveCell(State: "bag", Key: "missing"),
                     ],
-                    OnFailure: [new WorldTransactionStep.SetCell(State: "failed", Value: 1m)]
+                    OnFailure: [new TransactionStep.SetCell(State: "failed", Value: 1m)]
                 )]
             )]
         );
@@ -124,9 +124,9 @@ public sealed class WorldRuleExtensionLawTests {
                     Effects: [
                         new WorldTransactionStep.EmitCueStep(Name: "atomic.probe", Key: "0"),
                         new WorldTransactionStep.SetBodyVerticalVelocityStep(Key: "0", Velocity: 7m),
-                        new WorldTransactionStep.SetCell(State: "bounded", Value: 99m),
+                        new TransactionStep.SetCell(State: "bounded", Value: 99m),
                     ],
-                    OnFailure: [new WorldTransactionStep.SetCell(State: "failed", Value: 1m)]
+                    OnFailure: [new TransactionStep.SetCell(State: "failed", Value: 1m)]
                 )]
             )]
         );
@@ -151,7 +151,7 @@ public sealed class WorldRuleExtensionLawTests {
                 Name: Name("self-designation-atomic"),
                 Effects: [new ActionEffect.Transaction(
                     Effects: [
-                        new WorldTransactionStep.SetCell(State: "target", Value: 9m),
+                        new TransactionStep.SetCell(State: "target", Value: 9m),
                         new WorldTransactionStep.DesignateBodyStep(
                             Key: "0",
                             Register: "focus",
@@ -159,7 +159,7 @@ public sealed class WorldRuleExtensionLawTests {
                             TargetKey: "0"
                         ),
                     ],
-                    OnFailure: [new WorldTransactionStep.SetCell(State: "failed", Value: 1m)]
+                    OnFailure: [new TransactionStep.SetCell(State: "failed", Value: 1m)]
                 )]
             )]
         ) with {
@@ -223,7 +223,7 @@ public sealed class WorldRuleExtensionLawTests {
                 Right: Property,
                 CoOccurrence: WorldInteractionCoOccurrence.Distance,
                 Range: 0.100006103515625m,
-                Effects: [new ActionEffect.EmitCue(Name: "range.hit")]
+                Effects: [new WorldEffect.EmitCue(Name: "range.hit")]
             )]),
         };
 
@@ -234,7 +234,7 @@ public sealed class WorldRuleExtensionLawTests {
 
     [Fact]
     public void AggregateRuleBudgetRejectsAValidButPathologicallyExpensiveProgram() {
-        var effects = Enumerable.Range(start: 0, count: WorldRuleCapacity.MaxEffectsPerRule)
+        var effects = Enumerable.Range(start: 0, count: RuleCapacity.MaxEffectsPerRule)
             .Select(static _ => (ActionEffect)new ActionEffect.AddState(State: "counter", Value: 1m))
             .ToArray();
         var rules = Enumerable.Range(start: 0, count: ManyRules)
@@ -244,7 +244,7 @@ public sealed class WorldRuleExtensionLawTests {
 
         var budget = WorldRuleWorkBudget.Measure(definition: definition);
 
-        Assert.True(condition: budget.WorkUnitsPerTick > WorldRuleCapacity.MaxWorkUnitsPerTick);
+        Assert.True(condition: budget.WorkUnitsPerTick > RuleCapacity.MaxWorkUnitsPerTick);
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var reason));
         Assert.Contains(expectedSubstring: "work units per tick", actualString: reason, comparisonType: StringComparison.Ordinal);
     }
@@ -351,13 +351,13 @@ public sealed class WorldRuleExtensionLawTests {
                 Name: Name("sequential-preflight"),
                 Effects: [new ActionEffect.Transaction(
                     Effects: [
-                        new WorldTransactionStep.SetCell(State: "bounded", Value: 5m),
-                        new WorldTransactionStep.AddCell(
+                        new TransactionStep.SetCell(State: "bounded", Value: 5m),
+                        new TransactionStep.AddCell(
                             State: "bounded",
                             Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: "bounded")])
                         ),
                     ],
-                    OnFailure: [new WorldTransactionStep.SetCell(State: "failed", Value: 1m)]
+                    OnFailure: [new TransactionStep.SetCell(State: "failed", Value: 1m)]
                 )]
             )]
         );
@@ -377,7 +377,7 @@ public sealed class WorldRuleExtensionLawTests {
             rules: [new WorldRule(
                 Name: Name("arithmetic-refusal"),
                 Effects: [new ActionEffect.Transaction(
-                    Effects: [new WorldTransactionStep.SetCell(
+                    Effects: [new TransactionStep.SetCell(
                         State: "target",
                         Expression: new ValueExpression(Tokens: [
                             new ValueToken.Constant(Value: 1m),
@@ -385,7 +385,7 @@ public sealed class WorldRuleExtensionLawTests {
                             new ValueToken.Divide(),
                         ])
                     )],
-                    OnFailure: [new WorldTransactionStep.SetCell(State: "failed", Value: 1m)]
+                    OnFailure: [new TransactionStep.SetCell(State: "failed", Value: 1m)]
                 )]
             )]
         );
@@ -405,7 +405,7 @@ public sealed class WorldRuleExtensionLawTests {
             rules: [new WorldRule(
                 Name: Name("fixed-overflow-refusal"),
                 Effects: [new ActionEffect.Transaction(
-                    Effects: [new WorldTransactionStep.SetCell(
+                    Effects: [new TransactionStep.SetCell(
                         State: "target",
                         Expression: new ValueExpression(Tokens: [
                             new ValueToken.Constant(Value: 100_000_000m),
@@ -413,7 +413,7 @@ public sealed class WorldRuleExtensionLawTests {
                             new ValueToken.Multiply(),
                         ])
                     )],
-                    OnFailure: [new WorldTransactionStep.SetCell(State: "failed", Value: 1m)]
+                    OnFailure: [new TransactionStep.SetCell(State: "failed", Value: 1m)]
                 )]
             )]
         );
@@ -479,7 +479,7 @@ public sealed class WorldRuleExtensionLawTests {
             rules: [new WorldRule(
                 Name: Name("cue"),
                 Mode: ActionTriggerMode.Edge,
-                Effects: [new ActionEffect.EmitCue(Name: "round.start", Payload: "blue", Key: "0")]
+                Effects: [new WorldEffect.EmitCue(Name: "round.start", Payload: "blue", Key: "0")]
             )]
         );
 
@@ -501,7 +501,7 @@ public sealed class WorldRuleExtensionLawTests {
     public void AudioCueTableAdmitsTokensEmittedByThisWorldRules() {
         var rule = new WorldRule(
             Name: Name("custom-audio"),
-            Effects: [new ActionEffect.EmitCue(Name: "round.start")]
+            Effects: [new WorldEffect.EmitCue(Name: "round.start")]
         );
         var audio = new WorldAudioDefaults(
             MasterGain: 1f,
@@ -530,10 +530,10 @@ public sealed class WorldRuleExtensionLawTests {
                 Name: Name("launch"),
                 Mode: ActionTriggerMode.Edge,
                 Effects: [
-                    new ActionEffect.SetBodyVerticalVelocity(Key: "0", Velocity: 5m),
-                    new ActionEffect.ScaleBodyVerticalVelocity(Key: "0", Factor: 0.5m),
-                    new ActionEffect.ApplyBodyImpulse(Key: "0", BodyDirection: new DocumentVector3(x: 0f, y: 0f, z: 1f), Speed: 3m, DurationSeconds: 0.01m),
-                    new ActionEffect.DesignateBody(Key: "0", Register: "focus", Kind: WorldBodyDesignationKind.Body, TargetKey: "1"),
+                    new WorldEffect.SetBodyVerticalVelocity(Key: "0", Velocity: 5m),
+                    new WorldEffect.ScaleBodyVerticalVelocity(Key: "0", Factor: 0.5m),
+                    new WorldEffect.ApplyBodyImpulse(Key: "0", BodyDirection: new DocumentVector3(x: 0f, y: 0f, z: 1f), Speed: 3m, DurationSeconds: 0.01m),
+                    new WorldEffect.DesignateBody(Key: "0", Register: "focus", Kind: WorldBodyDesignationKind.Body, TargetKey: "1"),
                 ]
             )]
         ) with {
@@ -573,7 +573,7 @@ public sealed class WorldRuleExtensionLawTests {
             Rules = [new WorldRule(
                 Name: Name("paint"),
                 Mode: ActionTriggerMode.Edge,
-                Effects: [new ActionEffect.PaintField(Field: "heat", X: 1, Y: 0, Z: 1, Value: 12m, Radius: 1)]
+                Effects: [new WorldEffect.PaintField(Field: "heat", X: 1, Y: 0, Z: 1, Value: 12m, Radius: 1)]
             )],
         };
 
@@ -609,7 +609,7 @@ public sealed class WorldRuleExtensionLawTests {
         var definition = Fixtures.WithLattice(definition: Fixtures.BuildDocument(), composite: fields) with {
             Rules = [new WorldRule(
                 Name: Name("no-op-paint"),
-                Effects: [new ActionEffect.PaintField(Field: "heat", X: 0, Y: 0, Z: 0, Value: 0m, Radius: 0)]
+                Effects: [new WorldEffect.PaintField(Field: "heat", X: 0, Y: 0, Z: 0, Value: 0m, Radius: 0)]
             )],
         };
         using var fixture = Fixtures.FreshServer(definition: definition);

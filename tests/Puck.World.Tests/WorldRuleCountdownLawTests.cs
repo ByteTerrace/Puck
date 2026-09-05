@@ -39,7 +39,7 @@ public sealed class WorldRuleCountdownLawTests {
         var control = DurationDocument(seconds: 1m);
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: denied, neighbours: null, reason: out var reason));
-        Assert.Contains(expectedSubstring: nameof(WorldRuleRefusal.DurationEngineTicksOutOfRange), actualString: reason, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(expectedSubstring: nameof(RuleRefusal.DurationEngineTicksOutOfRange), actualString: reason, comparisonType: StringComparison.Ordinal);
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: control, neighbours: null, reason: out var controlReason), userMessage: controlReason);
     }
 

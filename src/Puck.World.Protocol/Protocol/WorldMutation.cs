@@ -437,7 +437,7 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// every cell. Refused on a slot site.</param>
     [MutationKind(ordinal: 51, section: WorldSection.State)]
     public sealed record Generate(WorldPrincipal Principal, string Row, IReadOnlyList<string>? Keys = null) : WorldMutation(Principal);
-    /// <summary>Upserts a world rule addressed by <see cref="WorldRule.Name"/> — the authoring door for the
+    /// <summary>Upserts a world rule addressed by <see cref="Rule.Name"/> — the authoring door for the
     /// <c>rules</c> section, never the firing one: a rule evaluating and its effects applying both ride
     /// <see cref="WorldPrincipal.World"/> and never submit this kind. Rejected loudly if the rule fails to compile
     /// against the candidate document (an undeclared state row or cell, an inadmissible predicate/effect kind for
@@ -449,7 +449,7 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <summary>Removes the world rule named <paramref name="Name"/>. Rejected if no rule declares that name.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Name">The rule name to remove — a <see cref="CellName"/>, the same validated-identifier type
-    /// <see cref="WorldRule.Name"/> itself rides, so a name this mutation could never match is refused at the verb
+    /// <see cref="Rule.Name"/> itself rides, so a name this mutation could never match is refused at the verb
     /// (or the JSON converter) instead of travelling as a miss.</param>
     [MutationKind(ordinal: 53, section: WorldSection.Rules)]
     public sealed record RemoveWorldRule(WorldPrincipal Principal, CellName Name) : WorldMutation(Principal);

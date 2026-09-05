@@ -286,15 +286,15 @@ public sealed class WorldDecisionLawTests {
             2 => policy with { PeriodSeconds = 0.000001m }, 3 => policy with { IncumbentBonus = -1 },
             4 => policy with { Options = [Option("a", 1), Option("a", 2)] }, _ => policy with { ScoreKind = CellKind.Bool },
         };
-        Assert.Throws<WorldRuleException>(() => WorldRuleCompiler.CompileAll(Document(Rule(policy))));
+        Assert.Throws<RuleException>(() => WorldRuleCompiler.CompileAll(Document(Rule(policy))));
     }
 
     [Fact]
     public void DecisionCannotCombineAnEdgeLatchOrMismatchedScoreKinds() {
         var rule = Rule(Policy(Option("a", 1)));
-        Assert.Throws<WorldRuleException>(() => WorldRuleCompiler.CompileAll(Document(rule with { Mode = ActionTriggerMode.Edge })));
+        Assert.Throws<RuleException>(() => WorldRuleCompiler.CompileAll(Document(rule with { Mode = ActionTriggerMode.Edge })));
         var typed = Policy(new WorldDecisionOption(Name("a"), new([new ValueToken.State("score")]), [])) with { ScoreKind = CellKind.Fixed };
-        Assert.Throws<WorldRuleException>(() => WorldRuleCompiler.CompileAll(Document(Rule(typed), Slot("score", 1))));
+        Assert.Throws<RuleException>(() => WorldRuleCompiler.CompileAll(Document(Rule(typed), Slot("score", 1))));
     }
 
     [Fact]

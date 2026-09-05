@@ -222,6 +222,40 @@ namespace Puck.World;
 // The rules section rows (the world.row.set rules payload shape). Also reachable from WorldDefinition already; this entry
 // exposes the typed WorldJsonContext.Default.WorldRule accessor the verb deserializes through.
 [JsonSerializable(typeof(WorldRule))]
+// The world-registered action arms (WorldRuleVocabulary): registered onto ActionEffect/ActionPredicate/TransactionStep at
+// resolution by WorldJsonVocabulary.Extend, so each needs its own metadata here.
+[JsonSerializable(typeof(WorldEffect.SetVerticalVelocity))]
+[JsonSerializable(typeof(WorldEffect.ScaleVerticalVelocity))]
+[JsonSerializable(typeof(WorldEffect.PlanarImpulse))]
+[JsonSerializable(typeof(WorldEffect.StartTimer))]
+[JsonSerializable(typeof(WorldEffect.Designate))]
+[JsonSerializable(typeof(WorldEffect.EmitCue))]
+[JsonSerializable(typeof(WorldEffect.SetBodyVerticalVelocity))]
+[JsonSerializable(typeof(WorldEffect.ScaleBodyVerticalVelocity))]
+[JsonSerializable(typeof(WorldEffect.ApplyBodyImpulse))]
+[JsonSerializable(typeof(WorldEffect.DesignateBody))]
+[JsonSerializable(typeof(WorldEffect.PaintField))]
+[JsonSerializable(typeof(WorldEffect.UpsertHudPanel))]
+[JsonSerializable(typeof(WorldEffect.RemoveHudPanel))]
+[JsonSerializable(typeof(WorldEffect.UpsertPlacement))]
+[JsonSerializable(typeof(WorldEffect.RemovePlacement))]
+[JsonSerializable(typeof(WorldEffect.Save))]
+[JsonSerializable(typeof(WorldEffect.Pose))]
+[JsonSerializable(typeof(WorldPredicate.Now))]
+[JsonSerializable(typeof(WorldPredicate.Recently))]
+[JsonSerializable(typeof(WorldPredicate.TimerElapsed))]
+[JsonSerializable(typeof(WorldPredicate.Held))]
+[JsonSerializable(typeof(WorldTransactionStep.UpsertHudPanelStep))]
+[JsonSerializable(typeof(WorldTransactionStep.RemoveHudPanelStep))]
+[JsonSerializable(typeof(WorldTransactionStep.UpsertPlacementStep))]
+[JsonSerializable(typeof(WorldTransactionStep.RemovePlacementStep))]
+[JsonSerializable(typeof(WorldTransactionStep.PoseStep))]
+[JsonSerializable(typeof(WorldTransactionStep.EmitCueStep))]
+[JsonSerializable(typeof(WorldTransactionStep.SetBodyVerticalVelocityStep))]
+[JsonSerializable(typeof(WorldTransactionStep.ScaleBodyVerticalVelocityStep))]
+[JsonSerializable(typeof(WorldTransactionStep.ApplyBodyImpulseStep))]
+[JsonSerializable(typeof(WorldTransactionStep.DesignateBodyStep))]
+[JsonSerializable(typeof(WorldTransactionStep.PaintFieldStep))]
 // The inputHold section row (the world.row.set inputHold payload shape + the document `inputHold` section) — its
 // AUTHORED shape (seconds, never the compiled simulation-tick fields WorldInputHoldSettings carries; see
 // WorldInputHoldAuthoring's remarks). WorldInputHoldSettings itself is never a JSON target any more (nothing
@@ -425,6 +459,7 @@ public static class WorldJsonVocabulary {
         if ((typeInfo.Type == typeof(LatticeTopology)) && (typeInfo.PolymorphismOptions is { } lattices)) {
             lattices.DerivedTypes.Add(item: new JsonDerivedType(derivedType: typeof(WorldFieldTopology), typeDiscriminator: "field"));
         }
+        WorldRuleVocabulary.Instance.ExtendJson(typeInfo: typeInfo);
     }
 }
 

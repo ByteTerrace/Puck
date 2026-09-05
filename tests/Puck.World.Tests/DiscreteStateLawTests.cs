@@ -34,13 +34,13 @@ public sealed class DiscreteStateLawTests {
         var row = new WorldStateRow(Name("terrain"), CellKind.Int, Cells: [Cell("1",2)], Domain: new StateDomain.CellsOf("map",1));
         var query = new BoardPathCostQuery(topology, target: 15, maxCost: 100, maxVisits: 16);
         Span<long> values = stackalloc long[16];
-        WorldBoardQueries.Read(row, topology, values);
-        _ = WorldBoardQueries.Evaluate(query, values, 1, 0);
+        BoardQueries.Read(row, topology, values);
+        _ = BoardQueries.Evaluate(query, values, 1, 0);
         var before = GC.GetAllocatedBytesForCurrentThread();
         for (var repeat = 0; repeat < 100; repeat++) {
             _ = WorldTopologyCompilation.FindPhysical(state);
-            WorldBoardQueries.Read(row, topology, values);
-            _ = WorldBoardQueries.Evaluate(query, values, 1, 0);
+            BoardQueries.Read(row, topology, values);
+            _ = BoardQueries.Evaluate(query, values, 1, 0);
         }
         Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
     }
@@ -159,15 +159,15 @@ public sealed class DiscreteStateLawTests {
             new(Name("occupancy"), CellKind.Int, Domain: new StateDomain.CellsOf("map", Empty: 0), Cells: [Cell("0", 1)])
         ) with {
             Rules = [new(Name("move"), Effects: [new ActionEffect.Transaction([
-                new WorldTransactionStep.AddCell("allowance", Key: "0", Expression: new([
+                new TransactionStep.AddCell("allowance", Key: "0", Expression: new([
                     new ValueToken.State("$board:pathCost:terrain:cell:destination:0:100:16", Key: "$cell:position:0"),
                     new ValueToken.Negate(),
                 ])),
-                new WorldTransactionStep.SetCell("occupancy", Key: "$cell:position:0", Value: 0),
-                new WorldTransactionStep.SetCell("terrain", Key: "$cell:position:0", Value: 1),
-                new WorldTransactionStep.SetCell("position", Key: "0", FromState: "destination", FromKey: "0"),
-                new WorldTransactionStep.SetCell("occupancy", Key: "$cell:position:0", Value: 1),
-                new WorldTransactionStep.SetCell("terrain", Key: "$cell:position:0", Value: -1),
+                new TransactionStep.SetCell("occupancy", Key: "$cell:position:0", Value: 0),
+                new TransactionStep.SetCell("terrain", Key: "$cell:position:0", Value: 1),
+                new TransactionStep.SetCell("position", Key: "0", FromState: "destination", FromKey: "0"),
+                new TransactionStep.SetCell("occupancy", Key: "$cell:position:0", Value: 1),
+                new TransactionStep.SetCell("terrain", Key: "$cell:position:0", Value: -1),
             ])], Mode: ActionTriggerMode.Edge, Gate: new ActionPredicate.All([
                 new ActionPredicate.CompareState("position", ActionStateComparison.NotEqual, Key: "0", ComparandState: "destination", ComparandKey: "0"),
                 new ActionPredicate.CompareState("$board:pathCost:terrain:cell:destination:0:100:16", ActionStateComparison.LessOrEqual, Key: "$cell:position:0", ComparandState: "allowance", ComparandKey: "0"),
@@ -202,9 +202,9 @@ public sealed class DiscreteStateLawTests {
             new(Name("hand"), CellKind.Bool, Cells: [], Domain: new StateDomain.KeysOf(CellName.Parse("cards"), Ordered: true)),
             Row("failed", new StateCell(WorldStateRow.SlotKey, 0))) with {
             Rules = [new(Name("atomic"), Effects: [new ActionEffect.Transaction([
-                new WorldTransactionStep.TransformStateStep(new StateTransform.Transfer("deck", "hand", ZoneSelector.First)),
-                new WorldTransactionStep.RemoveCell("hand", "missing")
-            ], OnFailure: [new WorldTransactionStep.SetCell("failed", Value: 1)])])],
+                new TransactionStep.TransformStateStep(new StateTransform.Transfer("deck", "hand", ZoneSelector.First)),
+                new TransactionStep.RemoveCell("hand", "missing")
+            ], OnFailure: [new TransactionStep.SetCell("failed", Value: 1)])])],
         };
         using var fixture = Fixtures.FreshServer(definition: definition);
         fixture.Step();
@@ -224,22 +224,22 @@ public sealed class DiscreteStateLawTests {
         var values = new long[topology.CellCount];
         values[rookCell] = 4;
         var attacksEast = new BoardAttacksQuery(topology, lower: 4, upper: 4, directions: [east]);
-        Assert.Equal(1, WorldBoardQueries.Evaluate(attacksEast, values, 0, origin));
+        Assert.Equal(1, BoardQueries.Evaluate(attacksEast, values, 0, origin));
         // Control: the same ray with no qualifying piece at all must read a miss, not a stale hit.
-        Assert.Equal(0, WorldBoardQueries.Evaluate(attacksEast, new long[topology.CellCount], 0, origin));
+        Assert.Equal(0, BoardQueries.Evaluate(attacksEast, new long[topology.CellCount], 0, origin));
         // Control: the rook's cell holds a code outside the authored range -- geometry alone must not be enough.
         var attacksWrongValue = new BoardAttacksQuery(topology, lower: 5, upper: 5, directions: [east]);
-        Assert.Equal(0, WorldBoardQueries.Evaluate(attacksWrongValue, values, 0, origin));
+        Assert.Equal(0, BoardQueries.Evaluate(attacksWrongValue, values, 0, origin));
         // Control: the piece sits east, not south -- an authored direction that never reaches it must read a miss.
         var attacksSouthOnly = new BoardAttacksQuery(topology, lower: 4, upper: 4, directions: [south]);
-        Assert.Equal(0, WorldBoardQueries.Evaluate(attacksSouthOnly, values, 0, origin));
+        Assert.Equal(0, BoardQueries.Evaluate(attacksSouthOnly, values, 0, origin));
         // Several authored directions OR together: south alone misses, but south-or-east finds the rook via east.
         var attacksEitherWay = new BoardAttacksQuery(topology, lower: 4, upper: 4, directions: [south, east]);
-        Assert.Equal(1, WorldBoardQueries.Evaluate(attacksEitherWay, values, 0, origin));
+        Assert.Equal(1, BoardQueries.Evaluate(attacksEitherWay, values, 0, origin));
         // Control: a non-qualifying piece one step closer blocks the ray -- if the walk did not stop at the first
         // occupied cell, this would wrongly still see the rook past it.
         var blocked = (long[])values.Clone();
         blocked[origin + 1] = 9;
-        Assert.Equal(0, WorldBoardQueries.Evaluate(attacksEast, blocked, 0, origin));
+        Assert.Equal(0, BoardQueries.Evaluate(attacksEast, blocked, 0, origin));
     }
 }

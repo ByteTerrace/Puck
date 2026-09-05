@@ -1356,12 +1356,12 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"rule '{rule}' gate can never hold: its comparisons pin {cell} to an empty range.");
             }
             var ruleBudget = WorldRuleWorkBudget.Measure(definition: definition);
-            if (ruleBudget.WorkUnitsPerTick > WorldRuleCapacity.MaxWorkUnitsPerTick) {
+            if (ruleBudget.WorkUnitsPerTick > RuleCapacity.MaxWorkUnitsPerTick) {
                 var costliest = string.Join(
                     separator: ", ",
                     values: WorldRuleWorkBudget.Contributors(definition: definition).Take(count: 3).Select(selector: static line => $"'{line.Name}' x{line.Multiplier} = {line.WorkUnits}")
                 );
-                errors.Add(item: $"rules/interactions/flock affinities derive {ruleBudget.WorkUnitsPerTick} worst-case work units per tick, exceeding the maximum of {WorldRuleCapacity.MaxWorkUnitsPerTick}; costliest: {costliest} (a forEach line's multiplier is its row's capacity, so author the capacity the row needs; world.budget.rules lists every line).");
+                errors.Add(item: $"rules/interactions/flock affinities derive {ruleBudget.WorkUnitsPerTick} worst-case work units per tick, exceeding the maximum of {RuleCapacity.MaxWorkUnitsPerTick}; costliest: {costliest} (a forEach line's multiplier is its row's capacity, so author the capacity the row needs; world.budget.rules lists every line).");
             }
         }
 

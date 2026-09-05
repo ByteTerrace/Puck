@@ -94,7 +94,7 @@ public sealed class WorldTableLawTests {
                 new WorldRule(
                     CellName.Parse("effect"),
                     [new ActionEffect.SetState(State: "multiplier", FromState: "$table:chart:$bind:pair")],
-                    Bindings: [new WorldRuleBinding(CellName.Parse("pair"), CellKind.Int, new ValueExpression([
+                    Bindings: [new RuleBinding(CellName.Parse("pair"), CellKind.Int, new ValueExpression([
                         new ValueToken.State("attack"), new ValueToken.Constant(100m), new ValueToken.Multiply(), new ValueToken.State("defend"), new ValueToken.Add(),
                     ]))]
                 ),

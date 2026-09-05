@@ -1,12 +1,12 @@
-namespace Puck.World.Server;
+namespace Puck.State;
 
 /// <summary>Deterministic discrete queries over immutable topology and caller-owned value spans.</summary>
-public static class WorldBoardQueries {
+public static class BoardQueries {
     /// <summary>Reads a board into scratch storage. Missing cells have the authored empty value.</summary>
     /// <param name="row">The validated board row.</param>
     /// <param name="topology">The compiled addressing.</param>
     /// <param name="values">Scratch storage with at least CellCount entries.</param>
-    public static void Read(WorldStateRow row, CompiledTopology topology, Span<long> values) {
+    public static void Read(StateRow row, CompiledTopology topology, Span<long> values) {
         values[..topology.CellCount].Fill(((StateDomain.CellsOf)row.EffectiveDomain).Empty);
         var cells = row.Cells;
         for (var cellIndex = 0; cellIndex < (cells?.Count ?? 0); cellIndex++) {
@@ -27,14 +27,14 @@ public static class WorldBoardQueries {
     /// query kind. The caller resolves it (a tick-dependent state read) before this otherwise tick-agnostic
     /// evaluation runs.</param>
     /// <returns>The result in the query's documented integer domain.</returns>
-    public static long Evaluate(CompiledWorldBoardQuery query, ReadOnlySpan<long> values, long empty, int source, int dynamicTarget = 0) {
+    public static long Evaluate(BoardQuery query, ReadOnlySpan<long> values, long empty, int source, int dynamicTarget = 0) {
         var topology = query.Topology;
         if (query is BoardCanonicalQuery) {
             return CanonicalFingerprint(topology, values);
         }
         if (query is BoardMaskQuery mask) {
             var result = 0L;
-            for (var ordinal = 0; ordinal < topology.CellCount && ordinal < WorldBoardMask.MaxCells; ordinal++) {
+            for (var ordinal = 0; ordinal < topology.CellCount && ordinal < BoardMask.MaxCells; ordinal++) {
                 if (values[ordinal] >= mask.Lower && values[ordinal] <= mask.Upper) {
                     result |= 1L << ordinal;
                 }
@@ -73,6 +73,36 @@ public static class WorldBoardQueries {
         throw new InvalidOperationException($"unhandled board query kind {query.Kind}");
     }
 
+    /// <summary>Reads the ray from the origin (exclusive) in one direction, stopping at the edge or on return to the
+    /// origin; an origin that names no cell is the empty word.</summary>
+    /// <param name="topology">The compiled addressing.</param>
+    /// <param name="values">One value per cell.</param>
+    /// <param name="origin">The origin cell, or -1 for none.</param>
+    /// <param name="direction">The direction ordinal.</param>
+    /// <param name="word">The word buffer, at least CellCount long.</param>
+    /// <returns>The ray's length.</returns>
+    public static int ReadRay(CompiledTopology topology, ReadOnlySpan<long> values, int origin, int direction, Span<long> word) {
+        var length = 0;
+
+        if (origin < 0) {
+            return 0;
+        }
+
+        var cell = origin;
+
+        for (var distance = 1; distance < topology.CellCount; distance++) {
+            cell = topology.Neighbour(cell, direction);
+
+            if (cell < 0 || cell == origin) {
+                break;
+            }
+
+            word[length++] = values[cell];
+        }
+
+        return length;
+    }
+
     // The least FNV-1a fingerprint of the board's values over every element: the same number for every board in
     // one symmetry orbit, so a ring of fingerprints answers repetition up to symmetry.
     private static long CanonicalFingerprint(CompiledTopology topology, ReadOnlySpan<long> values) {
@@ -107,7 +137,7 @@ public static class WorldBoardQueries {
             bits &= bits - 1UL;
             if (cell < topology.CellCount) {
                 var carried = topology.Image(element, cell);
-                if (carried < WorldBoardMask.MaxCells) {
+                if (carried < BoardMask.MaxCells) {
                     image |= 1UL << carried;
                 }
             }
@@ -131,17 +161,16 @@ public static class WorldBoardQueries {
                 continue;
             }
             var neighbour = topology.Neighbour(cell, query.Direction);
-            if (neighbour >= 0 && neighbour < WorldBoardMask.MaxCells) {
+            if (neighbour >= 0 && neighbour < BoardMask.MaxCells) {
                 shifted |= 1UL << neighbour;
             }
         }
         return (long)shifted;
     }
 
-
     // Dijkstra over a binary heap keyed (distance, cell ordinal): the same settle order as a linear scan (least
     // distance, lowest ordinal on ties), at O((V + E) log V) instead of O(V²) per query. Stale heap entries are
-    // skipped on pop; the visit budget counts settled cells exactly as before.
+    // skipped on pop; the visit budget counts settled cells.
     private static long PathCost(BoardPathCostQuery query, ReadOnlySpan<long> costs, int source, int target) {
         var topology = query.Topology;
         var count = topology.CellCount;
@@ -245,47 +274,5 @@ public static class WorldBoardQueries {
         }
         distance[index] = lastDistance;
         cell[index] = lastCell;
-    }
-
-}
-
-public sealed partial class WorldServer {
-    private long ReadBoardFact(BoardOperand operand, ulong tick) {
-        var query = operand.Board;
-        if (query is BoardCellOfQuery) {
-            var index = ResolveBodyRef(bodyRef: operand.BodyA!.Value, tick: tick);
-            return Body(index: index) is { } body && query.Topology.TryCellOf(position: body.FixedPosition, cell: out var cell) ? cell : -1;
-        }
-        if (
-            !WorldStateReader.TryReadHandle(
-            catalog: m_definition.StateCatalog,
-            definition: m_definition,
-            handle: operand.StateHandle,
-            key: null,
-            rawValue: out _,
-            row: out var row,
-            text: out _,
-            tick: tick
-        ) ||
-            (row.EffectiveDomain is not StateDomain.CellsOf rowBoard)
-        ) {
-            return -1;
-        }
-        if (query is BoardOffsetQuery offsetQuery) {
-            var originKey = ResolveOperandKey(operand.Key, operand.KeyFrom, tick);
-            var origin = originKey is not null && query.Topology.TryCell(originKey, out var originCell) ? originCell : -1;
-            return origin >= 0 && query.Topology.TryOffset(origin, offsetQuery.Dx, offsetQuery.Dz, out var offset) ? offset : -1;
-        }
-        var values = BoardScratch(query.Topology.CellCount);
-        WorldBoardQueries.Read(row, query.Topology, values);
-        var key = ResolveOperandKey(operand.Key, operand.KeyFrom, tick);
-        var source = key is not null && query.Topology.TryCell(key, out var sourceCell) ? sourceCell : -1;
-        // A pathCost query's live target, resolved on the same terms as a '$cell:' key indirection — the same
-        // (row, key) cell read, just answered as the destination ordinal rather than formatted as a key string.
-        var dynamicTarget = ((query is BoardPathCostQuery { TargetFrom: { } targetFrom })
-            ? ((int)IntegerOf(value: ReadStateCellByHandle(handle: targetFrom.Handle, key: targetFrom.Key, tick: tick)))
-            : 0
-        );
-        return WorldBoardQueries.Evaluate(query, values, rowBoard.Empty, source, dynamicTarget);
     }
 }

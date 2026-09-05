@@ -7,7 +7,7 @@ namespace Puck.World;
 public static class WorldRuleFacts {
     /// <summary>The prefix; <c>$argmax:&lt;row&gt;</c> reads a keyed row's cells and yields the winning cell's key —
     /// not the winning value — as a body index. The genuinely new primitive: a rule can name a body. A row driving
-    /// this channel is a convention, enforced at compile time (<c>WorldRuleRefusal.ArgRowNotKeyed</c>) and at
+    /// this channel is a convention, enforced at compile time (<c>RuleRefusal.ArgRowNotKeyed</c>) and at
     /// read time (a cell whose key does not parse as a non-negative index the population actually holds is simply
     /// excluded from consideration, never a hard refusal — the same "an ineligible candidate reads as absent, not an
     /// error" posture <see cref="MachinePrefix"/>'s unbooted-machine case already sets): author a keyed row whose

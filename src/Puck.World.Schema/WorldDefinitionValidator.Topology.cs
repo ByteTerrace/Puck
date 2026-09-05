@@ -317,7 +317,7 @@ public static partial class WorldDefinitionValidator {
 
         try {
             _ = WorldRuleCompiler.CompileAllInteractions(definition: definition);
-        } catch (WorldRuleException exception) {
+        } catch (RuleException exception) {
             errors.Add(item: exception.Message);
         }
     }
@@ -484,7 +484,7 @@ public static partial class WorldDefinitionValidator {
 
         try {
             _ = WorldRuleCompiler.CompileAll(definition: definition);
-        } catch (WorldRuleException exception) {
+        } catch (RuleException exception) {
             errors.Add(item: exception.Message);
         }
     }

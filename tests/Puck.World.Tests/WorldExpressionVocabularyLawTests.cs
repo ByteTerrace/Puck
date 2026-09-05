@@ -151,7 +151,7 @@ public sealed class WorldExpressionVocabularyLawTests {
             state: [Slot("target", 5L), Slot("failed", 0L), Slot("wrapped", long.MinValue), Slot("zero", 9L)],
             rules: [
                 new WorldRule(Name: Name("bad-shift"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.Transaction(
-                    Effects: [new WorldTransactionStep.SetCell(
+                    Effects: [new TransactionStep.SetCell(
                         State: "target",
                         Expression: new ValueExpression(Tokens: [
                             new ValueToken.Constant(Value: 1m),
@@ -159,10 +159,10 @@ public sealed class WorldExpressionVocabularyLawTests {
                             new ValueToken.ShiftLeft(),
                         ])
                     )],
-                    OnFailure: [new WorldTransactionStep.SetCell(State: "failed", Value: 1m)]
+                    OnFailure: [new TransactionStep.SetCell(State: "failed", Value: 1m)]
                 )]),
                 new WorldRule(Name: Name("bad-modulo"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.Transaction(
-                    Effects: [new WorldTransactionStep.SetCell(
+                    Effects: [new TransactionStep.SetCell(
                         State: "target",
                         Expression: new ValueExpression(Tokens: [
                             new ValueToken.Constant(Value: 1m),
@@ -170,7 +170,7 @@ public sealed class WorldExpressionVocabularyLawTests {
                             new ValueToken.Modulo(),
                         ])
                     )],
-                    OnFailure: [new WorldTransactionStep.AddCell(State: "failed", Value: 1m)]
+                    OnFailure: [new TransactionStep.AddCell(State: "failed", Value: 1m)]
                 )]),
                 new WorldRule(Name: Name("min-modulo"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.SetState(
                     State: "zero",
@@ -312,16 +312,16 @@ public sealed class WorldExpressionVocabularyLawTests {
                 Rule("trail", "trail", [new ValueToken.State(Name: "zero"), new ValueToken.TrailingZeroCount()]),
                 Rule("low", "low", [new ValueToken.State(Name: "zero"), new ValueToken.LowestSetBit()]),
                 new WorldRule(Name: Name("refuse-negate"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.Transaction(
-                    Effects: [new WorldTransactionStep.SetCell(State: "target", Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: "min"), new ValueToken.Negate()]))],
-                    OnFailure: [new WorldTransactionStep.AddCell(State: "failed", Value: 1m)]
+                    Effects: [new TransactionStep.SetCell(State: "target", Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: "min"), new ValueToken.Negate()]))],
+                    OnFailure: [new TransactionStep.AddCell(State: "failed", Value: 1m)]
                 )]),
                 new WorldRule(Name: Name("refuse-abs"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.Transaction(
-                    Effects: [new WorldTransactionStep.SetCell(State: "target", Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: "min"), new ValueToken.Abs()]))],
-                    OnFailure: [new WorldTransactionStep.AddCell(State: "failed", Value: 1m)]
+                    Effects: [new TransactionStep.SetCell(State: "target", Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: "min"), new ValueToken.Abs()]))],
+                    OnFailure: [new TransactionStep.AddCell(State: "failed", Value: 1m)]
                 )]),
                 new WorldRule(Name: Name("refuse-rotate"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.Transaction(
-                    Effects: [new WorldTransactionStep.SetCell(State: "target", Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: "low"), new ValueToken.Constant(Value: 64m), new ValueToken.RotateLeft()]))],
-                    OnFailure: [new WorldTransactionStep.AddCell(State: "failed", Value: 1m)]
+                    Effects: [new TransactionStep.SetCell(State: "target", Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: "low"), new ValueToken.Constant(Value: 64m), new ValueToken.RotateLeft()]))],
+                    OnFailure: [new TransactionStep.AddCell(State: "failed", Value: 1m)]
                 )]),
             ]
         );

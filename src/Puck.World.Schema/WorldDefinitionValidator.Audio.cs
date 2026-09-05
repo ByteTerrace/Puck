@@ -83,7 +83,7 @@ public static partial class WorldDefinitionValidator {
 
         foreach (var rule in (rules ?? [])) {
             foreach (var effect in (rule?.Effects ?? [])) {
-                if ((effect is ActionEffect.EmitCue cue) && WorldGameplayCue.IsValidName(candidate: cue.Name)) {
+                if ((effect is WorldEffect.EmitCue cue) && WorldGameplayCue.IsValidName(candidate: cue.Name)) {
                     tokens.Add(item: cue.Name);
                 }
             }

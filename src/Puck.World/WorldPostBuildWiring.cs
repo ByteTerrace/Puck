@@ -288,7 +288,7 @@ internal static class WorldPostBuildWiring {
         };
 
         // THE SAVE-EFFECT TAP: a world rule's 'save' effect performs engine I/O directly rather than composing a
-        // WorldMutation (see ActionEffect.Save's remarks for why), so WorldServer cannot run it through the ordinary
+        // WorldMutation (see WorldEffect.Save's remarks for why), so WorldServer cannot run it through the ordinary
         // mutation pipeline — and cannot run the CAPTURE itself either: Puck.World.Server references no rendering or
         // input, and WorldSessionCapture.Capture (the world.save fold) needs the live render levers, screen binder,
         // audio director, and pacing control, all composition-root state. This closure runs the IDENTICAL fold

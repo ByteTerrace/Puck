@@ -86,13 +86,13 @@ public sealed class ShapingRowLawTests {
                 // "recently Grounded" holds every tick too — proving the row order, not the fact's own truth, is
                 // what governs here.
                 Shaping: [
-                    new WorldShaping(When: new ActionPredicate.Now(Fact: ActionFact.Rising), Along: new WorldShapingAlong(Engage: risingEngage, Release: 46f)),
-                    new WorldShaping(When: new ActionPredicate.Recently(Fact: ActionFact.Grounded, WindowSeconds: 0.09f), Along: new WorldShapingAlong(Engage: 8f, Release: 8f)),
+                    new WorldShaping(When: new WorldPredicate.Now(Fact: ActionFact.Rising), Along: new WorldShapingAlong(Engage: risingEngage, Release: 46f)),
+                    new WorldShaping(When: new WorldPredicate.Recently(Fact: ActionFact.Grounded, WindowSeconds: 0.09f), Along: new WorldShapingAlong(Engage: 8f, Release: 8f)),
                     new WorldShaping(Along: new WorldShapingAlong(Engage: 12f, Release: 12f)),
                 ]
             ),
             ActionsRaw: new Dictionary<string, ActionSpec> {
-                ["jump"] = new ActionSpec(OnPress: new ActionTrigger(Effects: [new ActionEffect.SetVerticalVelocity(Velocity: 9f)])),
+                ["jump"] = new ActionSpec(OnPress: new ActionTrigger(Effects: [new WorldEffect.SetVerticalVelocity(Velocity: 9f)])),
             },
             ProducersRaw: new Dictionary<string, BodyProgramParameters> {
                 ["roam"] = Fixtures.TravelerRoamParameters,
@@ -326,7 +326,7 @@ public sealed class ShapingRowLawTests {
             var shaping = new List<WorldShaping>();
 
             if (withHeldRow) {
-                shaping.Add(item: new WorldShaping(When: new ActionPredicate.Held(Channel: "drift"), Along: new WorldShapingAlong(Engage: 2f, Release: 2f)));
+                shaping.Add(item: new WorldShaping(When: new WorldPredicate.Held(Channel: "drift"), Along: new WorldShapingAlong(Engage: 2f, Release: 2f)));
             }
 
             shaping.Add(item: new WorldShaping(Along: new WorldShapingAlong(Engage: 40f, Release: 40f)));

@@ -136,24 +136,6 @@ public sealed partial class WorldServer {
         if (query is WorldQuery.StateObservations observation) { return AnswerStateObservations(principal, observation.Row); }
         return Answer(query: query);
     }
-    // Compile-time kind matching proves the source and destination encodings agree. WorldFact carries that raw value
-    // directly, so full-width integers are copied without first narrowing through Q48.16.
-    private static long ConvertWorldFactToRaw(WorldFact value, CellKind kind) => kind switch {
-        CellKind.Bool => ((value.Value != 0L)
-        ? 1L
-        : 0L),
-        _ => value.Value,
-    };
-    private static WorldFact Finite(FixedQ4816 value) => new(
-        IsForever: false,
-        Kind: CellKind.Fixed,
-        Value: value.Value
-    );
-    private static WorldFact Finite(long value, CellKind kind) => new(
-        IsForever: false,
-        Kind: kind,
-        Value: value
-    );
     // $distance: — the straight-line distance between two named bodies, read through WorldServer.Body(int)'s own
     // bounds check (null for an out-of-range index or an inactive slot). Either side missing reads as
     // s_noBodyDistance rather than zero (see its own remarks).
@@ -252,76 +234,6 @@ public sealed partial class WorldServer {
 
         return (Body(index: seat)?.ChannelReadComposed[ordinal] ?? FixedQ4816.Zero);
     }
-    // The $reduce: aggregate — a thin delegation to WorldStateReader.Reduce, the ONE (row, key) read seam's sibling
-    // for a whole-row aggregate: it resolves EACH cell's value through TryRead's own per-key path (not the row's
-    // declared cell list raw), so a future per-cell advance widening flows through here for free. Count is always
-    // integer regardless of the row's declared kind (a count is never fixed-point); Max/Min/Sum preserve the row's
-    // kind, matching the compiler's own ValueKind (WorldRuleCompiler.ResolveOperand's reduce branch). An empty row
-    // reads as zero for every op — the same "absent reads as zero" precedent ReadStateCell itself follows for a
-    // vanished cell.
-    private long ReadReduction(ReductionOperand operand, ulong tick) {
-        if (!WorldStateReader.TryReadHandle(
-            definition: m_definition,
-            catalog: m_definition.StateCatalog,
-            handle: operand.StateHandle,
-            key: null,
-            tick: tick,
-            row: out var declared,
-            rawValue: out _,
-            text: out _
-        )) {
-            return 0L;
-        }
-        if (operand.FilterRow is null) {
-            return StateReader.ReduceRaw(row: declared, op: operand.Reduce, tick: tick);
-        }
-
-        var hasValue = false;
-        var accumulator = 0L;
-        foreach (var cell in (declared.Cells ?? [])) {
-            if (
-                !WorldStateReader.TryReadHandle(
-                    definition: m_definition,
-                    catalog: m_definition.StateCatalog,
-                    handle: operand.FilterHandle,
-                    key: cell.Key.Value,
-                    tick: tick,
-                    row: out _,
-                    rawValue: out var filterRaw,
-                    text: out _
-                ) ||
-                (filterRaw.GetValueOrDefault() == 0L)
-            ) {
-                continue;
-            }
-            if (operand.Reduce == StateReduceOp.Count) {
-                accumulator++;
-                continue;
-            }
-            if (!WorldStateReader.TryRead(
-                definition: m_definition,
-                rowName: declared.Name,
-                key: cell.Key.Value,
-                tick: tick,
-                row: out _,
-                rawValue: out var raw,
-                text: out _
-            ) || raw is null) {
-                continue;
-            }
-
-            accumulator = (!hasValue
-                ? raw.Value
-                : operand.Reduce switch {
-                    StateReduceOp.Sum => unchecked(accumulator + raw.Value),
-                    StateReduceOp.Max => Math.Max(accumulator, raw.Value),
-                    _ => Math.Min(accumulator, raw.Value),
-                }
-            );
-            hasValue = true;
-        }
-        return accumulator;
-    }
     // Reads a declared cell as fixed point off the LIVE definition (Install swaps it on every apply, so this is
     // always this tick's settled document), through the ONE shared (row, key) resolver — which computes an advancing
     // row's LIVE value rather than its stored base, so a rule composes with the trait instead of duplicating it. A
@@ -374,174 +286,6 @@ public sealed partial class WorldServer {
             : StateReader.LiftSaturating(raw: raw)
         );
     }
-    // $symmetry: — the source cell read through the same resolver as an ordinary cell, its whole part taken as a
-    // lattice node, and one of SymmetryLattice's maps applied. A cell holding no node reads the neutral value: -1
-    // for the node-valued maps, 0 for orthogonal and the projections.
-    private FixedQ4816 ReadSymmetry(SymmetryOperand operand, ulong tick) {
-        var node = NodeOf(value: ReadStateCellByHandle(
-            handle: operand.StateHandle,
-            key: ResolveOperandKey(
-                key: operand.Key,
-                keyFrom: operand.KeyFrom,
-                tick: tick
-            ),
-            tick: tick
-        ));
-        var other = ((operand.SymmetryOtherCell is { } otherCell)
-            ? NodeOf(value: ReadStateCellByHandle(
-                handle: otherCell.Handle,
-                key: ((otherCell.Key.Length == 0) ? WorldStateRow.SlotKey.Value : otherCell.Key),
-                tick: tick
-            ))
-            : (int)Math.Clamp(value: operand.SymmetryArgument, min: -1L, max: (SymmetryLattice.NodeCount - 1L))
-        );
-        var neutral = ((operand.Symmetry is WorldSymmetryFunction.Orthogonal or WorldSymmetryFunction.InnerProduct or WorldSymmetryFunction.ProjectionX or WorldSymmetryFunction.ProjectionY) ? 0L : -1L);
-
-        if ((node < 0) || ((operand.Symmetry is WorldSymmetryFunction.Reflect or WorldSymmetryFunction.Orthogonal or WorldSymmetryFunction.InnerProduct) && (other < 0))) {
-            return FixedQ4816.FromInteger(value: neutral);
-        }
-
-        return operand.Symmetry switch {
-            WorldSymmetryFunction.Ring => FixedQ4816.FromInteger(value: SymmetryLattice.Ring(node: node)),
-            WorldSymmetryFunction.Antipode => FixedQ4816.FromInteger(value: SymmetryLattice.Antipode(node: node)),
-            WorldSymmetryFunction.CanonicalRay => FixedQ4816.FromInteger(value: SymmetryLattice.CanonicalRay(node: node)),
-            WorldSymmetryFunction.Cycle => FixedQ4816.FromInteger(value: SymmetryLattice.Cycle(node: node, steps: operand.SymmetryArgument)),
-            WorldSymmetryFunction.Reflect => FixedQ4816.FromInteger(value: SymmetryLattice.Reflect(mirror: other, node: node)),
-            WorldSymmetryFunction.Orthogonal => FixedQ4816.FromInteger(value: (SymmetryLattice.AreOrthogonal(first: node, second: other) ? 1L : 0L)),
-            WorldSymmetryFunction.InnerProduct => FixedQ4816.FromInteger(value: SymmetryLattice.InnerProduct(first: node, second: other)),
-            WorldSymmetryFunction.ProjectionX => SymmetryLattice.Project(node: node).X,
-            _ => SymmetryLattice.Project(node: node).Y,
-        };
-    }
-    // A fact's whole part as a lattice node, or -1 when it names none.
-    private static int NodeOf(FixedQ4816 value) {
-        var whole = (value.Value >> FixedQ4816.FractionBitCount);
-
-        return (((whole < 0L) || (whole >= SymmetryLattice.NodeCount)) ? -1 : (int)whole);
-    }
-    // Shared by both sides of a compareState conjunct — the primary operand and, when present, the comparand — so
-    // the two reads can never diverge in how a reserved channel or a declared row resolves to a live fact.
-    private WorldFact ReadWorldFact(CompiledWorldOperand operand, ulong tick) => operand.Value switch {
-        BindingOperand bound => Finite(value: m_ruleBindingValues[bound.Ordinal], kind: bound.ValueKind),
-        TableOperand table => ReadTableFact(operand: table, tick: tick),
-        PhaseOperand phase => Finite(ReadPhaseFact(phase, tick), CellKind.Int),
-        BoardOperand board => Finite(ReadBoardFact(board, tick), CellKind.Int),
-        PatternOperand pattern => Finite(ReadPatternFact(pattern, tick), CellKind.Int),
-        HistoryOperand history => Finite(ReadHistoryFact(history, tick), history.ValueKind),
-        ClockOperand => Finite(value: ReadClockPhaseError(), kind: CellKind.Int),
-        TickOperand => Finite(value: unchecked((long)tick), kind: CellKind.Int),
-        PopulationOperand => Finite(value: m_population.ActiveCount(), kind: CellKind.Int),
-        PhysicsQuiescentOperand => Finite(value: (m_population.RigidBodiesQuiescent() ? 1 : 0), kind: CellKind.Bool),
-        RegionOccupancyOperand region => Finite(value: m_events.OccupantCount(placementId: region.Row), kind: CellKind.Int),
-        // $link: — the same per-tick staleness the link event family's own threshold comparison reads, in SIMULATION
-        // ticks. An edge whose livenessGraceSeconds is unauthored is held at 0 by the feed itself, so a staleness
-        // gate stays closed rather than opening on a world that never asked for liveness sensing.
-        LinkStalenessOperand link => Finite(value: m_events.LinkStalenessTicks(adjacencyName: link.Row), kind: CellKind.Int),
-        // The same IWorldMachineMemoryPeek.TryPeek primitive WorldAddonRuntime's memory-watch family already rides,
-        // called directly instead of accumulated as a change event. No machine booted (or no peek capability) reads
-        // as 0 — never a hard refusal, since the machine can boot on a later tick.
-        MachineMemoryOperand machine => Finite(value: (Machines.TryPeek(
-        screen: machine.Screen,
-        address: machine.Address,
-        out var raw
-    )
-        ? raw
-        : (byte)0), kind: CellKind.Int),
-        ReductionOperand reduction => Finite(value: ReadReduction(operand: reduction, tick: tick), kind: reduction.ValueKind),
-        ArgBodyOperand argBody => Finite(value: ResolveArgBody(
-        handle: argBody.StateHandle,
-        op: argBody.Reduce,
-        tick: tick,
-        filterHandle: argBody.FilterHandle,
-        hasFilter: (argBody.FilterRow is not null)
-    ), kind: CellKind.Int),
-        BodyDistanceOperand distance => Finite(value: ReadBodyDistance(
-        bodyA: distance.BodyA,
-        bodyB: distance.BodyB,
-        tick: tick
-    )),
-        LineOfSightOperand los => Finite(value: (ReadBodyLineOfSight(
-        bodyA: los.BodyA,
-        bodyB: los.BodyB,
-        tick: tick
-    )
-        ? 1
-        : 0), kind: CellKind.Bool),
-        UprightOperand upright => Finite(value: ReadBodyUpright(
-        bodyRef: upright.BodyA,
-        tick: tick
-    )),
-        NavigationOperand navigation => Finite(
-            value: m_population.NavigationFact(
-                index: ResolveBodyRef(bodyRef: navigation.BodyA, tick: tick),
-                facet: navigation.Row
-            ),
-            kind: CellKind.Int
-        ),
-        // Preserve the reserved channel's authored contract: $parked reports the population deadline's own
-        // SIMULATION-tick unit. Engine-tick countdown rows use countdownState instead; changing this unrelated
-        // channel's unit would silently retune every existing raw compareState threshold and fromState copy.
-        ParkedOperand parked => ((ReadParkedRemaining(
-        bodyRef: parked.BodyA,
-        tick: tick
-    ) is { } remaining)
-        ? Finite(value: remaining, kind: CellKind.Int)
-        : new WorldFact(
-            Value: 0L,
-            Kind: CellKind.Int,
-            IsForever: true
-        )),
-        ChannelOperand channel => Finite(value: ReadChannelValue(
-        seat: channel.Seat,
-        ordinal: channel.ChannelOrdinal
-    )),
-        NearestOperand nearest => Finite(value: ResolveNearestBody(
-        from: nearest.BodyA,
-        tagRowHandle: nearest.StateHandle,
-        tick: tick
-    ), kind: CellKind.Int),
-        SymmetryOperand symmetry => Finite(value: ConvertFixedToRaw(
-        value: ReadSymmetry(
-        operand: symmetry,
-        tick: tick
-    ), kind: symmetry.ValueKind), kind: symmetry.ValueKind),
-        StateCellOperand stateCell => ReadStateFact(
-        handle: stateCell.StateHandle,
-        key: ResolveOperandKey(
-        key: stateCell.Key,
-        keyFrom: stateCell.KeyFrom,
-        tick: tick
-    ),
-        tick: tick
-    ),
-        _ => throw new InvalidOperationException($"unhandled compiled world operand case '{operand.Value?.GetType().Name}'"),
-    };
-
-    private WorldFact ReadStateFact(StateHandle handle, string key, ulong tick) {
-        if (
-            !WorldStateReader.TryReadHandle(
-                definition: m_definition,
-                catalog: m_definition.StateCatalog,
-                handle: handle,
-                key: key,
-                rawValue: out var rawValue,
-                row: out var declared,
-                text: out _,
-                tick: tick
-            ) ||
-            (rawValue is not { } raw)
-        ) {
-            return Finite(value: 0L, kind: CellKind.Int);
-        }
-
-        return Finite(value: raw, kind: declared.Kind);
-    }
-
-    private static long ConvertFixedToRaw(FixedQ4816 value, CellKind kind) => kind switch {
-        CellKind.Fixed => value.Value,
-        CellKind.Bool => ((value.Value == 0L) ? 0L : 1L),
-        _ => (value.Value >> FixedQ4816.FractionBitCount),
-    };
     // The $argmax:/$argmin: extremum — a thin delegation to WorldStateReader.ArgExtremum, the same per-key read seam
     // ReadReduction's sibling resolves each candidate cell through, filtered here to the body indices the LIVE
     // population actually holds (a cell whose key does not parse as a non-negative index is excluded inside the
@@ -586,14 +330,14 @@ public sealed partial class WorldServer {
     // effect is read, -1 when a binding is not in play.
     private int m_boundEach = -1;
     // The enclosing rule's bound values for the evaluation in flight (CompiledRuleBinding.Ordinal indexes it).
-    private readonly long[] m_ruleBindingValues = new long[WorldRuleCapacity.MaxBindingsPerRule];
+    private readonly long[] m_ruleBindingValues = new long[RuleCapacity.MaxBindingsPerRule];
     private int m_boundLeft = -1;
     private int m_boundRight = -1;
 
-    private int BoundBody(RuleBinding binding) => binding switch {
-        RuleBinding.Each => m_boundEach,
-        RuleBinding.Left => m_boundLeft,
-        RuleBinding.Right => m_boundRight,
+    private int BoundBody(BoundKey binding) => binding switch {
+        BoundKey.Each => m_boundEach,
+        BoundKey.Left => m_boundLeft,
+        BoundKey.Right => m_boundRight,
         _ => -1,
     };
     // The static tables the definition references, in tables-row order; a validated document's rows are proven to
@@ -615,24 +359,6 @@ public sealed partial class WorldServer {
     // fails, so a missing entry is a reported refusal rather than a value.
     private bool m_tableKeyMissing;
     private string m_tableKeyMissingRule = string.Empty;
-    private WorldFact ReadTableFact(TableOperand operand, ulong tick) {
-        var key = operand.Key;
-        if (operand.KeyBinding >= 0) {
-            key = m_ruleBindingValues[operand.KeyBinding];
-        } else if (operand.KeyFrom is { } indirection) {
-            key = ((indirection.Binding == RuleBinding.Each)
-                ? m_boundEach
-                : ((indirection.Binding != RuleBinding.None)
-                    ? BoundBody(binding: indirection.Binding)
-                    : IntegerOf(value: ReadStateCellByHandle(handle: indirection.Handle, key: indirection.Key, tick: tick))));
-        }
-        if (m_tables[operand.TableOrdinal].TryLookup(key: key, column: operand.Column, raw: out var raw)) {
-            return Finite(value: raw, kind: operand.ValueKind);
-        }
-        m_tableKeyMissing = true;
-        ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.TableKeyMissing, ruleName: m_tableKeyMissingRule, effect: $"$table:{operand.Table}", tick: tick, detail: $"key {key} is not an entry of table '{operand.Table}'");
-        return new WorldFact(Value: 0L, Kind: operand.ValueKind, IsForever: true);
-    }
     /// <summary>Describes every static table the definition references: name, kind, entry count.</summary>
     public string DescribeTables() {
         if (m_tables.Length == 0) {
@@ -640,46 +366,6 @@ public sealed partial class WorldServer {
         }
         return $"[world.tables: {string.Join(separator: " | ", values: m_tables.Select(selector: static table => $"{table.Name} kind={table.Kind.ToString().ToLowerInvariant()} entries={table.Count}{((table.ColumnNames.Count > 0) ? $" columns=[{string.Join(separator: ",", values: table.ColumnNames)}]" : string.Empty)}"))}]";
     }
-    // A '$cell:' key indirection reads the cell's integer value as a key; a binding token reads the bound body; a
-    // '$pair:' key resolves both live body references and composes the directed (observer, subject) key.
-    private string ResolveOperandKey(string? key, CompiledCellRef? keyFrom, ulong tick) {
-        if (keyFrom is not { } indirection) {
-            return key!;
-        }
-
-        if (indirection.PairBodyA is { } pairBodyA && indirection.PairBodyB is { } pairBodyB) {
-            return ResolvePairKey(
-                a: ResolveBodyRef(bodyRef: pairBodyA, tick: tick),
-                b: ResolveBodyRef(bodyRef: pairBodyB, tick: tick)
-            );
-        }
-
-        if (indirection.Binding == RuleBinding.Token) {
-            return m_patternTokenKey ?? throw new InvalidOperationException("a $token key was read outside a pattern value expression");
-        }
-        if (indirection.Binding == RuleBinding.Each && m_boundEachKey is { } eachKey) {
-            return eachKey;
-        }
-
-        if (indirection.Binding != RuleBinding.None) {
-            return WorldBodyKeyCache.Get(index: BoundBody(binding: indirection.Binding));
-        }
-
-        // The ROW is fixed ('pieceCell'), but a '$cell:<row>:<key>' indirection whose OWN inner key spelled a
-        // binding token reads whichever cell THIS evaluation is at, never the compile-time Key (empty here) — see
-        // CompiledCellRef.InnerKeyBinding's own remarks.
-        var innerKey = ((indirection.InnerKeyBinding == RuleBinding.Each) && (m_boundEachKey is { } eachInnerKey)
-            ? eachInnerKey
-            : indirection.Key
-        );
-
-        return WorldBodyKeyCache.Get(index: IntegerOf(value: ReadStateCellByHandle(
-            handle: indirection.Handle,
-            key: innerKey,
-            tick: tick
-        )));
-    }
-
     // Canonical "a_b" pair keys (underscore, not colon: CellName reserves ':'), cached per distinct DIRECTED
     // pair once minted so a steady-state rule scan allocates nothing: (a, b) and (b, a) name different cells (an
     // observer's impression of a subject is not the reverse), and the domain (population capacity squared) is too
@@ -743,7 +429,7 @@ public sealed partial class WorldServer {
     }
     private int ResolveBodyRef(CompiledBodyRef bodyRef, ulong tick) => (bodyRef.Kind switch {
         CompiledBodyRefKind.Literal => bodyRef.Index,
-        CompiledBodyRefKind.Binding => BoundBody(binding: ((RuleBinding)bodyRef.Index)),
+        CompiledBodyRefKind.Binding => BoundBody(binding: ((BoundKey)bodyRef.Index)),
         CompiledBodyRefKind.Cell => (((IntegerOf(value: ReadStateCellByHandle(
         handle: bodyRef.Handle,
         key: bodyRef.Key!,
@@ -875,23 +561,4 @@ public sealed partial class WorldServer {
         };
     }
 
-    // One live fact off a rule operand: a fixed-point value, or POSITIVE INFINITY (IsForever) for the one channel
-    // whose magnitude can exceed every number — $parked: on a forever-parked body. Infinity participates in
-    // comparisons through the ActionStateComparisons overload and is never encoded as a numeric stand-in.
-    private readonly record struct WorldFact(long Value, CellKind Kind, bool IsForever);
-    private long ReadPhaseFact(PhaseOperand operand, ulong tick) {
-        if (!WorldStateReader.TryReadHandle(
-            catalog: m_definition.StateCatalog,
-            definition: m_definition,
-            handle: operand.StateHandle,
-            key: null,
-            rawValue: out _,
-            row: out var declared,
-            text: out _,
-            tick: tick
-        )) {
-            return -1;
-        }
-        return declared.Phase?.Sequence ?? -1;
-    }
 }

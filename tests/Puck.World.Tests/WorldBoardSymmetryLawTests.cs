@@ -69,7 +69,7 @@ public sealed class WorldBoardSymmetryLawTests {
                 new ValueToken.State(Name: "$board:mask:board:1:2"), new ValueToken.BoardImage(Topology: "map", Element: "rot45"),
             ]))]),
         ]);
-        Assert.Throws<WorldRuleException>(() => WorldRuleCompiler.CompileAll(badElement));
+        Assert.Throws<RuleException>(() => WorldRuleCompiler.CompileAll(badElement));
     }
 
     [Fact]

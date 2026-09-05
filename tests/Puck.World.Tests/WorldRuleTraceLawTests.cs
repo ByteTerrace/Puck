@@ -34,7 +34,7 @@ public sealed class WorldRuleTraceLawTests {
                 new ActionEffect.AddState(State: "hits", Value: 1m),
             ],
             Gate: new ActionPredicate.CompareState(State: "hp", Comparison: ActionStateComparison.GreaterOrEqual, Value: 0m),
-            Bindings: [new WorldRuleBinding(CellName.Parse("dealt"), CellKind.Int, Expr("min(damage, hp)"))]
+            Bindings: [new RuleBinding(CellName.Parse("dealt"), CellKind.Int, Expr("min(damage, hp)"))]
         )],
     };
 
@@ -75,7 +75,7 @@ public sealed class WorldRuleTraceLawTests {
         var dividing = Document() with {
             StateRaw = new WorldStateSection(World: [Slot("damage", 30L), Slot("hp", 20L), Slot("hits", 0L), Slot("zero", 0L)]),
             Rules = [Document().Rules![0] with {
-                Bindings = [new WorldRuleBinding(CellName.Parse("dealt"), CellKind.Int, Expr("damage / zero"))],
+                Bindings = [new RuleBinding(CellName.Parse("dealt"), CellKind.Int, Expr("damage / zero"))],
             }],
         };
         using var refused = Fixtures.FreshServer(definition: dividing);

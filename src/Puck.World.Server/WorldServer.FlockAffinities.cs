@@ -1,7 +1,7 @@
 namespace Puck.World.Server;
 
 public sealed partial class WorldServer {
-    private bool EvaluateFlockAffinity(CompiledWorldExpressionToken[] program, int observer, int neighbor, out long value) {
+    private bool EvaluateFlockAffinity(CompiledExpressionToken[] program, int observer, int neighbor, out long value) {
         var left = m_boundLeft;
         var right = m_boundRight;
         m_boundLeft = observer;

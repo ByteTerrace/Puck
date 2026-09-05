@@ -22,8 +22,8 @@ public static partial class WorldStateTransforms {
         var mask = rows[maskIndex];
         Span<long> values = stackalloc long[topology.CellCount];
         Span<long> visible = stackalloc long[topology.CellCount];
-        WorldBoardQueries.Read(source, topology, values);
-        WorldBoardQueries.Read(mask, topology, visible);
+        BoardQueries.Read(source, topology, values);
+        BoardQueries.Read(mask, topology, visible);
         var cells = (row.Cells ?? []).Select(c => c with { Observation = c.Observation is { } previous ? previous with { Visible = false } : null }).ToList();
         for (var cell = 0; cell < topology.CellCount; cell++) {
             if (visible[cell] == 0) {
