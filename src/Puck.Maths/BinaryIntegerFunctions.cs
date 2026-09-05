@@ -57,6 +57,56 @@ public static class BinaryIntegerFunctions {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static T NthFermatNumber<T>(this int value) where T : IBinaryInteger<T> =>
         ((T.One << (1 << value)) + T.One);
+    /// <summary>Builds a word with one set bit at the bottom of every block of <paramref name="blockWidth"/> bits.</summary>
+    /// <typeparam name="T">The fixed-width binary integer type, signed or unsigned.</typeparam>
+    /// <param name="blockWidth">A positive divisor of the bit width of <typeparamref name="T"/>, including the whole word width.</param>
+    /// <returns>The replication mask; for example, <c>8.ReplicationMask&lt;uint&gt;()</c> is <c>0x01010101</c>.</returns>
+    /// <remarks>
+    /// For a W-bit word and b-bit blocks, the geometric series <c>1 + 2^b + 2^(2b) + ...</c> equals
+    /// <c>(2^W - 1) / (2^b - 1)</c>. A signed result carries the same bits as its unsigned counterpart;
+    /// in particular, one-bit blocks return an all-ones word. No shift by the whole word width is performed.
+    /// </remarks>
+    /// <exception cref="NotSupportedException"><typeparamref name="T"/> is <see cref="BigInteger"/>, which has no fixed word width.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="blockWidth"/> is not a positive divisor of the word width.</exception>
+    public static T ReplicationMask<T>(this int blockWidth) where T : IBinaryInteger<T> {
+        BinaryIntegerConstants<T>.ThrowIfUnbounded(operationName: nameof(ReplicationMask));
+
+        var bitWidth = (Unsafe.SizeOf<T>() << 3);
+
+        if ((blockWidth <= 0) || (blockWidth > bitWidth) || ((bitWidth % blockWidth) != 0)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(blockWidth), message: "The block width must be a positive divisor of the word width.");
+        }
+        if (blockWidth == bitWidth) { return T.One; }
+
+        var allBits = T.AllBitsSet;
+        var signed = T.IsNegative(value: allBits).As<int>();
+        var divisor = ((T.One << blockWidth) - T.One);
+
+        // Both the all-ones numerator and its exact quotient are odd. Halving the positive numerator for signed T
+        // yields (quotient - 1) / 2 after division; doubling and setting bit zero reconstructs the original bits.
+        return (((allBits >>> signed) / divisor) << signed) | T.One;
+    }
+    /// <summary>Repeats the low <paramref name="blockWidth"/> bits of <paramref name="value"/> across a fixed-width word.</summary>
+    /// <typeparam name="T">The fixed-width binary integer type, signed or unsigned.</typeparam>
+    /// <param name="value">The pattern, with no set bits outside its block. A whole-word block accepts every bit pattern, including negative values.</param>
+    /// <param name="blockWidth">A positive divisor of the bit width of <typeparamref name="T"/>, including the whole word width.</param>
+    /// <returns>The repeated pattern; for example, <c>0xABu.RepeatBits(8)</c> is <c>0xABABABAB</c>.</returns>
+    /// <remarks>
+    /// Multiplying the pattern by <see cref="ReplicationMask{T}(int)"/> places one copy in each block without
+    /// overlapping bits. The result is interpreted as a bit pattern, so a signed result may be negative.
+    /// </remarks>
+    /// <exception cref="NotSupportedException"><typeparamref name="T"/> is <see cref="BigInteger"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="blockWidth"/> is not a positive divisor of the word width, or <paramref name="value"/> has set bits outside the block.</exception>
+    public static T RepeatBits<T>(this T value, int blockWidth) where T : IBinaryInteger<T> {
+        var replication = blockWidth.ReplicationMask<T>();
+        var blockMask = (T.AllBitsSet >>> ((Unsafe.SizeOf<T>() << 3) - blockWidth));
+
+        if ((value & ~blockMask) != T.Zero) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(value), message: "The pattern must fit entirely within one block.");
+        }
+
+        return unchecked(value * replication);
+    }
     /// <summary>Computes two raised to the power <paramref name="value"/> (that is, <c>1 &lt;&lt; <paramref name="value"/></c>).</summary>
     /// <typeparam name="T">The binary integer type the result is produced in.</typeparam>
     /// <param name="value">The exponent.</param>
