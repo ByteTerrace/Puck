@@ -199,7 +199,7 @@ public sealed class HoldLawTests {
             ),
         };
     }
-    // One inhabitant placement: a wanderer of the fixture kit, standing on its own ground.
+    // One inhabitant placement: a roaming body of the fixture kit, standing on its own ground.
     private static WorldPlacement Den(string id, float x, float z) => new(
         Id: id,
         PrototypeId: "room",
@@ -214,7 +214,7 @@ public sealed class HoldLawTests {
             ),
             Kit: Fixtures.SeatKitName,
             Look: null,
-            Source: IntentSource.Producer(name: "wander")
+            Source: IntentSource.Producer(name: "roam")
         )
     );
     private static PlayerIntent Ascend() => Channel(
@@ -961,7 +961,7 @@ public sealed class HoldLawTests {
         }
     }
     [Fact]
-    public void AWanderingInhabitantSteersAgainstItsOwnHome_NotTheWorldOrigin() {
+    public void ARoamingInhabitantSteersAgainstItsOwnHome_NotTheWorldOrigin() {
         // Two inhabitant rows, identical in everything but where they stand: one at the origin, one far from it.
         // Before the producer measured against the body's own home, both converged on (0, 0) — the far one's whole
         // journey WAS the defect. The near row is the control: it must be unmoved by the change, since its home IS
@@ -1020,7 +1020,7 @@ public sealed class HoldLawTests {
 
         Assert.True(
             condition: (farFromHome < farFromOrigin),
-            userMessage: $"a wanderer keeps to its own ground: it ended {farFromHome} from home and {farFromOrigin} from the origin, at {far.FixedPosition}"
+            userMessage: $"a roaming body keeps to its own ground: it ended {farFromHome} from home and {farFromOrigin} from the origin, at {far.FixedPosition}"
         );
         // The discriminating number: the old pull would have carried it the whole 42 units to the origin.
         Assert.True(
@@ -1033,7 +1033,7 @@ public sealed class HoldLawTests {
         );
     }
     [Fact]
-    public void BodyWhereEchoesTheHomeAWandererSteersAgainst() {
+    public void BodyWhereEchoesTheHomeARoamingBodySteersAgainst() {
         var document = BuildHoldDocument(holds: [Ground(), Air()]);
         var placements = document.PlacementsRaw!.Rows!.ToList();
 

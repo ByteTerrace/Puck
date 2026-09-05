@@ -23,6 +23,7 @@ public sealed partial class NavigationLawTests {
             ["approach"] = 1f,
             ["orbit"] = 0f,
             ["altitudeGain"] = 2f,
+            ["approachAltitudeGain"] = 2f,
             ["inwardGain"] = 1f,
             ["turnScale"] = 2f,
             ["forward"] = 0f,

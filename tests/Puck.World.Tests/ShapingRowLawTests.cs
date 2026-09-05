@@ -64,7 +64,7 @@ public sealed class ShapingRowLawTests {
                 BodyMotionOp.CommitPose,
             ]
         );
-        var wander = new BodyMotionProgram(Name: "wander", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
+        var roam = new BodyMotionProgram(Name: "roam", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
         var kit = new WorldKit(
             Name: "walker-test",
             BodyMotionProgram: "walker",
@@ -95,14 +95,14 @@ public sealed class ShapingRowLawTests {
                 ["jump"] = new ActionSpec(OnPress: new ActionTrigger(Effects: [new ActionEffect.SetVerticalVelocity(Velocity: 9f)])),
             },
             ProducersRaw: new Dictionary<string, BodyProgramParameters> {
-                ["wander"] = Fixtures.TravelerWanderParameters,
+                ["roam"] = Fixtures.TravelerRoamParameters,
             },
             Collider: null
         );
 
         return Fixtures.BuildDocument() with {
             ChannelsRaw = channels,
-            BodyMotionProgramsRaw = [walker, wander],
+            BodyMotionProgramsRaw = [walker, roam],
             KitRowsRaw = [kit],
             DefaultSeatKitRaw = "walker-test",
         };
@@ -127,7 +127,7 @@ public sealed class ShapingRowLawTests {
                 BodyMotionOp.CommitPose,
             ]
         );
-        var wander = new BodyMotionProgram(Name: "wander", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
+        var roam = new BodyMotionProgram(Name: "roam", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
         var kit = new WorldKit(
             Name: "glider-test",
             BodyMotionProgram: "walker",
@@ -148,7 +148,7 @@ public sealed class ShapingRowLawTests {
                 ]
             ),
             ProducersRaw: new Dictionary<string, BodyProgramParameters> {
-                ["wander"] = Fixtures.TravelerWanderParameters,
+                ["roam"] = Fixtures.TravelerRoamParameters,
             },
             Collider: null
         );
@@ -156,7 +156,7 @@ public sealed class ShapingRowLawTests {
         return Fixtures.BuildDocument() with {
             ChannelsRaw = channels,
             DynamicsRaw = [.. Fixtures.StandardDynamics, new WorldDynamicsRow(Damping: 1f, Frequency: frequency, Name: "stride", Response: 0f)],
-            BodyMotionProgramsRaw = [walker, wander],
+            BodyMotionProgramsRaw = [walker, roam],
             KitRowsRaw = [kit],
             DefaultSeatKitRaw = "glider-test",
         };
@@ -320,7 +320,7 @@ public sealed class ShapingRowLawTests {
                 BodyMotionOp.CommitPose,
             ]
         );
-        var wander = new BodyMotionProgram(Name: "wander", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
+        var roam = new BodyMotionProgram(Name: "roam", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
 
         WorldDefinition Build(bool withHeldRow) {
             var shaping = new List<WorldShaping>();
@@ -342,13 +342,13 @@ public sealed class ShapingRowLawTests {
                     ],
                     Shaping: shaping
                 ),
-                ProducersRaw: new Dictionary<string, BodyProgramParameters> { ["wander"] = Fixtures.TravelerWanderParameters },
+                ProducersRaw: new Dictionary<string, BodyProgramParameters> { ["roam"] = Fixtures.TravelerRoamParameters },
                 Collider: null
             );
 
             return Fixtures.BuildDocument() with {
                 ChannelsRaw = channels,
-                BodyMotionProgramsRaw = [program, wander],
+                BodyMotionProgramsRaw = [program, roam],
                 KitRowsRaw = [kit],
                 DefaultSeatKitRaw = "held-row-test",
             };

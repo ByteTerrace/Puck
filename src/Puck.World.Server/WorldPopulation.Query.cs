@@ -742,7 +742,7 @@ public sealed partial class WorldPopulation {
     /// <summary>Activates the first <paramref name="count"/> census stand-ins (indices <c>4..</c>), clamped to
     /// <c>0..min(networkPlayers cap, </c><see cref="MaxSimulated"/><c>)</c>, and deactivates the rest. A newly-activated
     /// entry is re-seeded to a fresh spawn and given its own <see cref="WorldBody"/> (a server-authoritative spawn at that
-    /// pose); a deactivated entry drops its body; entries already active keep wandering. Bumps the revision only when an
+    /// pose); a deactivated entry drops its body; entries already active keep running their producers. Bumps the revision only when an
     /// occupancy flips.</summary>
     /// <param name="count">The requested active census count.</param>
     /// <param name="admitted">Optional sink for the peer generations admitted by the census change.</param>

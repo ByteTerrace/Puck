@@ -680,7 +680,7 @@ public sealed class FederationTransferLawTests {
     [Theory]
     public void ReservationWire_PreservesAnonymousAutonomousIntentSource(bool producer) {
         using var fixture = Fixtures.FreshServer();
-        var source = (producer ? IntentSource.Producer(name: "wander") : IntentSource.Idle);
+        var source = (producer ? IntentSource.Producer(name: "roam") : IntentSource.Idle);
         var color = new Vector3(x: 0.125f, y: 0.5f, z: 0.875f);
         var request = Reservation(border: "seam", sourceAuthority: "machine-a/boot", transferId: 31) with {
             PeerAdmission = true,

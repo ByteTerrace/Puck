@@ -10,10 +10,9 @@ public enum BodyMotionOp : byte {
 
     /// <summary>A steering intent: an oscillator weave, a radial restoring term toward a reference point, and a
     /// yaw-rate clamp, resolved into an advance/strafe/up (and, under <see cref="IntegrateLocalAttitude"/>,
-    /// pitch/roll) triple. The reference is the currently sensed target when this tick's
-    /// <see cref="SenseNearestInCone"/> found one, otherwise the body's own home register — so a program pairing
-    /// this with <see cref="SenseNearestInCone"/> approaches while a target is sensed and roams home the rest of the
-    /// time, and a program selecting this alone always roams.</summary>
+    /// pitch/roll) triple. When this tick's <see cref="SenseNearestInCone"/> found a target, the approach shape
+    /// governs. Otherwise the producer runs its roam shape only when it authors that shape's scalar set; an
+    /// approach-only producer omitting the set holds instead.</summary>
     ProduceSteeringIntent,
     FaceSensorTarget,
     /// <summary>Translates a bounded flock steering preference into ordinary motion channels.</summary>
@@ -39,7 +38,7 @@ public enum BodyMotionOp : byte {
     RunActionTriggers,
 
     /// <summary>Applies the current hold's vertical law: the row's own arc for a hold gravity keeps, a rate-limited
-    /// inward standoff for a grip, a fraction of that arc cancelled for a lift, nothing for a hold that holds by
+    /// inward standoff for a pull, a fraction of that arc cancelled for a lift, nothing for a hold that holds by
     /// itself — plus the row's own thrust, in every bond, while MoveUp is non-zero. A program selecting this op
     /// without <see cref="ResolveHold"/> refuses by name, since it applies whatever row that op selected.</summary>
     ApplyHold,

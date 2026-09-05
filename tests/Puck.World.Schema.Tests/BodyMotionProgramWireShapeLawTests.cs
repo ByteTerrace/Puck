@@ -30,7 +30,7 @@ public sealed class BodyMotionProgramWireShapeLawTests {
 """;
     private const string SensedProducerJson = """
 {
-  "name": "wander",
+  "name": "steering",
   "version": "puck.body-motion.v1",
   "kind": "Producer",
   "operations": [
@@ -82,7 +82,7 @@ public sealed class BodyMotionProgramWireShapeLawTests {
     [Fact]
     public void AuthoredRowRoundTripsThroughItsPinnedSpelling() {
         var program = new BodyMotionProgram(
-            Name: "wander",
+            Name: "steering",
             Version: BodyMotionProgram.CurrentVersion,
             Kind: BodyProgramKind.Producer,
             Operations: [BodyMotionOp.SenseNearestInCone, BodyMotionOp.ProduceSteeringIntent],

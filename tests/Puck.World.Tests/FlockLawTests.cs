@@ -26,7 +26,7 @@ public sealed class FlockLawTests {
                 ? [new WorldTargetRegister(Name: "goal", MaximumRange: 100, MaximumHalfAngleDegrees: 180, RequiresLineOfSight: false)]
                 : definition.TargetRegistersRaw,
             KitRowsRaw = [definition.Kits[0] with {
-                // Deliberately no wander producer: spawn/color must not depend on choosing that behavior.
+                // Deliberately no roam producer: spawn/color must not depend on choosing that behavior.
                 ProducersRaw = new Dictionary<string, BodyProgramParameters> {
                     ["flock"] = new(Scalars: new Dictionary<string, float>(), Channels: new Dictionary<string, string>(), Flock: profile),
                 },

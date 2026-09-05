@@ -82,6 +82,7 @@ public sealed class CurveFollowLawTests {
             ["approach"] = 1f,
             ["orbit"] = orbit,
             ["altitudeGain"] = 0f,
+            ["approachAltitudeGain"] = 0f,
             ["inwardGain"] = 3f,
             ["turnScale"] = 3f,
             ["forward"] = 0f,

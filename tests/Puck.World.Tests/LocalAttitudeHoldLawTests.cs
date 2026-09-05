@@ -68,7 +68,7 @@ public sealed class LocalAttitudeHoldLawTests {
                 BodyMotionOp.CommitPose,
             ]
         );
-        var wander = new BodyMotionProgram(Name: "wander", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
+        var roam = new BodyMotionProgram(Name: "roam", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
         var kit = new WorldKit(
             Name: "flyer-test",
             BodyMotionProgram: "free",
@@ -89,13 +89,13 @@ public sealed class LocalAttitudeHoldLawTests {
                 ["dash"] = new ActionSpec(OnPress: new ActionTrigger(Effects: [new ActionEffect.SetVerticalVelocity(Velocity: 5.5f)])),
             },
             ProducersRaw: new Dictionary<string, BodyProgramParameters> {
-                ["wander"] = Fixtures.TravelerWanderParameters,
+                ["roam"] = Fixtures.TravelerRoamParameters,
             },
             Collider: new WorldCollider.Capsule(Endpoint: new Vector3(x: 0f, y: 1f, z: 0f), Radius: 0.35f)
         );
 
         return Fixtures.BuildDocument() with {
-            BodyMotionProgramsRaw = [free, wander],
+            BodyMotionProgramsRaw = [free, roam],
             ChannelsRaw = channels,
             DefaultSeatKitRaw = "flyer-test",
             KitRowsRaw = [kit],
