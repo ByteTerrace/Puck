@@ -592,10 +592,18 @@ public sealed partial class WorldServer {
         RuleBinding.Right => m_boundRight,
         _ => -1,
     };
-    // A '$cell:' key indirection reads the cell's integer value as a key; a binding token reads the bound body.
+    // A '$cell:' key indirection reads the cell's integer value as a key; a binding token reads the bound body; a
+    // '$pair:' key resolves both live body references and composes the directed (observer, subject) key.
     private string ResolveOperandKey(string? key, CompiledCellRef? keyFrom, ulong tick) {
         if (keyFrom is not { } indirection) {
             return key!;
+        }
+
+        if (indirection.PairBodyA is { } pairBodyA && indirection.PairBodyB is { } pairBodyB) {
+            return ResolvePairKey(
+                a: ResolveBodyRef(bodyRef: pairBodyA, tick: tick),
+                b: ResolveBodyRef(bodyRef: pairBodyB, tick: tick)
+            );
         }
 
         if (indirection.Binding == RuleBinding.Token) {
@@ -615,6 +623,24 @@ public sealed partial class WorldServer {
         );
 
         return WorldBodyKeyCache.Get(index: index);
+    }
+
+    // Canonical "a_b" pair keys (underscore, not colon: WorldCellName reserves ':'), cached per distinct DIRECTED
+    // pair once minted so a steady-state rule scan allocates nothing: (a, b) and (b, a) name different cells (an
+    // observer's impression of a subject is not the reverse), and the domain (population capacity squared) is too
+    // large to precompute the way WorldBodyKeyCache's single-index table is, so this grows lazily instead — the
+    // first read of a never-before-seen pair mints its key once, and every later read of that same directed pair is
+    // a dictionary hit.
+    private readonly Dictionary<long, string> m_pairKeyCache = [];
+    private string ResolvePairKey(int a, int b) {
+        var packed = ((((long)a) << 32) | (uint)b);
+
+        if (!m_pairKeyCache.TryGetValue(key: packed, value: out var pairKey)) {
+            pairKey = $"{a}_{b}";
+            m_pairKeyCache[packed] = pairKey;
+        }
+
+        return pairKey;
     }
     // The nearest active body to 'from' (itself excluded) whose cell in the keyed tag row reads nonzero, or -1.
     private int ResolveNearestBody(CompiledBodyRef from, WorldStateHandle tagRowHandle, ulong tick) {

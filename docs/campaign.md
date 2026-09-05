@@ -926,9 +926,16 @@ gate and keeps re-blending every tick, by
 in a bespoke parallel store, it never had a federation-transfer story to dissolve either: an
 ordinary keyed row is local to its world, exactly like every other `state` row, so an individual's
 beliefs simply do not travel with it across a transfer — a real behavior change from the old
-system's frozen-observer export/import, and a deliberate one (nothing shipped exercised it). The
-garden re-authors `witness-claim`/`rumor`/`choose-companion` and the pack kit's `alignmentAffinity`
-onto a `boneHolderTrust` row keyed by observer, moving its hash. `hounds-meet` and its `affection`
+system's frozen-observer export/import, and a deliberate one (nothing shipped exercised it). An
+impression keyed by observer alone conflates every subject it has ever concerned — a hound's trust
+in whoever holds the bone right now silently becomes its trust in whoever holds it next the moment
+the bone changes hands. `$pair:<bodyRefA>:<bodyRefB>` (`WorldRuleFacts.PairKeyPrefix`) is the
+composite-key indirection that fixes it: on the same terms as `$cell:`, it resolves to a directed
+`"<a>_<b>"` cell key (`(a, b)` and `(b, a)` name different cells), so a keyed row holds one cell per
+(observer, subject) pair instead of one per observer. The garden re-authors `witness-claim`/`rumor`/
+`choose-companion` and the pack kit's `alignmentAffinity` onto `boneHolderTrust` keyed by
+`$pair:<observer>:cell:boneHolder:0` — each hound's own trust in whichever specific body it has
+witnessed holding the bone — moving its hash. `hounds-meet` and its `affection`
 dimension are retired rather than re-keyed: it was a Distance interaction (`O(population²)`
 worst-case reach) whose only effect was a delivery an ordinary `AddState` now prices at the
 engine's real conservative per-write cost — at this population size that product alone exceeds the

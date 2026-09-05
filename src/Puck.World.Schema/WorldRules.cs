@@ -178,6 +178,19 @@ public static class WorldRuleFacts {
     /// on a <c>compareState</c> <c>key</c>/<c>comparandKey</c> and on a world-scope effect's <c>key</c>/<c>fromKey</c>;
     /// a body-reference token spells the same indirection as <c>cell:&lt;row&gt;:&lt;key&gt;</c>.</summary>
     public const string CellKeyPrefix = "$cell:";
+    /// <summary>The prefix a cell KEY may carry to address a row by a genuine (observer, subject) pair rather than
+    /// one body: <c>$pair:&lt;bodyRefA&gt;:&lt;bodyRefB&gt;</c> resolves, at every read and every firing, to the
+    /// composite key <c>"&lt;a&gt;_&lt;b&gt;"</c> (underscore, since <see cref="WorldCellName"/> reserves <c>:</c>)
+    /// the two live body references (the same grammar <see cref="DistancePrefix"/>/<see cref="LineOfSightPrefix"/>
+    /// spend both halves on — a literal <c>body:&lt;n&gt;</c>, an <c>argmax:&lt;row&gt;</c>/<c>argmin:&lt;row&gt;</c>
+    /// reduction, a <c>cell:&lt;row&gt;:&lt;key&gt;</c> indirection, or a bound <c>each</c>/<c>left</c>/<c>right</c>)
+    /// resolve to — so a keyed row can hold one cell PER PAIR (an observer's own impression of one particular
+    /// subject) instead of one cell per body. <c>(a, b)</c> and <c>(b, a)</c> name different cells: the pair is
+    /// directed, exactly as "how much A trusts B" and "how much B trusts A" are two different numbers. Admitted
+    /// everywhere <see cref="CellKeyPrefix"/> is — a <c>compareState</c> <c>key</c>/<c>comparandKey</c>, a
+    /// world-scope effect's <c>key</c>/<c>fromKey</c>, a flock affinity's own key — because both resolve through the
+    /// same <see cref="CompiledCellRef"/> indirection carrier.</summary>
+    public const string PairKeyPrefix = "$pair:";
 
     /// <summary>The binding vocabulary, one row per <see cref="RuleBinding"/> other than <see cref="RuleBinding.None"/>:
     /// the key token (<c>$each</c>, <c>$left</c>, <c>$right</c>), the body-reference token derived from it by
@@ -401,16 +414,23 @@ public enum CompiledBodyRefKind : byte {
 /// row-name scan; <see langword="default"/> (invalid) otherwise.</param>
 public readonly record struct CompiledBodyRef(CompiledBodyRefKind Kind, int Index, string? Row, string? Key = null, WorldStateHandle Handle = default);
 /// <summary>A state cell address whose integer value is read as a cell KEY at evaluation time
-/// (<see cref="WorldRuleFacts.CellKeyPrefix"/>).</summary>
-/// <param name="Row">The row holding the indirection cell.</param>
-/// <param name="Key">The indirection cell's key.</param>
+/// (<see cref="WorldRuleFacts.CellKeyPrefix"/>), OR a live composite (observer, subject) pair key
+/// (<see cref="WorldRuleFacts.PairKeyPrefix"/>) — a keyed row can therefore be keyed by one body index, or by two,
+/// through the very same indirection carrier every dynamic key already resolves through.</summary>
+/// <param name="Row">The row holding the indirection cell, for a <c>$cell:</c> indirection; empty otherwise.</param>
+/// <param name="Key">The indirection cell's key, for a <c>$cell:</c> indirection; empty otherwise.</param>
 /// <param name="Binding">The bound body read as the key instead, when not <see cref="RuleBinding.None"/>; then
 /// <paramref name="Row"/>/<paramref name="Key"/> are empty.</param>
 /// <param name="Handle">The compiled handle for <paramref name="Row"/> when <paramref name="Binding"/> is
 /// <see cref="RuleBinding.None"/> — resolved once at compile time (see <see cref="WorldStateReader.TryReadHandle"/>)
 /// so the per-tick indirection read never repeats a row-name scan; <see langword="default"/> (invalid) for a
 /// binding-carried reference, which names no row.</param>
-public readonly record struct CompiledCellRef(string Row, string Key, RuleBinding Binding = RuleBinding.None, WorldStateHandle Handle = default);
+/// <param name="PairBodyA">The first body of a <c>$pair:</c> composite key, or <see langword="null"/> for a
+/// <c>$cell:</c>/binding indirection.</param>
+/// <param name="PairBodyB">The second body of a <c>$pair:</c> composite key; set exactly when
+/// <paramref name="PairBodyA"/> is.</param>
+public readonly record struct CompiledCellRef(string Row, string Key, RuleBinding Binding = RuleBinding.None, WorldStateHandle Handle = default,
+    CompiledBodyRef? PairBodyA = null, CompiledBodyRef? PairBodyB = null);
 /// <summary>A name bound during one evaluation of a rule or interaction — the body index a key token
 /// <c>$each</c>/<c>$left</c>/<c>$right</c> or a body-reference token <c>each</c>/<c>left</c>/<c>right</c> reads.</summary>
 public enum RuleBinding : byte {
@@ -937,6 +957,10 @@ public enum WorldRuleRefusal : byte {
     /// <c>argmax:&lt;row&gt;</c>/<c>argmin:&lt;row&gt;</c>).</summary>
     [Refusal(door: "world.rule.compile", condition: "a '$parked:' channel does not spell exactly one body-reference token ('body:<n>' or 'argmax:<row>'/'argmin:<row>')", kind: RefusalKind.Verdict)]
     ParkedChannelMalformed,
+
+    /// <summary>A <c>$pair:</c> key does not spell exactly two body-reference tokens each.</summary>
+    [Refusal(door: "world.rule.compile", condition: "a '$pair:' key does not spell exactly two body-reference tokens ('body:<n>', 'argmax:<row>'/'argmin:<row>', 'cell:<row>:<key>', or a bound each/left/right) each", kind: RefusalKind.Verdict)]
+    PairKeyMalformed,
 
     /// <summary>A <c>$link:</c> channel does not spell exactly one adjacency row name, or names a row the
     /// <c>adjacencies</c> section does not declare.</summary>

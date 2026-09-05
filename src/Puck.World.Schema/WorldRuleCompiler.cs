@@ -848,6 +848,36 @@ public static partial class WorldRuleCompiler {
         }
 
         if (
+            (key is not null) &&
+            key.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: WorldRuleFacts.PairKeyPrefix
+        )
+        ) {
+            var pairTokens = key[WorldRuleFacts.PairKeyPrefix.Length..].Split(separator: ':');
+            var pairWidthA = BodyRefTokenWidth(start: 0, tokens: pairTokens);
+
+            if (pairTokens.Length != (pairWidthA + BodyRefTokenWidth(start: pairWidthA, tokens: pairTokens))) {
+                throw new WorldRuleException(
+                    refusal: WorldRuleRefusal.PairKeyMalformed,
+                    ruleName: ruleName,
+                    detail: $"'{verb}' {keyFieldLabel} '{key}' does not spell '{WorldRuleFacts.PairKeyPrefix}<bodyRefA>:<bodyRefB>' (each {s_bodyRefVocabulary})"
+                );
+            }
+
+            var channel = $"{verb} {keyFieldLabel} '{key}'";
+
+            cell = new CompiledCellRef(
+                Row: string.Empty,
+                Key: string.Empty,
+                PairBodyA: ResolveBodyRefToken(channel: channel, definition: definition, ruleName: ruleName, start: 0, tokens: pairTokens),
+                PairBodyB: ResolveBodyRefToken(channel: channel, definition: definition, ruleName: ruleName, start: pairWidthA, tokens: pairTokens)
+            );
+
+            return true;
+        }
+
+        if (
             (key is null) ||
             !key.StartsWith(
             comparisonType: StringComparison.Ordinal,
