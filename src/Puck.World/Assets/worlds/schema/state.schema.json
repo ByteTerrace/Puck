@@ -175,7 +175,7 @@
             "additionalProperties": false
           },
           {
-            "description": "An axial hexagon, indexed in ascending r then q order.",
+            "description": "A hexagonal disk of the given radius, indexed in HexagonalIndex order: rings outward from the origin, consecutive indices adjacent.",
             "properties": {
               "$type": {
                 "const": "hex"
