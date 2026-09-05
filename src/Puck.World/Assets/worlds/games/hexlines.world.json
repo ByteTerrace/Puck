@@ -1,0 +1,2897 @@
+{
+  "kits": {
+    "rows": [
+      {
+        "bodyContact": "Solid",
+        "bodyMotionProgram": "walk",
+        "collider": {
+          "$type": "box",
+          "halfExtents": [
+            0.06,
+            0.024,
+            0.06
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        "motion": {
+          "facingSnap": true,
+          "holds": [
+            {
+              "bond": "Free",
+              "envelope": {
+                "sinkSpeed": 40
+              },
+              "gravity": {
+                "fall": 46,
+                "rise": 28
+              },
+              "hold": "Gravity",
+              "name": "air"
+            }
+          ],
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "speed": {
+            "value": 0.001
+          },
+          "turn": {
+            "rate": 0.001
+          }
+        },
+        "name": "hexStone",
+        "rigid": {
+          "angularDamping": 0.05,
+          "friction": 0.5,
+          "linearDamping": 0.05,
+          "mass": 0.05,
+          "restitution": 0.1,
+          "rollingFriction": 0.15
+        }
+      }
+    ]
+  },
+  "looks": {
+    "rows": [
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "hexStoneLight",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "hexStoneLight"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "hexStoneDark",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "hexStoneDark"
+        }
+      }
+    ]
+  },
+  "placements": {
+    "rows": [
+      {
+        "id": "hexTable",
+        "position": [
+          -16,
+          -0.5,
+          5
+        ],
+        "prototypeId": "hexTable",
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTrayLight",
+        "parent": "hexTable",
+        "position": [
+          0,
+          1.3,
+          -1.12
+        ],
+        "prototypeId": "hexStoneTray",
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTrayDark",
+        "parent": "hexTable",
+        "position": [
+          0,
+          1.3,
+          1.12
+        ],
+        "prototypeId": "hexStoneTray",
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneLight-0",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneLight",
+          "source": "Idle"
+        },
+        "parent": "hexTrayLight",
+        "position": [
+          -0.36,
+          0.15,
+          -0.14
+        ],
+        "prototypeId": "hexStoneLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneLight-1",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneLight",
+          "source": "Idle"
+        },
+        "parent": "hexTrayLight",
+        "position": [
+          -0.18,
+          0.15,
+          -0.14
+        ],
+        "prototypeId": "hexStoneLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneLight-2",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneLight",
+          "source": "Idle"
+        },
+        "parent": "hexTrayLight",
+        "position": [
+          0.0,
+          0.15,
+          -0.14
+        ],
+        "prototypeId": "hexStoneLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneLight-3",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneLight",
+          "source": "Idle"
+        },
+        "parent": "hexTrayLight",
+        "position": [
+          0.18,
+          0.15,
+          -0.14
+        ],
+        "prototypeId": "hexStoneLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneLight-4",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneLight",
+          "source": "Idle"
+        },
+        "parent": "hexTrayLight",
+        "position": [
+          0.36,
+          0.15,
+          -0.14
+        ],
+        "prototypeId": "hexStoneLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneLight-5",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneLight",
+          "source": "Idle"
+        },
+        "parent": "hexTrayLight",
+        "position": [
+          -0.36,
+          0.15,
+          0.0
+        ],
+        "prototypeId": "hexStoneLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneLight-6",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneLight",
+          "source": "Idle"
+        },
+        "parent": "hexTrayLight",
+        "position": [
+          -0.18,
+          0.15,
+          0.0
+        ],
+        "prototypeId": "hexStoneLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneLight-7",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneLight",
+          "source": "Idle"
+        },
+        "parent": "hexTrayLight",
+        "position": [
+          0.0,
+          0.15,
+          0.0
+        ],
+        "prototypeId": "hexStoneLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneLight-8",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneLight",
+          "source": "Idle"
+        },
+        "parent": "hexTrayLight",
+        "position": [
+          0.18,
+          0.15,
+          0.0
+        ],
+        "prototypeId": "hexStoneLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneLight-9",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneLight",
+          "source": "Idle"
+        },
+        "parent": "hexTrayLight",
+        "position": [
+          0.36,
+          0.15,
+          0.0
+        ],
+        "prototypeId": "hexStoneLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneLight-10",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneLight",
+          "source": "Idle"
+        },
+        "parent": "hexTrayLight",
+        "position": [
+          -0.36,
+          0.15,
+          0.14
+        ],
+        "prototypeId": "hexStoneLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneLight-11",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneLight",
+          "source": "Idle"
+        },
+        "parent": "hexTrayLight",
+        "position": [
+          -0.18,
+          0.15,
+          0.14
+        ],
+        "prototypeId": "hexStoneLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneLight-12",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneLight",
+          "source": "Idle"
+        },
+        "parent": "hexTrayLight",
+        "position": [
+          0.0,
+          0.15,
+          0.14
+        ],
+        "prototypeId": "hexStoneLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneLight-13",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneLight",
+          "source": "Idle"
+        },
+        "parent": "hexTrayLight",
+        "position": [
+          0.18,
+          0.15,
+          0.14
+        ],
+        "prototypeId": "hexStoneLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneLight-14",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneLight",
+          "source": "Idle"
+        },
+        "parent": "hexTrayLight",
+        "position": [
+          0.36,
+          0.15,
+          0.14
+        ],
+        "prototypeId": "hexStoneLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneDark-0",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneDark",
+          "source": "Idle"
+        },
+        "parent": "hexTrayDark",
+        "position": [
+          -0.36,
+          0.15,
+          -0.14
+        ],
+        "prototypeId": "hexStoneDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneDark-1",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneDark",
+          "source": "Idle"
+        },
+        "parent": "hexTrayDark",
+        "position": [
+          -0.18,
+          0.15,
+          -0.14
+        ],
+        "prototypeId": "hexStoneDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneDark-2",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneDark",
+          "source": "Idle"
+        },
+        "parent": "hexTrayDark",
+        "position": [
+          0.0,
+          0.15,
+          -0.14
+        ],
+        "prototypeId": "hexStoneDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneDark-3",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneDark",
+          "source": "Idle"
+        },
+        "parent": "hexTrayDark",
+        "position": [
+          0.18,
+          0.15,
+          -0.14
+        ],
+        "prototypeId": "hexStoneDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneDark-4",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneDark",
+          "source": "Idle"
+        },
+        "parent": "hexTrayDark",
+        "position": [
+          0.36,
+          0.15,
+          -0.14
+        ],
+        "prototypeId": "hexStoneDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneDark-5",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneDark",
+          "source": "Idle"
+        },
+        "parent": "hexTrayDark",
+        "position": [
+          -0.36,
+          0.15,
+          0.0
+        ],
+        "prototypeId": "hexStoneDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneDark-6",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneDark",
+          "source": "Idle"
+        },
+        "parent": "hexTrayDark",
+        "position": [
+          -0.18,
+          0.15,
+          0.0
+        ],
+        "prototypeId": "hexStoneDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneDark-7",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneDark",
+          "source": "Idle"
+        },
+        "parent": "hexTrayDark",
+        "position": [
+          0.0,
+          0.15,
+          0.0
+        ],
+        "prototypeId": "hexStoneDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneDark-8",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneDark",
+          "source": "Idle"
+        },
+        "parent": "hexTrayDark",
+        "position": [
+          0.18,
+          0.15,
+          0.0
+        ],
+        "prototypeId": "hexStoneDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneDark-9",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneDark",
+          "source": "Idle"
+        },
+        "parent": "hexTrayDark",
+        "position": [
+          0.36,
+          0.15,
+          0.0
+        ],
+        "prototypeId": "hexStoneDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneDark-10",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneDark",
+          "source": "Idle"
+        },
+        "parent": "hexTrayDark",
+        "position": [
+          -0.36,
+          0.15,
+          0.14
+        ],
+        "prototypeId": "hexStoneDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneDark-11",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneDark",
+          "source": "Idle"
+        },
+        "parent": "hexTrayDark",
+        "position": [
+          -0.18,
+          0.15,
+          0.14
+        ],
+        "prototypeId": "hexStoneDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneDark-12",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneDark",
+          "source": "Idle"
+        },
+        "parent": "hexTrayDark",
+        "position": [
+          0.0,
+          0.15,
+          0.14
+        ],
+        "prototypeId": "hexStoneDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneDark-13",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneDark",
+          "source": "Idle"
+        },
+        "parent": "hexTrayDark",
+        "position": [
+          0.18,
+          0.15,
+          0.14
+        ],
+        "prototypeId": "hexStoneDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexStoneDark-14",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "hexStone",
+          "look": "hexStoneDark",
+          "source": "Idle"
+        },
+        "parent": "hexTrayDark",
+        "position": [
+          0.36,
+          0.15,
+          0.14
+        ],
+        "prototypeId": "hexStoneDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-0",
+        "parent": "hexTable",
+        "position": [
+          0.0,
+          1.305,
+          0.0
+        ],
+        "prototypeId": "hexTileA",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-1",
+        "parent": "hexTable",
+        "position": [
+          0.2,
+          1.305,
+          0.0
+        ],
+        "prototypeId": "hexTileB",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-2",
+        "parent": "hexTable",
+        "position": [
+          0.1,
+          1.305,
+          0.173205
+        ],
+        "prototypeId": "hexTileC",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-3",
+        "parent": "hexTable",
+        "position": [
+          -0.1,
+          1.305,
+          0.173205
+        ],
+        "prototypeId": "hexTileB",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-4",
+        "parent": "hexTable",
+        "position": [
+          -0.2,
+          1.305,
+          0.0
+        ],
+        "prototypeId": "hexTileC",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-5",
+        "parent": "hexTable",
+        "position": [
+          -0.1,
+          1.305,
+          -0.173205
+        ],
+        "prototypeId": "hexTileB",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-6",
+        "parent": "hexTable",
+        "position": [
+          0.1,
+          1.305,
+          -0.173205
+        ],
+        "prototypeId": "hexTileC",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-7",
+        "parent": "hexTable",
+        "position": [
+          0.4,
+          1.305,
+          0.0
+        ],
+        "prototypeId": "hexTileC",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-8",
+        "parent": "hexTable",
+        "position": [
+          0.3,
+          1.305,
+          0.173205
+        ],
+        "prototypeId": "hexTileA",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-9",
+        "parent": "hexTable",
+        "position": [
+          0.2,
+          1.305,
+          0.34641
+        ],
+        "prototypeId": "hexTileB",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-10",
+        "parent": "hexTable",
+        "position": [
+          0.0,
+          1.305,
+          0.34641
+        ],
+        "prototypeId": "hexTileA",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-11",
+        "parent": "hexTable",
+        "position": [
+          -0.2,
+          1.305,
+          0.34641
+        ],
+        "prototypeId": "hexTileC",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-12",
+        "parent": "hexTable",
+        "position": [
+          -0.3,
+          1.305,
+          0.173205
+        ],
+        "prototypeId": "hexTileA",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-13",
+        "parent": "hexTable",
+        "position": [
+          -0.4,
+          1.305,
+          0.0
+        ],
+        "prototypeId": "hexTileB",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-14",
+        "parent": "hexTable",
+        "position": [
+          -0.3,
+          1.305,
+          -0.173205
+        ],
+        "prototypeId": "hexTileA",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-15",
+        "parent": "hexTable",
+        "position": [
+          -0.2,
+          1.305,
+          -0.34641
+        ],
+        "prototypeId": "hexTileC",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-16",
+        "parent": "hexTable",
+        "position": [
+          0.0,
+          1.305,
+          -0.34641
+        ],
+        "prototypeId": "hexTileA",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-17",
+        "parent": "hexTable",
+        "position": [
+          0.2,
+          1.305,
+          -0.34641
+        ],
+        "prototypeId": "hexTileB",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-18",
+        "parent": "hexTable",
+        "position": [
+          0.3,
+          1.305,
+          -0.173205
+        ],
+        "prototypeId": "hexTileA",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-19",
+        "parent": "hexTable",
+        "position": [
+          0.6,
+          1.305,
+          0.0
+        ],
+        "prototypeId": "hexTileA",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-20",
+        "parent": "hexTable",
+        "position": [
+          0.5,
+          1.305,
+          0.173205
+        ],
+        "prototypeId": "hexTileB",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-21",
+        "parent": "hexTable",
+        "position": [
+          0.4,
+          1.305,
+          0.34641
+        ],
+        "prototypeId": "hexTileC",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-22",
+        "parent": "hexTable",
+        "position": [
+          0.3,
+          1.305,
+          0.519615
+        ],
+        "prototypeId": "hexTileA",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-23",
+        "parent": "hexTable",
+        "position": [
+          0.1,
+          1.305,
+          0.519615
+        ],
+        "prototypeId": "hexTileC",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-24",
+        "parent": "hexTable",
+        "position": [
+          -0.1,
+          1.305,
+          0.519615
+        ],
+        "prototypeId": "hexTileB",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-25",
+        "parent": "hexTable",
+        "position": [
+          -0.3,
+          1.305,
+          0.519615
+        ],
+        "prototypeId": "hexTileA",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-26",
+        "parent": "hexTable",
+        "position": [
+          -0.4,
+          1.305,
+          0.34641
+        ],
+        "prototypeId": "hexTileB",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-27",
+        "parent": "hexTable",
+        "position": [
+          -0.5,
+          1.305,
+          0.173205
+        ],
+        "prototypeId": "hexTileC",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-28",
+        "parent": "hexTable",
+        "position": [
+          -0.6,
+          1.305,
+          0.0
+        ],
+        "prototypeId": "hexTileA",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-29",
+        "parent": "hexTable",
+        "position": [
+          -0.5,
+          1.305,
+          -0.173205
+        ],
+        "prototypeId": "hexTileC",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-30",
+        "parent": "hexTable",
+        "position": [
+          -0.4,
+          1.305,
+          -0.34641
+        ],
+        "prototypeId": "hexTileB",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-31",
+        "parent": "hexTable",
+        "position": [
+          -0.3,
+          1.305,
+          -0.519615
+        ],
+        "prototypeId": "hexTileA",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-32",
+        "parent": "hexTable",
+        "position": [
+          -0.1,
+          1.305,
+          -0.519615
+        ],
+        "prototypeId": "hexTileB",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-33",
+        "parent": "hexTable",
+        "position": [
+          0.1,
+          1.305,
+          -0.519615
+        ],
+        "prototypeId": "hexTileC",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-34",
+        "parent": "hexTable",
+        "position": [
+          0.3,
+          1.305,
+          -0.519615
+        ],
+        "prototypeId": "hexTileA",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-35",
+        "parent": "hexTable",
+        "position": [
+          0.4,
+          1.305,
+          -0.34641
+        ],
+        "prototypeId": "hexTileC",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-36",
+        "parent": "hexTable",
+        "position": [
+          0.5,
+          1.305,
+          -0.173205
+        ],
+        "prototypeId": "hexTileB",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-37",
+        "parent": "hexTable",
+        "position": [
+          0.8,
+          1.305,
+          0.0
+        ],
+        "prototypeId": "hexTileB",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-38",
+        "parent": "hexTable",
+        "position": [
+          0.7,
+          1.305,
+          0.173205
+        ],
+        "prototypeId": "hexTileC",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-39",
+        "parent": "hexTable",
+        "position": [
+          0.6,
+          1.305,
+          0.34641
+        ],
+        "prototypeId": "hexTileA",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-40",
+        "parent": "hexTable",
+        "position": [
+          0.5,
+          1.305,
+          0.519615
+        ],
+        "prototypeId": "hexTileB",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-41",
+        "parent": "hexTable",
+        "position": [
+          0.4,
+          1.305,
+          0.69282
+        ],
+        "prototypeId": "hexTileC",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-42",
+        "parent": "hexTable",
+        "position": [
+          0.2,
+          1.305,
+          0.69282
+        ],
+        "prototypeId": "hexTileB",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-43",
+        "parent": "hexTable",
+        "position": [
+          0.0,
+          1.305,
+          0.69282
+        ],
+        "prototypeId": "hexTileA",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-44",
+        "parent": "hexTable",
+        "position": [
+          -0.2,
+          1.305,
+          0.69282
+        ],
+        "prototypeId": "hexTileC",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-45",
+        "parent": "hexTable",
+        "position": [
+          -0.4,
+          1.305,
+          0.69282
+        ],
+        "prototypeId": "hexTileB",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-46",
+        "parent": "hexTable",
+        "position": [
+          -0.5,
+          1.305,
+          0.519615
+        ],
+        "prototypeId": "hexTileC",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-47",
+        "parent": "hexTable",
+        "position": [
+          -0.6,
+          1.305,
+          0.34641
+        ],
+        "prototypeId": "hexTileA",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-48",
+        "parent": "hexTable",
+        "position": [
+          -0.7,
+          1.305,
+          0.173205
+        ],
+        "prototypeId": "hexTileB",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-49",
+        "parent": "hexTable",
+        "position": [
+          -0.8,
+          1.305,
+          0.0
+        ],
+        "prototypeId": "hexTileC",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-50",
+        "parent": "hexTable",
+        "position": [
+          -0.7,
+          1.305,
+          -0.173205
+        ],
+        "prototypeId": "hexTileB",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-51",
+        "parent": "hexTable",
+        "position": [
+          -0.6,
+          1.305,
+          -0.34641
+        ],
+        "prototypeId": "hexTileA",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-52",
+        "parent": "hexTable",
+        "position": [
+          -0.5,
+          1.305,
+          -0.519615
+        ],
+        "prototypeId": "hexTileC",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-53",
+        "parent": "hexTable",
+        "position": [
+          -0.4,
+          1.305,
+          -0.69282
+        ],
+        "prototypeId": "hexTileB",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-54",
+        "parent": "hexTable",
+        "position": [
+          -0.2,
+          1.305,
+          -0.69282
+        ],
+        "prototypeId": "hexTileC",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-55",
+        "parent": "hexTable",
+        "position": [
+          0.0,
+          1.305,
+          -0.69282
+        ],
+        "prototypeId": "hexTileA",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-56",
+        "parent": "hexTable",
+        "position": [
+          0.2,
+          1.305,
+          -0.69282
+        ],
+        "prototypeId": "hexTileB",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-57",
+        "parent": "hexTable",
+        "position": [
+          0.4,
+          1.305,
+          -0.69282
+        ],
+        "prototypeId": "hexTileC",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-58",
+        "parent": "hexTable",
+        "position": [
+          0.5,
+          1.305,
+          -0.519615
+        ],
+        "prototypeId": "hexTileB",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-59",
+        "parent": "hexTable",
+        "position": [
+          0.6,
+          1.305,
+          -0.34641
+        ],
+        "prototypeId": "hexTileA",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-60",
+        "parent": "hexTable",
+        "position": [
+          0.7,
+          1.305,
+          -0.173205
+        ],
+        "prototypeId": "hexTileC",
+        "scale": 1,
+        "yawDegrees": 0
+      }
+    ]
+  },
+  "prototypes": [
+    {
+      "document": {
+        "name": "hexTable",
+        "palette": [
+          {
+            "color": "state.hexTableColors.wood",
+            "shininess": 12,
+            "specular": 0.08
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "top0",
+            "position": [
+              0,
+              1.25,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              1.71,
+              0.05,
+              1.47224
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Intersection",
+            "id": 1,
+            "material": 0,
+            "name": "top1",
+            "position": [
+              0,
+              1.25,
+              0
+            ],
+            "rotation": [
+              0,
+              0.5,
+              0,
+              0.866025
+            ],
+            "scale": [
+              1.71,
+              0.05,
+              1.47224
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Intersection",
+            "id": 2,
+            "material": 0,
+            "name": "top2",
+            "position": [
+              0,
+              1.25,
+              0
+            ],
+            "rotation": [
+              0,
+              0.866025,
+              0,
+              0.5
+            ],
+            "scale": [
+              1.71,
+              0.05,
+              1.47224
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 3,
+            "material": 0,
+            "name": "plinth",
+            "position": [
+              0,
+              0.6,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.35,
+              0.6,
+              0.35
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "Union",
+            "id": 4,
+            "material": 0,
+            "name": "foot",
+            "position": [
+              0,
+              0.04,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.85,
+              0.04,
+              0.85
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          }
+        ]
+      },
+      "id": "hexTable"
+    },
+    {
+      "document": {
+        "name": "hexTileA",
+        "palette": [
+          {
+            "color": "state.hexTileColors.a",
+            "shininess": 8,
+            "specular": 0.05
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "tile0",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.0948038,
+              0.005,
+              0.11947
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Intersection",
+            "id": 1,
+            "material": 0,
+            "name": "tile1",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0.5,
+              0,
+              0.866025
+            ],
+            "scale": [
+              0.0948038,
+              0.005,
+              0.11947
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Intersection",
+            "id": 2,
+            "material": 0,
+            "name": "tile2",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0.866025,
+              0,
+              0.5
+            ],
+            "scale": [
+              0.0948038,
+              0.005,
+              0.11947
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "hexTileA"
+    },
+    {
+      "document": {
+        "name": "hexTileB",
+        "palette": [
+          {
+            "color": "state.hexTileColors.b",
+            "shininess": 8,
+            "specular": 0.05
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "tile0",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.0948038,
+              0.005,
+              0.11947
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Intersection",
+            "id": 1,
+            "material": 0,
+            "name": "tile1",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0.5,
+              0,
+              0.866025
+            ],
+            "scale": [
+              0.0948038,
+              0.005,
+              0.11947
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Intersection",
+            "id": 2,
+            "material": 0,
+            "name": "tile2",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0.866025,
+              0,
+              0.5
+            ],
+            "scale": [
+              0.0948038,
+              0.005,
+              0.11947
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "hexTileB"
+    },
+    {
+      "document": {
+        "name": "hexTileC",
+        "palette": [
+          {
+            "color": "state.hexTileColors.c",
+            "shininess": 8,
+            "specular": 0.05
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "tile0",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.0948038,
+              0.005,
+              0.11947
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Intersection",
+            "id": 1,
+            "material": 0,
+            "name": "tile1",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0.5,
+              0,
+              0.866025
+            ],
+            "scale": [
+              0.0948038,
+              0.005,
+              0.11947
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Intersection",
+            "id": 2,
+            "material": 0,
+            "name": "tile2",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0.866025,
+              0,
+              0.5
+            ],
+            "scale": [
+              0.0948038,
+              0.005,
+              0.11947
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "hexTileC"
+    },
+    {
+      "document": {
+        "name": "hexStoneLight",
+        "palette": [
+          {
+            "color": "state.hexStoneColors.light",
+            "shininess": 40,
+            "specular": 0.3
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "lens",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.066,
+              0.024,
+              0.066
+            ],
+            "smooth": 0,
+            "type": "Ellipsoid"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 0,
+            "name": "core",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.056,
+              0.014,
+              0.056
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          }
+        ]
+      },
+      "id": "hexStoneLight"
+    },
+    {
+      "document": {
+        "name": "hexStoneDark",
+        "palette": [
+          {
+            "color": "state.hexStoneColors.dark",
+            "shininess": 40,
+            "specular": 0.3
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "lens",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.066,
+              0.024,
+              0.066
+            ],
+            "smooth": 0,
+            "type": "Ellipsoid"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 0,
+            "name": "core",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.056,
+              0.014,
+              0.056
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          }
+        ]
+      },
+      "id": "hexStoneDark"
+    },
+    {
+      "document": {
+        "name": "hexStoneTray",
+        "palette": [
+          {
+            "color": "state.hexTableColors.tray",
+            "shininess": 10,
+            "specular": 0.06
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "shell",
+            "position": [
+              0,
+              0.04,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.55,
+              0.04,
+              0.25
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Subtraction",
+            "id": 1,
+            "material": 0,
+            "name": "well",
+            "position": [
+              0,
+              0.06,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.52,
+              0.04,
+              0.22
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "hexStoneTray"
+    }
+  ],
+  "state": {
+    "lattices": [
+      {
+        "$type": "hex",
+        "cellSize": 0.2,
+        "name": "hexLinesBoard",
+        "origin": [
+          -16,
+          0.8,
+          5
+        ],
+        "radius": 4
+      }
+    ],
+    "world": [
+      {
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          },
+          {
+            "key": "3",
+            "value": 0
+          },
+          {
+            "key": "4",
+            "value": 0
+          },
+          {
+            "key": "5",
+            "value": 0
+          },
+          {
+            "key": "6",
+            "value": 0
+          },
+          {
+            "key": "7",
+            "value": 0
+          },
+          {
+            "key": "8",
+            "value": 0
+          },
+          {
+            "key": "9",
+            "value": 0
+          },
+          {
+            "key": "10",
+            "value": 0
+          },
+          {
+            "key": "11",
+            "value": 0
+          },
+          {
+            "key": "12",
+            "value": 0
+          },
+          {
+            "key": "13",
+            "value": 0
+          },
+          {
+            "key": "14",
+            "value": 0
+          },
+          {
+            "key": "15",
+            "value": 0
+          },
+          {
+            "key": "16",
+            "value": 0
+          },
+          {
+            "key": "17",
+            "value": 0
+          },
+          {
+            "key": "18",
+            "value": 0
+          },
+          {
+            "key": "19",
+            "value": 0
+          },
+          {
+            "key": "20",
+            "value": 0
+          },
+          {
+            "key": "21",
+            "value": 0
+          },
+          {
+            "key": "22",
+            "value": 0
+          },
+          {
+            "key": "23",
+            "value": 0
+          },
+          {
+            "key": "24",
+            "value": 0
+          },
+          {
+            "key": "25",
+            "value": 0
+          },
+          {
+            "key": "26",
+            "value": 0
+          },
+          {
+            "key": "27",
+            "value": 0
+          },
+          {
+            "key": "28",
+            "value": 0
+          },
+          {
+            "key": "29",
+            "value": 0
+          },
+          {
+            "key": "30",
+            "value": 0
+          },
+          {
+            "key": "31",
+            "value": 0
+          },
+          {
+            "key": "32",
+            "value": 0
+          },
+          {
+            "key": "33",
+            "value": 0
+          },
+          {
+            "key": "34",
+            "value": 0
+          },
+          {
+            "key": "35",
+            "value": 0
+          },
+          {
+            "key": "36",
+            "value": 0
+          },
+          {
+            "key": "37",
+            "value": 0
+          },
+          {
+            "key": "38",
+            "value": 0
+          },
+          {
+            "key": "39",
+            "value": 0
+          },
+          {
+            "key": "40",
+            "value": 0
+          },
+          {
+            "key": "41",
+            "value": 0
+          },
+          {
+            "key": "42",
+            "value": 0
+          },
+          {
+            "key": "43",
+            "value": 0
+          },
+          {
+            "key": "44",
+            "value": 0
+          },
+          {
+            "key": "45",
+            "value": 0
+          },
+          {
+            "key": "46",
+            "value": 0
+          },
+          {
+            "key": "47",
+            "value": 0
+          },
+          {
+            "key": "48",
+            "value": 0
+          },
+          {
+            "key": "49",
+            "value": 0
+          },
+          {
+            "key": "50",
+            "value": 0
+          },
+          {
+            "key": "51",
+            "value": 0
+          },
+          {
+            "key": "52",
+            "value": 0
+          },
+          {
+            "key": "53",
+            "value": 0
+          },
+          {
+            "key": "54",
+            "value": 0
+          },
+          {
+            "key": "55",
+            "value": 0
+          },
+          {
+            "key": "56",
+            "value": 0
+          },
+          {
+            "key": "57",
+            "value": 0
+          },
+          {
+            "key": "58",
+            "value": 0
+          },
+          {
+            "key": "59",
+            "value": 0
+          },
+          {
+            "key": "60",
+            "value": 0
+          }
+        ],
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "hexLinesBoard"
+        },
+        "kind": "int",
+        "max": 1,
+        "min": -1,
+        "name": "hexBoard"
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "hexTurn",
+        "value": 1
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "hexVerdict",
+        "value": 1
+      },
+      {
+        "capacity": 5,
+        "cells": [
+          {
+            "key": "captured",
+            "value": 0
+          },
+          {
+            "key": "from",
+            "value": -1
+          },
+          {
+            "key": "kind",
+            "value": 0
+          },
+          {
+            "key": "mover",
+            "value": 0
+          },
+          {
+            "key": "to",
+            "value": -1
+          }
+        ],
+        "kind": "int",
+        "max": 60,
+        "min": -1,
+        "name": "hexMove"
+      },
+      {
+        "capacity": 30,
+        "cells": [
+          {
+            "key": "hexStoneLight-0",
+            "value": -1
+          },
+          {
+            "key": "hexStoneLight-1",
+            "value": -1
+          },
+          {
+            "key": "hexStoneLight-2",
+            "value": -1
+          },
+          {
+            "key": "hexStoneLight-3",
+            "value": -1
+          },
+          {
+            "key": "hexStoneLight-4",
+            "value": -1
+          },
+          {
+            "key": "hexStoneLight-5",
+            "value": -1
+          },
+          {
+            "key": "hexStoneLight-6",
+            "value": -1
+          },
+          {
+            "key": "hexStoneLight-7",
+            "value": -1
+          },
+          {
+            "key": "hexStoneLight-8",
+            "value": -1
+          },
+          {
+            "key": "hexStoneLight-9",
+            "value": -1
+          },
+          {
+            "key": "hexStoneLight-10",
+            "value": -1
+          },
+          {
+            "key": "hexStoneLight-11",
+            "value": -1
+          },
+          {
+            "key": "hexStoneLight-12",
+            "value": -1
+          },
+          {
+            "key": "hexStoneLight-13",
+            "value": -1
+          },
+          {
+            "key": "hexStoneLight-14",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-0",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-1",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-2",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-3",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-4",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-5",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-6",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-7",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-8",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-9",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-10",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-11",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-12",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-13",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-14",
+            "value": -1
+          }
+        ],
+        "kind": "int",
+        "max": 60,
+        "min": -1,
+        "name": "hexStoneCell"
+      },
+      {
+        "capacity": 30,
+        "cells": [
+          {
+            "key": "hexStoneLight-0",
+            "value": 1
+          },
+          {
+            "key": "hexStoneLight-1",
+            "value": 1
+          },
+          {
+            "key": "hexStoneLight-2",
+            "value": 1
+          },
+          {
+            "key": "hexStoneLight-3",
+            "value": 1
+          },
+          {
+            "key": "hexStoneLight-4",
+            "value": 1
+          },
+          {
+            "key": "hexStoneLight-5",
+            "value": 1
+          },
+          {
+            "key": "hexStoneLight-6",
+            "value": 1
+          },
+          {
+            "key": "hexStoneLight-7",
+            "value": 1
+          },
+          {
+            "key": "hexStoneLight-8",
+            "value": 1
+          },
+          {
+            "key": "hexStoneLight-9",
+            "value": 1
+          },
+          {
+            "key": "hexStoneLight-10",
+            "value": 1
+          },
+          {
+            "key": "hexStoneLight-11",
+            "value": 1
+          },
+          {
+            "key": "hexStoneLight-12",
+            "value": 1
+          },
+          {
+            "key": "hexStoneLight-13",
+            "value": 1
+          },
+          {
+            "key": "hexStoneLight-14",
+            "value": 1
+          },
+          {
+            "key": "hexStoneDark-0",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-1",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-2",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-3",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-4",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-5",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-6",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-7",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-8",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-9",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-10",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-11",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-12",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-13",
+            "value": -1
+          },
+          {
+            "key": "hexStoneDark-14",
+            "value": -1
+          }
+        ],
+        "kind": "int",
+        "max": 1,
+        "min": -1,
+        "name": "hexStoneCode"
+      },
+      {
+        "cells": [
+          {
+            "key": "a",
+            "value": "#D9B98A"
+          },
+          {
+            "key": "b",
+            "value": "#B98A5C"
+          },
+          {
+            "key": "c",
+            "value": "#8C5E3C"
+          }
+        ],
+        "kind": "text",
+        "name": "hexTileColors"
+      },
+      {
+        "cells": [
+          {
+            "key": "light",
+            "value": "#F2EFE6"
+          },
+          {
+            "key": "dark",
+            "value": "#2B2B30"
+          }
+        ],
+        "kind": "text",
+        "name": "hexStoneColors"
+      },
+      {
+        "cells": [
+          {
+            "key": "wood",
+            "value": "#6F4E37"
+          },
+          {
+            "key": "tray",
+            "value": "#4A3728"
+          }
+        ],
+        "kind": "text",
+        "name": "hexTableColors"
+      }
+    ]
+  }
+}
