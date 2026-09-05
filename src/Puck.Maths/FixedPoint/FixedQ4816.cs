@@ -654,6 +654,7 @@ public readonly partial record struct FixedQ4816(long Value)
             shift: shift
         );
     }
+
     /// <summary>Returns <c>2^value</c> for an exponent carried at Q32 rather than Q16 — the same table and polynomial
     /// as <see cref="Exp2"/> fed twenty-five residual bits instead of nine, so a caller that formed its exponent at
     /// full width (<see cref="Pow"/>, <see cref="CoshSinh"/>) does not quantize it to the Q16 grid first.</summary>
@@ -681,6 +682,7 @@ public readonly partial record struct FixedQ4816(long Value)
             shift: shift
         );
     }
+
     // The shared tail of Exp2 and Exp2Q32: the interval mantissa times the quartic of the Q62 residual, then the
     // round-half-up narrowing by shift (46 − k), already known to be below 64.
     private static FixedQ4816 Exp2Mantissa(int index, long residualQ62, long shift) {
@@ -765,6 +767,7 @@ public readonly partial record struct FixedQ4816(long Value)
 
         return new(Value: ((((long)(integerPart - FractionBitCount)) << FractionBitCount) + ((fraction + (1L << 44)) >> 45)));
     }
+
     // The base-2 logarithm of a positive raw at Q46 — the same interval table and polynomial as Log2, its Q61 fraction
     // rounded by fifteen bits instead of forty-five — for callers that multiply the logarithm before rounding.
     private static long Log2Q46(FixedQ4816 value) {
@@ -774,6 +777,7 @@ public readonly partial record struct FixedQ4816(long Value)
 
         return ((((long)(integerPart - FractionBitCount)) << 46) + ((fraction + (1L << 14)) >> 15));
     }
+
     /// <summary>Returns <paramref name="x"/> raised to the power <paramref name="y"/>.</summary>
     /// <param name="x">The base. A negative base is supported at every whole exponent, where the parity of the
     /// exponent carries the sign; at a non-whole exponent it yields <see cref="Zero"/>, because the real power is not
@@ -1238,6 +1242,7 @@ public readonly partial record struct FixedQ4816(long Value)
             angle: angle.Value,
             fractionBitCount: FractionBitCount
         );
+
     /// <summary>Returns the sine and cosine of half of <paramref name="angle"/> — the half angle taken exactly in the
     /// turn domain, one bit further down, so an odd raw angle loses nothing to a prior Q16 halving.</summary>
     internal static (FixedQ4816 Sin, FixedQ4816 Cos) SinCosHalfAngle(FixedQ4816 angle) =>
@@ -1252,6 +1257,7 @@ public readonly partial record struct FixedQ4816(long Value)
             angle: angleQ32,
             fractionBitCount: (2 * FractionBitCount)
         );
+
     // Reduce in turns: raw · round(2^64/2π) = turns · 2^(64 + fractionBitCount); the two's-complement wrap of the
     // 128-bit product is the exact mod-one-turn reduction. Reduced on the magnitude and re-signed, so the turn of −θ
     // is exactly the negation of the turn of θ and the pair comes out odd in the sine and even in the cosine.
@@ -1290,7 +1296,6 @@ public readonly partial record struct FixedQ4816(long Value)
             ? -cosRaw
             : cosRaw)));
     }
-
     // Q60 → Q16 for the circular pair: round to nearest with ties to even on the magnitude, then re-sign, so the
     // narrowing commutes with negation.
     private static long NarrowSinCosQ60(long value) {
@@ -1300,7 +1305,7 @@ public readonly partial record struct FixedQ4816(long Value)
         var sign = (value >> 63);
         var magnitude = unchecked((ulong)((value ^ sign) - sign));
         var truncated = (magnitude >> NarrowingShift);
-        var remainder = (magnitude & NarrowingMask);
+        var remainder = magnitude & NarrowingMask;
 
         if (
             (remainder > NarrowingHalf) ||
@@ -1313,6 +1318,7 @@ public readonly partial record struct FixedQ4816(long Value)
 
         return unchecked(((result ^ sign) - sign));
     }
+
     // Rounds a wide product (a raw Q16 factor times a 2^fractionBitCount-scaled ratio) to raw Q16, ties to even.
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     internal static long RoundProduct(Int128 product, int fractionBitCount) {

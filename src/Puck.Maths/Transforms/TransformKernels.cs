@@ -124,8 +124,8 @@ internal static class TransformKernels {
             !BitOperations.IsPow2(value: ((uint)length))
         ) {
             throw new ArgumentOutOfRangeException(
-                paramName: parameterName,
-                message: "length must be a positive power of two."
+                message: "length must be a positive power of two.",
+                paramName: parameterName
             );
         }
     }

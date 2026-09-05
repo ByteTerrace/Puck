@@ -97,22 +97,25 @@ public readonly record struct FixedComplex(FixedQ4816 Real, FixedQ4816 Imaginary
             Imaginary: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked(((((Int128)left.Real.Value) * right.Imaginary.Value) + (((Int128)left.Imaginary.Value) * right.Real.Value)))))
         );
     }
+
     /// <summary>Returns the real component of <c>left * right</c>, rounded once — the same bits the product's
     /// <see cref="Real"/> would carry, without forming the imaginary component.</summary>
     internal static FixedQ4816 RealOfProduct(FixedComplex left, FixedComplex right) =>
         FixedQ4816.FromRawBits(value: (ProductFitsLong(left: left, right: right)
             ? FixedQ4816.RoundProductSum(productSum: unchecked(((left.Real.Value * right.Real.Value) - (left.Imaginary.Value * right.Imaginary.Value))))
             : FixedQ4816.RoundProductSum(productSum: unchecked(((((Int128)left.Real.Value) * right.Real.Value) - (((Int128)left.Imaginary.Value) * right.Imaginary.Value))))));
+
     // The narrow-lane gate, asymmetric in the operands: each component product is below 2^(bits(left) + bits(right)),
     // so a sum of two stays inside a signed long whenever those bit lengths total at most 62 — which a unit rotation
     // (raw components at most 2^16) satisfies against any operand below 2^46, not merely 2^31 against 2^31.
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool ProductFitsLong(FixedComplex left, FixedComplex right) {
-        var leftMagnitude = (FusedArithmetic.RawMagnitude(value: left.Real.Value) | FusedArithmetic.RawMagnitude(value: left.Imaginary.Value));
-        var rightMagnitude = (FusedArithmetic.RawMagnitude(value: right.Real.Value) | FusedArithmetic.RawMagnitude(value: right.Imaginary.Value));
+        var leftMagnitude = FusedArithmetic.RawMagnitude(value: left.Real.Value) | FusedArithmetic.RawMagnitude(value: left.Imaginary.Value);
+        var rightMagnitude = FusedArithmetic.RawMagnitude(value: right.Real.Value) | FusedArithmetic.RawMagnitude(value: right.Imaginary.Value);
 
         return ((BitOperations.LeadingZeroCount(value: leftMagnitude) + BitOperations.LeadingZeroCount(value: rightMagnitude)) >= 66);
     }
+
     /// <summary>Divides <paramref name="left"/> by <paramref name="right"/>.</summary>
     /// <param name="left">The dividend.</param>
     /// <param name="right">The divisor; must be non-zero.</param>

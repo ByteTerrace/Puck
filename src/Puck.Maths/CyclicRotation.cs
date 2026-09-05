@@ -57,7 +57,7 @@ public static class CyclicRotation {
     /// <param name="step">The step count; any value, positive or negative, reduces modulo <see cref="Period"/>.</param>
     /// <returns>The baked unit <see cref="FixedComplex"/> <c>exp(2πi·step/30)</c>; the identity at every multiple of <see cref="Period"/>.</returns>
     public static FixedComplex Rotor(long step) =>
-        Rotors[(int)step.FloorModulo(modulus: ((long)Period))];
+        Rotors[((int)step.FloorModulo(modulus: ((long)Period)))];
     /// <summary>Returns the unit rotation of a whole number of steps around a loop of any order: <c>exp(2πi·step/order)</c>,
     /// formed exactly as the baked table forms its thirty entries, so an order that divides <see cref="Period"/> reads
     /// the same bits <see cref="Rotor(long)"/> holds at the matching step.</summary>
@@ -75,7 +75,7 @@ public static class CyclicRotation {
         var index = step.FloorModulo(modulus: ((long)order));
 
         return ((order == Period)
-            ? Rotors[(int)index]
+            ? Rotors[((int)index)]
             : FixedComplex.FromAngle(angle: FixedQ4816.FromRawBits(value: ((TurnRawQ16 * index) / order))));
     }
     /// <summary>Rotates a vector by a plane's rotation at a tick.</summary>

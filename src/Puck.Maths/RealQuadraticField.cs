@@ -109,7 +109,7 @@ public readonly record struct RealQuadraticField {
 
         if ((root * root) == radicand) { return (BigInteger.One, root); }
 
-        var pairsOfTwo = (int)(((long)BigInteger.TrailingZeroCount(value: radicand)) >> 1);
+        var pairsOfTwo = ((int)(((long)BigInteger.TrailingZeroCount(value: radicand)) >> 1));
         var scale = (BigInteger.One << pairsOfTwo);
 
         radicand >>= (pairsOfTwo << 1);

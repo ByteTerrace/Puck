@@ -69,6 +69,7 @@ public readonly record struct Rational : IComparable<Rational> {
     public static Rational One { get; } = new(Numerator: BigInteger.One, Denominator: BigInteger.One);
     /// <summary>Gets the rational <c>2</c>.</summary>
     public static Rational Two { get; } = new(Numerator: (2 * BigInteger.One), Denominator: BigInteger.One);
+
     /// <summary>Gets the rational <c>0</c>.</summary>
     public static Rational Zero => default;
 
@@ -99,7 +100,7 @@ public readonly record struct Rational : IComparable<Rational> {
         if (Numerator.IsZero) { return 0.0; }
 
         var magnitude = BigInteger.Abs(value: Numerator);
-        var magnitudeBits = ((long)magnitude.GetBitLength() - (long)Denominator.GetBitLength());
+        var magnitudeBits = (((long)magnitude.GetBitLength()) - ((long)Denominator.GetBitLength()));
 
         // Below 2^-1100 the value is under every subnormal's half, so the nearest double is zero at either sign.
         if (magnitudeBits < -1100L) { return ((Numerator.Sign < 0) ? -0.0 : 0.0); }
@@ -129,11 +130,10 @@ public readonly record struct Rational : IComparable<Rational> {
     // truncated integer carries more than the fifty-four bits the rounding needs below it; a value already wider than
     // that is truncated at scale zero.
     internal static int DoubleScale(long magnitudeBitLength) =>
-        ((int)Math.Clamp(value: (72L - magnitudeBitLength), min: 0L, max: 4096L));
+        ((int)Math.Clamp(max: 4096L, min: 0L, value: (72L - magnitudeBitLength)));
 
     /// <summary>Widens an integer to the rational with denominator one.</summary>
     public static implicit operator Rational(BigInteger value) => new(Numerator: value, Denominator: BigInteger.One);
-
     /// <summary>Adds two rationals.</summary>
     public static Rational operator +(Rational left, Rational right) => new(
         Numerator: ((left.Numerator * right.Denominator) + (right.Numerator * left.Denominator)),

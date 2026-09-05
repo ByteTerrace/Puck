@@ -124,6 +124,7 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
             values[i] = ring.Decode(value: values[i]);
         }
     }
+
     private readonly struct MontgomeryBatchRing(ScaledResidueRing64 ring) : IBatchInvertible<ulong> {
         private readonly ScaledResidueRing64 m_ring = ring;
 
@@ -144,6 +145,7 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
             right: right
         );
     }
+
     /// <summary>Creates the prime field <c>F_<paramref name="modulus"/></c>.</summary>
     /// <param name="modulus">The field's modulus, which must be an odd prime below <see cref="MaximumModulus"/>.</param>
     /// <returns>The described field.</returns>

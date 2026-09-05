@@ -153,6 +153,7 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
             ),
             val2: FusedArithmetic.RawMagnitude(value: vector.Z.Value)
         );
+
     // Norm of a vector part at full precision, saturating only when the scalar carrier cannot represent it.
     internal static FixedQ4816 VectorNorm(long x, long y, long z) =>
         (FixedVectorMath.TryMagnitude(

@@ -32,7 +32,7 @@ public readonly record struct HexagonalCoordinate(int Q, int R)
 
     /// <summary>Formats the two components without evaluating derived properties that may overflow.</summary>
     /// <returns>The coordinate's Q and R components in invariant decimal notation.</returns>
-    public override string ToString() => FormattableString.Invariant($"HexagonalCoordinate {{ Q = {Q}, R = {R} }}");
+    public override string ToString() => FormattableString.Invariant(formattable: $"HexagonalCoordinate {{ Q = {Q}, R = {R} }}");
 
     // The six units (sixth roots of unity), in counterclockwise order starting from the +Q axis. Each is a 60° step.
     private static readonly HexagonalCoordinate[] Units = [
