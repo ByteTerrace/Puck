@@ -17,4 +17,7 @@
         <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
         <ProjectReference Include="..\Puck.World.Server\Puck.World.Server.csproj" />
     </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.State" />
+    </ItemGroup>
 </Project>

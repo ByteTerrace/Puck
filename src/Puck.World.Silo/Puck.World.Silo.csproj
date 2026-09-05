@@ -24,4 +24,7 @@
     <ItemGroup>
         <Content Include="Assets\**" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.State" />
+    </ItemGroup>
 </Project>

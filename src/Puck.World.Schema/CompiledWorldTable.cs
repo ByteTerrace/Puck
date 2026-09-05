@@ -1,17 +1,4 @@
-using Puck.World.Authoring;
-
 namespace Puck.World;
-
-/// <summary>
-/// One static lookup-table asset reference row — a <c>puck.table.v1</c> document's stable name, its file path
-/// (relative to <see cref="AppContext.BaseDirectory"/>, the convention <see cref="WorldMusicRow.Source"/> uses), and
-/// the SHA-256 hex64 pin of the document's canonical bytes. A rule reads it through
-/// <c>$table:&lt;name&gt;:&lt;key&gt;</c>; nothing writes it, and it is not simulation state.
-/// </summary>
-/// <param name="Name">The row's stable name.</param>
-/// <param name="Source">The referenced document's file path.</param>
-/// <param name="Hash">The SHA-256 hex64 of the referenced document's canonical bytes.</param>
-public sealed record WorldTableRow(string Name, string Source, string Hash);
 
 /// <summary>A loaded table: keys sorted ascending, one value column per declared column (a single-value table has
 /// one unnamed column), values in the row's raw cell encoding, read by binary search.</summary>

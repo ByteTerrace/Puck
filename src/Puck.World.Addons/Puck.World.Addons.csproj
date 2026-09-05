@@ -9,4 +9,7 @@
         <ProjectReference Include="..\Puck.Scripting\Puck.Scripting.csproj" />
         <ProjectReference Include="..\Puck.World.Server\Puck.World.Server.csproj" />
     </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.State" />
+    </ItemGroup>
 </Project>

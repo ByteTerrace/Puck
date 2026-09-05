@@ -36,6 +36,7 @@
         <Project Path="src/Puck.ShaderVm/Puck.ShaderVm.csproj" />
         <Project Path="src/Puck.Shaders/Puck.Shaders.csproj" />
         <Project Path="src/Puck.SignedDistance/Puck.SignedDistance.csproj" />
+        <Project Path="src/Puck.State/Puck.State.csproj" />
         <Project Path="src/Puck.Storage/Puck.Storage.csproj" />
         <Project Path="src/Puck.Text/Puck.Text.csproj" />
         <Project Path="src/Puck.Vulkan.Presentation/Puck.Vulkan.Presentation.csproj" />
@@ -75,6 +76,7 @@
         <Project Path="tests/Puck.ShaderVm.Tests/Puck.ShaderVm.Tests.csproj" />
         <Project Path="tests/Puck.Shaders.Tests/Puck.Shaders.Tests.csproj" />
         <Project Path="tests/Puck.SignedDistance.Tests/Puck.SignedDistance.Tests.csproj" />
+        <Project Path="tests/Puck.State.Tests/Puck.State.Tests.csproj" />
         <Project Path="tests/Puck.Text.Tests/Puck.Text.Tests.csproj" />
         <Project Path="tests/Puck.World.Protocol.Tests/Puck.World.Protocol.Tests.csproj" />
         <Project Path="tests/Puck.World.Agents.Tests/Puck.World.Agents.Tests.csproj" />

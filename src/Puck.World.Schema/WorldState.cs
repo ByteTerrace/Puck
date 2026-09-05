@@ -5,31 +5,6 @@ using Puck.Maths;
 
 namespace Puck.World;
 
-/// <summary>The closed set of cell value kinds a <see cref="WorldStateRow"/> declares, shared by every cell the row
-/// carries. Carries no float kind: simulation state is float-free by the determinism contract (see
-/// <see cref="Fixed"/> for how a fractional value still rides here). A counter is represented as
-/// <see cref="Fixed"/>; a timer is <see cref="Int"/> with <see cref="WorldStateRow.NonNegative"/> set.</summary>
-[JsonConverter(typeof(StrictEnumConverter<CellKind>))]
-public enum CellKind : byte {
-    /// <summary>A whole 64-bit signed integer cell (a score, a round counter, an inventory count, or — with
-    /// <see cref="WorldStateRow.NonNegative"/> set — a tick-count timer).</summary>
-    Int,
-
-    /// <summary>A fixed-point cell holding raw <c>FixedQ4816</c> bits — the deterministic replacement for a float in
-    /// simulation state. Human-authored surfaces (document JSON, console verb arguments, validator refusal text,
-    /// read-back echoes) use the decimal representation via <c>FixedQ4816.TryParse</c>/<c>ToString</c>; only the
-    /// addon ABI channel wire and the per-cell mutation payload carry the raw bit pattern.</summary>
-    Fixed,
-
-    /// <summary>A boolean cell (a win flag, a toggle). Carries no range — a gauge cannot bind to it.</summary>
-    Bool,
-
-    /// <summary>A short-text cell (a status label, a player name slot), bounded to
-    /// <see cref="WorldStateCapacity.MaxTextValueLength"/> UTF-16 code units. Carries no range — a gauge cannot bind
-    /// to it. The only kind whose value is carried in <see cref="WorldStateCell.Text"/> rather than
-    /// <see cref="WorldStateCell.Value"/>.</summary>
-    Text,
-}
 /// <summary>The root <c>state</c> declaration. It is the document's abstract state inventory; compilation through
 /// <see cref="WorldStateCatalog"/> describes each lane's typed ownership and storage contract before runtime lowers
 /// values into the storage appropriate to their access pattern.</summary>
@@ -375,8 +350,7 @@ public sealed record WorldStateAdvance(long RateNumerator, long RateDenominator,
 
             if (TryAccumulate(elapsed: elapsed, scale: scale, magnitude: out var magnitude)) {
                 delta = ((RateNumerator < 0) ? -magnitude : magnitude);
-            }
-            else {
+            } else {
                 // A magnitude past long.MaxValue can still land inside long once the base is added (a drain from a
                 // positive base), so the sum is formed exactly and saturated as a whole rather than the magnitude alone.
                 var wide = AccumulatedMagnitude(elapsed: elapsed, scale: scale);
@@ -672,8 +646,7 @@ public sealed record WorldStateCycle(
                 WorldCycleOutput.ProjectionX => SymmetryLattice.Project(node: node).X.Value,
                 _ => SymmetryLattice.Project(node: node).Y.Value,
             };
-        }
-        else {
+        } else {
             var order = Order;
             var index = RotationIndex(currentTick: currentTick, phase: phase);
 

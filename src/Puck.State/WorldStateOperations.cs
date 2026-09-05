@@ -1,37 +1,7 @@
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
 
-namespace Puck.World;
-
-/// <summary>The transfer-count ceiling every <see cref="WorldStateTransform.Transfer"/> is validated against.</summary>
-public static class WorldStateTransferCapacity {
-    /// <summary>The most tokens one transfer moves in a single mutation — <see cref="WorldTopologyCompilation.MaxCells"/>,
-    /// the ceiling an uncapacitied <see cref="WorldStateDomain.KeysOf"/> pile row's own cell count is bounded by.</summary>
-    public const int MaxTransferCount = WorldTopologyCompilation.MaxCells;
-}
-
-/// <summary>Marks a plain integer row as a guarded submission stamp: the row's own generation
-/// <see cref="Sequence"/>, the sole state a <see cref="WorldPhaseGuard"/> checks and the mutation pipeline advances.
-/// Nothing about who may act, in what order, or under what deadline is engine knowledge any more — a turn order, a
-/// round counter, a ready or skipped bitset, and a deadline are all ordinary rows a world's own rules author and
-/// advance, and eligibility is the ordinary grant/admission system over whichever rows a rule ties to this one via
-/// <see cref="WorldStateRow.PhaseOf"/>. Submitting any mutation whose <see cref="WorldPhaseGuard"/> matches this
-/// generation both admits the submission and, on success, advances the generation by one: the guard's presence on a
-/// mutation IS the turn's completion, so a world that wants several ungated moves before a turn ends simply leaves
-/// those rows untagged and reserves <see cref="WorldStateRow.PhaseOf"/> for the one row that ends it.</summary>
-/// <param name="Sequence">The generation. Advanced by the mutation pipeline after a guarded mutation naming this row
-/// succeeds; never written directly.</param>
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldStatePhase(long Sequence = 0);
-
-/// <summary>Admission guard for a submitted gameplay operation: reduces a turn-taking protocol to the one thing the
-/// engine still enforces, a monotonic sequence a submission must match. See <see cref="WorldStatePhase"/> for what
-/// a match does on success.</summary>
-/// <param name="Row">The phase row.</param>
-/// <param name="Sequence">The observed generation.</param>
-/// <param name="Participant">World-program-only participant attribution; outside callers always use their stamp.</param>
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldPhaseGuard(string Row, long Sequence, string? Participant = null);
+namespace Puck.State;
 
 /// <summary>Selection of a single token from a zone.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldZoneSelector>))]
@@ -67,7 +37,7 @@ public abstract record WorldStateTransform {
     /// <param name="Key">The token key for key selection.</param>
     /// <param name="InsertFirst">Insert at the first position rather than the last.</param>
     /// <param name="Draw">A streamDraw site for random selection; absent for other selectors.</param>
-    /// <param name="Count">How many tokens move in this one transfer, 1..<see cref="WorldStateTransferCapacity.MaxTransferCount"/>,
+    /// <param name="Count">How many tokens move in this one transfer, 1..<c>MaxTransferCount</c>,
     /// each selected afresh from what remains (a five-card deal is one mutation); a key selection moves exactly one.</param>
     public sealed record Transfer(string From, string To, WorldZoneSelector Selector = WorldZoneSelector.Key,
         string? Key = null, bool InsertFirst = false, string? Draw = null, int Count = 1) : WorldStateTransform;
@@ -93,7 +63,7 @@ public abstract record WorldStateTransform {
     /// <summary>Reorders an ordered zone by attribute rows over its token domain, stably: the first key decides and
     /// each later key breaks the ties before it. The canonical order a pattern reads a hand in.</summary>
     /// <param name="Row">The ordered zone.</param>
-    /// <param name="By">The attribute keys, 1..<see cref="WorldStateCapacity.MaxSortKeys"/> distinct numeric rows
+    /// <param name="By">The attribute keys, 1..<c>MaxSortKeys</c> distinct numeric rows
     /// keyed over the zone's token domain, in precedence order; each carries its own direction.</param>
     public sealed record SortZone(string Row, IReadOnlyList<WorldSortKey> By) : WorldStateTransform;
     /// <summary>Reorders a keyed numeric row by its own cell values, stably.</summary>

@@ -897,7 +897,7 @@ the addon ABI channel stay raw. `min`/`max` are BOTH-OR-NEITHER on a numeric
 row (a half-declared range refuses); when both are present every cell must
 fall inside — the range a HUD gauge bound to `state.<row>` or
 `state.<row>.<key>` reads (see [hud.md](hud.md)). The row `name` and every
-cell `key` are `WorldCellName` (`Puck.World.Schema/WorldSafeName.cs`) — a
+cell `key` are `WorldCellName` (`Puck.State/WorldSafeName.cs`) — a
 validated type that cannot hold an empty, unsafe, or DOTTED value, refused at
 JSON parse naming the character; the dot-free rule is what makes
 `state.<row>.<key>` parse unambiguously (the engine-minted `"$value"` slot

@@ -2,7 +2,7 @@ using System.Text.Json;
 
 using Puck.Assets.Documents;
 
-namespace Puck.World.Authoring;
+namespace Puck.State;
 
 /// <summary>
 /// The <c>puck.table.v1</c> document — a static lookup table a world references by a <c>tables</c> row and a rule

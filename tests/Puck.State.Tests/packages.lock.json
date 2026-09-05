@@ -90,16 +90,6 @@
         "resolved": "5.0.0",
         "contentHash": "dDoKi0PnDz31yAyETfRntsLArTlVAVzUzCIvvEDsDsucrl33Dl8pIJG06ePTJTI3tGpeyHS9Cq7Foc/s4EeKcg=="
       },
-      "System.CommandLine": {
-        "type": "Transitive",
-        "resolved": "2.0.11",
-        "contentHash": "Pmg3/T0M37ZS3ovwPHtfBNTCdqNpnxo+tnZMg8JDHVR0qD8KwcPUKlheEiZysb1En8IyH7yDoa9QDq97Ny/vhQ=="
-      },
-      "System.Formats.Cbor": {
-        "type": "Transitive",
-        "resolved": "10.0.11",
-        "contentHash": "i6cQMkCkGavqCPqjoQIkxVgtbTG59FkWsJppVOQ4QoJ//MNoe/m/3M/BN1SxEmLHGxySM8LiUl5/ppKgOyTWBA=="
-      },
       "System.IO.Hashing": {
         "type": "Transitive",
         "resolved": "10.0.11",
@@ -183,28 +173,6 @@
           "System.IO.Hashing": "[10.*, )"
         }
       },
-      "ByteTerrace.Puck.Attestation": {
-        "type": "Project",
-        "dependencies": {
-          "System.Formats.Cbor": "[10.*, )"
-        }
-      },
-      "ByteTerrace.Puck.Commands": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "System.CommandLine": "[2.*, )"
-        }
-      },
-      "ByteTerrace.Puck.Hosting": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )"
-        }
-      },
       "ByteTerrace.Puck.Maths": {
         "type": "Project"
       },
@@ -215,13 +183,6 @@
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
         }
       },
-      "ByteTerrace.Puck.SignedDistance": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Text": "[0.1.0-alpha, )"
-        }
-      },
       "ByteTerrace.Puck.State": {
         "type": "Project",
         "dependencies": {
@@ -229,36 +190,6 @@
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Physics": "[0.1.0-alpha, )"
-        }
-      },
-      "ByteTerrace.Puck.Text": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
-        }
-      },
-      "puck.world.authoring": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.SignedDistance": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Text": "[0.1.0-alpha, )"
-        }
-      },
-      "puck.world.schema": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Physics": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.State": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Text": "[0.1.0-alpha, )",
-          "Puck.World.Authoring": "[1.0.0, )"
         }
       }
     }

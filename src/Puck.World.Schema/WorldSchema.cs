@@ -19,8 +19,8 @@ namespace Puck.World;
 /// policy), a <c>$type</c>-discriminated union as <c>anyOf</c> with a <c>const</c> arm per
 /// <see cref="System.Text.Json.Serialization.JsonDerivedTypeAttribute"/>, and a named-value <c>enum</c> for every
 /// <see cref="StrictEnumConverter{TEnum}"/> member. This generator adds only what the exporter cannot infer on its
-/// own: curated hover text pulled from the assembly's XML documentation (<c>Puck.World.Schema.xml</c> beside
-/// it), a <c>type</c>/<c>enum</c> constraint for a member whose <see cref="JsonConverter{T}"/> the exporter cannot
+/// own: curated hover text pulled from the XML documentation of this assembly and of <c>Puck.State</c>
+/// (<c>Puck.World.Schema.xml</c> and <c>Puck.State.xml</c> beside it), a <c>type</c>/<c>enum</c> constraint for a member whose <see cref="JsonConverter{T}"/> the exporter cannot
 /// introspect and that opts in via <see cref="IJsonSchemaTypeConverter"/> or
 /// <see cref="IJsonSchemaStringConverter"/> (<see cref="ApplyConverterVocabulary"/>),
 /// the document root's one deliberate strictness exception — the <see cref="WorldDefinition.Extensions"/>
@@ -34,7 +34,11 @@ public static class WorldSchema {
     // Below this compact-JSON length, a repeated node is left inlined: the $ref text would cost more than the
     // duplicate content saves, and a two/three-word leaf isn't a "shape" a reader benefits from finding by name.
     private const int HoistMinimumLength = 60;
-    private const string XmlDocumentationFileName = "Puck.World.Schema.xml";
+    // Every assembly whose types the document embeds; each one's generated XML doc file rides beside the DLL.
+    private static readonly (string FileName, Type Anchor)[] XmlDocumentationFiles = [
+        ("Puck.World.Schema.xml", typeof(WorldDefinition)),
+        ("Puck.State.xml", typeof(WorldValueExpression)),
+    ];
 
     /// <summary>The file name shared shapes live under, inside the sections directory.</summary>
     public const string CommonDefsFileName = "common.schema.json";
@@ -52,7 +56,7 @@ public static class WorldSchema {
 
     private static readonly Lazy<IReadOnlyDictionary<string, XElement>?> XmlDocIndex = new(valueFactory: LoadXmlDocIndex);
 
-    /// <summary>Gets whether the assembly's XML documentation file was found and loaded. <see langword="false"/>
+    /// <summary>Gets whether every XML documentation file the schema draws on was found and loaded. <see langword="false"/>
     /// means <see cref="Export"/> still succeeds but every node's <c>description</c> is omitted — a caller (the
     /// <c>puck schema</c> verb) reports that plainly rather than failing.</summary>
     public static bool HasXmlDocumentation =>
@@ -1402,49 +1406,56 @@ public static class WorldSchema {
 
         return false;
     }
+    // Every listed file must load: a missing one would silently drop every description its assembly owns, and
+    // the schema check would then fail on content rather than name the absent file.
     private static IReadOnlyDictionary<string, XElement>? LoadXmlDocIndex() {
-        var path = LocateXmlDocumentationFile();
+        var index = new Dictionary<string, XElement>(comparer: StringComparer.Ordinal);
 
-        if (path is null) {
-            return null;
-        }
+        foreach (var (fileName, anchor) in XmlDocumentationFiles) {
+            var path = LocateXmlDocumentationFile(
+                anchor: anchor,
+                fileName: fileName
+            );
 
-        try {
-            var document = XDocument.Load(uri: path);
-            var members = document.Root?.Element(name: "members")?.Elements(name: "member");
-
-            if (members is null) {
+            if (path is null) {
                 return null;
             }
 
-            var index = new Dictionary<string, XElement>(comparer: StringComparer.Ordinal);
+            try {
+                var document = XDocument.Load(uri: path);
+                var members = document.Root?.Element(name: "members")?.Elements(name: "member");
 
-            foreach (var member in members) {
-                if (((string?)member.Attribute(name: "name")) is { } name) {
-                    index[name] = member;
+                if (members is null) {
+                    return null;
                 }
-            }
 
-            return index;
-        } catch (Exception exception) when (((exception is IOException) || (exception is System.Xml.XmlException) || (exception is UnauthorizedAccessException))) {
-            return null;
+                foreach (var member in members) {
+                    if (((string?)member.Attribute(name: "name")) is { } name) {
+                        index[name] = member;
+                    }
+                }
+            } catch (Exception exception) when (((exception is IOException) || (exception is System.Xml.XmlException) || (exception is UnauthorizedAccessException))) {
+                return null;
+            }
         }
+
+        return index;
     }
     // Beside AppContext.BaseDirectory covers every real caller (puck.exe's own output directory, where a
     // referenced project's generated XML doc file is copied alongside its DLL — the same pattern
-    // Puck.Maths.xml already rides for this CLI); the assembly's own location is the fallback for a host that
-    // loads this assembly from elsewhere.
-    private static string? LocateXmlDocumentationFile() {
+    // Puck.Maths.xml already rides for this CLI); the owning assembly's own location is the fallback for a host
+    // that loads it from elsewhere.
+    private static string? LocateXmlDocumentationFile(Type anchor, string fileName) {
         var beside = Path.Combine(
             path1: AppContext.BaseDirectory,
-            path2: XmlDocumentationFileName
+            path2: fileName
         );
 
         if (File.Exists(path: beside)) {
             return beside;
         }
 
-        var assemblyLocation = typeof(WorldDefinition).Assembly.Location;
+        var assemblyLocation = anchor.Assembly.Location;
 
         if (string.IsNullOrEmpty(value: assemblyLocation)) {
             return null;
@@ -1452,7 +1463,7 @@ public static class WorldSchema {
 
         var besideAssembly = Path.Combine(
             path1: (Path.GetDirectoryName(path: assemblyLocation) ?? string.Empty),
-            path2: XmlDocumentationFileName
+            path2: fileName
         );
 
         return (File.Exists(path: besideAssembly)

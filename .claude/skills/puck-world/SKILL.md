@@ -41,6 +41,7 @@ away. Verify game behavior by RUNNING the game, never by a build gate
 
 | Project | Owns | Key types |
 |---|---|---|
+| `src/Puck.State` | The state and rule engine beneath the document, with no world or presentation concept | `WorldValueExpression`/`WorldValueToken`/`WorldExpressionSyntax`, `WorldExpressionOp`/`WorldExpressionArithmetic`, `TableDocument`/`TableCanonicalizer`/`WorldTableRow`, the `WorldStateTransform` union, `WorldSafeName`/`WorldCellName`/`WorldOwnedWorldFileName`, `CellKind`, `WorldRuleFacts` — every type keeping its `World` prefix until the charter's last phase; consumers reach them through a project-wide `Using` |
 | `src/Puck.World.Schema` | What a world IS — the document model | `WorldDefinition` + section records, `WorldDefinitionValidator`, `WorldDefinitionSerialization`; authored-to-fixed collider compilation; document-embedded wire vocabulary that keeps the `Puck.World.Protocol` namespace (`PlayerIntent`, `WorldGrant`/`WorldPrincipal`, admission entries) |
 | `src/Puck.World.Protocol` | What a world SAYS — the wire/tape vocabulary | `WorldCommand`, `WorldMutation`, `SubmissionEnvelope`, `SessionRequest`, `WorldSnapshot`, `IServerLink`/`IClientSink`/`IWorldServerHost`, `LoopbackTransport`, `WorldAuthorityEndpoint`/`WorldSessionMirror`, and the `IWorldAdjacencySource` family (`WorldAdjacencyFramePair`/`WorldAdjacencyProjection`/`IWorldAdjacencyNeighbour`) — all four namespaced `Puck.World.Server` still, moved here as files without a rename |
 | `src/Puck.Networking` | The dialect-agnostic wire substrate | `FrameCodec` (the socketless frame grammar), `WireReader`/`WireWriter`, `WireRefusal`/`WireFailure` |
@@ -83,7 +84,10 @@ current position to the nearest beat), never a dedicated effect or section.
 
 Dependency rules are enforced by the architecture gate (`PUCKARCH`
 diagnostics from `build/Architecture.props`): `Puck.World.Schema` references
-only its declared leaf/authoring closure plus `Puck.Physics`, which owns the fixed collider vocabulary —
+only its declared leaf/authoring closure plus `Puck.Physics`, which owns the fixed collider vocabulary, and
+`Puck.State`, the state and rule engine it consumes and extends (expression syntax and tokens, the opcode enum
+and its arithmetic, tables and their document, state transforms, the validated-identifier family, `CellKind`,
+the reserved fact channels) —
 structurally denied backends, presentation, `Puck.Overlays`, `Puck.Input`,
 `Puck.World.Protocol`, and `Puck.World.Server`. `Puck.World.Protocol` adds
 `Puck.World.Schema` and `Puck.Networking` (the transport-neutral frame/wire

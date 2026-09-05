@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using Puck.Abstractions.Documents;
 
-namespace Puck.World;
+namespace Puck.State;
 
 /// <summary>The postfix object spelling of a <see cref="WorldValueExpression"/>: <c>{ "tokens": [...] }</c>. The
 /// converter reads this shape when an expression is authored as tokens and writes it back for an expression that

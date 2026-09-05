@@ -1,12 +1,12 @@
 using System.Buffers;
 
-namespace Puck.World;
+namespace Puck.State;
 
 /// <summary>The reserved-character kernel shared by every member of this repository's validated-identifier family
 /// (<see cref="WorldSafeName"/>, <see cref="WorldCellName"/>): control characters and the fixed reserved set (quote,
 /// angle brackets, pipe, colon, asterisk, question mark, and both slashes) — the strictest host's reserved
 /// characters, a superset of every platform's, so a value that passes is storable everywhere regardless of which
-/// host minted it (the same requirement <see cref="WorldOwnedWorldFileName"/>'s id↔file-name mapping always
+/// host minted it (the same requirement <c>WorldOwnedWorldFileName</c>'s id↔file-name mapping always
 /// carried). Neither family member escapes or collapses an offending character the way that mapping used to — each
 /// refuses it, by name, at construction, which is what makes simply holding either type a proof of safety rather
 /// than a courtesy some caller remembered to check.</summary>
@@ -49,7 +49,7 @@ internal static class WorldIdentifierRules {
 
 /// <summary>
 /// A validated world/owned-world id or process-local world-instance name — the type cannot hold a value that does
-/// not survive <see cref="WorldOwnedWorldFileName"/>'s id↔file-name mapping, or that would navigate a directory
+/// not survive <c>WorldOwnedWorldFileName</c>'s id↔file-name mapping, or that would navigate a directory
 /// instead of naming one segment of it (a bare <c>"."</c> or <c>".."</c>). Construction refuses by name, naming the
 /// offending character (or the navigation rule), so every door that used to hand-check
 /// <c>WorldOwnedWorldFileName.IsSafe</c> plus its own copy of the <c>"."</c>/<c>".."</c> rule now just holds this
@@ -57,24 +57,16 @@ internal static class WorldIdentifierRules {
 /// argument, or this document's own JSON parse), and every downstream consumer inherits the proof for free.
 /// </summary>
 public readonly record struct WorldSafeName {
-    /// <summary>The longest a validated name may be.</summary>
-    /// <remarks>H9: three individually-valid <see cref="WorldSafeName"/>s could still compose
-    /// (<c>WorldSessionResolver.MintInstanceName</c>'s length-prefixed <c>ScopedSegment</c> chain) into a string too
-    /// long for the filesystem, refused only when <c>WorldInstanceHost.TryStart</c> finally tried to create the
-    /// directory — a live boot-time fault for what should have been a construction-time refusal. The bound: Windows'
-    /// 255-character path-segment ceiling (the tightest of the platforms this repository targets — NTFS/most Linux
-    /// filesystems allow more, so a value safe here is safe everywhere) minus the longest suffix any minting site
-    /// appends to a <see cref="WorldSafeName"/> before it reaches disk. That suffix is
-    /// <see cref="WorldOwnedWorldFileName.Suffix"/> (".world.json", 11 characters) — an owned-world id becomes
-    /// <c>&lt;id&gt;.world.json</c> inside its instance's directory (<see cref="WorldOwnedWorldFileName.For"/>), the
-    /// one transformation every consumer of this type applies before writing it out. A bare directory-segment use (an
-    /// instance name itself, consumed directly by <c>WorldInstanceHost.TryStart</c>) appends nothing, so this bound
-    /// is conservative there too — one ceiling covers every minting site (identity seeds, group ids, instance names,
-    /// and the resolver's own composed names) because every one of them mints through <see cref="TryParse"/>, never
-    /// around it. A <c>static readonly</c> computed from <see cref="WorldOwnedWorldFileName.Suffix"/>'s own length,
-    /// never a duplicated literal that could drift from it (<c>const string.Length</c> is not itself a constant
-    /// expression in C#, which is the only reason this is not a <c>const int</c>).</remarks>
-    public static readonly int MaxLength = (255 - WorldOwnedWorldFileName.Suffix.Length);
+    /// <summary>The longest suffix a minting site may append to a validated name before it reaches a file system —
+    /// a world document's <c>.world.json</c>, eleven characters. Every such suffix is proven no longer than this where
+    /// it is declared, so <see cref="MaxLength"/> stays the one ceiling.</summary>
+    public const int MaxSuffixLength = 11;
+    /// <summary>The longest a validated name may be: Windows' 255-character path-segment ceiling (the tightest of the
+    /// platforms this repository targets, so a value safe here is safe everywhere) minus
+    /// <see cref="MaxSuffixLength"/>. One ceiling covers every minting site — identity seeds, group ids, instance
+    /// names, composed instance names — because every one of them mints through <see cref="TryParse"/>, never around
+    /// it; a bare directory-segment use appends nothing and is covered conservatively.</summary>
+    public const int MaxLength = (255 - MaxSuffixLength);
 
     private WorldSafeName(string value) => Value = value;
 
@@ -113,7 +105,7 @@ public readonly record struct WorldSafeName {
         }
 
         if (candidate!.Length > MaxLength) {
-            reason = $"is {candidate.Length} characters, past the {MaxLength}-character limit (255 minus the longest suffix a minting site appends before writing this name to disk, '{WorldOwnedWorldFileName.Suffix}')";
+            reason = $"is {candidate.Length} characters, past the {MaxLength}-character limit (255 minus the {MaxSuffixLength}-character suffix a minting site may append before writing this name to disk)";
 
             return false;
         }
@@ -147,7 +139,7 @@ public readonly record struct WorldSafeName {
 /// A validated <c>state</c>-section row name or cell key — the base <see cref="WorldSafeName"/> rule plus no dot
 /// anywhere, which is what makes the <c>state.&lt;row&gt;.&lt;key&gt;</c> HUD binding grammar unambiguous by
 /// construction: splitting a bound token on <c>'.'</c> can never mistake part of a row or cell name for a grammar
-/// separator, because neither can hold one. The reserved slot key <see cref="WorldStateRow.SlotKey"/>
+/// separator, because neither can hold one. The reserved slot key <c>WorldStateRow.SlotKey</c>
 /// (<c>"$value"</c>) is unaffected — <c>'$'</c> is neither a reserved character nor a dot, so it is already a legal
 /// <see cref="WorldCellName"/> like any other author-chosen key, exactly the one reserved exception the substrate
 /// mints rather than authors.
@@ -206,7 +198,7 @@ public readonly record struct WorldCellName {
 
 /// <summary>Reads/writes <see cref="WorldSafeName"/> as its plain string — refusing on read, by name, exactly like
 /// <see cref="WorldSafeName.TryParse"/>, so a document holding one can never carry an unsafe id.</summary>
-internal sealed class WorldSafeNameJsonConverter : TryParseStringJsonConverter<WorldSafeName> {
+public sealed class WorldSafeNameJsonConverter : TryParseStringJsonConverter<WorldSafeName> {
     /// <inheritdoc/>
     protected override bool TryParse(string? candidate, out WorldSafeName value, out string reason) => WorldSafeName.TryParse(
         candidate: candidate,
@@ -219,7 +211,7 @@ internal sealed class WorldSafeNameJsonConverter : TryParseStringJsonConverter<W
 /// <summary>Reads/writes <see cref="WorldCellName"/> as its plain string — refusing on read, by name, exactly like
 /// <see cref="WorldCellName.TryParse"/>, so a document holding one can never carry a dotted or unsafe row/cell
 /// name.</summary>
-internal sealed class WorldCellNameJsonConverter : TryParseStringJsonConverter<WorldCellName> {
+public sealed class WorldCellNameJsonConverter : TryParseStringJsonConverter<WorldCellName> {
     /// <inheritdoc/>
     protected override bool TryParse(string? candidate, out WorldCellName value, out string reason) => WorldCellName.TryParse(
         candidate: candidate,

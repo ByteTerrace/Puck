@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <AssemblyName>Puck.State</AssemblyName>
+        <!-- The gallery card truncates, so the first sentence has to stand alone; the detail follows it. -->
+        <Description>The state and rule engine of a deterministic fixed-step simulation, with no world, body, rendering, or presentation concept. Authored rules read and write named state rows through a bounded postfix expression language that also carries an infix spelling, every value is exact fixed-point or integer arithmetic over Puck.Maths, and static lookup tables, atomic state transforms, validated identifiers, and the reserved fact channels a host answers are all data a document declares, so a card game, a turn-based resolver, or another engine's frontend can run authoritative rules over this package alone. Source-available and dual-licensed: free for noncommercial use under PolyForm Noncommercial 1.0.0, paid commercial license otherwise.</Description>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.State</PackageId>
+        <PackageTags>determinism;rules;simulation;state</PackageTags>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+        <RootNamespace>Puck.State</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- Puck.Abstractions is named for Puck.Abstractions.Documents' converter contracts (StrictEnumConverter,
+             IJsonSchemaNodeConverter, IJsonSchemaStringConverter); Puck.Assets for the canonical-document boundary the
+             table document crosses; Puck.Maths for the Q48.16 carrier every state value rides; Puck.Physics for the
+             motion-program facts a reserved channel names. Each is declared here rather than inherited so the
+             package's dependencies are its whole closure. -->
+        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
+        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
+        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <ProjectReference Include="..\Puck.Physics\Puck.Physics.csproj" />
+    </ItemGroup>
+</Project>
